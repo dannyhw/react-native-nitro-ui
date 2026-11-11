@@ -207,6 +207,22 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
   for it; the `NUI_SKIP_A11Y_SWEEP` escape hatch that let it was removed in fix round 3
   (review), because a gate recorded as PASS must mean the same sweep on every machine. The
   cheaper sweep for filtered runs is the open half of this line.
+- bench (fix round 3, review item 11): a per-variant cold fallback for the wheel would need
+  `NitroUiSizing.setFallback(componentName, …)` to key a fallback per *configuration*, and it keys
+  one per component (`HybridNitroUiPicker.kt:1709`, `HybridNitroUiDatePicker.kt:2170` declare the
+  single pair), so the 144 dp jump on a cold `wheel` mount cannot be removed inside this component
+  without touching core sizing. The `>= 48` sizing case is now `120 ± 1`, so the number is at least
+  pinned.
+- Picker's wheel seat (`syncWheelRow`) still moves the drum with the `selectedOption` write alone.
+  That holds on the Picker because its wheel draws from its own pager state, so a write recomposes
+  and remeasures the drum — the `DatePicker` drums do not, which is why they needed
+  `scrollToOption`. Its refused-roll case is red under the delete-the-seats mutation, so the
+  behaviour is witnessed; the mechanism is one shared helper away from being the same.
+- `DatePicker.harness.tsx`'s `leaves nothing behind when the drum becomes a field again` unmounts
+  between the two variants, so nothing a recycled host could hold on to is visible to it: two of
+  the three mutations aimed at it stayed green. If it is meant to be the wheel's "nothing is left
+  behind" case, it needs an oracle that survives the unmount (a second mount in the same view)
+  rather than a new native view.
 - tooling: `gate.mjs export`'s failure excerpt names the failing test but not the assertion line
   above it — the iOS `XCTAssertLessThanOrEqual failed:` text is in the stored log (line 32 of the
   red filtered run) and quoted here, but not in the committed excerpt, so committed evidence is a
@@ -290,6 +306,101 @@ the whole tree, review on a platform's own half, and the only commit since that 
 `trees.android`, both PASS — `16:58:27Z` (66 m 13 s) and `20:28:37Z` (67 m 40 s), each reading
 `expected N, saw N` for all five drum rolls. `real-input:ios:--control:date-picker` is the filtered
 red/green pair above, one run either side of `c7da9333`.
+
+## Fix round 3 — a seat has to move the drum, the guard, and arrive first
+
+**Branch:** `task/G29-fix1` (`b4c20d45` + `origin/main`) · **Lease:** `G29-2s78q`
+
+Both write-back bugs are gone, and the round found a third shape of the same thing: a drum is not
+painted from its value, so three things move together or nothing does.
+
+**Spending a request cancelled its own roll.** `wheelRequest` keys the effect that reads it, so
+clearing it mid-scroll re-keyed that effect and Compose killed the animation — `harness:android`
+lost four wheel cases that way, one reporting row 1 of a roll to row 4. A request is spent by a
+remembered serial now, and cleared once the scroll is over.
+
+**The time drums never moved.** `ScrollFieldState.selectedOption` is a *pending*
+`requestScrollToPage`, consumed only by a pager that measures again; these three read nothing from
+their value, so the getter said 09:20 while the drums stood on 14:05. A seat is the pager's instant
+`scrollToOption` now.
+
+**The guard stayed behind.** A seat that moves the drums without the wheel's own-write guard makes
+the next rest read as a pick the control made itself, and the second roll of a refused time reports
+nothing. All three were races, so one mutex orders every drum movement.
+
+Red proofs, in the same idiom (`test -> mutation -> the line that went red`); the mutated builds
+ran on `nitroui_b`, and the digest is each run's `trees.android`:
+
+- four wheel cases -> the review's own suggestion, `model.wheelRequest = null` before the scroll
+  (a field the effect is keyed on, written from its own body) -> `harness:android` **FAIL, 4 of
+  657** (2026-11-11T14-41-34Z, `1c41d4980dff`): `reports one event for a roll that passed several
+  rows: expected 4 to be +1`, the same in the refused-pick case, a mid-roll case whose drum was
+  left on row 16, and the time drum reading 05:08 for a roll asked to 14:05 — the hour drum's
+  animation died two rows in while the minute drum kept coasting.
+- Picker `rolls a refused pick back, and reports the next roll of it again` -> delete all three
+  roads that put a refused row back on the drum (the props seat, `LaunchedEffect(wheelState,
+  shown)`, the re-seat after a refused `choose`) -> `expected 4 to be +0`
+  (`harness:android:-t:rolls%20a%20refused%20pick%20back`, 2026-11-11T15-56-42Z, `9c34c374fc8e`).
+- Picker `leaves a roll in flight alone when an unrelated prop changes` -> the code before the
+  fix: write the drum on every batch, and delete the refusal that protects a rolling drum ->
+  `expected 1 to be +0`, i.e. one batch moved a drum that was still turning
+  (`harness:android:-t:leaves%20a%20roll%20in%20flight`, 2026-11-11T15-57-58Z, `8d238a42bbdc`).
+- DatePicker `reverts a time the parent refuses, and reports the next roll of it` -> no seat
+  anywhere (props pass, composition, rest's tail) -> `Only 1 of 2 change events arrived:
+  ["wheel-refused:1778850300000"]` (`harness:android:-t:reverts%20a%20time%20the%20parent%20refuses`,
+  2026-11-11T15-51-58Z, `fa5c18f5c373`).
+- the same case, at the other half of the fix -> the drums are moved and the wheel's own-write
+  guard is left behind (`seatTimeDrums(…, pushed)` becomes `seatTimeDrums(…, null)`) -> the same
+  red line (2026-11-11T15-50-45Z, `b09a8514ffdd`). Two rows because the drums going home and the
+  guard going with them are different bugs, and only the second one was invisible to every run
+  before this round.
+- DatePicker `leaves nothing behind when the drum becomes a field again` -> `wheel` and `compact`
+  draw the same control, so the second mount's box is the first one's -> `expected true to be
+  false` (`harness:android:-t:leaves%20nothing%20behind`, 2026-11-11T16-02-28Z, `b137a0363e97`).
+  Two earlier attempts at this row went **green** and are recorded as such: keeping the drum
+  drawn for `compact` + `time` (`15-53-08Z`, `d9679e500408`) and deleting
+  `host.noteSizingKeyChanged()` (`15-55-25Z`, `4f0c27f85b51`). The case unmounts between the two
+  variants, so a leftover host cannot be seen by it and a swallowed size correction cannot
+  either; the mutation above is the one it can see.
+- real-input `picker: a swipe that starts on the drum and turns sideways` -> the drum never
+  releases the disallow it sets on the down (the `handedSideways` release in `NitroUiWheelDrag.kt`
+  cannot be reached) -> `a sideways swipe on the drum is handed back to the scroller it sits in (the
+  drum moved 0 px of a 361 px drag)`, and nothing else in the run went red: the vertical fling two
+  lines later still rolls the same drum, so the mutation takes the hand-back and nothing else
+  (`real-input:android:--control:picker`, exit 1, 2026-11-11T18-39-56Z, mutated APK on `nitroui_b`,
+  tree `a6eefd95e878`).
+
+Gates (fix round 3):
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2013 tests / 85 suites | `b0045f2ae88f` | 2 m 45 s | start 5.4 / med 8.7 / max 10.8 |
+| `harness:ios` | **PASS** | 604 tests / 31 suites + isolated 6 tests / 3 suites | `b0045f2ae88f` (ios tree) | 16 m 59 s | start 14.2 / med 6.4 / max 26.1 |
+| `harness:android` | **PASS** | 660 tests / 31 suites + isolated 6 tests / 3 suites | `b0045f2ae88f` (android tree) | 18 m 28 s | start 6.5 / med 4.8 / max 13.9 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `b0045f2ae88f` (android tree) | 68 m 41 s | start 11.8 / med 8.1 / max 36.4 |
+| `harness:android:-t:leaves%20a%20roll%20in%20flight` | stale | 1 failed of 660 tests / 31 suites | 2c8a50d8935b (not this tree) | 52.2 s | start 12.3 / med 9.3 / max 12.3 |
+| `harness:android:-t:leaves%20nothing%20behind` | stale | 1 failed of 660 tests / 31 suites | 0fa445116c50 (not this tree) | 56.3 s | start 8.1 / med 14.6 / max 20.1 |
+| `harness:android:-t:reverts%20a%20time%20the%20parent%20refuses` | **PASS** | 660 tests / 31 suites | `b0045f2ae88f` (android tree) | 52.6 s | start 4.3 / med 4.6 / max 5.3 |
+| `harness:android:-t:rolls%20a%20refused%20pick%20back` | stale | 1 failed of 660 tests / 31 suites | 2d6bdc75c9f6 (not this tree) | 54.9 s | start 5.6 / med 15.2 / max 16.8 |
+| `harness:android:-t:wheel%20variant` | **PASS** | 660 tests / 31 suites | `b0045f2ae88f` (android tree) | 1 m 02 s | start 8.0 / med 6.5 / max 8.0 |
+| `real-input:android:--control:picker` | stale | — | a6eefd95e878 (not this tree) | 16 m 09 s | start 7.5 / med 8.0 / max 22.0 |
+
+`need --for review` is satisfied on this code tree: `✓ check`, `✓ harness:ios`,
+`✓ harness:android`, `✓ real-input:android` (twice, 69 m 50 s and 68 m 41 s, both on `trees.android`
+`8ba73eecc89f`, which is the load-sensitive fling's two greens). `need --for merge` still names
+`real-input:ios`: merge matches every gate on the whole tree and the branch's diff base
+(`0323287`) is treated as both platforms because of the shared harness files listed in its own note,
+while fix round 3 changed no iOS source — the last iOS half to run was round 2's
+`real-input:ios` **PASS**. The merge host re-keys the full set anyway.
+
+**How to read the stale rows.** Each is a red proof at a mutated tree, and a filtered run satisfies
+nothing but its own name: `…-t:rolls a refused pick back`, `…-t:leaves a roll in flight`,
+`…-t:leaves nothing behind` and `real-input:android:--control:picker` carry the four red lines above.
+`…-t:reverts a time the parent refuses` and `…-t:wheel variant` are the two filtered names that
+ended **green** on the fixed tree — the DatePicker re-seat case, and the wheel describes that the
+first red proof broke in four places.
+
 
 ## Questions for orchestrator
 
