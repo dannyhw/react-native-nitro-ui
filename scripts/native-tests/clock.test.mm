@@ -60,8 +60,15 @@ int main() {
             "nowNs() matches NSProcessInfo.systemUptime");
 
 #if defined(__APPLE__)
-  checkNear(ours, static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)), 1000000,
-            "nowNs() is CLOCK_UPTIME_RAW");
+  {
+    // Bracketed, not a tolerance: a fresh read must land between two reads of the reference clock taken
+    // around it. A fixed window failed on a loaded CI runner under ASan (off by 1.4 ms) because time
+    // passed between `ours` and the reference read, not because the clocks differ.
+    const int64_t lo = static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
+    const int64_t mid = NitroUiClock::nowNs();
+    const int64_t hi = static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
+    check(lo <= mid && mid <= hi, "nowNs() is CLOCK_UPTIME_RAW (read between two reads of it)");
+  }
   const int64_t raw = static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW));
   check(ours <= raw, "nowNs() is not CLOCK_MONOTONIC_RAW (= steady_clock on Apple)");
   std::printf("        sleep gap vs CLOCK_MONOTONIC_RAW: %.1f h\n",
