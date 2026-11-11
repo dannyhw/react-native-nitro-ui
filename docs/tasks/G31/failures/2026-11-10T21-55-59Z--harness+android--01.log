@@ -1,0 +1,202 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-10T21:55:59.277Z on code tree `f09535ece976` at HEAD `1ef3bb1` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1159032 ms
+- Load: start 17.26, end 6.49, median 11.50, max 38.23
+- Device: android / device `emulator-5570` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/harness+android-2026-11-10T21-55-58.283Z.log` (<store>/task/G31-checkbox-ios-checkmark/harness+android-2026-11-10T21-55-58.283Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Console`
+- `● Checkbox · G15 › lays out every iOS style at the box that style measures`
+- `expected 4 to be less than 3`
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › reports the clear button as one empty edit and keeps the focus`
+- `expected [] to deeply equal [ 'change:' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/harness+android-2026-11-10T21-55-58.283Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.49 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 219 — the rest is in the full log above)
+
+```
+  ● Checkbox · G15 › lays out every iOS style at the box that style measures
+
+    expected 4 to be less than 3
+
+      [0m [90m 980 |[39m       [90m// One configuration, not three (fewer corrections than styles), and one box for all[39m
+       [90m 981 |[39m       [90m// three names: Material 3's checkbox, whichever picture iOS was asked for.[39m
+      [31m[1m>[22m[39m[90m 982 |[39m       expect(made)[33m.[39mtoBeLessThan([33mSTYLES[39m[33m.[39mlength)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 983 |[39m       expect(sameSize(boxOf([32m'square'[39m)[33m,[39m boxOf([32m'circle'[39m)))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 984 |[39m       expect(sameSize(boxOf([32m'switch'[39m)[33m,[39m boxOf([32m'circle'[39m)))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 985 |[39m     }[0m
+
+FAIL __tests__/SearchField.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      search field height 56.00 vs text field 24.00
+
+
+    console.log
+      search field keyboardType="default" read back "default" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="number-pad" read back "number-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="decimal-pad" read back "decimal-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="numeric" read back "decimal-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="email-address" read back "email-address" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="phone-pad" read back "phone-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="url" read back "url" (return key "search", focused true)
+
+
+    console.log
+      search field autoCapitalize="words" read back "words"
+
+
+    console.log
+      search field autoCapitalize="characters" read back "characters"
+
+
+    console.log
+      search field autoCapitalize="sentences" read back "sentences"
+
+
+    console.log
+      search field autoCorrect=false read back false
+
+
+    console.log
+      search field all three read back {"text":"","focused":true,"composing":false,"nativeEvents":0,"jsEvents":0,"lastWrite":"none","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"Keyboard search field","returnKeyType":"search","keyboardType":"number-pad","autoCapitalize":"none","autoCorrect":false,"expanded":false,"canClear":false}
+
+
+    console.log
+      search field recycle round 0: drops=8 recycles=8 measuresAfterDrop=151 layoutsAfterDrop=151 giveUps=0 floatingFlushes=0 resetKeyboard=default/none/true
+
+
+    console.log
+      poisoned search field: laidOut 111.0x13.0, corrected 111.0x56.0, drew 280.0x56.0; measured 56.00
+
+  ● SearchField › reports the clear button as one empty edit and keeps the focus
+
+    expected [] to deeply equal [ 'change:' ]
+
+      [0m [90m 540 |[39m     )[33m;[39m
+       [90m 541 |[39m     [36mconst[39m reported [33m=[39m eventsOf([32m'cleared'[39m)[33m.[39mslice(before)[33m;[39m
+      [31m[1m>[22m[39m[90m 542 |[39m     expect(reported)[33m.[39mtoEqual([[32m'change:'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+      [90m 543 |[39m     expect(cleared[33m.[39mnativeEvents)[33m.[39mtoBe(typed[33m.[39mnativeEvents [33m+[39m [35m1[39m)[33m;[39m
+       [90m 544 |[39m     [90m// Focus stays: clearing a query is not leaving the field.[39m
+       [90m 545 |[39m     expect(cleared[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › lays out every iOS style at the box that style measures
+
+    expected 4 to be less than 3
+
+      [0m [90m 980 |[39m       [90m// One configuration, not three (fewer corrections than styles), and one box for all[39m
+       [90m 981 |[39m       [90m// three names: Material 3's checkbox, whichever picture iOS was asked for.[39m
+      [31m[1m>[22m[39m[90m 982 |[39m       expect(made)[33m.[39mtoBeLessThan([33mSTYLES[39m[33m.[39mlength)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 983 |[39m       expect(sameSize(boxOf([32m'square'[39m)[33m,[39m boxOf([32m'circle'[39m)))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 984 |[39m       expect(sameSize(boxOf([32m'switch'[39m)[33m,[39m boxOf([32m'circle'[39m)))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 985 |[39m     }[0m
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › reports the clear button as one empty edit and keeps the focus
+
+    expected [] to deeply equal [ 'change:' ]
+
+      [0m [90m 540 |[39m     )[33m;[39m
+       [90m 541 |[39m     [36mconst[39m reported [33m=[39m eventsOf([32m'cleared'[39m)[33m.[39mslice(before)[33m;[39m
+      [31m[1m>[22m[39m[90m 542 |[39m     expect(reported)[33m.[39mtoEqual([[32m'change:'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+      [90m 543 |[39m     expect(cleared[33m.[39mnativeEvents)[33m.[39mtoBe(typed[33m.[39mnativeEvents [33m+[39m [35m1[39m)[33m;[39m
+       [90m 544 |[39m     [90m// Focus stays: clearing a query is not leaving the field.[39m
+       [90m 545 |[39m     expect(cleared[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+
+Test Suites: 2 failed, 29 passed, 31 total
+Tests:       2 failed, 3 skipped, 648 passed, 653 total
+Snapshots:   0 total
+Time:        1122.247 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree f09535ece976, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.61/12.31 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-checkbox-ios-checkmark/harness+android-2026-11-10T21-55-58.283Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        33.035 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 1159.0 s
+gate: recorded in .gates/task/G31-checkbox-ios-checkmark.jsonl
+
+
+gate: appended the device context to task/G31-checkbox-ios-checkmark/harness+android-2026-11-10T21-55-58.283Z.log (5 probe(s))
+
+```
