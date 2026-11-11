@@ -166,8 +166,8 @@ final class StepperModel: NitroUiModel {
   private var drawn = "none"
   private var up = "none"
   private var down = "none"
-  /// What SwiftUI's own environment said about `isEnabled` the last time this body ran
-  /// (iOS only — see ``recordDrawn(_:canStepUp:canStepDown:environmentEnabled:)``).
+  /// What SwiftUI's own environment said about `isEnabled` the last time the control drew
+  /// (iOS only — see ``recordEnvironment(enabled:)``).
   private var environmentEnabled = "none"
   private var probes = 0
   private var merged = "unavailable"
@@ -189,22 +189,27 @@ final class StepperModel: NitroUiModel {
   /// (`HybridNitroUiStepper.kt`), which is what lets one assertion cover both
   /// platforms' bound behaviour.
   ///
-  /// `environmentEnabled` is the third thing worth reading where the control is drawn: it is
-  /// SwiftUI's own answer to `\isEnabled`, so it says whether the `.disabled(...)` modifier
-  /// below reached the control that is on screen. `model.disabled` cannot answer that — it is
-  /// the number React sent, and the accessibility traits are set from it directly, so a
-  /// `.disabled` that never arrived would leave every other reading of this control green.
-  func recordDrawn(
-    _ value: String,
-    canStepUp: Bool,
-    canStepDown: Bool,
-    environmentEnabled: Bool
-  ) {
+  func recordDrawn(_ value: String, canStepUp: Bool, canStepDown: Bool) {
     reportLock.lock()
     drawn = value
     up = canStepUp ? "1" : "0"
     down = canStepDown ? "1" : "0"
-    self.environmentEnabled = environmentEnabled ? "1" : "0"
+    reportLock.unlock()
+  }
+
+  /// Record what the control that is actually on screen believes about its own enabled
+  /// state.
+  ///
+  /// `model.disabled` cannot answer the question this is for. It is the number React sent,
+  /// and the accessibility traits are set from it directly, so a `.disabled(...)` modifier
+  /// that never reached the SwiftUI control would leave every other reading of this control
+  /// green while the screen drew a live-looking control nobody can operate — which is what
+  /// the disabled row of `stepper-ios.png` looked like. This is read from
+  /// `\.isEnabled` *below* the modifier, by ``StepperEnvironmentProbe``, so it is SwiftUI's
+  /// answer about the control rather than ours about the prop.
+  func recordEnvironment(enabled: Bool) {
+    reportLock.lock()
+    environmentEnabled = enabled ? "1" : "0"
     reportLock.unlock()
   }
 
@@ -268,10 +273,6 @@ final class StepperModel: NitroUiModel {
 /// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct StepperContent: NitroUIContent {
   @ObservedObject private var model: StepperModel
-  /// SwiftUI's own disabled environment, read where the control is drawn. See
-  /// ``StepperModel/recordDrawn(_:canStepUp:canStepDown:environmentEnabled:)``.
-  @Environment(\.isEnabled) private var environmentEnabled: Bool
-
   init(model: StepperModel) {
     self.model = model
   }
@@ -284,8 +285,7 @@ struct StepperContent: NitroUIContent {
     let _ = model.recordDrawn(
       model.accessibilityValueText,
       canStepUp: canStepUp,
-      canStepDown: canStepDown,
-      environmentEnabled: environmentEnabled
+      canStepDown: canStepDown
     )
     let value = Binding<Double>(
       get: { model.state.displayed },
@@ -315,6 +315,12 @@ struct StepperContent: NitroUIContent {
     // `docs/components/stepper.md` gives `accessibilityLabel` for.
     .labelsHidden()
     .disabled(model.disabled)
+    // Read back the disabled state this chain produced. `.background` content is placed by
+    // the view it is attached to, in that view's environment — so this one is downstream of
+    // the `.disabled` above, where reading `\.isEnabled` in this body would not be: an
+    // environment read in `body` answers the environment *into which* `body` is laid out,
+    // and would report `true` forever.
+    .background(StepperEnvironmentProbe(model: model))
     // SwiftUI's half of the accessibility, kept beside the UIKit element the view
     // vends (see ``NitroUiStepperAccessibilityElement`` for why that element is the
     // authoritative one): the same statement in SwiftUI's language, free, and the
@@ -327,6 +333,20 @@ struct StepperContent: NitroUIContent {
       model.step(up: direction == .increment)
     }
     .modifier(OptionalStepperAccessibility(label: model.accessibilityLabel))
+  }
+}
+
+/// Reads the `\.isEnabled` on the far side of the control's `.disabled` modifier and hands
+/// it to the model. Attaching it with `.background` is what puts it on that far side; the
+/// drawing code in this file records the value at the point the control is drawn, and this
+/// has to be read at the same point or it answers a question nobody asked.
+private struct StepperEnvironmentProbe: View {
+  let model: StepperModel
+  @Environment(\.isEnabled) private var isEnabled
+
+  var body: some View {
+    let _ = model.recordEnvironment(enabled: isEnabled)
+    return Color.clear
   }
 }
 
