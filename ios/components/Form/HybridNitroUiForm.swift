@@ -579,9 +579,17 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   ///   cleared with nobody coming to replace it.
   ///
   /// The remedy is the same in every case: adoption is the provider's job, so run the provider
-  /// again for those items. `reconfigureItems` is the API for "this item's cell has to be built
-  /// again" that a diffable data source allows, and it only runs when something is actually
-  /// wrong, so the steady state costs a walk of the visible index paths.
+  /// again for those items — and which of the two snapshot operations that is depends on what is
+  /// actually on screen at that item:
+  ///
+  /// - one of *our* cells, holding nothing: `reconfigureItems`, the API for "build this cell
+  ///   again". It re-runs the provider and requires it to return *that same cell*, which is only
+  ///   possible for a cell that came from this registration — so it is the right ask for ours and
+  ///   a fatal one for anything else (see `giveUpCell(in:at:)`);
+  /// - a cell that is not ours — the blank `UICollectionViewCell` a provider call that gave up
+  ///   left behind — cannot be reconfigured for the same reason: the provider cannot obtain it
+  ///   through `nitroui-form-row`. Those items get `reloadItems`, which is allowed to build a
+  ///   new cell, which is the only thing that can replace one.
   ///
   /// Asked from `reportGeometry`, which is every settle there is — the one after a snapshot
   /// apply and the one after a list came to rest — so a blank cell is chased whether an apply or
@@ -589,7 +597,26 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// inside a `UIScrollView` or layout callback is the class of thing UIKit answers with an
   /// exception, and by the next turn a settle may have been followed by an apply that fixed the
   /// cell anyway. `readoptQueued` keeps it to one per settle.
+  ///
+  /// That hop is also why the models are asked, again, in the turn the apply is written: React
+  /// can unmount a Section — or the whole Form — in between, which leaves the *snapshot* holding
+  /// items this class has forgotten, and a provider run for one of those index paths has nothing
+  /// to draw. `rowlessVisibleItems()` drops them; `applySnapshot` is already queued for the same
+  /// change, so it costs nothing but a turn.
   private var readoptQueued = false
+
+  /// The cells a reconfigure has been applied for, by index path, while that apply runs.
+  /// The only thing the provider may answer a reconfiguration with; see `giveUpCell(in:at:)`.
+  private var reconfigureTargets: [IndexPath: UICollectionViewCell] = [:]
+
+  /// One visible item whose cell holds no row, and the cell that is short of it.
+  private struct RowlessItem {
+    let id: NitroUiFormItem
+    let path: IndexPath
+    /// The cell on screen when it is one of ours. `nil` says a different cell is there, or
+    /// none yet — and a reconfigure may not be asked for either.
+    let cell: NitroUiFormRowCell?
+  }
 
   private func readoptRowlessCells() {
     guard !readoptQueued else { return }
@@ -597,26 +624,72 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       self.readoptQueued = false
-      let ids = self.rowlessVisibleItemIdentifiers()
-      guard !ids.isEmpty, var snapshot = self.dataSource?.snapshot() else { return }
-      snapshot.reconfigureItems(ids)
+      // A list that has left the window has no blank row to chase, and a Form with no
+      // sections has no rows to put in one — the shape a mount/unmount loop leaves behind
+      // between the settle and this turn.
+      guard self.list.window != nil, !self.sections.isEmpty,
+        var snapshot = self.dataSource?.snapshot()
+      else { return }
+      let rowless = self.rowlessVisibleItems()
+      guard !rowless.isEmpty else { return }
+      var reconfigure: [NitroUiFormItem] = []
+      var replace: [NitroUiFormItem] = []
+      var targets: [IndexPath: UICollectionViewCell] = [:]
+      for item in rowless {
+        if let cell = item.cell {
+          reconfigure.append(item.id)
+          targets[item.path] = cell
+        } else {
+          replace.append(item.id)
+        }
+      }
+      if !reconfigure.isEmpty { snapshot.reconfigureItems(reconfigure) }
+      if !replace.isEmpty { snapshot.reloadItems(replace) }
       self.snapshotApplies += 1
+      self.reconfigureTargets = targets
       self.dataSource?.apply(snapshot, animatingDifferences: false)
+      self.reconfigureTargets = [:]
     }
   }
 
-  /// The identifiers of the items on screen whose cell holds no row. Main thread only.
-  private func rowlessVisibleItemIdentifiers() -> [NitroUiFormItem] {
+  /// The items on screen whose cell holds no row. Main thread only.
+  private func rowlessVisibleItems() -> [RowlessItem] {
     guard let dataSource, dataSource.snapshot().numberOfItems > 0 else { return [] }
-    var ids: [NitroUiFormItem] = []
-    for path in list.indexPathsForVisibleItems {
-      guard let id = dataSource.itemIdentifier(for: path) else { continue }
-      // A cell that is not one of ours at all - the blank `UICollectionViewCell` from a
-      // provider call that gave up - has no row either, and reads as `nil` here.
-      let cell = list.cellForItem(at: path) as? NitroUiFormRowCell
-      if cell?.row == nil, !ids.contains(id) { ids.append(id) }
+    var found: [RowlessItem] = []
+    for at in list.indexPathsForVisibleItems {
+      guard case let .row(row)? = dataSource.itemIdentifier(for: at) else { continue }
+      // The models must place this row at this index path *now*. When they do not, the
+      // snapshot is behind this class — the turn since the settle unmounted something — and
+      // the provider would be asked to draw an item its own list no longer has, which is how
+      // a cell winds up answered with a give-up cell in the middle of a reconfigure.
+      guard self.path(for: row) == at else { continue }
+      let cell = list.cellForItem(at: at) as? NitroUiFormRowCell
+      // A cell that is not one of ours at all — the blank `UICollectionViewCell` from a
+      // provider call that gave up — has no row either, and reads as `nil` here.
+      if cell?.row == nil {
+        found.append(RowlessItem(id: .row(row), path: at, cell: cell))
+      }
     }
-    return ids
+    return found
+  }
+
+  /// The cell to answer with when this Form has nothing to draw at an index path.
+  ///
+  /// A fresh blank cell is the right answer while UIKit is *inserting* an item: it goes in the
+  /// list, the next settle notices it holds nothing, and `readoptRowlessCells()` replaces it.
+  /// While UIKit is *reconfiguring* an item it is fatal: a reconfiguration must be answered with
+  /// the cell already on screen, and answering with another one raises
+  /// `NSInternalInconsistencyException` out of `-[UICollectionView _reconfigureCell:forItemAtIndexPath:]`
+  /// and takes the app with it — which is what X25 found in the bench's `mount.form` cell, on
+  /// every launch, when a Section unmounted in the turn between a settle's readopt and the apply
+  /// it queued. The cell already there is also the honest answer: a give-up means "leave this
+  /// one as it is", and the queued `applySnapshot` still has the real fix.
+  private func giveUpCell(
+    in collectionView: UICollectionView,
+    at indexPath: IndexPath
+  ) -> UICollectionViewCell {
+    if let existing = reconfigureTargets[indexPath] { return existing }
+    return UICollectionViewCell()
   }
 
   private func configureDataSource() {
@@ -643,7 +716,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       ) as? NitroUiFormRowCell,
       indexPath.section < sections.count
     else {
-      return UICollectionViewCell()
+      return giveUpCell(in: collectionView, at: indexPath)
     }
     let model = sections[indexPath.section]
     // Name this Form to the cell here, where the cell is *configured*. A
