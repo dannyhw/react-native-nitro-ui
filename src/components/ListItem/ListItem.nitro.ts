@@ -47,12 +47,14 @@ export interface NitroUiListItemProps
    * none. One line, tail-truncated.
    *
    * Both platforms draw it in the headline slot, on the headline's own line and
-   * pushed to the trailing edge: iOS through
-   * `UIListContentConfiguration.valueCell()`'s value, Android in the row it passes
-   * as Material 3's `content` rather than `trailingContent`, because
-   * `trailingContent` is centred against the whole row and would sit a two-line
-   * item's value between the lines. Neither moves the height at one line, so it is
-   * not in the sizing key.
+   * pushed to the trailing edge: iOS as a label of the leaf's own, pinned to the
+   * headline's first baseline (the row's configuration is `.cell()`/`.subtitleCell()`,
+   * which have no value slot), Android as a second composable in the row it passes as
+   * `headlineContent`.
+   * Material 3's `trailingContent` slot is not used for it — that slot is centred
+   * against the whole row, so on a two-line item it would sit the value between the
+   * lines; the slot does carry the `disclosure` chevron. Neither the value nor the
+   * chevron moves the height at one line, so neither is in the sizing key.
    */
   value: string | null;
   /**

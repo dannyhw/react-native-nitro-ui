@@ -641,8 +641,9 @@ private class ListItemHost(
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
               // The platform's value role: Material's supporting-text colour rather than the
-              // headline's, because a value is the row's answer, not its name. UIKit draws
-              // exactly this distinction through `.valueCell()`'s secondary text.
+              // headline's, because a value is the row's answer, not its name. iOS makes the
+              // same distinction by drawing the value as its own label in the row's
+              // secondary text colour (`ListItemModel.valueColor`).
               color = valueColor,
             )
           }
@@ -820,10 +821,28 @@ private object ListItemLayout {
 /** One dp measurement as the report spells it. */
 private fun Float.fmt(): String = String.format(java.util.Locale.ROOT, "%.2f", this)
 
-/** The row's own colours, as `#rrggbbaa` — the shape iOS's `Self.hex` answers. */
+/**
+ * The row's own colours, as `#rrggbbaa` — the shape iOS's `Self.hex` answers.
+ *
+ * `toArgb()` answers `0xAARRGGBB`, so the byte order has to be rearranged, not just printed:
+ * one `#%08x` of it writes the alpha first and answers a colour neither platform reads.
+ * `colours=` is compared by its alpha byte by the harness, which is how this was caught —
+ * a disabled row's `#611c1b1f` and its enabled `#ff1c1b1f` share their blue byte, so the
+ * report claimed the grey had not landed.
+ */
 private fun hexOf(
   color: ComposeColor,
-): String = String.format(java.util.Locale.ROOT, "#%08x", color.toArgb())
+): String {
+  val argb = color.toArgb()
+  return String.format(
+    java.util.Locale.ROOT,
+    "#%02x%02x%02x%02x",
+    argb shr 16 and 0xFF,
+    argb shr 8 and 0xFF,
+    argb and 0xFF,
+    argb ushr 24 and 0xFF,
+  )
+}
 
 /** The Hybrid View React renders as `NitroUiListItem`. */
 class HybridNitroUiListItem(
