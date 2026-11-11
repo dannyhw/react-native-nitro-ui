@@ -5936,6 +5936,67 @@ const CHECKS = {
         `${boundsText(live)} — the boxes the harness reads insets from are in ` +
         '`ListItem.harness.tsx`, which is where `insets=` is asserted'
     );
+
+    // 7. The same press has to *look* like a press. Inside a row the leaf installs no
+    //    indication of its own (the cell owns the shape, and the Form's section paints
+    //    the pressed state for every row in it), so the only feedback this row can have
+    //    is the section's - and the section paints one only for a row that is pressable.
+    //    The fixture and the README's `list-item-in-form` example both write the handler
+    //    on the *item*, so an item's `onPress` that never reaches the row is a row that
+    //    presses in silence: the tap above arrives, and the screen says nothing.
+    const formPressBefore = t.requireEcho(ECHO.listItemFormPresses);
+    const formX = inForm.bounds.x1 + Math.round(inForm.bounds.width * 0.5);
+    const formRest = shoot(inForm);
+    const formHold = t.rawHold(formX, inForm.bounds.cy, 2200);
+    await t.settle(900);
+    const formStream = shoot(inForm);
+    await formHold;
+    await t.settle(500);
+    const formAfter = shoot(inForm);
+    t.log.note(
+      `in-Form highlight sample over a ${String(inForm.bounds.width)}x` +
+        `${String(inForm.bounds.height)} px row — rest=${formRest.mean.toFixed(4)} ` +
+        `${formRest.grid}`
+    );
+    t.log.note(
+      `  held swipe in flight, +900 ms: ${formStream.mean.toFixed(4)} ${formStream.grid}`
+    );
+    t.log.note(
+      `  released: ${formAfter.mean.toFixed(4)} ${formAfter.grid} — presses ` +
+        `"${formPressBefore}" -> "${t.requireEcho(ECHO.listItemFormPresses)}"`
+    );
+    t.log.check(
+      `the row inside the Form is darker with the finger down than at rest ` +
+        `(held ${formStream.mean.toFixed(4)} against rest ${formRest.mean.toFixed(4)}): ` +
+        'an item that presses inside a row has to show it, and inside a row only the ' +
+        "section's own pressed state can",
+      formStream.mean < formRest.mean - 0.005
+    );
+
+    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
+    //    asking for that row. Last, because it scrolls the page out from under everything
+    //    above it. Compose's own press handles this (a touch that travels past the slop
+    //    cancels), so this claim is a guard here rather than a bug report - iOS needed the
+    //    same check as a red first.
+    const dragNode = await t.requireControlOnScreen(LIVE);
+    const dragBefore = t.requireEcho(ECHO.listItemPresses);
+    const dragX = dragNode.bounds.x1 + Math.round(dragNode.bounds.width * 0.5);
+    await t.swipePx(
+      dragX,
+      dragNode.bounds.cy,
+      dragX,
+      dragNode.bounds.cy - Math.round(160 * t.density()),
+      300
+    );
+    await t.settle(600);
+    const dragAfter = t.requireEcho(ECHO.listItemPresses);
+    t.log.checkEquals(
+      `a drag that starts on the row is a scroll, not a press (${dragBefore} -> ` +
+        `${dragAfter}) — a row that fires on a scroll takes the person to a screen ` +
+        'they only meant to scroll past',
+      dragAfter,
+      dragBefore
+    );
   },
 };
 

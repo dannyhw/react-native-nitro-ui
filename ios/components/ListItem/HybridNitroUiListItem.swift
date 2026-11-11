@@ -89,10 +89,29 @@ final class ListItemModel: NitroUiModel {
   private var presses = 0
   private var probes = 0
   private var accessibilityReport = "none"
-  /// What the row's own layout answered: `<leading>,<trailing>,<shape>,<box>`. Written
-  /// by `NitroUiListRowView.layoutSubviews`, so it describes what drew rather than what
-  /// was sent.
-  private var layout = "pending"
+  /// The colours the row last handed each of its slots, as `text:..,secondary:..,..`.
+  /// Written where each slot is configured, so it says what will be painted rather than
+  /// what `disabled` was sent; see ``stateReport()``.
+  private var colours = "pending"
+  /// Whether the row's *own* highlight actually painted a background during the last
+  /// press. `shape=` reads this, so the answer comes from the painter and not from the
+  /// props that choose the painter.
+  private var highlightPainted = false
+  /// The live row, so a test-only read can ask the drawn view rather than recompute what
+  /// the props would have produced. Set once by the row's `init`, which is the only time
+  /// the model gains a row: a recycled host keeps drawing the same view.
+  weak var row: NitroUiListRowView?
+  /// Where the row's own layout put its content, in points: leading inset, trailing inset,
+  /// box. Written by `NitroUiListRowView.layoutSubviews` from the frames the layout gave,
+  /// so these describe what drew rather than what was sent. `layoutReport` answers from
+  /// them, and composes `shape=` here from `highlightPainted` — a layout pass does not run
+  /// when a press paints or unpaints a background, so the two have to be read together at
+  /// the moment the report is asked for.
+  private var laidOut = false
+  private var layoutLeading: CGFloat = 0
+  private var layoutTrailing: CGFloat = 0
+  private var layoutWidth: CGFloat = 0
+  private var layoutHeight: CGFloat = 0
 
   /// One press, through the path a tap takes. Refused while disabled, as a tap is, and
   /// the counter only moves for an accepted one — which is what makes
@@ -120,14 +139,39 @@ final class ListItemModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// Record where the row put its content.
-  func recordLayout(_ report: String) {
+  /// Record the colours the row handed its slots, taken at the place each is configured.
+  func recordColours(_ report: String) {
     reportLock.lock()
-    layout = report
+    colours = report
     reportLock.unlock()
   }
 
-  /// `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>;iconTint=-`. Safe from any thread.
+  /// Say whether the row's own highlight painted for the press being applied.
+  func recordHighlightPainted(_ painted: Bool) {
+    reportLock.lock()
+    highlightPainted = painted
+    reportLock.unlock()
+  }
+
+  /// Record where the row put its content, in points. `nil` until the row has laid out.
+  func recordLayout(
+    leading: CGFloat,
+    trailing: CGFloat,
+    width: CGFloat,
+    height: CGFloat
+  ) {
+    reportLock.lock()
+    laidOut = true
+    layoutLeading = leading
+    layoutTrailing = trailing
+    layoutWidth = width
+    layoutHeight = height
+    reportLock.unlock()
+  }
+
+  /// `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>;iconTint=-;colours=<…>`.
+  ///
+  /// Safe from any thread.
   ///
   /// The last field answers `-` because iOS has no pixel sampler to feed (`nuiTestPixelReport`
   /// answers `no pixels platform=ios` for the same reason). Android records the colour its
@@ -135,14 +179,27 @@ final class ListItemModel: NitroUiModel {
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);presses=\(presses);probes=\(probes);a11y=\(accessibilityReport);iconTint=-"
+    return "displayed=\(drawn);presses=\(presses);probes=\(probes);" +
+      "a11y=\(accessibilityReport);iconTint=-;colours=\(colours)"
   }
 
-  /// `insets=<l>,<t>;shape=<0|1>;box=<w>x<h>`. Safe from any thread.
+  /// `insets=<l>,<t>;shape=<0|1>;box=<w>x<h>`, or `pending` before the first layout.
+  ///
+  /// Safe from any thread. The insets and the box are the last layout's measured frames;
+  /// `shape=` is this model's `highlightPainted`, asked at the moment of reading — see
+  /// ``recordHighlightPainted(_:)``.
   func layoutReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return layout
+    guard laidOut else { return "pending" }
+    return String(
+      format: "insets=%.2f,%.2f;shape=%d;box=%.2fx%.2f",
+      layoutLeading,
+      layoutTrailing,
+      highlightPainted ? 1 : 0,
+      layoutWidth,
+      layoutHeight
+    )
   }
 
   /// Back to "nothing yet", for recycling: a reused row whose report still described the
@@ -153,7 +210,9 @@ final class ListItemModel: NitroUiModel {
     presses = 0
     probes = 0
     accessibilityReport = "none"
-    layout = "pending"
+    colours = "pending"
+    highlightPainted = false
+    laidOut = false
     reportLock.unlock()
   }
 }
@@ -205,6 +264,9 @@ final class NitroUiListRowView: UIView {
   /// The value label's trailing constraint, whose constant moves with the chevron.
   private var valueTrailing: NSLayoutConstraint?
   private var valueWidth: NSLayoutConstraint?
+  /// The value's text, kept so the width limit can be computed in `layoutSubviews`, where a
+  /// box exists, instead of in `nuiApply`, where on the first apply one does not.
+  private var valueText: String?
   private var chevronVisible = false
 
   /// The colour a pressed row draws, which is the one Form's own row uses
@@ -213,8 +275,11 @@ final class NitroUiListRowView: UIView {
 
   init(model: ListItemModel) {
     self.model = model
-    self.content = UIListContentView(configuration: ListItemModel.configuration(title: nil, subtitle: nil, image: nil, insideRow: false))
+    self.content = UIListContentView(configuration: ListItemModel.configuration(title: nil, subtitle: nil, image: nil, insideRow: false, disabled: false))
     super.init(frame: .zero)
+    // So a test-only read (`nuiTestProbeAccessibility`) can ask the drawn view what it
+    // publishes instead of recomputing what the props would have produced.
+    model.row = self
     backgroundColor = .clear
     // The view's own margins must not add to the configuration's: the row is pinned to
     // these edges, and a box that inherits layout margins would inset it a second time.
@@ -317,13 +382,21 @@ final class NitroUiListRowView: UIView {
   func nuiApply() {
     // Who paints the press: this row's own highlight, the `Form.Row`'s cell, or nobody.
     // `setPressed(_:)` is the painter, and this is its condition spelled once.
-    pressPath = !model.pressable || model.disabled ? "none" : (model.insideRow ? "cell" : "own")
+    // Inside a `Form.Row` the leaf tracks nothing: the cell is the touch target and the
+    // cell is what paints a pressed row (D46 item 2), and `Form.Row` takes this row's
+    // `onPress` through the context so the press still arrives. A recogniser armed inside a
+    // row would answer a touch the cell is already answering, and could only paint a
+    // highlight the row has no business painting.
+    pressPath = !model.pressable || model.disabled
+      ? "none"
+      : (model.insideRow ? "cell" : "own")
     let image = model.systemImage.flatMap { UIImage(systemName: $0) }
     let configuration = ListItemModel.configuration(
       title: model.title,
       subtitle: model.subtitle,
       image: image,
-      insideRow: model.insideRow
+      insideRow: model.insideRow,
+      disabled: model.disabled
     )
     // The trailing reservation: UIKit truncates the title at the configuration's trailing
     // margin, and the value label and chevron are drawn inside it. Reserving their width
@@ -346,22 +419,50 @@ final class NitroUiListRowView: UIView {
       valueLabel.text = value
       valueLabel.font = ListItemModel.valueFont
       valueLabel.textColor = ListItemModel.valueColor(disabled: model.disabled)
-      valueWidth?.constant = ListItemModel.valueMaxWidth(
-        width: bounds.width,
-        value: value,
-        accessory: model.accessory,
-        insideRow: model.insideRow,
-        font: ListItemModel.valueFont
-      )
+      // The width the value may take is a question about the *box*, and `nuiApply` runs
+      // before the box exists - on the first apply `bounds.width` is 0, which answers the
+      // reservation as if the row were 0 wide. It is applied where the box is known
+      // (`layoutSubviews`); this is the value, which the box cannot change.
+      valueText = value
       valueTrailing?.constant = -(ListItemModel.listInset(model.insideRow)
         + ListItemModel.chevronSpace(model.accessory))
     }
 
     chevronVisible = model.accessory == .disclosure
     chevron.isHidden = !chevronVisible
+    chevron.tintColor = model.disabled ? ListItemModel.disabledColor : ListItemModel.chevronColor
 
-    pressGesture.isEnabled = model.pressable && !model.disabled
+    pressGesture.isEnabled = model.pressable && !model.disabled && !model.insideRow
     if !pressGesture.isEnabled { setPressed(false) }
+
+    // What the row will paint in each slot, recorded where each is set: the colour the
+    // configuration carries for the headline and the supporting line, the image tint, the
+    // chevron this file draws, and the value label. `disabled` is a colour decision as much as
+    // an inertness one, and reading it back is the only way a harness can tell "greyed the
+    // row" from "greyed the value label".
+    //
+    // Both text colours are `null_resettable`: a configuration that was never told answers
+    // `nil`, and the colour it then paints with is the list cell's own default — `.label` and
+    // `.secondaryLabel`. Those are named here rather than reported as "unset", because the
+    // harness is comparing an enabled row with a disabled one and needs a number on both
+    // sides. An image tint answers `unset` when none was set: UIKit picks the symbol's own
+    // tint there, and this row has not chosen it.
+    func painted(
+      _ color: UIColor?,
+      _ fallback: UIColor
+    ) -> String {
+      Self.hex((color ?? fallback).resolvedColor(with: traitCollection))
+    }
+    let paintedImageTint = configured.imageProperties.tintColor.map { tint in
+      Self.hex(tint.resolvedColor(with: traitCollection))
+    } ?? "unset"
+    model.recordColours(
+      "text=\(painted(configured.textProperties.color, .label))"
+        + ",secondary=\(painted(configured.secondaryTextProperties.color, .secondaryLabel))"
+        + ",image=\(paintedImageTint)"
+        + ",chevron=\(painted(chevron.tintColor, .tertiaryLabel))"
+        + ",value=\(valueLabel.isHidden ? "none" : painted(valueLabel.textColor, .label))"
+    )
 
     applyAccessibility()
     model.recordDrawn(
@@ -385,7 +486,12 @@ final class NitroUiListRowView: UIView {
         .compactMap { $0 }
         .joined(separator: ", ")
     }
-    var traits: UIAccessibilityTraits = model.pressable ? .button : .staticText
+    // `.button` is a promise about a touch. Inside a `Form.Row` the touch belongs to the
+    // cell, which publishes its own button element, and a second button nested in it is one
+    // stop too many for a row that is already one.
+    var traits: UIAccessibilityTraits = model.pressable && !model.insideRow
+      ? .button
+      : .staticText
     if model.disabled { traits.insert(.notEnabled) }
     accessibilityTraits = traits
     // The labels inside are not elements: `isAccessibilityElement` on the row hides the
@@ -413,8 +519,35 @@ final class NitroUiListRowView: UIView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
+    applyValueWidth()
     rideValueLabelOnTitleBaseline()
-    model.recordLayout(Self.layoutReport(self))
+    if let geometry = Self.layoutGeometry(self) {
+      model.recordLayout(
+        leading: geometry.leading,
+        trailing: geometry.trailing,
+        width: geometry.width,
+        height: geometry.height
+      )
+    }
+  }
+
+  /// The value label's own width limit, at the width the row actually has.
+  ///
+  /// Asked in `layoutSubviews` and not in `nuiApply`: the apply that first sets a value
+  /// runs before the view has a box (`bounds.width == 0`), and a reservation computed at
+  /// width 0 is a value label with no room, truncated to nothing on the frame it arrives.
+  private func applyValueWidth() {
+    guard let value = valueText, bounds.width > 0 else { return }
+    let width = ListItemModel.valueMaxWidth(
+      width: bounds.width,
+      value: value,
+      accessory: model.accessory,
+      insideRow: model.insideRow,
+      font: ListItemModel.valueFont
+    )
+    if valueWidth?.constant != width {
+      valueWidth?.constant = width
+    }
   }
 
   /// Put the value label on the *title's* baseline.
@@ -467,53 +600,145 @@ final class NitroUiListRowView: UIView {
     return found
   }
 
-  /// What the row drew, as one line. Read from the drawn layout: the configuration the
-  /// content view laid itself out with, and whether the row paints anything of its own.
-  private static func layoutReport(_ row: NitroUiListRowView) -> String {
-    let margins = (row.content.configuration as? UIListContentConfiguration)?.directionalLayoutMargins
-    // The reservation is the value's and the chevron's own width, not an inset of the
-    // list, and the harness asks about the list's inset — so it is subtracted back out.
-    let reservation = ListItemModel.trailingReservation(
-      value: row.model.value,
-      accessory: row.model.accessory,
-      font: ListItemModel.valueFont
-    )
-    let leading = margins?.leading ?? -1
-    let trailing = (margins?.trailing ?? -1) - reservation
-    // `shape=1`: a background on screen right now, or a press highlight this row has armed
-    // for itself. Inside a `Form.Row` neither happens, and the row's cell is the shape.
-    let painted = (row.backgroundColor != nil && row.backgroundColor != .clear)
-      || row.pressPath == "own"
-    return String(
-      format: "insets=%.2f,%.2f;shape=%d;box=%.2fx%.2f",
-      leading,
-      trailing,
-      painted ? 1 : 0,
-      row.bounds.width,
-      row.bounds.height
+  /// What the row drew, as numbers: leading inset, trailing inset, box — in points.
+  ///
+  /// Both halves come off the drawn thing, not off what was asked of it. The insets are the
+  /// title label's own frame, converted into the row's coordinates: reading
+  /// `configuration.directionalLayoutMargins` back would only repeat the number `nuiApply`
+  /// wrote into it, and a report that echoes the prop cannot notice an `insideRow` that was
+  /// ignored. The trailing number is the gap to the furthest thing the row draws on that edge
+  /// - the value label or the chevron when there is one, the title's own right edge when
+  /// there is not - because that is the inset the list paid for.
+  ///
+  /// `nil` until there is a title label to measure, so a row that has not drawn its content
+  /// yet reports `pending` rather than a pair of made-up zeroes.
+  ///
+  /// `shape=` is not answered here: a layout pass does not run when a press paints or
+  /// unpaints a background, so the flag would go stale between the press and the read.
+  /// `ListItemModel.layoutReport()` composes it from `highlightPainted`, which the painter
+  /// itself sets. A row inside a `Form.Row` never answers `1`: its cell is the shape.
+  private static func layoutGeometry(
+    _ row: NitroUiListRowView
+  ) -> (leading: CGFloat, trailing: CGFloat, width: CGFloat, height: CGFloat)? {
+    guard let title = titleLabel(in: row.content) else { return nil }
+    let frame = title.convert(title.bounds, to: row)
+    var drawnTo = frame.maxX
+    if !row.valueLabel.isHidden {
+      drawnTo = max(drawnTo, row.valueLabel.frame.maxX)
+    }
+    if row.chevronVisible {
+      drawnTo = max(drawnTo, row.chevronHost.frame.maxX)
+    }
+    return (
+      leading: frame.minX,
+      trailing: row.bounds.width - drawnTo,
+      width: row.bounds.width,
+      height: row.bounds.height
     )
   }
+
+  /// One resolved colour as `#rrggbbaa`, for the `colours=` report.
+  static func hex(_ color: UIColor) -> String {
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+    guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+      return "other"
+    }
+    func byte(_ value: CGFloat) -> String {
+      String(format: "%02x", Int((max(0, min(1, value)) * 255).rounded()))
+    }
+    return "#" + byte(red) + byte(green) + byte(blue) + byte(alpha)
+  }
+  /// How far a finger may travel before the row stops calling the touch its own press.
+  ///
+  /// The recogniser starts at touch-down (`minimumPressDuration = 0`), which is what makes a
+  /// quick thumb work at all, and it recognises alongside the scroll view, which is what lets
+  /// React Native and the list keep their own read of the same touch. Travel is therefore the
+  /// only thing left that tells a tap from a flick that happened to begin on a row, and 10 pt
+  /// is the order of magnitude UIKit itself gives a tap for slop.
+  static let pressTravelLimit: CGFloat = 10
+
+  /// Where this gesture's finger came down, and whether it has since travelled or left.
+  private var pressOrigin: CGPoint?
+  private var pressTravelling = false
 
   @objc private func pressChanged(_ gesture: UILongPressGestureRecognizer) {
     switch gesture.state {
       case .began:
-        setPressed(true)
+        pressOrigin = gesture.location(in: self)
+        pressTravelling = false
+        model.recordHighlightPainted(setPressed(true))
+      case .changed:
+        // A scroll that began on the row: stand down. The highlight goes, and the flag is
+        // what keeps the release from firing a press anyway.
+        guard let origin = pressOrigin else { break }
+        let here = gesture.location(in: self)
+        let travelled = abs(here.x - origin.x) > Self.pressTravelLimit
+          || abs(here.y - origin.y) > Self.pressTravelLimit
+        if travelled || !bounds.contains(here), !pressTravelling {
+          pressTravelling = true
+          setPressed(false)
+          // Not a press after all, so nothing counts as having painted one.
+          model.recordHighlightPainted(false)
+        }
       case .ended:
         setPressed(false)
-        model.press()
+        // This is the whole difference between a row that presses and a row that fires
+        // whenever someone scrolls past it: `.ended` is where a long press with no minimum
+        // says "the finger lifted", and a flick lifts a finger too.
+        if pressTravelling {
+          model.recordHighlightPainted(false)
+        } else {
+          model.press()
+        }
+        pressTravelling = false
       default:
         // Cancelled or failed: a scroll that turned out to be a scroll.
         setPressed(false)
+        model.recordHighlightPainted(false)
+        pressTravelling = false
     }
   }
 
   /// The row's own highlight: the platform's colour at the platform's press timing, and
   /// nothing at all inside a `Form.Row`, whose cell draws its own (DECISIONS D46 item 2).
-  private func setPressed(_ pressed: Bool) {
+  ///
+  /// Answers whether a background was painted *by this call*, which is what `shape=` reads.
+  /// The claim is "this row's own highlight is what a press draws", and the only witness for
+  /// that is the painter running.
+  @discardableResult
+  private func setPressed(_ pressed: Bool) -> Bool {
     let wantsPressed = pressed && model.pressable && !model.disabled && !model.insideRow
-    guard wantsPressed != self.pressed else { return }
+    guard wantsPressed != self.pressed else { return self.pressed }
     self.pressed = wantsPressed
     backgroundColor = wantsPressed ? Self.pressedColor : .clear
+    return wantsPressed
+  }
+
+  /// The press path a test drives: the highlight, then the release, then the callback, in the
+  /// order the recogniser uses, so `shape=` means the same thing from a test as under a
+  /// finger. The travel check is a gesture's business; a test press is a tap.
+  func simulatePressForTesting() {
+    model.recordHighlightPainted(setPressed(true))
+    setPressed(false)
+    model.press()
+  }
+
+  /// Back to a row at rest, for a host object being reused.
+  ///
+  /// `prepareForRecycle` resets the *model*, and a model reset reaches the drawn row only
+  /// through a re-apply, which the pool does not promise before the instance goes back out.
+  /// A row still wearing its previous owner's pressed background, or still armed for that
+  /// owner's touch, is a recycled row that looks pressed and could answer a callback its next
+  /// owner never set.
+  func prepareForReuseForTesting() {
+    pressed = false
+    backgroundColor = .clear
+    pressOrigin = nil
+    pressTravelling = false
+    pressGesture.isEnabled = false
   }
 }
 
@@ -528,7 +753,10 @@ extension NitroUiListRowView: UIGestureRecognizerDelegate {
   }
 
   override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-    model.pressable && !model.disabled
+    // Inside a `Form.Row` the cell owns the touch and the highlight, and the item's handler
+    // was handed up to it (`Form.Row`'s `RowItemPressContext`), so a recogniser here would be
+    // a second answer to one touch.
+    model.pressable && !model.disabled && !model.insideRow
   }
 }
 
@@ -601,11 +829,21 @@ extension ListItemModel {
     UIListContentConfiguration.valueCell().secondaryTextProperties.font
   }
 
+  /// The colour a disabled row draws *everything* in: text, supporting text, the leading
+  /// glyph and the chevron. `.tertiaryLabel` is the one UIKit hands a disabled label, and it
+  /// is the colour the value label has always used for this - a row that greys only its value
+  /// looks like a row with a placeholder, not a row you cannot press.
+  static let disabledColor: UIColor = .tertiaryLabel
+  /// The chevron's colour when the row is enabled: a piece of decoration, one step behind the
+  /// headline, and the same colour the disabled row uses (which is why only the text, the
+  /// supporting text and the glyph change when a row is disabled).
+  static let chevronColor: UIColor = .tertiaryLabel
+
   static func valueColor(disabled: Bool) -> UIColor {
     var properties = UIListContentConfiguration.valueCell().secondaryTextProperties
     if disabled {
       // The row's own disabled colour, not a dimmed copy of the normal one.
-      properties.color = .tertiaryLabel
+      properties.color = disabledColor
     }
     return properties.resolvedColor()
   }
@@ -619,7 +857,8 @@ extension ListItemModel {
     title: String?,
     subtitle: String?,
     image: UIImage?,
-    insideRow: Bool
+    insideRow: Bool,
+    disabled: Bool
   ) -> UIListContentConfiguration {
     var configuration: UIListContentConfiguration = subtitle == nil ? .cell() : .subtitleCell()
     configuration.text = title
@@ -630,6 +869,17 @@ extension ListItemModel {
     configuration.textProperties.lineBreakMode = .byTruncatingTail
     configuration.secondaryTextProperties.numberOfLines = 1
     configuration.secondaryTextProperties.lineBreakMode = .byTruncatingTail
+    if disabled {
+      // `UIListContentConfiguration` does not grey itself: the configuration it hands a
+      // disabled cell is the configuration it hands an enabled one, and the greying is the
+      // cell's. This leaf is not a cell, so the row's disabled colour has to be said for
+      // each slot - headline, supporting line and the leading glyph's template tint.
+      configuration.textProperties.color = disabledColor
+      configuration.secondaryTextProperties.color = disabledColor
+      if image != nil {
+        configuration.imageProperties.tintColor = disabledColor
+      }
+    }
     var margins = configuration.directionalLayoutMargins
     margins.leading = listInset(insideRow)
     configuration.directionalLayoutMargins = margins
@@ -892,6 +1142,9 @@ final class HybridNitroUiListItem: HybridNitroUiListItemSpec, RecyclableView {
   }
 
   func prepareForRecycle() {
+    // The drawn row first: a pressed background or an armed recogniser survives a model reset
+    // until something re-applies, and the pool does not promise that before reuse.
+    model.row?.prepareForReuseForTesting()
     model.title = nil
     model.subtitle = nil
     model.value = nil
@@ -925,12 +1178,24 @@ final class HybridNitroUiListItem: HybridNitroUiListItemSpec, RecyclableView {
   }
 
   /// Press through the tap's path, on main (see the spec). Returns at once.
+  ///
+  /// The drawn row runs it when there is one, so a test press paints the highlight and
+  /// counts the press in the order a finger does, and `shape=` means the same thing here as
+  /// under a held touch. The model alone answers only when the row has not been made yet.
   func nuiTestPress() throws {
     let model = host.model
     if Thread.isMainThread {
-      model.press()
+      Self.pressForTesting(model)
     } else {
-      DispatchQueue.main.async { model.press() }
+      DispatchQueue.main.async { Self.pressForTesting(model) }
+    }
+  }
+
+  private static func pressForTesting(_ model: ListItemModel) {
+    if let row = model.row {
+      row.simulatePressForTesting()
+    } else {
+      model.press()
     }
   }
 
@@ -941,19 +1206,39 @@ final class HybridNitroUiListItem: HybridNitroUiListItemSpec, RecyclableView {
   /// `UIView` element built in ``NitroUiListRowView/applyAccessibility``, and readable
   /// in-process. It is a reading of *this leaf's* element: what VoiceOver is finally
   /// handed through a SwiftUI host is XCUITest's to check, and is
-  /// (`real-input:ios`'s a11y case for the same item). Nothing is asked of the main
-  /// thread, so there is nothing to hop for.
+  /// (`real-input:ios`'s a11y case for the same item).
+  ///
+  /// The answers come off the element - `isAccessibilityElement`, `accessibilityLabel()`,
+  /// `accessibilityTraits` - because recomputing them from the model would only be an echo
+  /// of the props, and the point of the probe is that `applyAccessibility` ran and put
+  /// something on screen for a reader to find. Those are `UIView` properties, so this one
+  /// *does* hop to main, and the harness's probe helper waits for the counter to move
+  /// rather than reading the line straight back.
   func nuiTestProbeAccessibility() throws {
-    host.model.recordAccessibility(Self.accessibilityProbe(host.model))
+    let model = host.model
+    if Thread.isMainThread {
+      model.recordAccessibility(Self.accessibilityProbe(model))
+    } else {
+      DispatchQueue.main.async { model.recordAccessibility(Self.accessibilityProbe(model)) }
+    }
   }
 
   private static func accessibilityProbe(_ model: ListItemModel) -> String {
-    // The row builds its element from the model on every apply, and the element is what a
-    // reader gets, so the probe reads the same three answers off the same rule rather
-    // than off a second copy of it.
-    let label = model.accessibilityLabel
-      ?? [model.title, model.subtitle, model.value].compactMap { $0 }.joined(separator: ", ")
-    return "role=\(model.pressable ? "button" : "text"),disabled=\(model.disabled),label=\(label)"
+    guard let row = model.row else {
+      return "no row"
+    }
+    let traits = row.accessibilityTraits
+    let role: String
+    if traits.contains(.button) {
+      role = "button"
+    } else if traits.contains(.staticText) {
+      role = "text"
+    } else {
+      role = "none"
+    }
+    let label = row.accessibilityLabel ?? ""
+    return "role=\(role),disabled=\(traits.contains(.notEnabled)),"
+      + "element=\(row.isAccessibilityElement),label=\(label)"
   }
 
   func nuiTestStateReport() throws -> String {

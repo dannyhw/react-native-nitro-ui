@@ -106,6 +106,46 @@
       "symbol": "star",
       "style": "materialsymbolsoutlined",
       "why": "the resource-name form: the star above, compiled into the example APK, so a test can measure the release build's artwork against the development one"
+    },
+    {
+      "path": "example/src/assets/icons/notifications_24px.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/notifications/materialsymbolsoutlined/notifications_24px.xml",
+      "sha256": "9915e9e282df7d59758c70c32bde9dc9cfee8401abfcf3311b508ac63ca5e8de",
+      "symbol": "notifications",
+      "style": "materialsymbolsoutlined",
+      "why": "the bell the ListItem stories and the README sample draw: the Android twin of the SF Symbol `bell`, so one row shows one glyph on both platforms (G30 round 1)"
+    },
+    {
+      "path": "example/android/app/src/main/res/drawable/nitroui_test_notifications.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/notifications/materialsymbolsoutlined/notifications_24px.xml",
+      "sha256": "9915e9e282df7d59758c70c32bde9dc9cfee8401abfcf3311b508ac63ca5e8de",
+      "symbol": "notifications",
+      "style": "materialsymbolsoutlined",
+      "why": "the same bell as a compiled drawable, which is the form the ListItem story names — stories are photographed for docs/images/"
+    },
+    {
+      "path": "example/src/assets/icons/person_24px.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/person/materialsymbolsoutlined/person_24px.xml",
+      "sha256": "ab409acf8825d92c92928e06d2d84c003f9e227033594443d0ba5700fe2fe072",
+      "symbol": "person",
+      "style": "materialsymbolsoutlined",
+      "why": "the person the README's `list-item-in-form` sample draws: the Android twin of `person.crop.circle`, which that example had on iOS alone"
+    },
+    {
+      "path": "example/src/assets/icons/archive_24px.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/archive/materialsymbolsoutlined/archive_24px.xml",
+      "sha256": "e27698bcdb3609b38f5c398a844fb1bfd71af8eb43851afff38635b198201054",
+      "symbol": "archive",
+      "style": "materialsymbolsoutlined",
+      "why": "the box the README's disabled `ListItem` draws: the Android twin of `tray.and.arrow.down`, the other half-drawn glyph in that sample"
+    },
+    {
+      "path": "example/android/app/src/main/res/drawable/nitroui_test_lock.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/lock/materialsymbolsoutlined/lock_24px.xml",
+      "sha256": "2153d1ce0851e9b9eff5e55efca2dc5d10343988bc14c3d96c958ca2e9d287fe",
+      "symbol": "lock",
+      "style": "materialsymbolsoutlined",
+      "why": "the lock the ListItem story's disabled row draws: the Android twin of the SF Symbol `lock`, which that row had on iOS alone"
     }
   ]
 }

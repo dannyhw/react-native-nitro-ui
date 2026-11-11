@@ -144,9 +144,9 @@ export default function ListItemScreen() {
         />
         <ListItem
           accessory="disclosure"
-          androidIcon="nitroui_test_star"
+          androidIcon="nitroui_test_notifications"
           subtitle="Alerts, sounds and badges"
-          systemImage="bell.badge"
+          systemImage="bell"
           title="Notifications"
           value="On"
         />

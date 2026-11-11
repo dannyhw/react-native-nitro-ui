@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ViewProps } from 'react-native';
 
 import { useSizingId } from '../../core/useSizingId';
@@ -12,7 +13,7 @@ import {
   resolveAndroidIcon,
   type AndroidIconProp,
 } from '../../iconSource';
-import { useInsideFormRow } from '../Form/Form';
+import { useInsideFormRow, useFormRowItemPressReporter } from '../Form/Form';
 import { NativeNitroUiListItem } from './NativeNitroUiListItem';
 
 /**
@@ -71,9 +72,10 @@ export interface ListItemProps extends ViewProps {
    * Called when the row is tapped, drawn with the platform's own row highlight.
    *
    * Without it the row is a label, not a button: no highlight, no button role, and
-   * a tap goes to whatever is behind the row. Inside a `Form.Row` the row can own
-   * the press instead — see {@link ListItem}'s "Inside a `Form`" section; wire the
-   * press on one of the two, not both.
+   * a tap goes to whatever is behind the row. Inside a `Form.Row` the *cell* takes this
+   * handler and presses for the item, because the cell is the touch target and the only
+   * thing that can paint a pressed row — see {@link ListItem}'s "Inside a `Form`"
+   * section. A row with a handler of its own keeps its own; wiring both warns.
    */
   onPress?: (() => void) | undefined;
   /**
@@ -207,8 +209,10 @@ function resolveAccessory(accessory: ListItemAccessory | undefined): string {
  * **Inside a `Form.Row`** the leaf draws no insets, no shape and no press of its own
  * beyond what it is told to: the row is the cell, and the cell has already paid for
  * both (D46 item 2). It knows because `Form.Row` publishes that through a context,
- * so nothing has to be configured by hand. Standalone it adds the platform's own list
- * insets, measured to match a real list cell's.
+ * so nothing has to be configured by hand — and the same context carries the
+ * other way too, so an item's `onPress` becomes the cell's press and is drawn with the
+ * cell's highlight. That is why the handler can be written on the item alone. Standalone
+ * it adds the platform's own list insets, measured to match a real list cell's.
  *
  * `measureContent()` answers the row's own height; the width is the box's
  * (`fillWidth`).
@@ -250,6 +254,23 @@ export function ListItem({
   const filledValue = value == null || value === '' ? null : value;
   const hasIcon = systemImage != null || resolvedAndroidIcon != null;
   const insideRow = useInsideFormRow();
+  const reportRowItemPress = useFormRowItemPressReporter();
+  // Inside a row the leaf installs no press of its own (the cell is the touch target, and
+  // the cell is what paints a pressed row), so the handler has to travel up to the row
+  // that owns the touch - otherwise the README's own shape, a `<Form.Row>` with no handler
+  // around a `<ListItem onPress>`, presses in silence: the callback is wired, and nothing
+  // on screen ever says the row was pressed. Reported from an effect, because the row is an
+  // *ancestor*: reporting during render would set state in a component React is not
+  // rendering. `null` on the way out, so a row that loses its item stops being pressable.
+  useEffect(() => {
+    if (reportRowItemPress == null) {
+      return;
+    }
+    reportRowItemPress(onPress ?? null, disabled);
+    return () => {
+      reportRowItemPress(null, false);
+    };
+  }, [reportRowItemPress, onPress, disabled]);
   const sizingId = useSizingId();
   const pressCallback = useStableCallback(
     onPress ?? onPressNotProvided

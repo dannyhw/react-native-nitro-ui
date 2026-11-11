@@ -671,15 +671,16 @@ export function RingtoneList({
     <View>
       <ListItem
         accessory="disclosure"
-        androidIcon={require('./assets/icons/share_24px.xml')}
+        androidIcon={require('./assets/icons/notifications_24px.xml')}
         onPress={onOpenNotifications}
         subtitle="Only while the app is open"
-        systemImage="bell.badge"
+        systemImage="bell"
         title="Notifications"
       />
       <ListItem title="Version" value="1.2.3" />
       <ListItem
         accessory="disclosure"
+        androidIcon={require('./assets/icons/archive_24px.xml')}
         disabled
         onPress={onOpenArchive}
         systemImage="tray.and.arrow.down"
@@ -701,6 +702,7 @@ export function AccountForm({ onOpenProfile }: { onOpenProfile: () => void }) {
         <Form.Row>
           <ListItem
             accessory="disclosure"
+            androidIcon={require('./assets/icons/person_24px.xml')}
             onPress={onOpenProfile}
             subtitle="Signed in on 3 devices"
             systemImage="person.crop.circle"

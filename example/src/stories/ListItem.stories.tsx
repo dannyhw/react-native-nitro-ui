@@ -17,8 +17,14 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 
 import { Column, Frame, Note, Showcase, useShowcaseInk } from './showcase';
 
-/** A drawable the example app ships in `res/drawable/` — the resource-name form. */
-const DRAWABLE = 'nitroui_test_star';
+/**
+ * A drawable the example app ships in `res/drawable/` — the resource-name form.
+ *
+ * A Material Symbols bell, because every row here names both glyphs and the pair has to be
+ * one glyph: `bell.badge` beside Google's star drew a bell on iOS and a star on Android, and
+ * the two screenshots in `docs/images/` were two different rows.
+ */
+const DRAWABLE = 'nitroui_test_notifications';
 
 const meta = {
   component: ListItem,
@@ -26,7 +32,7 @@ const meta = {
     title: 'Push notifications',
     subtitle: 'Only while the app is open',
     value: null,
-    systemImage: 'bell.badge',
+    systemImage: 'bell',
     androidIcon: DRAWABLE,
     accessory: 'none',
     disabled: false,
@@ -128,7 +134,7 @@ export const Slots: Story = {
           accessory="disclosure"
           androidIcon={DRAWABLE}
           subtitle="Alerts, sounds and badges"
-          systemImage="bell.badge"
+          systemImage="bell"
           title="Notifications"
           value="On"
         />
@@ -244,7 +250,7 @@ export const InsideAForm: Story = {
                 androidIcon={DRAWABLE}
                 onPress={() => setPressed((count) => count + 1)}
                 subtitle="Alerts, sounds and badges"
-                systemImage="bell.badge"
+                systemImage="bell"
                 title="Notifications"
                 value="On"
               />
@@ -271,6 +277,7 @@ export const InsideAForm: Story = {
             </Form.Row>
             <Form.Row>
               <ListItem
+                androidIcon="nitroui_test_lock"
                 disabled
                 subtitle="Greyed by the platform, not by us"
                 systemImage="lock"
