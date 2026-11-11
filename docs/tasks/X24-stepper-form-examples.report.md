@@ -302,3 +302,114 @@ directly — buys the JS time back.
 - The Popover section's closing paragraph ("Your content is laid out in your own tree at up to
   `maxWidth`…") sits at the end of the README's **Form** section, on `main` as here
   (`README.md:1268`).
+
+## Fix round 2
+
+**Centring without the node.** The wrapper is gone. `src/core/useSelfSizing.ts` now holds the base
+style all eleven self-sizing controls carry: `alignSelf: 'center'` when a `Form.Row` provides its
+context (exported from core), `'flex-start'` elsewhere — one `useContext` read, no node, the row
+back to its own `alignItems: 'center'`. `Popover` and `BottomSheet` clear the context. `form.md`
+says what a row gives its children, and that a control carrying its own `alignSelf` (React
+Native's `Switch`) keeps it. No JS-thread cell moved out
+of noise; the wrapper's +20-32 % is gone.
+
+**The Android cards were a component bug.** `FormSection` applied a row's offset twice — the
+`Modifier.offset` it computed and the placement Compose had already performed — so each card sat a
+row-box below its rows. One layout pass that both measures and places the box fixes it.
+
+**iOS `disabled` did reach SwiftUI**: `.disabled(model.disabled)` is on the chain and a `Toggle`
+beneath it visibly dims. SwiftUI's `Stepper` keeps drawing itself live, so iOS now draws it at 0.5
+opacity, read back by the harness. Pixels were unavailable: the probe reads one flat grey from
+its box, its parent and the window crop.
+
+All four PNGs retaken from one story each, same state on both platforms.
+
+### Before / after
+
+| | Before (start of this round) | After (this branch) |
+| --- | --- | --- |
+| Form Android — cards off the rows | ![before](X24/before2/form-android.png) | ![after](../images/components/form-android.png) |
+| Form iOS | ![before](X24/before2/form-ios.png) | ![after](../images/components/form-ios.png) |
+| Stepper iOS — DISABLED drawn live | ![before](X24/before2/stepper-ios.png) | ![after](../images/components/stepper-ios.png) |
+| Stepper Android | ![before](X24/before2/stepper-android.png) | ![after](../images/components/stepper-android.png) |
+
+### Red proofs
+
+- `harness:{ios,android}:Form` → `Form.tsx` swapped for `origin/main`'s (its `InsideRowContext` is
+  a different object, so the controls keep `flex-start`) → `Form row content (X24)` red both sides,
+  `1 failed, 121 passed`, iOS `X24 BARE pair: row content x=40.0..380.0, control x=319.0..380.0,
+  centre delta -8.0`, Android `… x=28.2..383.6, control x=331.4..383.6, centre delta -4.0` (tree
+  `16f94c973dfa`); the same case is green inside both full harness runs at `07021b2ead49`. The
+  probe now reads `useSelfSizingBaseStyle()` rather than retyping the style, so it follows whatever
+  the row actually gives a control — which is what makes it go red on `main`'s row at all.
+- `harness:android:FormFidelity` → `Modifier.placedPixelBox` out of the section's card layout →
+  red `row 0: its container is drawn at y=77 while the row starts at y=37.3 …; its card starts at
+  x=24.4 while the row starts at x=12.2` (tree `cd8ab58b8853`, both axes exactly doubled), 2/2
+  green after `6754384f`; the case also passes with `main`'s `Form.tsx` in place, because the fix
+  is Kotlin-side.
+- `harness:ios:Stepper` → `nitroUiStepperDisabledOpacity` mutated to `1.0` → red `a disabled iOS
+  stepper is drawn dimmed … (displayed=5;up=0;down=0;opacity=1.00;probes=0;merged=unavailable;
+  a11y=none): expected '1.00' to be '0.50'` (tree `b8b1039c537d`), green 15/15 now.
+- `check` → the new core file trips the packaging guard: `package-files: +src/core/useSelfSizing.ts
+  would be published (not in the manifest)` (tree `d235a43d3fb3`), green after `manifest:update`.
+- Two ledger lines are not results: `harness:ios:Form:--background` (1.6 s — `--background` behind
+  `--` reached jest) and `harness:ios` FAIL at `d0d0881421c8` (2.0 s — a bench edit in the tree met
+  "refusing to run against a stale app").
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2028 tests / 86 suites | `07021b2ead49` | 3 m 10 s | start 6.3 / med 19.3 / max 26.6 |
+| `harness:ios` | **PASS** | 595 tests / 31 suites + isolated 6 tests / 3 suites | `07021b2ead49` (ios tree) | 14 m 50 s | start 7.5 / med 9.6 / max 29.1 |
+| `harness:android` | **PASS** | 651 tests / 31 suites + isolated 6 tests / 3 suites | `07021b2ead49` (android tree) | 18 m 20 s | start 26.0 / med 5.1 / max 26.0 |
+| `real-input:ios` | **PASS** | — | `07021b2ead49` (ios tree) | 43 m 03 s | start 6.2 / med 10.9 / max 223.7 |
+| `real-input:android` | **PASS** | — | `07021b2ead49` (android tree) | 63 m 19 s | start 9.4 / med 7.4 / max 122.9 |
+| `harness:android:FormFidelity` | stale | 2 tests / 1 suites | bb035c8f3251 (not this tree) | 15.3 s | start 10.6 / med 11.1 / max 11.1 |
+| `harness:ios:SegmentedControl` | stale | 21 tests / 1 suites | b4bb12d817e6 (not this tree) | 26.6 s | start 17.8 / med 15.5 / max 17.8 |
+| `harness:ios:Stepper` | **PASS** | 15 tests / 1 suites | `07021b2ead49` (ios tree) | 25.8 s | start 7.0 / med 7.8 / max 8.0 |
+
+`harness:ios:Stepper` is the mutation's green counterpart; the two `harness:*:Form` red proofs and
+the two other filtered runs are in the ledger and satisfy nothing. `need --for review` is satisfied
+on this tree.
+
+### Bench
+
+`--plan quick --component form --only nitro-ui` on `maintainer-mac-2`, load 4.3-5.3 over 10 cores
+(ceiling 5.0, so `--force`), two runs per platform, medians. The left number is `main` as fix round
+1 measured it on this machine, same plan, same cells; the right is this tree.
+
+| Cell | presented | mounted | JS commit | JS CPU/op | UI CPU/op |
+| --- | --- | --- | --- | --- | --- |
+| Android mount N=20 | 32.59 → 32.53 ms (0 %) | 24.83 → 24.79 ms (0 %) | 2.20 → 2.17 ms (**−1 %**) | 5.04 → 4.97 ms (−1 %) | 14.43 → 13.72 ms (−5 %) |
+| Android mount N=50 | 43.80 → 42.35 ms (−3 %) | 32.07 → 31.56 ms (−2 %) | 4.14 → 4.06 ms (**−2 %**) | 9.00 → 8.88 ms (−1 %) | 27.39 → 25.66 ms (−6 %) |
+| Android update N=50 | 30.22 → 30.37 ms (+0.5 %) | 15.85 → 15.86 ms (0 %) | 2.45 → 2.56 ms (**+4 %**) | 2.70 → 2.75 ms (+2 %) | 4.73 → 4.61 ms (−3 %) |
+| iOS update N=50 | 16.06 → 16.08 ms (0 %) | 2.39 → 2.43 ms (**+1.5 %**) | 2.14 → 2.17 ms (**+1 %**) | 2.35 → 2.33 ms (0 %) | 4.25 → 4.21 ms (−1 %) |
+
+Nothing here is resolvable, which is the answer: the same code twice puts Android mount N=20 JS
+commit at 2.06 and 2.27 ms (10 % apart) and mount N=50 at 3.98 and 4.14 ms (4 %), so every delta
+above sits inside the bench's own repeatability. What was resolvable — the wrapper — was +20 %,
++28 % and +20 % on the Android JS thread and +34 % on iOS's, and each cell now sits 13-24 % under
+the wrapper's number. `mount.form` stays unmeasurable on iOS: 8 of 8 launches per run abort in
+`HybridNitroUiForm.readoptRowlessCells()` at N=20 and N=50, unchanged from `main` and not
+investigated, on instruction.
+
+`memory.form N=200`: iOS 163.7 → 164.9 KiB/inst (+0.7 %, where iOS repeats to 0.6 %); Android's
+cell reads 135 KiB here against 219 KiB two hours earlier on this machine with nothing in this diff
+that could move it, so it is not quoted across rounds. The Android APK used for these runs was
+checked rather than trusted: its Hermes bundle contains `useSelfSizingBaseStyle` and
+`InsideRowContext`, so round 1's `createBundleReleaseJsAndAssets` staleness did not bite here.
+
+### Follow-ups (this round)
+
+- `nuiTestPixelProbe` cannot see a hybrid Stepper: its own box, its parent and the window crop all
+  read one flat grey (`flat view=#808080 spread=0 parent=#808080 spread=0 window=#0A1628 spread=0`)
+  while SegmentedControl's box in the same harness answers a tint. A Stepper pixel case needs a
+  different capture path; the state-report assertion is what stands in for it now.
+- Android's `memory.form` cell is not comparable across rounds (135 KiB vs 219 KiB on one machine).
+  Only iOS memory should be quoted in a report.
+- `origin/main` (`8ae6cada`) already carries `alignItems: 'center'` on `Form.Row` and its own local
+  `InsideRowContext`, so X24's row shape matches what merged; the difference this round is that the
+  flag travels in core where the controls can read it.
+- The bench fixtures still need the round-1 workaround (PNG copies under `bench/src/assets/` with
+  the two `.xml` requires aimed at them, removed after the runs). Unchanged as a fix request.
