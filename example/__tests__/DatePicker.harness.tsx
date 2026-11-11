@@ -2075,9 +2075,12 @@ describe('DatePicker · wheel variant (G29)', () => {
     // drum), rather than writing the model. So the drums really do move to 14:05 here,
     // the rest is a real rest, and the second call is a real roll only if something put
     // the drums back afterwards — the props pass (`seatTimeDrumsFromModel`) when the
-    // frame the `LaunchedEffect` needs never came, and the rest's own tail when it did.
-    // Delete both and this goes red on the second `waitForEvents`: the drums are already
-    // on 14:05, the request moves nothing, no rest happens, and the log stays one line.
+    // frame the `LaunchedEffect` needs never came, and the composition's own seat when it
+    // did. Delete both and this goes red on the second `waitForEvents`: the drums are
+    // already on 14:05, the request moves nothing, no rest happens, and the log stays one
+    // line. Delete the wheel's drum mutex instead and it goes red the same way, one frame
+    // later: the revert's seat is still scrolling when the second roll is asked for, so
+    // that roll finds the drums on its own target and reports nothing.
     const PARENT = localMs(2026, 5, 15, 9, 20);
     const ROLLED = localMs(2026, 5, 15, 14, 5);
     const { unmount } = await render(
@@ -2105,7 +2108,9 @@ describe('DatePicker · wheel variant (G29)', () => {
     handles.get('wheel-refused')?.nuiTestSelect(2026, 5, 15, 14, 5);
     const second = await waitForEvents(2);
     expect(second[1]).toBe(`wheel-refused:${String(ROLLED)}`);
-    expect(displayedOf('wheel-refused')).toBe(PARENT);
+    // Polled, not read: the revert rides the batch that echoes this event's count, and
+    // reading it the moment the event lands asserts against a frame that has not run.
+    await waitForDisplayed('wheel-refused', PARENT, 'the second revert');
     unmount();
   });
 
