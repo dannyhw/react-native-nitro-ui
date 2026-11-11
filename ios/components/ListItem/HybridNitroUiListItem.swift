@@ -179,6 +179,15 @@ final class NitroUiListRowView: UIView {
   /// (`NitroUiFormViews.swift`): React Native's touch handler will not share a touch with
   /// a recogniser it did not create, so the row has to accept simultaneous recognition
   /// rather than take the touch for itself.
+  ///
+  /// The minimum is part of the shape, not a tuning knob: UIKit's default is half a
+  /// second, and a recogniser with that floor is a row that answers nobody. Measured on
+  /// `real-input:ios`, the suite's 0.15 s press landed on a row that was on screen and
+  /// hittable and reported no press at all, on every run that reached it, while the same
+  /// press at the same dwell reached the controls beside it. The highlight never appeared
+  /// either — it is drawn by the same `.began` this floor postponed. A person's tap lasts
+  /// less than half a second too, so this was the row failing every quick thumb, not a
+  /// test asking for something unnatural.
   private lazy var pressGesture = UILongPressGestureRecognizer(target: self, action: #selector(pressChanged(_:)))
   /// Whether the row is drawing its pressed background right now.
   private var pressed = false
@@ -277,6 +286,7 @@ final class NitroUiListRowView: UIView {
     ])
 
     pressGesture.delegate = self
+    pressGesture.minimumPressDuration = 0
     pressGesture.cancelsTouchesInView = false
     pressGesture.delaysTouchesBegan = false
     pressGesture.delaysTouchesEnded = false
