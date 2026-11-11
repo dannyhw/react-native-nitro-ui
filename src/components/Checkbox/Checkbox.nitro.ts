@@ -30,17 +30,42 @@ export interface NitroUiCheckboxProps
   /** Initial value of an uncontrolled Checkbox; ignored while `checked` is set. */
   defaultChecked: boolean | null;
   /**
-   * Three-state display, Android only: Material 3's `TriStateCheckbox` shows a dash
-   * instead of the box. It is never a value - a tap still asks for "checked" - and
-   * iOS has no checkbox at all (`CheckboxToggleStyle` is iOS-unavailable), so a
-   * SwiftUI `Toggle` reads this as off. `docs/components/checkbox.md` has the table.
+   * Three-state display: Material 3's `TriStateCheckbox` draws a dash instead of the
+   * box, and on iOS the glyph styles draw `minus.circle.fill` / `minus.square.fill`
+   * (DECISIONS D47 item 3). It is never a value - a tap still asks for "checked" -
+   * and `checked` outranks it on both platforms: a box that is `indeterminate` *and*
+   * checked draws the check mark, which is Android's rule and has to stay Android's.
+   * `docs/components/checkbox.md` has the table.
    *
-   * It is in the sizing key on Android because the third glyph is what Material's
-   * three-state composable draws, and an unlabelled box keeps its own measure;
-   * `checked` is not, because neither state changes the box on either platform
-   * (the harness measures both).
+   * The one thing `'switch'` does not draw: that style is SwiftUI's two-position
+   * control, which reads this as off, exactly as it did before D47.
+   *
+   * It is in the sizing key wherever it changes what is drawn - on Android, and on iOS
+   * in the glyph styles - and out wherever it does not; `checked` is out on both,
+   * because no box on either platform moves between states (the harness measures all
+   * of them).
    */
   indeterminate: boolean | null;
+  /**
+   * Which picture iOS draws: `'circle'` (the default), `'square'` or `'switch'`,
+   * resolved by the wrapper - anything else is `'circle'`. See
+   * `docs/components/checkbox.md` for what each maps to.
+   *
+   * `'circle'` and `'square'` are still the platform's own `Toggle`, with a style of
+   * ours that draws Apple's SF Symbols (`checkmark.circle.fill` / `circle`,
+   * `checkmark.square.fill` / `square`) - the checklist glyph iOS itself uses in
+   * Reminders and Notes, which is why a Checkbox no longer has to look like a Switch
+   * on this platform (DECISIONS D47). `'switch'` is the look this component shipped
+   * with under D38 item 1, unchanged in every detail: same control, same box, same
+   * element a reader meets.
+   *
+   * **Android ignores it** - Material 3 has a checkbox, so there is nothing to choose
+   * - and it stays out of Android's sizing key for the reason `indeterminate` stays
+   * out of iOS's: a prop that changes nothing that is drawn must not cost a cold
+   * configuration. On iOS it *is* in the key, because the three styles measure apart
+   * (`HybridNitroUiCheckbox.swift` declares the default one's box).
+   */
+  iosStyle: string;
   /**
    * The last event count JS has fully processed (core-architecture §4). Native
    * only accepts a `checked` write once it has seen this many of its own events.
@@ -123,17 +148,24 @@ export interface NitroUiCheckboxMethods extends HybridViewMethods {
 
   /**
    * TEMPORARY, test-only: what the checkbox is showing, as one line -
-   * `displayed=<0|1|mixed|none>;probes=<n>;merged=<0|1|none>;a11y=<...>`.
+   * `displayed=<0|1|mixed|none>;probes=<n>;merged=<0|1|none>;a11y=<...>
+   * [<;symbol=<SF Symbol|switch>][<;labelBox=<off,room>>];drops=<n>;recycles=<m>`.
    *
    * `displayed` is written where the control is drawn (the SwiftUI body, the
    * composable), so it is a reading of the hosted control rather than an echo of a
    * prop: the handle's `checked` answers what React sent. `none` until the control
-   * has drawn; `mixed` is Android's indeterminate, which iOS never draws.
+   * has drawn; `mixed` is the third state, which both platforms draw - on iOS in the
+   * two glyph styles only, never in `'switch'`, whose control has two positions.
    * `probes` counts the answers `nuiTestProbeAccessibility` has stored, so a test
    * can tell a fresh one from the last; `merged` is whether Android found one
    * focusable node for a labelled checkbox or two (1 = one node, which is what
    * TalkBack needs); `a11y` is that answer (Android:
    * `role=<role>,checked=<bool|none>,toggle=<On|Off|Indeterminate|none>,disabled=<bool>,clickable=<bool>,label=<text>`).
+   * `symbol` is iOS's half of "what is on screen" - the SF Symbol the drawing code was
+   * handed, or `switch` for the style that draws none of ours; Android has no symbol of
+   * ours to name, as iOS has never answered Android's `labelBox`. `drops`/`recycles` are
+   * the *host object's* lifetime, not this mount's: they survive a recycle, which is what
+   * makes `recycles>=1` the witness that a mount is looking at a recycled view.
    *
    * @internal Not app API (DECISIONS D14).
    */

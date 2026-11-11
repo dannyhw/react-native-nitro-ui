@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:re-measures%20for%20a%20new%20style
+
+- Ran: 2026-11-11T01:04:45.400Z on code tree `c20a3642a266` at HEAD `bffb1c1` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android re-measures for a new style`
+- Result: fail, exit 1, 633 ms
+- Load: start 8.77, end 8.77, median 8.77, max 8.77
+- Device: android / device `emulator-5570` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-44.736Z.log` (<store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-44.736Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-44.736Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.77 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:re-measures%20for%20a%20new%20style
+gate: node ../scripts/harness.mjs --harnessRunner android re-measures for a new style (cwd example)
+gate: code tree c20a3642a266 at HEAD bffb1c11
+gate: git tree bc19feedfbdd with a DIRTY worktree (not reusable)
+gate: log task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-44.736Z.log
+gate:       <store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-44.736Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android re-measures for a new style
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp b7e72d66 at bffb1c11fc4ce60745a6fbf729406639a204768a, now c20a3642 at bffb1c11fc4ce60745a6fbf729406639a204768a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp b7e72d66 at bffb1c11fc4ce60745a6fbf729406639a204768a, now c20a3642 at bffb1c11fc4ce60745a6fbf729406639a204768a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:android:re-measures%20for%20a%20new%20style FAIL in 0.6 s
+gate: recorded in .gates/task/G31-checkbox-ios-checkmark.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-44.736Z.log (5 probe(s))
+
+```

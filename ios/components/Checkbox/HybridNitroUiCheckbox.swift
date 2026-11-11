@@ -3,10 +3,17 @@
 //  react-native-nitro-ui
 //
 //  The Checkbox component. iOS has no checkbox - `CheckboxToggleStyle` is
-//  `@available(iOS, unavailable)` in the SDK - so, exactly as Expo's universal
-//  `Checkbox` does, this renders SwiftUI's `Toggle` with the switch style and calls
-//  it a Checkbox. The control is real; only the glyph is another platform's.
-//  `docs/components/checkbox.md` says so where a reader would look.
+//  `@available(iOS, unavailable)` in the SDK - so this is SwiftUI's `Toggle` wearing a
+//  style of ours that draws Apple's checklist glyph (`checkmark.circle.fill` over
+//  `circle`, or the square pair), which is what Reminders and Notes draw and what
+//  DECISIONS D47 settled on after a Checkbox that looked exactly like a Switch read as
+//  the wrong component. `iosStyle='switch'` is what this shipped with under D38 item 1
+//  - Expo's answer, the system's own control, unchanged.
+//
+//  Either way the control is Apple's and the symbols are Apple's: nothing here
+//  imitates a control (D38 item 1), and the tap, the value and the accessibility
+//  element are one code path for all three styles. The glyph table is in
+//  `NitroUiCheckboxGlyph.swift`, which is also the only place the whole table runs.
 //
 //  The structure is Switch's for the value (`HybridNitroUiSwitch.swift`: the
 //  event-count handshake) and Chip's for the label (`HybridNitroUiChip.swift`: a
@@ -26,11 +33,15 @@ final class CheckboxModel: NitroUiModel {
   var state = NitroUiControlledValue<Bool>(displayed: false)
   var defaultChecked: Bool?
   var didApplyDefault = false
-  /// Three-state display. Read by Android's `TriStateCheckbox`; stored here because
-  /// the prop is sent on both platforms and recycle has to clear it. Nothing on this
-  /// platform draws it - a switch has two positions.
+  /// Three-state display: the dash glyph (`minus.circle.fill` / `minus.square.fill`),
+  /// which D47 item 3 gave this platform. The `'switch'` style still has two positions
+  /// and reads it as off, so the *style* decides whether it is drawn - see
+  /// `showsThirdState` in ``CheckboxContent``.
   var indeterminate = false
-  /// Text beside the switch, or `nil`. Content: it is width, and it is the name.
+  /// Which picture to draw (DECISIONS D47 item 2). `'switch'` is everything below as it
+  /// shipped; the two glyph styles change the drawing and the box, nothing else.
+  var iosStyle: NitroUiCheckboxStyle = .circle
+  /// Text beside the glyph or switch, or `nil`. Content: it is width, and it is the name.
   var label: String?
   var disabled = false
   var tint: UIColor?
@@ -47,6 +58,7 @@ final class CheckboxModel: NitroUiModel {
   /// would ask for the update that has just happened.
   private let reportLock = NSLock()
   private var drawn = "none"
+  private var symbol = "none"
   private var probes = 0
   private var merged = "none"
   private var accessibilityReport = "none"
@@ -78,11 +90,29 @@ final class CheckboxModel: NitroUiModel {
     userToggle(to: !state.displayed)
   }
 
-  /// Record what the drawing code was handed: `1`/`0`. This platform has no third
-  /// glyph, so it never answers `mixed` - which is the point the harness pins.
+  /// Record what the drawing code was handed: `1`, `0`, or `mixed` for the dash the two
+  /// glyph styles draw (DECISIONS D47 item 3). `'switch'` never answers `mixed` - that
+  /// control has two positions - which is the point `Checkbox.harness.tsx` pins by
+  /// reading the same flag that decides the picture.
   func recordDrawn(_ value: String) {
     reportLock.lock()
     drawn = value
+    reportLock.unlock()
+  }
+
+  /// Record the symbol the drawing code was handed - the SF Symbol name for a glyph
+  /// style, or `switch` for the style that draws none of ours.
+  ///
+  /// This is how a device test checks *which picture* a style drew: the hosting view
+  /// answers `accessibilityElements == []` to anything that is not an accessibility
+  /// client (``nuiTestProbeAccessibility``), and a pixel probe would have to name the
+  /// colour before it knew what was on screen. Read where the control is drawn, like
+  /// ``recordDrawn``, so it is the picture the `Toggle` was handed and not an echo of the
+  /// prop - and `checked`/`unchecked`/`indeterminate` answer three different names, which
+  /// is what makes "the glyph changed with the state" a comparison rather than a claim.
+  func recordSymbol(_ value: String) {
+    reportLock.lock()
+    symbol = value
     reportLock.unlock()
   }
 
@@ -102,11 +132,17 @@ final class CheckboxModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// `displayed=…;probes=…;merged=…;a11y=…`. Safe from any thread.
+  /// `displayed=…;probes=…;merged=…;a11y=…;symbol=…`. Safe from any thread.
+  ///
+  /// `symbol` is iOS's half of "what is on screen": `displayed` is the state and `symbol`
+  /// is the picture it wears, and the two differ exactly once - the dash, which is
+  /// `mixed` wearing `minus.circle.fill`. The `'switch'` style answers `symbol=switch`.
+  /// Android has no symbol of ours to name and leaves the field out, as it has always
+  /// left `labelBox` out on iOS.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport);symbol=\(symbol)"
   }
 
   /// Back to "nothing yet", for recycling: a reused view whose report still
@@ -114,6 +150,7 @@ final class CheckboxModel: NitroUiModel {
   func clearReports() {
     reportLock.lock()
     drawn = "none"
+    symbol = "none"
     probes = 0
     merged = "none"
     accessibilityReport = "none"
@@ -130,13 +167,39 @@ struct CheckboxContent: NitroUIContent {
     self.model = model
   }
 
-  // `@ViewBuilder` so the read-out below can be a statement: without it a `Void`
+  // `@ViewBuilder` so the read-outs below can be statements: without them a `Void`
   // statement would be the body's value.
   @ViewBuilder var body: some View {
+    // The switch style has two positions, so it neither draws the third state nor
+    // claims it: one flag says whether the dash is on screen, and the drawing, the
+    // `displayed` read-out and the announced value all read *that* rather than each
+    // asking about the style again.
+    let showsThirdState = model.indeterminate && model.iosStyle.drawsGlyph
     // The reading `nuiTestStateReport()` answers with: taken where the control is
-    // drawn, so it is what the Toggle is handed rather than what React sent.
-    let drawn = model.state.displayed ? "1" : "0"
+    // drawn, so it is what the Toggle is handed rather than what React sent. `mixed` is
+    // the dash, which iOS now draws too - the state and its picture are `recordSymbol`.
+    let drawn = model.state.displayed ? "1" : (showsThirdState ? "mixed" : "0")
+    // The value a reader is told, from the same two inputs the picture is drawn from.
+    //
+    // It is one call to the table's own rule, not a second reading of `indeterminate`:
+    // `checked` outranks the dash in the glyph (`NitroUiCheckboxGlyphs.glyph`), so it has
+    // to outrank it in the announcement as well. Asked as `showsThirdState ? "mixed" :
+    // nil` - which is what this said first - a box that is `checked` *and*
+    // `indeterminate` drew a checkmark and said "mixed", and so did a dash the app has
+    // not cleared yet: the tap reports `true`, the app may answer on its next render, and
+    // in between the row shows a checkmark. Both modifiers below take this one value, so
+    // the drawn picture and the announced value cannot come from different questions.
+    let announcedValue = NitroUiCheckboxGlyphs.accessibilityValue(
+      checked: model.state.displayed,
+      indeterminate: showsThirdState
+    )
+    let glyph = NitroUiCheckboxGlyphs.glyph(
+      style: model.iosStyle,
+      checked: model.state.displayed,
+      indeterminate: showsThirdState
+    )
     let _ = model.recordDrawn(drawn)
+    let _ = model.recordSymbol(glyph?.symbol ?? "switch")
     let name = model.accessibilityLabel ?? model.label
     Toggle(isOn: Binding(
       get: { model.state.displayed },
@@ -144,7 +207,9 @@ struct CheckboxContent: NitroUIContent {
     )) {
       // With no label the Toggle still needs an empty one: `Toggle("", isOn:)` and
       // `labelsHidden()` is what Switch does for the same reason, so a checkbox
-      // without text is a switch and nothing else.
+      // without text is the control and nothing else. The glyph style asks the same
+      // question one rung later and leaves the empty text out of its row
+      // (`showsLabel`), because a `HStack` charges spacing for a zero-width child.
       if let label = model.label {
         Text(label).lineLimit(1)
       } else {
@@ -152,11 +217,17 @@ struct CheckboxContent: NitroUIContent {
       }
     }
     // A `Toggle` with a label keeps the label visible; a label-less one hides the empty
-    // text so the box is the switch alone. The row's tap target is added at the end of
-    // this chain rather than assumed: measured here, a switch-style `Toggle` answers
-    // touches on its glyph only, and a press on the label delivers nothing at all.
+    // text so the box is the control alone.
     .modifier(OptionalHideLabels(hidden: model.label == nil))
-    .toggleStyle(.switch)
+    // DECISIONS D47: the checklist glyph for the two default styles, and the system's
+    // switch for `'switch'` - the look, the box and the read-out that came with it.
+    .modifier(
+      CheckboxToggleStyleModifier(
+        style: model.iosStyle,
+        showsThirdState: showsThirdState,
+        showsLabel: model.label != nil
+      )
+    )
     .disabled(model.disabled)
     .modifier(OptionalTint(color: model.tint))
     // A checkbox with no text has no name, and the one thing that gives it one is
@@ -164,13 +235,33 @@ struct CheckboxContent: NitroUIContent {
     // (an empty `accessibilityLabel("")` would silence the text it does have, so it
     // is applied only when there is a name - Switch's and Chip's rule).
     .modifier(OptionalAccessibility(label: name))
+    // The third state's word, for the one state whose picture and value disagree.
+    //
+    // A `Toggle` is two-position, so its element can only say checked or unchecked; the
+    // dash is drawn by a control that is *not* checked, and a reader told "off" about a
+    // box showing a dash is being told about a different box. The word is "mixed", which
+    // is Apple's own for a checkbox that is partly on (`NSButton.allowsMixedState`,
+    // `NSControlStateValueMixed`) - and it is *not* what Android says: Compose renders
+    // `ToggleableState.Indeterminate` as "Partially checked"
+    // (`R.string.indeterminate` in `androidx.compose.ui`), so the platforms name the
+    // third state differently and neither invents a third `checked` value.
+    // `docs/components/checkbox.md` carries both words.
+    //
+    // Measured, not assumed: `real-input:ios`'s a11y sweep prints the element this ends
+    // up with (`trait=… value=…`), which is the closest thing to a transcript this
+    // suite can read, and `docs/components/checkbox.md` quotes what it said.
+    .modifier(OptionalAccessibilityValue(value: announcedValue))
     // The label is part of the control, so touching it is touching the control - which
-    // is also what Android's merged `Row` node does. A switch-style `Toggle` answers
-    // touches on the glyph only: a press on a labelled Checkbox's label was measured
-    // here (`real-input:ios --control checkbox`) as no `value` change and no event at
-    // all, while a press on the glyph toggled. So the row gets a tap target of its own,
-    // and it asks through the hook a press is documented to take - `press()`: the
-    // opposite of what the box shows, refused while `disabled`.
+    // is also what Android's merged `Row` node does.
+    //
+    // For the switch style this is a measured necessity and not a guess: a press on a
+    // labelled switch-style Checkbox's label was measured here (`real-input:ios
+    // --control checkbox`) as no `value` change and no event at all, while a press on the
+    // glyph toggled. For a glyph row it is the only tap target there is - the style draws
+    // a symbol and a text and installs no gesture of its own, so without this row
+    // handler nothing on the control would answer a touch at all. Either way the row gets
+    // one target, and it asks through the hook a press is documented to take - `press()`:
+    // the opposite of what the box shows, refused while `disabled`.
     //
     // It has to be an overlay, and not the `background` layer one would rather write.
     // That version was tried on this simulator and measured: three presses on the row's
@@ -185,11 +276,191 @@ struct CheckboxContent: NitroUIContent {
     // glyph and counts, which is the assertion that a row handler and the `Toggle`'s own
     // gesture both answering the same touch would go red on. Out of the accessibility tree,
     // so the element a reader meets is still the switch.
+    // One element for a reader, on the row's own box (DECISIONS D47 item 3).
+    //
+    // Measured on the device by `real-input:ios`'s accessibility sweep, a custom
+    // `ToggleStyle` does not get the accessibility SwiftUI's own styles get: the element
+    // a reader reaches is built from the style's *content*, so a glyph row read as three
+    // stops - the `Toggle` (named, valued, and laid out at 107 x 21.67 pt inside a
+    // control laid out at 109 x 26), the symbol as an image named "Circle", and the row's
+    // text as static text of its own. Two of those are things a person has to skip to
+    // reach the control, and a name 2 pt off the box the finger presses is exactly the
+    // finding `scripts/real-input/a11y.mjs` fails a control for. Neither of the two
+    // obvious fixes measures out: `.accessibilityHidden(true)` on the symbol leaves the
+    // symbol in the tree with its "Circle" name, and
+    // `.accessibilityElement(children: .ignore)` - in the style or on the `Toggle` - adds
+    // an element rather than replacing one, and loses the toggle trait with it.
+    //
+    // `accessibilityRepresentation` replaces the row's accessibility with a `Toggle`'s
+    // that is never drawn, and it is the only shape measured here that answers all four
+    // questions at once: one element (no symbol stop, no text stop), the control's name,
+    // the value - including `mixed` for the dash - and the row's own box, one pixel of
+    // height taller than the host's (1/3 pt, inside the rule's half-point tolerance).
+    // The bare case gains the most: unnamed, its element used to be the symbol, named
+    // "Circle", at 21.67 pt; named with `accessibilityLabel`, it is now that name on the
+    // 26 pt box.
+    //
+    // `.disabled` is restated inside the representation because the representation is a
+    // separate view: measured without it, a *disabled* Checkbox's element answered
+    // `enabled=true` to a reader, which is a worse announcement than the inset box this
+    // replaced. The `'switch'` style is not represented at all - its element is already
+    // the row, at the box the sweep has read since D38 - so D47 changes nothing about
+    // what a reader meets for the look it kept.
+    .modifier(
+      CheckboxGlyphAccessibility(
+        glyph: model.iosStyle.drawsGlyph,
+        name: name ?? "",
+        isOn: model.state.displayed,
+        setOn: { requested in model.userToggle(to: requested) },
+        disabled: model.disabled,
+        value: announcedValue
+      )
+    )
     .overlay {
       Color.clear
         .contentShape(Rectangle())
         .accessibilityHidden(true)
         .onTapGesture { model.press() }
+    }
+  }
+}
+
+/// The two glyph styles of DECISIONS D47: the system's checklist symbol, then the label
+/// beside it.
+///
+/// A style of ours on Apple's `Toggle`, which is what keeps every promise the component
+/// makes: the binding is the Toggle's, so a press means "the opposite of what is showing"
+/// here exactly as it does in the switch style; `.disabled` refuses the touch and dims
+/// the row; and the symbol is `.font(…)`-sized, so Dynamic Type scales the glyph with the
+/// label instead of leaving a 1990s-sized box behind large text.
+///
+/// It says nothing to a reader, on purpose. What the elements of a custom style's content
+/// become is measured in `CheckboxContent/body` - three stops, with the name 2 pt off the
+/// box - which is why the row's one element comes from `CheckboxGlyphAccessibility`
+/// rather than from anything in here: a symbol and a text that are *pictures of* the
+/// state have no announcement to make.
+///
+/// It draws and does not intercept. The row's tap target is applied to the control in
+/// ``CheckboxContent/body`` - one target for all three styles, for the measured reason
+/// spelled out there - so this style cannot answer a touch twice.
+/// The `DynamicProperty` conformance is what gets the `@Environment` below injected and
+/// re-read: a style is not a `View`, and without it SwiftUI has no reason to fill the
+/// wrapper, which would leave `isEnabled` at its default and a disabled row undimmed.
+private struct CheckboxGlyphToggleStyle: ToggleStyle, DynamicProperty {
+  /// `circle` or `square`: the two glyph styles are one symbol pair apart and nothing
+  /// else, which is also why they share a sizing rule.
+  let style: NitroUiCheckboxStyle
+  /// Is the dash the state on screen? (`checked` outranks it - see the table.)
+  let showsThirdState: Bool
+  /// Is there a label to show? `labelsHidden()` is honoured by SwiftUI's own styles,
+  /// not by this one, so the empty text a label-less `Toggle` carries has to be left
+  /// out here - an `HStack` charges its spacing for a zero-width child, and a bare
+  /// checkbox would measure a glyph plus a gap it never drew.
+  let showsLabel: Bool
+  /// Whether the row dims. Read from the environment instead of passed: `.disabled(…)` is
+  /// applied to the `Toggle` outside this style, and the environment is that same fact as
+  /// the control already knows it, so the drawing cannot disagree with the control it
+  /// draws and no argument has to be threaded down to it.
+  @Environment(\.isEnabled) private var isEnabled
+
+  func makeBody(configuration: Configuration) -> some View {
+    let glyph = NitroUiCheckboxGlyphs.glyph(
+      style: style,
+      checked: configuration.isOn,
+      indeterminate: showsThirdState
+    )
+    // SwiftUI's own spacing between an image and a text - not an invented number. It is
+    // what a row of `Image` + `Text` gets on this platform, and it is the spacing the
+    // label's own font decides, which is the pair Dynamic Type needs to stay in step.
+    return HStack {
+      Image(systemName: glyph?.symbol ?? "circle")
+        // The body font, which is the font the label inherits: the glyph rides the
+        // same text style, so a larger accessibility size grows the box and its label
+        // together (and the sizing engine's environment epoch is what re-measures it).
+        .font(.body)
+        .imageScale(.large)
+        .symbolRenderingMode(.monochrome)
+        // `.tint` is the accent the row was handed: `OptionalTint` applies `tintColor` to
+        // the `Toggle` above this style, and a style that asked for the tint again would
+        // keep a second copy of a decision the environment already carries - and would
+        // ignore an app's own `.tint(_:)` further out. With no tint set, `.tint` is the
+        // accent colour, which is the answer this used to fall back to. The empty box is
+        // not a state, so it is not tinted: the system's secondary label, either way.
+        .foregroundStyle(
+          glyph?.filled == true
+            ? AnyShapeStyle(.tint)
+            : AnyShapeStyle(Color(uiColor: .secondaryLabel))
+        )
+      if showsLabel {
+        configuration.label
+      }
+    }
+    .opacity(isEnabled ? 1 : 0.5)
+  }
+}
+
+/// Puts one of the three iOS looks on the `Toggle`.
+///
+/// `.toggleStyle(…)` takes a different concrete style per branch, so the choice is a
+/// modifier and not an argument - the `OptionalTint` shape below, for the same reason:
+/// the branches belong together, and the call site keeps one chain of modifiers that
+/// every style shares (`disabled`, the tint, the name, the row's tap target).
+private struct CheckboxToggleStyleModifier: ViewModifier {
+  let style: NitroUiCheckboxStyle
+  let showsThirdState: Bool
+  let showsLabel: Bool
+
+  @ViewBuilder func body(content: Content) -> some View {
+    switch style {
+    case .toggle:
+      // D38 item 1's look, and the branch that keeps it: SwiftUI draws every pixel of
+      // this control, so nothing above or below this line changes its box, its element
+      // or its read-out.
+      content.toggleStyle(.switch)
+    case .circle, .square:
+      content.toggleStyle(
+        CheckboxGlyphToggleStyle(
+          style: style,
+          showsThirdState: showsThirdState,
+          showsLabel: showsLabel
+        )
+      )
+    }
+  }
+}
+
+/// The glyph styles' one accessibility element: the platform's `Toggle`, represented
+/// rather than drawn, on the row's box.
+///
+/// ``CheckboxContent/body`` carries the reason, measured. It is a modifier because
+/// `.accessibilityRepresentation` replaces the accessibility of everything it is applied
+/// to: the glyph branch gets it, the `'switch'` branch gets the element SwiftUI builds
+/// for itself, and the chain above (the name, the third state's word) stays one chain
+/// that every style shares. The name and the value inside the representation are the
+/// same two values the chain applies, from the same two sources, so a reader is told the
+/// same thing whichever style drew the row.
+private struct CheckboxGlyphAccessibility: ViewModifier {
+  /// Glyph styles only; `'switch'` keeps its own element.
+  let glyph: Bool
+  /// The control's name - `accessibilityLabel`, else `label` - or empty for no name.
+  let name: String
+  let isOn: Bool
+  let setOn: (Bool) -> Void
+  /// Restated inside the representation, which does not inherit it.
+  let disabled: Bool
+  /// The third state's word, or `nil` to let the `Toggle`'s own checked/unchecked answer
+  /// through (`NitroUiCheckboxGlyphs.accessibilityValue`'s rule).
+  let value: String?
+
+  @ViewBuilder func body(content: Content) -> some View {
+    if glyph {
+      content.accessibilityRepresentation {
+        Toggle(name, isOn: Binding(get: { isOn }, set: { requested in setOn(requested) }))
+          .modifier(OptionalAccessibilityValue(value: value))
+          .disabled(disabled)
+      }
+    } else {
+      content
     }
   }
 }
@@ -216,6 +487,21 @@ private struct OptionalTint: ViewModifier {
     if let color {
       // `tint(_:)` takes a `ShapeStyle`, and `UIColor` is not one.
       content.tint(Color(color))
+    } else {
+      content
+    }
+  }
+}
+
+/// `.accessibilityValue(_:)` has no "leave the control's own value alone" form either, so
+/// the third state's word is applied only for the third state. Same rule as the name
+/// below: an empty value would silence what the `Toggle` has to say about itself.
+private struct OptionalAccessibilityValue: ViewModifier {
+  let value: String?
+
+  func body(content: Content) -> some View {
+    if let value {
+      content.accessibilityValue(Text(value))
     } else {
       content
     }
@@ -250,16 +536,22 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
   /// points.
   ///
   /// One number for every configuration, for the reason Button's is (the engine keys
-  /// fallbacks by component alone). A bare `.switch` Toggle is the Switch's own box -
-  /// 61x28 pt from iOS 26 and 51x31 pt before it, the same OS check
-  /// `HybridNitroUiSwitch.swift` makes - and a label only adds width, which the
-  /// measurement is for. The height is therefore the part that is right for every
-  /// configuration, and the width is a bare box's: inside the measured table in
-  /// `docs/components/checkbox.md` rather than any one checkbox.
+  /// fallbacks by component alone), and it is the *default* configuration's box: a
+  /// checkbox with no label, in the default `'circle'` style, is what an app draws
+  /// first. `Checkbox.harness.tsx` measures that box on the device - 26x26 pt on
+  /// iPhone Air / iOS 27 - and `scripts/conformance-core.mjs` keeps this number
+  /// beside it, because a fallback that drifts from the box it names is a guess with
+  /// a number in it.
+  ///
+  /// Until DECISIONS D47 this read the Switch's box - 61x28 pt from iOS 26, 51x31 pt
+  /// before it, with the same OS check `HybridNitroUiSwitch.swift` makes - because a
+  /// Checkbox on iOS *was* a `Toggle(.switch)`. It is not any more, and the glyph's
+  /// measure is an SF Symbol's, which does not care about the SDK split that moves
+  /// the switch's thumb; hence one constant where that needed two. `'switch'` remains
+  /// one configuration of three, and its box is in the measured table in
+  /// `docs/components/checkbox.md` alongside the other two.
   private static let declaresFallback: Bool = {
-    let modern = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
-    let size = modern ? (width: 61.0, height: 28.0) : (width: 51.0, height: 31.0)
-    NitroUiSizing.setFallback(sizingComponentName, size.width, size.height, NitroUiSizingPolicy.intrinsic.rawValue)
+    NitroUiSizing.setFallback(sizingComponentName, 26.0, 26.0, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
   }()
 
@@ -325,11 +617,42 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
     }
   }
 
-  /// Stored, never rendered: iOS has no third glyph. No `markDirty()` - nothing
-  /// observes it. Android's setter does render it (`HybridNitroUiCheckbox.kt`).
+  /// Stored and marked dirty for every style; *drawn* by two of them. The two glyph
+  /// styles have a dash (`minus.circle.fill` / `minus.square.fill`, D47 item 3) and
+  /// `'switch'` has two positions, so the branch is about the picture, not about the
+  /// write: the setter stores and marks dirty whichever style is on screen, because a
+  /// style change and a value change arrive in one batch and `commit()` applies the
+  /// batch, not the prop. The branch that decides what is drawn lives in the content
+  /// (`showsThirdState`), which is the only place that asks about the style here.
+  ///
+  /// No `noteContentSizeMayHaveChanged()`: the dash, the check mark and the empty box are
+  /// one symbol box, which `Checkbox.harness.tsx` measures (`keeps its size checked and
+  /// unchecked`) - and that is also why the harness's key has to keep agreeing.
   var indeterminate: Variant_Bool_NullType {
     get { .first(model.indeterminate) }
-    set { model.indeterminate = newValue.asType(Bool.self) ?? false }
+    set {
+      let next = newValue.asType(Bool.self) ?? false
+      guard next != model.indeterminate else { return }
+      model.indeterminate = next
+      host.markDirty()
+    }
+  }
+
+  /// Which picture this platform draws (DECISIONS D47). A different control's box, so
+  /// this is the size-affecting prop of the component: it repaints *and* asks for a new
+  /// measure, and `Checkbox.tsx` puts it in the iOS sizing key.
+  var iosStyle: String {
+    get { model.iosStyle.rawValue }
+    set {
+      let next = NitroUiCheckboxStyle.resolve(newValue)
+      guard next != model.iosStyle else { return }
+      model.iosStyle = next
+      host.markDirty()
+      // The three styles measure apart - a bare 61x28 switch against a bare 26x26
+      // glyph, and the two glyph shapes are 2 pt apart from each other - and the
+      // engine only learns that from this instance's next report.
+      host.noteContentSizeMayHaveChanged()
+    }
   }
 
   var mostRecentEventCount: Double {
@@ -405,7 +728,14 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
 
   var nuiSizingKey: String {
     get { model.sizingKey }
-    set { model.sizingKey = newValue }
+    set {
+      guard newValue != model.sizingKey else { return }
+      model.sizingKey = newValue
+      // A new configuration may measure what the old one did - `'circle'` and `'square'`
+      // are expected to - and the host must not swallow that report against its dedupe
+      // (Button's and Chip's `nuiSizingKey` setters, and review F1's stuck fallback).
+      host.noteSizingKeyChanged()
+    }
   }
 
   var nuiSizingId: Double {
@@ -434,6 +764,7 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
     model.defaultChecked = nil
     model.didApplyDefault = false
     model.indeterminate = false
+    model.iosStyle = .circle
     model.label = nil
     model.disabled = false
     model.tint = nil
@@ -483,6 +814,13 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
   }
 
   func nuiTestStateReport() throws -> String {
+    // The host's lifetime pair rides along, semicolon-separated so a reader can take it
+    // apart the same way it takes the rest of the line apart. Neither counter is cleared
+    // by `prepareForRecycle()` (``NitroSwiftUIHost/lifetimeDrops``), which is what makes
+    // it the witness `Checkbox.harness.tsx`'s recycle case needs: a fresh instance
+    // answers `recycles=0`, so a mount that answers `recycles>=1` can only be a view the
+    // pool handed back - and only such a mount is testing the reset at all.
     return model.stateReport()
+      + ";drops=\(host.lifetimeDrops);recycles=\(host.lifetimeRecycles)"
   }
 }

@@ -1,0 +1,49 @@
+# Failure excerpt — real-input:ios:Checkbox
+
+- Ran: 2026-11-10T22:18:16.908Z on code tree `56a02e6c9d00` at HEAD `1ef3bb1` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node scripts/real-input/ios.mjs Checkbox`
+- Result: fail, exit 1, 603 ms
+- Load: start 16.85, end 16.85, median 16.85, max 16.85
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/real-input+ios+Checkbox-2026-11-10T22-18-16.908Z.log` (<store>/task/G31-checkbox-ios-checkmark/real-input+ios+Checkbox-2026-11-10T22-18-16.908Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/real-input+ios+Checkbox-2026-11-10T22-18-16.908Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 16.85 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 5 log line(s)
+
+```
+
+real-input (ios): Error: real-input: unknown argument "Checkbox".
+
+
+
+```

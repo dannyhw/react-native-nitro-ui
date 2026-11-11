@@ -248,10 +248,11 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Real-input checkbox',
     role: 'interactive',
     anchorTestId: 'real-input-checkbox',
-    // iOS has no checkbox, so this is a `Toggle(.switch)`: the toggle trait, which
-    // XCUITest reports as `switch` with `value` 0/1 — the same answer Chip's filter
-    // chip measures, for the same reason (`Checkbox` renders that Toggle; see
-    // `docs/components/checkbox.md`). Android's `Role.Checkbox` is read from the
+    // iOS has no checkbox control, so every `iosStyle` is SwiftUI's `Toggle` — G31's
+    // glyph styles change what it *draws* (Apple's `checkmark.circle.fill`, D47) and not
+    // the element: still the toggle trait, which XCUITest reports as `switch` with
+    // `value` 0/1 — the same answer Chip's filter chip measures. See
+    // `docs/components/checkbox.md`. Android's `Role.Checkbox` is read from the
     // uiautomator tree by `CHECKS.checkbox`, which asserts `checkable`/`checked`.
     iosTrait: 'switch',
   },
