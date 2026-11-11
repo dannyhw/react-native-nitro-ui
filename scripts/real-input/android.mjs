@@ -5731,6 +5731,62 @@ const CHECKS = {
       }
       return samples === 0 ? 0 : total / samples;
     };
+    /**
+     * Where two screenshots differ, across the whole content area.
+     *
+     * The grid above answers "did this row get darker". This answers the question a
+     * flat grid cannot: *was anything painted at all*. A press whose indication is
+     * drawn over a different row and a press whose indication is drawn nowhere look
+     * identical to fifteen samples of one box, and they are different bugs — one is a
+     * layer with the wrong rect, the other is a press that never reached a painter.
+     *
+     * Every pixel, not a sample: a ripple is tens of pixels wide and can fall between
+     * two grid points. The strip the status bar owns is left out, because its clock
+     * changes on its own and a diff that reports it has answered nothing.
+     *
+     * @param {{pixels?: Uint8Array, channels?: number, width: number, height: number}} before
+     * @param {{pixels?: Uint8Array, channels?: number, width: number, height: number}} after
+     * @param {number} top the first row inside the app's content, below the tab strip
+     */
+    const changedBox = (before, after, top) => {
+      if (before?.pixels == null || after?.pixels == null) {
+        return 'no decoded frame to compare';
+      }
+      if (before.pixels.length !== after.pixels.length) {
+        return 'a window of a different size';
+      }
+      const channels = after.channels ?? 4;
+      const bottom = after.height - 4;
+      let changed = 0;
+      let x1 = -1;
+      let x2 = -1;
+      let y1 = -1;
+      let y2 = -1;
+      for (let y = top; y <= bottom; y += 1) {
+        const line = y * after.width * channels;
+        for (let x = 0; x < after.width; x += 1) {
+          const at = line + x * channels;
+          let differs = false;
+          for (let channel = 0; channel < channels; channel += 1) {
+            if (before.pixels[at + channel] !== after.pixels[at + channel]) {
+              differs = true;
+              break;
+            }
+          }
+          if (!differs) continue;
+          changed += 1;
+          if (x1 < 0 || x < x1) x1 = x;
+          if (x > x2) x2 = x;
+          if (y1 < 0) y1 = y;
+          y2 = y;
+        }
+      }
+      return changed === 0
+        ? 'nothing changed anywhere in the content area'
+        : `${String(changed)} px changed, x ${String(x1)}-${String(x2)}, ` +
+          `y ${String(y1)}-${String(y2)}`;
+    };
+    const contentTop = Math.round(t.tabBarBottom()) + 4;
     const counters = () =>
       `${t.requireEcho(ECHO.listItemPresses)}/` +
       `${t.requireEcho(ECHO.listItemDisabledEvents)}/` +
@@ -5806,6 +5862,7 @@ const CHECKS = {
       }
       return {
         mean: meanLuma(screen, node),
+        screen,
         grid: `${cells.slice(0, 5).join(' ')} | ${cells.slice(5, 10).join(' ')} | ${cells
           .slice(10, 15)
           .join(' ')}`,
@@ -5855,6 +5912,10 @@ const CHECKS = {
     t.log.note(
       `  released: ${afterRelease.mean.toFixed(4)} ${afterRelease.grid} — presses ` +
         `"${pressesBefore}" -> "${t.requireEcho(ECHO.listItemPresses)}"`
+    );
+    t.log.note(
+      `  whole window under the held finger: ` +
+        `${changedBox(atRest.screen, heldStream.screen, contentTop)}`
     );
     const heldDarker = Math.min(heldDown.mean, heldStream.mean);
     t.log.check(
@@ -5965,6 +6026,14 @@ const CHECKS = {
       `  released: ${formAfter.mean.toFixed(4)} ${formAfter.grid} — presses ` +
         `"${formPressBefore}" -> "${t.requireEcho(ECHO.listItemFormPresses)}"`
     );
+    // And where, if anywhere, the cell painted. The reading that matters here is the
+    // boring one: "nothing changed anywhere" says the touch reached a row that owns a
+    // press and no painter was told about it, which is a different bug from a ripple
+    // drawn over the wrong rect — and the two need different fixes.
+    t.log.note(
+      `  whole window under the held finger: ` +
+        `${changedBox(formRest.screen, formStream.screen, contentTop)}`
+    );
     t.log.check(
       `the row inside the Form is darker with the finger down than at rest ` +
         `(held ${formStream.mean.toFixed(4)} against rest ${formRest.mean.toFixed(4)}): ` +
@@ -5978,6 +6047,14 @@ const CHECKS = {
     //    above it. Compose's own press handles this (a touch that travels past the slop
     //    cancels), so this claim is a guard here rather than a bug report - iOS needed the
     //    same check as a red first.
+    //
+    //    Back to the top of the screen first. The Form section above has scrolled the
+    //    page past this row by now, and `requireControlOnScreen` only walks forward, so
+    //    the six scrolls it can do all go the way that puts this row further out of the
+    //    dump. The first real run of this check ended right there, with the drag aimed
+    //    at a row it could no longer see. Scrolling back is not a softer aim: the row
+    //    is still required to be on screen and hittable before the finger goes down.
+    await t.scrollToTop();
     const dragNode = await t.requireControlOnScreen(LIVE);
     const dragBefore = t.requireEcho(ECHO.listItemPresses);
     const dragX = dragNode.bounds.x1 + Math.round(dragNode.bounds.width * 0.5);
@@ -7233,6 +7310,11 @@ class DeviceHarness {
     return {
       width: image.width,
       height: image.height,
+      // The decoded frame itself, beside the accessor: a check that wants to know
+      // *where* two screenshots differ has to walk the frame, and `pixel(x, y)` one
+      // call at a time is 2.6 million calls to answer it.
+      pixels: image.pixels,
+      channels: image.channels,
       pixel: (x, y) => pixelAt(image, x, y),
     };
   }
@@ -8539,6 +8621,18 @@ function makeContext(harness, log) {
     screencap() {
       return harness.screencap();
     },
+
+    /**
+     * Bring the page back to its own top.
+     *
+     * `requireControlOnScreen` walks *forward*: it swipes the page down until the
+     * node comes round, which is the right direction for every control a case has
+     * not reached yet. A check that got there first and scrolled past it needs the
+     * other direction, and a forward walk cannot aim at a row above the window: the
+     * six scrolls end with the node still out of the dump, and the case is left with
+     * nothing to press. See `DeviceHarness.scrollToTop`.
+     */
+    scrollToTop: () => harness.scrollToTop(),
 
     /**
      * One raw touch event, injected without waiting for the injection to finish.
