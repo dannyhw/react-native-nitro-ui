@@ -525,6 +525,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     if dataSource == nil {
       configureDataSource()
     }
+    // Whatever reconfigure was in flight is superseded by this snapshot.
+    reconfigureTargets = [:]
     dataSource?.apply(snapshot, animatingDifferences: false)
     // A snapshot moves every cell below it, so the rows positions the shadow tree knows about are
     // now wrong. One turn later, when UIKit has placed the cells, they are read again. The
@@ -605,8 +607,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// change, so it costs nothing but a turn.
   private var readoptQueued = false
 
-  /// The cells a reconfigure has been applied for, by index path, while that apply runs.
-  /// The only thing the provider may answer a reconfiguration with; see `giveUpCell(in:at:)`.
+  /// The cells a reconfigure has been applied for, by index path, while that reconfigure can
+  /// still run. The only thing the provider may answer a reconfiguration with; see
+  /// `giveUpCell(in:at:)`. Another snapshot closes the window before it applies: answering an
+  /// insert with a cell that is already on screen is as wrong as the reverse.
   private var reconfigureTargets: [IndexPath: UICollectionViewCell] = [:]
 
   /// One visible item whose cell holds no row, and the cell that is short of it.
@@ -648,7 +652,12 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       self.snapshotApplies += 1
       self.reconfigureTargets = targets
       self.dataSource?.apply(snapshot, animatingDifferences: false)
-      self.reconfigureTargets = [:]
+      // `apply` may run the reconfigure inline or hand it to the next layout pass, so the
+      // window cannot close the moment it returns — the provider may still be coming. Once
+      // the run loop has moved on, nothing is owed an answer any more.
+      DispatchQueue.main.async { [weak self] in
+        self?.reconfigureTargets = [:]
+      }
     }
   }
 
