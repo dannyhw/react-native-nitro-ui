@@ -120,7 +120,7 @@
 | G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | merged (PR #58; 1 impl + 1 fix round; merge gates 5/5 on code tree `89018eda`) |
 | X23 | Android: a recycled Form keeps its scroll offset after other suites run (G24 test, order-dependent) | Apex | Opus | merged (PR #60; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | merged (PR #61; 1 impl + 1 fix round; merge gates 5/5 on code tree `fe9f3b10`) |
-| G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | running |
+| G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | fix round after review (PR #62; a props batch cancels a Picker roll mid-flight; a refused DatePicker time leaves the drums on it, untested; unproven reds; dev-only a11y skip in the gate; two false doc claims) |
 | G30 | ListItem: the row-content leaf (D46, Q10 question C) | Apex | Opus | running |
 | G31 | Checkbox on iOS: SF Symbol checkmark styles, `iosStyle` (D47) | Apex | Opus | running |
-| X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | queued (after G29 frees a pair) |
+| X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | round 2 (round 1: code and check only, no lease in 5 h; cause: controls' alignSelf flex-start beats the row's alignItems, story lacked flex 1; decided: Form.Row centres its children in an internal wrapper, benched; device retake and gates) |
