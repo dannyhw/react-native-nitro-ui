@@ -107,9 +107,9 @@ bands now come from a per-column ink scan.
 
 ## Appendix: the story each pair photographs
 
-Fifteen of the twenty-two pairs could move under this change, because their component's story file
-uses showcase `Row` somewhere. The seven that were retaken are exactly the ones whose *photographed*
-story uses it; the other eight use `Row` only in stories nobody photographs:
+Fifteen story files mention showcase `Row`, so fifteen pairs could move under this change. The seven
+that were retaken are exactly the ones whose *photographed* story uses it. These eight photograph a
+story that does not:
 
 | Pair             | Photographed story | Containers there                            |
 | ---------------- | ------------------ | ------------------------------------------- |
