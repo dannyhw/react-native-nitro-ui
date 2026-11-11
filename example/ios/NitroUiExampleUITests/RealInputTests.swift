@@ -6961,7 +6961,7 @@ final class RealInputTests: XCTestCase {
     element.centre.press(
       forDuration: 0.25,
       thenDragTo: element.centre.withOffset(delta),
-      withVelocity: .normal,
+      withVelocity: .fast,
       thenHoldForDuration: 0.1
     )
     let after = echoText(echo)
