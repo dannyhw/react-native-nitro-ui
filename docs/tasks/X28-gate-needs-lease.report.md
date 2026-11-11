@@ -92,3 +92,14 @@ Every new guard, one mutation each, reverted after:
 - `scripts/__tests__/gate-logs.test.js`: `leaseHomeFor`'s `lease: false` option has no caller left now that an unleased device run cannot start.
 - `scripts/gate.mjs`: `collectDeviceContext`'s "no lease id" branch is defence-in-depth only — a device run that reaches it is already refused at start.
 - `scripts/__tests__/gate-lease-required.test.js`: the harness-config cases read the file as text because it refuses to load without a stamped app; a fixture-stamped config would let them run it instead.
+
+## Questions for orchestrator
+
+- `need --for review` cannot reach zero on this branch: the diff touches
+  `example/rn-harness.config.mjs` and `scripts/real-input/android.mjs`, which map to both
+  platforms, and the brief forbids this round from leasing or running a device gate.
+  Options: (a) merge X28 combined with the component merge the brief already names, so
+  `harness:ios` + `harness:android` run once on a leased round that also exercises the two
+  files above; (b) a short X28 fix round with a lease, purely to earn those two rows.
+  Recommendation: **(a)** — the brief planned it, and one leased round proves more than a
+  tooling-only one would.
