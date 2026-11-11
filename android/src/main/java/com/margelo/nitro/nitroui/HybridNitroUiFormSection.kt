@@ -814,6 +814,21 @@ internal fun FormSegmentedLayer(
     // 2. The press indication. material3's clickable `SegmentedListItem` draws
     //    `ripple(focusRingShape = shape)`, and the finger is on a React Native view, so the
     //    row feeds the interaction into a source it holds here.
+    //
+    //    One ripple, made here and shared by every row, and deliberately resolved without
+    //    looking at the pressed state. `Modifier.indication` keeps the indication it was handed
+    //    and, when the next one is not the same, throws that node away and builds a new one
+    //    (`IndicationModifierElement.update` undelegates the old). A press writes
+    //    `pressedIndex` on the way down and so recomposes this layer, which means an indication
+    //    that read `pressed` was destroyed by the very press meant to show it - after the
+    //    finger's `Press` had already been collected by the node being discarded. What the
+    //    device showed was the shape morph with no ink: a held finger on a row in a section
+    //    moved 819 px of a 931x183 box, the corners of the new shape, and left the row's mean
+    //    luma unchanged to four decimals. `ripple()` with no arguments is the indication the
+    //    theme gives everything else through `LocalIndication`, is remembered on its defaults
+    //    and so survives a recomposition, and is the same one [HybridNitroUiListItem] installs
+    //    for a standalone row.
+    val pressRipple = ripple()
     rows.forEachIndexed { index, rect ->
       val source = sources.getOrPut(index) { MutableInteractionSource() }
       Box(
@@ -821,10 +836,7 @@ internal fun FormSegmentedLayer(
           .align(Alignment.TopStart)
           .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
           .withPixelSize(rect.right - rect.left, rect.height)
-          .indication(
-            source,
-            ripple(focusRingShape = resolvedShape(shapes[index], rect.selected, index == pressed)),
-          ),
+          .indication(source, pressRipple),
       )
     }
     // 3. The accessories. iOS gets these from `UICellAccessory`; the Android twin is one of
