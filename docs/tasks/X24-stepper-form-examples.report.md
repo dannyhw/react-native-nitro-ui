@@ -411,5 +411,9 @@ checked rather than trusted: its Hermes bundle contains `useSelfSizingBaseStyle`
 - `origin/main` (`8ae6cada`) already carries `alignItems: 'center'` on `Form.Row` and its own local
   `InsideRowContext`, so X24's row shape matches what merged; the difference this round is that the
   flag travels in core where the controls can read it.
+- `gate.mjs export --task X24` rebuilds `docs/tasks/X24/gates.jsonl` from the current branch's
+  ledger alone, so it dropped the 14 lines from `task/X24-stepper-form-examples` and
+  `task/X24-fix1`; they are re-appended here above this round's. Export should merge what is
+  already committed rather than rewrite it.
 - The bench fixtures still need the round-1 workaround (PNG copies under `bench/src/assets/` with
   the two `.xml` requires aimed at them, removed after the runs). Unchanged as a fix request.
