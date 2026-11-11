@@ -14,6 +14,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { requireLeaseDevice } from '../lease-core.mjs';
+
 /**
  * A dead device or emulator makes some adb calls block forever, so every call
  * is bounded and fails loudly instead of stalling a run.
@@ -174,15 +176,26 @@ function avdNameFor(serial) {
 /**
  * Resolve the device to measure on.
  *
- * `ANDROID_AVD` wins when it is set, because console ports are handed out in
- * order of availability: a task that was told to use `emulator-5572` gets a
- * different serial as soon as something else boots or dies. Matching on the AVD
- * name is what keeps a run on the device its brief assigned and off every other
- * task's (AGENTS.md: never touch a device you did not start).
+ * `ANDROID_AVD` is what a CI bench names, because its emulator comes from the job and
+ * console ports are handed out in order of availability. A *leased* run is a different
+ * animal (X28): its pair has a fixed console port, so the serial the lease exported is
+ * both known and binding, and `requireLeaseDevice` refuses a bench whose env names a
+ * lease without naming that serial.
+ *
+ * What used to happen when the two disagreed is the reason this changed: the runner
+ * printed "ANDROID_SERIAL=… is not the emulator running AVD …; using emulator-55xx"
+ * and measured on the other emulator anyway. A bench number is a claim about one
+ * device, so a run that cannot tell which device it is on has no result to report —
+ * it now refuses, naming both candidates.
  */
 export function resolveAndroidDevice() {
-  const serial = process.env.ANDROID_SERIAL;
-  const avd = process.env.ANDROID_AVD ?? process.env.AVD ?? null;
+  const device = requireLeaseDevice({
+    env: process.env,
+    platform: 'android',
+    command: 'bench',
+  });
+  const serial = device.serial;
+  const avd = device.avd;
   if (serial == null && avd == null) {
     throw new Error(
       'No Android device. Set ANDROID_AVD (the AVD name from your brief) or ' +
@@ -199,8 +212,12 @@ export function resolveAndroidDevice() {
       );
     }
     if (serial != null && serial !== match) {
-      process.stderr.write(
-        `ANDROID_SERIAL=${serial} is not the emulator running AVD "${avd}"; using ${match}.\n`
+      throw new Error(
+        `ANDROID_SERIAL=${serial} is not the emulator running AVD "${avd}" ` +
+          `(adb says ${match}). Refusing to measure on either: a bench number ` +
+          'describes one device, and these are two. Source the lease env file ' +
+          '(`node scripts/lease.mjs acquire --task <ID>`) so the serial and the ' +
+          'AVD come from the same pair.'
       );
     }
     return describeAndroidDevice(match, avd);

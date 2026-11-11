@@ -34,6 +34,14 @@ Background (read the sections your brief points to):
   --task <ID> --boot`, CONTRIBUTING "Leasing a device or port"), or those your brief assigns. Never
   shut down, wipe or kill devices you did not start. **Never touch the `emulator-5560` emulator —
   it belongs to the human.**
+  **A device gate enforces this now** (X28): `gate.mjs harness:*`, `real-input:*`, `smoke:expo`,
+  `smoke:rn-cli` and `bench` refuse to start unless `NITRO_UI_LEASE_ID` names a live lease in the
+  store whose task, platform and devices match the run, and the Android runners address only the
+  lease's `ANDROID_SERIAL` and `ANDROID_ADB_SERVER_PORT` (the iOS runner only its `IOS_SIM_UDID`).
+  There is no flag around it — an exclusive lease is the bench host's way through, because it holds
+  every pair. So `gate: refused before the run` is fixed by sourcing a lease, never by exporting a
+  device variable by hand, and a run started outside `gate.mjs` has no such guard: do not drive a
+  runner directly from an unleased shell.
   **The lease owns device lifecycle, not you** (X11): `--boot` starts the pair and waits until it
   is settled, `release` leaves it booted, and only an explicit `lease.mjs reap` — or an
   `--exclusive` acquire — powers anything off. `acquire`, `list` and `release` never kill or reset
