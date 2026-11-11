@@ -268,6 +268,60 @@ internal class HybridNitroUiFormSection(
       // given, this says where it ended up on screen. Same encoding as the row's own `frame`, so
       // a test can put the two side by side.
       "drawnAccessory=${accessoryFrame.ifEmpty { "-" }}",
+      // Where the layer that draws all of this *is*, in the section's px. Everything above is
+      // measured inside that view: `drawnCards` is a placement within the layer, `layerH` is the
+      // size Compose gave its root — so neither of them can see a layer that is the section's
+      // size and shape but is not sitting on the section. It is a child of a `ReactViewGroup`
+      // without being one of Fabric's children, so whose frame it ends up under is a real
+      // question, and it is the one question that has an answer only from out here.
+      "layerBox=" +
+        view
+          .model
+          .drawnLayer
+          ?.let {
+            String.format(
+              "%.1f,%.1f,%.1f,%.1f",
+              it.left / density,
+              it.top / density,
+              (it.right - it.left) / density,
+              it.height / density,
+            )
+          }
+          ?: "-",
+      "hostBox=" +
+        view
+          .layer
+          ?.let {
+            String.format(
+              "%.1f,%.1f,%.1f,%.1f",
+              it.left / density,
+              it.top / density,
+              it.width / density,
+              it.height / density,
+            )
+          }
+          ?: "-",
+      // The same four numbers per row, out of the layout pass rather than out of [rects]:
+      // `cardBoxes` is what the layer was given, this is where that box landed. A section whose
+      // rows are drawn outside their own containers has one of these two wrong, and only this
+      // one can say which (`FormFidelity`'s card case, X24 round 3).
+      "drawnCards=" +
+        view
+          .model
+          .drawnCards
+          .entries
+          .sortedBy { it.key }
+          .joinToString("|") { (index, rect) ->
+            String.format(
+              "%d:%.1f,%.1f,%.1f,%.1f",
+              index,
+              rect.left / density,
+              rect.top / density,
+              (rect.right - rect.left) / density,
+              rect.height / density,
+            )
+          }
+          .ifEmpty { "-" },
     ).joinToString(";")
   }
 }
@@ -332,6 +386,27 @@ internal class FormSectionModel : NitroUiModel() {
   var drawnAccessory: FormRowRect? = null
 
   /**
+   * Where the layer last *placed* each row's container, by row index, in the section's px.
+   *
+   * The other half of the same distinction as [drawnAccessory], and the half `form-android.png`
+   * was missing: [rects] is what the layer was *handed*, and a container can be handed the right
+   * box and land in another one — the box travels through an offset lambda, a Box alignment and
+   * a layer that has to have been told the section's size before any of it means what it says.
+   * Only the layout pass knows where the drawing ended up, so this is written from `onPlaced`,
+   * next to the accessory's own report, and read by the section report beside it.
+   */
+  val drawnCards = HashMap<Int, FormRowRect>()
+
+  /**
+   * Where the layer's own root box was placed inside the host's Compose view, in px.
+   *
+   * [drawnCards] is a placement inside this box and [hostBox] is where the box's view sits, so
+   * the gap between the two — the placement the host's root gave its content — is the last place
+   * a section's cards can be going astray without any number saying so.
+   */
+  var drawnLayer: FormRowRect? = null
+
+  /**
    * How tall the drawing layer was when Compose last measured it, in px.
    *
    * Reported beside the section's own height because everything in the layer is placed inside
@@ -373,6 +448,8 @@ internal class FormSectionModel : NitroUiModel() {
     boxW = 0f
     boxH = 0f
     drawnAccessory = null
+    drawnCards.clear()
+    drawnLayer = null
     layerPx = 0f
   }
 }
@@ -402,6 +479,15 @@ internal class NitroUiFormSectionView(
 ) : ReactViewGroup(context) {
   val model = FormSectionModel()
   private var composeHost: FormSectionHost? = null
+  /**
+   * The layer, for the one thing only its owner's owner can say about it: where it sits.
+   *
+   * [composeHost] stays private — everything the layer is *told* goes through this class. Its
+   * frame is read by the section report, which is asked from the Hybrid View, and that report is
+   * the only place a layer sitting on the wrong part of its section can be seen at all.
+   */
+  val layer: View?
+    get() = composeHost
   private var hostLayoutPosted = false
 
   init {
@@ -549,6 +635,9 @@ internal class NitroUiFormSectionView(
       }
     if (next == model.rects) return
     model.rects = next
+    // A row that is gone takes its placement report with it: `drawnCards` is keyed by index, and
+    // an entry for a row that no longer exists would be read as a container drawn for it.
+    model.drawnCards.keys.retainAll(next.indices.toSet())
     if (composeHost != null && !hostLayoutPosted) {
       hostLayoutPosted = true
       post {
@@ -798,6 +887,23 @@ internal fun FormSegmentedLayer(
     Modifier
       // Not `fillMaxSize`: a host's content is measured with an unbounded height, so filling
       // the height here means filling one row. The box arrives as state, from the layout pass.
+      //
+      // And where that box ended up is reported, not assumed: the layer draws every card at a
+      // number relative to this box, so a box the host's root placed anywhere but at the top of
+      // its view moves the whole picture — rows, accessories and all — with every number in the
+      // section report still reading correct.
+      .onPlaced { placed ->
+        val at = placed.positionInParent()
+        model.drawnLayer =
+          FormRowRect(
+            left = at.x,
+            top = at.y,
+            right = at.x + placed.size.width.toFloat(),
+            height = placed.size.height.toFloat(),
+            selected = false,
+            accessory = NitroUiFormRowView.ACCESSORY_NONE,
+          )
+      }
       .withPixelSize(model.boxW, model.boxH)
       // The layer's own answer for the box it draws in, so a layer that is not the section's
       // size stops being invisible here: `layerH` in the section report is this number.
@@ -821,6 +927,21 @@ internal fun FormSegmentedLayer(
         Modifier
           .align(Alignment.TopStart)
           .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+          // Where this container actually ended up, for the report — the same `onPlaced` trick
+          // the accessory below uses, and for the same reason: what a test can compare with the
+          // row's own frame is the placement, not the numbers the placement was asked for.
+          .onPlaced { placed ->
+            val at = placed.positionInParent()
+            model.drawnCards[index] =
+              FormRowRect(
+                left = at.x,
+                top = at.y,
+                right = at.x + placed.size.width.toFloat(),
+                height = placed.size.height.toFloat(),
+                selected = rect.selected,
+                accessory = rect.accessory,
+              )
+          }
           .withPixelSize(rect.right - rect.left, rect.height),
       ) {
         if (model.gapPx != gap.toPx()) model.gapPx = gap.toPx()
