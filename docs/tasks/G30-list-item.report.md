@@ -162,3 +162,26 @@ What the device run found: a row in a section drew the shape morph and no ink, b
 
 Reds: `docs/tasks/G30/mutations.json`. Not run: the glyph probe. Follow-ups: Form's own iOS cell, the bench cells.
 
+
+### Gates (fix round 1)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2016 tests / 85 suites | `a1dd2f0426f7` | 2 m 48 s | start 24.6 / med 21.7 / max 40.9 |
+| `harness:ios` | **PASS** | 606 tests / 32 suites + isolated 6 tests / 3 suites | `a1dd2f0426f7` (ios tree) | 14 m 53 s | start 25.4 / med 9.9 / max 29.2 |
+| `harness:android` | **PASS** | 662 tests / 32 suites + isolated 6 tests / 3 suites | `a1dd2f0426f7` (android tree) | 19 m 04 s | start 12.2 / med 5.3 / max 124.5 |
+| `real-input:ios` | **PASS** | — | `a1dd2f0426f7` (ios tree) | 46 m 22 s | start 4.8 / med 9.5 / max 223.7 |
+| `real-input:android` | **PASS** | — | `a1dd2f0426f7` (android tree) | 66 m 07 s | start 5.2 / med 6.0 / max 25.0 |
+| `harness:android:ListItem` | stale | 1 failed of 8 tests / 1 suites | 7c72a6a9d329 (not this tree) | 13.5 s | start 11.2 / med 10.5 / max 11.2 |
+| `harness:ios:ListItem` | stale | 8 failed of 8 tests / 1 suites | 6b389241b942 (not this tree) | 1 m 16 s | start 17.0 / med 11.5 / max 17.0 |
+| `real-input:android:--control:list-item` | stale | — | 43f9ce853d78 (not this tree) | 13 m 05 s | start 122.1 / med 8.2 / max 122.1 |
+| `real-input:android:--control:list-item:--background` | stale | — | 007137817e57 (not this tree) | 0.6 s | start 15.6 / med 15.1 / max 15.6 |
+| `real-input:android:--control:menu` | **PASS** | — | `a1dd2f0426f7` (android tree) | 12 m 46 s | start 6.7 / med 7.2 / max 15.8 |
+| `real-input:android:--control:menu:--background` | **FAIL** | — | `a1dd2f0426f7` (android tree) | 0.2 s | start 6.7 / med 6.7 / max 6.7 |
+| `real-input:ios:--control:list-item` | stale | — | e0f011b977b4 (not this tree) | 13 m 46 s | start 7.5 / med 9.6 / max 73.3 |
+
+## Appendix (fix round 1)
+
+- **Hygiene incident.** Two `real-input:android` runs were launched from shells with the lease env left out (`14:32` filtered `--control menu`, `14:48` full). A device gate with no lease resolves a device for itself, and both runs drove the AOSP AVD `nitroui` at `emulator-5554` through the **default** adb server on Metro 8291 — a device outside the pool and not this task's pair. `emulator-5560` was not attached during either run and no command was aimed at it. What those runs left: no `adb reverse` (the driver removed its own) and one preference, now back to an empty `<map/>` on that device. The `15:18` run exports the lease and names `emulator-5574 · nitroui_a · adb server 5043 · Metro 8295` in its own log. Both leaseless lines are kept in the ledger with `lease: null`, and the `14:48` FAIL in that pair is one of them — that device is not the one the harness is sized for (a `context-menu` bottom-edge check, then a dead accessibility tree in `search-field`). The table's `--control:menu` **PASS** is the other, so read it as a note on the flake below rather than as evidence on the leased pair, where `menu` passed inside the full run anyway. The `0.2 s` `--control:menu:--background` **FAIL** is a mistyped invocation: `--background` goes before `--`.
+- **Why `real-input:android` ran three times.** The first full run (`13:24`, leased pair, load1 9.6 at the failure) got 27/28 controls and `list-item: PASS`, and fell on `menu` alone: "a real tap on the action half runs the primary action — expected action, saw none", with that same tap's echo arriving during the *next* assertion — one JS round trip slower than the read. The same two assertions have failed on two other branches (`G23-merge`, `G22-popover`), both under load. At load1 ~5 the same tree is green, 66 m 07 s, which is the row in the table. `menu` is another task's component: one line, not a fix.
+- **Reds.** Eight rows in `docs/tasks/G30/mutations.json`, each naming its run and the line that went red. Rows 7-8 were added to close this turn's gap: they are the two new iOS real-input checks going red on mutated builds, which is what says they can fail. One red has no stored log — the press-fixture hittability failure this round opened with. The oldest iOS log the store still holds from that hour is a build failure (exit 65), and the store pruned three logs by its 64 MiB cap at 14:48. That fixture change is carried instead by two green full iOS runs and by the drag case's own note: 476 pt of travel, 0 presses.
