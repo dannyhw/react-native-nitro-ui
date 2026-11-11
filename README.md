@@ -244,8 +244,8 @@ export function VolumeSlider() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on iOS: loading draws as a ring and wavy draws flat" /></td>
-    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on Android, with Material's morphing and contained loading shapes" /></td>
+    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear, circular, loading and tinted Progress on iOS, where loading draws as a ring" /></td>
+    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear, circular, loading and tinted Progress on Android, with Material’s morphing and contained loading shapes" /></td>
   </tr>
 </table>
 
@@ -573,7 +573,7 @@ export function ViewToggle() {
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
     <td><img src="docs/images/components/picker-ios.png" width="300" alt="Picker menu and wheel variants on iOS" /></td>
-    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker's open menu with its selected row checked on Android" /></td>
+    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker’s menu and wheel variants on Android: both draw Material 3’s exposed dropdown box, filled to its caller’s width" /></td>
   </tr>
 </table>
 
@@ -644,8 +644,8 @@ export function DueDate() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on iOS" /></td>
-    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on Android" /></td>
+    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with a checked row, subtitles and a titled group on iOS" /></td>
+    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with a checked row, subtitles and a titled group on Android" /></td>
   </tr>
 </table>
 
