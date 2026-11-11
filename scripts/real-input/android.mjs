@@ -5681,6 +5681,400 @@ const CHECKS = {
     });
     await t.hideKeyboard();
   },
+
+  'list-item': async (t) => {
+    // The three rows are named by their accessibility label, which on Android is both the
+    // node a reader stops on and the only handle a check has: React Native's `testID` is a
+    // view tag and never reaches a dump.
+    const LIVE = 'Real-input item';
+    const DISABLED = 'Real-input disabled item';
+    const IN_FORM = 'Item inside a Form row';
+    const boundsText = (node) =>
+      `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
+      `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
+    /**
+     * The average luminance of a grid inside one row's box.
+     *
+     * A grid and not one pixel: a bounded ripple is brightest near the touch point, and a
+     * single sample could land on the one spot it has not reached at the instant the
+     * screenshot was taken. Inset 4 dp from every edge so the sample is the row's fill and
+     * not a pixel of whatever is drawn outside it.
+     */
+    const meanLuma = (screen, node) => {
+      const inset = Math.max(2, Math.round(4 * t.density()));
+      const step = Math.max(1, Math.round(3 * t.density()));
+      // Whole pixels, and inside the image: a grid cell's edge is a fifth of a row's
+      // width, which is a fraction whenever the row does not divide by five, and
+      // `png-pixel.mjs` refuses a fractional coordinate rather than rounding it into a
+      // neighbouring pixel and a reading of the wrong thing. Clamped rather than
+      // assumed-on-screen, so a row parked against the edge of the window samples the
+      // part that is visible instead of ending the run with an out-of-image error.
+      const x1 = Math.max(0, Math.round(node.bounds.x1) + inset);
+      const x2 = Math.min(screen.width - 1, Math.round(node.bounds.x2) - inset);
+      const y1 = Math.max(0, Math.round(node.bounds.y1) + inset);
+      const y2 = Math.min(
+        screen.height - 1,
+        Math.round(node.bounds.y2) - inset
+      );
+      let total = 0;
+      let samples = 0;
+      for (let y = y1; y <= y2; y += step) {
+        for (let x = x1; x <= x2; x += step) {
+          const pixel = screen.pixel(x, y);
+          if (pixel == null) {
+            continue;
+          }
+          total +=
+            (0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]) / 255;
+          samples += 1;
+        }
+      }
+      return samples === 0 ? 0 : total / samples;
+    };
+    /**
+     * Where two screenshots differ, across the whole content area.
+     *
+     * The grid above answers "did this row get darker". This answers the question a
+     * flat grid cannot: *was anything painted at all*. A press whose indication is
+     * drawn over a different row and a press whose indication is drawn nowhere look
+     * identical to fifteen samples of one box, and they are different bugs — one is a
+     * layer with the wrong rect, the other is a press that never reached a painter.
+     *
+     * Every pixel, not a sample: a ripple is tens of pixels wide and can fall between
+     * two grid points. The strip the status bar owns is left out, because its clock
+     * changes on its own and a diff that reports it has answered nothing.
+     *
+     * @param {{pixels?: Uint8Array, channels?: number, width: number, height: number}} before
+     * @param {{pixels?: Uint8Array, channels?: number, width: number, height: number}} after
+     * @param {number} top the first row inside the app's content, below the tab strip
+     */
+    const changedBox = (before, after, top) => {
+      if (before?.pixels == null || after?.pixels == null) {
+        return 'no decoded frame to compare';
+      }
+      if (before.pixels.length !== after.pixels.length) {
+        return 'a window of a different size';
+      }
+      const channels = after.channels ?? 4;
+      const bottom = after.height - 4;
+      let changed = 0;
+      let x1 = -1;
+      let x2 = -1;
+      let y1 = -1;
+      let y2 = -1;
+      for (let y = top; y <= bottom; y += 1) {
+        const line = y * after.width * channels;
+        for (let x = 0; x < after.width; x += 1) {
+          const at = line + x * channels;
+          let differs = false;
+          for (let channel = 0; channel < channels; channel += 1) {
+            if (before.pixels[at + channel] !== after.pixels[at + channel]) {
+              differs = true;
+              break;
+            }
+          }
+          if (!differs) continue;
+          changed += 1;
+          if (x1 < 0 || x < x1) x1 = x;
+          if (x > x2) x2 = x;
+          if (y1 < 0) y1 = y;
+          y2 = y;
+        }
+      }
+      return changed === 0
+        ? 'nothing changed anywhere in the content area'
+        : `${String(changed)} px changed, x ${String(x1)}-${String(x2)}, ` +
+            `y ${String(y1)}-${String(y2)}`;
+    };
+    const contentTop = Math.round(t.tabBarBottom()) + 4;
+    const counters = () =>
+      `${t.requireEcho(ECHO.listItemPresses)}/` +
+      `${t.requireEcho(ECHO.listItemDisabledEvents)}/` +
+      `${t.requireEcho(ECHO.listItemFormPresses)}`;
+
+    // 1. At rest, so every claim below is about a number that moved.
+    t.log.checkEquals(
+      `no item has been pressed before a touch (${counters()})`,
+      counters(),
+      '0/0/0'
+    );
+
+    // 2. One element per item, read out of the tree rather than from inside the app: the
+    //    harness can say the leaf publishes one semantics node, and only this dump can
+    //    say a TalkBack swipe gets one stop and not a title, a subtitle and a value.
+    const live = await t.requireControlOnScreen(LIVE);
+    t.log.checkEquals(
+      "exactly one node carries the item's name — the title, subtitle and value are " +
+        'merged into the row, not three stops of their own',
+      String(t.dump().filter((node) => node.contentDesc === LIVE).length),
+      '1'
+    );
+    t.log.note(
+      `the named node is a ${live.className ?? 'missing'} at ` +
+        `${boundsText(live)}, clickable=${live.clickable} enabled=${live.enabled} — ` +
+        'clickable because it has an onPress, which is the same modifier that installs ' +
+        'the ripple the highlight sample below looks for'
+    );
+
+    // 3. Ten taps, ten presses, and the *row that answered* is named — the counter alone
+    //    would be satisfied by whichever item last happened to hold a callback.
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => t.requireControl(LIVE),
+        ECHO.listItemPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a list item`
+      );
+    }
+    t.log.checkEquals(
+      'ten real taps are ten presses, from this item and no other',
+      `${t.requireEcho(ECHO.listItemPresses)} ${t.requireEcho(ECHO.listItemLast)}`,
+      '10 real'
+    );
+
+    // 4. The row's own highlight: Material's ripple, sampled the way the iOS half samples
+    //    UIKit's — the same band of pixels at rest and with the finger still down. Two
+    //    injections of a held finger are tried, because they are not the same thing to the
+    //    input stack: `input motionevent DOWN` is one event whose process then exits with
+    //    the pointer left down, and `input swipe x y x y 2200` is one gesture stream that
+    //    is genuinely in flight while the screenshot is taken. Both are readings of one
+    //    claim — the row is darker while a finger is on it — and the log prints both, each
+    //    with a 5x3 grid over the row, so a flat reading is evidence in the ledger rather
+    //    than a mystery a later round has to re-run to understand.
+    const shoot = (node) => {
+      const screen = t.screencap();
+      const cols = 5;
+      const rows = 3;
+      const cells = [];
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          cells.push(
+            meanLuma(screen, {
+              bounds: {
+                x1: node.bounds.x1 + (col * node.bounds.width) / cols,
+                y1: node.bounds.y1 + (row * node.bounds.height) / rows,
+                x2: node.bounds.x1 + ((col + 1) * node.bounds.width) / cols,
+                y2: node.bounds.y1 + ((row + 1) * node.bounds.height) / rows,
+              },
+            }).toFixed(3)
+          );
+        }
+      }
+      return {
+        mean: meanLuma(screen, node),
+        screen,
+        grid: `${cells.slice(0, 5).join(' ')} | ${cells.slice(5, 10).join(' ')} | ${cells
+          .slice(10, 15)
+          .join(' ')}`,
+      };
+    };
+    const atRest = shoot(live);
+    const pressX = live.bounds.x1 + Math.round(live.bounds.width * 0.5);
+    const pressY = live.bounds.cy;
+    const pressesBefore = t.requireEcho(ECHO.listItemPresses);
+
+    await t.rawTouch('DOWN', pressX, pressY);
+    await t.settle(400);
+    const heldDown = shoot(live);
+    await t.settle(700);
+    let released = true;
+    try {
+      await t.rawTouch('UP', pressX, pressY);
+    } catch (error) {
+      released = false;
+      t.log.note(`the raw UP did not take: ${String(error)}`);
+    }
+    await t.settle(500);
+
+    // The same question with a gesture that stays in flight, so the screenshot cannot be
+    // of a row whose finger had already gone.
+    const heldSwipe = t.rawHold(pressX, pressY, 2200);
+    await t.settle(900);
+    const heldStream = shoot(live);
+    await heldSwipe;
+    await t.settle(500);
+    const afterRelease = shoot(live);
+    if (!released) {
+      t.log.abort(
+        'the highlight press could not be closed, so nothing after it is evidence'
+      );
+    }
+    t.log.note(
+      `highlight sample over a ${String(live.bounds.width)}x${String(live.bounds.height)} px ` +
+        `row — rest=${atRest.mean.toFixed(4)} ${atRest.grid}`
+    );
+    t.log.note(
+      `  motionevent DOWN, +400 ms: ${heldDown.mean.toFixed(4)} ${heldDown.grid}`
+    );
+    t.log.note(
+      `  held swipe in flight, +900 ms: ${heldStream.mean.toFixed(4)} ${heldStream.grid}`
+    );
+    t.log.note(
+      `  released: ${afterRelease.mean.toFixed(4)} ${afterRelease.grid} — presses ` +
+        `"${pressesBefore}" -> "${t.requireEcho(ECHO.listItemPresses)}"`
+    );
+    t.log.note(
+      `  whole window under the held finger: ` +
+        `${changedBox(atRest.screen, heldStream.screen, contentTop)}`
+    );
+    const heldDarker = Math.min(heldDown.mean, heldStream.mean);
+    t.log.check(
+      `the row is darker with the finger down than at rest (best held reading ` +
+        `${heldDarker.toFixed(4)} — ${heldDown.mean.toFixed(4)} under a raw DOWN, ` +
+        `${heldStream.mean.toFixed(4)} under a held swipe — against rest ` +
+        `${atRest.mean.toFixed(4)}): the platform's own press feedback is drawn, not ` +
+        'just wired',
+      heldDarker < atRest.mean - 0.005
+    );
+    t.log.check(
+      `and it is back where it started once the finger lifts (${afterRelease.mean.toFixed(4)} ` +
+        `against rest ${atRest.mean.toFixed(4)}) — a highlight, not a state the row got ` +
+        'stuck in',
+      Math.abs(afterRelease.mean - atRest.mean) < 0.01
+    );
+
+    // 5. A disabled item takes nothing, and the tree says so before the taps do. Then the
+    //    live item proves the silence was a refusal and not a dead screen.
+    await t.requireControlOnScreen(DISABLED);
+    t.log.checkEquals(
+      'the disabled item is in the tree as disabled, so a reader is told it is inert ' +
+        'instead of being handed a control that does nothing',
+      t.nativeEnabled(DISABLED),
+      'false'
+    );
+    const disabledNode = await t.requireControlOnScreen(DISABLED);
+    for (let tap = 1; tap <= 3; tap += 1) {
+      await t.tapNode(disabledNode);
+    }
+    t.log.checkEquals(
+      'three real taps on a disabled item report nothing',
+      t.requireEchoToStay(
+        ECHO.listItemDisabledEvents,
+        '0',
+        'three real taps on a disabled item'
+      ),
+      '0'
+    );
+    // Read from the counter rather than hard-coded: the held press in the highlight
+    // sample above is itself a press this counter has counted, so the absolute number is
+    // a fact about how many checks ran above, while "one more after one more tap" is the
+    // claim. A hard-coded 11 here failed on the first real run for exactly that reason.
+    const beforeBarrier = Number(t.requireEcho(ECHO.listItemPresses));
+    const wantedBarrier = String(beforeBarrier + 1);
+    t.log.checkEquals(
+      `and input is alive: the live item still presses (${beforeBarrier} -> ` +
+        `${wantedBarrier})`,
+      await t.tapUntilValue(
+        () => t.requireControl(LIVE),
+        ECHO.listItemPresses,
+        wantedBarrier,
+        'a real tap on the live item after the disabled one'
+      ),
+      wantedBarrier
+    );
+
+    // 6. Inside a `Form.Row` the leaf is a different code path — the row owns the cell, the
+    //    item draws content edge-to-edge (DECISIONS D46 item 2) — and the tap has to reach
+    //    the item through a row that has a shape and insets of its own.
+    const inForm = await t.requireControlOnScreen(IN_FORM);
+    t.log.checkEquals(
+      'inside a Form.Row the item is still one named node',
+      String(t.dump().filter((node) => node.contentDesc === IN_FORM).length),
+      '1'
+    );
+    t.log.checkEquals(
+      'a real tap inside a Form.Row reaches the item, once',
+      await t.tapUntilValue(
+        () => t.requireControl(IN_FORM),
+        ECHO.listItemFormPresses,
+        '1',
+        'a real tap on the item inside a Form.Row'
+      ),
+      '1'
+    );
+    t.log.note(
+      `the in-form row is ${boundsText(inForm)} and the standalone item is ` +
+        `${boundsText(live)} — the boxes the harness reads insets from are in ` +
+        '`ListItem.harness.tsx`, which is where `insets=` is asserted'
+    );
+
+    // 7. The same press has to *look* like a press. Inside a row the leaf installs no
+    //    indication of its own (the cell owns the shape, and the Form's section paints
+    //    the pressed state for every row in it), so the only feedback this row can have
+    //    is the section's - and the section paints one only for a row that is pressable.
+    //    The fixture and the README's `list-item-in-form` example both write the handler
+    //    on the *item*, so an item's `onPress` that never reaches the row is a row that
+    //    presses in silence: the tap above arrives, and the screen says nothing.
+    const formPressBefore = t.requireEcho(ECHO.listItemFormPresses);
+    const formX = inForm.bounds.x1 + Math.round(inForm.bounds.width * 0.5);
+    const formRest = shoot(inForm);
+    const formHold = t.rawHold(formX, inForm.bounds.cy, 2200);
+    await t.settle(900);
+    const formStream = shoot(inForm);
+    await formHold;
+    await t.settle(500);
+    const formAfter = shoot(inForm);
+    t.log.note(
+      `in-Form highlight sample over a ${String(inForm.bounds.width)}x` +
+        `${String(inForm.bounds.height)} px row — rest=${formRest.mean.toFixed(4)} ` +
+        `${formRest.grid}`
+    );
+    t.log.note(
+      `  held swipe in flight, +900 ms: ${formStream.mean.toFixed(4)} ${formStream.grid}`
+    );
+    t.log.note(
+      `  released: ${formAfter.mean.toFixed(4)} ${formAfter.grid} — presses ` +
+        `"${formPressBefore}" -> "${t.requireEcho(ECHO.listItemFormPresses)}"`
+    );
+    // And where, if anywhere, the cell painted. The reading that matters here is the
+    // boring one: "nothing changed anywhere" says the touch reached a row that owns a
+    // press and no painter was told about it, which is a different bug from a ripple
+    // drawn over the wrong rect — and the two need different fixes.
+    t.log.note(
+      `  whole window under the held finger: ` +
+        `${changedBox(formRest.screen, formStream.screen, contentTop)}`
+    );
+    t.log.check(
+      `the row inside the Form is darker with the finger down than at rest ` +
+        `(held ${formStream.mean.toFixed(4)} against rest ${formRest.mean.toFixed(4)}): ` +
+        'an item that presses inside a row has to show it, and inside a row only the ' +
+        "section's own pressed state can",
+      formStream.mean < formRest.mean - 0.005
+    );
+
+    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
+    //    asking for that row. Last, because it scrolls the page out from under everything
+    //    above it. Compose's own press handles this (a touch that travels past the slop
+    //    cancels), so this claim is a guard here rather than a bug report - iOS needed the
+    //    same check as a red first.
+    //
+    //    Back to the top of the screen first. The Form section above has scrolled the
+    //    page past this row by now, and `requireControlOnScreen` only walks forward, so
+    //    the six scrolls it can do all go the way that puts this row further out of the
+    //    dump. The first real run of this check ended right there, with the drag aimed
+    //    at a row it could no longer see. Scrolling back is not a softer aim: the row
+    //    is still required to be on screen and hittable before the finger goes down.
+    await t.scrollToTop();
+    const dragNode = await t.requireControlOnScreen(LIVE);
+    const dragBefore = t.requireEcho(ECHO.listItemPresses);
+    const dragX = dragNode.bounds.x1 + Math.round(dragNode.bounds.width * 0.5);
+    await t.swipePx(
+      dragX,
+      dragNode.bounds.cy,
+      dragX,
+      dragNode.bounds.cy - Math.round(160 * t.density()),
+      300
+    );
+    await t.settle(600);
+    const dragAfter = t.requireEcho(ECHO.listItemPresses);
+    t.log.checkEquals(
+      `a drag that starts on the row is a scroll, not a press (${dragBefore} -> ` +
+        `${dragAfter}) — a row that fires on a scroll takes the person to a screen ` +
+        'they only meant to scroll past',
+      dragAfter,
+      dragBefore
+    );
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -6916,6 +7310,11 @@ class DeviceHarness {
     return {
       width: image.width,
       height: image.height,
+      // The decoded frame itself, beside the accessor: a check that wants to know
+      // *where* two screenshots differ has to walk the frame, and `pixel(x, y)` one
+      // call at a time is 2.6 million calls to answer it.
+      pixels: image.pixels,
+      channels: image.channels,
       pixel: (x, y) => pixelAt(image, x, y),
     };
   }
@@ -8222,6 +8621,74 @@ function makeContext(harness, log) {
     screencap() {
       return harness.screencap();
     },
+
+    /**
+     * Bring the page back to its own top.
+     *
+     * `requireControlOnScreen` walks *forward*: it swipes the page down until the
+     * node comes round, which is the right direction for every control a case has
+     * not reached yet. A check that got there first and scrolled past it needs the
+     * other direction, and a forward walk cannot aim at a row above the window: the
+     * six scrolls end with the node still out of the dump, and the case is left with
+     * nothing to press. See `DeviceHarness.scrollToTop`.
+     */
+    scrollToTop: () => harness.scrollToTop(),
+
+    /**
+     * One raw touch event, injected without waiting for the injection to finish.
+     *
+     * For a check that has to ask a question *while the finger is down*, which the
+     * synchronous `input tap` cannot serve: by the time it returns, the platform's press
+     * feedback is gone. `DOWN`, then a read, then `UP` is the same touch a finger makes,
+     * and it is the only way out here can see the row's own highlight.
+     *
+     * The drag path has used [motionAsync] for this since the Android drag flake; this is
+     * the same injection, named for the check that needs it rather than for a gesture.
+     *
+     * @param {'DOWN' | 'MOVE' | 'UP'} action
+     * @param {number} x
+     * @param {number} y
+     * @returns {Promise<void>}
+     */
+    rawTouch: (action, x, y) => motionAsync(action, x, y),
+
+    /**
+     * A finger held still for `ms`, injected as one gesture stream that is *still in
+     * flight* when the caller's next line runs: `input swipe x y x y <ms>`, spawned and
+     * not awaited, so the caller can take its reading mid-press and then await what came
+     * back. `rawTouch('DOWN')` cannot serve that: its process exits with the pointer left
+     * down, which is a press the app sees and the compositor may not.
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number} ms
+     * @returns {Promise<void>} resolves when the gesture's own process is done
+     */
+    rawHold: (x, y, ms) =>
+      new Promise((resolve, reject) => {
+        const child = spawn(
+          'adb',
+          [
+            '-s',
+            harness.serial,
+            'shell',
+            'input',
+            'swipe',
+            String(Math.round(x)),
+            String(Math.round(y)),
+            String(Math.round(x)),
+            String(Math.round(y)),
+            String(Math.round(ms)),
+          ],
+          { stdio: 'ignore', env: process.env }
+        );
+        child.on('error', reject);
+        child.on('close', (code) =>
+          code === 0
+            ? resolve()
+            : reject(new Error(`input swipe exited ${String(code)}`))
+        );
+      }),
 
     /**
      * Scroll the screen until this control is on it, then look it up.

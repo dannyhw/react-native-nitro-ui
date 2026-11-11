@@ -1,0 +1,180 @@
+# Failure excerpt — harness:ios:ListItem
+
+- Ran: 2026-11-11T11:44:58.749Z on code tree `6b389241b942` at HEAD `2d6b551` (branch `task/G30-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios ListItem`
+- Result: fail, exit 1, 75570 ms
+- Load: start 17.00, end 10.34, median 11.48, max 17.00
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G30-o7nwh`
+- Full log: `task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log` (<store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ListItem.harness.tsx`
+- `● ListItem · G30 › sizes each configuration from a poisoned fallback, and only it`
+- `● ListItem · G30 › keeps one box while the slots that cost nothing change`
+- `● ListItem · G30 › draws the leading glyph in the row content colour, filling its slot`
+- `● ListItem · G30 › takes no press and sends nothing while disabled`
+- `● ListItem · G30 › publishes one node, whose role is a button only with onPress`
+- `● ListItem · G30 › starts a recycled row from nothing`
+- `● ListItem · G30 › draws no insets, container or highlight of its own inside a Form.Row`
+- `● ListItem · G30 › greys every slot when it is disabled, not only the value`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-o7nwh (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   X24-wd8i4                X24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.34 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 128 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:ListItem
+gate: node ../scripts/harness.mjs --harnessRunner ios ListItem (cwd example)
+gate: code tree 6b389241b942 at HEAD 2d6b5510
+gate: git tree 42cb5e6956f9 with a DIRTY worktree (not reusable)
+gate: log task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log
+gate:       <store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios ListItem
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 6b389241b942, 25 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 17.00/11.82 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/ListItem.harness.tsx
+  ● ListItem · G30 › sizes each configuration from a poisoned fallback, and only it
+
+    "size-title" (size-title) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › keeps one box while the slots that cost nothing change
+
+    "slot-row" (slot-row) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › draws the leading glyph in the row content colour, filling its slot
+
+    "ink-slab" (ink-slab) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › takes no press and sends nothing while disabled
+
+    "press-enabled" (press-enabled) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › publishes one node, whose role is a button only with onPress
+
+    "a11y-button" (a11y-button) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › starts a recycled row from nothing
+
+    "recycled-item" (recycled-item) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › draws no insets, container or highlight of its own inside a Form.Row
+
+    "bare-item" (bare-item) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+  ● ListItem · G30 › greys every slot when it is disabled, not only the value
+
+    "colour-live" (colour-live) never reported a measured size from the hosted row. Box: 402.00x111.67.
+
+      [0m [90m 342 |[39m     }[33m,[39m
+       [90m 343 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 344 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 345 |[39m         [32m`"${testId}" (${what}) never reported a measured size from the hosted `[39m [33m+[39m
+       [90m 346 |[39m           [32m`row. Box: ${describeSize(sizeOf(testId))}.`[39m
+       [90m 347 |[39m       )[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       8 failed, 8 total
+Snapshots:   0 total
+Time:        73.578 s
+Ran all test suites matching ListItem.
+gate: harness:ios:ListItem FAIL in 75.6 s
+gate: recorded in .gates/task/G30-fix1.jsonl
+
+
+gate: appended the device context to task/G30-fix1/harness+ios+ListItem-2026-11-11T11-44-57.844Z.log (4 probe(s))
+
+```

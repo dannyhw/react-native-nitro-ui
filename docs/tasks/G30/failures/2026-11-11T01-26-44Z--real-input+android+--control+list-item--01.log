@@ -1,0 +1,107 @@
+# Failure excerpt — real-input:android:--control:list-item
+
+- Ran: 2026-11-11T01:26:44.365Z on code tree `995964148e03` at HEAD `0b04f19` (branch `task/G30-list-item`)
+- Command: `node scripts/real-input/android.mjs --control list-item`
+- Result: fail, exit 1, 189540 ms
+- Load: start 4.18, end 6.91, median 6.34, max 12.02
+- Device: android / device `emulator-5574` / lease `G30-16rcb`
+- Full log: `task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-26-43.702Z.log` (<store>/task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-26-43.702Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-26-43.702Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-16rcb (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.91 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 61 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:list-item
+gate: node scripts/real-input/android.mjs --control list-item (cwd .)
+gate: code tree 995964148e03 at HEAD 0b04f199
+gate: git tree c95ac1720c7b with a DIRTY worktree (not reusable)
+gate: log task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-26-43.702Z.log
+gate:       <store>/task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-26-43.702Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Stepper" (tab-stepper) is 73.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "List items" (tab-listitem) is 85.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  list-item: a real tap on an item fires its onPress once and highlights the row, a disabled item takes nothing, and a tap inside a Form reaches the item
+    ✓ no item has been pressed before a touch (0/0/0) — expected 0/0/0, saw 0/0/0
+    · "Real-input item" occupies 42,764 → 1038,953
+    ✓ exactly one node carries the item's name — the title, subtitle and value are merged into the row, not three stops of their own — expected 1, saw 1
+    · the named node is a android.view.View at 42,764 → 1038,953, clickable=false enabled=true — clickable because it has an onPress, which is the same modifier that installs the ripple the highlight sample below looks for
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    · "Real-input item" occupies 42,764 → 1038,953
+    ✓ ten real taps are ten presses, from this item and no other — expected 10 real, saw 10 real
+
+real-input (android): Error: png-pixel: (252.2, 775) is outside a 1080x2424 image
+gate: real-input:android:--control:list-item FAIL in 189.5 s
+gate: recorded in .gates/task/G30-list-item.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-26-43.702Z.log (5 probe(s))
+
+```

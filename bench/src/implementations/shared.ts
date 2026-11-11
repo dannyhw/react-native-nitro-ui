@@ -47,6 +47,12 @@ const ROW_HEIGHTS: Record<
   // every arm still lays out the identical area — the icon-button's rule, for the
   // same reason: on this control the touch target *is* the box.
   'stepper': 48,
+  // The one-line row every arm draws (`LIST_ITEM_TITLE` + a trailing value). Material 3
+  // will not publish a one-line `ListItem` under `ItemOneLineContainerHeight` (56 dp) and
+  // UIKit's `UIListContentView` with a `.cell()` configuration measured 52.00 pt here
+  // (G30 early check 1), so 56 holds the taller arm and every arm still lays out the
+  // identical area — the rule these row heights exist for.
+  'list-item': 56,
 };
 
 /* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
@@ -549,6 +555,45 @@ export const STEPPER_LABEL = 'Quantity';
  * identity per render would hand one arm a cheaper prop diff than another.
  */
 export function onStepperChange(_value: number): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * The title every `list-item` arm draws.
+ *
+ * The row is the one-line settings row — a title with a trailing value — because that is
+ * the shape every arm can draw with the same two pieces of text: the brief's floor is an
+ * RN `View` with two `Text`s, `@expo/ui`'s row takes a headline and a trailing slot, and
+ * this library's leaf takes a `title` and a `value`. A subtitle would be a third `Text`
+ * in the floor and a third slot in the others, i.e. an arm priced for markup the
+ * control under it does not have.
+ *
+ * Constant across the flip, on purpose: a ListItem's height is its *configuration's*, not
+ * its text's — every slot is capped to one line (DECISIONS D46), so a longer title moves
+ * no arm's sizing key and the cell stays a text commit rather than a re-measure.
+ */
+export const LIST_ITEM_TITLE = 'Ringtone';
+
+/**
+ * The trailing value every `list-item` arm draws, flipped by the `update.list-item`
+ * cell.
+ *
+ * Two short words of different length, which is what a settings row actually writes
+ * ("Off" → "Normal"): one `Text` in the RN-core floor, one prop in this library's arm,
+ * one slot in `@expo/ui`'s row, and nothing in any arm's sizing key — so the cell
+ * prices a text commit on a row that keeps its box, which is the common case.
+ */
+export function listItemValue(value: boolean): string {
+  return value ? 'Normal' : 'Off';
+}
+
+/**
+ * Stable no-op `onPress` for the ListItem arms, for the same reason as
+ * {@link onButtonGroupPress}: the row is pressable in every arm so every arm pays for
+ * the interaction, and a callback whose identity changed per render would price one
+ * arm cheaper than another.
+ */
+export function onListItemPress(): void {
   // Intentionally empty: state is driven by the runner.
 }
 

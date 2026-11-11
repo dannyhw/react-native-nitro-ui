@@ -1,0 +1,91 @@
+# Failure excerpt — harness:android:ListItem
+
+- Ran: 2026-11-11T11:39:17.518Z on code tree `7c72a6a9d329` at HEAD `2d6b551` (branch `task/G30-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ListItem`
+- Result: fail, exit 1, 13488 ms
+- Load: start 11.23, end 9.83, median 10.53, max 11.23
+- Device: android / device `emulator-5574` / lease `G30-o7nwh`
+- Full log: `task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log` (<store>/task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ListItem.harness.tsx`
+- `● ListItem · G30 › takes no press and sends nothing while disabled`
+- `expected [ 'press-disabled:press', …(2) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-o7nwh (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   X24-wd8i4                X24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.83 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:ListItem
+gate: node ../scripts/harness.mjs --harnessRunner android ListItem (cwd example)
+gate: code tree 7c72a6a9d329 at HEAD 2d6b5510
+gate: git tree 42cb5e6956f9 with a DIRTY worktree (not reusable)
+gate: log task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log
+gate:       <store>/task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ListItem
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 7c72a6a9d329, 26 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.23/12.83 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ListItem.harness.tsx
+  ● ListItem · G30 › takes no press and sends nothing while disabled
+
+    expected [ 'press-disabled:press', …(2) ] to deeply equal []
+
+      [0m [90m 908 |[39m     pressItem([32m'press-disabled'[39m)[33m;[39m
+       [90m 909 |[39m     [36mawait[39m sleep([33mEVENT_QUIET_MS[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 910 |[39m     expect(events[33m.[39mslice([36mfrom[39m))[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 911 |[39m     expect(reportOf([32m'press-disabled'[39m)[33m.[39mpresses [33m?[39m[33m?[39m [32m'none'[39m)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 912 |[39m
+       [90m 913 |[39m     pressItem([32m'press-enabled'[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 7 passed, 8 total
+Snapshots:   0 total
+Time:        11.936 s
+Ran all test suites matching ListItem.
+gate: harness:android:ListItem FAIL in 13.5 s
+gate: recorded in .gates/task/G30-fix1.jsonl
+
+
+gate: appended the device context to task/G30-fix1/harness+android+ListItem-2026-11-11T11-39-16.669Z.log (5 probe(s))
+
+```

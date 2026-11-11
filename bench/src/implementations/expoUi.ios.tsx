@@ -28,6 +28,8 @@ import {
   tag,
 } from '@expo/ui/swift-ui/modifiers';
 
+import { ListItem } from '@expo/ui';
+
 import { useEffect } from 'react';
 
 import type { BenchListProps } from '../types';
@@ -44,6 +46,9 @@ import {
   formSwitchValue,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
+  listItemValue,
+  LIST_ITEM_TITLE,
+  onListItemPress,
   menuItems,
   menuTitle,
   onDateChange,
@@ -287,6 +292,27 @@ function BenchButtonGroup({ index, value }: { index: number; value: boolean }) {
         />
       ))}
     </HStack>
+  );
+}
+
+/**
+ * `@expo/ui`'s row for this job: its universal `ListItem`, which on iOS is a SwiftUI
+ * `Button` with a headline and a trailing slot (Q10 Appendix A) — the row a `@expo/ui`
+ * app writes for a settings line, and the same two pieces of text the other arms draw.
+ *
+ * `ListItem` rather than `LabeledContent` because the row under test *presses*, and a
+ * labeled content row has no press of its own: bolting one on would be layout code the
+ * arm under test does not write.
+ */
+function BenchListItem({ index, value }: { index: number; value: boolean }) {
+  return (
+    <ListItem
+      testID={`bench-expo-list-item-${String(index)}`}
+      onPress={onListItemPress}
+      trailing={<Text>{listItemValue(value)}</Text>}
+    >
+      <Text>{LIST_ITEM_TITLE}</Text>
+    </ListItem>
   );
 }
 
@@ -543,6 +569,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             <BenchButtonGroup index={index} value={value} />
           </Host>
+        ) : component === 'list-item' ? (
+          <Host key={index} style={style}>
+            <BenchListItem index={index} value={value} />
+          </Host>
         ) : (
           <Host key={index} style={style}>
             <BenchToggle index={index} value={value} />
@@ -621,6 +651,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchProgress key={index} index={index} value={value} />
           ) : component === 'button-group' ? (
             <BenchButtonGroup key={index} index={index} value={value} />
+          ) : component === 'list-item' ? (
+            <BenchListItem key={index} index={index} value={value} />
           ) : (
             <BenchToggle key={index} index={index} value={value} />
           )
