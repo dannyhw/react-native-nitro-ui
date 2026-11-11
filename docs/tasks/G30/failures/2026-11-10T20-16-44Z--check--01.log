@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-10T20:16:44.486Z on code tree `c83e7b21135c` at HEAD `d7e2d3f` (branch `task/G30-list-item`)
+- Command: `bun run check`
+- Result: fail, exit 1, 159172 ms
+- Load: start 4.79, end 6.37, median 10.19, max 16.06
+- Device: none recorded (not a device gate)
+- Full log: `task/G30-list-item/check-2026-11-10T20-16-43.702Z.log` (<store>/task/G30-list-item/check-2026-11-10T20-16-43.702Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/real-input-a11y.test.js`
+- `● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt`
+- `expect(received).toEqual(expected) // deep equality`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3210 — the rest is in the full log above)
+
+```
+      at warnAndroidIconSource (src/iconSource.ts:309:7)
+      at Button (src/components/Button/Button.tsx:311:49)
+      at Object.react_stack_bottom_frame (node_modules/react-reconciler/cjs/react-reconciler.development.js:19204:20)
+      at renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:5549:22)
+      at updateFunctionComponent (node_modules/react-reconciler/cjs/react-reconciler.development.js:7969:19)
+      at beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:9591:18)
+      at runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:2663:13)
+      at performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:16674:22)
+      at workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16500:41)
+      at renderRootSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16481:11)
+      at performWorkOnRoot (node_modules/react-reconciler/cjs/react-reconciler.development.js:15540:11)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-reconciler/cjs/react-reconciler.development.js:3520:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:664:34)
+      at node_modules/react/cjs/react.development.js:923:21
+
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS src/__tests__/menuSizingKey.test.tsx
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS eslint-rules/__tests__/rules.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS src/__tests__/form.test.tsx
+PASS scripts/__tests__/ime-frame.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS src/__tests__/stepper.test.tsx
+PASS scripts/__tests__/free-lsof-stub.test.js
+PASS src/__tests__/iconName.test.tsx
+  ● Console
+
+    console.warn
+      nitro-ui: Button's androidIcon "a|b" is not a valid Android resource name — lower-case letters, digits and underscores only, and not starting with a digit. Nothing will be drawn for it. See docs/components/button.md, "Android icons".
+
+      84 |   }
+      85 |   warnedNames.add(key);
+    > 86 |   console.warn(
+         |           ^
+      87 |     `nitro-ui: ${componentName}'s ${propName} "${name}" ${problem}. ` +
+      88 |       `Nothing will be drawn for it. See docs/components/button.md, "Android icons".`
+      89 |   );
+
+      at warn (src/iconName.ts:86:11)
+      at Button (src/components/Button/Button.tsx:317:24)
+      at Object.react_stack_bottom_frame (node_modules/react-reconciler/cjs/react-reconciler.development.js:19204:20)
+      at renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:5549:22)
+      at updateFunctionComponent (node_modules/react-reconciler/cjs/react-reconciler.development.js:7969:19)
+      at beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:9591:18)
+      at runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:2663:13)
+      at performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:16674:22)
+      at workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16500:41)
+      at renderRootSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16481:11)
+      at performWorkOnRoot (node_modules/react-reconciler/cjs/react-reconciler.development.js:15540:11)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-reconciler/cjs/react-reconciler.development.js:3520:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:664:34)
+      at node_modules/react/cjs/react.development.js:923:21
+
+PASS src/__tests__/segmentedControl.test.tsx
+PASS scripts/__tests__/app-launch-env.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/pod-install.test.js
+PASS src/__tests__/hostInertStyles.test.tsx
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (53.092 s)
+PASS scripts/__tests__/bench-machine.test.js
+PASS src/__tests__/harnessHandles.test.ts
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS src/__tests__/dialog.test.tsx
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/harness-isolated.test.js
+PASS src/__tests__/materialTheme.test.ts
+PASS src/__tests__/hostReport.test.tsx
+PASS src/__tests__/checkbox.test.tsx
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/native-tests-android-skip.test.js (8.566 s)
+PASS src/__tests__/NitroUiCore.test.ts
+PASS scripts/__tests__/device-ops.test.js (15.344 s)
+PASS scripts/__tests__/gate.test.js (59.534 s)
+PASS scripts/__tests__/gate-logs.test.js (68.958 s)
+PASS scripts/__tests__/ci-workflows.test.js (74.268 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (80.737 s)
+PASS scripts/__tests__/bench-gate.test.js (152.055 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/real-input-a11y.test.js
+  ● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+    @@ -15,6 +15,7 @@
+        "hosted-progress",
+        "text-field",
+        "search-field",
+        "context-menu",
+        "form",
+    +   "list-item",
+      ]
+
+      93 |     expect(
+      94 |       verdicts.filter((v) => v.known.length === 0).map((v) => v.id)
+    > 95 |     ).toEqual([
+         |       ^
+      96 |       'switch',
+      97 |       'button',
+      98 |       'date-picker',
+
+      at Object.toEqual (scripts/__tests__/real-input-a11y.test.js:95:7)
+
+
+Test Suites: 1 failed, 84 passed, 85 total
+Tests:       1 failed, 2015 passed, 2016 total
+Snapshots:   0 total
+Time:        152.979 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 159.2 s
+gate: recorded in .gates/task/G30-list-item.jsonl
+
+```
