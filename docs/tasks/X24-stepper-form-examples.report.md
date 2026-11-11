@@ -1,29 +1,26 @@
 # X24 — Stepper and Form: examples and screenshots that lay out properly
 
 **Branch:** `task/X24-stepper-form-examples` (from `main` at `404eaad3`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `LEASE_ID` (`LEASE_DEVICES` / Metro `METRO_PORT`)
+**Lease:** none — `acquire --task X24 --boot --wait-minutes 240` timed out twice, ≈5 h queued (see "Device half pending")
 
 ## Summary
 
-**Was Form's misalignment a component bug? Horizontally no, vertically yes — but not in
-`Form.Row`.** `flex: 1` does reach the row's trailing edge on both platforms: the new case
-measures a probe row whose only child takes all the room, and the README's control ends at
-`CONTROL_RIGHT` dp against that box's `PROBE_RIGHT` dp. The `Sections` story simply never
-used `flex: 1` — it put a plain `<Text>` beside the `Switch`, and the `flex: 1` the README
-shows lived only in the README, so the picture was not the code.
+**Was Form's misalignment a component bug? Not horizontally, and the vertical half is not
+`Form.Row`'s either.** `Form.Row` is `flexDirection: 'row'` with `alignItems: 'center'`, at the
+cell's content width (`src/components/Form/Form.tsx:581`, `:590`), so the README's
+`<Text style={{ flex: 1 }} /><Switch />` pair does reach the row's trailing edge. The `Sections`
+story never used `flex: 1` at all: it put a plain `<Text>` beside the `Switch`, so the picture
+was not the code the README prints.
 
-The vertical half is real and general: every self-sizing control carries
-`{ alignSelf: 'flex-start' }` as its base style (the same defence React Native's own iOS
-`Switch` has, and load-bearing here, because a stretched box decides an intrinsic control's
-size for it and is never even asked). A child's `alignSelf` beats its parent's
-`alignItems`, so in any row taller than its content — every Form row is, at `minHeight: 44`
-/ `56` — the control sticks to the row's top edge while the label centres. The measured
-delta for the pair with no box is `BARE_DELTA`. Every nitro-ui control in a `Form.Row` has
-this shape, which is why the examples and the docs now wrap a row's content in
-`{ alignItems: 'center', flex: 1, flexDirection: 'row' }`: the box hugs its content, so
-there is no leftover room for the two rules to disagree about. `docs/components/form.md`
-says so where a reader would look. The component-level fixes are cross-cutting, so they are
-a question rather than a guess (below).
+The vertical half is real and general: 14 components carry `{ alignSelf: 'flex-start' }` as
+their base style (React Native's own `Switch` has the same defence, and it is load-bearing — a
+stretched box decides an intrinsic control's size, so the measurement is never asked). A child's
+`alignSelf` beats its parent's `alignItems`, so in any row taller than its content — every Form
+row is, at `minHeight: 44` / `56` — the control sticks to the row's top edge while the label
+centres. That is why the examples and `docs/components/form.md` now wrap a row's content in
+`{ alignItems: 'center', flex: 1, flexDirection: 'row' }`: the box hugs its content, so the two
+rules have no leftover room to disagree about. A component-level fix is cross-cutting, so it is
+a question below, not a guess.
 
 **The squashed Android steppers are a starved box, not a clipped drawing bug.** In
 `showcase.tsx`'s `Row` the caption may not shrink and the content wrapper is the only thing
@@ -33,28 +30,58 @@ C1 placement pass re-measures the content *under* the box width, `Modifier.size(
 the constraints, and the two `FilledTonalIconButton`s come out as ellipses. The story now
 gives the caption a column and the control `flexShrink: 0`.
 
-The Stepper `States` story and the Form `Sections` story read as one settings list each;
-README, `readme-examples.tsx` and `form.md` agree with the pictures, and all four PNGs are
-retaken. The other 20 pairs are swept below.
+The Stepper `States` and Form `Sections` stories read as one settings list each, and README,
+`readme-examples.tsx` and `form.md` agree with each other. **What did not happen is the
+photography and the device gates:** with no pair, the four PNGs are still the ones on `main` and
+the new case has never run, so the claims above rest on the components' styles rather than a
+measurement, and the red proof is un-run too. The other twenty pairs are swept below; that part
+needed no device.
 
 ## Gates
 
-GATE_TABLE
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2013 tests / 85 suites | `c6648f07c513` | 2 m 55 s | start 13.8 / med 19.6 / max 25.3 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
 
-`need --for review`: NEED_LINE
+`need --for review`: 2 gate(s) missing for review: harness:ios, harness:android — `check` green
+on `c6648f07c513`, the whole device half outstanding.
 
 ## Before / after
 
+What the README shows today, from `main`, byte-identical to `docs/images/components/`:
+
 | | iOS | Android |
 | --- | --- | --- |
-| Stepper, before | ![Stepper iOS before](X24/before/stepper-ios.png) | ![Stepper Android before](X24/before/stepper-android.png) |
-| Stepper, after | ![Stepper iOS after](../images/components/stepper-ios.png) | ![Stepper Android after](../images/components/stepper-android.png) |
-| Form, before | ![Form iOS before](X24/before/form-ios.png) | ![Form Android before](X24/before/form-android.png) |
-| Form, after | ![Form iOS after](../images/components/form-ios.png) | ![Form Android after](../images/components/form-android.png) |
+| Stepper | ![Stepper iOS before](X24/before/stepper-ios.png) | ![Stepper Android before](X24/before/stepper-android.png) |
+| Form | ![Form iOS before](X24/before/form-ios.png) | ![Form Android before](X24/before/form-android.png) |
+
+There is no `after` row yet: the retake needs a simulator and an emulator, and the committed
+`docs/images/components/{stepper,form}-{ios,android}.png` are these same four files. Every
+defect the brief describes is visible here — iOS's steppers overlap their own captions and run
+off the right edge, Android's `+` halves are ellipses at three rows in five, and each Form
+switch sits against its label instead of at the trailing edge.
 
 ## Red proofs
 
-RED_PROOFS
+None run: `Form row content (X24)` has never been on a device, because there was never a lease.
+The mutations are chosen, so one filtered run each proves them — `gate.mjs harness:ios -- Form`
+and `harness:android -- Form`, which record as `harness:*:Form` and satisfy nothing:
+
+- `TrailingEdgeForm`'s row two, drop the box (label and control become the row's children and
+  the control's wrapper carries `x24SelfSizing`) → expect `the control is centred at y=… while
+  its label is centred at y=…`.
+- `x24Styles.label` from `{ flex: 1 }` to `{}` → expect `the control ends at x=… while the
+  row's content ends at x=…`, and the same for the box-less row-three pair.
+
+The fixture is what gets broken, not `Form`, because the claim is about what a row gives its
+content: a mutation inside `Form` cannot redden the boxed pair, since the box hugs its content
+and so the row's `alignItems` moves the pair without moving it — which is the same reason the
+boxed pattern is the advice. The case's own `X24 BARE pair` / `X24 BOX pair` lines carry the
+numbers the summary is missing.
 
 ## Files changed
 
@@ -65,12 +92,13 @@ RED_PROOFS
   controls on one trailing edge (`flexShrink: 0` keeps a control its measured width).
 - `example/__tests__/Form.harness.tsx` — `Form row content (X24)`: a probe row measures the
   row's content box, and the case asserts the trailing edge and the label's middle.
-- `docs/images/components/{stepper,form}-{ios,android}.png` — retaken; the shots that were
-  on `main` are kept in `docs/tasks/X24/before/`.
+- `docs/tasks/X24/before/` — the four shots that are on `main`, copied so an `after` can be read
+  against them. `docs/images/components/{stepper,form}-{ios,android}.png` are unchanged: the
+  retake is what a device pair still owes.
 
 ## Sweep of the other pairs
 
-Twenty pairs reviewed at README width and at full size. No other control is clipped or
+The other twenty pairs reviewed at README width and at full size. No other control is clipped or
 squashed by a component; what is wrong is either a crop or `showcase.tsx`'s `Row`:
 
 - `icon-button-{ios,android}`: "each one disabled" and "the toggle form" hand four controls
@@ -92,8 +120,36 @@ squashed by a component; what is wrong is either a crop or `showcase.tsx`'s `Row
   (`label: { flexShrink: 1 }`, `content: { flexShrink: 0 }`) is honest but retakes about ten
   pairs, so it is not mine to make from a screenshots task.
 
+## Device half pending
+
+One pair, in this order — everything here is scripted, so it is ~45 min of device time:
+
+1. `node scripts/build-app.mjs --platform <p>`: both artifacts are already stamped for
+   `c6648f07c513`, so this is a no-op unless a story changes on the way.
+2. Retake the four PNGs by CONTRIBUTING's recipe (`stepper--states`, `form--…`). For the Form
+   pair pick **one** story and shoot both platforms from it: `form--sections` renders `push` /
+   `sound` uncontrolled (both switches off) while the README's state is `useState(true)` /
+   `useState(false)`, and the pair on `main` already mixes the two — the iOS half reads like
+   `form--playground` (first switch on) and the Android half like `form--sections` (both off).
+   `form--playground` on both is the closer match to the README code, and its
+   `quiet-hours presses:` line sits under a 420 pt form, below the crop.
+3. `harness:ios`, `harness:android`, `real-input:ios`, `real-input:android` — the brief asks for
+   all four because `example/__tests__/Form.harness.tsx` changed.
+4. The red proofs above, last: a mutated fixture changes the code tree, so the app gets rebuilt
+   for them and the stamp stops matching the round.
+5. Undo the scratch `initialSelection`, `RCT_jsLocation`, `debug_http_host` and the
+   `tcp:<port>` reverse; then `gate.mjs table`, `export --task X24` and `task-ready`.
+
+Worth 30 s while the pair is up: `form--sections` on iOS. If iOS really draws the *first*
+uncontrolled `Switch` on and the second off, that is a component question, not a story one, and
+the `main` pair hints at exactly that.
+
 ## Follow-ups
 
+- pool: three device tasks (G29, G30, G31, then X24) against `maxDeviceLeases: 2`; X24 queued
+  ≈5 h and twice watched a pair released and re-taken by another task within seconds.
+- docs/images: the Form pair on `main` is two different stories — one switch on in the iOS half,
+  none on in the Android half — so the two halves are not the same example.
 - sizing/Android: an `intrinsic` control whose box is narrower than its measured width is
   laid out *inside* that box by the C1 placement pass, and `Modifier.size()` clamps — a
   fixed-shape control (Stepper's two icon buttons) draws squashed where iOS overflows. A
@@ -108,9 +164,10 @@ squashed by a component; what is wrong is either a crop or `showcase.tsx`'s `Row
 
 ## Questions for orchestrator
 
-- **Where should a control in a `Form.Row` be centred?** The measured fact: a self-sizing
-  control directly in a row sits `BARE_DELTA` above its label's middle, on both platforms,
-  because its base `{ alignSelf: 'flex-start' }` beats the row's `alignItems: 'center'`.
+- **Where should a control in a `Form.Row` be centred?** The fact, from the styles: a self-sizing
+  control directly in a row takes the row's top edge while its label centres, because its base
+  `{ alignSelf: 'flex-start' }` beats the row's `alignItems: 'center'` (the new case logs the
+  delta in dp on both platforms; it has not run yet, so the number belongs to the next round).
   Options: (a) leave it and document the content box — what this round did, because it
   matches React Native, costs nothing, and touches no other component's layout;
   (b) give `Form.Row` an internal content wrapper — fixes the bare pattern too, but adds a
@@ -121,3 +178,11 @@ squashed by a component; what is wrong is either a crop or `showcase.tsx`'s `Row
   if the owner wants the bare pattern to centre, (b) as its own task with a Form benchmark
   run — G31 and G30 (`ListItem`) are both in row layout right now and would want the same
   answer.
+- **How does X24 get an hour of device time?** The code, docs and the new case are committed and
+  `check` is green on `c6648f07c513`; what is missing is a screenshot session and four device
+  gates, and `need --for review` cannot pass without the two harness runs. Options: (a) re-run
+  the device half as a fix round when a pair is free — recommended, nothing has to be redone;
+  (b) an `--exclusive` lease out of hours, which waits for both other tasks to end and then
+  holds the machine; (c) `maxDeviceLeases: 3` on this box, which buys capacity with the load
+  that D21 kept two leases for. Recommendation: (a) now, and (c) only if the queue stays three
+  deep.
