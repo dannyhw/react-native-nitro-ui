@@ -883,7 +883,9 @@ export function CheckoutOptions({
 ```
 
 `indeterminate` asks for a third glyph, not a third value: a dash on Android and
-`minus.circle.fill` on iOS, announced as "mixed" on both. It is a display, so
+`minus.circle.fill` on iOS. Each platform names that state for a screen reader in its own
+words — Compose says "Partially checked", iOS says "mixed" — and neither says it as a
+`checked` value. It is a display, so
 `onCheckedChange` never carries a third value, and a press reports the opposite of
 what the box shows — empty box → `true`, check mark → `false`, dash → `true`.
 `checked` outranks the display on both platforms, so the press that empties a

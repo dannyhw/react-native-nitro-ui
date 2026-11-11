@@ -179,6 +179,20 @@ struct CheckboxContent: NitroUIContent {
     // drawn, so it is what the Toggle is handed rather than what React sent. `mixed` is
     // the dash, which iOS now draws too - the state and its picture are `recordSymbol`.
     let drawn = model.state.displayed ? "1" : (showsThirdState ? "mixed" : "0")
+    // The value a reader is told, from the same two inputs the picture is drawn from.
+    //
+    // It is one call to the table's own rule, not a second reading of `indeterminate`:
+    // `checked` outranks the dash in the glyph (`NitroUiCheckboxGlyphs.glyph`), so it has
+    // to outrank it in the announcement as well. Asked as `showsThirdState ? "mixed" :
+    // nil` - which is what this said first - a box that is `checked` *and*
+    // `indeterminate` drew a checkmark and said "mixed", and so did a dash the app has
+    // not cleared yet: the tap reports `true`, the app may answer on its next render, and
+    // in between the row shows a checkmark. Both modifiers below take this one value, so
+    // the drawn picture and the announced value cannot come from different questions.
+    let announcedValue = NitroUiCheckboxGlyphs.accessibilityValue(
+      checked: model.state.displayed,
+      indeterminate: showsThirdState
+    )
     let glyph = NitroUiCheckboxGlyphs.glyph(
       style: model.iosStyle,
       checked: model.state.displayed,
@@ -211,9 +225,7 @@ struct CheckboxContent: NitroUIContent {
       CheckboxToggleStyleModifier(
         style: model.iosStyle,
         showsThirdState: showsThirdState,
-        showsLabel: model.label != nil,
-        disabled: model.disabled,
-        tint: model.tint
+        showsLabel: model.label != nil
       )
     )
     .disabled(model.disabled)
@@ -227,14 +239,18 @@ struct CheckboxContent: NitroUIContent {
     //
     // A `Toggle` is two-position, so its element can only say checked or unchecked; the
     // dash is drawn by a control that is *not* checked, and a reader told "off" about a
-    // box showing a dash is being told about a different box. Android's Material
-    // publishes `ToggleableState.Indeterminate` and TalkBack reads it as "Mixed", so iOS
-    // says the same word and neither platform invents a third `checked` value.
+    // box showing a dash is being told about a different box. The word is "mixed", which
+    // is Apple's own for a checkbox that is partly on (`NSButton.allowsMixedState`,
+    // `NSControlStateValueMixed`) - and it is *not* what Android says: Compose renders
+    // `ToggleableState.Indeterminate` as "Partially checked"
+    // (`R.string.indeterminate` in `androidx.compose.ui`), so the platforms name the
+    // third state differently and neither invents a third `checked` value.
+    // `docs/components/checkbox.md` carries both words.
     //
     // Measured, not assumed: `real-input:ios`'s a11y sweep prints the element this ends
     // up with (`trait=… value=…`), which is the closest thing to a transcript this
     // suite can read, and `docs/components/checkbox.md` quotes what it said.
-    .modifier(OptionalAccessibilityValue(value: showsThirdState ? "mixed" : nil))
+    .modifier(OptionalAccessibilityValue(value: announcedValue))
     // The label is part of the control, so touching it is touching the control - which
     // is also what Android's merged `Row` node does.
     //
@@ -297,7 +313,7 @@ struct CheckboxContent: NitroUIContent {
         isOn: model.state.displayed,
         setOn: { requested in model.userToggle(to: requested) },
         disabled: model.disabled,
-        value: showsThirdState ? "mixed" : nil
+        value: announcedValue
       )
     )
     .overlay {
@@ -327,7 +343,10 @@ struct CheckboxContent: NitroUIContent {
 /// It draws and does not intercept. The row's tap target is applied to the control in
 /// ``CheckboxContent/body`` - one target for all three styles, for the measured reason
 /// spelled out there - so this style cannot answer a touch twice.
-private struct CheckboxGlyphToggleStyle: ToggleStyle {
+/// The `DynamicProperty` conformance is what gets the `@Environment` below injected and
+/// re-read: a style is not a `View`, and without it SwiftUI has no reason to fill the
+/// wrapper, which would leave `isEnabled` at its default and a disabled row undimmed.
+private struct CheckboxGlyphToggleStyle: ToggleStyle, DynamicProperty {
   /// `circle` or `square`: the two glyph styles are one symbol pair apart and nothing
   /// else, which is also why they share a sizing rule.
   let style: NitroUiCheckboxStyle
@@ -338,11 +357,11 @@ private struct CheckboxGlyphToggleStyle: ToggleStyle {
   /// out here - an `HStack` charges its spacing for a zero-width child, and a bare
   /// checkbox would measure a glyph plus a gap it never drew.
   let showsLabel: Bool
-  /// Whether the row dims. `.disabled(…)` is applied to the `Toggle` outside this
-  /// style, and it is the same fact the row needs to look like a disabled control.
-  let disabled: Bool
-  /// The accent a state glyph takes, or `nil` for the app's own accent colour.
-  let tint: UIColor?
+  /// Whether the row dims. Read from the environment instead of passed: `.disabled(…)` is
+  /// applied to the `Toggle` outside this style, and the environment is that same fact as
+  /// the control already knows it, so the drawing cannot disagree with the control it
+  /// draws and no argument has to be threaded down to it.
+  @Environment(\.isEnabled) private var isEnabled
 
   func makeBody(configuration: Configuration) -> some View {
     let glyph = NitroUiCheckboxGlyphs.glyph(
@@ -361,16 +380,22 @@ private struct CheckboxGlyphToggleStyle: ToggleStyle {
         .font(.body)
         .imageScale(.large)
         .symbolRenderingMode(.monochrome)
+        // `.tint` is the accent the row was handed: `OptionalTint` applies `tintColor` to
+        // the `Toggle` above this style, and a style that asked for the tint again would
+        // keep a second copy of a decision the environment already carries - and would
+        // ignore an app's own `.tint(_:)` further out. With no tint set, `.tint` is the
+        // accent colour, which is the answer this used to fall back to. The empty box is
+        // not a state, so it is not tinted: the system's secondary label, either way.
         .foregroundStyle(
           glyph?.filled == true
-            ? (tint.map { Color(uiColor: $0) } ?? Color.accentColor)
-            : Color(uiColor: .secondaryLabel)
+            ? AnyShapeStyle(.tint)
+            : AnyShapeStyle(Color(uiColor: .secondaryLabel))
         )
       if showsLabel {
         configuration.label
       }
     }
-    .opacity(disabled ? 0.5 : 1)
+    .opacity(isEnabled ? 1 : 0.5)
   }
 }
 
@@ -384,8 +409,6 @@ private struct CheckboxToggleStyleModifier: ViewModifier {
   let style: NitroUiCheckboxStyle
   let showsThirdState: Bool
   let showsLabel: Bool
-  let disabled: Bool
-  let tint: UIColor?
 
   @ViewBuilder func body(content: Content) -> some View {
     switch style {
@@ -399,9 +422,7 @@ private struct CheckboxToggleStyleModifier: ViewModifier {
         CheckboxGlyphToggleStyle(
           style: style,
           showsThirdState: showsThirdState,
-          showsLabel: showsLabel,
-          disabled: disabled,
-          tint: tint
+          showsLabel: showsLabel
         )
       )
     }
@@ -596,12 +617,13 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
     }
   }
 
-  /// Rendered wherever the style can draw it: the two glyph styles have a dash
-  /// (`minus.circle.fill` / `minus.square.fill`, D47 item 3) and `'switch'` does not, so
-  /// the same prop marks dirty for one style and only stores for the other. The style
-  /// branch lives in the content (`showsThirdState`), which is what reads it; the setter
-  /// marks dirty for both because a style change and a value change arrive in one batch
-  /// and `commit()` applies the batch, not the prop.
+  /// Stored and marked dirty for every style; *drawn* by two of them. The two glyph
+  /// styles have a dash (`minus.circle.fill` / `minus.square.fill`, D47 item 3) and
+  /// `'switch'` has two positions, so the branch is about the picture, not about the
+  /// write: the setter stores and marks dirty whichever style is on screen, because a
+  /// style change and a value change arrive in one batch and `commit()` applies the
+  /// batch, not the prop. The branch that decides what is drawn lives in the content
+  /// (`showsThirdState`), which is the only place that asks about the style here.
   ///
   /// No `noteContentSizeMayHaveChanged()`: the dash, the check mark and the empty box are
   /// one symbol box, which `Checkbox.harness.tsx` measures (`keeps its size checked and
@@ -792,6 +814,13 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
   }
 
   func nuiTestStateReport() throws -> String {
+    // The host's lifetime pair rides along, semicolon-separated so a reader can take it
+    // apart the same way it takes the rest of the line apart. Neither counter is cleared
+    // by `prepareForRecycle()` (``NitroSwiftUIHost/lifetimeDrops``), which is what makes
+    // it the witness `Checkbox.harness.tsx`'s recycle case needs: a fresh instance
+    // answers `recycles=0`, so a mount that answers `recycles>=1` can only be a view the
+    // pool handed back - and only such a mount is testing the reset at all.
     return model.stateReport()
+      + ";drops=\(host.lifetimeDrops);recycles=\(host.lifetimeRecycles)"
   }
 }

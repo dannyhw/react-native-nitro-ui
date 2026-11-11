@@ -688,8 +688,10 @@ export const DECLARED_FALLBACKS = Object.freeze({
   //
   // The width is not compared, because it is the label's: 48 dp is a bare box's width on
   // Android and the glyph is a bare box's width on iOS, while `docs/components/checkbox.md`
-  // measures 131.05 dp and 145 pt with one mounted (`Checkbox.harness.tsx`, which is where a
-  // label's effect on width is pinned). A fixture that is labelled would make the width
+  // measures 131.05 dp and 110 pt with one labelled row mounted - and 145 pt for the same
+  // label in `iosStyle='switch'`, which is the widest of the three iOS pictures and a
+  // different control's box (`Checkbox.harness.tsx`, which is where a label's effect on
+  // width is pinned). A fixture that is labelled would make the width
   // assertable too, and the conformance fixture is deliberately bare - the same node the
   // recycle and naming rules probe - so the axis this table can promise is the height.
   NitroUiCheckbox: {

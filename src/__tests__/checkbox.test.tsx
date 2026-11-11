@@ -179,12 +179,15 @@ describe('Checkbox · iosStyle (D47)', () => {
     });
   });
 
-  it('keys the third state where it is drawn, which is not the switch style', async () => {
-    // `indeterminate` is in the key wherever a third glyph appears and out where it
-    // does not - on Android always (TriStateCheckbox), on iOS only for the glyph
-    // styles, whose dash D47 item 3 added. The `'switch'` control has two positions,
-    // so asking it about `indeterminate` would file a second configuration for a box
-    // that cannot look different.
+  it('keys the third state on Android, and not at all on iOS', async () => {
+    // The field goes where it changes the *box*. On Android it does: `TriStateCheckbox`
+    // is Material's own third control. On iOS it does not - `minus.circle.fill`,
+    // `checkmark.circle.fill` and `circle` are one SF Symbol box, so D47 item 3's dash is
+    // a repaint inside a size the row already has, and the field answers `0` for every
+    // style the way `checked` does. Keyed, a glyph row that grew a dash would be a cold
+    // configuration: one frame at the fallback and a correction, to draw the same box.
+    // `Checkbox.harness.tsx` measures both halves - the dash and the unchecked row at one
+    // size, and a warm row flipping to `indeterminate` for no correction.
     await onOs('ios', async () => {
       const glyph = await render(
         <Checkbox checked={false} indeterminate label="K" testID="i-glyph" />
@@ -198,7 +201,9 @@ describe('Checkbox · iosStyle (D47)', () => {
           testID="i-switch"
         />
       );
-      expect(nativeProps(glyph, 'i-glyph').nuiSizingKey).toBe('1|circle|K');
+      // One string for the dash and the empty box, and the switch's own key differs from
+      // it by its style only: the field is `0` here even though the dash is drawn.
+      expect(nativeProps(glyph, 'i-glyph').nuiSizingKey).toBe('0|circle|K');
       expect(nativeProps(toggle, 'i-switch').nuiSizingKey).toBe('0|switch|K');
     });
     await onOs('android', async () => {

@@ -148,17 +148,24 @@ export interface NitroUiCheckboxMethods extends HybridViewMethods {
 
   /**
    * TEMPORARY, test-only: what the checkbox is showing, as one line -
-   * `displayed=<0|1|mixed|none>;probes=<n>;merged=<0|1|none>;a11y=<...>`.
+   * `displayed=<0|1|mixed|none>;probes=<n>;merged=<0|1|none>;a11y=<...>
+   * [<;symbol=<SF Symbol|switch>][<;labelBox=<off,room>>];drops=<n>;recycles=<m>`.
    *
    * `displayed` is written where the control is drawn (the SwiftUI body, the
    * composable), so it is a reading of the hosted control rather than an echo of a
    * prop: the handle's `checked` answers what React sent. `none` until the control
-   * has drawn; `mixed` is Android's indeterminate, which iOS never draws.
+   * has drawn; `mixed` is the third state, which both platforms draw - on iOS in the
+   * two glyph styles only, never in `'switch'`, whose control has two positions.
    * `probes` counts the answers `nuiTestProbeAccessibility` has stored, so a test
    * can tell a fresh one from the last; `merged` is whether Android found one
    * focusable node for a labelled checkbox or two (1 = one node, which is what
    * TalkBack needs); `a11y` is that answer (Android:
    * `role=<role>,checked=<bool|none>,toggle=<On|Off|Indeterminate|none>,disabled=<bool>,clickable=<bool>,label=<text>`).
+   * `symbol` is iOS's half of "what is on screen" - the SF Symbol the drawing code was
+   * handed, or `switch` for the style that draws none of ours; Android has no symbol of
+   * ours to name, as iOS has never answered Android's `labelBox`. `drops`/`recycles` are
+   * the *host object's* lifetime, not this mount's: they survive a recycle, which is what
+   * makes `recycles>=1` the witness that a mount is looking at a recycled view.
    *
    * @internal Not app API (DECISIONS D14).
    */

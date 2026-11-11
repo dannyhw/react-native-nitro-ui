@@ -15,8 +15,14 @@ The value, the label, the events and the accessibility element are the same in a
 three: the control is the `Toggle` in every style, and only its drawing changes.
 
 Both are hosted by the core runtime (`docs/architecture/core.md`), so the control is
-the real one, with its own press feedback, its own accessibility element and its own
-dynamic-type handling.
+the real one, with its own accessibility element and its own dynamic-type handling. A
+press does the same thing wherever it lands and on both platforms — the control asks for
+the opposite of what it shows and reports one `onCheckedChange` — and Android keeps
+Material's own ripple, because its row *is* the `clickable`. On iOS the highlight is the
+one thing given up: the row answers touches through a tap target of its own (see
+[Sizing](#sizing)), and a `Toggle` pressed from in front of it does not dim under the
+finger. What a press shows there is the box changing state, one event, which is the
+feedback a checkbox is judged by.
 
 ```tsx
 import { Checkbox } from 'react-native-nitro-ui';
@@ -130,9 +136,12 @@ with a finger.
 
 A checkbox is its box plus its label (`sizing: "intrinsic"`). The host measures the
 control unbounded and Yoga lays out that box. The sizing key is
-`indeterminate|iosStyle|label` on iOS and `indeterminate|label` on Android — one rule
+`0|iosStyle|label` on iOS and `indeterminate|label` on Android — one rule
 (`iosStyle`'s doc comment), read about each platform's own control: a field belongs in
-the key where it changes what is mounted, and does not where it does not.
+the key where it changes the *box*, and does not where it does not. A field that only
+changes what is painted inside a box that stays put still costs a cold configuration, a
+first frame at the fallback and a correction to leave it, which is why the rule asks about
+the box rather than about the picture.
 
 - `label` is content — a bare box and a labelled one are different controls of
   different widths, so a new label is a new configuration (`noteContentSizeMayHaveChanged`
@@ -142,11 +151,15 @@ the key where it changes what is mounted, and does not where it does not.
   never reads it, so its key would pay for three cold configurations to mount one box —
   `Checkbox.harness.tsx` measures three style names of one label there and asserts
   **zero** extra corrections and one box for all three;
-- `indeterminate` is in the key wherever a third glyph is mounted: on Android
-  (`TriStateCheckbox` is a different composable), and on iOS in the two glyph styles,
-  which draw `minus.circle.fill` / `minus.square.fill`. It changes no box — see the
-  third-state row below — and `iosStyle='switch'` leaves the field at `0`, because that
-  control has two positions and nothing third to mount;
+- `indeterminate` is Android's field and not iOS's. On Android it answers
+  `TriStateCheckbox`, a composable of its own. On iOS it is written `0` for every style —
+  the answer `checked` gets — because the dash D47 item 3 added is `minus.circle.fill`
+  painted in the same symbol box as `circle` and `checkmark.circle.fill`: the row does not
+  change size, so keying it would make an app that grew a dash on a row it had already
+  drawn pay a frame at the fallback for a repaint. `Checkbox.harness.tsx` measures the
+  dash and an unchecked row of one label at the same size, and measures that flipping
+  `indeterminate` on a mounted row costs **zero** corrections on iOS and one on Android
+  (where the field really is a new configuration);
 - `checked` is in neither key, because neither platform's box moves between states.
   `Checkbox.harness.tsx` measures a checked and an unchecked checkbox of one label
   side by side and asserts they are the same size — if that ever differs, the key is
@@ -171,7 +184,10 @@ of keeping it as a style rather than as the control). The dash row is narrower t
 three above it because its fixture's label is `"Select all"`, not `"Measured"`: the label
 decides the width, the dash decides the picture. `Checkbox.harness.tsx` asserts that, by
 measuring the dash and an unchecked box of the *same* label from poisoned keys and
-requiring the same size — the third state costs a configuration, not a box.
+requiring the same size. It costs a box neither way, and a configuration on Android only:
+the two dash fixtures above are two keys there and one key on iOS, and a row already on
+screen that is flipped to `indeterminate` is corrected once on Android and not at all on
+iOS — which is the difference the field in the key is there to draw.
 
 The fallback — the size of the very first frame before anything is measured — is
 26 × 26 pt on iOS and 48 × 48 dp on Android (`NitroUiSizing.setFallback` in
@@ -260,15 +276,24 @@ The control is the platform's, so the accessibility element is too:
   iOS role and state are asserted from outside the app: the a11y sweep's `checkbox` case
   grades name, box and trait, and `RealInputTests.testRealInputCheckbox` reads the third
   state's element.
-- **The third state says "mixed", on both platforms.** A `Toggle` is two-position, so
-  its element can only say checked or unchecked, and a reader told "off" about a box
-  showing a dash is being told about a different box. Android's Material publishes
-  `ToggleableState.Indeterminate` and TalkBack reads it as "Mixed"; iOS sets
-  `.accessibilityValue(Text("mixed"))` for exactly the state where the picture and the
+- **The third state says something, on both platforms — in two different words.** A
+  `Toggle` is two-position, so its element can only say checked or unchecked, and a reader
+  told "off" about a box showing a dash is being told about a different box. Each platform
+  then says its own:
+  — Android publishes `ToggleableState.Indeterminate` and Compose renders that state
+  description as **"Partially checked"** (`R.string.indeterminate`,
+  `androidx.compose.ui`; the harness reads the state itself as `toggle=Indeterminate`);
+  — iOS sets `.accessibilityValue(Text("mixed"))`, Apple's own word for a checkbox that is
+  partly on (`NSButton.allowsMixedState`), for exactly the state where the picture and the
   value disagree, and leaves the `Toggle`'s own value alone otherwise — an empty value
-  would silence it. Read from outside the app on iPhone Air / iOS 27, that word is what the
-  element answers with: `trait=switch label="Real-input mixed checkbox" value="mixed"` — a
-  string where the two-position `Toggle` otherwise answers `0` or `1`.
+  would silence it. The words are not the same and neither platform pretends to be the
+  other; what is shared is the rule, `checked` outranks the dash, and the fact that the
+  third state is never a third `checked` value.
+  Read from outside the app on iPhone Air / iOS 27, that word is what the element answers
+  with: `trait=switch label="Real-input mixed checkbox" value="mixed"` — a string where the
+  two-position `Toggle` otherwise answers `0` or `1`, and `1` once the dash has been
+  tapped away (asserted: `testRealInputCheckbox` step 8 presses the mixed row and requires
+  the value to move, which is the state where the word could outlive the picture).
 - `accessibilityLabel` goes on the control, never on a wrapper, and defaults to
   `label`. A *bare* Android checkbox has no name of its own, which is the argument
   for giving one: pass `accessibilityLabel` when there is no `label`.
