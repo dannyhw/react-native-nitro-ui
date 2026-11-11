@@ -28,6 +28,7 @@
  */
 
 import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
+import { ACQUIRE_HINT, emulatorSerial, leaseIsLive } from './lease-core.mjs';
 
 /** Where a machine's ledgers live. Gitignored: the committed copy is exported. */
 export const LEDGER_DIR = '.gates';
@@ -2984,6 +2985,323 @@ export function lookLeaseRefusal(env, resolved) {
     `iOS ${runtime} look-check simulator (lease.mjs acquire --ios-runtime). The merge gates run ` +
     'on the default pairs: release this lease and acquire one without --ios-runtime.'
   );
+}
+
+/**
+ * Which gates drive a device, and so which ones owe a lease (X28).
+ *
+ * The same set `lookLeaseRefusal` treats as device gates, read off `resolveGate`'s
+ * own answer rather than off a list of names: `platform` is what claims a device and
+ * pre-flights Metro, `bench` is the one gate that measures one on purpose, and a
+ * `smoke:expo`/`smoke:rn-cli` run boots a device of its own (`ensure_emulator` in
+ * `scripts/smoke/common.sh`) without ever setting `platform`, because the script
+ * decides per `PLATFORM` at run time. `check` and `smoke:pack` build things and touch
+ * nothing: they run from any shell, lease or not.
+ *
+ * A filtered run is a device gate exactly when its base gate is (`harness:android:
+ * ColdSizing` included), which is the case the brief calls out: the filter changes
+ * what the run proves, not what it boots.
+ *
+ * @param {{gate?: string, platform?: string | null, bench?: boolean}} resolved
+ * @returns {boolean}
+ */
+export function isDeviceGate(resolved) {
+  if (resolved == null) return false;
+  if (resolved.bench === true) return true;
+  if (resolved.platform != null) return true;
+  return smokeTouchesDevice(String(resolved.gate ?? ''));
+}
+
+/** Is this gate a `smoke:expo`/`smoke:rn-cli` run, with or without a filter? */
+function smokeTouchesDevice(gate) {
+  return /^smoke:(expo|rn-cli)(?::|$)/.test(gate);
+}
+
+/**
+ * Which platform a device gate is about to drive, or null when it has not said yet.
+ *
+ * Read the way the runner reads it, so the gate never refuses a run the runner would
+ * have accepted on other devices: a harness/real-input gate carries its platform in
+ * the name, a bench only has `--platform` (`benchPlatform`, because a bench has no
+ * `platform` to claim a device with), and a smoke run falls back to the `PLATFORM`
+ * variable `scripts/smoke/common.sh` reads — including its default of `both`, which
+ * is why "said nothing" means *both halves here*, not *nothing*.
+ *
+ * @param {{gate?: string, platform?: string | null, bench?: boolean, benchPlatform?: string | null}} resolved
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {'ios' | 'android' | 'both' | null}
+ */
+export function deviceGatePlatform(resolved, env = {}) {
+  if (resolved == null) return null;
+  if (resolved.bench === true) return resolved.benchPlatform ?? null;
+  if (resolved.platform != null) return resolved.platform;
+  if (smokeTouchesDevice(String(resolved.gate ?? ''))) {
+    const platform = String(env?.PLATFORM ?? '').trim();
+    return platform === 'ios' || platform === 'android' ? platform : 'both';
+  }
+  return null;
+}
+
+/** Does a lease taken for `leasePlatform` cover a run that needs `needed`? */
+function leaseCoversPlatform(leasePlatform, needed) {
+  const held = String(leasePlatform ?? '').trim() || 'both';
+  return held === 'both' || held === needed;
+}
+
+/**
+ * Why this device gate must not start on the lease in `env`, or `null` (X28).
+ *
+ * On 2026-11-11 G30 ran two `real-input:android` gates from a shell with no lease
+ * env. AGENTS.md already said a device gate runs under a lease; the ledger proved it
+ * after the fact (`lease: null` on the line), and only the runner's own luck decided
+ * which emulator got driven. This is the rule that refuses it *before* the build,
+ * the Metro pre-flight, the claim and the first `adb`/`simctl` call: `NITRO_UI_LEASE_ID`
+ * has to name a lease that is still live in the store, for a task and platform that
+ * match this run, and holding the very devices the environment names.
+ *
+ * Pure, and handed the state rather than reading `~/.nitro-ui`: `scripts/gate.mjs`
+ * loads `leases.json` and `devices.json` (the same pair `lease.mjs list` prints, so
+ * an override never exists — the bench host passes this check by holding an exclusive
+ * lease, which is exactly the state it is in), and the test drives the decision with
+ * a temporary home.
+ *
+ * The lease *record* is the authority, not the environment: `NITRO_UI_LEASE_TASK` and
+ * the device variables are what a shell exported, and a shell can be edited. That is
+ * also why a lease nobody holds any more is a refusal even when every identifier
+ * around it looks right — a released lease's devices are somebody else's now.
+ *
+ * @param {object} options
+ * @param {NodeJS.ProcessEnv} [options.env] the run's environment
+ * @param {{gate: string, platform: string | null, bench?: boolean, benchPlatform?: string | null}} options.resolved `resolveGate`'s answer
+ * @param {object[]} [options.leases] the live leases from `leases.json`
+ * @param {object[] | null} [options.pairs] the pool pairs from `devices.json`
+ * @param {string | null} [options.poolProblem] why the pool could not be read
+ * @param {number} [options.now]
+ * @returns {string | null} the refusal, in the shape `gate.mjs` prints
+ */
+export function deviceGateLeaseRefusal({
+  env = {},
+  resolved,
+  leases = [],
+  pairs = null,
+  poolProblem = null,
+  now = Date.now(),
+} = {}) {
+  if (!isDeviceGate(resolved)) return null;
+  const gate = String(resolved?.gate ?? 'device gate');
+  // Every refusal ends the same way, because every one of them is fixed by the
+  // same two commands — and a message that only says "no" is a message that gets
+  // worked around by exporting a variable by hand.
+  const acquire = `Lease a device and source it:\n${ACQUIRE_HINT}`;
+  const leaseId = String(env?.NITRO_UI_LEASE_ID ?? '').trim();
+
+  if (leaseId === '') {
+    return [
+      `${gate} is a device gate and this shell has no lease: ` +
+        `NITRO_UI_LEASE_ID is not set, so nothing here says which device this run ` +
+        `may use. Without it the runner would pick one itself, and on a shared ` +
+        `machine that is another task\'s emulator.`,
+      acquire,
+    ].join('\n');
+  }
+
+  const lease = (Array.isArray(leases) ? leases : []).find(
+    (entry) => entry?.id === leaseId
+  );
+  if (lease == null) {
+    return [
+      `${gate} is a device gate and NITRO_UI_LEASE_ID=${leaseId} names no lease in ` +
+        `the lease store: it was released (or expired and pruned), so its devices ` +
+        `belong to the pool again. ${acquire}`,
+    ].join('\n');
+  }
+  if (!leaseIsLive(lease, now)) {
+    const ttl = Number(lease.ttlMinutes) || 0;
+    return [
+      `${gate} is a device gate and lease ${leaseId} (task ${lease.task ?? '?'}) ` +
+        `is outlived: it is past its own ${String(ttl)}-minute ttl. A gate that ran ` +
+        `on it now would record green for a device it no longer holds, and the pool ` +
+        `may have handed that device to another task. ${acquire}`,
+    ].join('\n');
+  }
+
+  const task = String(env?.NITRO_UI_LEASE_TASK ?? '').trim();
+  if (task !== '' && lease.task != null && task !== lease.task) {
+    return [
+      `${gate} has an environment from two leases: NITRO_UI_LEASE_ID=${leaseId} ` +
+        `belongs to task ${lease.task}, but NITRO_UI_LEASE_TASK says ${task}. ` +
+        `Source one lease file, not two — the gate cannot tell which devices the ` +
+        `mismatched variables were meant to name.`,
+      acquire,
+    ].join('\n');
+  }
+
+  const holds = Array.isArray(lease.holds) ? lease.holds : null;
+  if (holds == null || holds.length === 0) {
+    return [
+      `${gate} cannot check lease ${leaseId}: its record holds no pair, so there ` +
+        `is no device the store agrees this run may use. Release it and take a ` +
+        `fresh one (\`node scripts/lease.mjs list\` shows what is there).`,
+      acquire,
+    ].join('\n');
+  }
+
+  const needed = deviceGatePlatform(resolved, env);
+  if (needed === null) {
+    // A bench with no `--platform`: live lease, live devices, and the runner
+    // refuses the run itself for the name it was not given. Nothing here can say
+    // which half to check, and inventing one is how a claim lands on the wrong device.
+    return null;
+  }
+  if (!leaseCoversPlatform(lease.platform, needed)) {
+    return [
+      `${gate} drives ${needed}, and lease ${leaseId} was taken for ` +
+        `${lease.platform ?? 'the other'} devices. ${acquire}`,
+    ].join('\n');
+  }
+
+  // Only now, with a live lease whose task and platform fit, does the pool get
+  // asked about: an unusable `devices.json` and a stale lease are both refusals, but
+  // the lease is the one the caller can fix in one command, and reading them the
+  // other way round sends somebody off to edit a pool file they did not break.
+  if (poolProblem != null) {
+    return [
+      `${gate} cannot check lease ${leaseId}: ${poolProblem}. A device gate is ` +
+        `refused rather than run unverifiable — without the pool it cannot know ` +
+        `which devices the lease holds.`,
+      acquire,
+    ].join('\n');
+  }
+
+  const held = (Array.isArray(pairs) ? pairs : []).filter((pair) =>
+    holds.includes(pair?.id)
+  );
+  if (held.length === 0) {
+    return [
+      `${gate} cannot check lease ${leaseId}: it holds ${holds.join(', ')}, which ` +
+        `is no pair in this machine's devices.json. The pool changed after the ` +
+        `lease was taken — release it and take one from the current pool.`,
+      acquire,
+    ].join('\n');
+  }
+
+  if (needed === 'ios' || needed === 'both') {
+    const refusal = checkLeasedIosDevice({ env, gate, lease, held, acquire });
+    if (refusal != null) return refusal;
+  }
+  if (needed === 'android' || needed === 'both') {
+    const refusal = checkLeasedAndroidDevice({
+      env,
+      gate,
+      lease,
+      held,
+      acquire,
+    });
+    if (refusal != null) return refusal;
+  }
+  return null;
+}
+
+/**
+ * Does the environment name the simulator this lease holds?
+ *
+ * `IOS_UDID` is checked too because `scripts/real-input/ios.mjs` reads it *before*
+ * `IOS_SIM_UDID`: a shell that exports both, with the second one leased, would have
+ * the gate approve a device the runner then ignores.
+ */
+function checkLeasedIosDevice({ env, gate, lease, held, acquire }) {
+  const udid = String(env?.IOS_SIM_UDID ?? '').trim();
+  const udids = held
+    .map((pair) => pair?.ios?.udid)
+    .filter((entry) => entry != null && entry !== '');
+  if (udid === '') {
+    return [
+      `${gate} has no simulator to run on: lease ${lease.id} is live, but ` +
+        `IOS_SIM_UDID is not set, so this shell did not source that lease.`,
+      acquire,
+    ].join('\n');
+  }
+  const override = String(env?.IOS_UDID ?? '').trim();
+  if (override !== '' && override !== udid) {
+    return [
+      `${gate} names two simulators: IOS_UDID=${override} (which ` +
+        `scripts/real-input/ios.mjs prefers) and IOS_SIM_UDID=${udid}, which is ` +
+        `the one lease ${lease.id} exports. Unset IOS_UDID and run on the leased ` +
+        `simulator.`,
+      acquire,
+    ].join('\n');
+  }
+  if (!udids.includes(udid)) {
+    return [
+      `${gate} would run on ${udid}, which is not a device of lease ${lease.id} ` +
+        `(it holds ${held.map((pair) => pair?.id).join(', ')}). ` +
+        `The environment was edited, or belongs to another task's lease.`,
+      acquire,
+    ].join('\n');
+  }
+  return null;
+}
+
+/**
+ * Does the environment name the emulator this lease holds — and only it?
+ *
+ * The serial is derived from the pair's console port the same way
+ * `renderEnvFile` derives the one the lease exports, so a hand-set
+ * `ANDROID_SERIAL` that points at a warm but unleased emulator cannot pass. The adb
+ * server is checked against the pair too: AGENTS.md requires every adb command to
+ * address the lease's own server, and the default server on 5037 is the
+ * maintainer's.
+ */
+function checkLeasedAndroidDevice({ env, gate, lease, held, acquire }) {
+  const serial = String(env?.ANDROID_SERIAL ?? '').trim();
+  const bySerial = held.filter((pair) => {
+    const port = pair?.android?.emulatorPort;
+    return port != null && emulatorSerial(port) === serial;
+  });
+  if (serial === '') {
+    return [
+      `${gate} has no emulator to run on: lease ${lease.id} is live, but ` +
+        `ANDROID_SERIAL is not set, so this shell did not source that lease. ` +
+        `This is where the 2026-11-11 incident started — with no serial the runner ` +
+        `went looking for one.`,
+      acquire,
+    ].join('\n');
+  }
+  if (bySerial.length === 0) {
+    const leased = held
+      .filter((pair) => pair?.android?.emulatorPort != null)
+      .map((pair) => emulatorSerial(pair.android.emulatorPort));
+    return [
+      `${gate} would drive ${serial}, which is not the emulator of lease ` +
+        `${lease.id} (${leased.join(', ') || 'it holds no emulator'}). ` +
+        `Address the leased serial, or take a lease for that device.`,
+      acquire,
+    ].join('\n');
+  }
+  const pair = bySerial[0];
+  const avd = String(env?.ANDROID_AVD ?? env?.AVD ?? '').trim();
+  if (avd !== '' && pair?.android?.avd != null && avd !== pair.android.avd) {
+    return [
+      `${gate} has an environment from two leases: ANDROID_SERIAL=${serial} is ` +
+        `lease ${lease.id}'s ${pair.id}, whose AVD is ${pair.android.avd}, but ` +
+        `ANDROID_AVD says ${avd}.`,
+      acquire,
+    ].join('\n');
+  }
+  const server = String(env?.ANDROID_ADB_SERVER_PORT ?? '').trim();
+  if (
+    pair?.android?.adbPort != null &&
+    server !== String(pair.android.adbPort)
+  ) {
+    return [
+      `${gate} would address ${server === '' ? "the machine's own adb server" : `adb server ${server}`}, ` +
+        `and lease ${lease.id} exports ${pair.android.adbPort} for ${serial}. The ` +
+        `default server also sees every other device on this machine, which is why ` +
+        `AGENTS.md says to use the lease's.`,
+      acquire,
+    ].join('\n');
+  }
+  return null;
 }
 
 /**

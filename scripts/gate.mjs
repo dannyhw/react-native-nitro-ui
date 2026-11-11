@@ -69,12 +69,14 @@ import {
   decideNeed,
   decideWait,
   deviceFromEnv,
+  deviceGateLeaseRefusal,
   DEVICE_CONTEXT_END,
   DEVICE_CONTEXT_START,
   explainNeedRow,
   failureExcerptName,
   findReusableCheck,
   gateLogStoreDir,
+  isDeviceGate,
   isFailedRunWithLog,
   isUsageProbe,
   lookLeaseRefusal,
@@ -120,6 +122,7 @@ import { claimDevicesFromEnv } from './device-pool.mjs';
 import {
   emulatorSerial,
   isReservedSerial,
+  normalizeDevices,
   metroPreflightFromEnv,
   pidIsAlive,
   portListeners,
@@ -1200,6 +1203,81 @@ function ownRunningGates(records, own) {
 /** The `{branch, worktree}` pair a record has to match to be ours. */
 function ownRecordScope() {
   return { branch: currentBranch(), worktree: store().worktree };
+}
+
+/**
+ * Load the lease state a device gate has to be checked against (X28).
+ *
+ * The same two files `lease.mjs list` prints — `leases.json` for who holds what,
+ * `devices.json` for the devices behind each lease — so the gate and the CLI can
+ * never disagree about whether a lease is live, and there is no flag that skips the
+ * question. A bench host passes it the way the brief allows only because it holds an
+ * exclusive lease, which is the state this reads, not because it asked to be excused.
+ *
+ * Unreadable is not "no lease": it is its own refusal, with the validator's reason,
+ * because "cannot prove you own a device" must not read as "you may use any device".
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {{leases: object[], pairs: object[] | null, poolProblem: string | null}}
+ */
+function leaseStoreForGate(env = process.env) {
+  const paths = statePaths(stateHome(env));
+  let leases = [];
+  try {
+    // The raw file, not `pruneExpired`'s answer: the refusal says *why* the lease is
+    // no good ("released" and "outlived by its own ttl" are different fixes for
+    // different mistakes), and pruning first collapses both into "not here".
+    leases = readJson(paths.leases, { leases: [] }).leases ?? [];
+  } catch (error) {
+    // An unreadable lease file says nothing about any lease, which is the same
+    // answer as no lease file at all: every gate from here is refused.
+    process.stderr.write(
+      `gate: could not read ${paths.leases}: ${String(error?.message ?? error)}\n`
+    );
+  }
+  try {
+    return {
+      leases,
+      pairs: normalizeDevices(readJson(paths.devices, {})).pairs,
+      poolProblem: null,
+    };
+  } catch (error) {
+    const reason = String(error?.message ?? error)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+      .join(' ')
+      .slice(0, 400);
+    return {
+      leases,
+      pairs: null,
+      poolProblem: `${reason} (node scripts/doctor.mjs --setup creates the pool)`,
+    };
+  }
+}
+
+/**
+ * Refuse a device gate that no live lease authorises, before anything runs (X28).
+ *
+ * The point of doing it here, ahead of the Metro pre-flight, the device claim and the
+ * ledger, is that all three of those are already work: the incident this closes (G30,
+ * 2026-11-11) started two `real-input:android` runs from a shell with no lease env,
+ * and only the runner's own AVD-name scan decided which emulator got driven. Nothing
+ * is recorded for a refusal — it is not evidence about a tree, and a red row for a
+ * command that never started would ask the next round to debug the code.
+ *
+ * @param {object} resolved `resolveGate`'s answer
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | null} the message to print, when the gate must not start
+ */
+function deviceGateLeaseBlock(resolved, env = process.env) {
+  if (!isDeviceGate(resolved)) return null;
+  return deviceGateLeaseRefusal({
+    env,
+    resolved,
+    now: Date.now(),
+    ...leaseStoreForGate(env),
+  });
 }
 
 /**
@@ -3297,6 +3375,19 @@ async function main(argv) {
   } catch (error) {
     process.stderr.write(`gate: ${String(error?.message ?? error)}\n${USAGE}`);
     return 2;
+  }
+  // X28: the lease is checked here rather than inside `runGate` so a backgrounded
+  // gate is refused in the shell that asked for it, instead of leaving a record and
+  // a log for a run that never touched a device.
+  // The look-check refusal first: it is the more specific answer (this lease may
+  // never run a device gate, whatever else is right about it), and the store check
+  // would otherwise report a lease that *is* live as merely unverifiable.
+  const leaseBlock =
+    lookLeaseRefusal(process.env, resolved) ??
+    deviceGateLeaseBlock(resolved, process.env);
+  if (leaseBlock != null) {
+    process.stderr.write(`gate: refused before the run - ${leaseBlock}\n`);
+    return 1;
   }
   if (background) return await startBackgroundGate(resolved.gate, resolved);
   return await runGate(resolved.gate, resolved, backgroundOptions());
