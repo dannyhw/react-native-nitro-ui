@@ -124,4 +124,5 @@
 | G30 | ListItem: the row-content leaf (D46, Q10 question C) | Apex | Opus | fix round 1 (PR #64; review: no press feedback for an item inside a Form.Row without onPress; iOS may press after a scroll; Android value beside the title; iOS disabled greys only the value; early check 3 reads back props; unevidenced reds) |
 | G31 | Checkbox on iOS: SF Symbol checkmark styles, `iosStyle` (D47) | Apex | Opus | merged (PR #63; 1 impl + 1 fix round; merge gates 5/5 on code tree `3db596b4`) |
 | X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | round 3, last (round 2: Form.Row wrapper fixed the centring, but +20-32 % JS in the Form bench; now a zero-node alignSelf rule via Form.Row's context, the Android section-card offset, the iOS Stepper's disabled look) |
-| X25 | iOS Form crashes the bench app in readoptRowlessCells (found by X24) | Apex | Opus | running |
+| X25 | iOS Form crashes the bench app in readoptRowlessCells (found by X24) | Apex | Opus | fix written, device half waiting (cause: a deferred reconfigure apply after a Section or Form unmount names cells UIKit no longer has; no pair granted in 4.5 h, so the red proof, gates and bench are owed) |
+| X26 | Device leases first come, first served (X24 and X25 starved for hours) | Apex | Opus | running |
