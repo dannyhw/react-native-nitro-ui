@@ -186,3 +186,108 @@ the `main` pair hints at exactly that.
   holds the machine; (c) `maxDeviceLeases: 3` on this box, which buys capacity with the load
   that D21 kept two leases for. Recommendation: (a) now, and (c) only if the queue stays three
   deep.
+
+## Fix round 1
+
+**Decision (b) is in `Form.Row`.** A row's children now sit in one internal wrapper —
+`flexDirection: 'row'`, `alignItems: 'center'`, `flex: 1`, no `minHeight` — which the row's own
+`minHeight` centres, so the bare `<Form.Row><Text style={{ flex: 1 }} /><Switch /></Form.Row>`
+lays out right without the app knowing about `alignSelf`. README, `readme-examples.tsx`,
+`Form.stories.tsx` and `docs/components/form.md` are back to that pattern, the three copies
+identical; the Stepper story keeps its caption column and `flexShrink: 0`.
+
+The first shape was wrong and `Form measure (E7)` caught it: the row's `style` landed on the
+wrapper, so `alignItems: 'stretch'` stretched only the wrapper — fourteen measures of 17 pt of
+text inside 44 pt rows, all `off by 13.7 pt`. The rule now travels into the wrapper with the
+children (`f320547c`, and `form.md` says so).
+
+**Both pairs retaken from one story each** (`Form/Playground`, `Stepper/States`), so the two
+halves of a pair are the same example — the Form pair on `main` was not.
+
+**Was the misalignment a component bug?** The switch sitting at the label was the story's (no
+`flex: 1`); the vertical half was `Form.Row`'s and is fixed; the Android cards and the
+`mount.form` crash below are pre-existing and not this round's.
+
+### Before / after
+
+| | Before (`main`) | After (this branch) |
+| --- | --- | --- |
+| Stepper iOS | ![before](X24/before/stepper-ios.png) | ![after](../images/components/stepper-ios.png) |
+| Stepper Android | ![before](X24/before/stepper-android.png) | ![after](../images/components/stepper-android.png) |
+| Form iOS | ![before](X24/before/form-ios.png) | ![after](../images/components/form-ios.png) |
+| Form Android | ![before](X24/before/form-android.png) | ![after](../images/components/form-android.png) |
+
+### Red proofs
+
+- `Form row content (X24)` → `main`'s `Form.Row` back in the tree → iOS `X24 BARE pair: row
+  content x=40.0..380.0, control x=319.0..380.0, centre delta -8.0` and Android
+  `X24 BARE pair: row content x=28.2..383.6, control x=331.4..383.6, centre delta -4.0`, one
+  failed test on each platform (`1 failed, 120 passed`), the only issue
+  `a bare row: the control is centred at y=… while its label is centred at y=…`.
+- The same case, wrapper back in → `centre delta 0.0` / `-0.2` and the suite green: it fails on
+  the bare pair and nothing else, on both platforms. Both width claims passed even with `main`'s
+  row — round 1's "not horizontal" answer, measured rather than argued.
+- `Form measure (E7)` → the wrapper shipped without the row's own `alignItems` →
+  `measureInWindow …,340.0,17.0 … off by 13.7 pt`, fourteen times.
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+GATES_TABLE_PLACEHOLDER
+
+The two `stale` `harness:*:Form` rows are the red proofs above, against the `main`-row tree
+`8eb501e66342`; `harness:ios:Form:--background` is a mistyped argument that reached jest in
+1.8 s, not a result, and an earlier `harness:ios` RED in the ledger is two gates sharing one
+lease's `METRO_PORT` (`EADDRINUSE`).
+
+### Bench
+
+`--plan quick --component form --only nitro-ui` (4 launches × 20 measured iterations) on
+`maintainer-mac-2` at load ≈6 over 10 cores — above the 5.0 ceiling, so `--force`, and read the
+percentages knowing that. Android, where `mount.form` runs at all:
+
+| Cell | Metric | `main`'s row | wrapper | Δ |
+| --- | --- | --- | --- | --- |
+| mount N=20 | presented / mounted | 32.15 / 24.55 ms | 32.52 / 24.51 ms | +1.2 % / −0.2 % |
+| mount N=20 | JS commit, JS CPU, UI CPU | 2.19 / 4.98 / 14.33 ms | 2.16 / 5.06 / 14.56 ms | −1.4 % / +1.6 % / +1.6 % |
+| mount N=50 | presented / mounted | 43.38 / 31.52 ms | 42.86 / 31.15 ms | −1.2 % / −1.2 % |
+| mount N=50 | JS commit, JS CPU, UI CPU | 4.22 / 8.91 / 26.85 ms | 4.04 / 8.90 / 26.96 ms | −4.3 % / −0.1 % / +0.4 % |
+| update N=50 | mounted, JS commit | 15.64 / 2.47 ms | 16.00 / 2.47 ms | +2.3 % / 0 % |
+| memory N=200 | bytes/inst | 191.8 KiB | 214.3 KiB | **+11.7 %** |
+
+iOS `update.form N=50` (`mount.form` cannot run there — Follow-ups), medians of three runs each:
+
+| Metric | `main`'s row | wrapper | Δ |
+| --- | --- | --- | --- |
+| mounted | 2.38 ms (2.37, 2.39) | 3.19 ms (3.15, 3.16, 3.25) | **+34 %** |
+| JS commit | 2.13 ms (2.12, 2.14) | 2.90 ms (2.86, 2.86, 2.98) | **+36 %** |
+| JS CPU/op | 2.33 ms | 3.05 ms | **+31 %** |
+| UI CPU/op | 4.23 ms | 4.69 ms | +11 % |
+| memory N=200 bytes/inst | 163.6 KiB | 169.4 KiB | +3.6 % |
+
+It is the node, not the JS around it: deleting the per-row `alignItems` lookup only takes iOS
+back to 3.09 ms. Over the 5 % bar on iOS and invisible on Android; the memory is honest and
+small, ≈115 B a row on both platforms. Your call — a native-side fix (the row cell takes the
+content directly) is the only way to buy it back on iOS.
+
+### Follow-ups
+
+- `mount.form:nitro-ui` crashes the bench app on iOS on `main`'s own code: 8/8 launches abort in
+  `-[UICollectionView reconfigureItemsAtIndexPaths:]` under `HybridNitroUiForm.readoptRowlessCells()`,
+  at N=20 and N=50, with and without the wrapper — so Form has no iOS mount numbers, before or
+  after.
+- `bench/src/implementations/shared.ts:444` requires `../assets/circle.png`, which is
+  `bench/src/assets/`; the fixtures are in `bench/assets/`, so the bench app cannot bundle on
+  either platform as committed. Pointing the requires at the real folder fixes iOS, but the
+  `.png`/`.xml` pair of one name merges into one Android drawable (`src_assets_circle`,
+  "Duplicate resources"), so it needs a real fix, not a path edit. This round's runs used copies
+  under `bench/src/assets/` (with the two `.xml` requires aimed at the PNGs), removed afterwards.
+- `real-input:android`'s `hosted-picker` check is positional: menu row "Gamma" at y=2241 against
+  an anchor top of y=2242 on a 2424-px screen — the anchor had been scrolled to the bottom edge
+  and the popup had nowhere to go. The same check passes on G31's and G29's logs with the anchor
+  mid-screen, and `HostScreen.tsx` contains no Form.
+- Android draws each Form section card ≈147 px (56 dp) too low and one row tall, byte-identically
+  with `main`'s `Form.stories.tsx` and `Form.tsx` served against the same binary, while the
+  harness's geometry cases stay green: the drawing layer disagrees with what the component
+  reports. Suspects: `eb867e45`, `63c517f4`, `06ee2982`, `ba2fa41e`, `43136665`.
