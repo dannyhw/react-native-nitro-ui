@@ -1271,19 +1271,22 @@ private class DatePickerHost(
     val pmLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_pm)
     // The columns in the digits the device's locale writes. Material's drum rows use its own
     // `toLocalString`, which is `internal` to the artifact, so the wheel asks for the same
-    // thing directly: a `NumberFormat` for the device's locale with a minimum digit count.
+    // thing directly: a `NumberFormat` for the composition's locale with a minimum digit count.
     // That is what puts Arabic-Indic digits in a wheel on an Arabic device, where Latin ones
     // would disagree with every other number on the screen. Keyed on the composition's
     // language tag, which is the fact a wheel's columns would be stale about.
     val localeTag = LocalLocale.current.toLanguageTag()
     val (padded, plain) =
       remember(localeTag) {
+        // The composition's locale, not `Locale.getDefault()`: a per-app or
+        // configuration-scoped locale can differ from the process default.
+        val locale = java.util.Locale.forLanguageTag(localeTag)
         Pair(
-          NumberFormat.getInstance().apply {
+          NumberFormat.getInstance(locale).apply {
             minimumIntegerDigits = 2
             isGroupingUsed = false
           },
-          NumberFormat.getInstance().apply {
+          NumberFormat.getInstance(locale).apply {
             isGroupingUsed = false
           },
         )
