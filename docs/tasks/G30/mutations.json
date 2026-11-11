@@ -1,0 +1,83 @@
+{
+  "task": "G30",
+  "round": 1,
+  "how": "Fix round 1. One source mutation applied to the working tree, the named suite run against it, and the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it). Rows 1-2 are Android, rows 3-5 iOS. Lease G30-o7nwh, pair-a (`iPhone 17` / iOS 27.0 and emulator-5574 / API 35, Metro 8295); every filtered gate name satisfies nothing but itself. The mutated builds are the same `build-app.mjs` artefacts the gates use, one line each in `.gates/task/G30-fix1.jsonl`. Logs: `gate.mjs logs --branch task/G30-fix1`. Row 6 is not a mutation: it is the failure the round was called to fix, recorded in the shape X14/X15 use for the organic kind.",
+  "mutations": [
+    {
+      "test": "example/__tests__/ListItem.harness.tsx › starts a recycled row from nothing",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiListItem.kt",
+      "mutation": "the recycling reset keeps its new owner's reports: `reset()` stops clearing them, which is the residue bug the test exists to catch",
+      "before": "    onPress = null\n    clearReports()",
+      "after": "    onPress = null",
+      "run": "harness:android:ListItem — FAIL, 2 of 8 (13.9 s) — harness+android+ListItem-2026-11-11T11-37-23.877Z.log",
+      "redTests": [
+        "starts a recycled row from nothing: expected '2' to be '1' — ListItem.harness.tsx:1070 `expect(presses).toBe('1')`, and the round log printed `presses=2`: the first owner's press survived the pool",
+        "draws no insets, container or highlight of its own inside a Form.Row: expected 1 to be +0 — ListItem.harness.tsx:1137 `expect(bare.shape).toBe(0)`, on a row nothing has pressed: the `shape=` witness came in as a leftover from the previous test's held press, which is the evidence that it is read out of what was painted and not off the props"
+      ],
+      "note": "The second red is the one fix round 1 item 5 asked for and did not expect to get for free: an `insideRow` leaf that reports its highlight from props cannot notice a previous owner's press, because props never carry one."
+    },
+    {
+      "test": "example/__tests__/ListItem.harness.tsx › takes no press and sends nothing while disabled",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiListItem.kt",
+      "mutation": "`disabled` stops being inert: the press seam drops its enabled guard",
+      "before": "  fun press() {\n    if (!model.enabled || !model.pressable) {",
+      "after": "  fun press() {\n    if (!model.pressable) {",
+      "run": "harness:android:ListItem — FAIL, 1 of 8 (13.5 s) — harness+android+ListItem-2026-11-11T11-39-16.669Z.log",
+      "redTests": [
+        "takes no press and sends nothing while disabled: expected [ 'press-disabled:press', …(2) ] to deeply equal []"
+      ]
+    },
+    {
+      "test": "example/__tests__/ListItem.harness.tsx › takes no press and sends nothing while disabled",
+      "file": "ios/components/ListItem/HybridNitroUiListItem.swift",
+      "mutation": "the iOS twin of the row above: `press()` stops refusing a disabled item",
+      "before": "  func press() {\n    guard !disabled, pressable else { return }",
+      "after": "  func press() {\n    guard pressable else { return }",
+      "run": "harness:ios:ListItem — FAIL, 1 of 8 (14.0 s) — harness+ios+ListItem-2026-11-11T11-42-32.140Z.log",
+      "redTests": [
+        "takes no press and sends nothing while disabled: expected [ 'press-disabled:press', …(2) ] to deeply equal []"
+      ]
+    },
+    {
+      "test": "example/__tests__/ListItem.harness.tsx › draws no insets, container or highlight of its own inside a Form.Row",
+      "file": "ios/components/ListItem/HybridNitroUiListItem.swift",
+      "mutation": "a leaf that ignores `insideRow` — the mistake fix round 1 item 5 says an echoed margin could hide: the standalone inset is applied whether or not the cell already paid for it",
+      "before": "  static func listInset(_ insideRow: Bool) -> CGFloat {\n    insideRow ? 0 : listInset\n  }",
+      "after": "  static func listInset(_ insideRow: Bool) -> CGFloat {\n    listInset\n  }",
+      "run": "harness:ios:ListItem — FAIL, 1 of 8 (14.6 s) — harness+ios+ListItem-2026-11-11T11-40-46.974Z.log",
+      "redTests": [
+        "draws no insets, container or highlight of its own inside a Form.Row: expected 16 to be close to +0, received difference is 16, but expected 0.05"
+      ],
+      "note": "`insets=` is now the title label's frame read back in the row's coordinates, so a margin the code got wrong cannot report itself as right. Before item 5 this line read the margins back off the constraints that had just been written, and stayed green under this mutation."
+    },
+    {
+      "test": "example/__tests__/ListItem.harness.tsx › sizes each configuration from a poisoned fallback, and only it",
+      "file": "ios/components/ListItem/HybridNitroUiListItem.swift",
+      "mutation": "skip the correction: the row stops reporting a measured size, so the declaration the harness poisoned is the only number the engine has",
+      "before": "    super.init()\n    host.wantsContentSize = true",
+      "after": "    super.init()\n    host.wantsContentSize = false",
+      "run": "harness:ios:ListItem — FAIL, 8 of 8 (76 s) — harness+ios+ListItem-2026-11-11T11-44-57.844Z.log",
+      "redTests": [
+        "sizes each configuration from a poisoned fallback, and only it: \"size-title\" (size-title) never reported a measured size from the hosted row. Box: 402.00x111.67. — 111.67 pt is the height this file planted, so the poison is what reached the screen",
+        "the other seven fail on the same seam, each waiting for a measured size that never arrives — a row that never corrects is not a row any other case can measure"
+      ],
+      "note": "Deliberately not a rounded number: `fallbackSize` is 300x52, the real height of the one configuration the conformance fixture mounts, and the harness plants 111.67 for every other key, so a correction that silently failed cannot read as a plausible row."
+    },
+    {
+      "kind": "organic",
+      "test": "scripts/real-input/android.mjs (list-item, in-Form highlight)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt",
+      "mutation": "no mutation — the shipped code, before the fix: `Modifier.indication` was handed `ripple(focusRingShape = resolvedShape(..., index == pressed))`, and a press recomposes the layer, so the indication node was rebuilt after the finger's `Press` had been collected by the node being discarded",
+      "before": "(shipped) — the row inside the Form is darker with the finger down than at rest (held 0.9530 against rest 0.9530)",
+      "after": "(fixed) — held 0.8740 against rest 0.9530",
+      "run": "real-input:android:--control:list-item — FAIL (real-input+android+--control+list-item-2026-11-11T11-08-30.392Z.log), then PASS 161 s on the same filtered case (…-2026-11-11T11-23-07.956Z.log)",
+      "redTests": [
+        "the row inside the Form is darker with the finger down than at rest (held 0.9530 against rest 0.9530): an item that presses inside a row has to show it — with `whole window under the held finger: 819 px changed, x 106-1037, y 1491-1674`, which is the segmented shape morph's corners and no ink, while the press itself fired (`presses \"1\" -> \"2\"`)"
+      ],
+      "note": "The whole-window diff added this round is what told the two apart: 819 px of a 931x183 row is a painter that was told about the press and had nothing to draw with, where 0 px anywhere would have been a press that never reached a painter. After the fix the same reading is 167082 px changed and the row's mean luma falls 0.9530 -> 0.8740."
+    }
+  ],
+  "notRun": [
+    "the glyph probe (D43's Material Symbols bell): named lowest priority by the review and not run this round; the icon path is covered on Android by `nitroUiIcon` parsing the shipped drawable and by the README screenshot, and the follow-up asks for the probe with the bench cells."
+  ]
+}
