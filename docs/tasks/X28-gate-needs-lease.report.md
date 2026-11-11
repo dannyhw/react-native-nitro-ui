@@ -30,10 +30,13 @@ Two decisions a reviewer needs:
   device" must not read as "use any device".
 - **The runners have no fallback left** (brief item 2). `requireLeaseDevice`
   (`scripts/lease-core.mjs`) answers "which device" from the lease and refuses a
-  half-sourced env; `real-input/android.mjs` no longer scans `adb devices` for an AVD or
-  defaults to `nitroui`, `bench/devices.mjs` refuses instead of printing "…; using
+  half-sourced env; `scripts/real-input/android.mjs` no longer scans `adb devices` for an AVD or
+  defaults to `nitroui`, `scripts/bench/devices.mjs` refuses instead of printing "…; using
   emulator-55xx", and the harness config reads its simulator/AVD from the lease. CI keeps
   working: it names an AVD with no lease and is not a gate.
+
+task-ready runs clean on this branch except for those two device rows: it lists
+harness:ios / harness:android as never run, and nothing else.
 
 ## Gates
 
