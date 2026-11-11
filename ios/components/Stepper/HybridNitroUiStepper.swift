@@ -270,7 +270,7 @@ struct StepperContent: NitroUIContent {
   @ObservedObject private var model: StepperModel
   /// SwiftUI's own disabled environment, read where the control is drawn. See
   /// ``StepperModel/recordDrawn(_:canStepUp:canStepDown:environmentEnabled:)``.
-  @Environment(\.isEnabled) private var environmentEnabled = true
+  @Environment(\.isEnabled) private var environmentEnabled: Bool
 
   init(model: StepperModel) {
     self.model = model
