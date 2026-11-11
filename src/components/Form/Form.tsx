@@ -511,6 +511,14 @@ function RowRoot({
     onPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
+  // The cross-axis rule the app asked the row for, if it asked for one. `styles.rowContent`
+  // centres, and the wrapper below is what a row's own `style` is now applied to, so a row
+  // written `alignItems: 'stretch'` — or a child with `alignSelf: 'stretch'` — would otherwise
+  // stretch only the wrapper and leave the child its own text height. The rule travels into
+  // the wrapper with it, so a row stops centring exactly when the app asked it not to: E7
+  // measures a row's child against the row's own box, and fourteen of those measures came
+  // back as 17 pt of text inside a 44 pt row the first time this wrapper shipped.
+  const rowAlignItems = StyleSheet.flatten(style)?.alignItems;
   const insideRow = useContext(InsideRowContext);
   if (__DEV__ && insideRow && !warnedNestedRow) {
     warnedNestedRow = true;
@@ -563,7 +571,13 @@ function RowRoot({
        * be overruled in, and `flex: 1` here is what hands the content the row's whole content
        * width, insets included.
        */}
-      <View style={styles.rowContent}>
+      <View
+        style={
+          rowAlignItems == null
+            ? styles.rowContent
+            : [styles.rowContent, { alignItems: rowAlignItems }]
+        }
+      >
         <InsideRowContext.Provider value={true}>
           {children}
         </InsideRowContext.Provider>
