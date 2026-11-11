@@ -52,9 +52,13 @@ pair-a and G31 then X24 held pair-b, each re-acquiring the moment it released; t
 whichever waiter polls first, so four waiting tasks share two pairs at random.
 
 Everything a fix round needs is already built and stamped, so its only cost is the device time:
-the fixed iOS and Android example apps (both from this tree), the **pre-fix** iOS app — kept built
-from `e002d66b~1`'s `HybridNitroUiForm.swift` with this round's harness case, which is the red
-proof's starting state — and the bench apps.
+the fixed iOS and Android example apps (both from this tree), the **pre-fix** iOS app, and the
+bench apps. The red proof's starting state is one command: put the pre-fix Form file back with
+`git show e002d66b~1:ios/components/Form/HybridNitroUiForm.swift > <same path>`, which
+reproduces byte-for-byte the code tree that app was built from (`app.stamp` refuses any other
+tree, which is also what proves the app under test is that one), then
+`gate.mjs harness:ios -- Form`. The worktree is left clean at HEAD rather than sitting in that
+state, because a round that ends without a device should leave a tree that says what it is.
 
 ## Bench
 
