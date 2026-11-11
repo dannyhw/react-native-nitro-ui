@@ -288,6 +288,11 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
   );
 }
 
+/** The stepper's own report, as sent - the evidence a failure message carries. */
+function rawOf(testId: string): string {
+  return handles.get(testId)?.nuiTestStateReport() ?? '';
+}
+
 /** The stepper's own report, as `key -> value`. */
 function reportOf(testId: string): Record<string, string> {
   const fields: Record<string, string> = {};
@@ -924,23 +929,26 @@ describe('Stepper', () => {
       'a disabled stepper has no live half at all'
     ).toBe('0/0');
 
-    // iOS only: the *modifier*, not just the flag. `model.disabled` is what React sent, and
-    // the accessibility traits below are set straight from it — so both readings above stay
-    // green even if `.disabled(...)` never reached the control on screen, which is exactly
-    // what `stepper-ios.png` looked like: a row that is inert and draws as live. `enabled`
-    // is SwiftUI's own `\isEnabled`, read where the stepper is drawn. Android's two buttons
-    // take `enabled` as their own parameter from the same flag, so the `up`/`down` above
-    // already is that reading there; Compose has no environment to ask.
+    // iOS: the *drawing*, not the flag. `model.disabled` is what React sent and the
+    // accessibility traits below are set straight from it, so everything above stays green
+    // while the screen paints a live-looking control - which is what the disabled row of
+    // `stepper-ios.png` used to look like, a half stop away from Android's. SwiftUI's
+    // `.disabled(_)` is on the chain and does reach this host (a `Toggle` under it dims), but
+    // SwiftUI's `Stepper` does not change its own drawing for it, and no capture of its box
+    // reaches what it draws (`nuiTestPixelProbe` carries that measurement). So the assertion
+    // is the opacity the drawing code was handed, read at the same point `up`/`down` are.
     if (Platform.OS === 'ios') {
       expect(
-        reportOf('off').enabled,
-        'a disabled iOS stepper is disabled in SwiftUI as well as in the model — otherwise ' +
-          'the screen shows a live control that answers to nobody'
-      ).toBe('0');
+        reportOf('off').opacity,
+        'a disabled iOS stepper is drawn dimmed - at full strength the screen offers a ' +
+          `control that answers to nobody (${rawOf('off')})`
+      ).toBe('0.50');
       expect(
-        reportOf('off-barrier').enabled,
-        'and the live stepper beside it is not disabled'
-      ).toBe('1');
+        reportOf('off-barrier').opacity,
+        `and the live stepper beside it is drawn at full strength (${rawOf(
+          'off-barrier'
+        )})`
+      ).toBe('1.00');
     }
 
     // A reader is told the same thing the screen shows.
