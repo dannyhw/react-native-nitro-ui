@@ -5703,10 +5703,19 @@ const CHECKS = {
     const meanLuma = (screen, node) => {
       const inset = Math.max(2, Math.round(4 * t.density()));
       const step = Math.max(1, Math.round(3 * t.density()));
-      const x1 = node.bounds.x1 + inset;
-      const x2 = node.bounds.x2 - inset;
-      const y1 = node.bounds.y1 + inset;
-      const y2 = node.bounds.y2 - inset;
+      // Whole pixels, and inside the image: a grid cell's edge is a fifth of a row's
+      // width, which is a fraction whenever the row does not divide by five, and
+      // `png-pixel.mjs` refuses a fractional coordinate rather than rounding it into a
+      // neighbouring pixel and a reading of the wrong thing. Clamped rather than
+      // assumed-on-screen, so a row parked against the edge of the window samples the
+      // part that is visible instead of ending the run with an out-of-image error.
+      const x1 = Math.max(0, Math.round(node.bounds.x1) + inset);
+      const x2 = Math.min(screen.width - 1, Math.round(node.bounds.x2) - inset);
+      const y1 = Math.max(0, Math.round(node.bounds.y1) + inset);
+      const y2 = Math.min(
+        screen.height - 1,
+        Math.round(node.bounds.y2) - inset
+      );
       let total = 0;
       let samples = 0;
       for (let y = y1; y <= y2; y += step) {
@@ -5768,16 +5777,49 @@ const CHECKS = {
     );
 
     // 4. The row's own highlight: Material's ripple, sampled the way the iOS half samples
-    //    UIKit's — the same band of pixels at rest and with the finger still down. The
-    //    touch is injected raw and left down (see `rawTouch`), because by the time
-    //    `input tap` returns the ripple has already faded and a screenshot of a released
-    //    row is a picture of a row that never highlighted.
-    const atRest = meanLuma(t.screencap(), live);
+    //    UIKit's — the same band of pixels at rest and with the finger still down. Two
+    //    injections of a held finger are tried, because they are not the same thing to the
+    //    input stack: `input motionevent DOWN` is one event whose process then exits with
+    //    the pointer left down, and `input swipe x y x y 2200` is one gesture stream that
+    //    is genuinely in flight while the screenshot is taken. Both are readings of one
+    //    claim — the row is darker while a finger is on it — and the log prints both, each
+    //    with a 5x3 grid over the row, so a flat reading is evidence in the ledger rather
+    //    than a mystery a later round has to re-run to understand.
+    const shoot = (node) => {
+      const screen = t.screencap();
+      const cols = 5;
+      const rows = 3;
+      const cells = [];
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          cells.push(
+            meanLuma(screen, {
+              bounds: {
+                x1: node.bounds.x1 + (col * node.bounds.width) / cols,
+                y1: node.bounds.y1 + (row * node.bounds.height) / rows,
+                x2: node.bounds.x1 + ((col + 1) * node.bounds.width) / cols,
+                y2: node.bounds.y1 + ((row + 1) * node.bounds.height) / rows,
+              },
+            }).toFixed(3)
+          );
+        }
+      }
+      return {
+        mean: meanLuma(screen, node),
+        grid: `${cells.slice(0, 5).join(' ')} | ${cells.slice(5, 10).join(' ')} | ${cells
+          .slice(10, 15)
+          .join(' ')}`,
+      };
+    };
+    const atRest = shoot(live);
     const pressX = live.bounds.x1 + Math.round(live.bounds.width * 0.5);
     const pressY = live.bounds.cy;
+    const pressesBefore = t.requireEcho(ECHO.listItemPresses);
+
     await t.rawTouch('DOWN', pressX, pressY);
     await t.settle(400);
-    const during = meanLuma(t.screencap(), live);
+    const heldDown = shoot(live);
+    await t.settle(700);
     let released = true;
     try {
       await t.rawTouch('UP', pressX, pressY);
@@ -5785,27 +5827,49 @@ const CHECKS = {
       released = false;
       t.log.note(`the raw UP did not take: ${String(error)}`);
     }
-    await t.settle(400);
-    const afterRelease = meanLuma(t.screencap(), live);
+    await t.settle(500);
+
+    // The same question with a gesture that stays in flight, so the screenshot cannot be
+    // of a row whose finger had already gone.
+    const heldSwipe = t.rawHold(pressX, pressY, 2200);
+    await t.settle(900);
+    const heldStream = shoot(live);
+    await heldSwipe;
+    await t.settle(500);
+    const afterRelease = shoot(live);
     if (!released) {
       t.log.abort(
         'the highlight press could not be closed, so nothing after it is evidence'
       );
     }
     t.log.note(
-      `highlight sample: luminance rest=${atRest.toFixed(4)} held=${during.toFixed(4)} ` +
-        `released=${afterRelease.toFixed(4)} over a ` +
-        `${String(live.bounds.width)}x${String(live.bounds.height)} px row`
+      `highlight sample over a ${String(live.bounds.width)}x${String(live.bounds.height)} px ` +
+        `row — rest=${atRest.mean.toFixed(4)} ${atRest.grid}`
+    );
+    t.log.note(
+      `  motionevent DOWN, +400 ms: ${heldDown.mean.toFixed(4)} ${heldDown.grid}`
+    );
+    t.log.note(
+      `  held swipe in flight, +900 ms: ${heldStream.mean.toFixed(4)} ${heldStream.grid}`
+    );
+    t.log.note(
+      `  released: ${afterRelease.mean.toFixed(4)} ${afterRelease.grid} — presses ` +
+        `"${pressesBefore}" -> "${t.requireEcho(ECHO.listItemPresses)}"`
+    );
+    const heldDarker = Math.min(heldDown.mean, heldStream.mean);
+    t.log.check(
+      `the row is darker with the finger down than at rest (best held reading ` +
+        `${heldDarker.toFixed(4)} — ${heldDown.mean.toFixed(4)} under a raw DOWN, ` +
+        `${heldStream.mean.toFixed(4)} under a held swipe — against rest ` +
+        `${atRest.mean.toFixed(4)}): the platform's own press feedback is drawn, not ` +
+        'just wired',
+      heldDarker < atRest.mean - 0.005
     );
     t.log.check(
-      `the row is darker with the finger down than at rest (${during.toFixed(4)} against ` +
-        `${atRest.toFixed(4)}): the platform's own press feedback is drawn, not just wired`,
-      during < atRest - 0.005
-    );
-    t.log.check(
-      `and it is back where it started once the finger lifts (${afterRelease.toFixed(4)} ` +
-        `against rest ${atRest.toFixed(4)}) — a highlight, not a state the row got stuck in`,
-      Math.abs(afterRelease - atRest) < 0.01
+      `and it is back where it started once the finger lifts (${afterRelease.mean.toFixed(4)} ` +
+        `against rest ${atRest.mean.toFixed(4)}) — a highlight, not a state the row got ` +
+        'stuck in',
+      Math.abs(afterRelease.mean - atRest.mean) < 0.01
     );
 
     // 5. A disabled item takes nothing, and the tree says so before the taps do. Then the
@@ -5830,15 +5894,22 @@ const CHECKS = {
       ),
       '0'
     );
+    // Read from the counter rather than hard-coded: the held press in the highlight
+    // sample above is itself a press this counter has counted, so the absolute number is
+    // a fact about how many checks ran above, while "one more after one more tap" is the
+    // claim. A hard-coded 11 here failed on the first real run for exactly that reason.
+    const beforeBarrier = Number(t.requireEcho(ECHO.listItemPresses));
+    const wantedBarrier = String(beforeBarrier + 1);
     t.log.checkEquals(
-      'and input is alive: the live item still presses',
+      `and input is alive: the live item still presses (${beforeBarrier} -> ` +
+        `${wantedBarrier})`,
       await t.tapUntilValue(
         () => t.requireControl(LIVE),
         ECHO.listItemPresses,
-        '11',
+        wantedBarrier,
         'a real tap on the live item after the disabled one'
       ),
-      '11'
+      wantedBarrier
     );
 
     // 6. Inside a `Form.Row` the leaf is a different code path — the row owns the cell, the
@@ -8425,6 +8496,44 @@ function makeContext(harness, log) {
      * @returns {Promise<void>}
      */
     rawTouch: (action, x, y) => motionAsync(action, x, y),
+
+    /**
+     * A finger held still for `ms`, injected as one gesture stream that is *still in
+     * flight* when the caller's next line runs: `input swipe x y x y <ms>`, spawned and
+     * not awaited, so the caller can take its reading mid-press and then await what came
+     * back. `rawTouch('DOWN')` cannot serve that: its process exits with the pointer left
+     * down, which is a press the app sees and the compositor may not.
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number} ms
+     * @returns {Promise<void>} resolves when the gesture's own process is done
+     */
+    rawHold: (x, y, ms) =>
+      new Promise((resolve, reject) => {
+        const child = spawn(
+          'adb',
+          [
+            '-s',
+            harness.serial,
+            'shell',
+            'input',
+            'swipe',
+            String(Math.round(x)),
+            String(Math.round(y)),
+            String(Math.round(x)),
+            String(Math.round(y)),
+            String(Math.round(ms)),
+          ],
+          { stdio: 'ignore', env: process.env }
+        );
+        child.on('error', reject);
+        child.on('close', (code) =>
+          code === 0
+            ? resolve()
+            : reject(new Error(`input swipe exited ${String(code)}`))
+        );
+      }),
 
     /**
      * Scroll the screen until this control is on it, then look it up.
