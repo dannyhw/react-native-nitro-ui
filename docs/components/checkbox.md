@@ -244,17 +244,17 @@ The control is the platform's, so the accessibility element is too:
   `.accessibilityElement(children: .ignore)`, which adds an element instead of replacing one
   and drops the toggle trait with it. So the glyph styles carry an
   `accessibilityRepresentation`: a `Toggle` that is represented rather than drawn, with
-  `.disabled` restated inside it (measured without that, a *disabled* box announced itself
-  as enabled).
+  `.disabled` restated inside it (measured without that, a *disabled* box reported itself
+  enabled).
 
-  What a reader gets from that is one element: XCUITest's `switch` type — SwiftUI's toggle
-  trait, the same answer the `'switch'` style and Chip's filter chip give — named by
+  What that leaves is one element: XCUITest's `switch` type — SwiftUI's toggle trait, the
+  same answer the `'switch'` style and Chip's filter chip give — named by
   `accessibilityLabel ?? label`, valued `0`/`1`, on the row's own box, one pixel (⅓ pt)
-  taller than the host's. So a reader hears the name, then the state of a toggle, then the
-  activation hint; `value` is the number XCUITest reads, which is what this suite can hear
-  of an announcement, and it is the same number a switch-style Checkbox reported before
-  D47. The bare case gained the most: with no name of its own its element used to *be* the
-  symbol, announced as "Circle" at 21.67 pt.
+  taller than the host's. Like every accessibility claim in these docs that is read off the
+  tree, not listened to: `value` is the number XCUITest answers with, and nobody has
+  confirmed aloud what VoiceOver says about the element. It is, at least, the same number a
+  switch-style Checkbox reported before D47. The bare case gained the most: with no name of
+  its own its element used to *be* the symbol, listed as "Circle" at 21.67 pt.
   On iOS 27 the hosting view exposes no element to an in-app probe
   (`nuiTestProbeAccessibility` answers `unavailable`, as it does for Slider and Chip), so
   iOS role and state are asserted from outside the app: the a11y sweep's `checkbox` case
@@ -267,8 +267,8 @@ The control is the platform's, so the accessibility element is too:
   `.accessibilityValue(Text("mixed"))` for exactly the state where the picture and the
   value disagree, and leaves the `Toggle`'s own value alone otherwise — an empty value
   would silence it. Read from outside the app on iPhone Air / iOS 27, that word is what the
-  element answers with: `trait=switch label="Real-input mixed checkbox" value="mixed"`, and
-  the value string is what a reader hears in place of "on" or "off".
+  element answers with: `trait=switch label="Real-input mixed checkbox" value="mixed"` — a
+  string where the two-position `Toggle` otherwise answers `0` or `1`.
 - `accessibilityLabel` goes on the control, never on a wrapper, and defaults to
   `label`. A *bare* Android checkbox has no name of its own, which is the argument
   for giving one: pass `accessibilityLabel` when there is no `label`.
