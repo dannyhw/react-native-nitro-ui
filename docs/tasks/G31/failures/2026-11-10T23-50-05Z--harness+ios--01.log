@@ -1,0 +1,116 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-10T23:50:05.864Z on code tree `b7e72d66cbb9` at HEAD `f2d3e37` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 994070 ms
+- Load: start 9.62, end 8.37, median 10.10, max 32.64
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log` (<store>/task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.37 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 71 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree b7e72d66cbb9 at HEAD f2d3e374
+gate: git tree 42a43cf2300c with a DIRTY worktree (not reusable)
+gate: log task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log
+gate:       <store>/task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree b7e72d66cbb9, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.62/27.99 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Test suite failed to run
+
+    The native app crashed during test execution.
+    Harness couldn't extract the crash log.
+
+    The app process exited, but no crash log lines were found.
+
+
+Summary of all failing tests
+FAIL __tests__/Dialog.harness.tsx
+  ● Test suite failed to run
+
+    The native app crashed during test execution.
+    Harness couldn't extract the crash log.
+
+    The app process exited, but no crash log lines were found.
+
+
+Test Suites: 1 failed, 1 skipped, 29 passed, 30 of 31 total
+Tests:       2 skipped, 562 passed, 564 total
+Snapshots:   0 total
+Time:        956.102 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree b7e72d66cbb9, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.72/12.54 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        34.129 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 994.1 s
+gate: recorded in .gates/task/G31-checkbox-ios-checkmark.jsonl
+
+
+gate: appended the device context to task/G31-checkbox-ios-checkmark/harness+ios-2026-11-10T23-50-05.424Z.log (4 probe(s))
+
+```

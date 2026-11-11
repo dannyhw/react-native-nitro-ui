@@ -1,0 +1,74 @@
+# Failure excerpt — harness:android:re-measures%20for%20a%20new%20style
+
+- Ran: 2026-11-11T01:04:59.601Z on code tree `c20a3642a266` at HEAD `bffb1c1` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android re-measures for a new style`
+- Result: fail, exit 1, 1385 ms
+- Load: start 7.59, end 7.59, median 7.59, max 7.59
+- Device: android / device `emulator-5570` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log` (<store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.59 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 28 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:re-measures%20for%20a%20new%20style
+gate: node ../scripts/harness.mjs --harnessRunner android re-measures for a new style (cwd example)
+gate: code tree c20a3642a266 at HEAD bffb1c11
+gate: git tree bc19feedfbdd with a DIRTY worktree (not reusable)
+gate: log task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log
+gate:       <store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android re-measures for a new style
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c20a3642a266, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.59/5.74 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+No tests found, exiting with code 1
+Run with `--passWithNoTests` to exit with code 0
+In <repo>/example
+  437 files checked.
+  testMatch: <repo>/example/**/__tests__/**/*.harness.[jt]s?(x), !**/__tests__/isolated/** - 31 matches
+  testPathIgnorePatterns: \.(ios)\.harness\.(?:[mc]?[jt]sx?)$ - 437 matches
+  testRegex:  - 0 matches
+Pattern: re-measures for a new style - 0 matches
+gate: harness:android:re-measures%20for%20a%20new%20style FAIL in 1.4 s
+gate: recorded in .gates/task/G31-checkbox-ios-checkmark.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G31-checkbox-ios-checkmark/harness+android+re-measures+20for+20a+20new+20style-2026-11-11T01-04-58.989Z.log (5 probe(s))
+
+```
