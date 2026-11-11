@@ -44,19 +44,25 @@ name as one drawable.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2013 tests / 85 suites | `cf27f27206b3` | 3 m 28 s | start 11.5 / med 22.2 / max 29.5 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
 
-`need --for review`: `check` is green on this tree (99 s); `harness:ios`, `harness:android`,
-`real-input:ios` and `real-input:android` are **missing** — no device lease came free during this
-round. `acquire --task X25 --boot --wait-minutes 240` polled from 08:34 to 12:34 while G30 held
-pair-a and G31 then X24 held pair-b, each re-acquiring the moment it released; the pool grants to
-whichever waiter polls first, so four waiting tasks share two pairs at random.
+`need --for review`: `check` — green; `harness:ios`, `harness:android` — never run on this tree,
+which is all `need` can ask for at review (`real-input:*` arrive at merge). No device lease came
+free during this round. `acquire --task X25 --boot --wait-minutes 240` polled from 08:34 to
+12:34, and again from 12:32, while G30 held pair-a and G31 then X24 held pair-b, each
+re-acquiring the moment it released; the pool grants a freed pair to whichever waiter polls
+first, so four waiting tasks share two pairs at random.
 
 Everything a fix round needs is already built and stamped, so its only cost is the device time:
 the fixed iOS and Android example apps (both from this tree), the **pre-fix** iOS app, and the
-bench apps. The red proof's starting state is one command: put the pre-fix Form file back with
-`git show e002d66b~1:ios/components/Form/HybridNitroUiForm.swift > <same path>`, which
-reproduces byte-for-byte the code tree that app was built from (`app.stamp` refuses any other
-tree, which is also what proves the app under test is that one), then
+bench apps. The red proof's starting state is one command —
+`git show e002d66b~1:ios/components/Form/HybridNitroUiForm.swift > ios/components/Form/HybridNitroUiForm.swift`
+— which reproduces byte-for-byte the code tree that app was built from (`app.stamp` refuses any
+other tree, which is also what proves the app under test is that one), then
 `gate.mjs harness:ios -- Form`. The worktree is left clean at HEAD rather than sitting in that
 state, because a round that ends without a device should leave a tree that says what it is.
 
