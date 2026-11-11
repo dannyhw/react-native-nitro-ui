@@ -123,4 +123,4 @@
 | G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | fix round after review (PR #62; a props batch cancels a Picker roll mid-flight; a refused DatePicker time leaves the drums on it, untested; unproven reds; dev-only a11y skip in the gate; two false doc claims) |
 | G30 | ListItem: the row-content leaf (D46, Q10 question C) | Apex | Opus | running |
 | G31 | Checkbox on iOS: SF Symbol checkmark styles, `iosStyle` (D47) | Apex | Opus | running |
-| X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | running |
+| X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | round 2 (round 1: code and check only, no lease in 5 h; cause: controls' alignSelf flex-start beats the row's alignItems, story lacked flex 1; decided: Form.Row centres its children in an internal wrapper, benched; device retake and gates) |
