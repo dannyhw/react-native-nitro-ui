@@ -210,9 +210,10 @@ SearchField case and passed here, and both lines are in the exported ledger.
 
 ### Follow-ups added this round
 
-- a11y: iOS's third state is `Text("mixed")`, an English literal in every locale;
-  Compose's "Partially checked" comes from a localised resource, so ours would want a
-  `.strings` entry before a localised app ships the dash.
+- a11y: iOS's third state is `accessibilityValue(Text(value))` with a `String`, which is
+  SwiftUI's verbatim text — "mixed" is English in every locale, where Compose's "Partially
+  checked" comes from a localised resource. Localising ours means a `LocalizedStringKey` or a
+  bundle lookup at the call site, before a localised app ships the dash.
 - harness: `SearchField › holds maxLength in UTF-16 units and never splits an emoji`
   reads `eventsOf('capped').at(-1)`, so a `focus` event landing after the change reddens
   it while the text assertion two lines above passes. Red once here, green on the retry;
