@@ -19,9 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -85,10 +84,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - the interactive overload passes `applySemantics = {}`, so it publishes neither a
  *   button role nor a disabled state: a disabled item would stay a live button to TalkBack
  *   unless this file adds both.
- * - the plain overload passes `{ if (!enabled) disabled() }` and no `onClick`, so it has
- *   no ripple, no `combinedClickable` and no touch-target floor. That is the overload a
- *   pressable item *inside a `Form.Row`* needs, because the row's own indication is the
- *   highlight and a second one would be a band inside a band again.
+ * - the plain overload passes `{ if (!enabled) disabled() }` and no `onClick`, so the press
+ *   and its ink are this file's to install. That is deliberate: the interactive overload's
+ *   own answer to a press is `combinedClickable(indication = ripple(bounded = false))` plus
+ *   a morph of the container it paints, and this row paints none, so on the device it drew
+ *   *nothing* — the first real run held a real gesture on a 996x189 px row and read
+ *   0.9880 luma at rest and 0.9880 luma 900 ms later, over a 5x3 grid, while the row's own
+ *   `onClick` fired twice. The standalone row therefore gets Material's bounded `ripple()`
+ *   through its own `clickable`, the way [HybridNitroUiFormSection] installs its rows'
+ *   indication; inside a `Form.Row` the indication is `null`, because the cell's highlight
+ *   is the highlight and a second one would be a band inside a band again. The floor the
+ *   interactive overload enforces is 48 dp, which never binds on a row Material lays out at
+ *   56 dp or 72 dp.
  *
  * Heights come from Material rather than from this file: `ListTokens.ItemOneLineContainer-
  * Height` (56 dp) and `ItemTwoLineContainerHeight` (72 dp) are applied as a minimum *only
@@ -208,7 +215,7 @@ internal class ListItemModel : NitroUiModel() {
   }
 
   /**
-   * Which press path drew this row: `own` (Material's interactive row, with the ripple),
+   * Which press path drew this row: `own` (the leaf's own `clickable`, with Material's ripple),
    * `cell` (inside a `Form.Row`, whose cell owns the highlight) or `none`.
    *
    * Recorded at the branch that picks the painter, not from `insideRow`, so the answer is
@@ -299,23 +306,6 @@ internal object ListItemMetrics {
 
   /** The gap kept between the headline and the value that trails it on its own line. */
   val ValueGap = 8.dp
-}
-
-/**
- * The row's shapes with the **pressed corner squared off**.
- *
- * Material 1.5's `ListItemDefaults.shapes()` resolves the pressed corner to
- * `CornerLarge` on an expressive theme, and the container paint is what morphs — so a
- * pressed row would draw a shape of its own, which inside a `Form.Row` is a shape inside
- * the shape that already owns it (D46 item 2). The container colour is transparent, so
- * nothing visibly morphs; the pressed corner is squared anyway so "the leaf draws no
- * shape" is true of the geometry and not only of the paint. Everything else stays the
- * theme's, including the resting corner.
- */
-@Composable
-private fun squarePressedShapes(): ListItemShapes {
-  val base = ListItemDefaults.shapes()
-  return remember(base) { base.copy(pressedShape = RectangleShape) }
 }
 
 /**
@@ -522,57 +512,40 @@ private class ListItemHost(
           null
         }
 
-      if (pressable && !insideRow) {
-        // Material's own interactive row: `combinedClickable` and Material's ripple, which
-        // is the platform's row highlight rather than a colour this file chose.
-        model.recordPressPath("own")
-        ListItem(
-          modifier = Modifier.fillMaxWidth().then(rowSemantics),
-          onClick = { press() },
-          enabled = enabled,
-          leadingContent = leading,
-          trailingContent = trailing,
-          supportingContent =
-            model.subtitle?.let { supporting ->
-              { Text(text = supporting, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            },
-          shapes = squarePressedShapes(),
-          colors = colors,
-          contentPadding = contentPadding,
-          interactionSource = interactionSource,
-          content = headline,
-        )
-      } else {
-        // The plain row. Inside a `Form.Row` it carries its own clickable with *no*
-        // indication, because the row's own press is the highlight (D46 item 2); with no
-        // `onPress` at all it carries nothing, and a tap goes to whatever is behind it.
-        model.recordPressPath(if (pressable) "cell" else "none")
-        val ownClick =
-          if (pressable) {
-            Modifier.clickable(
-              interactionSource = interactionSource,
-              indication = null,
-              enabled = enabled,
-              role = Role.Button,
-              onClick = { press() },
-            )
-          } else {
-            Modifier
-          }
-        ListItem(
-          modifier = Modifier.fillMaxWidth().then(ownClick).then(rowSemantics),
-          enabled = enabled,
-          leadingContent = leading,
-          trailingContent = trailing,
-          supportingContent =
-            model.subtitle?.let { supporting ->
-              { Text(text = supporting, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            },
-          colors = colors,
-          contentPadding = contentPadding,
-          content = headline,
-        )
-      }
+      // One row, two indications. The plain overload draws the content either way and the
+      // press is installed here, because Material's interactive overload has no ink this
+      // row can show (the file header): it morphs a container this row keeps transparent
+      // and its `ripple(bounded = false)` drew nothing measurable across the whole row.
+      // `ripple()` is still the platform's own indication rather than a colour this file
+      // chose, bounded so the wash stays inside the row instead of leaking over its
+      // neighbours.
+      model.recordPressPath(if (!pressable) "none" else if (insideRow) "cell" else "own")
+      val ownClick =
+        if (!pressable) {
+          Modifier
+        } else {
+          Modifier.clickable(
+            interactionSource = interactionSource,
+            // Inside a row the cell owns the highlight, so the leaf's clickable is silent.
+            indication = if (insideRow) null else ripple(),
+            enabled = enabled,
+            role = Role.Button,
+            onClick = { press() },
+          )
+        }
+      ListItem(
+        modifier = Modifier.fillMaxWidth().then(ownClick).then(rowSemantics),
+        enabled = enabled,
+        leadingContent = leading,
+        trailingContent = trailing,
+        supportingContent =
+          model.subtitle?.let { supporting ->
+            { Text(text = supporting, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+          },
+        colors = colors,
+        contentPadding = contentPadding,
+        content = headline,
+      )
     }
   }
 }
