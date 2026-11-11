@@ -1,7 +1,7 @@
 {
   "task": "G30",
   "round": 1,
-  "how": "Fix round 1. One source mutation applied to the working tree, the named suite run against it, and the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it). Rows 1-2 are Android, rows 3-5 iOS. Lease G30-o7nwh, pair-a (`iPhone 17` / iOS 27.0 and emulator-5574 / API 35, Metro 8295); every filtered gate name satisfies nothing but itself. The mutated builds are the same `build-app.mjs` artefacts the gates use, one line each in `.gates/task/G30-fix1.jsonl`. Logs: `gate.mjs logs --branch task/G30-fix1`. Row 6 is not a mutation: it is the failure the round was called to fix, recorded in the shape X14/X15 use for the organic kind.",
+  "how": "Fix round 1. One source mutation applied to the working tree, the named suite run against it, and the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it). Rows 1-2 are Android, rows 3-5 iOS. Lease G30-o7nwh, pair-a (`iPhone 17` / iOS 27.0 and emulator-5574 / API 35, Metro 8295); every filtered gate name satisfies nothing but itself. The mutated builds are the same `build-app.mjs` artefacts the gates use, one line each in `.gates/task/G30-fix1.jsonl`. Logs: `gate.mjs logs --branch task/G30-fix1`. Row 6 is not a mutation: it is the failure the round was called to fix, recorded in the shape X14/X15 use for the organic kind. Rows 7-8 are real-input reds on iOS: each is a temporary working-tree mutation of a built app, reverted and rebuilt before the ledger’s final line, so no shipped tree ever carried them.",
   "mutations": [
     {
       "test": "example/__tests__/ListItem.harness.tsx › starts a recycled row from nothing",
@@ -75,6 +75,29 @@
         "the row inside the Form is darker with the finger down than at rest (held 0.9530 against rest 0.9530): an item that presses inside a row has to show it — with `whole window under the held finger: 819 px changed, x 106-1037, y 1491-1674`, which is the segmented shape morph's corners and no ink, while the press itself fired (`presses \"1\" -> \"2\"`)"
       ],
       "note": "The whole-window diff added this round is what told the two apart: 819 px of a 931x183 row is a painter that was told about the press and had nothing to draw with, where 0 px anywhere would have been a press that never reached a painter. After the fix the same reading is 167082 px changed and the row's mean luma falls 0.9530 -> 0.8740."
+    },
+    {
+      "test": "a drag that starts on a row presses nobody (real input, iOS)",
+      "file": "ios/components/ListItem/HybridNitroUiListItem.swift",
+      "mutation": "`NitroUiListRowView.pressChanged` stops checking travel: the `.changed` case becomes `break`. That is the shipped code before fix round 1 item 2, so this row doubles as the check’s red-first.",
+      "before": "      case .changed:\n        guard let origin = pressOrigin else { break }\n        let here = gesture.location(in: self)\n        let travelled = abs(here.x - origin.x) > Self.pressTravelLimit\n          || abs(here.y - origin.y) > Self.pressTravelLimit\n        if travelled || !bounds.contains(here), !pressTravelling {\n          pressTravelling = true\n          setPressed(false)\n          model.recordHighlightPainted(false)\n        }",
+      "after": "      case .changed:\n        break",
+      "run": "real-input:ios:--control:list-item — FAIL, 875 s, mutated tree 2b42c9fe3769 — real-input+ios+--control+list-item-2026-11-11T16-26-13.573Z.log",
+      "redTests": [
+        "the list item with onPress (real-input-listitem) reported a press for a drag that started on it: \"real-input-listitem-presses\" went \"12\" -> \"13\" while the finger travelled 200 pt down the page — RealInputTests.swift:6974 XCTAssertEqual (\"13\") is not equal to (\"12\")"
+      ],
+      "note": "A press for a drag is the whole bug the review flagged: the flick was meant to scroll, and the row navigated instead."
+    },
+    {
+      "test": "a held press on the item inside a Form.Row paints the row (real input, iOS)",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "The Form cell stops entering its pressed state: `pressChanged`’s `.began` case becomes `break`. The row still fires the item’s handler, so only the screen-sampling witness can fail — which is the point of the check. A mutation in another task’s file, reverted and rebuilt straight after; Form’s cell is a FOLLOWUPS line, not a fix here.",
+      "before": "      case .began:\n        pressed = true",
+      "after": "      case .began:\n        break",
+      "run": "real-input:ios:--control:list-item — FAIL, 826 s, mutated tree e0f011b977b4 — real-input+ios+--control+list-item-2026-11-11T16-42-21.369Z.log",
+      "redTests": [
+        "the list item inside a Form.Row (real-input-listitem-in-form) is no darker with the finger down than at rest: luminance 0.9651 held against 0.9651 at rest — RealInputTests.swift:7163 XCTAssertLessThan (\"0.9651529411764705\") is not less than (\"0.9551529411764705\")"
+      ]
     }
   ],
   "notRun": [

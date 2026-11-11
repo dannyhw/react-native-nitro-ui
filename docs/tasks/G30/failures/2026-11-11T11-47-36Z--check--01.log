@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-11T11:47:36.064Z on code tree `43f9ce853d78` at HEAD `2d6b551` (branch `task/G30-fix1`)
+- Command: `bun run check`
+- Result: fail, exit 1, 152151 ms
+- Load: start 7.61, end 6.50, median 7.75, max 10.23
+- Device: android / device `emulator-5574` / lease `G30-o7nwh`
+- Full log: `task/G30-fix1/check-2026-11-11T11-47-35.291Z.log` (<store>/task/G30-fix1/check-2026-11-11T11-47-35.291Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "lint" exited with code 1`
+- `error: script "format" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2944 — the rest is in the full log above)
+
+```
+  ok    a changing element count is not a settle
+  ok    and it spends the same bounded wait (got 4)
+  ok    half a point is a move
+  ok    and so is a tenth
+  ok    a frame the platform cannot answer for never agrees with itself
+  ok    and the same CGRect does
+  ok    the moved count counts frames, for the log line
+  ok    a changed element count reports every frame
+  ok    the two memberships sit on identical frames — the premise, not an accident
+  ok    and the identity channel is the only thing that tells them apart
+  ok    duplicates count: two of one element is not one of each
+  ok    a subtree walked in the other order is still the same tree
+  ok    a caller with no identity channel asks the frame question only
+  ok    a same-boxed, swapped-membership pair is not agreement (got 4 reads)
+  ok    the wait settles on the tree that repeated itself
+  ok    a stable membership still costs two reads (got 2)
+  ok    the disputed shape settles
+  ok    and pays one confirmation read for it (got 3)
+  ok    the outcome says the pair was confirmed, not just agreed
+  ok    the confirmation is a window (2120 ms), not the 120 ms snapshot pause
+  ok    a shape that does not ask is not confirmed (got 2 reads)
+  ok    a tree that published under the confirmation is chased, not printed (got 5)
+  ok    and it settles confirmed once the published tree repeats
+  ok    the snapshot handed back is the published tree
+  ok    reads past the designed confirmation are news, and this run has them (reads=5)
+  ok    a tree that flaps and holds still does settle
+  ok    on the fourth read (got 4)
+  ok    and the last box equals the first, so moved is 0 (got 0)
+  ok    a flapped-back tree is still reported - moved == 0 is not 'nothing happened'
+  ok    the ordinary two agreeing reads print nothing
+  ok    two reads that disagree and then settle are reported
+  ok    five quiet reads are reported
+  ok    the confirmation read a disputed shape always pays prints nothing
+  ok    reads past the designed confirmation are still reported
+  ok    an out-of-budget wait is reported even with nothing moved
+a11y-frame-stability.test: all checks passed
+── sizing.test (C++ / ASan + UBSan)
+sizing.test.cpp
+  382 checks passed
+── scroll-offset.test (C++ / ASan + UBSan)
+  16 checks passed
+test:native: PASS
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 5 passed, 2 failed, 10 skipped in 151.9s
+check: failed step(s): lint, format
+check: not started after the first failure: test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+<repo>/example/__tests__/Dialog.harness.tsx
+  616:13  warning  'probe' is already declared in the upper scope on line 191 column 16  @typescript-eslint/no-shadow
+
+<repo>/example/src/ListItemScreen.tsx
+  201:22  warning  Inline style: { height: 24 }  react-native/no-inline-styles
+
+<repo>/example/src/readme-examples.tsx
+  181:18  warning  Inline style: { alignItems: 'center', flexDirection: 'row', gap: 12 }  react-native/no-inline-styles
+  182:20  warning  Inline style: { fontSize: 20, minWidth: 32, textAlign: 'center' }      react-native/no-inline-styles
+  502:22  warning  Inline style: { padding: 24, gap: 12 }                                 react-native/no-inline-styles
+  644:24  warning  Inline style: { flex: 1 }                                              react-native/no-inline-styles
+  648:24  warning  Inline style: { flex: 1 }                                              react-native/no-inline-styles
+  698:18  warning  Inline style: { height: 220 }                                          react-native/no-inline-styles
+
+<repo>/scripts/__tests__/bench-baseline-merge.test.js
+  1113:11  warning  'built' is already declared in the upper scope on line 968 column 9  no-shadow
+
+<repo>/scripts/__tests__/build-speed.test.js
+  251:45  warning  Spaces are hard to count. Use {2}  no-regex-spaces
+
+<repo>/scripts/__tests__/ci-workflows.test.js
+    57:24  warning  [true] is better written in dot notation  dot-notation
+  1879:7   warning  Spaces are hard to count. Use {2}         no-regex-spaces
+
+<repo>/scripts/__tests__/conformance.test.js
+  1766:11  warning  'harness' is already declared in the upper scope on line 1669 column 9  no-shadow
+
+<repo>/scripts/__tests__/patch-nitrogen.test.js
+  479:9   warning  'generated' is already declared in the upper scope on line 48 column 7  no-shadow
+  496:12  warning  'withSheetTree' is defined but never used                               no-unused-vars
+
+<repo>/scripts/__tests__/real-input-a11y-ios.test.js
+  646:11  warning  'node' is already declared in the upper scope on line 51 column 10  no-shadow
+  670:11  warning  'node' is already declared in the upper scope on line 51 column 10  no-shadow
+
+<repo>/scripts/__tests__/real-input-ime-frame.test.js
+  154:3  warning  Spaces are hard to count. Use {2}  no-regex-spaces
+
+<repo>/scripts/__tests__/registry.test.js
+   762:13  warning  'manifests' is already declared in the upper scope on line 486 column 11  no-shadow
+   817:11  warning  'manifests' is already declared in the upper scope on line 486 column 11  no-shadow
+  1121:13  warning  'nitro' is already declared in the upper scope on line 974 column 9       no-shadow
+
+<repo>/scripts/harness-suite-timing.mjs
+  25:19  warning  'join' is defined but never used  no-unused-vars
+
+<repo>/scripts/real-input/android.mjs
+  4770:12  warning  Unexpected use of '&'  no-bitwise
+  4771:13  warning  Unexpected use of '&'  no-bitwise
+  4772:13  warning  Unexpected use of '&'  no-bitwise
+  4773:13  warning  Unexpected use of '&'  no-bitwise
+  4774:13  warning  Unexpected use of '&'  no-bitwise
+  4776:11  warning  Unexpected use of '&'  no-bitwise
+  4777:12  warning  Unexpected use of '&'  no-bitwise
+  4777:45  warning  Unexpected use of '&'  no-bitwise
+  4791:24  warning  Unexpected use of '&'  no-bitwise
+  4791:62  warning  Unexpected use of '&'  no-bitwise
+  4792:32  warning  Unexpected use of '&'  no-bitwise
+  4794:27  warning  Unexpected use of '&'  no-bitwise
+  4794:66  warning  Unexpected use of '&'  no-bitwise
+  4811:20  warning  Unexpected use of '&'  no-bitwise
+  4831:20  warning  Unexpected use of '&'  no-bitwise
+  4867:20  warning  Unexpected use of '&'  no-bitwise
+  4904:20  warning  Unexpected use of '&'  no-bitwise
+  4922:20  warning  Unexpected use of '&'  no-bitwise
+  5787:11  error    Insert `··`            prettier/prettier
+
+<repo>/scripts/real-input/png-pixel.mjs
+  204:35  warning  Unexpected use of '|'  no-bitwise
+  205:35  warning  Unexpected use of '|'  no-bitwise
+  208:16  warning  Unexpected use of '|'  no-bitwise
+  221:23  warning  Unexpected use of '&'  no-bitwise
+  264:5   warning  Unexpected use of '|'  no-bitwise
+
+<repo>/src/__tests__/iconSource.test.ts
+  24:11  warning  'react-native/Libraries/Image/AssetSourceResolver' React Native deep imports are deprecated. Please use the top level import instead  @react-native/no-deep-imports
+  35:11  warning  'react-native/Libraries/Image/resolveAssetSource' React Native deep imports are deprecated. Please use the top level import instead   @react-native/no-deep-imports
+
+✖ 48 problems (1 error, 47 warnings)
+  1 error and 4 warnings potentially fixable with the `--fix` option.
+
+error: script "lint" exited with code 1
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+[warn] scripts/real-input/android.mjs
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+error: script "format" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 152.2 s
+gate: recorded in .gates/task/G30-fix1.jsonl
+
+```
