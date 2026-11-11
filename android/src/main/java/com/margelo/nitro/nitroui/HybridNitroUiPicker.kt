@@ -1300,18 +1300,24 @@ private class PickerHost(
         }
         // A request from `nuiTestSelect`, on the animated road a real row press takes.
         val request = model.wheelRequest
+        var readRequestSerial by remember { mutableStateOf(0) }
         LaunchedEffect(wheelState, request) {
-          if (request != null) {
-            // Consumed before the scroll, not after it: this effect is keyed on
-            // [ScrollFieldState] too, so a request left standing is re-run by the next
-            // new state object - which `options` changing length produces *while* this
-            // roll is still coasting - and that scroll would undo the re-seat the same
-            // composition is doing for the new one. A request the composition has read
-            // is a request that has been spent.
+          if (request != null && request.serial > readRequestSerial) {
+            readRequestSerial = request.serial
+            // Consumed by serial, and the field is cleared only once the roll is over.
+            // This effect is keyed on [PickerModel.wheelRequest] itself, so writing that
+            // field from inside the body re-keys the effect while its own scroll is still
+            // running, and Compose cancels the scroll with it: `harness:android` asks the
+            // drum to roll 0 -> 4 and finds it - and the rest it reports - on 1. A
+            // remembered serial says "this request has been read" without touching a key,
+            // which is the guard the clear was reaching for: the next new
+            // [ScrollFieldState] (`options` changing length while this roll is still
+            // coasting) recomposes the effect and does not scroll it a second time.
+            // Clearing after the animation cancels nothing - the body has already run.
+            wheelState.animateScrollToOption(request.index)
             if (model.wheelRequest === request) {
               model.wheelRequest = null
             }
-            wheelState.animateScrollToOption(request.index)
           }
         }
         ScrollField(
