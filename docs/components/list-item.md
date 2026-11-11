@@ -57,7 +57,7 @@ warns in development, exactly as `Button`'s does — the slot is still held at i
 | Value              | a label pinned to the headline's **first baseline**           | a trailing composable in `headlineContent`, same line         |
 | Leading glyph      | the configuration's `image`, `imageToTextPadding` 16 pt       | `leadingContent`, 24 dp (`ListTokens.ItemLeadingIconSize`), 12 dp gap |
 | Chevron            | `chevron.right` in `.tertiaryLabel`, right-aligned            | `chevron_right` in `trailingContent`                          |
-| Press highlight    | the platform's own row colour (`.quaternarySystemFill`)       | Material's ripple, through `ListItem(onClick:)`                |
+| Press highlight    | the platform's own row colour (`.quaternarySystemFill`)       | Material's own `ripple()`, bounded to the row (see below)      |
 | Container          | none — the row is transparent                                 | `containerColor = Transparent`, because M3 paints `Surface` by default |
 
 **The value is on the headline's line on both platforms.** Material's
@@ -66,6 +66,21 @@ two-line item puts the value between the lines; UIKit's value slot sits on the
 headline's baseline. Material's centred slot is therefore not used — the value goes
 into `headlineContent` behind the headline, which is the same arrangement UIKit
 draws.
+
+## Press feedback
+
+**Android's row installs its own ripple.** Material's interactive `ListItem(onClick:)`
+overload answers a press two ways — it morphs the container it paints, and it draws
+`ripple(bounded = false)` — and this row paints no container, so the first has nothing to
+show and, measured on a device, the second showed nothing either: a 996 × 189 px row
+sampled as a 5 × 3 grid read 0.9880 mean luma at rest and 0.9880 luma with a real gesture
+stream holding a finger on it 900 ms later, while the row's own `onClick` fired twice. The
+row therefore takes the plain `ListItem` overload and carries Material's own bounded
+`ripple()`, the same indication `Form` puts on its rows: 0.9133 luma with the finger down,
+back to 0.9880 when it lifts. It is still the platform's indication rather than a colour
+this library chose; what changed is who installs it. Inside a `Form.Row` the indication is
+`null`, because the cell's highlight is the highlight and a second one would be a band
+inside a band.
 
 ## Sizing
 
@@ -179,8 +194,8 @@ Put one item in a row and it behaves like the row's own content:
 One element per item — never three — carrying the row's own label:
 
 - With `onPress` it is a **button** on both platforms (UIKit's `.button` trait, and
-  on Android an explicit `Role.Button`, because Material's interactive `ListItem`
-  overload does not set one); without it, a plain text element.
+  on Android an explicit `Role.Button`, because the `ListItem` overload that draws
+  this row publishes no role of its own); without it, a plain text element.
 - Its label is `accessibilityLabel` when given, otherwise the row's own title,
   subtitle and value.
 - `disabled` is published as disabled, so a reader says so and a swipe action
