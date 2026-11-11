@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-10T15:27:24.024Z on code tree `fb5f2f68c2b2` at HEAD `f21e6c8` (branch `task/G29-android-wheels`)
+- Command: `bun run check`
+- Result: fail, exit 1, 151449 ms
+- Load: start 4.20, end 10.27, median 12.25, max 20.59
+- Device: none recorded (not a device gate)
+- Full log: `task/G29-android-wheels/check-2026-11-10T15-27-23.170Z.log` (<store>/task/G29-android-wheels/check-2026-11-10T15-27-23.170Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/ci-workflows.test.js (73.767 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check`
+- `expect(received).toEqual(expected) // deep equality`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3101 — the rest is in the full log above)
+
+```
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS src/__tests__/dialog.test.tsx
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/readme-components.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-tab-targets.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/ime-frame.test.js
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (58.837 s)
+PASS scripts/__tests__/gate.test.js (61.213 s)
+PASS scripts/__tests__/gate-logs.test.js (68.225 s)
+FAIL scripts/__tests__/ci-workflows.test.js (73.767 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2116,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+PASS scripts/__tests__/bench-baseline-merge.test.js (86.719 s)
+PASS scripts/__tests__/bench-gate.test.js (145.465 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/ci-workflows.test.js (73.767 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2116,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+
+Test Suites: 1 failed, 84 passed, 85 total
+Tests:       1 failed, 2009 passed, 2010 total
+Snapshots:   0 total
+Time:        145.786 s, estimated 149 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 151.4 s
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+
+```

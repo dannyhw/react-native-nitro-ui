@@ -1,0 +1,205 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-11T14:41:34.903Z on code tree `b32d5c61ccd4` at HEAD `f46d707` (branch `task/G29-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1117237 ms
+- Load: start 5.52, end 6.31, median 7.31, max 30.29
+- Device: android / device `emulator-5570` / lease `G29-2s78q`
+- Full log: `task/G29-fix1/harness+android-2026-11-11T14-41-34.217Z.log` (<store>/task/G29-fix1/harness+android-2026-11-11T14-41-34.217Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● Console`
+- `● DatePicker · wheel variant (G29) › reverts a time the parent refuses, and reports the next roll of it`
+- `expected [ 'wheel-refused:1778818080000' ] to deeply equal [ 'wheel-refused:1778850300000' ]`
+- `FAIL __tests__/Picker.harness.tsx`
+- `● Picker · wheel variant (G29) › reports one event for a roll that passed several rows`
+- `expected [ 'wheel-roll:1' ] to deeply equal [ 'wheel-roll:4' ]`
+- `● Picker · wheel variant (G29) › rolls a refused pick back, and reports the next roll of it again`
+- `expected [ 'wheel-refuse:1' ] to deeply equal [ 'wheel-refuse:4' ]`
+- `● Picker · wheel variant (G29) › leaves a roll in flight alone when an unrelated prop changes`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-fix1/harness+android-2026-11-11T14-41-34.217Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-2s78q (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   G29-2s78q                G29          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.31 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 423 — the rest is in the full log above)
+
+```
+      radio platform: variant=radio 114.67x144.00
+
+
+    console.log
+      radio->menu (android): group=133.33x144.00 menu=280.00x56.00 events=[]
+
+
+    console.log
+      wheel box: 300.19x200.00 in a 300 dp box cold={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      wheel roll 0->4: events=["wheel-roll:1"]
+
+
+    console.log
+      mid-roll batches: witnessed=false witness={"batches":35,"sawRolling":false,"seats":0,"refusals":0,"row":16} events=["wheel-midroll:16"]
+
+
+    console.log
+      wheel silence: events=[]
+
+
+    console.log
+      disabled drum (android): enabled=280.00x200.00 disabled=280.00x200.00
+
+
+    console.log
+      wheel->menu->wheel (android): wheel=330.29x200.00 menu=280.00x56.00 wheel2=330.29x200.00 events=[]
+
+  ● Picker · wheel variant (G29) › reports one event for a roll that passed several rows
+
+    expected [ 'wheel-roll:1' ] to deeply equal [ 'wheel-roll:4' ]
+
+      [0m [90m 2598 |[39m     [36mawait[39m rollWheel([32m'wheel-roll'[39m[33m,[39m [35m4[39m[33m,[39m [36mtrue[39m)[33m;[39m
+       [90m 2599 |[39m     console[33m.[39mlog([32m`wheel roll 0->4: events=${JSON.stringify(eventLog)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2600 |[39m     expect(eventLog)[33m.[39mtoEqual([[32m'wheel-roll:4'[39m])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2601 |[39m     [90m// And the control agrees: the index it now holds is the one it reported, which[39m
+       [90m 2602 |[39m     [90m// is the "the value shown equals the value reported" half of the claim that a[39m
+       [90m 2603 |[39m     [90m// harness can actually check (the painted row is a pixel question, and the[39m[0m
+
+  ● Picker · wheel variant (G29) › rolls a refused pick back, and reports the next roll of it again
+
+    expected [ 'wheel-refuse:1' ] to deeply equal [ 'wheel-refuse:4' ]
+
+      [0m [90m 2633 |[39m
+       [90m 2634 |[39m     [36mawait[39m rollWheel([32m'wheel-refuse'[39m[33m,[39m [35m4[39m[33m,[39m [36mtrue[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2635 |[39m     expect(eventLog)[33m.[39mtoEqual([[32m'wheel-refuse:4'[39m])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2636 |[39m     [90m// The parent refused it: the index React holds is still 0, and that is the[39m
+       [90m 2637 |[39m     [90m// index the wheel is driven back to.[39m
+       [90m 2638 |[39m     expect(handles[33m.[39m[36mget[39m([32m'wheel-refuse'[39m)[33m?[39m[33m.[39mselectedIndex)[33m.[39mtoBe([35m0[39m)[33m;[39m[0m
+
+  ● Picker · wheel variant (G29) › leaves a roll in flight alone when an unrelated prop changes
+
+    none of the 16 batches reached the drum's sync point while it was touched or turning (witness {"batches":35,"sawRolling":false,"seats":0,"refusals":0,"row":16}, log ["wheel-midroll:16"]) - a mid-roll batch that never arrives mid-roll proves nothing, so this case refuses rather than passing.
+
+      [0m [90m 2750 |[39m     [90m// instead - the same rule the red proofs of this suite run on.[39m
+       [90m 2751 |[39m     [36mif[39m ([33m![39mduring[33m.[39msawRolling) {
+      [31m[1m>[22m[39m[90m 2752 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                      [31m[1m^[22m[39m
+       [90m 2753 |[39m         [32m`none of the ${String(LABELS.length)} batches reached the drum's sync point while `[39m [33m+[39m
+       [90m 2754 |[39m           [32m`it was touched or turning (witness ${JSON.stringify(during)}, log `[39m [33m+[39m
+       [90m 2755 |[39m           [32m`${JSON.stringify(eventLog)}) - a mid-roll batch that never arrives mid-roll `[39m [33m+[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/DatePicker.harness.tsx
+  ● DatePicker · wheel variant (G29) › reverts a time the parent refuses, and reports the next roll of it
+
+    expected [ 'wheel-refused:1778818080000' ] to deeply equal [ 'wheel-refused:1778850300000' ]
+
+      [0m [90m 2099 |[39m     handles[33m.[39m[36mget[39m([32m'wheel-refused'[39m)[33m?[39m[33m.[39mnuiTestSelect([35m2026[39m[33m,[39m [35m5[39m[33m,[39m [35m15[39m[33m,[39m [35m14[39m[33m,[39m [35m5[39m)[33m;[39m
+       [90m 2100 |[39m     [36mconst[39m first [33m=[39m [36mawait[39m waitForEvents([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2101 |[39m     expect(first)[33m.[39mtoEqual([[32m`wheel-refused:${String(ROLLED)}`[39m])[33m;[39m
+       [90m      |[39m                          [31m[1m^[22m[39m
+       [90m 2102 |[39m     [90m// Reverted: the instant the picker holds is the parent's again.[39m
+       [90m 2103 |[39m     [36mawait[39m waitForDisplayed([32m'wheel-refused'[39m[33m,[39m [33mPARENT[39m[33m,[39m [32m'the revert'[39m)[33m;[39m
+       [90m 2104 |[39m[0m
+
+FAIL __tests__/Picker.harness.tsx
+  ● Picker · wheel variant (G29) › reports one event for a roll that passed several rows
+
+    expected [ 'wheel-roll:1' ] to deeply equal [ 'wheel-roll:4' ]
+
+      [0m [90m 2598 |[39m     [36mawait[39m rollWheel([32m'wheel-roll'[39m[33m,[39m [35m4[39m[33m,[39m [36mtrue[39m)[33m;[39m
+       [90m 2599 |[39m     console[33m.[39mlog([32m`wheel roll 0->4: events=${JSON.stringify(eventLog)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2600 |[39m     expect(eventLog)[33m.[39mtoEqual([[32m'wheel-roll:4'[39m])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2601 |[39m     [90m// And the control agrees: the index it now holds is the one it reported, which[39m
+       [90m 2602 |[39m     [90m// is the "the value shown equals the value reported" half of the claim that a[39m
+       [90m 2603 |[39m     [90m// harness can actually check (the painted row is a pixel question, and the[39m[0m
+
+  ● Picker · wheel variant (G29) › rolls a refused pick back, and reports the next roll of it again
+
+    expected [ 'wheel-refuse:1' ] to deeply equal [ 'wheel-refuse:4' ]
+
+      [0m [90m 2633 |[39m
+       [90m 2634 |[39m     [36mawait[39m rollWheel([32m'wheel-refuse'[39m[33m,[39m [35m4[39m[33m,[39m [36mtrue[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2635 |[39m     expect(eventLog)[33m.[39mtoEqual([[32m'wheel-refuse:4'[39m])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2636 |[39m     [90m// The parent refused it: the index React holds is still 0, and that is the[39m
+       [90m 2637 |[39m     [90m// index the wheel is driven back to.[39m
+       [90m 2638 |[39m     expect(handles[33m.[39m[36mget[39m([32m'wheel-refuse'[39m)[33m?[39m[33m.[39mselectedIndex)[33m.[39mtoBe([35m0[39m)[33m;[39m[0m
+
+  ● Picker · wheel variant (G29) › leaves a roll in flight alone when an unrelated prop changes
+
+    none of the 16 batches reached the drum's sync point while it was touched or turning (witness {"batches":35,"sawRolling":false,"seats":0,"refusals":0,"row":16}, log ["wheel-midroll:16"]) - a mid-roll batch that never arrives mid-roll proves nothing, so this case refuses rather than passing.
+
+      [0m [90m 2750 |[39m     [90m// instead - the same rule the red proofs of this suite run on.[39m
+       [90m 2751 |[39m     [36mif[39m ([33m![39mduring[33m.[39msawRolling) {
+      [31m[1m>[22m[39m[90m 2752 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                      [31m[1m^[22m[39m
+       [90m 2753 |[39m         [32m`none of the ${String(LABELS.length)} batches reached the drum's sync point while `[39m [33m+[39m
+       [90m 2754 |[39m           [32m`it was touched or turning (witness ${JSON.stringify(during)}, log `[39m [33m+[39m
+       [90m 2755 |[39m           [32m`${JSON.stringify(eventLog)}) - a mid-roll batch that never arrives mid-roll `[39m [33m+[39m[0m
+
+
+Test Suites: 2 failed, 29 passed, 31 total
+Tests:       4 failed, 3 skipped, 653 passed, 660 total
+Snapshots:   0 total
+Time:        1082.39 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree b32d5c61ccd4, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.15/7.06 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G29-fix1/harness+android-2026-11-11T14-41-34.217Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        31.647 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 1117.2 s
+gate: recorded in .gates/task/G29-fix1.jsonl
+
+
+gate: appended the device context to task/G29-fix1/harness+android-2026-11-11T14-41-34.217Z.log (5 probe(s))
+
+```
