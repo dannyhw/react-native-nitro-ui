@@ -121,7 +121,10 @@ and has no minimum height of its own — the `minHeight` below stays the row's.
 
 Your content therefore sees a row, not a row's plumbing: `style` on a row is the row's
 own box, and the wrapper is not configurable, so a `justifyContent` or `gap` written
-there arranges nothing — put that on a child of yours instead.
+there arranges nothing — put that on a child of yours instead. `alignItems` is the one
+rule that does travel: it is what a row's children are laid out under, so writing
+`alignItems: 'stretch'` on a row stretches your content to the row's height and stops the
+centring, which is the point when a child wants the row's whole box.
 
 On Android a row with an `accessory` gives up the trailing room the section is going
 to draw the glyph in, so the accessory never lands on top of your content.
