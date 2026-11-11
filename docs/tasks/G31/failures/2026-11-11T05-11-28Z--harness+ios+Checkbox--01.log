@@ -1,0 +1,89 @@
+# Failure excerpt — harness:ios:Checkbox
+
+- Ran: 2026-11-11T05:11:28.615Z on code tree `70ef95eb4f46` at HEAD `f1b606e` (branch `task/G31-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Checkbox`
+- Result: fail, exit 1, 26170 ms
+- Load: start 5.48, end 6.99, median 6.99, max 7.97
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G31-l0ifb`
+- Full log: `task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log` (<store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › lays out every iOS style at the box that style measures`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-l0ifb (still live)
+  |   X24-djsle                X24          both              pair-b
+  |   G31-l0ifb                G31          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.99 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Checkbox
+gate: node ../scripts/harness.mjs --harnessRunner ios Checkbox (cwd example)
+gate: code tree 70ef95eb4f46 at HEAD f1b606e4
+gate: git tree 9b33fc03b0c2 with a DIRTY worktree (not reusable)
+gate: log task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log
+gate:       <store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Checkbox
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 70ef95eb4f46, 24 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.48/6.23 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › lays out every iOS style at the box that style measures
+
+    testID "style-circle" (style-circle) never reached 110.00x26.00 - last box 145.00x28.00, control measured 110.00x26.00.
+
+      [0m [90m 231 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 232 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 233 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 234 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 235 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 236 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        24.213 s
+Ran all test suites matching Checkbox.
+gate: harness:ios:Checkbox FAIL in 26.2 s
+gate: recorded in .gates/task/G31-fix1.jsonl
+
+
+gate: appended the device context to task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-11-27.922Z.log (4 probe(s))
+
+```

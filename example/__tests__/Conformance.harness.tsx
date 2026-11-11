@@ -254,8 +254,8 @@ const SHARED = {
         "height": 48
       },
       "ios": {
-        "width": 61,
-        "height": 28
+        "width": 26,
+        "height": 26
       }
     },
     "NitroUiIconButton": {

@@ -69,6 +69,11 @@ void JHybridNitroUiCheckboxStateUpdater::updateViewProps(jni::alias_ref<jni::JCl
     hybridView->setIndeterminate(newProps->indeterminate.get());
   }
   if (oldProps == nullptr
+        ? newProps->iosStyle.isProvided()
+        : !newProps->iosStyle.hasSameValue(oldProps->iosStyle)) {
+    hybridView->setIosStyle(newProps->iosStyle.get());
+  }
+  if (oldProps == nullptr
         ? newProps->mostRecentEventCount.isProvided()
         : !newProps->mostRecentEventCount.hasSameValue(oldProps->mostRecentEventCount)) {
     hybridView->setMostRecentEventCount(newProps->mostRecentEventCount.get());

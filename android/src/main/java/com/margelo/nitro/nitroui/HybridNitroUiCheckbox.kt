@@ -86,6 +86,17 @@ internal class CheckboxModel : NitroUiModel() {
   /** The label beside the box, or `null`. Observed: it is content, and width. */
   var label by mutableStateOf<String?>(null)
 
+  /**
+   * The `iosStyle` React sent, kept so the getter answers what was written - and
+   * deliberately *not* snapshot-observed: this platform has a checkbox
+   * (`Checkbox`, and `TriStateCheckbox` for the dash), so DECISIONS D47's choice of
+   * picture is another platform's and reading it here would be a style switch Material
+   * 3 does not have. Storing rather than dropping it means a recycled instance cannot
+   * answer the previous owner's style, and `Checkbox.harness.tsx` can assert that
+   * Android took the prop and drew the same box anyway.
+   */
+  var iosStyle: String = "circle"
+
   /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
@@ -169,6 +180,7 @@ internal class CheckboxModel : NitroUiModel() {
   override fun reset() {
     displayed = false
     indeterminate = false
+    iosStyle = "circle"
     label = null
     enabled = true
     tint = null
@@ -580,6 +592,19 @@ class HybridNitroUiCheckbox(
       host.markDirty()
     }
 
+  /**
+   * Stored, never read: DECISIONS D47's three pictures are what iOS draws because iOS
+   * has no checkbox, and Android's is Material 3's own. Every style arrives, is kept for
+   * the getter, and changes nothing about what is composed - no `markDirty()`, because
+   * nothing observes it, which is the same reason `Checkbox.harness.tsx` measures the
+   * box under each style name and expects one answer.
+   */
+  override var iosStyle: String
+    get() = model.iosStyle
+    set(next) {
+      model.iosStyle = next
+    }
+
   override var disabled: Boolean
     get() = !model.enabled
     set(next) {
@@ -714,7 +739,18 @@ class HybridNitroUiCheckbox(
     }
   }
 
-  override fun nuiTestStateReport(): String = model.stateReport()
+  /**
+   * The mount's own read-outs, then the host's lifetime pair.
+   *
+   * `drops`/`recycles` come from [NitroComposeHost] and survive a recycle deliberately
+   * (`Recycling.harness.tsx` explains why a per-mount flag cannot answer the question):
+   * a fresh instance answers `recycles=0`, so the mount that answers `recycles>=1` is a
+   * view the pool handed back - which is the only kind of mount whose reset a test can
+   * actually be testing. iOS publishes the same two fields from the same kind of counter.
+   */
+  override fun nuiTestStateReport(): String =
+    model.stateReport() +
+    ";drops=${host.lifetimeDrops};recycles=${host.lifetimeRecycles}"
 
   /**
    * The control's accessibility, as two facts in one line:

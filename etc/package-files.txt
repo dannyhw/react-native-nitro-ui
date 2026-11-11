@@ -78,6 +78,7 @@ ios/components/BottomSheet/HybridNitroUiBottomSheet.swift
 ios/components/Button/HybridNitroUiButton.swift
 ios/components/ButtonGroup/HybridNitroUiButtonGroup.swift
 ios/components/Checkbox/HybridNitroUiCheckbox.swift
+ios/components/Checkbox/NitroUiCheckboxGlyph.swift
 ios/components/Chip/HybridNitroUiChip.swift
 ios/components/ContextMenu/HybridNitroUiContextMenu.swift
 ios/components/DatePicker/HybridNitroUiDatePicker.swift

@@ -178,6 +178,9 @@ export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated
 export function Checkbox(input: CheckboxProps): JSX.Element;
 
 // @public
+export type CheckboxIosStyle = 'circle' | 'square' | 'switch';
+
+// @public
 export interface CheckboxProps extends ViewProps {
     checked?: boolean | undefined;
     defaultChecked?: boolean | undefined;
@@ -189,6 +192,7 @@ export interface CheckboxProps extends ViewProps {
         readonly label: string | null;
         readonly disabled: boolean;
         readonly indeterminate: boolean | null;
+        readonly iosStyle: string;
         readonly accessibilityLabel: string | null;
         measureContent(): {
             width: number;
@@ -199,6 +203,7 @@ export interface CheckboxProps extends ViewProps {
         nuiTestStateReport(): string;
     }) => void) | undefined;
     indeterminate?: boolean | undefined;
+    iosStyle?: CheckboxIosStyle | undefined;
     label?: string | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
