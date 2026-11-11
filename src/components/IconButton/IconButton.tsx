@@ -12,6 +12,7 @@ import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import type { ButtonShape } from '../Button/Button';
 import { NativeNitroUiIconButton } from './NativeNitroUiIconButton';
 
@@ -253,13 +254,6 @@ function sizingVariantFor(
   ].join(FIELD_SEPARATOR);
 }
 
-/**
- * What a self-sizing control is laid out with, before any `style`: Button's and
- * Chip's base style, for their reason (a column's `alignItems: stretch` would
- * otherwise decide the width and the measurement would never be asked for).
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
 /** Resolve a caller's variant, defaulting anything unrecognised to `'standard'`. */
 function resolveVariant(
   variant: IconButtonVariant | undefined
@@ -358,6 +352,7 @@ export function IconButton({
   style,
   ...restProps
 }: IconButtonProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   warnAboutEmptyLabel(accessibilityLabel);
 
   // One string for native whichever form the caller used, resolved before the size
@@ -444,7 +439,7 @@ export function IconButton({
       )}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }

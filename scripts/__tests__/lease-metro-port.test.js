@@ -44,6 +44,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
 import { LOG_STORE_BASENAME } from '../gate-core.mjs';
+import { leaseRecord, writeLeaseStore } from './helpers/lease-store.js';
 import {
   decideAcquire,
   lsofListenArgs,
@@ -434,6 +435,13 @@ describeCli('a stale Metro server on a leased pair', () => {
   };
 
   /** The env a device gate runs under on pair-a, as `lease.mjs` would print it. */
+  const leasePairA = leaseRecord({
+    id: 'X4-1',
+    task: 'X4',
+    platform: 'android',
+    holds: [PAIR_A],
+  });
+
   const PAIR_A_ENV = {
     NITRO_UI_LEASE_ID: 'X4-1',
     NITRO_UI_LEASE_TASK: 'X4',
@@ -447,6 +455,16 @@ describeCli('a stale Metro server on a leased pair', () => {
 
   /** `gate.mjs <gate>`, in a throwaway checkout with the lease env sourced. */
   const gateCli = (args, extra = {}) => {
+    // X28: the lease has to be in the store, not only in the environment. A device
+    // gate reads `leases.json` before the Metro pre-flight and refuses a run whose
+    // lease it cannot find, so `PAIR_A_ENV` alone would stop at "released" and never
+    // reach the port question this suite is about. pair-a is what the copied
+    // `devices.example.json` really holds, and the lease is the record
+    // `lease.mjs acquire` would have written for it.
+    writeLeaseStore(home, {
+      skipDevices: true,
+      leases: [leasePairA],
+    });
     const dir = makeCheckout();
     checkouts.push(dir);
     const bin = join(dir, 'fake-bin');
@@ -601,6 +619,11 @@ describeCli('a stale Metro server on a leased pair', () => {
       expect(transcript).toContain('Tests: 3 passed, 3 total');
       // And the pool's answer for the pair is unchanged: the sweep stopped a server on the port
       // this run was handed, not the pair's own port, and certainly not another task's.
+      // X28 first: the gate run above is checked against the fixture's X4-1 lease, so
+      // pair-a is leased while the run lasts and `acquire` would answer "already leased"
+      // for any other task, sweep or no sweep. Dropping the lease leaves the question
+      // this line actually asks: is pair-a's Metro port free again?
+      writeLeaseStore(home, { skipDevices: true, leases: [] });
       const next = leaseCli(['acquire', '--task', 'X5']);
       expect(next.status).toBe(0);
       expect(next.stdout).toContain(`export METRO_PORT='${PORT_A}'`);

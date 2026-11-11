@@ -282,7 +282,11 @@ function StoryForm() {
           >
             <Text>Push notifications</Text>
           </Form.Row>
-          <Form.Row>
+          <Form.Row
+            hybridRef={(view) => {
+              rows.storySecond = view;
+            }}
+          >
             <Text>Play a sound</Text>
           </Form.Row>
         </Form.Section>
@@ -542,6 +546,198 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
         `question 2: ${over.length} field(s) out of bounds ` +
           `(${CONTAINER_BOUND_PT} pt container, ${ROW_BOX_BOUND_PT} pt row box).\n` +
           `field       prototype  reference    delta\n${table}`
+      );
+    }
+  });
+
+  /**
+   * Every row sits inside the card its section draws behind it (task X24 round 3).
+   *
+   * `form-android.png` shipped with the rows and their cards disagreeing: one card, drawn
+   * across the boundary between two rows, so the first row had no container at all and the
+   * second was half in and half out. Nothing else in this file sees it. The case above reads
+   * `drawnAccessory` against `frame` — one row, and the accessory's own box — and the
+   * `layerH`/`boxH` pair reads the layer's box, not what it drew inside it. A section can
+   * report two shapes, a layer as tall as the section, an accessory in its row, and still
+   * paint both shapes at one row's y.
+   *
+   * So read the placement itself: `drawnCards`, each row container's box as the layout pass
+   * left it (section-relative dp — the same space the row's own `frame` is in, and rows are
+   * direct children of the section, which is what `shapes=rows` proves), against every row's
+   * box, in React's order, on both axes. `cardBoxes` is what the layer was *handed* and stays
+   * in the failure message beside it, because the two disagree in different ways: a wrong
+   * `cardBoxes` is a row whose frame the layer was never told about, and a wrong `drawnCards`
+   * is a container that was handed the right box and landed somewhere else. The report used to
+   * carry these as `top-height` pairs only, which cannot show a card that is a centimetre wide.
+   * A card may fall short of its row by the segmented gap the layer trims off
+   * (`top = row.top + gap/2`, `height = row.height - gap`) and by nothing else; half a row is
+   * what this case is for.
+   *
+   * Android only: iOS draws its rows through UIKit cells, which have no painted container to
+   * disagree with.
+   */
+  it('lays every row of a section inside its own card (X24)', async () => {
+    if (IOS) return;
+    cleanup();
+    render(<StoryForm />);
+
+    /** Why the cards and the rows disagree, as one line each; empty means they agree. */
+    const disagree = (): string[] => {
+      const report = parse(sections.story?.nuiTestSectionReport() ?? '');
+      const rowsInStory = [rows.storyFirst, rows.storySecond].filter(
+        (row) => row != null
+      );
+      if (rowsInStory.length < 2)
+        return ['the story section has no two rows yet'];
+      const gap = num(report, 'gap');
+      // `drawnCards` is a placement *inside* the layer, and `layerH` is the size Compose gave
+      // that layer's root, so neither of them can see a layer that is the right size and in the
+      // wrong place. `hostBox` is the layer's own frame in the section, read from the View tree
+      // above it: at the section's origin and as tall as the section, or every card below is
+      // being painted somewhere else than where its numbers say.
+      const layer = box(report.hostBox);
+      const layerIssues: string[] = [];
+      if (layer[0] !== 0 || layer[1] !== 0) {
+        layerIssues.push(
+          `the layer that paints the cards sits at x=${layer[0]}, y=${layer[1]} inside its ` +
+            `own section (hostBox=${String(report.hostBox)})`
+        );
+      }
+      if (Math.abs(layer[3] - num(report, 'boxH')) > 1) {
+        layerIssues.push(
+          `the layer is ${layer[3]} dp tall in a section ${num(
+            report,
+            'boxH'
+          )} dp tall (hostBox=${String(report.hostBox)})`
+        );
+      }
+      // ... and the box that box's content is laid out in has to be at the top of it, at the
+      // section's size: every card is drawn at a number relative to *that*, so a box the host's
+      // root placed lower moves the picture with every card still "inside" its own row.
+      const root = box(report.layerBox);
+      if (root[0] !== 0 || root[1] !== 0) {
+        layerIssues.push(
+          `the section's own layer box sits at x=${root[0]}, y=${root[1]} inside the ` +
+            `layer's view (layerBox=${String(report.layerBox)})`
+        );
+      }
+      if (Math.abs(root[3] - num(report, 'boxH')) > 1) {
+        layerIssues.push(
+          `the section's own layer box is ${root[3]} dp tall in a section ` +
+            `${num(report, 'boxH')} dp tall (layerBox=${String(report.layerBox)})`
+        );
+      }
+      if (layerIssues.length > 0) return layerIssues;
+      // `0:l,t,w,h|1:l,t,w,h`, by row index — the index travels so a row that was never placed
+      // is a missing entry rather than a box that belongs to whichever row came first.
+      const drawn = new Map<number, Box>();
+      for (const entry of (report.drawnCards ?? '').split('|')) {
+        const at = entry.indexOf(':');
+        if (at < 0 || !entry.includes(',')) continue;
+        drawn.set(Number(entry.slice(0, at)), box(entry.slice(at + 1)));
+      }
+      const missing = rowsInStory
+        .map((_, index) => index)
+        .filter((index) => !drawn.has(index));
+      if (missing.length > 0) {
+        return [
+          `the layer placed no container for row(s) ${missing.join(', ')} of ${rowsInStory.length}: drawnCards=${String(
+            report.drawnCards ?? '<absent>'
+          )} (handed cardBoxes=${String(report.cardBoxes ?? '<absent>')})`,
+        ];
+      }
+      const cards = rowsInStory.map((_, index) => drawn.get(index) as Box);
+      // Beside it, for the message only: what the layer was handed.
+      const handed = (report.cardBoxes ?? '')
+        .split('|')
+        .filter((entry) => entry.includes(','))
+        .map((entry) => box(entry));
+      const handedTop = (index: number): string =>
+        handed[index] == null ? '?' : String(handed[index][1]);
+      const rowBoxes = rowsInStory.map((row) =>
+        box(parse(row.nuiTestRowReport()).frame)
+      );
+      if (rowBoxes.some((b) => b[3] <= 0)) {
+        return ['a row of the story section has no height yet'];
+      }
+      const out: string[] = [];
+      cards.forEach((card, index) => {
+        const [cardLeft, cardTop, cardWidth, cardHeight] = card;
+        const [rowLeft, rowTop, rowWidth, rowHeight] = rowBoxes[index] ?? [
+          0, 0, 0, 0,
+        ];
+        const slack = gap / 2 + 0.5;
+        // A card with nothing to fill draws nothing, and looks exactly like a card that was
+        // never placed: `form-android.png` shipped one of these two.
+        if (cardWidth <= 0 || cardHeight <= 0) {
+          out.push(
+            `row ${index}: the container drawn for it is ${cardWidth} x ${cardHeight}`
+          );
+          return;
+        }
+        if (cardTop > rowTop + slack) {
+          out.push(
+            `row ${index}: its container is drawn at y=${cardTop} while the row starts at ` +
+              `y=${rowTop} (its box was handed to the layer as y=${handedTop(index)})`
+          );
+        }
+        if (cardTop + cardHeight < rowTop + rowHeight - slack) {
+          out.push(
+            `row ${index}: its card ends at y=${(cardTop + cardHeight).toFixed(1)} while the ` +
+              `row ends at y=${(rowTop + rowHeight).toFixed(1)}`
+          );
+        }
+        if (Math.abs(cardLeft - rowLeft) > 1) {
+          out.push(
+            `row ${index}: its card starts at x=${cardLeft} while the row starts at x=${rowLeft}`
+          );
+        }
+        if (Math.abs(cardWidth - rowWidth) > 1) {
+          out.push(
+            `row ${index}: its card is ${cardWidth} wide while the row is ${rowWidth} wide`
+          );
+        }
+      });
+      return out;
+    };
+    // A report that cannot be read at all ("not yet") is one more reason to disagree, never
+    // an exception that escapes the poll.
+    const issues = (): string[] => {
+      try {
+        return disagree();
+      } catch (error) {
+        return [String(error)];
+      }
+    };
+
+    const settled = await readSection(
+      'story',
+      (r) => num(r, 'shapes') > 0 && issues().length === 0
+    ).catch(() => {
+      throw new Error(
+        `X24: ${issues().join('; ')} - a row is drawn outside the container its own section ` +
+          `paints behind it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )}; rows ${String(rows.storyFirst?.nuiTestRowReport())} / ${String(
+            rows.storySecond?.nuiTestRowReport()
+          )})`
+      );
+    });
+    console.log(
+      `FORM CARDS story section ${JSON.stringify(settled)} rows ${String(
+        rows.storyFirst?.nuiTestRowReport()
+      )} / ${String(rows.storySecond?.nuiTestRowReport())}`
+    );
+    // And it has to stay agreed, for the same reason the accessory case waits: the bands come
+    // back from JavaScript and the rows move after their first layout.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const late = issues();
+    if (late.length > 0) {
+      throw new Error(
+        `X24: ${late.join('; ')} - the cards followed the section's first layout and not the ` +
+          `one after it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )})`
       );
     }
   });

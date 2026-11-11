@@ -21,6 +21,7 @@
 #include "HybridNitroUiFormSpecSwift.hpp"
 #include "HybridNitroUiHostSpecSwift.hpp"
 #include "HybridNitroUiIconButtonSpecSwift.hpp"
+#include "HybridNitroUiListItemSpecSwift.hpp"
 #include "HybridNitroUiMenuSpecSwift.hpp"
 #include "HybridNitroUiPickerSpecSwift.hpp"
 #include "HybridNitroUiPopoverSpecSwift.hpp"
@@ -306,6 +307,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiIconButtonSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiListItemSpec>
+  std::shared_ptr<HybridNitroUiListItemSpec> create_std__shared_ptr_HybridNitroUiListItemSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiListItemSpec_cxx swiftPart = NitroUi::HybridNitroUiListItemSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiListItemSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiListItemSpec_(std__shared_ptr_HybridNitroUiListItemSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiListItemSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiListItemSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiListItemSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiListItemSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

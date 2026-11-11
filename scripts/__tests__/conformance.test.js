@@ -191,6 +191,7 @@ describe('coverage', () => {
       'Dialog',
       'Form',
       'IconButton',
+      'ListItem',
       'Menu',
       'Picker',
       'Popover',
@@ -2110,6 +2111,7 @@ describe('the a11y sweep, against a fake device', () => {
         'searchfield',
         'contextmenu',
         'form',
+        'listitem',
       ]);
     });
   });

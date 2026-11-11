@@ -288,6 +288,11 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
   );
 }
 
+/** The stepper's own report, as sent - the evidence a failure message carries. */
+function rawOf(testId: string): string {
+  return handles.get(testId)?.nuiTestStateReport() ?? '';
+}
+
 /** The stepper's own report, as `key -> value`. */
 function reportOf(testId: string): Record<string, string> {
   const fields: Record<string, string> = {};
@@ -923,6 +928,28 @@ describe('Stepper', () => {
       `${reportOf('off').up}/${reportOf('off').down}`,
       'a disabled stepper has no live half at all'
     ).toBe('0/0');
+
+    // iOS: the *drawing*, not the flag. `model.disabled` is what React sent and the
+    // accessibility traits below are set straight from it, so everything above stays green
+    // while the screen paints a live-looking control - which is what the disabled row of
+    // `stepper-ios.png` used to look like, a half stop away from Android's. SwiftUI's
+    // `.disabled(_)` is on the chain and does reach this host (a `Toggle` under it dims), but
+    // SwiftUI's `Stepper` does not change its own drawing for it, and no capture of its box
+    // reaches what it draws (`nuiTestPixelProbe` carries that measurement). So the assertion
+    // is the opacity the drawing code was handed, read at the same point `up`/`down` are.
+    if (Platform.OS === 'ios') {
+      expect(
+        reportOf('off').opacity,
+        'a disabled iOS stepper is drawn dimmed - at full strength the screen offers a ' +
+          `control that answers to nobody (${rawOf('off')})`
+      ).toBe('0.50');
+      expect(
+        reportOf('off-barrier').opacity,
+        `and the live stepper beside it is drawn at full strength (${rawOf(
+          'off-barrier'
+        )})`
+      ).toBe('1.00');
+    }
 
     // A reader is told the same thing the screen shows.
     const a11y = await probeAccessibility('off');

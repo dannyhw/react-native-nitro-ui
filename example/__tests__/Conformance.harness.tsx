@@ -106,6 +106,7 @@ import {
   Form,
   ButtonGroup,
   IconButton,
+  ListItem,
   Menu,
   Picker,
   Popover,
@@ -287,6 +288,16 @@ const SHARED = {
         "width": 300,
         "height": 34.4
       }
+    },
+    "NitroUiListItem": {
+      "android": {
+        "width": 300,
+        "height": 56
+      },
+      "ios": {
+        "width": 300,
+        "height": 52
+      }
     }
   },
   "poisonSizes": {
@@ -315,7 +326,8 @@ const SHARED = {
     "NitroUiCheckbox": "height",
     "NitroUiIconButton": "both",
     "NitroUiStepper": "both",
-    "NitroUiButtonGroup": "height"
+    "NitroUiButtonGroup": "height",
+    "NitroUiListItem": "height"
   },
   "exemptions": [
     {
@@ -675,6 +687,15 @@ const recordRecycleChecked =
     recycleEvents.push(`${testId}:${id}:${String(checked)}`);
   };
 
+/**
+ * ListItem's `onPress` carries no value at all — a row press is a press, not a state change
+ * (DECISIONS D46) — so the one-value recorder above would log `…:undefined` and the probe
+ * would assert a string that means nothing. This records the row that answered.
+ */
+const recordRecyclePress = (testId: string) => (): void => {
+  recycleEvents.push(testId);
+};
+
 /** Events recorded since `from`, so a probe reads only the effect of its own press. */
 const eventsSince = (from: number): string[] => recycleEvents.slice(from);
 
@@ -695,6 +716,43 @@ async function eventsSettled(from: number, wanted: string): Promise<string> {
     if (Date.now() >= deadline) return seen;
     await sleep(50);
   }
+}
+
+/**
+ * Press a ListItem through the control's own press seam (`ListItemModel.press()`), on both
+ * platforms.
+ *
+ * The reason is Chip's and IconButton's — the harness's touch on iOS carries no HID event,
+ * and UIKit's row highlight is a gesture recogniser, which is exactly the thing that
+ * gesture needs and the harness does not send. On Android a harness tap would land, but a
+ * probe that pressed one platform with a finger and the other with a seam could not tell a
+ * lost touch from a lost reset, and the reset is what this fixture is about. `press()` is
+ * where the counter a reset owns is written on both, so both go through it.
+ */
+const pressListItem = (testId: string): void => {
+  const handle = handleFor(testId);
+  if (handle.nuiTestPress == null) {
+    throw new Error(`"${testId}" is not a ListItem - it has no nuiTestPress()`);
+  }
+  handle.nuiTestPress();
+};
+
+/**
+ * ListItem's report (`HybridNitroUiListItem`'s `nuiTestStateReport`), as `key -> value`.
+ *
+ * Split on the first `=` only: `displayed=Notifications|-|On|none` has no `=` in its value,
+ * and the a11y answer after it does (`role=button,…`), which would otherwise be read as
+ * seven keys of its own.
+ */
+function listItemReportOf(handle: Handle): Record<string, string> {
+  const report: Record<string, string> = {};
+  for (const pair of (handle.nuiTestStateReport?.() ?? '').split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) {
+      report[pair.slice(0, at)] = pair.slice(at + 1);
+    }
+  }
+  return report;
 }
 
 /** Press a control at its own box. */
@@ -1846,6 +1904,21 @@ const FORM_LABEL_SECOND = 'Second owner’s form';
  * shared `Handle` type for the controls that do. Same arrangement as `captureDialog`.
  */
 const captureForm =
+  (testId: string) =>
+  (view: object): void => {
+    handles.set(testId, view as unknown as Handle);
+  };
+
+/**
+ * ListItem's handle, captured the way Form's is.
+ *
+ * The shared `Handle` type carries `title?: string`, which is Menu's trigger text; a
+ * ListItem's `title` is `string | null` because every text slot is nullable (no optional
+ * Hybrid View props — D7/nitro#1184), and the two types are not assignable to each other.
+ * The cast is this file's standing answer for a control whose own props are wider than the
+ * one handle type: the fields the fixtures below read are on both.
+ */
+const captureListItem =
   (testId: string) =>
   (view: object): void => {
     handles.set(testId, view as unknown as Handle);
@@ -4480,6 +4553,128 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: 'a step up from that value emits',
             expected: 'conformance-stepper:8',
             actual: await eventsSettled(before, 'conformance-stepper:8'),
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'ListItem',
+    component: 'NitroUiListItem',
+    label: 'Conformance list item',
+    testId: 'conformance-list-item',
+    // The one-line row with a trailing value: the configuration
+    // `DECLARED_FALLBACKS.NitroUiListItem` describes and the docs print. The subtitle is
+    // the only slot that moves the height, so it is deliberately absent here and measured
+    // rung by rung in `ListItem.harness.tsx` — a fixture that carried one would compare
+    // Material's two-line minimum against a number that says one line.
+    owner: (second) => (
+      <ListItem
+        accessibilityLabel={
+          second ? `Conformance list item, ${SECOND}` : 'Conformance list item'
+        }
+        onPress={recordRecyclePress('conformance-list-item')}
+        testID="conformance-list-item"
+        title="Notifications"
+        value={second ? 'Weekly' : 'On'}
+        hybridRef={captureListItem('conformance-list-item')}
+      />
+    ),
+    control: (testId, variant) => (
+      <ListItem
+        accessibilityLabel={`Leak list item ${String(variant)}`}
+        testID={testId}
+        title={variant ? 'Bluetooth' : 'Notifications'}
+        value={variant ? 'Off' : 'On'}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance list item, ${SECOND}`
+          : 'Conformance list item',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // What a row can leave behind is its own press counter and the line it drew, and no
+    // prop rewrites either: `ListItem.tsx` sends every prop on every commit, while
+    // `presses` is written where the tap lands and `displayed` where the row composes.
+    //
+    // The second owner's title and value are *different words* from the first's, so a
+    // `displayed=` that was never re-taken cannot coincide with the right answer, and the
+    // counter the reset owns is asked with a press rather than read: a reset that left
+    // `presses=1` behind prints `presses=2` for the second owner's first tap.
+    probe: {
+      leaveBehind:
+        "a press the first owner took, through the tap's own path - one accepted press " +
+        "in the row's counter - and a drawn line the second owner never asked for",
+      first: () => (
+        <ListItem
+          accessibilityLabel="Conformance list item"
+          onPress={recordRecyclePress('conformance-list-item')}
+          testID="conformance-list-item"
+          title="Notifications"
+          value="On"
+          hybridRef={captureListItem('conformance-list-item')}
+        />
+      ),
+      act: async () => {
+        const handle = await ensureHandle('conformance-list-item');
+        const from = recycleEvents.length;
+        pressListItem('conformance-list-item');
+        const seen = await eventsSettled(from, 'conformance-list-item');
+        if (seen !== 'conformance-list-item') {
+          throw new Error(
+            `the first owner's press reported "${seen}", so the row has no press for a ` +
+              'reset to clear and the assertion below would be measuring nothing'
+          );
+        }
+        if (
+          !(listItemReportOf(handle).displayed ?? '').includes('Notifications')
+        ) {
+          throw new Error(
+            `the first owner's row never reported what it drew: ` +
+              (handle.nuiTestStateReport?.() ?? '(no report)')
+          );
+        }
+      },
+      second: () => (
+        <ListItem
+          accessibilityLabel="Conformance list item"
+          onPress={recordRecyclePress('conformance-list-item')}
+          testID="conformance-list-item"
+          title="Bluetooth"
+          value="Off"
+          hybridRef={captureListItem('conformance-list-item')}
+        />
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-list-item');
+        // Read the row the second owner is showing *before* pressing it: a stale
+        // `displayed=` is the residue, and pressing first would overwrite it with the
+        // answer the props would have produced anyway.
+        const before = listItemReportOf(handle);
+        const from = recycleEvents.length;
+        pressListItem('conformance-list-item');
+        const reported = await eventsSettled(from, 'conformance-list-item');
+        return [
+          {
+            label: "the line the second owner's row drew",
+            expected: 'Bluetooth|-|Off|none',
+            actual: before.displayed,
+          },
+          {
+            label: 'a press on it still reaches the app',
+            expected: 'conformance-list-item',
+            actual: reported,
+          },
+          {
+            label: 'and it is the first press this row has had',
+            expected: '1',
+            actual:
+              listItemReportOf(handleFor('conformance-list-item')).presses ??
+              'none',
           },
         ];
       },

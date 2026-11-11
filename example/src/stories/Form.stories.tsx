@@ -54,6 +54,11 @@ type Story = StoryObj<typeof meta>;
 /**
  * The two sections the README picture shows, as a component so the Playground can
  * hold their switch state while `Sections` renders the same form uncontrolled.
+ *
+ * The two switch rows are the bare pair the README prints: a `Text` with `flex: 1`
+ * and the control after it. A row lays that pair out as one centred row across its
+ * content width, so the switch sits on the trailing edge level with its label with
+ * no wrapper in this file to arrange it (`docs/components/form.md`).
  */
 function NotificationSections({
   push,
@@ -406,8 +411,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rowLabel: {
+    // The label takes the room the row has and the control keeps the room it
+    // measured: `flex: 1` is what puts a trailing control at the trailing edge.
     flexShrink: 1,
     fontSize: 16,
+    flexGrow: 1,
   },
   rowDetail: {
     fontSize: 13,

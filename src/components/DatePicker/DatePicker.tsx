@@ -5,6 +5,7 @@ import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiDatePicker } from './NativeNitroUiDatePicker';
 
 /**
@@ -165,16 +166,6 @@ function sizingVariantFor(
 }
 
 /**
- * What a self-sizing control is laid out with, before any caller `style`.
- *
- * With `alignItems: stretch` (the column default) Yoga decides a stretched
- * child's width *for* it as an exact constraint, so the measured size is never
- * asked for and a compact field becomes a 402 pt box with a small button inside
- * it. Same rule as `Switch`, `Button` and `SegmentedControl`.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
-/**
  * The same for a `fillWidth` control, spelled the other way: an inline calendar
  * measures its height at the width it was *given*, so it needs the row's width,
  * and `flex-start` would ask it to invent one. Slider and the linear `Progress`
@@ -270,6 +261,7 @@ export function DatePicker({
   style,
   ...restProps
 }: DatePickerProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   const normalisedMode = normaliseMode(mode);
   const normalisedVariant = normaliseVariant(variant);
   // Bounds first: the value is clamped against them, and it may be `undefined`
@@ -335,10 +327,7 @@ export function DatePicker({
       nuiSizingKey={sizingKey}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[
-        isFillWidth ? FILL_WIDTH_BASE_STYLE : SELF_SIZING_BASE_STYLE,
-        style,
-      ]}
+      style={[isFillWidth ? FILL_WIDTH_BASE_STYLE : selfSizingBaseStyle, style]}
     />
   );
 }

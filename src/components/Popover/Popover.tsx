@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 
 import { useControlled } from '../../core/useControlled';
+import { InsideRowContext } from '../../core/useSelfSizing';
 import {
   useStableCallback,
   type NitroCallbackProp,
@@ -224,7 +225,14 @@ export function Popover({
       >
         {mounted ? (
           <View collapsable={false} style={contentBoxStyle(cap)}>
-            {children}
+            {/*
+             * The content is presented in the popover, not in the box it was written in, so a
+             * `Form.Row` above this wrapper lays none of it out: the row's cross-axis rule
+             * (`alignSelf: 'center'`, see `src/core/useSelfSizing.ts`) stops here.
+             */}
+            <InsideRowContext.Provider value={false}>
+              {children}
+            </InsideRowContext.Provider>
           </View>
         ) : null}
       </NativeNitroUiPopover>
