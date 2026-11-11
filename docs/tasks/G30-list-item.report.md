@@ -156,11 +156,11 @@ Each line is `test -> what was broken -> the line that went red`.
 
 Branch `task/G30-fix1`, lease `G30-o7nwh`.
 
-Every must-fix is in. An item with `onPress` inside a `Form.Row` hands that handler and `disabled` to the row through the existing context, so the cell owns the press and its one highlight and the leaf installs no press at all; development warns when both carry one. iOS cancels a press whose finger travels past ~10 pt or leaves the bounds, so a real drag from a row is 0 presses, both platforms. Android's headline takes `weight(1f)` with fill, putting the value at the trailing edge; `disabled` greys text, secondary text, image tint and chevron; `valueWidth` moved into `layoutSubviews`; a recycle clears the row's pressed flag and background; `insets=` reads the title label's frame and `shape=` the background painted under a held press. The README pair was reshoot.
+Every must-fix is in. An item with `onPress` inside a `Form.Row` hands that handler and `disabled` to the row through the existing context, so the cell owns the press and its one highlight and the leaf installs no press at all; development warns when both carry one. iOS cancels a press whose finger travels past ~10 pt or leaves the bounds, so a real drag from a row is 0 presses, both platforms. Android's headline takes `weight(1f)` with fill, putting the value at the trailing edge; `disabled` greys text, secondary text, image tint and chevron; `valueWidth` moved into `layoutSubviews`; a recycle clears the row's pressed flag and background; `insets=` reads the title label's frame and `shape=` the background painted under a held press. The README pair was reshot.
 
 What the device run found: a row in a section drew the shape morph and no ink, because `Modifier.indication` rebuilt its node from a ripple that read `pressed`, destroying the node holding that press. One theme ripple, resolved away from the press: held luma 0.9530 → 0.8740.
 
-Reds: `docs/tasks/G30/mutations.json`. Not run: the glyph probe. Follow-ups: Form's own iOS cell, the bench cells.
+Reds: `docs/tasks/G30/mutations.json` - eight rows. Not run: the glyph probe. Follow-ups: Form's own iOS cell, the bench cells.
 
 
 ### Gates (fix round 1)
