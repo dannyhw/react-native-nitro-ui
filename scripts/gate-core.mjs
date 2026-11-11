@@ -140,12 +140,17 @@ export const REQUIRED_ELIGIBLE_PREFIXES = [
  *
  * An explicit allow-list, not `scripts/` wholesale (X2 review, "Rules, docs and
  * tests"). A device run imports a lot of `scripts/`: `example/rn-harness.config.mjs`
- * pulls in `app-stamp*.mjs`, `lease-core.mjs`, `node-version.mjs` and
+ * pulls in `app-stamp*.mjs`, `node-version.mjs` and
  * `harness-timing-gate.js`, `example/metro.config.js` requires the timing gate,
  * and `scripts/real-input/**`, `harness.mjs`, `build-app.mjs`, `pod-install*.mjs`
  * and `patch-nitrogen.mjs` shape the binary or the run. Everything not listed
  * below therefore stays unmapped, which means both platforms - the expensive
  * answer, which is the right one for a tool a device run depends on.
+ *
+ * The one exception to that sentence is the lease pair below (X26): a device run does
+ * read two *guards* out of `lease-core.mjs` through the harness config. They are named
+ * there and proven by unit test here, which is why that file is allowed on a list whose
+ * whole point is "nothing here reaches the binary".
  *
  * A tooling path belongs to *no* platform, so it is also out of both per-platform
  * digests (`platformsOwningFile`). That is what stops a fix round that edits
@@ -192,6 +197,17 @@ export const TOOLING_FILES = [
   // fails loudly if this misbehaves, and `scripts/__tests__/build-slot.test.js`
   // proves it in `check`.
   'scripts/build-slot-core.mjs',
+  // X26. The device/port allocator behind `~/.nitro-ui/leases.json`. Like the build slot
+  // beside it, it decides *when* a run may start and never what is in it: no package ships
+  // either file, and no built code contains them. `example/rn-harness.config.mjs` does
+  // import two env *guards* from here (`checkEmulatorEnv`, `emulatorSerial`) - pure checks
+  // on the variables a lease exported, nothing compiled - and `scripts/__tests__/lease.test.js`
+  // ("the console port a lease owns") exercises both, which is the honest version of the
+  // claim this list rests on. The rules themselves are proven by `lease.test.js`,
+  // `lease-queue.test.js` and `lease-pool-cli.test.js`, and `check` is the cheapest place
+  // in the repo to learn that one of them is wrong.
+  'scripts/lease.mjs',
+  'scripts/lease-core.mjs',
   // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
   // run reads that copy, never this file, and neither is in the app.
   'scripts/devices.example.json',

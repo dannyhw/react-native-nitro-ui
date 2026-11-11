@@ -477,12 +477,31 @@ with a reason when it refuses. It hands out `IOS_SIM_UDID`, `IOS_SIM`,
 which are the variables `example/rn-harness.config.mjs` and the real-input scripts
 already read, so a task stops naming devices and starts by leasing them.
 
-Four rules are enforced rather than written down:
+Five rules are enforced rather than written down:
 
 - at most **2 device leases** at a time (a third is refused: two device tasks is
   what one machine does without load turning duration gates red, D21);
+- **the queue is first come, first served** (X26). Every `acquire` that is willing
+  to wait records a ticket with the time it started waiting and refreshes it on
+  every poll, so a freed pair goes to whoever has waited longest rather than to
+  whoever polls first - and the task that just released a pair, which is always the
+  one asking again within seconds, queues at the back like everybody else. (Before
+  this, a pair that came free was won by the fastest poll: on 2026-11-11 two tasks
+  waited four and a half hours each and never got one while the pool turned over
+  between their polls.) The rule is read pair by pair: **the oldest live ticket a
+  pair would satisfy owns that pair**, so a waiter only holds what it can use - an
+  iOS-only waiter does not idle an Android-only pair - and the cost is stated
+  plainly: a pair the line is entitled to may sit idle until that waiter's next
+  poll (10 s), or up to 60 s if its ticket belongs to a process that died, which is
+  also how a ticket with nobody behind it expires. `--wait-minutes 0` does not join
+  the queue: it takes a pair now if nothing older is waiting, and is refused if
+  something is. `list` shows the queue (task, waiting since, position), and a
+  refusal names who is in front of you;
 - `--exclusive` - for a bench run or a baseline mint, which needs a quiet
   machine - **waits until every other lease has ended**, then holds every pair;
+  a waiting exclusive request keeps its place in the queue while it does, and it
+  holds _new_ leases back until the machine goes quiet, so it is the one request the
+  queue does not delay - the queue is not being served while it waits, by design;
 - the emulator serial **`emulator-5560` can never be leased**, because an `adb`
   command without `-s` reaches it. A pool that contains it is refused when it is
   read, so the mistake is a config error rather than a borrowed device.

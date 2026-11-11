@@ -30,6 +30,7 @@ import {
   fullTreesMatch,
   isToolingPath,
   ledgerLineFromRun,
+  platformsOwningFile,
   renderGateTable,
   renderStepTimings,
   stepTimingsOf,
@@ -661,11 +662,14 @@ describe('fullTreesMatch (the one comparison reuse rests on)', () => {
 
 /* --------------------------- the tooling allow-list -------------------------- */
 
-describe('TOOLING_FILES (X10 additions)', () => {
+describe('TOOLING_FILES (X10, X26 additions)', () => {
   it.each([
     // Each of these used to count as "both platforms", so a one-line change to a
     // dev-only script owed four device runs. None of them can reach the app binary:
     // they run checks, schedule them, or describe a device pool the app never sees.
+    // The lease pair is X26's: `lease.mjs` is a machine's own allocator, it ships in
+    // no package, and no app binary contains it - what it decides is *when* a run may
+    // start, which is the same argument that put `build-slot-core.mjs` on this list.
     'scripts/check.mjs',
     'scripts/check-steps.mjs',
     'scripts/gen-registry.mjs',
@@ -673,9 +677,14 @@ describe('TOOLING_FILES (X10 additions)', () => {
     'scripts/build-slot-core.mjs',
     'scripts/devices.example.json',
     'scripts/sync-example-lock.mjs',
+    'scripts/lease.mjs',
+    'scripts/lease-core.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);
+    // ... and belongs to neither platform's half, which is what stops a lease change
+    // from re-owing two device runs on top of `check`.
+    expect(platformsOwningFile(file)).toEqual([]);
   });
 
   it('the files are real, so the list cannot guard a path that does not exist', () => {
@@ -692,7 +701,6 @@ describe('TOOLING_FILES (X10 additions)', () => {
       'scripts/harness.mjs',
       'scripts/app-stamp.mjs',
       'scripts/patch-nitrogen.mjs',
-      'scripts/lease.mjs',
     ]) {
       expect(isToolingPath(file)).toBe(false);
     }

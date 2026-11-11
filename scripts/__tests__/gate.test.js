@@ -1079,7 +1079,6 @@ describe('platformMappingFor / tooling class', () => {
     for (const deviceRunInput of [
       'scripts/app-stamp.mjs',
       'scripts/app-stamp-core.mjs',
-      'scripts/lease-core.mjs',
       'scripts/node-version.mjs',
       'scripts/harness-timing-gate.js',
       'scripts/harness.mjs',
@@ -1090,6 +1089,17 @@ describe('platformMappingFor / tooling class', () => {
     ]) {
       expect(isToolingPath(deviceRunInput)).toBe(false);
       expect(platformsOwningFile(deviceRunInput)).toEqual(['ios', 'android']);
+    }
+
+    // X26 moved the lease pair onto the allow-list, which is the one place this rule
+    // has an exception: `example/rn-harness.config.mjs` does read `checkEmulatorEnv`
+    // and `emulatorSerial` out of `lease-core.mjs`. They are guards on the environment
+    // a lease exported - not code the app is built from - both are unit-tested in
+    // `check`, and neither ships in a package. The pair is asserted tooling in
+    // `gate-check.test.js` ("TOOLING_FILES"), where the reason is written out.
+    for (const allocator of ['scripts/lease.mjs', 'scripts/lease-core.mjs']) {
+      expect(isToolingPath(allocator)).toBe(true);
+      expect(platformsOwningFile(allocator)).toEqual([]);
     }
   });
 });
