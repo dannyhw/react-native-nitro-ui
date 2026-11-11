@@ -41,7 +41,16 @@ bands now come from a per-column ink scan.
 
 ## Gates
 
-<!--GATE-TABLE-->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2018 tests / 85 suites | `baf64c171dca` | 2 m 58 s | start 18.0 / med 18.0 / max 34.6 |
+| `harness:ios` | **PASS** | 598 tests / 31 suites + isolated 6 tests / 3 suites | `baf64c171dca` (ios tree) | 15 m 10 s | start 10.7 / med 13.4 / max 33.1 |
+| `harness:android` | **PASS** | 654 tests / 31 suites + isolated 6 tests / 3 suites | `baf64c171dca` (android tree) | 18 m 35 s | start 13.4 / med 6.1 / max 13.4 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: review is satisfied on this code tree. `real-input:ios` and
+`real-input:android` stay missing: they run once at merge, with the full harness.
 
 ## Red proofs
 
