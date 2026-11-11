@@ -5784,7 +5784,7 @@ const CHECKS = {
       return changed === 0
         ? 'nothing changed anywhere in the content area'
         : `${String(changed)} px changed, x ${String(x1)}-${String(x2)}, ` +
-          `y ${String(y1)}-${String(y2)}`;
+            `y ${String(y1)}-${String(y2)}`;
     };
     const contentTop = Math.round(t.tabBarBottom()) + 4;
     const counters = () =>
