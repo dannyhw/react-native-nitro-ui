@@ -193,20 +193,20 @@ the `main` pair hints at exactly that.
 `flexDirection: 'row'`, `alignItems: 'center'`, `flex: 1`, no `minHeight` — which the row's own
 `minHeight` centres, so the bare `<Form.Row><Text style={{ flex: 1 }} /><Switch /></Form.Row>`
 lays out right without the app knowing about `alignSelf`. README, `readme-examples.tsx`,
-`Form.stories.tsx` and `docs/components/form.md` are back to that pattern, the three copies
-identical; the Stepper story keeps its caption column and `flexShrink: 0`.
+`Form.stories.tsx` and `docs/components/form.md` are back to that pattern — README's block and
+`example/src/readme-examples.tsx` byte-identical, which `scripts/readme-examples-check.mjs`
+enforces; the Stepper story keeps its caption column and `flexShrink: 0`.
 
 The first shape was wrong and `Form measure (E7)` caught it: the row's `style` landed on the
-wrapper, so `alignItems: 'stretch'` stretched only the wrapper — fourteen measures of 17 pt of
-text inside 44 pt rows, all `off by 13.7 pt`. The rule now travels into the wrapper with the
-children (`f320547c`, and `form.md` says so).
+wrapper, so `alignItems: 'stretch'` stretched only the wrapper — fourteen measures of 17 pt
+inside 44 pt rows, all `off by 13.7 pt`. The rule now travels in with the children (`f320547c`).
 
-**Both pairs retaken from one story each** (`Form/Playground`, `Stepper/States`), so the two
-halves of a pair are the same example — the Form pair on `main` was not.
+**Both pairs retaken from one story each** (`Form/Playground`, `Stepper/States`), so a pair's
+halves are the same example — the Form pair on `main` was not.
 
 **Was the misalignment a component bug?** The switch sitting at the label was the story's (no
 `flex: 1`); the vertical half was `Form.Row`'s and is fixed; the Android cards and the
-`mount.form` crash below are pre-existing and not this round's.
+`mount.form` crash below are pre-existing.
 
 ### Before / after
 
@@ -234,60 +234,71 @@ halves of a pair are the same example — the Form pair on `main` was not.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-GATES_TABLE_PLACEHOLDER
+| `check` | **PASS** | 2013 tests / 85 suites | `cc46c2f26071` | 2 m 49 s | start 6.7 / med 9.5 / max 15.9 |
+| `harness:ios` | **PASS** | 594 tests / 31 suites + isolated 6 tests / 3 suites | `cc46c2f26071` (ios tree) | 14 m 51 s | start 12.5 / med 19.8 / max 181.4 |
+| `harness:android` | **PASS** | 650 tests / 31 suites + isolated 6 tests / 3 suites | `cc46c2f26071` (android tree) | 18 m 32 s | start 10.0 / med 5.2 / max 11.5 |
+| `real-input:ios` | **PASS** | — | `cc46c2f26071` (ios tree) | 47 m 15 s | start 27.4 / med 17.1 / max 378.1 |
+| `real-input:android` | **PASS** | — | `cc46c2f26071` (android tree) | 63 m 47 s | start 7.0 / med 7.2 / max 50.8 |
+| `harness:android:Form` | stale | 1 failed of 121 tests / 3 suites | 8eb501e66342 (not this tree) | 3 m 38 s | start 7.6 / med 7.3 / max 10.1 |
+| `harness:ios:Form` | stale | 1 failed of 121 tests / 3 suites | 8eb501e66342 (not this tree) | 3 m 37 s | start 12.5 / med 12.6 / max 20.0 |
+| `harness:ios:Form:--background` | stale | — | 8eb501e66342 (not this tree) | 1.8 s | start 12.7 / med 12.7 / max 12.7 |
 
-The two `stale` `harness:*:Form` rows are the red proofs above, against the `main`-row tree
-`8eb501e66342`; `harness:ios:Form:--background` is a mistyped argument that reached jest in
-1.8 s, not a result, and an earlier `harness:ios` RED in the ledger is two gates sharing one
-lease's `METRO_PORT` (`EADDRINUSE`).
+Both `real-input:android` runs are in the ledger: the row above is the re-run, and the older
+line for the same tree is a 62 m 54 s failure of `hosted-picker` (Follow-ups). The `stale` `harness:*:Form` rows are the red proofs against the
+`main`-row tree `8eb501e66342`; `harness:ios:Form:--background` is a mistyped argument that
+reached jest in 1.8 s, not a result, and an earlier `harness:ios` RED line is two gates sharing
+one lease's `METRO_PORT` (`EADDRINUSE`).
 
 ### Bench
 
-`--plan quick --component form --only nitro-ui` (4 launches × 20 measured iterations) on
-`maintainer-mac-2` at load ≈6 over 10 cores — above the 5.0 ceiling, so `--force`, and read the
-percentages knowing that. Android, where `mount.form` runs at all:
+`--plan quick --component form --only nitro-ui` (4 launches × 20 measured iterations),
+`maintainer-mac-2`, load 4-11 over 10 cores — above the 5.0 ceiling, so `--force`. Two verified
+runs per column (Android: each APK's bundle checked for the wrapper; iOS: `main.jsbundle` is
+rewritten by the bundle phase every run). Medians, Android first:
 
-| Cell | Metric | `main`'s row | wrapper | Δ |
-| --- | --- | --- | --- | --- |
-| mount N=20 | presented / mounted | 32.15 / 24.55 ms | 32.52 / 24.51 ms | +1.2 % / −0.2 % |
-| mount N=20 | JS commit, JS CPU, UI CPU | 2.19 / 4.98 / 14.33 ms | 2.16 / 5.06 / 14.56 ms | −1.4 % / +1.6 % / +1.6 % |
-| mount N=50 | presented / mounted | 43.38 / 31.52 ms | 42.86 / 31.15 ms | −1.2 % / −1.2 % |
-| mount N=50 | JS commit, JS CPU, UI CPU | 4.22 / 8.91 / 26.85 ms | 4.04 / 8.90 / 26.96 ms | −4.3 % / −0.1 % / +0.4 % |
-| update N=50 | mounted, JS commit | 15.64 / 2.47 ms | 16.00 / 2.47 ms | +2.3 % / 0 % |
-| memory N=200 | bytes/inst | 191.8 KiB | 214.3 KiB | **+11.7 %** |
+| Cell | presented | mounted | JS commit | JS CPU/op | UI CPU/op |
+| --- | --- | --- | --- | --- | --- |
+| Android mount N=20 | 32.59 → 32.24 ms (−1 %) | 24.83 → 24.78 ms (0 %) | 2.20 → 2.63 ms (**+20 %**) | 5.04 → 6.03 ms (**+20 %**) | 14.43 → 14.98 ms (+4 %) |
+| Android mount N=50 | 43.80 → 42.83 ms (−2 %) | 32.07 → 31.47 ms (−2 %) | 4.14 → 5.29 ms (**+28 %**) | 9.00 → 10.89 ms (**+21 %**) | 27.39 → 27.09 ms (−1 %) |
+| Android update N=50 | 30.22 → 30.92 ms (+2 %) | 15.85 → 15.77 ms (0 %) | 2.45 → 2.95 ms (**+20 %**) | 2.70 → 3.17 ms (**+18 %**) | 4.73 → 5.04 ms (+7 %) |
+| iOS update N=50 | 16.06 → 16.06 ms (0 %) | 2.39 → 3.16 ms (**+32 %**) | 2.14 → 2.86 ms (**+34 %**) | 2.35 → 3.04 ms (**+29 %**) | 4.25 → 4.69 ms (+10 %) |
 
-iOS `update.form N=50` (`mount.form` cannot run there — Follow-ups), medians of three runs each:
+iOS is three runs a side (Android, two); its first `main`-row run is the outlier (2.84 ms
+mounted) and the other two agree within 1 %. `memory.form N=200` is 163.7 → 169.4 KiB/inst on
+iOS (+3.5 %, and iOS repeats to 0.6 %) and 219 → 224 KiB on Android, where the same APK measured
+twice spread by 12 % — so Android has no memory signal to quote, iOS has a small one. The node is
+the cost, not the JS around it: dropping the per-row `alignItems` lookup returns only 0.07 ms.
 
-| Metric | `main`'s row | wrapper | Δ |
-| --- | --- | --- | --- |
-| mounted | 2.38 ms (2.37, 2.39) | 3.19 ms (3.15, 3.16, 3.25) | **+34 %** |
-| JS commit | 2.13 ms (2.12, 2.14) | 2.90 ms (2.86, 2.86, 2.98) | **+36 %** |
-| JS CPU/op | 2.33 ms | 3.05 ms | **+31 %** |
-| UI CPU/op | 4.23 ms | 4.69 ms | +11 % |
-| memory N=200 bytes/inst | 163.6 KiB | 169.4 KiB | +3.6 % |
-
-It is the node, not the JS around it: deleting the per-row `alignItems` lookup only takes iOS
-back to 3.09 ms. Over the 5 % bar on iOS and invisible on Android; the memory is honest and
-small, ≈115 B a row on both platforms. Your call — a native-side fix (the row cell takes the
-content directly) is the only way to buy it back on iOS.
+So: over the 5 % bar on the JS thread (≈+20 % Android, ≈+32 % iOS), invisible in Android's
+wall-clock `presented`/`mounted`, visible in iOS's because its update op is 6× shorter and the
+extra commit lands on the measured path. `mount.form` cannot be measured on iOS at all (below),
+which is the gap in this answer. Only a native-side fix — the row cell taking the content
+directly — buys the JS time back.
 
 ### Follow-ups
 
 - `mount.form:nitro-ui` crashes the bench app on iOS on `main`'s own code: 8/8 launches abort in
-  `-[UICollectionView reconfigureItemsAtIndexPaths:]` under `HybridNitroUiForm.readoptRowlessCells()`,
-  at N=20 and N=50, with and without the wrapper — so Form has no iOS mount numbers, before or
-  after.
+  `-[UICollectionView reconfigureItemsAtIndexPaths:]` under `HybridNitroUiForm.readoptRowlessCells()`
+  at N=20 and N=50, with and without the wrapper — Form has no iOS mount numbers, before or after.
+- Android's `:app:createBundleReleaseJsAndAssets` does not see library sources: with only
+  `../../src/components/Form/Form.tsx` changed, Gradle reported the task `UP-TO-DATE`, rebuilt
+  nothing in 4 s, and the APK kept the previous JS bundle — so a library-only bench run on
+  Android silently re-measures the old code. Every Android bench number taken across a
+  library-only change is suspect; forcing it needs the generated bundle moved aside.
 - `bench/src/implementations/shared.ts:444` requires `../assets/circle.png`, which is
-  `bench/src/assets/`; the fixtures are in `bench/assets/`, so the bench app cannot bundle on
-  either platform as committed. Pointing the requires at the real folder fixes iOS, but the
-  `.png`/`.xml` pair of one name merges into one Android drawable (`src_assets_circle`,
-  "Duplicate resources"), so it needs a real fix, not a path edit. This round's runs used copies
-  under `bench/src/assets/` (with the two `.xml` requires aimed at the PNGs), removed afterwards.
+  `bench/src/assets/`; the fixtures live in `bench/assets/`, so the bench app cannot bundle on
+  either platform as committed. Pointing the requires at the real folder fixes iOS, but one
+  fixture name in two formats merges into one Android drawable (`src_assets_circle`, "Duplicate
+  resources"), so it needs a real fix, not a path edit. This round's runs used PNG copies under
+  `bench/src/assets/`, with the two `.xml` requires aimed at those PNGs, removed afterwards.
 - `real-input:android`'s `hosted-picker` check is positional: menu row "Gamma" at y=2241 against
   an anchor top of y=2242 on a 2424-px screen — the anchor had been scrolled to the bottom edge
-  and the popup had nowhere to go. The same check passes on G31's and G29's logs with the anchor
-  mid-screen, and `HostScreen.tsx` contains no Form.
+  and the popup had nowhere to go. The re-run passed with the anchor mid-screen, as G31's and
+  G29's logs did; `HostScreen.tsx` has no Form in it either way.
 - Android draws each Form section card ≈147 px (56 dp) too low and one row tall, byte-identically
   with `main`'s `Form.stories.tsx` and `Form.tsx` served against the same binary, while the
   harness's geometry cases stay green: the drawing layer disagrees with what the component
   reports. Suspects: `eb867e45`, `63c517f4`, `06ee2982`, `ba2fa41e`, `43136665`.
+- The Popover section's closing paragraph ("Your content is laid out in your own tree at up to
+  `maxWidth`…") sits at the end of the README's **Form** section, on `main` as here
+  (`README.md:1268`).
