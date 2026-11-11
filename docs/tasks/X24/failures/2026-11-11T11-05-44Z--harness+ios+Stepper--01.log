@@ -1,0 +1,89 @@
+# Failure excerpt — harness:ios:Stepper
+
+- Ran: 2026-11-11T11:05:44.512Z on code tree `28d36d1a879d` at HEAD `6754384` (branch `task/X24-fix2`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Stepper`
+- Result: fail, exit 1, 25704 ms
+- Load: start 6.97, end 6.55, median 6.97, max 7.02
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X24-wd8i4`
+- Full log: `task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log` (<store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Stepper.harness.tsx`
+- `● Stepper › sends nothing while disabled, and follows the flag back`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X24-wd8i4 (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   X24-wd8i4                X24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.55 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:Stepper
+gate: node ../scripts/harness.mjs --harnessRunner ios Stepper (cwd example)
+gate: code tree 28d36d1a879d at HEAD 6754384f
+gate: git tree a261b8526a02 with a DIRTY worktree (not reusable)
+gate: log task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log
+gate:       <store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Stepper
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 28d36d1a879d, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.97/8.25 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Stepper.harness.tsx
+  ● Stepper › sends nothing while disabled, and follows the flag back
+
+    and the live stepper beside it is not disabled (reported displayed=6;up=1;down=1;enabled=none;slots=none;probes=0;merged=unavailable;a11y=none): expected 'none' to be '1' // Object.is equality
+
+      [0m [90m 946 |[39m         reportOf([32m'off-barrier'[39m)[33m.[39menabled[33m,[39m
+       [90m 947 |[39m         [32m`and the live stepper beside it is not disabled (reported ${rawReport('off-barrier')})`[39m
+      [31m[1m>[22m[39m[90m 948 |[39m       )[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m             [31m[1m^[22m[39m
+       [90m 949 |[39m     }
+       [90m 950 |[39m
+       [90m 951 |[39m     [90m// A reader is told the same thing the screen shows.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        23.741 s
+Ran all test suites matching Stepper.
+gate: harness:ios:Stepper FAIL in 25.7 s
+gate: recorded in .gates/task/X24-fix2.jsonl
+
+
+gate: appended the device context to task/X24-fix2/harness+ios+Stepper-2026-11-11T11-05-43.805Z.log (4 probe(s))
+
+```
