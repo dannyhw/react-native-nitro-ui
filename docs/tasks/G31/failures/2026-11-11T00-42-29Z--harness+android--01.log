@@ -1,0 +1,118 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-11T00:42:29.136Z on code tree `b7e72d66cbb9` at HEAD `bffb1c1` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1010 ms
+- Load: start 7.82, end 7.27, median 7.54, max 7.82
+- Device: android / device `emulator-5570` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/harness+android-2026-11-11T00-42-28.524Z.log` (<store>/task/G31-checkbox-ios-checkmark/harness+android-2026-11-11T00-42-28.524Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/harness+android-2026-11-11T00-42-28.524Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.27 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 72 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree b7e72d66cbb9 at HEAD bffb1c11
+gate: git tree bc19feedfbdd
+gate: log task/G31-checkbox-ios-checkmark/harness+android-2026-11-11T00-42-28.524Z.log
+gate:       <store>/task/G31-checkbox-ios-checkmark/harness+android-2026-11-11T00-42-28.524Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 56a02e6c at 1ef3bb1eba6bfb4afe08c2867bc53dd154b31f5f, now b7e72d66 at bffb1c11fc4ce60745a6fbf729406639a204768a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 56a02e6c at 1ef3bb1eba6bfb4afe08c2867bc53dd154b31f5f, now b7e72d66 at bffb1c11fc4ce60745a6fbf729406639a204768a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 56a02e6c at 1ef3bb1eba6bfb4afe08c2867bc53dd154b31f5f, now b7e72d66 at bffb1c11fc4ce60745a6fbf729406639a204768a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 56a02e6c at 1ef3bb1eba6bfb4afe08c2867bc53dd154b31f5f, now b7e72d66 at bffb1c11fc4ce60745a6fbf729406639a204768a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:android FAIL in 1.0 s
+gate: recorded in .gates/task/G31-checkbox-ios-checkmark.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G31-checkbox-ios-checkmark/harness+android-2026-11-11T00-42-28.524Z.log (5 probe(s))
+
+```

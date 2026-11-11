@@ -20,6 +20,7 @@ const meta = {
     checked: false,
     defaultChecked: false,
     indeterminate: false,
+    iosStyle: 'circle',
     disabled: false,
     tintColor: undefined,
     onCheckedChange: fn(),
@@ -42,7 +43,13 @@ const meta = {
     indeterminate: {
       control: { type: 'boolean' },
       description:
-        'Android only: Material 3 `TriStateCheckbox`, which draws a dash. A display, not a value - iOS has no checkbox and reads it as off.',
+        "The third state: Material 3 `TriStateCheckbox`'s dash on Android, `minus.circle.fill` on iOS. A display, not a value - and `checked` outranks it on both.",
+    },
+    iosStyle: {
+      control: { type: 'select' },
+      options: ['circle', 'square', 'switch'],
+      description:
+        'iOS only: which picture to draw - the checklist circle (default), the square, or the switch this component shipped with. Android ignores it: Material 3 has a checkbox.',
     },
     disabled: { control: { type: 'boolean' } },
     tintColor: {
@@ -101,9 +108,10 @@ export const Playground: Story = {
  * state in both of its values - a dash while the value is off, a check mark while it is
  * on, which is the row whose press reports `false`.
  *
- * The third column is Android's: on iOS the box is a switch, `indeterminate` draws
- * nothing, and the two rows read as off and on. That is what the note says and what the
- * picture shows.
+ * Both platforms draw the third state now (DECISIONS D47 item 3): Material 3's dash on
+ * Android and `minus.circle.fill` on iOS, so the middle column is a pair of pictures on
+ * either platform and not one platform's column. The iOS picture is the checkmark glyph;
+ * `iosStyle='switch'` is the old look and has its own story.
  *
  * This is the README screenshot.
  */
@@ -118,7 +126,7 @@ export const States: Story = {
           <Checkbox accessibilityLabel="Bare box" />
         </View>
       </Column>
-      <Column label="Third state (Android)">
+      <Column label="Third state">
         <View style={styles.stack}>
           <Checkbox label="Select all" indeterminate />
           {/*
@@ -134,6 +142,70 @@ export const States: Story = {
           <Checkbox label="On, disabled" disabled checked />
         </View>
       </Column>
+    </Showcase>
+  ),
+};
+
+/**
+ * `iosStyle`: the three pictures iOS can draw (DECISIONS D47).
+ *
+ * The circle is the default - Apple's own checklist symbol, the one Reminders and Notes
+ * draw - because a Checkbox that looked exactly like a Switch read as the wrong
+ * component. The square is the same glyph squared. `'switch'` is what this shipped with
+ * under DECISIONS D38 item 1, kept because it is the look some callers chose: the
+ * system's own control, at its own size, with its own thumb.
+ *
+ * It is one prop with three pictures and not three controls: the same `Toggle`, the same
+ * binding, the same tap target, the same accessibility element, the same value. Android
+ * ignores it entirely - Material 3 has a checkbox - and draws its box for all three rows.
+ */
+export const IosStyles: Story = {
+  render: () => (
+    <Showcase>
+      <Column label="circle (default)">
+        <View style={styles.stack}>
+          <Checkbox label="Email me offers" />
+          <Checkbox label="Order confirmation" defaultChecked />
+          <Checkbox label="Some items selected" indeterminate />
+        </View>
+      </Column>
+      <Column label="square">
+        <View style={styles.stack}>
+          <Checkbox label="Email me offers" iosStyle="square" />
+          <Checkbox
+            label="Order confirmation"
+            defaultChecked
+            iosStyle="square"
+          />
+          <Checkbox
+            label="Some items selected"
+            indeterminate
+            iosStyle="square"
+          />
+        </View>
+      </Column>
+      <Column label="switch">
+        <View style={styles.stack}>
+          <Checkbox label="Email me offers" iosStyle="switch" />
+          <Checkbox
+            label="Order confirmation"
+            defaultChecked
+            iosStyle="switch"
+          />
+          <Checkbox
+            label="Some items selected"
+            indeterminate
+            iosStyle="switch"
+          />
+        </View>
+      </Column>
+      {Platform.OS === 'ios' ? (
+        <Note>
+          Three pictures, one control: the glyph styles still toggle from a
+          press anywhere on the row, still report one change per press, and are
+          still one accessibility element with the label as its name.
+        </Note>
+      ) : null}
     </Showcase>
   ),
 };
@@ -219,8 +291,10 @@ export const Tint: Story = {
       </Column>
       {Platform.OS === 'ios' ? (
         <Note>
-          On iOS the accent is `.tint()`, which colours the switch knob; on
-          Android it replaces Material 3&apos;s checked box and check.
+          On iOS the accent colours the filled glyph - the check mark or the
+          dash - and the switch knob in `iosStyle='switch'`; on Android it
+          replaces Material 3&apos;s checked box and check. The empty box stays
+          the system&apos;s secondary label colour, whichever accent is set.
         </Note>
       ) : null}
     </Showcase>

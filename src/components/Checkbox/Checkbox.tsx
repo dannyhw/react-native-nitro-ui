@@ -8,6 +8,23 @@ import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiCheckbox } from './NativeNitroUiCheckbox';
 
 /**
+ * Which picture iOS draws for a Checkbox (DECISIONS D47).
+ *
+ * - `circle` (the default): Apple's checklist glyph - `checkmark.circle.fill` over
+ *   `circle`, the one Reminders and Notes use. iOS has no checkbox control
+ *   (`CheckboxToggleStyle` is unavailable there), so this is the platform's own
+ *   `Toggle` with a style that draws Apple's own symbols.
+ * - `square`: the same glyph squared (`checkmark.square.fill` over `square`).
+ * - `switch`: the look this component shipped with - SwiftUI's `.switch` Toggle,
+ *   which is what a Checkbox was under DECISIONS D38 item 1. Unchanged.
+ *
+ * Android ignores all three: Material 3 has a checkbox, so there is nothing to choose.
+ */
+export type CheckboxIosStyle = 'circle' | 'square' | 'switch';
+
+const IOS_STYLES: readonly CheckboxIosStyle[] = ['circle', 'square', 'switch'];
+
+/**
  * Props of {@link Checkbox}.
  *
  * There are no children: the label is the `label` string, as a Button's is its
@@ -31,10 +48,14 @@ export interface CheckboxProps extends ViewProps {
    */
   onCheckedChange?: ((checked: boolean) => void) | undefined;
   /**
-   * Android only: show Material 3's third state (a dash in the box). It is a
-   * display, not a value - a tap still asks for `checked: true`, and the event
-   * never carries `'indeterminate'`. iOS has no checkbox at all, so its switch
-   * reads this as off (`docs/components/checkbox.md`).
+   * Show the third state (a dash in the box): Material 3's `TriStateCheckbox` on
+   * Android, `minus.circle.fill` / `minus.square.fill` on iOS. It is a display, not a
+   * value - a tap still asks for `checked: true`, and the event never carries
+   * `'indeterminate'` (`docs/components/checkbox.md`).
+   *
+   * `checked` outranks it on both platforms: a box that is `indeterminate` *and*
+   * checked draws the check mark. The one iOS style that reads it as off is
+   * `iosStyle='switch'`, whose control has two positions (`iosStyle`).
    */
   indeterminate?: boolean | undefined;
   /**
@@ -43,6 +64,16 @@ export interface CheckboxProps extends ViewProps {
    * {@link accessibilityLabel} is unset - a bare Android checkbox has no name.
    */
   label?: string | undefined;
+  /**
+   * iOS only: which picture the checkbox draws - a circle (the default), a square, or
+   * the switch this component shipped with. See {@link CheckboxIosStyle}.
+   *
+   * Android ignores it (Material 3 has a checkbox), and iOS still has no checkbox
+   * *control*: the two glyph styles are SwiftUI's `Toggle` drawing Apple's own SF
+   * Symbols, which is why the tap, the value and the accessibility element are the
+   * same in all three.
+   */
+  iosStyle?: CheckboxIosStyle | undefined;
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
@@ -68,6 +99,7 @@ export interface CheckboxProps extends ViewProps {
         readonly label: string | null;
         readonly disabled: boolean;
         readonly indeterminate: boolean | null;
+        readonly iosStyle: string;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
         nuiTestToggle(): void;
@@ -107,22 +139,63 @@ function escapeField(value: string): string {
 
 /**
  * The size configuration of one Checkbox, as the sizing engine sees it:
- * `indeterminate|label`.
+ * `indeterminate|label` on Android and `0|iosStyle|label` on iOS.
  *
- * - `indeterminate` is `1` only where it changes what is drawn: on Android, whose
- *   `TriStateCheckbox` paints a third glyph. iOS draws a switch and reads it as
- *   off, so its key never carries it and turning it on there is not a cold
+ * The rule is one sentence - a field goes in the key where it changes what is drawn,
+ * and stays out where it does not - and each platform reads it about its own control.
+ * What a field has to earn is a *box*: a field that only changes what is painted inside
+ * a box that does not move buys a cold configuration, a correction, and a first frame at
+ * the fallback, so it belongs out of the key.
+ *
+ * - `indeterminate` is Android's field: there it answers `TriStateCheckbox`, Material's
+ *   own third control. On iOS it is written `0` for every style, the way `checked` is,
+ *   because `minus.circle.fill`, `checkmark.circle.fill` and `circle` are one SF Symbol
+ *   box - `Checkbox.harness.tsx` measures the dash and an unchecked row of the *same*
+ *   label at one size, and measures that flipping `indeterminate` on a row already on
+ *   screen costs no correction at all. D47 item 3 gave iOS the dash, and this is the
+ *   field the dash does not earn: keyed, an app that grew a dash on a row it had already
+ *   drawn would watch that row re-lay out at the fallback for a frame to repaint the
+ *   same box;
+ * - `iosStyle` is iOS's own field: three styles, three boxes. Android ignores the
+ *   prop, so its key does not carry it - a prop that changes nothing that is drawn
+ *   must not cost a cold configuration there, and that is the same reason the field
+ *   is missing rather than constant. `Chip.tsx` keeps its iOS-only `systemImage` in
+ *   both keys to stop the platforms drifting apart; here the drift is settled by the
+ *   sizing test that measures each style's box, and Android's rows stay one per
  *   configuration;
  * - `label` is the content, escaped because it is free-form;
- * - `checked` is in neither key: neither platform's box changes size between
- *   checked and unchecked, which the harness measures (a checkbox grows only with
- *   its label), and `disabled` and `tintColor` repaint without resizing. The
+ * - `checked` is in neither key: no box on either platform changes size between
+ *   checked and unchecked, which the harness measures (a checkbox grows only with its
+ *   label, and `checkmark.circle.fill`, `minus.circle.fill` and `circle` are one
+ *   symbol box), and `disabled` and `tintColor` repaint without resizing. The
  *   environment (text size, density) is folded in by native through the epoch.
  */
-function sizingVariantFor(label: string, indeterminate: boolean): string {
-  const indeterminateField =
-    Platform.OS === 'android' && indeterminate ? '1' : '0';
-  return [indeterminateField, escapeField(label)].join(FIELD_SEPARATOR);
+function sizingVariantFor(
+  label: string,
+  indeterminate: boolean,
+  iosStyle: CheckboxIosStyle
+): string {
+  const android = Platform.OS === 'android';
+  // `0` on iOS whatever `indeterminate` says - see the rule above. It stays a field of
+  // the key rather than disappearing so one string shape describes both platforms and
+  // Android's half of the key keeps its position.
+  const indeterminateField = android && indeterminate ? '1' : '0';
+  const fields = [indeterminateField];
+  if (!android) fields.push(iosStyle);
+  fields.push(escapeField(label));
+  return fields.join(FIELD_SEPARATOR);
+}
+
+/**
+ * Resolve a caller's iOS style, defaulting anything unrecognised to `'circle'` -
+ * Chip's `resolveVariant` rule, and the reason the native prop is a plain `string`.
+ */
+function resolveIosStyle(
+  iosStyle: CheckboxIosStyle | undefined
+): CheckboxIosStyle {
+  return iosStyle != null && IOS_STYLES.includes(iosStyle)
+    ? iosStyle
+    : 'circle';
 }
 
 /**
@@ -144,10 +217,12 @@ function nameOrNull(value: string | undefined): string | null {
 
 /**
  * A checkbox: Material 3 `Checkbox` - `TriStateCheckbox` when `indeterminate` - on
- * Android, and SwiftUI `Toggle(isOn:)` with the switch style on iOS, which has no
- * checkbox (`CheckboxToggleStyle` is unavailable there). That is what Expo's
- * universal `Checkbox` renders on iOS too, and it is why `indeterminate` is
- * documented as Android-only rather than faked with a drawn dash.
+ * Android, and on iOS a SwiftUI `Toggle(isOn:)` wearing a style that draws Apple's
+ * checklist glyph (`checkmark.circle.fill` over `circle`), because iOS has no checkbox
+ * control (`CheckboxToggleStyle` is unavailable there) and a Checkbox that looked like
+ * a Switch read as the wrong component (DECISIONS D47). `iosStyle='switch'` is the
+ * previous look - the `.switch` Toggle Expo's universal `Checkbox` renders - and it is
+ * unchanged.
  *
  * ```tsx
  * const [terms, setTerms] = useState(false)
@@ -164,6 +239,7 @@ export function Checkbox({
   onCheckedChange,
   indeterminate = false,
   label,
+  iosStyle = 'circle',
   disabled = false,
   tintColor,
   testID,
@@ -188,6 +264,9 @@ export function Checkbox({
   // Both names, before anything reads them: see `nameOrNull`.
   const labelText = nameOrNull(label);
   const nameText = nameOrNull(accessibilityLabel);
+  // Resolved once, before the key and before the prop, so the configuration the key
+  // names is the one native draws (`resolveIosStyle`).
+  const resolvedIosStyle = resolveIosStyle(iosStyle);
 
   return (
     <NativeNitroUiCheckbox
@@ -197,13 +276,18 @@ export function Checkbox({
       indeterminate={indeterminate ? true : null}
       mostRecentEventCount={controlled.mostRecentEventCount}
       label={labelText}
+      iosStyle={resolvedIosStyle}
       disabled={disabled}
       tintColor={tint}
       testID={testID ?? null}
       accessibilityLabel={nameText}
       nuiPerfId={nuiPerfId}
       onCheckedChange={controlled.onNativeChange}
-      nuiSizingKey={sizingVariantFor(labelText ?? '', indeterminate)}
+      nuiSizingKey={sizingVariantFor(
+        labelText ?? '',
+        indeterminate,
+        resolvedIosStyle
+      )}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
       style={[selfSizingBaseStyle, style]}
