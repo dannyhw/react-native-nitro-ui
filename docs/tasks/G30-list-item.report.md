@@ -147,3 +147,5 @@ Each line is `test -> what was broken -> the line that went red`.
 - iOS real input: XCUITest taps an element's frame without scrolling a plain view, so every press fixture in `example/ios/NitroUiExampleUITests/RealInputTests.swift` now has to call `scrollIntoView` first — the older cases only get away without it because their fixtures happen to sit in the band.
 - harness: `ListItem × no-leak-on-drop` went red once at load1 21-25 and green at load1 ~6 on the same tree; the churn's three-second quiescence window is what absorbs it, so a recurrence at ordinary load is a real retention, not a scheduling artefact.
 - a11y: a `Form.Row`'s UIKit cell accessory publishes its own "Forward" element, so a whole-screen count of that name includes G24's row, not just this leaf's disclosure.
+
+- device settings: the screenshot round left an `adb reverse tcp:8080` on `emulator-5574`, now removed; `debug_http_host=localhost:8295` is left as `scripts/real-input/android.mjs` leaves it after any run on that device, because its teardown removes only its own reverse and the next run overwrites the preference.
