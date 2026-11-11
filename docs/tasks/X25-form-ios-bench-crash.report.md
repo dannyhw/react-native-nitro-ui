@@ -70,3 +70,22 @@ BENCH_PLACEHOLDER
   source changes (X24's finding, unfixed here); this round forced the bundle instead.
 - form/iOS: the provider's give-up branch still draws a blank cell for an item the models have
   moved under, one settle at a time; the fix keeps it from aborting, not from being blank.
+
+## Appendix — the crash evidence
+
+27 `nitrouibench-*.ips` reports from X24's bench runs are all the same abort, and all of them
+are still on the machine's DiagnosticReports folder. From the newest:
+
+- `exception`: `EXC_CRASH / SIGABRT`, `termination`: `Abort trap: 6`, raised by the app itself.
+- `lastExceptionBacktrace`, top down: `__exceptionPreprocess` → `objc_exception_throw` →
+  Foundation `_userInfoForFileAndLine` (the frame that attaches the message to an
+  `NSInternalInconsistencyException`) → `-[UICollectionView _reconfigureCell:forItemAtIndexPath:]`
+  → `-[UICollectionView _reconfigureItemAtIndexPath:]` →
+  `__49-[UICollectionView reconfigureItemsAtIndexPaths:]_block_invoke` →
+  `-[UICollectionView reconfigureItemsAtIndexPaths:]` →
+  `[_UIDiffableDataSourceViewUpdater _performViewUpdates:]` → the diffable apply — and below
+  that, the frames X24 recorded, `closure #1 in HybridNitroUiForm.readoptRowlessCells()`.
+
+`_reconfigureCell:forItemAtIndexPath:` is the only frame in that path that can raise, and it
+raises for one reason: the data source answered a reconfiguration with a cell other than the one
+on screen.
