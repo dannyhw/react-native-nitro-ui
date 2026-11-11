@@ -127,4 +127,4 @@
 | X25 | iOS Form crashes the bench app in readoptRowlessCells (found by X24) | Apex | Opus | fix written, device half waiting (cause: a deferred reconfigure apply after a Section or Form unmount names cells UIKit no longer has; no pair granted in 4.5 h, so the red proof, gates and bench are owed) |
 | X26 | Device leases first come, first served (X24 and X25 starved for hours) | Apex | Opus | merged (PR #65; waiters hold tickets, the oldest live ticket a pair satisfies gets it; lease scripts are check-only tooling; merged before its device gates ran - they run with X24's merge tree) |
 | X27 | Examples: caption above the control in every story, all affected README screenshots retaken (owner) | Apex | Opus | running |
-| X28 | Device gates refuse to run without a live lease (G30 drove a stray emulator without one) | Apex | Opus | running |
+| X28 | Device gates refuse to run without a live lease (G30 drove a stray emulator without one) | Apex | Opus | done, merging with X24 and G30 (device gates refuse without a matching live lease; runner fallbacks removed; 12 reds) |
