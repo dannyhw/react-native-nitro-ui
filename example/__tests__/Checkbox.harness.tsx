@@ -113,11 +113,11 @@ function corrections(before: NitroUiSizingStats, after: NitroUiSizingStats) {
  * The counters are process-wide: they add up every configuration the engine corrects,
  * including the ones a case that already finished is still landing. Two cases here read
  * them as *this* render's number, and a straggler from the case before arrives as an
- * extra cold configuration - measured on Android, where the four cold boxes of the third
- * state case pushed the styles case's count to 4 against a bound of "fewer corrections
- * than styles". Two consecutive equal reads, because "settled" only means something
- * against a number that is not on its way somewhere else: the same rule
- * `Conformance.harness.tsx`'s `settledStats` applies to the ledger.
+ * extra correction - the engine counts one per *instance* laid out at a wrong size, so a
+ * case that mounts four boxes owes four, and the styles case below used to read the third
+ * state case's four late ones as its own. Two consecutive equal reads, because "settled"
+ * only means something against a number that is not on its way somewhere else: the same
+ * rule `Conformance.harness.tsx`'s `settledStats` applies to the ledger.
  *
  * Throws rather than returning a contested read - a window that never settles is not a
  * baseline, and a bound checked against one is green for the wrong reason.
@@ -757,9 +757,9 @@ describe('Checkbox · G15', () => {
     }
     // Four cold configurations, counted with a counter the whole app shares - so the
     // case's own number is only this case's once the counter has stopped moving. Read it
-    // settled, which is also what stops two of these corrections from landing inside the
-    // next case's window (the Android failure this replaced read exactly that: the styles
-    // case below inherited them and its "fewer corrections than styles" bound went red).
+    // settled, which is also what stops these corrections from landing inside the next
+    // case's window (the Android failure this replaced read exactly that: four late
+    // corrections of this case, arriving as the styles case's own count).
     const total = corrections(
       before,
       await settledCorrections('the third state')
@@ -939,13 +939,12 @@ describe('Checkbox · G15', () => {
     //
     // Android is the other half of this case and the half that must not move: the prop is
     // stored and ignored (`HybridNitroUiCheckbox.kt`), so it is out of Android's key and
-    // three style names of one label are *one* configuration. That is what the correction
-    // count is read for there - the day the key starts carrying a field Android ignores,
-    // it costs three cold mounts and this line goes red.
+    // three style names of one label are *one* configuration - which is what the three
+    // boxes have to say, one box whichever name was sent. The correction count is not
+    // where that claim lives; the Android branch below says why.
     // Take the baseline once the counter has stopped moving: it is a process-wide one,
-    // and the bound below is only about what *this* render corrects. Whatever an earlier
-    // case still has in flight lands in the settle instead of inside this window, where
-    // it would read as a second Android configuration.
+    // and the iOS bound below is only about what *this* render corrects. Whatever an
+    // earlier case still has in flight lands in the settle instead of inside this window.
     await settledCorrections('the iOS styles');
     poison(STYLES.map((style) => sizingKey(false, 'Measured', style)));
     const before = stats();
@@ -1024,9 +1023,17 @@ describe('Checkbox · G15', () => {
           Math.abs(circle.height - toggled.height) > 0.6
       ).toBe(true);
     } else {
-      // One configuration, not three (fewer corrections than styles), and one box for all
-      // three names: Material 3's checkbox, whichever picture iOS was asked for.
-      expect(made).toBeLessThan(STYLES.length);
+      // One box for all three names: Material 3's checkbox, whichever picture iOS was
+      // asked for. No correction count is read here, for two measured reasons. It counts
+      // *instances* laid out at a wrong size - `applyReports` corrects every instance
+      // sharing a key, one increment each - so four mounted boxes cost four corrections
+      // whether the key carries the style or not (4 on Android from one configuration,
+      // and the same 4 on iOS from four). And the count is not a probe for the key
+      // either: with `iosStyle` pushed into Android's key, the case below that rerenders
+      // one style into another still costs 0 there, because the view is already on screen
+      // at the size the new key would answer with and a confirmation is not a correction.
+      // A key is pinned by comparing strings, which is
+      // `src/__tests__/checkbox.test.tsx`; what this case owes Android is the picture.
       expect(sameSize(boxOf('square'), boxOf('circle'))).toBe(true);
       expect(sameSize(boxOf('switch'), boxOf('circle'))).toBe(true);
     }
