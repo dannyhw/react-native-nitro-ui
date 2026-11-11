@@ -282,7 +282,11 @@ function StoryForm() {
           >
             <Text>Push notifications</Text>
           </Form.Row>
-          <Form.Row>
+          <Form.Row
+            hybridRef={(view) => {
+              rows.storySecond = view;
+            }}
+          >
             <Text>Play a sound</Text>
           </Form.Row>
         </Form.Section>
@@ -542,6 +546,118 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
         `question 2: ${over.length} field(s) out of bounds ` +
           `(${CONTAINER_BOUND_PT} pt container, ${ROW_BOX_BOUND_PT} pt row box).\n` +
           `field       prototype  reference    delta\n${table}`
+      );
+    }
+  });
+
+  /**
+   * Every row sits inside the card its section draws behind it (task X24 round 3).
+   *
+   * `form-android.png` shipped with the rows and their cards disagreeing: one card, drawn
+   * across the boundary between two rows, so the first row had no container at all and the
+   * second was half in and half out. Nothing else in this file sees it. The case above reads
+   * `drawnAccessory` against `frame` — one row, and the accessory's own box — and the
+   * `layerH`/`boxH` pair reads the layer's box, not what it drew inside it. A section can
+   * report two shapes, a layer as tall as the section, an accessory in its row, and still
+   * paint both shapes at one row's y.
+   *
+   * So read the pair the drawing is actually built from: the section's published `rects`
+   * (`top-height` dp, section-relative — the same space the row's `frame` is in, and rows are
+   * direct children of the section, which is what `shapes=rows` proves), against every row's
+   * own box, in React's order. A card is allowed to fall short of its row by the segmented
+   * gap the layer trims off (`top = row.top + gap/2`, `height = row.height - gap`) and by
+   * nothing else; half a row is what this case is for.
+   *
+   * Android only: iOS draws its rows through UIKit cells, which have no painted container to
+   * disagree with.
+   */
+  it('lays every row of a section inside its own card (X24)', async () => {
+    if (IOS) return;
+    cleanup();
+    render(<StoryForm />);
+
+    /** Why the cards and the rows disagree, as one line each; empty means they agree. */
+    const disagree = (): string[] => {
+      const report = parse(sections.story?.nuiTestSectionReport() ?? '');
+      const rowsInStory = [rows.storyFirst, rows.storySecond].filter(
+        (row) => row != null
+      );
+      if (rowsInStory.length < 2)
+        return ['the story section has no two rows yet'];
+      const gap = num(report, 'gap');
+      const cards = (report.rects ?? '')
+        .split(',')
+        .filter((entry) => entry.includes('-'))
+        .map((entry) => entry.split('-').map(Number));
+      if (cards.length !== rowsInStory.length) {
+        return [
+          `the section publishes ${cards.length} card(s) for ${rowsInStory.length} row(s): ${String(report.rects)}`,
+        ];
+      }
+      const out: string[] = [];
+      const boxes = rowsInStory.map((row) =>
+        box(parse(row.nuiTestRowReport()).frame)
+      );
+      if (boxes.some((b) => b[3] <= 0)) {
+        return ['a row of the story section has no height yet'];
+      }
+      cards.forEach((card, index) => {
+        const rowTop = boxes[index]?.[1] ?? 0;
+        const rowBottom = rowTop + (boxes[index]?.[3] ?? 0);
+        const [top, height] = card;
+        const bottom = (top ?? 0) + (height ?? 0);
+        const slack = gap / 2 + 0.5;
+        if ((top ?? 0) > rowTop + slack) {
+          out.push(
+            `row ${index}: its card starts at ${String(top)} while the row starts at ${rowTop.toFixed(1)}`
+          );
+        }
+        if (bottom < rowBottom - slack) {
+          out.push(
+            `row ${index}: its card ends at ${bottom.toFixed(1)} while the row ends at ${rowBottom.toFixed(1)}`
+          );
+        }
+      });
+      return out;
+    };
+    // A report that cannot be read at all ("not yet") is one more reason to disagree, never
+    // an exception that escapes the poll.
+    const issues = (): string[] => {
+      try {
+        return disagree();
+      } catch (error) {
+        return [String(error)];
+      }
+    };
+
+    const settled = await readSection(
+      'story',
+      (r) => num(r, 'shapes') > 0 && issues().length === 0
+    ).catch(() => {
+      throw new Error(
+        `X24: ${issues().join('; ')} - a row is drawn outside the container its own section ` +
+          `paints behind it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )}; rows ${String(rows.storyFirst?.nuiTestRowReport())} / ${String(
+            rows.storySecond?.nuiTestRowReport()
+          )})`
+      );
+    });
+    console.log(
+      `FORM CARDS story section ${JSON.stringify(settled)} rows ${String(
+        rows.storyFirst?.nuiTestRowReport()
+      )} / ${String(rows.storySecond?.nuiTestRowReport())}`
+    );
+    // And it has to stay agreed, for the same reason the accessory case waits: the bands come
+    // back from JavaScript and the rows move after their first layout.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const late = issues();
+    if (late.length > 0) {
+      throw new Error(
+        `X24: ${late.join('; ')} - the cards followed the section's first layout and not the ` +
+          `one after it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )})`
       );
     }
   });
