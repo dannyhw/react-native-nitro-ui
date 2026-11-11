@@ -35,7 +35,7 @@ import { ListItem } from 'react-native-nitro-ui';
 | `systemImage`        | `string \| undefined`       | —        | Leading SF Symbol (iOS). Android ignores it.                  |
 | `androidIcon`        | `AndroidIconProp \| undefined` | —     | Leading glyph on Android: a `require()`'d file, `{ uri }`, or a drawable name. |
 | `accessory`          | `'none' \| 'disclosure'`    | `'none'` | The trailing chevron a row that goes somewhere carries.       |
-| `onPress`            | `() => void \| undefined`   | —        | Absent → not a button, no highlight, and a tap goes through the row. |
+| `onPress`            | `(() => void) \| undefined` | —        | Absent → not a button, no highlight, and a tap goes through the row. |
 | `disabled`           | `boolean`                   | `false`  | Drawn greyed and inert: no press, no highlight, no event.      |
 | `accessibilityLabel` | `string \| undefined`       | —        | The whole label. Without it the row reads title, subtitle and value. |
 | `testID`             | `string`                    | —        | Forwarded to the native view.                                 |

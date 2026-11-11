@@ -87,7 +87,9 @@ export default function ListItemScreen() {
           on Android: the row content of a list row, not the row itself.
         </Text>
 
-        <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
+        <Text style={[styles.section, { color: ink.ink }]}>
+          Taps and presses
+        </Text>
         <ListItem
           accessibilityLabel="Real-input item"
           onPress={onRealPress}

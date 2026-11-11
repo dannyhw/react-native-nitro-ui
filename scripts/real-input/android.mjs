@@ -5888,10 +5888,18 @@ const CHECKS = {
 
     // The same question with a gesture that stays in flight, so the screenshot cannot be
     // of a row whose finger had already gone.
-    const heldSwipe = t.rawHold(pressX, pressY, 2200);
+    // Caught up front: `rawHold` rejects on an adb failure, and a rejection left unhandled
+    // through the awaits below would end the whole run instead of failing this check.
+    let holdFailure = null;
+    const heldSwipe = t.rawHold(pressX, pressY, 2200).catch((error) => {
+      holdFailure = error;
+    });
     await t.settle(900);
     const heldStream = shoot(live);
     await heldSwipe;
+    if (holdFailure) {
+      t.log.abort(`the held press could not be made: ${String(holdFailure)}`);
+    }
     await t.settle(500);
     const afterRelease = shoot(live);
     if (!released) {
