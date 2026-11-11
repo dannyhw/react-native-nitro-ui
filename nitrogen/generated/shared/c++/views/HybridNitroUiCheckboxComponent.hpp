@@ -49,6 +49,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<std::variant<bool, nitro::NullType>> checked;
     nitro::ReactProp<std::variant<bool, nitro::NullType>> defaultChecked;
     nitro::ReactProp<std::variant<bool, nitro::NullType>> indeterminate;
+    nitro::ReactProp<std::string> iosStyle;
     nitro::ReactProp<double> mostRecentEventCount;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> label;
     nitro::ReactProp<bool> disabled;
@@ -66,6 +67,7 @@ namespace margelo::nitro::nitroui::views {
       return checked.hasSameValue(other.checked) &&
              defaultChecked.hasSameValue(other.defaultChecked) &&
              indeterminate.hasSameValue(other.indeterminate) &&
+             iosStyle.hasSameValue(other.iosStyle) &&
              mostRecentEventCount.hasSameValue(other.mostRecentEventCount) &&
              label.hasSameValue(other.label) &&
              disabled.hasSameValue(other.disabled) &&
@@ -84,6 +86,7 @@ namespace margelo::nitro::nitroui::views {
       return checked.isProvided() ||
              defaultChecked.isProvided() ||
              indeterminate.isProvided() ||
+             iosStyle.isProvided() ||
              mostRecentEventCount.isProvided() ||
              label.isProvided() ||
              disabled.isProvided() ||

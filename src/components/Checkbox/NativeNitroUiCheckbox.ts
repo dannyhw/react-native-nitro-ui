@@ -37,8 +37,10 @@ export interface NitroUiCheckboxHandle {
   readonly label: string | null;
   /** Whether interaction is disabled. */
   readonly disabled: boolean;
-  /** The three-state display React sent, or `null` (Android only in effect). */
+  /** The three-state display React sent, or `null`. */
   readonly indeterminate: boolean | null;
+  /** The iOS picture React sent: `'circle'`, `'square'` or `'switch'` (D47). */
+  readonly iosStyle: string;
   /** The control's accessibility label, or `null` when it falls back to `label`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
@@ -67,6 +69,7 @@ export interface NativeNitroUiCheckboxProps
   indeterminate: boolean | null;
   mostRecentEventCount: number;
   label: string | null;
+  iosStyle: string;
   disabled: boolean;
   tintColor: number | null;
   testID: string | null;

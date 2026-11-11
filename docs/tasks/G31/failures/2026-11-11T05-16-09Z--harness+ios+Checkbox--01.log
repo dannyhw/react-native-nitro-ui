@@ -1,0 +1,90 @@
+# Failure excerpt — harness:ios:Checkbox
+
+- Ran: 2026-11-11T05:16:09.371Z on code tree `609b5659c435` at HEAD `f1b606e` (branch `task/G31-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Checkbox`
+- Result: fail, exit 1, 18079 ms
+- Load: start 8.18, end 7.80, median 7.80, max 8.18
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G31-l0ifb`
+- Full log: `task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log` (<store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › costs nothing to flip a mounted row to the third state on iOS`
+- `expected 1 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-l0ifb (still live)
+  |   X24-djsle                X24          both              pair-b
+  |   G31-l0ifb                G31          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.50 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Checkbox
+gate: node ../scripts/harness.mjs --harnessRunner ios Checkbox (cwd example)
+gate: code tree 609b5659c435 at HEAD f1b606e4
+gate: git tree 9b33fc03b0c2 with a DIRTY worktree (not reusable)
+gate: log task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log
+gate:       <store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Checkbox
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 609b5659c435, 24 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.18/11.48 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › costs nothing to flip a mounted row to the third state on iOS
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 853 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'ios'[39m) {
+       [90m 854 |[39m       [90m// Zero: a row already on screen at its own size owes the engine nothing.[39m
+      [31m[1m>[22m[39m[90m 855 |[39m       expect(made)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 856 |[39m     } [36melse[39m {
+       [90m 857 |[39m       [90m// Android's field is the one that earns its place: the flip is[39m
+       [90m 858 |[39m       [90m// `TriStateCheckbox`, a configuration of its own, and the planted size under its key[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        16.297 s
+Ran all test suites matching Checkbox.
+gate: harness:ios:Checkbox FAIL in 18.1 s
+gate: recorded in .gates/task/G31-fix1.jsonl
+
+
+gate: appended the device context to task/G31-fix1/harness+ios+Checkbox-2026-11-11T05-16-08.551Z.log (4 probe(s))
+
+```
