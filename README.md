@@ -1354,6 +1354,7 @@ export function AccountForm({ onOpenProfile }: { onOpenProfile: () => void }) {
         <Form.Row>
           <ListItem
             accessory="disclosure"
+            androidIcon={require('./assets/icons/person_24px.xml')}
             onPress={onOpenProfile}
             subtitle="Signed in on 3 devices"
             systemImage="person.crop.circle"
