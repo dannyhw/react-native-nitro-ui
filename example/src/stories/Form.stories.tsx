@@ -52,31 +52,13 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * A row's content: a box that fills the row and centres what it holds.
- *
- * A `Form.Row` is already `flexDirection: 'row'` with `alignItems: 'center'`, so
- * the plain `<Text style={{flex: 1}}/><Switch/>` pair in the README does reach the
- * row's trailing edge. What it does not do is *vertically centre* the control: a
- * self-sizing control carries `{ alignSelf: 'flex-start' }` as its base style —
- * the same defence React Native's own `Switch` has, so a stretching parent cannot
- * decide its width — and a child's `alignSelf` beats its parent's `alignItems`.
- * In a row taller than its content (here, a `minHeight` row) the control then
- * sticks to the top edge while the label centres.
- *
- * Content that hugs its own height has no leftover room to argue about, which is
- * why every story here with a control at the trailing edge wraps it in this box:
- * the box centres in the row, the label fills the box, and the control sits level
- * with the label. `docs/components/form.md` says the same to app developers.
- */
-const rowContent = {
-  alignItems: 'center',
-  flex: 1,
-  flexDirection: 'row',
-} as const;
-
-/**
  * The two sections the README picture shows, as a component so the Playground can
  * hold their switch state while `Sections` renders the same form uncontrolled.
+ *
+ * The two switch rows are the bare pair the README prints: a `Text` with `flex: 1`
+ * and the control after it. A row lays that pair out as one centred row across its
+ * content width, so the switch sits on the trailing edge level with its label with
+ * no wrapper in this file to arrange it (`docs/components/form.md`).
  */
 function NotificationSections({
   push,
@@ -99,28 +81,24 @@ function NotificationSections({
         footer="Push arrives on this device only."
       >
         <Form.Row>
-          <View style={rowContent}>
-            <Text style={[styles.rowLabel, { color: ink.ink }]}>
-              Push notifications
-            </Text>
-            <Switch
-              accessibilityLabel="Push notifications"
-              value={push}
-              onValueChange={onPushChange}
-            />
-          </View>
+          <Text style={[styles.rowLabel, { color: ink.ink }]}>
+            Push notifications
+          </Text>
+          <Switch
+            accessibilityLabel="Push notifications"
+            value={push}
+            onValueChange={onPushChange}
+          />
         </Form.Row>
         <Form.Row>
-          <View style={rowContent}>
-            <Text style={[styles.rowLabel, { color: ink.ink }]}>
-              Play a sound
-            </Text>
-            <Switch
-              accessibilityLabel="Play a sound"
-              value={sound}
-              onValueChange={onSoundChange}
-            />
-          </View>
+          <Text style={[styles.rowLabel, { color: ink.ink }]}>
+            Play a sound
+          </Text>
+          <Switch
+            accessibilityLabel="Play a sound"
+            value={sound}
+            onValueChange={onSoundChange}
+          />
         </Form.Row>
       </Form.Section>
       <Form.Section title="Quiet hours">

@@ -15,10 +15,8 @@ import { Text } from 'react-native';
 <Form>
   <Form.Section title="Notifications" footer="Push arrives on this device only.">
     <Form.Row>
-      <View style={{ alignItems: 'center', flex: 1, flexDirection: 'row' }}>
-        <Text style={{ flex: 1 }}>Push notifications</Text>
-        <Switch value={push} onValueChange={setPush} />
-      </View>
+      <Text style={{ flex: 1 }}>Push notifications</Text>
+      <Switch value={push} onValueChange={setPush} />
     </Form.Row>
   </Form.Section>
 </Form>;
@@ -109,17 +107,21 @@ insets. The Form reports that width and applies it to every row, which is what m
 row's Yoga height equal the cell's height, and what makes a wrapping `Text` grow the
 cell that holds it.
 
-A row also centres its content vertically (`alignItems: 'center'`, on top of the
-minimum height below), and one of your own styles can overrule that from the child's
-side: every self-sizing nitro-ui control carries `{ alignSelf: 'flex-start' }` as its
-base style — the same defence React Native's own `Switch` has, so a parent with
-`alignItems: 'stretch'` cannot decide the control's width — and a child's `alignSelf`
-beats its parent's `alignItems`. In a row taller than its content the control then
-sticks to the row's top edge while the label centres. Wrap the pair in a box of your
-own (`{ alignItems: 'center', flex: 1, flexDirection: 'row' }`, as above): the box
-hugs its content, so there is no leftover room for the two rules to disagree about,
-the label's `flex: 1` still reaches the trailing edge, and the control sits level
-with the label.
+A row also tells its children what it gives them: they are laid out as one row of
+their own, `alignItems: 'center'` across the row's whole content width, so a label
+with `flex: 1` pushes a control to the trailing edge and the two sit level — at the
+minimum height below, and at any height a wrapping `Text` grows the row to. That is
+the row's doing, not something the content arranges, and it matters precisely for a
+nitro-ui control: every self-sizing one carries `{ alignSelf: 'flex-start' }` as its
+base style (the same defence React Native's own `Switch` has, so a parent with
+`alignItems: 'stretch'` cannot decide the control's width), a child's `alignSelf`
+beats the `alignItems` it is laid out under, and so the row cannot centre such a
+child directly. It centres the wrapper its children live in instead, which hugs them
+and has no minimum height of its own — the `minHeight` below stays the row's.
+
+Your content therefore sees a row, not a row's plumbing: `style` on a row is the row's
+own box, and the wrapper is not configurable, so a `justifyContent` or `gap` written
+there arranges nothing — put that on a child of yours instead.
 
 On Android a row with an `accessory` gives up the trailing room the section is going
 to draw the glyph in, so the accessory never lands on top of your content.
