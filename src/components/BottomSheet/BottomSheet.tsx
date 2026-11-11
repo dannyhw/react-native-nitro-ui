@@ -3,6 +3,7 @@ import { Platform, useWindowDimensions, type ColorValue } from 'react-native';
 
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
+import { InsideRowContext } from '../../core/useSelfSizing';
 import {
   useStableCallback,
   type NitroCallbackProp,
@@ -433,7 +434,11 @@ export function BottomSheet({
       pointerEvents="box-none"
       style={contentStyle}
     >
-      {mounted ? children : null}
+      {/* The content is presented in the sheet, not in the box it was written in, so a
+       * `Form.Row` above lays none of it out: see `src/core/useSelfSizing.ts`. */}
+      <InsideRowContext.Provider value={false}>
+        {mounted ? children : null}
+      </InsideRowContext.Provider>
     </NativeNitroUiBottomSheet>
   );
 }

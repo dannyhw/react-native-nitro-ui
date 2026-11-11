@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import { useStableCallback } from '../../core/useStableCallback';
+import { InsideRowContext, useInsideRow } from '../../core/useSelfSizing';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 import type { NitroUiFormAccessory as FormAccessory } from './Form.nitro';
 import {
@@ -88,16 +89,6 @@ interface FormLayout {
 const EMPTY_LAYOUT: FormLayout = { contentWidth: 0 };
 
 const FormLayoutContext = createContext<FormLayout>(EMPTY_LAYOUT);
-
-/**
- * Whether the nearest wrapper above is already a `Form.Row`.
- *
- * Only {@link RowRoot} sets it, for its own children. It exists so a Row written inside a Row
- * says so instead of drawing a cell inside a cell: on iOS the inner row's content ends up in
- * the outer cell and the inner row never reaches a cell of its own; on Android it gets a row
- * rect inside a row rect.
- */
-const InsideRowContext = createContext(false);
 
 /** What a Row inside a Row is told, once per process — a 50-row list should not log 50 lines. */
 const NESTED_ROW_WARNING =
@@ -511,15 +502,13 @@ function RowRoot({
     onPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
-  // The cross-axis rule the app asked the row for, if it asked for one. `styles.rowContent`
-  // centres, and the wrapper below is what a row's own `style` is now applied to, so a row
-  // written `alignItems: 'stretch'` — or a child with `alignSelf: 'stretch'` — would otherwise
-  // stretch only the wrapper and leave the child its own text height. The rule travels into
-  // the wrapper with it, so a row stops centring exactly when the app asked it not to: E7
-  // measures a row's child against the row's own box, and fourteen of those measures came
-  // back as 17 pt of text inside a 44 pt row the first time this wrapper shipped.
-  const rowAlignItems = StyleSheet.flatten(style)?.alignItems;
-  const insideRow = useContext(InsideRowContext);
+  // The row centres its own content (`alignItems: 'center'` on the row style, which the app's
+  // `style` can still override). It needs no wrapper to do that: what stopped it was each
+  // self-sizing control's `alignSelf: 'flex-start'` base style, which `Form.Row` now answers
+  // with `alignSelf: 'center'` — see `src/core/useSelfSizing.ts`. A row written
+  // `alignItems: 'stretch'` stops centring exactly when the app asked it not to, and E7
+  // measures a row's child against the row's own box.
+  const insideRow = useInsideRow();
   if (__DEV__ && insideRow && !warnedNestedRow) {
     warnedNestedRow = true;
     console.error(NESTED_ROW_WARNING);
@@ -556,32 +545,9 @@ function RowRoot({
       onPress={press}
       hybridRef={hybridRefCallback ?? undefined}
     >
-      {/*
-       * One wrapper for the row's content, so that the row can hold its children level
-       * without their co-operation.
-       *
-       * Every self-sizing control carries `{ alignSelf: 'flex-start' }` as its base style —
-       * React Native's own `Switch` does the same, and it is load-bearing here, because a
-       * stretched box decides an intrinsic control's size for it and the measurement is then
-       * never asked. A child's `alignSelf` beats its parent's `alignItems`, so in a row taller
-       * than its content (every row is: the minimum height below) the control in
-       * `<Form.Row><Text style={{flex: 1}} /><Switch /></Form.Row>` took the row's top edge
-       * while its label centred. The wrapper has no minimum height, so it hugs its content and
-       * the row centres *it*; inside it the same `alignItems: 'center'` has no leftover room to
-       * be overruled in, and `flex: 1` here is what hands the content the row's whole content
-       * width, insets included.
-       */}
-      <View
-        style={
-          rowAlignItems == null
-            ? styles.rowContent
-            : [styles.rowContent, { alignItems: rowAlignItems }]
-        }
-      >
-        <InsideRowContext.Provider value={true}>
-          {children}
-        </InsideRowContext.Provider>
-      </View>
+      <InsideRowContext.Provider value={true}>
+        {children}
+      </InsideRowContext.Provider>
     </NativeNitroUiFormRow>
   );
 }
@@ -614,13 +580,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
-  },
-  // The row's content, in the box described at {@link RowRoot}: full content width, level
-  // children, and no minimum height of its own — the row's `minHeight` stays the row's.
-  rowContent: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flex: 1,
   },
   androidSection: {
     flexDirection: 'column',

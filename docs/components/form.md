@@ -107,24 +107,31 @@ insets. The Form reports that width and applies it to every row, which is what m
 row's Yoga height equal the cell's height, and what makes a wrapping `Text` grow the
 cell that holds it.
 
-A row also tells its children what it gives them: they are laid out as one row of
-their own, `alignItems: 'center'` across the row's whole content width, so a label
-with `flex: 1` pushes a control to the trailing edge and the two sit level — at the
-minimum height below, and at any height a wrapping `Text` grows the row to. That is
-the row's doing, not something the content arranges, and it matters precisely for a
-nitro-ui control: every self-sizing one carries `{ alignSelf: 'flex-start' }` as its
-base style (the same defence React Native's own `Switch` has, so a parent with
-`alignItems: 'stretch'` cannot decide the control's width), a child's `alignSelf`
-beats the `alignItems` it is laid out under, and so the row cannot centre such a
-child directly. It centres the wrapper its children live in instead, which hugs them
-and has no minimum height of its own — the `minHeight` below stays the row's.
+A row lays its children out as one row of their own: `flexDirection: 'row'`,
+`alignItems: 'center'`, across the row's whole content width. A
+label with `flex: 1` therefore pushes a control to the trailing edge and the two sit
+level — at the minimum height below, and at any height a wrapping `Text` grows the row
+to. That is the row's doing, not something your content arranges, and it needed saying
+because of a base style every self-sizing control carries: `{ alignSelf: 'flex-start' }`,
+the same defence React Native's own `Switch` has so a parent with `alignItems: 'stretch'`
+cannot decide the control's width. A child's `alignSelf` beats the `alignItems` it is
+laid out under, so in a row taller than its content the control followed `flex-start` to
+the row's top edge while its label centred. A nitro-ui control now reads that rule from
+the row: `alignSelf: 'center'` inside a `Form.Row`, `flex-start` everywhere else. It is
+the control's own base style that changes, so no node is added between a row and your
+content, and your `style` stays the override it was — an `alignSelf` you write on a
+control wins either way.
 
-Your content therefore sees a row, not a row's plumbing: `style` on a row is the row's
-own box, and the wrapper is not configurable, so a `justifyContent` or `gap` written
-there arranges nothing — put that on a child of yours instead. `alignItems` is the one
-rule that does travel: it is what a row's children are laid out under, so writing
-`alignItems: 'stretch'` on a row stretches your content to the row's height and stops the
-centring, which is the point when a child wants the row's whole box.
+Two things follow from the rule being read rather than wrapped:
+
+- a control that is not nitro-ui's keeps what it carries. React Native's `Switch` has the
+  same `flex-start` base style for the same reason, and nothing reaches across to change
+  it: it takes the row's top edge as it always did, and its label centres beside it.
+  nitro-ui's own controls are the ones that centre.
+- the row's own box is what it always was: `style` on a row styles the row, and
+  `alignItems` is the rule your children are laid out under, so writing
+  `alignItems: 'stretch'` on a row stretches your content to the row's height and stops
+  the centring — which is the point when a child wants the whole box.
 
 On Android a row with an `accessory` gives up the trailing room the section is going
 to draw the glyph in, so the accessory never lands on top of your content.

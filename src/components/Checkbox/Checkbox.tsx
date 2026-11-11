@@ -4,6 +4,7 @@ import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiCheckbox } from './NativeNitroUiCheckbox';
 
 /**
@@ -142,13 +143,6 @@ function nameOrNull(value: string | undefined): string | null {
 }
 
 /**
- * What a self-sizing control is laid out with, before any `style`: Switch's and
- * Chip's base style, for their reason (a column's `alignItems: stretch` would
- * otherwise decide the width and the measurement would never be asked for).
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
-/**
  * A checkbox: Material 3 `Checkbox` - `TriStateCheckbox` when `indeterminate` - on
  * Android, and SwiftUI `Toggle(isOn:)` with the switch style on iOS, which has no
  * checkbox (`CheckboxToggleStyle` is unavailable there). That is what Expo's
@@ -179,6 +173,7 @@ export function Checkbox({
   style,
   ...restProps
 }: CheckboxProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   const sizingId = useSizingId();
   const tint = useProcessedColor(tintColor);
   // The value's own handshake (core-architecture §4): native shows a toggle at
@@ -211,7 +206,7 @@ export function Checkbox({
       nuiSizingKey={sizingVariantFor(labelText ?? '', indeterminate)}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }
