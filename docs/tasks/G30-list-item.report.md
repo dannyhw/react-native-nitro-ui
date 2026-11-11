@@ -145,9 +145,20 @@ Each line is `test -> what was broken -> the line that went red`.
 
 ## Follow-ups
 
-- bench: the `mount.list-item` arms are in `bench/src/implementations/nitroUi.tsx` and `bench/src/plan.ts`, but no numbers here: `scripts/bench/run.mjs --plan quick --component list-item --dry-run` answers `matched no cell in plan "quick"` (and the same for `full`, whose components stop at `form`), so the cell needs adding to the scheduled plan before it can be measured; the runner also refuses this box at load1 5.2-6.5 against its 5.0 ceiling. Benches belong to the bench host (D15) and are not in `need`.
+- bench: please add `list-item` (this task) and `stepper` cells to the scheduled bench plan — both have registry arms in `bench/src/implementations/nitroUi.tsx` and `bench/src/plan.ts` but no scheduled cells, so there are no numbers here: `node scripts/bench/run.mjs --platform ios --plan quick --component list-item --dry-run` answers `matched no cell in plan "quick"`, whose components stop at `form`, and `--plan full`, `--component stepper` answer the same; the runner also refuses this box at load1 5.2-6.5 against its 5.0 ceiling. Benches belong to the bench host (D15) and are not in `need`.
 - iOS real input: XCUITest taps an element's frame without scrolling a plain view, so every press fixture in `example/ios/NitroUiExampleUITests/RealInputTests.swift` now has to call `scrollIntoView` first — the older cases only get away without it because their fixtures happen to sit in the band.
 - harness: `ListItem × no-leak-on-drop` went red once at load1 21-25 and green at load1 ~6 on the same tree; the churn's three-second quiescence window is what absorbs it, so a recurrence at ordinary load is a real retention, not a scheduling artefact.
 - a11y: a `Form.Row`'s UIKit cell accessory publishes its own "Forward" element, so a whole-screen count of that name includes G24's row, not just this leaf's disclosure.
 
 - device settings: the screenshot round left an `adb reverse tcp:8080` on `emulator-5574`, now removed; `debug_http_host=localhost:8295` is left as `scripts/real-input/android.mjs` leaves it after any run on that device, because its teardown removes only its own reverse and the next run overwrites the preference.
+
+## Fix round 1
+
+Branch `task/G30-fix1`, lease `G30-o7nwh`.
+
+Every must-fix is in. An item with `onPress` inside a `Form.Row` hands that handler and `disabled` to the row through the existing context, so the cell owns the press and its one highlight and the leaf installs no press at all; development warns when both carry one. iOS cancels a press whose finger travels past ~10 pt or leaves the bounds, so a real drag from a row is 0 presses, both platforms. Android's headline takes `weight(1f)` with fill, putting the value at the trailing edge; `disabled` greys text, secondary text, image tint and chevron; `valueWidth` moved into `layoutSubviews`; a recycle clears the row's pressed flag and background; `insets=` reads the title label's frame and `shape=` the background painted under a held press. The README pair was reshoot.
+
+What the device run found: a row in a section drew the shape morph and no ink, because `Modifier.indication` rebuilt its node from a ripple that read `pressed`, destroying the node holding that press. One theme ripple, resolved away from the press: held luma 0.9530 → 0.8740.
+
+Reds: `docs/tasks/G30/mutations.json`. Not run: the glyph probe. Follow-ups: Form's own iOS cell, the bench cells.
+
