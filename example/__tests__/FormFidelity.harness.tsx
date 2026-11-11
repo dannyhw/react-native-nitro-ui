@@ -561,10 +561,11 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
    * report two shapes, a layer as tall as the section, an accessory in its row, and still
    * paint both shapes at one row's y.
    *
-   * So read the pair the drawing is actually built from: the section's published `rects`
-   * (`top-height` dp, section-relative — the same space the row's `frame` is in, and rows are
+   * So read the pair the drawing is actually built from: the section's published card boxes
+   * (`cardBoxes`, section-relative dp — the same space the row's `frame` is in, and rows are
    * direct children of the section, which is what `shapes=rows` proves), against every row's
-   * own box, in React's order. A card is allowed to fall short of its row by the segmented
+   * own box, in React's order, on both axes. The report used to carry these as `top-height`
+   * pairs only, which cannot show a card that is a centimetre wide. A card is allowed to fall short of its row by the segmented
    * gap the layer trims off (`top = row.top + gap/2`, `height = row.height - gap`) and by
    * nothing else; half a row is what this case is for.
    *
@@ -585,36 +586,53 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
       if (rowsInStory.length < 2)
         return ['the story section has no two rows yet'];
       const gap = num(report, 'gap');
-      const cards = (report.rects ?? '')
-        .split(',')
-        .filter((entry) => entry.includes('-'))
-        .map((entry) => entry.split('-').map(Number));
+      const cards = (report.cardBoxes ?? '')
+        .split('|')
+        .filter((entry) => entry.includes(','))
+        .map((entry) => box(entry));
       if (cards.length !== rowsInStory.length) {
         return [
-          `the section publishes ${cards.length} card(s) for ${rowsInStory.length} row(s): ${String(report.rects)}`,
+          `the section hands its layer ${cards.length} card box(es) for ${rowsInStory.length} row(s): ${String(report.cardBoxes)}`,
         ];
       }
-      const out: string[] = [];
-      const boxes = rowsInStory.map((row) =>
+      const rowBoxes = rowsInStory.map((row) =>
         box(parse(row.nuiTestRowReport()).frame)
       );
-      if (boxes.some((b) => b[3] <= 0)) {
+      if (rowBoxes.some((b) => b[3] <= 0)) {
         return ['a row of the story section has no height yet'];
       }
+      const out: string[] = [];
       cards.forEach((card, index) => {
-        const rowTop = boxes[index]?.[1] ?? 0;
-        const rowBottom = rowTop + (boxes[index]?.[3] ?? 0);
-        const [top, height] = card;
-        const bottom = (top ?? 0) + (height ?? 0);
+        const [cardLeft, cardTop, cardWidth, cardHeight] = card;
+        const [rowLeft, rowTop, rowWidth, rowHeight] = rowBoxes[index] ?? [
+          0, 0, 0, 0,
+        ];
         const slack = gap / 2 + 0.5;
-        if ((top ?? 0) > rowTop + slack) {
+        // A card with nothing to fill draws nothing, and looks exactly like a card that was
+        // never placed: `form-android.png` shipped one of these two.
+        if (cardWidth <= 0 || cardHeight <= 0) {
+          out.push(`row ${index}: its card is ${cardWidth} x ${cardHeight}`);
+          return;
+        }
+        if (cardTop > rowTop + slack) {
           out.push(
-            `row ${index}: its card starts at ${String(top)} while the row starts at ${rowTop.toFixed(1)}`
+            `row ${index}: its card starts at y=${cardTop} while the row starts at y=${rowTop}`
           );
         }
-        if (bottom < rowBottom - slack) {
+        if (cardTop + cardHeight < rowTop + rowHeight - slack) {
           out.push(
-            `row ${index}: its card ends at ${bottom.toFixed(1)} while the row ends at ${rowBottom.toFixed(1)}`
+            `row ${index}: its card ends at y=${(cardTop + cardHeight).toFixed(1)} while the ` +
+              `row ends at y=${(rowTop + rowHeight).toFixed(1)}`
+          );
+        }
+        if (Math.abs(cardLeft - rowLeft) > 1) {
+          out.push(
+            `row ${index}: its card starts at x=${cardLeft} while the row starts at x=${rowLeft}`
+          );
+        }
+        if (Math.abs(cardWidth - rowWidth) > 1) {
+          out.push(
+            `row ${index}: its card is ${cardWidth} wide while the row is ${rowWidth} wide`
           );
         }
       });

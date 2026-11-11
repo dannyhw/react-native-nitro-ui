@@ -243,6 +243,26 @@ internal class HybridNitroUiFormSection(
       "boxH=${String.format("%.1f", view.height / density)}",
       "layerH=${String.format("%.1f", view.model.layerPx / density)}",
       "rects=${rects.ifEmpty { "-" }}",
+      // The same boxes with all four numbers, in the encoding the row's own `frame` and the
+      // drawn accessory use. `rects` above carries only `top-height`, because it was written
+      // for one question — how many shapes, and how far down the section they go. It cannot
+      // show a container that publishes a correct `top` and a width of nothing: the picture
+      // of a section whose first row has no card at all is exactly that, and every number
+      // this report used to carry was right about it.
+      "cardBoxes=" +
+        view
+          .model
+          .rects
+          .joinToString("|") {
+            String.format(
+              "%.1f,%.1f,%.1f,%.1f",
+              it.left / density,
+              it.top / density,
+              (it.right - it.left) / density,
+              it.height / density,
+            )
+          }
+          .ifEmpty { "-" },
       // Where the layer last *placed* an accessory, which comes out of the layout pass rather
       // than out of the numbers that were asked for: `rects`/`shapes` say what the layer was
       // given, this says where it ended up on screen. Same encoding as the row's own `frame`, so
