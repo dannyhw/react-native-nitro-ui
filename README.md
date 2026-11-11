@@ -473,7 +473,7 @@ toggle in one cannot show what it is.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/stepper-ios.png" width="300" alt="Steppers on iOS: SwiftUI's two-arrow control mid-range, one at its minimum with the down half greyed, one at its maximum with the up half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
+    <td><img src="docs/images/components/stepper-ios.png" width="300" alt="Steppers on iOS: SwiftUI's minus and plus control mid-range, one at its minimum with the minus half greyed, one at its maximum with the plus half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
     <td><img src="docs/images/components/stepper-android.png" width="300" alt="Steppers on Android: two tonal circular icon buttons with a minus and a plus, mid-range, then one at each bound with the inert half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
   </tr>
 </table>
