@@ -6940,23 +6940,44 @@ final class RealInputTests: XCTestCase {
   /// finger went fires on every flick that happened to begin on a row. Ten taps and a
   /// counter are the other half of this; this is the half that says the counter did not
   /// move for the drag.
+  ///
+  /// The travel is measured off the row's own frame, and always downhill to the roomier
+  /// half of the window: `scrollIntoView` only promises the row's centre is inside the
+  /// band a tap can land in, which on a row that had to be scrolled *up* to reach means a
+  /// fixed screen fraction can land a few points away from it. A drag of a few points is
+  /// not a scroll, and the row is right to call it a press, so the gesture has to be a
+  /// real flick — 200 pt, twenty times the slop the recogniser allows.
   private func assertDragFromRowIsNotAPress(
     _ identifier: String,
     echo: String,
     as what: String
   ) throws {
     let element = try required(identifier, as: what)
+    let window = app.windows.firstMatch.frame
+    let travel: CGFloat = 200
+    let down = element.frame.midY < window.midY
+    let delta = CGVector(dx: 0, dy: down ? travel : -travel)
     let before = echoText(echo)
-    let travel = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-    element.centre.press(forDuration: 0.25, thenDragTo: travel, withVelocity: .normal, thenHoldForDuration: 0.1)
+    element.centre.press(
+      forDuration: 0.25,
+      thenDragTo: element.centre.withOffset(delta),
+      withVelocity: .normal,
+      thenHoldForDuration: 0.1
+    )
     let after = echoText(echo)
-    print("real-input list-item drag: \(what) (\(identifier)) echo \"\(before)\" -> \"\(after)\"")
+    let direction = down ? "down" : "up"
+    print(
+      "real-input list-item drag: \(what) (\(identifier)) travelled \(direction) "
+        + "\(Int(travel)) pt from midY \(Int(element.frame.midY)) of a window ending at "
+        + "\(Int(window.maxY)) — echo \"\(before)\" -> \"\(after)\""
+    )
     XCTAssertEqual(
       after,
       before,
       "\(what) (\(identifier)) reported a press for a drag that started on it: \"\(echo)\" "
-        + "went \"\(before)\" -> \"\(after)\" while the finger travelled up the page. A row "
-        + "that fires on a scroll takes the person to a screen they only meant to scroll past."
+        + "went \"\(before)\" -> \"\(after)\" while the finger travelled \(Int(travel)) pt "
+        + "\(direction) the page. A row that fires on a scroll takes the person "
+        + "to a screen they only meant to scroll past."
     )
   }
 
