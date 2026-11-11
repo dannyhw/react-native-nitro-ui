@@ -4,6 +4,7 @@ import { useSizingId } from '../../core/useSizingId';
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiSwitch } from './NativeNitroUiSwitch';
 
 /**
@@ -99,20 +100,6 @@ function sizingVariantFor(testWidth: number | null | undefined): string {
 }
 
 /**
- * What a self-sizing control is laid out with, before any `style`.
- *
- * `alignItems: stretch` (the default in a column) otherwise decides a control's
- * width for it: Yoga gives a stretched child the row's width as an *exact*
- * constraint, so the measured size is never even asked for and a Switch becomes
- * a 402pt-wide box with a 61pt control in it. React Native's own `Switch` does
- * the same thing for the same reason (`Libraries/Components/Switch/Switch.js`).
- * It is a base style, not a forced one: an explicit `width`, `flex`, or
- * `alignSelf: 'stretch'` in the caller's `style` wins, because their styles are
- * applied after this.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
-/**
  * The platform Switch: SwiftUI `Toggle` with `.switch` style on iOS, Material 3
  * `Switch` on Android.
  *
@@ -135,6 +122,7 @@ export function Switch({
   style,
   ...restProps
 }: SwitchProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   const controlled = useControlled(value, defaultValue, onValueChange);
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
@@ -156,7 +144,7 @@ export function Switch({
       nuiSizingId={sizingId}
       nuiTestWidth={nuiTestWidth}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }

@@ -5,6 +5,7 @@ import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiPicker } from './NativeNitroUiPicker';
 
 /**
@@ -239,7 +240,7 @@ type ResolvedPickerVariant = 'menu' | 'wheel' | 'radio';
  * the menu - the same "build it from the platform's real controls, never imitate
  * one" rule that makes `wheel` the menu on Android. The resolution happens here,
  * in the one place that decides all three of the things a variant picks: the
- * native `variant` prop, the sizing policy behind it (`SELF_SIZING_BASE_STYLE`
+ * native `variant` prop, the sizing policy behind it (`useSelfSizingBaseStyle`
  * versus `FILL_WIDTH_BASE_STYLE`) and the `nuiSizingKey`. Resolving it only
  * inside SwiftUI would leave the key naming a `radio` configuration whose width
  * follows a title, and the menu's title-dependent width would be filed against a
@@ -262,18 +263,6 @@ function resolveVariant(variant: PickerVariant): ResolvedPickerVariant {
   }
   return variant === 'wheel' ? 'wheel' : 'menu';
 }
-
-/**
- * What a `menu` picker is laid out with, before any `style`: the control's own
- * fitting size, so a parent must not stretch it.
- *
- * `alignItems: stretch` (the default in a column) otherwise decides the
- * control's width for it: Yoga gives a stretched child the row's width as an
- * *exact* constraint, so the measured size is never even asked for. Same rule as
- * `Switch`, `Button` and `SegmentedControl`; an explicit `width`, `flex` or
- * `alignSelf: 'stretch'` in the caller's `style` still wins.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
 
 /**
  * What a `wheel` picker is laid out with: `alignSelf: 'stretch'`, because the
@@ -332,6 +321,7 @@ export function Picker({
   style,
   ...restProps
 }: PickerProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   // `options` may be `undefined` at runtime despite the type; treat that as no
   // options rather than throwing inside a render.
   const safeOptions = options ?? [];
@@ -443,9 +433,7 @@ export function Picker({
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
       style={[
-        nativeVariant === 'wheel'
-          ? FILL_WIDTH_BASE_STYLE
-          : SELF_SIZING_BASE_STYLE,
+        nativeVariant === 'wheel' ? FILL_WIDTH_BASE_STYLE : selfSizingBaseStyle,
         style,
       ]}
     />

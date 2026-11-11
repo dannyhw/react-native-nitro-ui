@@ -4,6 +4,7 @@ import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiSegmentedControl } from './NativeNitroUiSegmentedControl';
 
 /**
@@ -140,18 +141,6 @@ function sizingVariantFor(options: readonly string[]): string {
     .join(OPTION_SEPARATOR)}`;
 }
 
-/**
- * What a self-sizing control is laid out with, before any `style`.
- *
- * `alignItems: stretch` (the default in a column) otherwise decides the
- * control's width for it: Yoga gives a stretched child the row's width as an
- * *exact* constraint, so the measured size is never even asked for and a row of
- * three segments becomes a 402 pt box with three short buttons in it. Same rule
- * as `Switch` and `Button`; an explicit `width`, `flex` or
- * `alignSelf: 'stretch'` in the caller's `style` still wins.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
 /** Clamp a caller's index into `options`, non-numerics going to the front. */
 function clampToOptions(index: number, optionCount: number): number {
   if (!(optionCount > 0)) {
@@ -199,6 +188,7 @@ export function SegmentedControl({
   style,
   ...restProps
 }: SegmentedControlProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   // `options` may be `undefined` at runtime despite the type; treat that as no
   // options rather than throwing inside a render.
   const safeOptions = options ?? [];
@@ -240,7 +230,7 @@ export function SegmentedControl({
       nuiSizingKey={sizingVariantFor(safeOptions)}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }

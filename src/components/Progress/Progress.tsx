@@ -3,6 +3,7 @@ import { type ColorValue, type ViewProps } from 'react-native';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiProgress } from './NativeNitroUiProgress';
 
 /** The two things this component can draw. */
@@ -206,13 +207,6 @@ function resolveVariant(variant: ProgressVariant): ProgressVariant {
 const FILL_WIDTH_BASE_STYLE = { alignSelf: 'stretch' } as const;
 
 /**
- * What an `intrinsic` control is laid out with: the opposite guard, because a
- * circular indicator must *not* be stretched into its parent's width - it wants
- * its own square. Same reason `Switch` carries it.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
-/**
  * The platform progress indicator: SwiftUI `ProgressView` (`.linear` /
  * `.circular`) on iOS, Material 3 `LinearProgressIndicator` /
  * `CircularProgressIndicator` on Android.
@@ -241,6 +235,7 @@ export function Progress({
   style,
   ...restProps
 }: ProgressProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   const processedTint = useProcessedColor(tintColor);
   const processedTrack = useProcessedColor(trackColor);
   const hybridRefCallback = useStableCallback(hybridRef);
@@ -301,8 +296,8 @@ export function Progress({
       hybridRef={hybridRefCallback ?? undefined}
       style={[
         // A bar takes the box's width; every self-sized shape guards against a
-        // stretching parent (`FILL_WIDTH_BASE_STYLE` / `SELF_SIZING_BASE_STYLE`).
-        shape === 'linear' ? FILL_WIDTH_BASE_STYLE : SELF_SIZING_BASE_STYLE,
+        // stretching parent (`FILL_WIDTH_BASE_STYLE` / the row-aware base style).
+        shape === 'linear' ? FILL_WIDTH_BASE_STYLE : selfSizingBaseStyle,
         style,
       ]}
     />

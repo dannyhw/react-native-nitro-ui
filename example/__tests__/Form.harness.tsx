@@ -38,6 +38,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 
 import { Form } from '../../src/components/Form/Form';
+import { useSelfSizingBaseStyle } from '../../src/core/useSelfSizing';
 import { Switch } from '../../src/components/Switch/Switch';
 import { forgetPromisedHandles, handleOf } from './handles';
 
@@ -1781,17 +1782,31 @@ async function settledBoxes<const K extends readonly string[]>(
 const x24Fill = { flex: 1 } as const;
 
 /**
- * What a self-sizing control is laid out with, and the reason this case exists.
+ * A stand-in for a self-sizing control: a box React Native *can* measure, carrying the
+ * base style the real controls carry because it reads it from the same hook they do.
  *
- * Every self-sizing nitro-ui control carries `{ alignSelf: 'flex-start' }` as its
- * base style — the defence React Native's own `Switch` has against a stretching
- * parent — and a child's `alignSelf` beats its parent's `alignItems`. A wrapper that
- * carries that style itself therefore lands where an unwrapped control lands, which
- * is the only way to ask this case's question of a control React Native cannot
- * measure: `measureInWindow` walks the shadow tree, and a hybrid view's handle
- * reports the size its native side measured, never where it sits.
+ * This is the whole trick of the case. `measureInWindow` walks the shadow tree, and a
+ * hybrid view's handle reports the size its native side measured, never where it sits —
+ * so the question "where does a `Switch` land in a row?" can only be asked through a
+ * proxy. Reading `useSelfSizingBaseStyle` instead of retyping `{ alignSelf:
+ * 'flex-start' }` is what keeps the proxy honest: the answer the case measures is the
+ * answer the row gives a real control, and on a `Form.Row` that predates the row-aware
+ * base style the proxy follows `flex-start` to the row's top edge and the case goes red
+ * for the reason it exists, not for the reason it was written.
  */
-const x24SelfSizing = { alignSelf: 'flex-start' } as const;
+function SelfSizingProbe({
+  boxKey,
+  children,
+}: {
+  boxKey: string;
+  children?: ReactElement;
+}) {
+  return (
+    <View ref={keepBox(boxKey)} style={useSelfSizingBaseStyle()}>
+      {children}
+    </View>
+  );
+}
 
 /** The same pair inside a box of an app's own — what an app that copied round 1 has. */
 const x24Box = {
@@ -1828,18 +1843,18 @@ function TrailingEdgeForm() {
           <View ref={keepBox('label')} style={x24Styles.label}>
             <Text style={x24Styles.text}>Push notifications</Text>
           </View>
-          <View ref={keepBox('control')} style={x24SelfSizing}>
+          <SelfSizingProbe boxKey="control">
             <Switch testID="x24-switch" value />
-          </View>
+          </SelfSizingProbe>
         </Form.Row>
         <Form.Row>
           <View style={x24Box}>
             <View ref={keepBox('boxedLabel')} style={x24Styles.label}>
               <Text style={x24Styles.text}>Play a sound</Text>
             </View>
-            <View ref={keepBox('boxedControl')} style={x24SelfSizing}>
+            <SelfSizingProbe boxKey="boxedControl">
               <Switch testID="x24-boxed-switch" value={false} />
-            </View>
+            </SelfSizingProbe>
           </View>
         </Form.Row>
       </Form.Section>
@@ -1891,9 +1906,9 @@ describe('Form row content (X24)', () => {
       // The one round 1's `Form.Row` failed: a control whose base style is
       // `alignSelf: 'flex-start'` was left directly in a row taller than its content
       // followed that style to the row's top edge, because a child's `alignSelf` beats
-      // the row's `alignItems`. It now follows the wrapper the row centres instead, so
-      // it lands on its label's middle — within a point, which is what "level" means
-      // to a reader of a screenshot.
+      // the row's `alignItems`. A row now answers that base style with `alignSelf:
+      // 'center'` (`src/core/useSelfSizing.ts`), so the control lands on its label's
+      // middle — within a point, which is what "level" means to a reader of a screenshot.
       if (Math.abs(centre(pair.control) - centre(pair.label)) > 1) {
         issues.push(
           `${name}: the control is centred at y=${centre(pair.control).toFixed(1)} while its label is centred at y=${centre(pair.label).toFixed(1)}`
