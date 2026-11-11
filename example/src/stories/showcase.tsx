@@ -51,16 +51,24 @@ export function Showcase({ children }: PropsWithChildren) {
   );
 }
 
-/** A caption and the controls it describes, side by side. */
+/**
+ * A caption on its own line, above the controls it describes.
+ *
+ * The controls sit in a row that wraps when they do not fit, so a long caption
+ * squeezes nothing and a strip of several controls stays one strip instead of
+ * turning into a column beside the label. A control whose width comes from its
+ * parent (`fillWidth`: Progress, Slider, TextField, SearchField, ButtonGroup)
+ * is measured against this line and so still fills the page on its own.
+ */
 export function Row({
   label,
   children,
 }: PropsWithChildren<{ label: string; children?: ReactNode }>) {
   const ink = useShowcaseInk();
   return (
-    <View style={styles.row}>
+    <View style={styles.captioned}>
       <Text style={[styles.label, { color: ink.muted }]}>{label}</Text>
-      <View style={styles.content}>{children}</View>
+      <View style={styles.controls}>{children}</View>
     </View>
   );
 }
@@ -72,7 +80,7 @@ export function Column({
 }: PropsWithChildren<{ label: string; children?: ReactNode }>) {
   const ink = useShowcaseInk();
   return (
-    <View style={styles.column}>
+    <View style={styles.captioned}>
       <Text style={[styles.label, { color: ink.muted }]}>{label}</Text>
       <View style={styles.columnContent}>{children}</View>
     </View>
@@ -93,7 +101,7 @@ export function Frame({
 }: PropsWithChildren<{ label: string; width: number; children?: ReactNode }>) {
   const ink = useShowcaseInk();
   return (
-    <View style={styles.column}>
+    <View style={styles.captioned}>
       <Text style={[styles.label, { color: ink.muted }]}>{label}</Text>
       <View
         style={[
@@ -120,19 +128,17 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 48,
   },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-  },
-  column: {
+  captioned: {
     gap: 6,
   },
   columnContent: {
     gap: 12,
   },
-  content: {
-    flexShrink: 1,
+  controls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   frame: {
     borderStyle: 'dashed',
