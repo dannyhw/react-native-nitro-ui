@@ -19,7 +19,7 @@ import { ListItem } from 'react-native-nitro-ui';
   androidIcon={require('./icons/bell.xml')}
   onPress={openNotifications}
   subtitle="Only while the app is open"
-  systemImage="bell.badge"
+  systemImage="bell"
   title="Notifications"
   value="On"
 />;
@@ -36,7 +36,7 @@ import { ListItem } from 'react-native-nitro-ui';
 | `androidIcon`        | `AndroidIconProp \| undefined` | —     | Leading glyph on Android: a `require()`'d file, `{ uri }`, or a drawable name. |
 | `accessory`          | `'none' \| 'disclosure'`    | `'none'` | The trailing chevron a row that goes somewhere carries.       |
 | `onPress`            | `() => void \| undefined`   | —        | Absent → not a button, no highlight, and a tap goes through the row. |
-| `disabled`           | `boolean`                   | `false`  | Drawn, inert: no press, no highlight, no event.               |
+| `disabled`           | `boolean`                   | `false`  | Drawn greyed and inert: no press, no highlight, no event.      |
 | `accessibilityLabel` | `string \| undefined`       | —        | The whole label. Without it the row reads title, subtitle and value. |
 | `testID`             | `string`                    | —        | Forwarded to the native view.                                 |
 | `style`              | `StyleProp<ViewStyle>`      | —        | Applied over the item's own `alignSelf: 'stretch'`.           |
@@ -60,12 +60,14 @@ warns in development, exactly as `Button`'s does — the slot is still held at i
 | Press highlight    | the platform's own row colour (`.quaternarySystemFill`)       | Material's own `ripple()`, bounded to the row (see below)      |
 | Container          | none — the row is transparent                                 | `containerColor = Transparent`, because M3 paints `Surface` by default |
 
-**The value is on the headline's line on both platforms.** Material's
-`trailingContent` slot is vertically centred against the whole row, which on a
-two-line item puts the value between the lines; UIKit's value slot sits on the
+**The value is on the headline's line, at the trailing edge, on both platforms.**
+Material's `trailingContent` slot is vertically centred against the whole row, which
+on a two-line item puts the value between the lines; UIKit's value slot sits on the
 headline's baseline. Material's centred slot is therefore not used — the value goes
 into `headlineContent` behind the headline, which is the same arrangement UIKit
-draws.
+draws. The headline takes the row's leftover width (`weight(1f)`), so the value is
+pushed to the trailing edge rather than sitting beside the title's last letter, and
+the title is what truncates when the two do not fit.
 
 ## Press feedback
 
@@ -134,17 +136,27 @@ highlight of its own. It knows because `Form.Row` publishes that through a conte
 so an app never configures it and cannot get it wrong.
 
 ```tsx
-<Form.Row onPress={openProfile}>
-  {/* the row owns the press and the cell: this item is the content */}
-  <ListItem subtitle="Signed in on 3 devices" title="Profile" />
+<Form.Row>
+  {/* the row is still the cell: it takes this handler and presses for the item */}
+  <ListItem
+    onPress={openProfile}
+    subtitle="Signed in on 3 devices"
+    title="Profile"
+  />
 </Form.Row>
 ```
 
-That means a row can own the press and the item stay a label inside it — the
-`Form.Row` example above, where `ListItem` has no `onPress`. Or the item can own
-it, and then the row is a plain container for it. Wire the press on one of the
-two, not both: two handlers on one cell is two highlights and, if both fire, two
-navigations for one tap.
+Either side can carry the press, and the cell does the pressing either way. A row
+with its own `onPress` owns it and the item inside stays content — the shape the
+first example above shows. An item with `onPress` in a row without one **hands that
+handler up to the row**, which becomes pressable, fires it, and draws its own
+pressed state for it; the leaf installs no touch target of its own, because a second
+one inside the cell would take the touch from the cell and leave the row unlit while
+its callback ran. A disabled item hands up nothing, so the row stops being pressable
+and stops highlighting.
+
+Wire it on one of the two, not both: the row's own handler is the one that fires, and
+the item's is never called — in development that combination says so once.
 
 Standalone, the same item adds the list's own horizontal insets — 16 pt on iOS,
 16 dp on Android, both measured against a real list cell — and, with `onPress`,
@@ -195,9 +207,13 @@ One element per item — never three — carrying the row's own label:
 
 - With `onPress` it is a **button** on both platforms (UIKit's `.button` trait, and
   on Android an explicit `Role.Button`, because the `ListItem` overload that draws
-  this row publishes no role of its own); without it, a plain text element.
+  this row publishes no role of its own); without it, a plain text element. Inside a
+  `Form.Row` the *cell* is the button and the item is a text element under it — one
+  stop for a row that is already one, whatever side the handler was written on.
 - Its label is `accessibilityLabel` when given, otherwise the row's own title,
-  subtitle and value.
+  subtitle and value — in that order on both platforms, with a comma between the
+  parts. Material merges the row's text on its own too, but in the order its slots
+  compose, which reads a value out of the middle of the sentence.
 - `disabled` is published as disabled, so a reader says so and a swipe action
   refuses the element; the row is still drawn and still hit-testable as a label.
 - The leading glyph is decoration and is not announced; the chevron is the

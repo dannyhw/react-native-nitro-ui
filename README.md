@@ -1304,15 +1304,16 @@ export function RingtoneList({
     <View>
       <ListItem
         accessory="disclosure"
-        androidIcon={require('./assets/icons/share_24px.xml')}
+        androidIcon={require('./assets/icons/notifications_24px.xml')}
         onPress={onOpenNotifications}
         subtitle="Only while the app is open"
-        systemImage="bell.badge"
+        systemImage="bell"
         title="Notifications"
       />
       <ListItem title="Version" value="1.2.3" />
       <ListItem
         accessory="disclosure"
+        androidIcon={require('./assets/icons/archive_24px.xml')}
         disabled
         onPress={onOpenArchive}
         systemImage="tray.and.arrow.down"
@@ -1368,8 +1369,10 @@ export function AccountForm({ onOpenProfile }: { onOpenProfile: () => void }) {
 }
 ```
 
-A row can own the press instead of the item (`Form.Row onPress`), and then the
-item is a label inside it; wire the press on one of the two, not both.
+Either side can carry the press: `Form.Row onPress` makes the item a label inside
+the cell, and `ListItem onPress` in a row without one hands that handler up to the
+row, so the cell still does the pressing and draws its own pressed state. Wire it on
+one of the two, not both — the row's handler is the one that fires.
 In a `FlashList` or `FlatList` row the same item recycles with the row and resets
 completely — the cell's highlight, the drawn slots and its own press count.
 [list-item.md](docs/components/list-item.md) has the measurements per

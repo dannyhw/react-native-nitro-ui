@@ -46,16 +46,20 @@ export interface NitroUiListItemProps
    * Trailing text on the headline's own line — "Off", "1.2.3" — or `null` for
    * none. One line, tail-truncated.
    *
-   * iOS draws it in the row's own side-by-side value layout
-   * (`UIListContentConfiguration.valueCell()`); Android puts it in Material 3's
-   * `trailingContent` slot. Neither moves the height at one line, so it is not in
-   * the sizing key.
+   * Both platforms draw it in the headline slot, on the headline's own line and
+   * pushed to the trailing edge: iOS through
+   * `UIListContentConfiguration.valueCell()`'s value, Android in the row it passes
+   * as Material 3's `content` rather than `trailingContent`, because
+   * `trailingContent` is centred against the whole row and would sit a two-line
+   * item's value between the lines. Neither moves the height at one line, so it is
+   * not in the sizing key.
    */
   value: string | null;
   /**
    * Leading SF Symbol name (iOS), or `null`. Android ignores it and draws
-   * `androidIcon`; the wrapper drops a name no runtime has, so nothing
-   * half-draws.
+   * `androidIcon`. The wrapper sends the name through unvalidated: on iOS a name the
+   * runtime does not have resolves to no image and the row draws no glyph, so a
+   * typo is a missing icon rather than a crash or a placeholder.
    */
   systemImage: string | null;
   /**
@@ -181,14 +185,21 @@ export interface NitroUiListItemMethods extends HybridViewMethods {
    * TEMPORARY, test-only: where the row put its own content, as one line —
    * `insets=<leading>,<trailing>;shape=<0|1>;box=<w>x<h>`.
    *
-   * `insets` are the horizontal paddings **the leaf itself** applied, taken from
-   * where the row content actually landed inside the view's bounds — 16/16
+   * `insets` are the horizontal paddings **the leaf itself** applied, measured off
+   * where the row content actually landed inside the view's bounds — the title
+   * label's own frame on iOS, `onGloballyPositioned` on Android — and not read back
+   * out of the margins or padding the row was told to set, which would repeat the
+   * number it wrote and could not notice an `insideRow` that was ignored. 16/16
    * standalone, 0/0 inside a `Form.Row`, whose cell has already paid for them
-   * (DECISIONS D46 item 2). `shape` is whether this leaf paints anything of its own
-   * behind or around the content — a background, or a press highlight of its own. It is
-   * `1` for a pressable row standing on its own and `0` inside a `Form.Row`, where the cell
-   * paints both; recorded where the painter is chosen, not read back off `insideRow`. Both
-   * are read from the layout that drew, so a leaf that ignored its own insets says so.
+   * (DECISIONS D46 item 2).
+   *
+   * `shape` is whether this leaf's *own highlight painted* for the press last applied
+   * to it — answered by the painter, not by the props that choose one. iOS records the
+   * call that set its pressed background; Android records a `PressInteraction.Press`
+   * collected off the same interaction stream its ripple consumes (the pixels
+   * themselves are `real-input:android`'s reading). At rest both rows answer `0`; after
+   * a press the standalone one answers `1` and the one inside a `Form.Row` stays `0`,
+   * because inside a row the cell is the shape and the cell is the highlight.
    *
    * @internal Not app API (DECISIONS D14).
    */

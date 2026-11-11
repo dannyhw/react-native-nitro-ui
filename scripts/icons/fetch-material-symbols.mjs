@@ -102,6 +102,41 @@ const EXAMPLE_ICONS = [
     file: 'star_24px.xml',
     why: "the resource-name form: the star above, compiled into the example APK, so a test can measure the release build's artwork against the development one",
   },
+  {
+    out: 'example/src/assets/icons/notifications_24px.xml',
+    symbol: 'notifications',
+    style: 'materialsymbolsoutlined',
+    file: 'notifications_24px.xml',
+    why: 'the bell the ListItem stories and the README sample draw: the Android twin of the SF Symbol `bell`, so one row shows one glyph on both platforms (G30 round 1)',
+  },
+  {
+    out: 'example/android/app/src/main/res/drawable/nitroui_test_notifications.xml',
+    symbol: 'notifications',
+    style: 'materialsymbolsoutlined',
+    file: 'notifications_24px.xml',
+    why: 'the same bell as a compiled drawable, which is the form the ListItem story names — stories are photographed for docs/images/',
+  },
+  {
+    out: 'example/src/assets/icons/person_24px.xml',
+    symbol: 'person',
+    style: 'materialsymbolsoutlined',
+    file: 'person_24px.xml',
+    why: "the person the README's `list-item-in-form` sample draws: the Android twin of `person.crop.circle`, which that example had on iOS alone",
+  },
+  {
+    out: 'example/src/assets/icons/archive_24px.xml',
+    symbol: 'archive',
+    style: 'materialsymbolsoutlined',
+    file: 'archive_24px.xml',
+    why: "the box the README's disabled `ListItem` draws: the Android twin of `tray.and.arrow.down`, the other half-drawn glyph in that sample",
+  },
+  {
+    out: 'example/android/app/src/main/res/drawable/nitroui_test_lock.xml',
+    symbol: 'lock',
+    style: 'materialsymbolsoutlined',
+    file: 'lock_24px.xml',
+    why: "the lock the ListItem story's disabled row draws: the Android twin of the SF Symbol `lock`, which that row had on iOS alone",
+  },
 ];
 
 /**

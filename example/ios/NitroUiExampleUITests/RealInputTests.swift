@@ -6907,6 +6907,57 @@ final class RealInputTests: XCTestCase {
     )
     try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
     try assertOnePressPerTap("real-input-listitem-in-form", echo: Echo.listItemFormPresses, times: 5, as: "the list item inside a Form.Row")
+
+    // 7. The same press has to *look* like a press. Inside a `Form.Row` the leaf paints
+    //    nothing of its own (step 6 is about the insets that prove it), so the only
+    //    feedback this row can have is the cell's - and the cell paints one only for a row
+    //    that is pressable. The README's own example and this screen's fixture both write
+    //    the handler on the *item* (`list-item-in-form`), so an item's `onPress` that never
+    //    reaches the row is a row that presses in silence.
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    try assertRowShowsCellHighlight(
+      "real-input-listitem-in-form",
+      echo: Echo.listItemFormPresses,
+      as: "the list item inside a Form.Row"
+    )
+
+    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
+    //    asking for that row. Last, because it scrolls the page out from under everything
+    //    above it.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertDragFromRowIsNotAPress(
+      "real-input-listitem",
+      echo: Echo.listItemPresses,
+      as: "the list item with onPress"
+    )
+  }
+
+  /// A drag that begins on a row belongs to the scroll view, so the row presses nobody.
+  ///
+  /// The row's press recogniser starts at once (`minimumPressDuration = 0`, which is what
+  /// made a quick thumb work at all), so it is the finger's *travel* that has to tell a
+  /// press from a scroll: a recogniser that answers `.ended` without looking at where the
+  /// finger went fires on every flick that happened to begin on a row. Ten taps and a
+  /// counter are the other half of this; this is the half that says the counter did not
+  /// move for the drag.
+  private func assertDragFromRowIsNotAPress(
+    _ identifier: String,
+    echo: String,
+    as what: String
+  ) throws {
+    let element = try required(identifier, as: what)
+    let before = echoText(echo)
+    let travel = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+    element.centre.press(forDuration: 0.25, thenDragTo: travel, withVelocity: .normal, thenHoldForDuration: 0.1)
+    let after = echoText(echo)
+    print("real-input list-item drag: \(what) (\(identifier)) echo \"\(before)\" -> \"\(after)\"")
+    XCTAssertEqual(
+      after,
+      before,
+      "\(what) (\(identifier)) reported a press for a drag that started on it: \"\(echo)\" "
+        + "went \"\(before)\" -> \"\(after)\" while the finger travelled up the page. A row "
+        + "that fires on a scroll takes the person to a screen they only meant to scroll past."
+    )
   }
 
   /// Tap `identifier` ten times and require the echo to read exactly 1…10.

@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,13 +25,17 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -186,7 +191,48 @@ internal class ListItemModel : NitroUiModel() {
   private var presses = 0
   private var probes = 0
   private var accessibilityReport = "none"
-  private var layout = "pending"
+
+  /**
+   * Where the row's own layout put its content, in dp: leading inset, trailing inset, box.
+   * `null` until the first `onGloballyPositioned` has run.
+   *
+   * Stored as numbers rather than as the finished line so [layoutReport] can compose
+   * `shape=` at the moment it is asked for: a layout pass does not run when a press paints
+   * or unpaints a highlight, so a shape recorded with the geometry would go stale.
+   */
+  private var geometry: FloatArray? = null
+
+  /**
+   * The colour each slot is painted with, keyed by slot name — `text`, `secondary`, `image`,
+   * `chevron`, `value`, each a `#rrggbbaa` or `none`.
+   *
+   * Test-only, and written at the slot from the `LocalContentColor` that slot inherits (the
+   * same reading [recordIconTint] makes), not from `enabled`: the claim is "a disabled row is
+   * greyed", and a row that greyed only one label answers that wrong. Slots that paint nothing
+   * answer `none`; a slot that never ran answers `pending`, which is how a missing slot shows
+   * up rather than passing as a colour.
+   */
+  private val slotColours = HashMap<String, String>()
+
+  /**
+   * Whether this leaf's own press painted for the press last applied to it — the `shape=`
+   * answer, and a latch: it says "painted for that press", not "painting right now".
+   *
+   * Set by the collector that watches the interaction stream the indication itself consumes
+   * ([ListItemHost.Component]), not by the props that choose the painter. Inside a
+   * `Form.Row` nothing is collected (the leaf installs no press at all), so it stays `false`
+   * and the row that owns the cell is the one that can be seen to highlight.
+   */
+  private var highlightPainted = false
+
+  /**
+   * The live `clickable`'s interaction source, while the leaf installs a press of its own;
+   * `null` inside a `Form.Row` and for an item with no handler.
+   *
+   * Held so [ListItemHost.nuiTestPress] can drive the same interaction a finger produces —
+   * Form's row emits into its section's source for the same reason.
+   */
+  @Volatile var ownInteractionSource: MutableInteractionSource? = null
 
   /**
    * The colour the leading glyph was painted with, as `#RRGGBB`, or `-` when no glyph drew.
@@ -214,29 +260,35 @@ internal class ListItemModel : NitroUiModel() {
     }
   }
 
-  /**
-   * Which press path drew this row: `own` (the leaf's own `clickable`, with Material's ripple),
-   * `cell` (inside a `Form.Row`, whose cell owns the highlight) or `none`.
-   *
-   * Recorded at the branch that picks the painter, not from `insideRow`, so the answer is
-   * the path that ran — the harness's "inside a row the leaf draws no shape or highlight of
-   * its own" is then a reading of the composition rather than an echo of the prop.
-   */
-  private var pressPath = "pending"
-
-  fun recordPressPath(
-    path: String,
+  /** Record where the row put its content, in dp. See [geometry]. */
+  fun recordGeometry(
+    leading: Float,
+    trailing: Float,
+    width: Float,
+    height: Float,
   ) {
-    synchronized(reportLock) { pressPath = path }
+    synchronized(reportLock) { geometry = floatArrayOf(leading, trailing, width, height) }
   }
 
-  /** Whether this leaf paints a container or a press of its own — the `shape=` answer. */
-  fun paintsOwn(): Boolean =
-    synchronized(reportLock) { pressPath == "own" }
+  /** Record the colour one slot is painted with. See [slotColours]. */
+  fun recordSlotColour(
+    slot: String,
+    report: String,
+  ) {
+    synchronized(reportLock) { slotColours[slot] = report }
+  }
 
-  /** Record where the row put its content, as `insets=<l>,<t>;shape=<0|1>;box=<w>x<h>`. */
-  fun recordLayout(report: String) {
-    synchronized(reportLock) { layout = report }
+  /** The slots in reading order, each with its colour, `none`, or `pending` if it never ran. */
+  private fun coloursReport(): String =
+    listOf("text", "secondary", "image", "chevron", "value").joinToString(",") { slot ->
+      "$slot=${slotColours[slot] ?: "pending"}"
+    }
+
+  /** Say whether the row's own press painted for the press being applied. See [highlightPainted]. */
+  fun recordHighlightPainted(
+    painted: Boolean,
+  ) {
+    synchronized(reportLock) { highlightPainted = painted }
   }
 
   /**
@@ -251,15 +303,29 @@ internal class ListItemModel : NitroUiModel() {
   }
 
   /**
-   * `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>;iconTint=<#RRGGBB|->`. Safe from any
-   * thread. iOS answers the last field `-` because it has no sampler to feed.
+   * `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>;iconTint=<#RRGGBB|->;colours=<…>`. Safe
+   * from any thread. iOS answers the penultimate field `-` because it has no sampler to feed.
    */
   fun stateReport(): String =
     synchronized(reportLock) {
-      "displayed=$drawn;presses=$presses;probes=$probes;a11y=$accessibilityReport;iconTint=$iconTint"
+      "displayed=$drawn;presses=$presses;probes=$probes;a11y=$accessibilityReport;" +
+        "iconTint=$iconTint;colours=${coloursReport()}"
     }
 
-  fun layoutReport(): String = synchronized(reportLock) { layout }
+  /**
+   * `insets=<l>,<t>;shape=<0|1>;box=<w>x<h>`, or `pending` before the first layout.
+   *
+   * The insets and the box are the last layout's measured frames; `shape=` is
+   * [highlightPainted], read here rather than stored with them. See [recordGeometry].
+   */
+  fun layoutReport(): String =
+    synchronized(reportLock) {
+      val measured = geometry ?: return "pending"
+      "insets=" +
+        measured[0].fmt() + "," + measured[1].fmt() +
+        ";shape=" + (if (highlightPainted) 1 else 0) +
+        ";box=" + measured[2].fmt() + "x" + measured[3].fmt()
+    }
 
   /** Back to "nothing yet", for recycling: a reused row whose report still described the
    * previous owner's item would let a test read that owner's content. */
@@ -269,13 +335,16 @@ internal class ListItemModel : NitroUiModel() {
       presses = 0
       probes = 0
       accessibilityReport = "none"
-      layout = "pending"
+      geometry = null
+      slotColours.clear()
+      highlightPainted = false
       iconTint = "-"
-      pressPath = "pending"
     }
   }
 
   override fun reset() {
+    // The interaction source belongs to a composition that is going away with this instance.
+    ownInteractionSource = null
     title = null
     subtitle = null
     value = null
@@ -307,6 +376,12 @@ internal object ListItemMetrics {
   /** The gap kept between the headline and the value that trails it on its own line. */
   val ValueGap = 8.dp
 }
+
+/**
+ * Material's disabled-content alpha (`ContentAlpha.disabledContentAlpha`), spelled out because
+ * material3 keeps the constant internal — the same reason [ListItemMetrics] exists.
+ */
+private const val DisabledContentAlpha = 0.38f
 
 /**
  * The item's host: [NitroComposeHost] plus this component's composable. [Component] is
@@ -341,10 +416,21 @@ private class ListItemHost(
    * One press, through the path a tap takes — Material's `onClick`, and the `nuiTestPress`
    * hook — so the two cannot disagree about what a press means. Refused while disabled or
    * unwired, as a tap is, and the counter only moves for an accepted one.
+   *
+   * On the test path it also emits the interaction a finger produces, because `onClick` alone
+   * emits none: the ripple that answers a real touch is driven off the interaction source, and
+   * a test press that skipped it would leave `shape=` describing a press that never painted.
+   * The release is posted, not emitted inline — a finger is down for a frame or two, and the
+   * indication needs that long to draw.
    */
   fun press() {
     if (!model.enabled || !model.pressable) {
       return
+    }
+    model.ownInteractionSource?.let { source ->
+      val press = PressInteraction.Press(Offset.Zero)
+      source.tryEmit(press)
+      postDelayed({ source.tryEmit(PressInteraction.Release(press)) }, 50L)
     }
     model.recordPress()
     model.onPress?.invoke()
@@ -365,16 +451,58 @@ private class ListItemHost(
 
     // No container of the leaf's own: Material paints one by default (the file header),
     // and the two colours have to be squared together or a disabled row paints it again.
-    // Read back out of the colours the row is *being configured with* to answer `shape=`,
-    // the way Chip reads `LocalContentColor` to answer `iconTint=`: a reading of what will
-    // be painted, taken at the same place the painter takes it, not of a prop.
     val colors =
       ListItemDefaults.colors(
         containerColor = ComposeColor.Transparent,
         disabledContainerColor = ComposeColor.Transparent,
       )
-    val paintsContainer =
-      colors.containerColor(enabled = enabled, selected = false, dragged = false).alpha > 0f
+    // What each slot is painted with, taken from the same `ListItemColors` Material is handed
+    // and *applied* to the slot it belongs to. Reading the colours the row is configured with
+    // and then painting with them is what makes `colours=` a statement about pixels rather
+    // than about a `LocalContentColor` this file cannot see into; Material's own functions do
+    // the greying, so `disabled` dims the headline, the supporting line and the trailing
+    // icon exactly as Material dims them anywhere else. Without them a disabled row on
+    // Android kept a full-strength everything except the one label this file owns, while iOS
+    // greyed the whole row.
+    val headlineColor = colors.contentColor(enabled = enabled, selected = false, dragged = false)
+    val supportingColor =
+      colors.supportingContentColor(enabled = enabled, selected = false, dragged = false)
+    val chevronColor =
+      colors.trailingContentColor(enabled = enabled, selected = false, dragged = false)
+    // The value's own colour, spelled here because it is painted here: Material's grey for a
+    // supporting line, and the same 38 % disabled-content alpha Material uses elsewhere.
+    val valueColor =
+      MaterialTheme.colorScheme.onSurfaceVariant.let {
+        if (enabled) it else it.copy(alpha = DisabledContentAlpha)
+      }
+    model.recordSlotColour(
+      "text",
+      when (model.title) {
+        null -> "none"
+        else -> hexOf(headlineColor)
+      },
+    )
+    model.recordSlotColour(
+      "secondary",
+      when (model.subtitle) {
+        null -> "none"
+        else -> hexOf(supportingColor)
+      },
+    )
+    model.recordSlotColour(
+      "chevron",
+      when (accessory) {
+        ListItemAccessory.Disclosure -> hexOf(chevronColor)
+        else -> "none"
+      },
+    )
+    model.recordSlotColour(
+      "value",
+      when (model.value) {
+        null -> "none"
+        else -> hexOf(valueColor)
+      },
+    )
 
     // The list's own horizontal inset, or none inside a row. The vertical insets stay
     // Material's either way: a row's *height* is its content's, and the row's own vertical
@@ -390,15 +518,26 @@ private class ListItemHost(
         bottom = defaults.calculateBottomPadding(),
       )
 
-    // One element for the whole row. Material merges the descendants itself
-    // (`semantics(mergeDescendants = true)`), which covers the *text*; what the interactive
-    // overload does not do is say the row is a button or that it is disabled — it passes
-    // `applySemantics = {}`. Both are this file's job, and the harness's a11y case reads
+    // One element for the whole row, and one *reading order*. Material merges the descendants
+    // itself (`semantics(mergeDescendants = true)`), which covers the *text*; what the plain
+    // overload does not do is say the row is a button, that it is disabled, or in what order a
+    // reader gets its parts — all three are this file's job, and the harness's a11y case reads
     // the answer off the merged node.
-    val label = model.accessibilityLabel
+    //
+    // The reading order is title, subtitle, value: the same
+    // three the leaf draws and the same order iOS's element publishes. Material merges the
+    // descendants' text too, but in whatever order its slots compose, and on a two-line item
+    // that put the value between the lines of the label rather than after them.
+    val label =
+      model.accessibilityLabel
+        ?: listOfNotNull(model.title, model.subtitle, model.value).joinToString(", ")
+          .ifEmpty { null }
     val rowSemantics =
       Modifier.semantics {
-        if (pressable) {
+        // The button role is a promise about a touch, and inside a `Form.Row` the touch belongs
+        // to the cell, which publishes its own button element. A second button nested in it is
+        // one stop too many for a row that is already one.
+        if (pressable && !insideRow) {
           role = Role.Button
         }
         if (!enabled) {
@@ -411,24 +550,42 @@ private class ListItemHost(
 
     // Where the content landed, in the view's own box, for `nuiTestLayoutReport`. Both
     // readings come from the layout that drew: the item's box and the content column's box
-    // inside it. Written as plain storage (`recordLayout`), so a layout pass never asks for
+    // inside it. Written as plain storage (`recordGeometry`), so a layout pass never asks for
     // a recomposition.
     val density = LocalDensity.current
     val box = remember { FloatArray(4) }
     val content = remember { FloatArray(3) }
     val publish = {
       if (box[2] > 0f && content[2] >= 0f) {
-        // `shape=`: a container of the leaf's own, or the leaf's own press — inside a
-        // `Form.Row` neither is painted, and the row that owns the cell can be told.
-        model.recordLayout(
-          ListItemLayout.report(
-            box,
-            content,
-            paintsContainer || model.paintsOwn(),
-            density,
-          ),
-        )
+        val measured = ListItemLayout.geometry(box, content, density)
+        model.recordGeometry(measured[0], measured[1], measured[2], measured[3])
       }
+    }
+    // The row's own press source, hoisted out of the box below so the two effects under it can
+    // name it. One per composition, never replaced (`setContent` runs once).
+    val interactionSource = remember { MutableInteractionSource() }
+
+    // Whether this row installs a press of its own at all. Inside a `Form.Row` it does not:
+    // the cell is the touch target, the cell paints the pressed row, and `Form.Row` has taken
+    // this item's `onPress` through `RowItemPressContext` so the press still arrives.
+    val ownsClick = pressable && !insideRow
+
+    // Watch the interaction stream the indication itself consumes, and record what it says.
+    // This is the witness behind `shape=`: a Press that reached a source with an indication
+    // attached, seen by a collector rather than inferred from the props that choose one.
+    // A `Cancel` (a touch that travelled past the slop, a scroll) takes the answer back off.
+    LaunchedEffect(interactionSource, ownsClick) {
+      interactionSource.interactions.collect { interaction ->
+        when (interaction) {
+          is PressInteraction.Press -> if (ownsClick) model.recordHighlightPainted(true)
+          is PressInteraction.Cancel -> model.recordHighlightPainted(false)
+          else -> {}
+        }
+      }
+    }
+    DisposableEffect(interactionSource, ownsClick) {
+      model.ownInteractionSource = interactionSource.takeIf { ownsClick }
+      onDispose { model.ownInteractionSource = null }
     }
 
     Box(
@@ -444,7 +601,6 @@ private class ListItemHost(
             publish()
           },
     ) {
-      val interactionSource = remember { MutableInteractionSource() }
       // The row's content: the headline, with the value trailing it *on the same line*.
       // Material's `trailingContent` slot is vertically centred against the whole row,
       // which on a two-line item puts the value between the lines rather than beside the
@@ -468,7 +624,14 @@ private class ListItemHost(
             text = model.title ?: "",
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
+            color = headlineColor,
+            // `fill = true`, so the headline takes the row's leftover width and the value is
+            // pushed to the trailing edge — where UIKit's value slot puts it. With `fill =
+            // false` the headline shrinks to its text and the two sit side by side in the
+            // middle of the row, which is the difference between a settings row and a label.
+            // The title still truncates before the value: the value has no weight, so it is
+            // measured first and the headline gets what is left.
+            modifier = Modifier.weight(1f),
           )
           val value = model.value
           if (value != null) {
@@ -480,7 +643,7 @@ private class ListItemHost(
               // The platform's value role: Material's supporting-text colour rather than the
               // headline's, because a value is the row's answer, not its name. UIKit draws
               // exactly this distinction through `.valueCell()`'s secondary text.
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              color = valueColor,
             )
           }
         }
@@ -491,10 +654,13 @@ private class ListItemHost(
           // Nothing in the slot, so nothing painted: the harness's probe has to be able to
           // tell "this row has no glyph" from "the glyph's colour was never recorded".
           model.recordIconTint(null)
+          model.recordSlotColour("image", "none")
           null
         } else {
           {
-            model.recordIconTint(LocalContentColor.current)
+            val tint = LocalContentColor.current
+            model.recordIconTint(tint)
+            model.recordSlotColour("image", hexOf(tint))
             NitroUiIconSlotGlyph(model.androidIconContent, ListItemMetrics.LeadingIconSize)
           }
         }
@@ -506,6 +672,7 @@ private class ListItemHost(
               imageVector = nitroUiIcon(R.drawable.nitroui_chevron_right),
               contentDescription = null,
               modifier = Modifier.size(ListItemMetrics.LeadingIconSize),
+              tint = chevronColor,
             )
           }
         } else {
@@ -519,15 +686,18 @@ private class ListItemHost(
       // `ripple()` is still the platform's own indication rather than a colour this file
       // chose, bounded so the wash stays inside the row instead of leaking over its
       // neighbours.
-      model.recordPressPath(if (!pressable) "none" else if (insideRow) "cell" else "own")
+      // Inside a row the leaf installs no press at all — not a silent one. A `clickable` with
+      // `indication = null` still took the touch from the cell and still answered it, so the
+      // row that owns the cell never learned to press and never lit: an item with `onPress`
+      // inside a row without one pressed in silence. The handler travels up through
+      // `RowItemPressContext`, the cell presses, and the cell highlights.
       val ownClick =
-        if (!pressable) {
+        if (!ownsClick) {
           Modifier
         } else {
           Modifier.clickable(
             interactionSource = interactionSource,
-            // Inside a row the cell owns the highlight, so the leaf's clickable is silent.
-            indication = if (insideRow) null else ripple(),
+            indication = ripple(),
             enabled = enabled,
             role = Role.Button,
             onClick = { press() },
@@ -540,7 +710,14 @@ private class ListItemHost(
         trailingContent = trailing,
         supportingContent =
           model.subtitle?.let { supporting ->
-            { Text(text = supporting, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            {
+              Text(
+                text = supporting,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = supportingColor,
+              )
+            }
           },
         colors = colors,
         contentPadding = contentPadding,
@@ -620,24 +797,33 @@ private fun findComposeRoot(root: View): RootForTest? {
 
 /** Turns the two measured boxes into the report, in points. */
 private object ListItemLayout {
-  fun report(
+  /** The row's measured geometry in dp: leading inset, trailing inset, box. */
+  fun geometry(
     box: FloatArray,
     content: FloatArray,
-    paintsContainer: Boolean,
     density: Density,
-  ): String {
+  ): FloatArray {
     val leading = (content[0] - box[0]).toDp(density)
     val trailing = (box[0] + box[2] - content[0] - content[2]).toDp(density)
-    return "insets=" +
-      leading.fmt() + "," + trailing.fmt() +
-      ";shape=" + (if (paintsContainer) 1 else 0) +
-      ";box=" + box[2].toDp(density).fmt() + "x" + box[3].toDp(density).fmt()
+    return floatArrayOf(
+      leading,
+      trailing,
+      box[2].toDp(density),
+      box[3].toDp(density),
+    )
   }
 
   private fun Float.toDp(density: Density): Float = with(density) { this@toDp.toDp().value }
 
-  private fun Float.fmt(): String = String.format(java.util.Locale.ROOT, "%.2f", this)
 }
+
+/** One dp measurement as the report spells it. */
+private fun Float.fmt(): String = String.format(java.util.Locale.ROOT, "%.2f", this)
+
+/** The row's own colours, as `#rrggbbaa` — the shape iOS's `Self.hex` answers. */
+private fun hexOf(
+  color: ComposeColor,
+): String = String.format(java.util.Locale.ROOT, "#%08x", color.toArgb())
 
 /** The Hybrid View React renders as `NitroUiListItem`. */
 class HybridNitroUiListItem(

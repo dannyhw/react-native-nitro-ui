@@ -94,6 +94,68 @@ const captureItem =
     handles.set(testId, view);
   };
 
+/**
+ * What a `Form.Row`'s `hybridRef` hands back: the two test-only methods this file needs to
+ * ask the *cell* what it was told to be. Declared, not imported (DECISIONS D14), as
+ * `Form.harness.tsx` spells them.
+ */
+type FormRowHandle = {
+  nuiTestRowReport(): string;
+  nuiTestA11yClick(): void;
+};
+
+const rowHandles = new Map<string, FormRowHandle>();
+const captureRow =
+  (key: string) =>
+  (view: FormRowHandle): void => {
+    rowHandles.set(key, view);
+  };
+
+/** The cell's own report, as `key -> value`. iOS publishes it on main, so callers poll. */
+function rowReportOf(key: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  const text = rowHandles.get(key)?.nuiTestRowReport() ?? '';
+  for (const pair of text.split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) fields[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return fields;
+}
+
+/**
+ * `colours=text=…,secondary=…,image=…,chevron=…,value=…`, as `slot -> colour`.
+ *
+ * Each colour is a `#rrggbbaa`, or a word: `none` for a slot that draws nothing, `unset` for
+ * iOS's image slot when the row set no tint, and `pending` for a slot whose configure never
+ * ran — which is how a missing slot shows up instead of passing as a colour.
+ */
+function coloursOf(testId: string): Record<string, string> {
+  const report = reportOf(testId).colours ?? '';
+  const slots: Record<string, string> = {};
+  for (const pair of report.split(/,(?=[a-z]+=)/)) {
+    const at = pair.indexOf('=');
+    if (at > 0) slots[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return slots;
+}
+
+/** A `#rrggbbaa`'s alpha as 0-255, or `null` when the slot paints nothing. */
+function alphaOf(colour: string | undefined): number | null {
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(
+    colour ?? ''
+  );
+  return hex == null ? null : parseInt(hex[4] ?? '', 16);
+}
+
+/** Press the *cell* the way a screen reader does — Android's `ACTION_CLICK` seam. */
+function clickRow(key: string): void {
+  const row = rowHandles.get(key);
+  if (row == null) {
+    throw new Error(`no Form.Row handle was captured for "${key}"`);
+  }
+  row.nuiTestA11yClick();
+}
+
 /** Every press the app was told about, in order, as `testID:press`. */
 const events: string[] = [];
 const recordPress = (testId: string) => (): void => {
@@ -907,13 +969,23 @@ describe('ListItem · G30', () => {
     expect(button.toLowerCase()).toContain('role=button');
     expect(label.toLowerCase()).not.toContain('role=button');
 
-    // All three slots are in what a reader gets, whatever order the platform reads them in.
-    for (const text of ['Ringtone', 'Only while the app is open', 'Normal']) {
-      expect(button).toContain(text);
-    }
+    // All three slots, in the order a person reads the row: headline, supporting line,
+    // value. Both platforms build that label themselves — UIKit from the row's three slots
+    // in `applyAccessibility`, Android through a `contentDescription` it sets precisely
+    // because Material merges the row's text in slot order instead — so the order is part of
+    // what the component promises, not an accident of the toolkit. `label=` is the last
+    // field of the probe line on both platforms.
+    const readOrder = (probed: string): string => {
+      const at = probed.lastIndexOf(',label=');
+      return at < 0 ? probed : probed.slice(at + ',label='.length);
+    };
+    expect(readOrder(button)).toBe(
+      'Ringtone, Only while the app is open, Normal'
+    );
     for (const text of ['Account', 'Last synced yesterday']) {
       expect(label).toContain(text);
     }
+    expect(readOrder(label)).toBe('Account, Last synced yesterday');
 
     // An explicit label wins, and is the whole answer.
     const named = 'Work account, signed in as danny';
@@ -1011,11 +1083,19 @@ describe('ListItem · G30', () => {
     // edge with a second highlight under the cell's — the doubled-padding row this leaf
     // exists to make impossible.
     //
-    // `insets=` is measured, not declared: it is where the content column landed inside the
-    // view's bounds (`onGloballyPositioned` on Android, the configuration's own margins on
-    // iOS). `shape=` is read where the painter is chosen — `1` when this leaf paints a
-    // background or arms its own highlight, `0` when it hands the press to the cell — so the
-    // two rows cannot both answer the same thing and one of them cannot be right by accident.
+    // Both answers are read from the drawn thing. `insets=` is where the content actually
+    // landed inside the view's bounds: the title label's frame in the row's coordinates on
+    // iOS, `onGloballyPositioned` on Android — not `configuration.directionalLayoutMargins`
+    // read back, which would repeat the number the row wrote into it and could not notice an
+    // `insideRow` that was ignored. `shape=` is the row's own highlight *painting*: iOS
+    // answers from the call that set its background colour, Android from a Press interaction
+    // collected off the stream the ripple itself consumes. At rest both rows therefore
+    // answer `0`, and only the standalone one answers `1` after a press.
+    //
+    // The row here has no `onPress` of its own, because that is the shape the README teaches
+    // (`list-item-in-form`) and the shape the component screen ships: the handler is written
+    // on the item, and the row has to take it. A `Form.Row` that stayed unpressable around a
+    // pressable item pressed in silence — the callback arrived and nothing on screen said so.
     const ids = ['bare-item', 'form-item'];
     await render(
       <View style={columnStyle}>
@@ -1027,7 +1107,7 @@ describe('ListItem · G30', () => {
           hybridRef={captureItem('bare-item')}
         />
         <Form style={{ height: 140 }}>
-          <Form.Row onPress={recordPress('form-row')}>
+          <Form.Row hybridRef={captureRow('form-row')}>
             <ListItem
               onPress={recordPress('form-item')}
               testID="form-item"
@@ -1048,20 +1128,158 @@ describe('ListItem · G30', () => {
       `list-item layout:\n  standalone: ${bare.raw}\n  in row:     ${inRow.raw}`
     );
 
-    const inset = Platform.OS === 'android' ? 16 : 16;
-    expect(bare.leading).toBeCloseTo(inset, 1);
-    expect(bare.trailing).toBeCloseTo(inset, 1);
-    expect(bare.shape).toBe(1);
+    expect(bare.leading).toBeCloseTo(16, 1);
+    expect(bare.trailing).toBeCloseTo(16, 1);
     expect(inRow.leading).toBeCloseTo(0, 1);
     expect(inRow.trailing).toBeCloseTo(0, 1);
+
+    // Nothing has painted yet, on either row.
+    expect(bare.shape).toBe(0);
     expect(inRow.shape).toBe(0);
 
-    // And the item inside the row is still itself: it drew, and a press on it is a press.
+    // The cell has taken the item's handler: `pressable` is what the row tells its own native
+    // view to be, and it is 0 unless the report the item handed up reached it. iOS publishes
+    // the report from main, so this polls rather than reads once.
+    const pressable = await pollUntil(
+      () => {
+        const report = rowReportOf('form-row');
+        return report.pressable == null ? null : report.pressable;
+      },
+      () =>
+        new Error(
+          `the Form.Row around a pressable item never reported its own pressability - last ` +
+            `answer "${rowHandles.get('form-row')?.nuiTestRowReport() ?? 'no handle'}".`
+        )
+    );
+    console.log(`  · in-Form cell: pressable=${pressable}`);
+    expect(pressable).toBe('1');
+
+    // The standalone row paints; the row inside the cell never does, press or no press.
+    pressItem('bare-item');
+    const painted = await pollUntil(
+      () => (layoutOf('bare-item')?.shape === 1 ? '1' : null),
+      () =>
+        new Error(
+          `"bare-item" never reported its own highlight painting - last answer ` +
+            `"${handles.get('bare-item')?.nuiTestLayoutReport() ?? 'no handle'}", and a press ` +
+            `was taken (presses=${String(reportOf('bare-item').presses)}).`
+        )
+    );
+    expect(painted).toBe('1');
+    const afterPress = await waitForLayout('form-item', 'inside Form.Row');
+    console.log(`  · in row after both presses: ${afterPress.raw}`);
+    expect(afterPress.shape).toBe(0);
+
+    // And the item inside the row still gets its own press — through the cell that now owns
+    // the touch. On Android that is `ACTION_CLICK` on the row, the action TalkBack doubles:
+    // the handler the item wrote is the one the cell was given, so the cell's press is the
+    // item's callback. (iOS's activation is a synthesised centre tap no method can send from
+    // here - `Form.harness.tsx` says so, and `real-input:ios`'s in-Form case is the half that
+    // presses this row with a finger.)
     expect(reportOf('form-item').displayed).toBe('Ringtone|-|Normal|none');
-    const from = events.length;
-    pressItem('form-item');
-    expect(await waitForEvents(from, ['form-item:press'])).toEqual([
-      'form-item:press',
-    ]);
+    if (Platform.OS === 'android') {
+      const from = events.length;
+      clickRow('form-row');
+      expect(await waitForEvents(from, ['form-item:press'])).toEqual([
+        'form-item:press',
+      ]);
+    }
+  });
+
+  it('greys every slot when it is disabled, not only the value', async () => {
+    // `disabled` has always refused the press; what it did to the *paint* is the half that
+    // went wrong first. iOS greyed the value label alone and left the headline, the
+    // supporting line and the leading glyph at full strength, so a "disabled" row read as a
+    // row whose answer happened to be faint.
+    //
+    // `colours=` is read where each slot is configured — the configuration's own text
+    // colours and image tint on iOS, the `LocalContentColor` each slot inherits on Android —
+    // so it is what will be painted, not what `disabled` was sent. The alpha byte is the
+    // comparison: a platform's enabled grey is not another's, and this asserts that one row
+    // got greyer than the identical row next to it, slot by slot.
+    const ids = ['colour-live', 'colour-off'];
+    const slots = {
+      accessory: 'disclosure' as const,
+      subtitle: 'A supporting line',
+      systemImage: SYMBOL,
+      title: 'Notifications',
+      value: 'On',
+    };
+    await render(
+      <View style={columnStyle}>
+        <ListItem
+          {...slots}
+          androidIcon={SLAB}
+          hybridRef={captureItem('colour-live')}
+          testID="colour-live"
+        />
+        <ListItem
+          {...slots}
+          androidIcon={SLAB}
+          disabled
+          hybridRef={captureItem('colour-off')}
+          testID="colour-off"
+        />
+      </View>,
+      { timeout: 25000 }
+    );
+    await settleEach(ids);
+
+    const live = coloursOf('colour-live');
+    const off = coloursOf('colour-off');
+    console.log(
+      `list-item colours:\n  enabled:  ${JSON.stringify(live)}\n  disabled: ${JSON.stringify(off)}`
+    );
+    for (const id of ids) {
+      expect(Object.keys(coloursOf(id)).sort()).toEqual(
+        ['chevron', 'image', 'secondary', 'text', 'value'].sort()
+      );
+    }
+
+    // The three slots every platform owns: same colour family, less alpha. `pending` fails
+    // here as much as a full-strength one would — a slot that never recorded says nothing
+    // about what it painted.
+    for (const slot of ['text', 'secondary', 'value']) {
+      const before = alphaOf(live[slot]);
+      const after = alphaOf(off[slot]);
+      expect({ slot, before, after }).toEqual(
+        expect.objectContaining({ slot })
+      );
+      if (before == null || after == null) {
+        throw new Error(
+          `slot "${slot}" is not a colour on both rows: enabled=${String(
+            live[slot]
+          )} disabled=${String(off[slot])}.`
+        );
+      }
+      expect(after).toBeLessThan(before);
+    }
+
+    // The glyph's tint is the slot with the two platforms' widest difference: iOS leaves the
+    // symbol's tint to UIKit when the row is enabled and so answers `unset`, while Android
+    // resolves Material's leading-content colour either way. What both have to show is that
+    // disabling a row *changes* its glyph — a disabled row whose icon stayed full-strength is
+    // the same bug in one slot.
+    if (alphaOf(live.image) == null) {
+      expect(alphaOf(off.image)).not.toBeNull();
+    } else {
+      const before = alphaOf(live.image) as number;
+      const after = alphaOf(off.image) as number;
+      expect(after).toBeLessThan(before);
+    }
+
+    // The chevron is the exception, and it is a look fact rather than a bug: UIKit's own
+    // disclosure indicator is `.tertiaryLabel` — already the row's disabled grey — so iOS
+    // cannot grey it further and this asserts it stays put. Android takes the trailing icon's
+    // colour from Material, which does dim it. Neither may make the chevron *brighter*.
+    const liveChevron = alphaOf(live.chevron);
+    const offChevron = alphaOf(off.chevron);
+    if (liveChevron != null && offChevron != null) {
+      if (Platform.OS === 'ios') {
+        expect(offChevron).toBe(liveChevron);
+      } else {
+        expect(offChevron).toBeLessThan(liveChevron);
+      }
+    }
   });
 });
