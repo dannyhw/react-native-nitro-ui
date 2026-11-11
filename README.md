@@ -575,7 +575,7 @@ export function ViewToggle() {
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
     <td><img src="docs/images/components/picker-ios.png" width="300" alt="Picker menu and wheel variants on iOS" /></td>
-    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker’s menu and wheel variants on Android: both draw Material 3’s exposed dropdown box, filled to its caller’s width" /></td>
+    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker’s menu and wheel variants on Android: Material 3’s exposed dropdown for the menu, and a ScrollField drum reading Small, Medium, Large for the wheel" /></td>
   </tr>
 </table>
 
