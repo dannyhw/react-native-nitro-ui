@@ -127,9 +127,11 @@ Each line is `test -> what was broken -> the line that went red`.
   item" at all…`; -> the action taken off the row node -> `the node that carries
   "Real-input item" is not actionable, and nothing whose box is the control's is either…`.
 - The harness device rules (poisoned fallback, glyph drawn not parsed, disabled inert,
-  recycling reset, `Form.Row` `insets=`/`shape=`) were each shown red earlier in this round,
-  before the fixes they guarded landed; they were not re-broken again after the last commit,
-  and both harnesses then re-ran green on the final tree.
+  recycling reset, `Form.Row` `insets=`/`shape=`) were each seen red while the leaf was being
+  written, before the fix they guarded landed. That was earlier in this round than any recorded
+  gate run and no red line from it was kept, so those five are asserted here, not evidenced;
+  what the runs above evidence is the press, highlight, barrier and a11y reds plus the offline
+  a11y rule's two mutations. Both harnesses re-ran green on the final tree.
 
 
 ## Files changed
