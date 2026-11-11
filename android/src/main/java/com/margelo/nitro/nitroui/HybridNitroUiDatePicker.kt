@@ -47,7 +47,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -1036,6 +1040,50 @@ private class DatePickerHost(
   var timeActive: State<Boolean>? = null
 
   /**
+   * The wheel's own [CoroutineScope], for the same reason as the drum states above: the
+   * only call that reliably *moves* a drum is the pager's own `scrollToOption`, and that
+   * is a `suspend` function, so a props pass needs a scope to launch it on.
+   *
+   * [ScrollFieldState.selectedOption] looks like the non-suspending road - its setter is
+   * `PagerState.requestScrollToPage`, and the Picker's drum does use it - and on this
+   * control it was not enough: measured on `nitroui_b`, a batch asked the hour drum to go
+   * from 2 to 9, the write landed, and the next rest read the drum back on 2, because a
+   * pending `requestScrollToPage` is consumed by the pager's own next measure and the
+   * wheel's three pagers had no reason to remeasure. `scrollToOption` scrolls now, on the
+   * caller's coroutine, which is what a snap-back needs.
+   */
+  var timeDrumScope: CoroutineScope? = null
+
+  /**
+   * One drum movement at a time, for every road that moves one.
+   *
+   * A seat and a roll are the same act on the same three pagers, and the order between
+   * them is the whole rule: a roll asked for one frame after a refused pick has to start
+   * from where the app *is*, not from where the drums have not yet been moved to. Without
+   * this the two raced and the loser decided what the next event was - measured on
+   * `nitroui_b`, a seat launched from a props pass was still scrolling when the next roll
+   * began, so that roll found the drums already on its own target, never scrolled, never
+   * rested, and reported nothing at all.
+   *
+   * Held by the composition's own seat, by the props pass's seat, by a roll and by a
+   * rest's tail - each of which launches on a scope that dies with the composition, so a
+   * lock is never left held. [ScrollFieldState] offers no queue of its own.
+   */
+  val timeDrumMutex = Mutex()
+
+  /**
+   * The wheel's own-write guard - the pair the drums were last *put on* - held by the
+   * composition and reached from here for the same reason as the drums themselves.
+   *
+   * A seat that moves the drums has to move this with them, and the harness case that
+   * caught it is the second roll of a refused time: the props pass wrote the parent's
+   * pair into the drums and left the guard on the refused one, so the roll back to that
+   * pair rested on what the guard called a pick the control had just made, and sent
+   * nothing. A rest is only a pick when it is not standing where it was put.
+   */
+  var timePushed: MutableState<Pair<Int, Int>>? = null
+
+  /**
    * Put the drums on the instant this control shows, if they are not on it already.
    *
    * [afterUpdate] calls this for a batch that *moved* [DatePickerModel.displayed], and
@@ -1056,18 +1104,32 @@ private class DatePickerHost(
    * A no-op when no wheel is composed, which is every other variant and mode.
    */
   fun seatTimeDrumsFromModel() {
+    val scope = timeDrumScope ?: return
     val hour = timeHourDrum ?: return
     val minute = timeMinuteDrum ?: return
-    if (timeActive?.value == true) {
+    val period = timePeriodDrum
+    val pushed = timePushed
+    val active = timeActive
+    if (active?.value == true) {
       return
     }
-    seatTimeDrums(
-      twentyFourHour,
-      hour,
-      minute,
-      timePeriodDrum,
-      timeOfDayOf(model, model.displayed),
-    )
+    scope.launch {
+      timeDrumMutex.withLock {
+        // Again, on the far side of the lock: a roll can have started while this waited
+        // behind it, and a roll is exactly what this must not interrupt.
+        if (active?.value == true) {
+          return@withLock
+        }
+        seatTimeDrums(
+          twentyFourHour,
+          hour,
+          minute,
+          period,
+          timeOfDayOf(model, model.displayed),
+          pushed,
+        )
+      }
+    }
   }
 
   @Composable
@@ -1381,7 +1443,30 @@ private class DatePickerHost(
         remember(active) {
           this@DatePickerHost.timeActive = active
         }
-        syncTimeWheel(model, twentyFourHour, hourState, minuteState, periodState, active)
+        // [syncTimePicker]'s own-write guard, for the same reason: comparing the drums
+        // against `model.displayed` prices a model-driven write as a pick whenever the
+        // instant is a frame behind, so the pair written *into* the drums is remembered
+        // beside the write. Beside the write, and beside the drums on the host: any road
+        // that moves a drum moves this too, and the props pass is one of them.
+        val pushed = remember(model) { mutableStateOf(timeOfDayOf(model, shown)) }
+        remember(pushed) {
+          this@DatePickerHost.timePushed = pushed
+        }
+        val drumScope = rememberCoroutineScope()
+        remember(drumScope) {
+          this@DatePickerHost.timeDrumScope = drumScope
+        }
+        syncTimeWheel(
+          model,
+          twentyFourHour,
+          hourState,
+          minuteState,
+          periodState,
+          active,
+          drumScope,
+          this@DatePickerHost.timeDrumMutex,
+          pushed,
+        )
         TimeWheel(
           model = model,
           twentyFourHour = twentyFourHour,
@@ -1837,49 +1922,82 @@ private fun syncTimeWheel(
   minuteState: ScrollFieldState,
   periodState: ScrollFieldState?,
   active: State<Boolean>,
+  scope: CoroutineScope,
+  drumMutex: Mutex,
+  pushed: MutableState<Pair<Int, Int>>,
 ) {
   val shown = model.displayed
-  // [syncTimePicker]'s own-write guard, for the same reason: comparing the drums against
-  // `model.displayed` prices a model-driven write as a pick whenever the instant is a
-  // frame behind, so the pair written *into* the drums is remembered beside the write.
-  val pushed = remember(model) { mutableStateOf(timeOfDayOf(model, shown)) }
-  // The value the app holds moves the drums - the direction that closes a refused pick and
-  // answers a new `value`. Instant, never animated: a rejected roll has to be off the
-  // centre line before the user looks, and this write must not start a scroll that could be
-  // read as the user's (it cannot - the rest it causes reads back the value just written,
-  // which the guard below refuses - but an instant snap does not even open the question).
+  // The value the app holds moves the drums - the direction that answers a new `value`.
+  // Instant, never animated: a new time has to be on the centre line before the user looks
+  // at it, and this write must not start a scroll that could be read as the user's (it
+  // cannot - the rest it causes reads back the value just written, which the guard below
+  // refuses - but an instant snap does not even open the question).
+  //
+  // It keeps its hands off while a roll is in progress, on the same rule as
+  // [DatePickerHost.seatTimeDrumsFromModel] below: moving a drum that is turning cancels
+  // the roll, and a roll that never rests reports nothing. What it also cannot see is the
+  // revert of a pick this control just refused, which is why that one is the props pass's
+  // job - see the race `docs/components/picker.md` records.
   LaunchedEffect(shown, hourState, minuteState, periodState) {
-    val wanted = timeOfDayOf(model, shown)
-    pushed.value = wanted
-    seatTimeDrums(twentyFourHour, hourState, minuteState, periodState, wanted)
+    drumMutex.withLock {
+      if (active.value) {
+        return@withLock
+      }
+      seatTimeDrums(
+        twentyFourHour,
+        hourState,
+        minuteState,
+        periodState,
+        timeOfDayOf(model, model.displayed),
+        pushed,
+      )
+    }
   }
   // A request from `nuiTestSelect`: this variant has no row to press, so the hook asks
   // for the roll a pick here *is* - the drums turning and coming to rest - and the rest
-  // below emits, exactly as a finger's does. Consumed before the scroll rather than
-  // after it: the effect is keyed on the drum states too, and a request left standing is
-  // re-run by the next new state object, which `options`-sized change while this roll is
-  // still coasting would produce, undoing the re-seat that same composition is doing.
+  // below emits, exactly as a finger's does.
+  //
+  // The request is spent by *serial*, and the field is cleared only once the roll is over.
+  // This effect is keyed on [DatePickerModel.timeWheelRequest] itself, so writing that
+  // field from inside the body re-keys the effect while its own three scrolls are still
+  // running and Compose cancels them with it - which is how a drum asked for 14:05 reports
+  // 05:08 instead: the hour drum's animation dies two rows in, the minute drum keeps
+  // coasting, and the rest reads whichever pair they happened to stop on. A remembered
+  // serial says "this request has been read" without touching a key, which is the guard
+  // the clear was reaching for: a new drum state object (`options`-sized change while this
+  // roll is still coasting) recomposes the effect without scrolling it a second time.
+  // Clearing after the joins cancels nothing - the body has already run.
   val request = model.timeWheelRequest
+  var readRequestSerial by remember { mutableStateOf(0) }
   LaunchedEffect(hourState, minuteState, periodState, request) {
-    if (request != null) {
+    if (request != null && request.serial > readRequestSerial) {
+      readRequestSerial = request.serial
+      // The lock is the handshake with a seat: a props batch that reverted the instant
+      // launches its own scroll, and this roll has to wait for it and start from where the
+      // drums then are. Overtaking it is what made the second roll of a refused time
+      // report nothing - see [DatePickerHost.timeDrumMutex].
+      drumMutex.withLock {
+        // All three at once. `active` is the drums' *or*, so starting them one after
+        // another would leave a frame in which none of them is scrolling - a rest, in the
+        // middle of a roll, and an event for a pair the user is not standing on.
+        val hour =
+          launch {
+            hourState.animateScrollToOption(
+              if (twentyFourHour) request.hour else request.hour % 12
+            )
+          }
+        val minute = launch { minuteState.animateScrollToOption(request.minute) }
+        val period =
+          periodState?.let { drum ->
+            launch { drum.animateScrollToOption(if (request.hour >= 12) 1 else 0) }
+          }
+        hour.join()
+        minute.join()
+        period?.join()
+      }
       if (model.timeWheelRequest === request) {
         model.timeWheelRequest = null
       }
-      // All three at once. `active` is the drums' *or*, so starting them one after
-      // another would leave a frame in which none of them is scrolling - a rest, in the
-      // middle of a roll, and an event for a pair the user is not standing on.
-      val hour =
-        launch {
-          hourState.animateScrollToOption(if (twentyFourHour) request.hour else request.hour % 12)
-        }
-      val minute = launch { minuteState.animateScrollToOption(request.minute) }
-      val period =
-        periodState?.let { drum ->
-          launch { drum.animateScrollToOption(if (request.hour >= 12) 1 else 0) }
-        }
-      hour.join()
-      minute.join()
-      period?.join()
     }
   }
   // One report per rest, on the rule the Picker's drum shares: a finger on the wheel or a
@@ -1894,8 +2012,14 @@ private fun syncTimeWheel(
       model.applyUserSelection(model.fromTimeOfDay(rolled.first, rolled.second, model.displayed))
     }
     val wanted = timeOfDayOf(model, model.displayed)
+    // Now, not from inside the lock: the guard answers the rest that has just happened,
+    // and the seat below only has to keep the drums where it already says they are.
     pushed.value = wanted
-    seatTimeDrums(twentyFourHour, hourState, minuteState, periodState, wanted)
+    scope.launch {
+      drumMutex.withLock {
+        seatTimeDrums(twentyFourHour, hourState, minuteState, periodState, wanted, pushed)
+      }
+    }
   }
 }
 
@@ -1930,27 +2054,48 @@ private fun readTimeDrums(
   return Pair(hour, minuteState.selectedOption)
 }
 
-/** Put the drums on an hour of day and a minute, leaving alone any drum already there. */
-private fun seatTimeDrums(
+/**
+ * Put the drums on an hour of day and a minute, leaving alone any drum already there.
+ *
+ * Both halves of a drum move: the [ScrollFieldState.selectedOption] write, which is what
+ * the Picker's drum does, and the pager's own instant `scrollToOption` after it.
+ *
+ * The write alone was measured not to be enough on these three pagers: its setter is a
+ * `requestScrollToPage`, a *pending* scroll that the pager consumes on its own next
+ * measure, and a drum whose value nobody is reading has no reason to remeasure - the
+ * getter says the drum is seated while the pager underneath it is still standing on the
+ * refused pair, and a roll asked for afterwards finds its own target there and never
+ * scrolls. `scrollToOption` scrolls on the caller's coroutine instead of asking for one,
+ * which is what a snap-back needs to be over before the user looks at it. It is the
+ * non-animated form, so a seat never looks like a roll, and the rest it causes reads back
+ * the pair just written - which every caller's own-write guard already refuses to report.
+ *
+ * Callers hold [DatePickerHost.timeDrumMutex]: this is the one place a drum moves, and
+ * the one place [DatePickerHost.timePushed] is written by something other than a rest.
+ */
+private suspend fun seatTimeDrums(
   twentyFourHour: Boolean,
   hourState: ScrollFieldState,
   minuteState: ScrollFieldState,
   periodState: ScrollFieldState?,
   timeOfDay: Pair<Int, Int>,
+  pushed: MutableState<Pair<Int, Int>>?,
 ) {
+  pushed?.value = timeOfDay
   val hour = timeOfDay.first
   val wantedHour = if (twentyFourHour) hour else hour % 12
+  val wantedPeriod = if (hour >= 12) 1 else 0
   if (hourState.selectedOption != wantedHour) {
     hourState.selectedOption = wantedHour
+    hourState.scrollToOption(wantedHour)
   }
   if (minuteState.selectedOption != timeOfDay.second) {
     minuteState.selectedOption = timeOfDay.second
+    minuteState.scrollToOption(timeOfDay.second)
   }
-  if (periodState != null) {
-    val wantedPeriod = if (hour >= 12) 1 else 0
-    if (periodState.selectedOption != wantedPeriod) {
-      periodState.selectedOption = wantedPeriod
-    }
+  if (periodState != null && periodState.selectedOption != wantedPeriod) {
+    periodState.selectedOption = wantedPeriod
+    periodState.scrollToOption(wantedPeriod)
   }
 }
 
@@ -2440,6 +2585,8 @@ class HybridNitroUiDatePicker(
     host.timeMinuteDrum = null
     host.timePeriodDrum = null
     host.timeActive = null
+    host.timeDrumScope = null
+    host.timePushed = null
     // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
     // marked the recycle: clearing it here would hide that mark.
     // Back to the policy the reset variant implies, and it has to be said here rather
@@ -2468,6 +2615,8 @@ class HybridNitroUiDatePicker(
     host.timeMinuteDrum = null
     host.timePeriodDrum = null
     host.timeActive = null
+    host.timeDrumScope = null
+    host.timePushed = null
     // The other half of the leak rule, and the reason `presented` is composed rather than
     // tracked: `drop()` disposes the composition, and a `Dialog` composed by a disposed
     // composition is gone with it. Nothing of this mount survives in a window, a listener
