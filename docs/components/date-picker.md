@@ -187,12 +187,21 @@ its snap line continuously, so the dial's rule ("the fields moved, so somebody p
 would price a roll from 09:20 to 14:05 at fifty-odd events, each with its own event count.
 The rule is kept and the trigger replaced: the time is read when the drums have come to
 rest, one rest one report. The write-back that reverts a refused pick is **not** that rest:
-it is an instant `requestScrollToPage` on the drums, asked for where the value is decided —
-on the props pass, right after the reconcile that reverts the instant. A refused pick can
+it is an instant `scrollToOption` on each drum, asked for where the value is decided — on
+the props pass, right after the reconcile that reverts the instant. A refused pick can
 write the new instant and the parent's back inside one frame, and an effect keyed on the
 instant then never sees the change it was waiting for, which would leave the refused pair on
 the drums and the next roll reporting nothing (`Picker variant="wheel"` documents the same
-race, and answers it the same way). The rest's own tail re-seats the drums too, so a roll
+race, and answers it the same way). It is `scrollToOption` and not the `selectedOption`
+write the `Picker` drum gets away with because these are three pagers that draw nothing from
+their own value: `selectedOption` only *asks* for a scroll, and a drum nobody is reading has
+no reason to measure again, so it reports the new page while still standing on the old one.
+Two more things travel with that seat, both learned the hard way: the wheel's own-write
+guard — the pair the drums were last put on, which is what stops a rest the control caused
+from being read as a pick — has to be moved with it, or the *next* roll is swallowed as
+exactly that; and every road that moves a drum (that seat, a new `value`, a roll, a rest's
+tail) takes one mutex, so a roll asked for a frame after a revert starts from where the
+drums have got to. The rest's own tail re-seats the drums too, so a roll
 that lands on a value the app refuses is home again by the time the finger has left. The
 rest is the wheel's own, on both of this library's wheels and in one helper: a
 finger on the drum or a drum still turning is *active*, and a drum's scroll flag falls when
