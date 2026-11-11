@@ -32,6 +32,15 @@ export type {
 } from './NitroUiCore.nitro';
 
 export { Slider, type SliderProps } from './components/Slider/Slider';
+
+// The row content of a list row (D46): UIKit's `UIListContentView` on iOS, Material 3's
+// `ListItem` on Android, so a settings screen reads like the platform's.
+export {
+  ListItem,
+  type ListItemAccessory,
+  type ListItemProps,
+} from './components/ListItem/ListItem';
+
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 
 // An opt-in shared native composition (H1): a container whose nitro-ui children render

@@ -34,6 +34,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiFormSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 // Forward declaration of `HybridNitroUiIconButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiIconButtonSpec; }
+// Forward declaration of `HybridNitroUiListItemSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiListItemSpec; }
 // Forward declaration of `HybridNitroUiMenuSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiMenuSpec; }
 // Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
@@ -122,6 +124,8 @@ namespace NitroUi { class HybridNitroUiFormSpec_cxx; }
 namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 // Forward declaration of `HybridNitroUiIconButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiIconButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiListItemSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiListItemSpec_cxx; }
 // Forward declaration of `HybridNitroUiMenuSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiMenuSpec_cxx; }
 // Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
@@ -159,6 +163,7 @@ namespace NitroUi { class HybridNitroUiTooltipSpec_cxx; }
 #include "HybridNitroUiFormSpec.hpp"
 #include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiIconButtonSpec.hpp"
+#include "HybridNitroUiListItemSpec.hpp"
 #include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiPopoverSpec.hpp"
@@ -1006,6 +1011,27 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiIconButtonSize>::withError(error);
   }
   
+  // pragma MARK: std::shared_ptr<HybridNitroUiListItemSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiListItemSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiListItemSpec_ = std::shared_ptr<HybridNitroUiListItemSpec>;
+  std::shared_ptr<HybridNitroUiListItemSpec> create_std__shared_ptr_HybridNitroUiListItemSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiListItemSpec_(std__shared_ptr_HybridNitroUiListItemSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiListItemSpec>
+  using std__weak_ptr_HybridNitroUiListItemSpec_ = std::weak_ptr<HybridNitroUiListItemSpec>;
+  inline std__weak_ptr_HybridNitroUiListItemSpec_ weakify_std__shared_ptr_HybridNitroUiListItemSpec_(const std::shared_ptr<HybridNitroUiListItemSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiSize>
+  using Result_NitroUiSize_ = Result<NitroUiSize>;
+  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const NitroUiSize& value) noexcept {
+    return Result<NitroUiSize>::withValue(value);
+  }
+  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiSize>::withError(error);
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiMenuSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridNitroUiMenuSpec>`.
@@ -1086,15 +1112,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNitroUiProgressSpec>
   using std__weak_ptr_HybridNitroUiProgressSpec_ = std::weak_ptr<HybridNitroUiProgressSpec>;
   inline std__weak_ptr_HybridNitroUiProgressSpec_ weakify_std__shared_ptr_HybridNitroUiProgressSpec_(const std::shared_ptr<HybridNitroUiProgressSpec>& strong) noexcept { return strong; }
-  
-  // pragma MARK: Result<NitroUiSize>
-  using Result_NitroUiSize_ = Result<NitroUiSize>;
-  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const NitroUiSize& value) noexcept {
-    return Result<NitroUiSize>::withValue(value);
-  }
-  inline Result_NitroUiSize_ create_Result_NitroUiSize_(const std::exception_ptr& error) noexcept {
-    return Result<NitroUiSize>::withError(error);
-  }
   
   // pragma MARK: Result<bool>
   using Result_bool_ = Result<bool>;

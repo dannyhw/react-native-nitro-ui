@@ -299,4 +299,16 @@ public final class NitroUiAutolinking {
   public static func isNitroUiButtonGroupRecyclable() -> Bool {
     return HybridNitroUiButtonGroup.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiListItem() -> bridge.std__shared_ptr_HybridNitroUiListItemSpec_ {
+    let hybridObject = HybridNitroUiListItem()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiListItemSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiListItemRecyclable() -> Bool {
+    return HybridNitroUiListItem.self is any RecyclableView.Type
+  }
 }

@@ -22,7 +22,11 @@ import {
   platformForArtifact,
   selectHarnessApp,
 } from '../scripts/app-stamp-core.mjs';
-import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
+import {
+  checkEmulatorEnv,
+  emulatorSerial,
+  requireLeaseDevice,
+} from '../scripts/lease-core.mjs';
 import {
   NITRO_UI_TEST_LOCALE_ENV,
   NITRO_UI_TEST_TZ_ENV,
@@ -162,7 +166,10 @@ const DEFAULT_AVD = 'nitroui';
  * @returns {ReturnType<typeof appleSimulator>}
  */
 function iosDevice() {
-  const udid = process.env.IOS_SIM_UDID;
+  // From the lease when one is named (`leaseDevice` refused the run earlier if the
+  // lease exported no UDID); the name/version selection below is for the shells that
+  // run a suite outside a lease, which `gate.mjs` no longer accepts as a gate.
+  const udid = leaseDevice.udid;
   if (udid == null || udid === '') {
     return appleSimulator(
       process.env.IOS_SIM ?? DEFAULT_IOS_NAME,
@@ -207,9 +214,17 @@ function iosDevice() {
   );
 }
 
-/** @returns {string} the AVD name to use (the harness creates it if missing). */
+/**
+ * The AVD name to use (the harness creates it if missing).
+ *
+ * `DEFAULT_AVD` is only reachable with no lease named: `requireLeaseDevice` insists
+ * on `ANDROID_AVD` from a leased run, so a gate never boots or attaches an AVD its
+ * lease did not hand out (X28).
+ *
+ * @returns {string}
+ */
 function avd() {
-  return process.env.ANDROID_AVD ?? process.env.AVD ?? DEFAULT_AVD;
+  return leaseDevice.avd ?? DEFAULT_AVD;
 }
 
 /**
@@ -265,6 +280,37 @@ function appLaunchEnvironment() {
     );
   }
   return options;
+}
+
+/**
+ * The device this run may use, when its shell names a lease (X28).
+ *
+ * A lease is the only thing between six concurrent tasks and one person's emulator,
+ * and it works by exporting variables — which a shell can also do by hand. So a run
+ * that names a lease (`NITRO_UI_LEASE_ID`) has to name the *whole* device that lease
+ * exported: the simulator UDID, the AVD, the serial and the private adb server. A
+ * half-sourced env is refused here, at config time, before the app is installed and
+ * long before anything could reach a device this task does not own.
+ *
+ * With no lease named this returns what the environment says and asks nothing, which
+ * is the developer's `bun run harness:ios` and the GitHub action that boots its own
+ * emulator. The gate is what turns "a device run" into "evidence", and
+ * `node scripts/gate.mjs` refuses that shape outright (`gate-core.mjs:
+ * deviceGateLeaseRefusal`), so the defaults below never reach a ledger line.
+ */
+const leaseDevice = requireLeaseDevice({
+  env: process.env,
+  platform: runner,
+  command: `bun run harness:${runner}`,
+});
+if (leaseDevice.leased) {
+  console.log(
+    `lease: ${leaseDevice.leaseId} runs this suite on ` +
+      (runner === 'ios'
+        ? `simulator ${leaseDevice.udid}`
+        : `${leaseDevice.serial} (${leaseDevice.avd}) via adb server ` +
+          String(leaseDevice.adbServerPort))
+  );
 }
 
 /**

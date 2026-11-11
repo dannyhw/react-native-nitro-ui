@@ -243,11 +243,85 @@ internal class HybridNitroUiFormSection(
       "boxH=${String.format("%.1f", view.height / density)}",
       "layerH=${String.format("%.1f", view.model.layerPx / density)}",
       "rects=${rects.ifEmpty { "-" }}",
+      // The same boxes with all four numbers, in the encoding the row's own `frame` and the
+      // drawn accessory use. `rects` above carries only `top-height`, because it was written
+      // for one question — how many shapes, and how far down the section they go. It cannot
+      // show a container that publishes a correct `top` and a width of nothing: the picture
+      // of a section whose first row has no card at all is exactly that, and every number
+      // this report used to carry was right about it.
+      "cardBoxes=" +
+        view
+          .model
+          .rects
+          .joinToString("|") {
+            String.format(
+              "%.1f,%.1f,%.1f,%.1f",
+              it.left / density,
+              it.top / density,
+              (it.right - it.left) / density,
+              it.height / density,
+            )
+          }
+          .ifEmpty { "-" },
       // Where the layer last *placed* an accessory, which comes out of the layout pass rather
       // than out of the numbers that were asked for: `rects`/`shapes` say what the layer was
       // given, this says where it ended up on screen. Same encoding as the row's own `frame`, so
       // a test can put the two side by side.
       "drawnAccessory=${accessoryFrame.ifEmpty { "-" }}",
+      // Where the layer that draws all of this *is*, in the section's px. Everything above is
+      // measured inside that view: `drawnCards` is a placement within the layer, `layerH` is the
+      // size Compose gave its root — so neither of them can see a layer that is the section's
+      // size and shape but is not sitting on the section. It is a child of a `ReactViewGroup`
+      // without being one of Fabric's children, so whose frame it ends up under is a real
+      // question, and it is the one question that has an answer only from out here.
+      "layerBox=" +
+        view
+          .model
+          .drawnLayer
+          ?.let {
+            String.format(
+              "%.1f,%.1f,%.1f,%.1f",
+              it.left / density,
+              it.top / density,
+              (it.right - it.left) / density,
+              it.height / density,
+            )
+          }
+          ?: "-",
+      "hostBox=" +
+        view
+          .layer
+          ?.let {
+            String.format(
+              "%.1f,%.1f,%.1f,%.1f",
+              it.left / density,
+              it.top / density,
+              it.width / density,
+              it.height / density,
+            )
+          }
+          ?: "-",
+      // The same four numbers per row, out of the layout pass rather than out of [rects]:
+      // `cardBoxes` is what the layer was given, this is where that box landed. A section whose
+      // rows are drawn outside their own containers has one of these two wrong, and only this
+      // one can say which (`FormFidelity`'s card case, X24 round 3).
+      "drawnCards=" +
+        view
+          .model
+          .drawnCards
+          .entries
+          .sortedBy { it.key }
+          .joinToString("|") { (index, rect) ->
+            String.format(
+              "%d:%.1f,%.1f,%.1f,%.1f",
+              index,
+              rect.left / density,
+              rect.top / density,
+              (rect.right - rect.left) / density,
+              rect.height / density,
+            )
+          }
+          .ifEmpty { "-" },
     ).joinToString(";")
   }
 }
@@ -312,6 +386,27 @@ internal class FormSectionModel : NitroUiModel() {
   var drawnAccessory: FormRowRect? = null
 
   /**
+   * Where the layer last *placed* each row's container, by row index, in the section's px.
+   *
+   * The other half of the same distinction as [drawnAccessory], and the half `form-android.png`
+   * was missing: [rects] is what the layer was *handed*, and a container can be handed the right
+   * box and land in another one — the box travels through an offset lambda, a Box alignment and
+   * a layer that has to have been told the section's size before any of it means what it says.
+   * Only the layout pass knows where the drawing ended up, so this is written from `onPlaced`,
+   * next to the accessory's own report, and read by the section report beside it.
+   */
+  val drawnCards = HashMap<Int, FormRowRect>()
+
+  /**
+   * Where the layer's own root box was placed inside the host's Compose view, in px.
+   *
+   * [drawnCards] is a placement inside this box and [hostBox] is where the box's view sits, so
+   * the gap between the two — the placement the host's root gave its content — is the last place
+   * a section's cards can be going astray without any number saying so.
+   */
+  var drawnLayer: FormRowRect? = null
+
+  /**
    * How tall the drawing layer was when Compose last measured it, in px.
    *
    * Reported beside the section's own height because everything in the layer is placed inside
@@ -353,6 +448,8 @@ internal class FormSectionModel : NitroUiModel() {
     boxW = 0f
     boxH = 0f
     drawnAccessory = null
+    drawnCards.clear()
+    drawnLayer = null
     layerPx = 0f
   }
 }
@@ -382,6 +479,15 @@ internal class NitroUiFormSectionView(
 ) : ReactViewGroup(context) {
   val model = FormSectionModel()
   private var composeHost: FormSectionHost? = null
+  /**
+   * The layer, for the one thing only its owner's owner can say about it: where it sits.
+   *
+   * [composeHost] stays private — everything the layer is *told* goes through this class. Its
+   * frame is read by the section report, which is asked from the Hybrid View, and that report is
+   * the only place a layer sitting on the wrong part of its section can be seen at all.
+   */
+  val layer: View?
+    get() = composeHost
   private var hostLayoutPosted = false
 
   init {
@@ -529,6 +635,9 @@ internal class NitroUiFormSectionView(
       }
     if (next == model.rects) return
     model.rects = next
+    // A row that is gone takes its placement report with it: `drawnCards` is keyed by index, and
+    // an entry for a row that no longer exists would be read as a container drawn for it.
+    model.drawnCards.keys.retainAll(next.indices.toSet())
     if (composeHost != null && !hostLayoutPosted) {
       hostLayoutPosted = true
       post {
@@ -778,6 +887,23 @@ internal fun FormSegmentedLayer(
     Modifier
       // Not `fillMaxSize`: a host's content is measured with an unbounded height, so filling
       // the height here means filling one row. The box arrives as state, from the layout pass.
+      //
+      // And where that box ended up is reported, not assumed: the layer draws every card at a
+      // number relative to this box, so a box the host's root placed anywhere but at the top of
+      // its view moves the whole picture — rows, accessories and all — with every number in the
+      // section report still reading correct.
+      .onPlaced { placed ->
+        val at = placed.positionInParent()
+        model.drawnLayer =
+          FormRowRect(
+            left = at.x,
+            top = at.y,
+            right = at.x + placed.size.width.toFloat(),
+            height = placed.size.height.toFloat(),
+            selected = false,
+            accessory = NitroUiFormRowView.ACCESSORY_NONE,
+          )
+      }
       .withPixelSize(model.boxW, model.boxH)
       // The layer's own answer for the box it draws in, so a layer that is not the section's
       // size stops being invisible here: `layerH` in the section report is this number.
@@ -788,20 +914,37 @@ internal fun FormSegmentedLayer(
     //    material3's own `InteractiveListItem` resolves it.
     //
     //
-    // One canvas per row, placed by the same `align`/`offset` pair as the press box and the
-    // accessory under it. That is deliberate: `createOutline` builds an outline at the origin of
-    // the scope that asks for it, so a single canvas over the whole layer has to move every
-    // shape into place by hand, and a shape that forgot where it came from shows up in no number
-    // a test can read - only in the pixels. The `Sections` story shipped exactly that, each
-    // section's rows drawn over its own header. Placed by Compose, a row's container can only
-    // sit where the row sits, and it shares the placement with the accessory, whose box the
-    // `FormFidelity` case reads back out of the layout pass and puts next to the row's own.
+    // One canvas per row, sized and placed by the same layout pass - [placedPixelBox]. The
+    // accessory under it still travels on `align`/`offset`, which is right for a child Compose
+    // sizes itself (`Modifier.size`). It was not right for a child this file sizes, and this
+    // canvas was one for a long time: `offset` and [withPixelSize] each placed the box once, so
+    // every card landed at twice the row's offset from the layer's corner - one row-inset right
+    // and one header-band below the row whose shape it draws. That is the offset
+    // `form-android.png` shows and the one `FormFidelity`'s card case failed on
+    // (`drawnCards=0:24.4,77.0` beside a row at `12.2,37.3`). `createOutline` builds an outline
+    // at the origin of the scope that asks for it, so a single canvas over the whole layer has
+    // to move every shape into place by hand, and a shape that forgot where it came from shows
+    // up in no number a test can read - only in the pixels. The `Sections` story shipped exactly
+    // that, each section's rows drawn over its own header. Placed by the layout pass, a row's
+    // container can only sit where the row sits.
     rows.forEachIndexed { index, rect ->
       Canvas(
         Modifier
           .align(Alignment.TopStart)
-          .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-          .withPixelSize(rect.right - rect.left, rect.height),
+          // Sized and placed in the one pass, and reported from inside it: what a test can
+          // compare with the row's own frame is the placement the layout produced, not the
+          // numbers the placement was asked for. See [placedPixelBox].
+          .placedPixelBox(rect.left, rect.top, rect.right - rect.left, rect.height) { at ->
+            model.drawnCards[index] =
+              FormRowRect(
+                left = at.left,
+                top = at.top,
+                right = at.right,
+                height = at.height,
+                selected = rect.selected,
+                accessory = rect.accessory,
+              )
+          },
       ) {
         if (model.gapPx != gap.toPx()) model.gapPx = gap.toPx()
         drawRowContainer(
@@ -814,17 +957,30 @@ internal fun FormSegmentedLayer(
     // 2. The press indication. material3's clickable `SegmentedListItem` draws
     //    `ripple(focusRingShape = shape)`, and the finger is on a React Native view, so the
     //    row feeds the interaction into a source it holds here.
+    //
+    //    One ripple, made here and shared by every row, and deliberately resolved without
+    //    looking at the pressed state. `Modifier.indication` keeps the indication it was handed
+    //    and, when the next one is not the same, throws that node away and builds a new one
+    //    (`IndicationModifierElement.update` undelegates the old). A press writes
+    //    `pressedIndex` on the way down and so recomposes this layer, which means an indication
+    //    that read `pressed` was destroyed by the very press meant to show it - after the
+    //    finger's `Press` had already been collected by the node being discarded. What the
+    //    device showed was the shape morph with no ink: a held finger on a row in a section
+    //    moved 819 px of a 931x183 box, the corners of the new shape, and left the row's mean
+    //    luma unchanged to four decimals. `ripple()` with no arguments is the indication the
+    //    theme gives everything else through `LocalIndication`, is remembered on its defaults
+    //    and so survives a recomposition, and is the same one [HybridNitroUiListItem] installs
+    //    for a standalone row.
+    val pressRipple = ripple()
     rows.forEachIndexed { index, rect ->
       val source = sources.getOrPut(index) { MutableInteractionSource() }
       Box(
         Modifier
           .align(Alignment.TopStart)
-          .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-          .withPixelSize(rect.right - rect.left, rect.height)
-          .indication(
-            source,
-            ripple(focusRingShape = resolvedShape(shapes[index], rect.selected, index == pressed)),
-          ),
+          // The same single placement as the card above: a ripple sized here but placed by a
+          // second modifier would light up somewhere else in the section than the row pressed.
+          .placedPixelBox(rect.left, rect.top, rect.right - rect.left, rect.height)
+          .indication(source, pressRipple),
       )
     }
     // 3. The accessories. iOS gets these from `UICellAccessory`; the Android twin is one of
@@ -952,7 +1108,14 @@ private fun accessoryIcon(accessory: Int): ImageVector? =
     else -> null
   }
 
-/** Give a layer the px size of one row, without a Dp round trip. */
+/**
+ * Give a layer the px size of one row, without a Dp round trip.
+ *
+ * Only for a child that lives at the origin of its box - the section's own layer, which fills
+ * it. A child that has to be *moved* inside that box wants [placedPixelBox]: `Modifier.offset`
+ * and this modifier each place the child once, and the two add up to a box at twice the
+ * distance from the corner.
+ */
 private fun Modifier.withPixelSize(
   widthPx: Float,
   heightPx: Float,
@@ -963,6 +1126,54 @@ private fun Modifier.withPixelSize(
       val height = heightPx.roundToInt().coerceAtMost(constraints.maxHeight)
       val placeable = measurable.measure(Constraints.fixed(width, height))
       layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+    },
+  )
+
+/**
+ * Size a child of the section's layer *and* put it where its row is, in the layer's own px,
+ * from one layout pass.
+ *
+ * A row's box arrives from the row views as px numbers, so its size and its position both have
+ * to be applied without a Dp round trip - and applied once. The card canvas used to travel on
+ * `Modifier.offset { }` with [withPixelSize] below it, and the placement came out twice: the
+ * box landed at (`2 * rect.left`, `2 * rect.top`), one row-inset and one header-band away from
+ * the row whose shape it draws - in the pixels as much as in the report. Here the modifier that
+ * measures the child is the one that places it, so exactly one place applies a position.
+ *
+ * [onPlaced] is handed the box this pass applied - the width and height the child came back
+ * with, at the position that was placed - so `FormFidelity` can put a drawn container beside
+ * the row's own frame, which is Fabric's reading of the same row and does not come from here.
+ */
+private fun Modifier.placedPixelBox(
+  leftPx: Float,
+  topPx: Float,
+  widthPx: Float,
+  heightPx: Float,
+  onPlaced: ((FormRowRect) -> Unit)? = null,
+): Modifier =
+  this.then(
+    layout { measurable, constraints ->
+      val width = widthPx.roundToInt().coerceAtMost(constraints.maxWidth)
+      val height = heightPx.roundToInt().coerceAtMost(constraints.maxHeight)
+      val placeable = measurable.measure(Constraints.fixed(width, height))
+      layout(placeable.width, placeable.height) {
+        val left = leftPx.roundToInt()
+        val top = topPx.roundToInt()
+        // Absolute, not `placeRelative`: these coordinates come from the row views' own px
+        // positions inside this layer, which the platform has already mirrored for a RTL
+        // layout. Mirroring them a second time would move the card to the far side.
+        placeable.place(left, top)
+        onPlaced?.invoke(
+          FormRowRect(
+            left = left.toFloat(),
+            top = top.toFloat(),
+            right = (left + placeable.width).toFloat(),
+            height = placeable.height.toFloat(),
+            selected = false,
+            accessory = NitroUiFormRowView.ACCESSORY_NONE,
+          ),
+        )
+      }
     },
   )
 

@@ -1,0 +1,90 @@
+# Failure excerpt — harness:ios:ListItem
+
+- Ran: 2026-11-11T11:40:47.850Z on code tree `ae61c04c8401` at HEAD `2d6b551` (branch `task/G30-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios ListItem`
+- Result: fail, exit 1, 14631 ms
+- Load: start 7.97, end 9.15, median 8.56, max 9.15
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G30-o7nwh`
+- Full log: `task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log` (<store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ListItem.harness.tsx`
+- `● ListItem · G30 › draws no insets, container or highlight of its own inside a Form.Row`
+- `expected 16 to be close to +0, received difference is 16, but expected 0.05`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-o7nwh (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   X24-wd8i4                X24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.15 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:ListItem
+gate: node ../scripts/harness.mjs --harnessRunner ios ListItem (cwd example)
+gate: code tree ae61c04c8401 at HEAD 2d6b5510
+gate: git tree 42cb5e6956f9 with a DIRTY worktree (not reusable)
+gate: log task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log
+gate:       <store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios ListItem
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree ae61c04c8401, 25 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.97/11.18 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/ListItem.harness.tsx
+  ● ListItem · G30 › draws no insets, container or highlight of its own inside a Form.Row
+
+    expected 16 to be close to +0, received difference is 16, but expected 0.05
+
+      [0m [90m 1131 |[39m     expect(bare[33m.[39mleading)[33m.[39mtoBeCloseTo([35m16[39m[33m,[39m [35m1[39m)[33m;[39m
+       [90m 1132 |[39m     expect(bare[33m.[39mtrailing)[33m.[39mtoBeCloseTo([35m16[39m[33m,[39m [35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1133 |[39m     expect(inRow[33m.[39mleading)[33m.[39mtoBeCloseTo([35m0[39m[33m,[39m [35m1[39m)[33m;[39m
+       [90m      |[39m                                      [31m[1m^[22m[39m
+       [90m 1134 |[39m     expect(inRow[33m.[39mtrailing)[33m.[39mtoBeCloseTo([35m0[39m[33m,[39m [35m1[39m)[33m;[39m
+       [90m 1135 |[39m
+       [90m 1136 |[39m     [90m// Nothing has painted yet, on either row.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 7 passed, 8 total
+Snapshots:   0 total
+Time:        12.487 s
+Ran all test suites matching ListItem.
+gate: harness:ios:ListItem FAIL in 14.6 s
+gate: recorded in .gates/task/G30-fix1.jsonl
+
+
+gate: appended the device context to task/G30-fix1/harness+ios+ListItem-2026-11-11T11-40-46.974Z.log (4 probe(s))
+
+```

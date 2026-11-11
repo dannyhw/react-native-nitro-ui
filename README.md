@@ -38,6 +38,7 @@ the layout engine, and React never sees a native node.
 | `Tooltip`            | a `.popover` presentation with SwiftUI content                          | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
 | `Popover`            | `UIPopoverPresentationController` with React Native content             | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                | next  | [popover.md](docs/components/popover.md)                     |
 | `Form`               | `UICollectionView` in `.insetGrouped`, rows in cells                    | rows in place behind M3 Expressive segmented-list shapes                                              | next  | [form.md](docs/components/form.md)                           |
+| `ListItem`           | `UIListContentView` (`.cell()` / `.subtitleCell()`)                     | M3 `ListItem` content — Android has no list-row content view of its own                               | next  | [list-item.md](docs/components/list-item.md)                 |
 | `Host`               | a plain `View` (passthrough, by design)                                 | one shared Compose composition for its hosted children                                                | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
@@ -67,6 +68,7 @@ import {
   Form,
   Host,
   IconButton,
+  ListItem,
   Menu,
   Picker,
   Popover,
@@ -1235,6 +1237,8 @@ A grouped, scrolling settings screen whose rows are ordinary React Native views.
 (`onPress`, `accessory`, `selected`); a bare child of a section is already a row.
 `measure()` of a row is right once scrolling has settled, and a row scrolled out
 of the list is not attached to a cell — `docs/components/form.md` has both.
+A row lays its content out as one centred row at the row's full content width, so
+a label with `flex: 1` puts a control on the trailing edge, level with the label.
 
 ```tsx name=form
 export function NotificationForm({
@@ -1276,6 +1280,111 @@ side. It goes below the anchor and above it when there is no room, clear of the
 keyboard on Android. `onIsPresentedChange` is not called for a change you made, and a
 close you refuse presents it again.
 [popover.md](docs/components/popover.md) has the platform details.
+
+### ListItem
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/list-item-ios.png" width="300" alt="List items on iOS: a bare headline, a headline with its supporting line under it, a headline with the trailing value 1.2.3, and one row with a leading bell glyph, a subtitle, a value and a disclosure chevron" /></td>
+    <td><img src="docs/images/components/list-item-android.png" width="300" alt="The same four rows on Android, drawn by Material 3's list item: the same headline, supporting line, trailing value and the same row with a leading icon, a value and a chevron" /></td>
+  </tr>
+</table>
+
+The row content of a list row, drawn by the platform's own row view — UIKit's
+`UIListContentView` on iOS, Material 3's `ListItem` on Android — rather than a
+`Text` pair sized to look like one. `title` is the headline, `subtitle` the
+supporting line under it, `value` the trailing answer on the headline's _own_
+line ("Off", "1.2.3", "Last week"), `systemImage`/`androidIcon` the leading glyph,
+and `accessory="disclosure"` the chevron every platform puts on a row that goes
+somewhere.
+
+```tsx name=list-item
+export function RingtoneList({
+  onOpenNotifications,
+  onOpenArchive,
+}: {
+  onOpenNotifications: () => void;
+  onOpenArchive: () => void;
+}) {
+  return (
+    <View>
+      <ListItem
+        accessory="disclosure"
+        androidIcon={require('./assets/icons/notifications_24px.xml')}
+        onPress={onOpenNotifications}
+        subtitle="Only while the app is open"
+        systemImage="bell"
+        title="Notifications"
+      />
+      <ListItem title="Version" value="1.2.3" />
+      <ListItem
+        accessory="disclosure"
+        androidIcon={require('./assets/icons/archive_24px.xml')}
+        disabled
+        onPress={onOpenArchive}
+        systemImage="tray.and.arrow.down"
+        title="Archived conversations"
+        value="Soon"
+      />
+    </View>
+  );
+}
+```
+
+**Every slot is one line, tail-truncated** — and that is a sizing decision, not a
+styling one. It is what makes a row's height a function of _which_ slots are
+filled rather than of what was typed into them, so one measured height serves
+every row of its configuration: a list of a hundred rows corrects its height four
+times, not a hundred, and a row's pitch does not change when the text does. `ListItem`
+is `fillWidth`, so it takes the width of whatever it is in and answers only the
+height.
+
+`onPress` is what makes a row a row: without it the item has no highlight, is not
+a button to a screen reader, and a tap goes through to whatever is behind it.
+`disabled` keeps the row drawn and takes nothing — no press, no highlight, no
+event. Screen readers get **one element** per item, reading title, subtitle and
+value.
+
+Inside a `Form.Row` the item is the content and the row is the cell, so the item
+adds no insets, no shape and no press of its own — it draws edge-to-edge in the box
+the cell already inset. Nothing has to be configured for that; `ListItem` knows
+because `Form.Row` says so.
+
+```tsx name=list-item-in-form
+export function AccountForm({ onOpenProfile }: { onOpenProfile: () => void }) {
+  return (
+    <Form style={{ height: 220 }}>
+      <Form.Section title="Account">
+        {/* Inside a row the item draws no insets, shape or press of its own: the
+            row is the cell, and the cell has already paid for all three. */}
+        <Form.Row>
+          <ListItem
+            accessory="disclosure"
+            androidIcon={require('./assets/icons/person_24px.xml')}
+            onPress={onOpenProfile}
+            subtitle="Signed in on 3 devices"
+            systemImage="person.crop.circle"
+            title="Profile"
+          />
+        </Form.Row>
+        <Form.Row>
+          <ListItem title="Sign out" />
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+```
+
+Either side can carry the press: `Form.Row onPress` makes the item a label inside
+the cell, and `ListItem onPress` in a row without one hands that handler up to the
+row, so the cell still does the pressing and draws its own pressed state. Wire it on
+one of the two, not both — the row's handler is the one that fires.
+In a `FlashList` or `FlatList` row the same item recycles with the row and resets
+completely — the cell's highlight, the drawn slots and its own press count.
+[list-item.md](docs/components/list-item.md) has the measurements per
+configuration, both platforms' insets, and the recycle rules.
 
 ### Host
 

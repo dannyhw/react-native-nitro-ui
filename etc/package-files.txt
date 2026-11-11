@@ -23,6 +23,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormRow.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiListItem.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt
@@ -89,6 +90,7 @@ ios/components/Form/NitroUiFormReference.swift
 ios/components/Form/NitroUiFormViews.swift
 ios/components/Host/HybridNitroUiHost.swift
 ios/components/IconButton/HybridNitroUiIconButton.swift
+ios/components/ListItem/HybridNitroUiListItem.swift
 ios/components/Menu/HybridNitroUiMenu.swift
 ios/components/Picker/HybridNitroUiPicker.swift
 ios/components/Picker/NitroUiPickerVariant.swift
@@ -216,6 +218,14 @@ lib/module/components/IconButton/NativeNitroUiIconButton.js
 lib/module/components/IconButton/NativeNitroUiIconButton.js.map
 lib/module/components/IconButton/NitroUiIconButtonConfig.js
 lib/module/components/IconButton/NitroUiIconButtonConfig.js.map
+lib/module/components/ListItem/ListItem.js
+lib/module/components/ListItem/ListItem.js.map
+lib/module/components/ListItem/ListItem.nitro.js
+lib/module/components/ListItem/ListItem.nitro.js.map
+lib/module/components/ListItem/NativeNitroUiListItem.js
+lib/module/components/ListItem/NativeNitroUiListItem.js.map
+lib/module/components/ListItem/NitroUiListItemConfig.js
+lib/module/components/ListItem/NitroUiListItemConfig.js.map
 lib/module/components/Menu/Menu.js
 lib/module/components/Menu/Menu.js.map
 lib/module/components/Menu/Menu.nitro.js
@@ -316,6 +326,8 @@ lib/module/core/useControlled.js
 lib/module/core/useControlled.js.map
 lib/module/core/useProcessedColor.js
 lib/module/core/useProcessedColor.js.map
+lib/module/core/useSelfSizing.js
+lib/module/core/useSelfSizing.js.map
 lib/module/core/useSizingId.js
 lib/module/core/useSizingId.js.map
 lib/module/core/useStableCallback.js
@@ -430,6 +442,14 @@ lib/typescript/src/components/IconButton/NativeNitroUiIconButton.d.ts
 lib/typescript/src/components/IconButton/NativeNitroUiIconButton.d.ts.map
 lib/typescript/src/components/IconButton/NitroUiIconButtonConfig.d.ts
 lib/typescript/src/components/IconButton/NitroUiIconButtonConfig.d.ts.map
+lib/typescript/src/components/ListItem/ListItem.d.ts
+lib/typescript/src/components/ListItem/ListItem.d.ts.map
+lib/typescript/src/components/ListItem/ListItem.nitro.d.ts
+lib/typescript/src/components/ListItem/ListItem.nitro.d.ts.map
+lib/typescript/src/components/ListItem/NativeNitroUiListItem.d.ts
+lib/typescript/src/components/ListItem/NativeNitroUiListItem.d.ts.map
+lib/typescript/src/components/ListItem/NitroUiListItemConfig.d.ts
+lib/typescript/src/components/ListItem/NitroUiListItemConfig.d.ts.map
 lib/typescript/src/components/Menu/Menu.d.ts
 lib/typescript/src/components/Menu/Menu.d.ts.map
 lib/typescript/src/components/Menu/Menu.nitro.d.ts
@@ -530,6 +550,8 @@ lib/typescript/src/core/useControlled.d.ts
 lib/typescript/src/core/useControlled.d.ts.map
 lib/typescript/src/core/useProcessedColor.d.ts
 lib/typescript/src/core/useProcessedColor.d.ts.map
+lib/typescript/src/core/useSelfSizing.d.ts
+lib/typescript/src/core/useSelfSizing.d.ts.map
 lib/typescript/src/core/useSizingId.d.ts
 lib/typescript/src/core/useSizingId.d.ts.map
 lib/typescript/src/core/useStableCallback.d.ts
@@ -578,6 +600,8 @@ nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiHostSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiIconButtonSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiIconButtonSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiListItemSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiListItemSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp
@@ -654,6 +678,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiIconButtonStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiIconButtonStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiListItemStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiListItemStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
@@ -698,6 +724,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiFormSec
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiFormSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiHostSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiIconButtonSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiListItemSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMaterialThemeSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMenuSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPickerSpec.kt
@@ -760,6 +787,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiH
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiIconButtonManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiIconButtonStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiListItemManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiListItemStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiMenuManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiMenuStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPickerManager.kt
@@ -818,6 +847,8 @@ nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiIconButtonSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiIconButtonSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiListItemSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiListItemSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiPickerSpecSwift.cpp
@@ -853,6 +884,7 @@ nitrogen/generated/ios/c++/views/HybridNitroUiFormRowComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiFormSectionComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiHostComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiIconButtonComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiListItemComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiMenuComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiPickerComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiPopoverComponent.mm
@@ -899,6 +931,8 @@ nitrogen/generated/ios/swift/HybridNitroUiHostSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiHostSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiIconButtonSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiIconButtonSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiListItemSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiListItemSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiMenuSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiMenuSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiPickerSpec.swift
@@ -972,6 +1006,8 @@ nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiHostSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiIconButtonSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiIconButtonSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiListItemSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiListItemSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiMaterialThemeSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiMaterialThemeSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
@@ -1045,6 +1081,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiIconButtonComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiIconButtonComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiListItemComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiListItemComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
@@ -1080,6 +1118,7 @@ nitrogen/generated/shared/json/NitroUiFormRowConfig.json
 nitrogen/generated/shared/json/NitroUiFormSectionConfig.json
 nitrogen/generated/shared/json/NitroUiHostConfig.json
 nitrogen/generated/shared/json/NitroUiIconButtonConfig.json
+nitrogen/generated/shared/json/NitroUiListItemConfig.json
 nitrogen/generated/shared/json/NitroUiMenuConfig.json
 nitrogen/generated/shared/json/NitroUiPickerConfig.json
 nitrogen/generated/shared/json/NitroUiPopoverConfig.json
@@ -1143,6 +1182,10 @@ src/components/IconButton/IconButton.nitro.ts
 src/components/IconButton/IconButton.tsx
 src/components/IconButton/NativeNitroUiIconButton.ts
 src/components/IconButton/NitroUiIconButtonConfig.ts
+src/components/ListItem/ListItem.nitro.ts
+src/components/ListItem/ListItem.tsx
+src/components/ListItem/NativeNitroUiListItem.ts
+src/components/ListItem/NitroUiListItemConfig.ts
 src/components/Menu/Menu.nitro.ts
 src/components/Menu/Menu.tsx
 src/components/Menu/MenuRows.ts
@@ -1193,6 +1236,7 @@ src/core/index.ts
 src/core/keyboard.ts
 src/core/useControlled.ts
 src/core/useProcessedColor.ts
+src/core/useSelfSizing.ts
 src/core/useSizingId.ts
 src/core/useStableCallback.ts
 src/iconName.ts

@@ -61,6 +61,7 @@ final class RealInputTests: XCTestCase {
     static let formTab = "tab-form"
     static let buttonGroupTab = "tab-buttongroup"
     static let stepperTab = "tab-stepper"
+    static let listItemTab = "tab-listitem"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -118,6 +119,11 @@ final class RealInputTests: XCTestCase {
     static let stepperRefusedLast = "real-input-stepper-refused-last"
     static let stepperRefusedEvents = "real-input-stepper-refused-events"
     static let stepperDisabledEvents = "real-input-stepper-disabled-events"
+    // The ListItem screen's counters - the same testIDs `scripts/real-input/screens.mjs` names.
+    static let listItemPresses = "real-input-listitem-presses"
+    static let listItemLast = "real-input-listitem-last"
+    static let listItemDisabledEvents = "real-input-listitem-disabled-events"
+    static let listItemFormPresses = "real-input-listitem-form-presses"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -511,6 +517,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.contextMenuTab, screenAnchor: Echo.contextMenu),
       A11yCase(id: "form", testId: "form-row", label: "Row with onPress",
                tab: Tab.formTab, screenAnchor: Echo.formScreen),
+      A11yCase(id: "list-item", testId: "real-input-listitem", label: "Real-input item",
+               tab: Tab.listItemTab, screenAnchor: Echo.listItemPresses),
     ]
   }
 
@@ -6949,6 +6957,229 @@ final class RealInputTests: XCTestCase {
 
     try assertRowShowsCellHighlight("form-row", echo: Echo.formRowPresses, as: "the form row with onPress")
     try assertFormKeepsFieldAboveKeyboard()
+  }
+
+  /// Question 3 on iOS (G30): a `ListItem` is the row content, drawn by UIKit's own
+  /// `UIListContentView`, and a real finger has to reach it through the SwiftUI host that
+  /// carries it. Every reading is React's own render of a counter, so a number moves only
+  /// if the touch reached UIKit's row, the row told Nitro, and Nitro told JS.
+  ///
+  /// The three fixtures are the three answers the component has to give: a row that presses
+  /// and highlights, a row that is disabled and says so to a reader, and a row inside a
+  /// `Form.Row`, where the cell is the Form's and the leaf draws content into it (DECISIONS
+  /// D46 item 2).
+  func testRealInputListItem() throws {
+    try goToTab(Tab.listItemTab, showing: Echo.listItemPresses)
+
+    // The three fixtures sit at three heights of one page taller than the window, and
+    // XCUITest taps an element's frame without scrolling a plain view to reach it (see
+    // `scrollIntoView`), so each one is brought into the band a tap can land in just
+    // before the claim that taps it. Both hittability claims below are made of a node
+    // after *its own* scroll, which is the only form of that claim that means anything
+    // here; a fixture the screen cannot bring into view fails inside `scrollIntoView`,
+    // naming the screen, rather than being tapped off-screen and reading as a refusal
+    // nobody delivered.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    let item = try required("real-input-listitem", as: "the list item with onPress")
+    XCTAssert(
+      item.isHittable,
+      "the item with onPress should be touchable once it is in the tappable band, "
+        + "before any tap is delivered"
+    )
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    let inForm = try required("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    XCTAssert(
+      inForm.isHittable,
+      "the item inside the Form should be touchable once it is in the band, before any "
+        + "tap is delivered — inside a row the leaf still has to be reachable (D46 item 2)"
+    )
+    let disabled = try required("real-input-listitem-disabled", as: "the disabled list item")
+    // The row inside that wrapper, which is where the leaf publishes its own element
+    // (`hostedControl`, the same addressing the disabled Picker's case uses).
+    let disabledRow = try hostedControl(in: "real-input-listitem-disabled", as: "the disabled list item")
+
+    // 1. At rest, so every claim below is about a number that moved.
+    XCTAssertEqual(
+      try read(Echo.listItemPresses), "0",
+      "no item press should be reported before a touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.listItemFormPresses), "0",
+      "the item inside the Form should have been asked for nothing yet"
+    )
+    XCTAssertEqual(
+      try read(Echo.listItemDisabledEvents), "0",
+      "the counter the disabled item reports into should start at zero, so a stray "
+        + "delivery is a number that moved rather than a callback nobody saw"
+    )
+
+    // 2. One element, named, and the row's own text is not a stop of its own. The names
+    //    below are the fixture's title and subtitle: if UIKit published them as elements
+    //    beside the merged one, a screen reader would read the row twice, which is the
+    //    G6 symptom this repo's a11y rule exists to catch.
+    XCTAssertEqual(
+      item.label, "Real-input item",
+      "the item should be one element carrying the label the app chose, not the "
+        + "three texts the row is built out of"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: "Real input"), 0,
+      "and the row's title should not also be an element of its own — one stop per item"
+    )
+    // The chevron is the same claim from the other side. It is a sibling of the content
+    // subtree rather than inside it, and `chevron.right` vends its own label, so a row
+    // with a disclosure can gain a second stop that nothing in the row's own label
+    // explains. Measured in this case's own node dump before it was stood down: an
+    // `other` element named "Forward" at the arrow's 14 pt box, inside the row.
+    XCTAssertEqual(
+      optionLabels(containing: "Forward"), 0,
+      "the disclosure chevron is decoration inside the row, not a stop of its own — one "
+        + "element per item (D46 item 1) includes the arrow that says what the role says"
+    )
+    // The disabled claim is taken on the row's own element rather than on the React
+    // Native view that hosts it, because RN owns the wrapper's element and a Hybrid View
+    // speaks `disabled` to the platform control — the Picker's disabled case made this
+    // the rule here for the same reason. Both readings are printed *before* the claim,
+    // so a red run says which of the two elements moved instead of leaving the reader to
+    // rerun it to find out.
+    print(
+      "real-input list-item: item traits label=\(item.label) enabled=\(item.isEnabled) "
+        + "frame=\(item.frame); disabled wrapper enabled=\(disabled.isEnabled) "
+        + "row enabled=\(disabledRow.isEnabled) row traits label=\(disabledRow.label)"
+    )
+    XCTAssert(item.isEnabled, "an enabled item should not read as disabled")
+    XCTAssertFalse(
+      disabledRow.isEnabled,
+      "a disabled item should say so in the tree, so a reader is told it is inert "
+        + "instead of being handed a control that does nothing "
+        + "(row isEnabled=\(disabledRow.isEnabled), React Native wrapper isEnabled=\(disabled.isEnabled))"
+    )
+
+    // 3. Ten taps, ten presses, one per tap (`assertOnePressPerTap` reads the counter
+    //    between taps, which is what tells an overshoot from a drop), and the *named* row
+    //    is the one that answered.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertOnePressPerTap("real-input-listitem", echo: Echo.listItemPresses, times: 10, as: "the list item with onPress")
+    XCTAssertEqual(
+      try read(Echo.listItemLast), "real",
+      "the presses should be attributed to the item that was tapped"
+    )
+
+    // 4. The row's own highlight: UIKit's press colour, sampled the same way the Form's
+    //    cell is (same helper, same bounded mid-press wait, same UNSAMPLED discipline).
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertRowShowsCellHighlight("real-input-listitem", echo: Echo.listItemPresses, as: "the list item with onPress")
+
+    // 5. The disabled item takes nothing, and the live item then proves the silence was a
+    //    refusal rather than a screen that had stopped answering.
+    try scrollIntoView("real-input-listitem-disabled", as: "the disabled list item")
+    try assertTapsGoNowhere(
+      "real-input-listitem-disabled",
+      echoes: [Echo.listItemDisabledEvents, Echo.listItemPresses, Echo.listItemFormPresses],
+      taps: 10,
+      as: "the disabled list item"
+    )
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    // The wanted count is read from the counter rather than hard-coded. The held press in
+    // the highlight check above is itself a press this counter counted, so the absolute
+    // number is a fact about how many checks ran above; "one more press after one more
+    // tap" is the claim. Android's half hard-coded 11 and its first real run arrived at 12.
+    let beforeBarrier = Int(try read(Echo.listItemPresses)) ?? -1
+    let wantedBarrier = String(beforeBarrier + 1)
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-listitem",
+        echo: Echo.listItemPresses,
+        expected: wantedBarrier,
+        as: "the list item with onPress",
+        waitingFor: "the barrier tap after the disabled item"
+      ),
+      wantedBarrier,
+      "the live item, tapped the same way, should still answer (\(beforeBarrier) -> "
+        + "\(wantedBarrier))"
+    )
+
+    // 6. Inside a `Form.Row` the leaf is the other code path: the cell, the shape and the
+    //    insets belong to the row, so the item's own box is the row's content box and its
+    //    press has to arrive through the row that owns the touch.
+    XCTAssertEqual(
+      inForm.label, "Item inside a Form row",
+      "inside a Form.Row the item is still the element that carries its own name"
+    )
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    try assertOnePressPerTap("real-input-listitem-in-form", echo: Echo.listItemFormPresses, times: 5, as: "the list item inside a Form.Row")
+
+    // 7. The same press has to *look* like a press. Inside a `Form.Row` the leaf paints
+    //    nothing of its own (step 6 is about the insets that prove it), so the only
+    //    feedback this row can have is the cell's - and the cell paints one only for a row
+    //    that is pressable. The README's own example and this screen's fixture both write
+    //    the handler on the *item* (`list-item-in-form`), so an item's `onPress` that never
+    //    reaches the row is a row that presses in silence.
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    try assertRowShowsCellHighlight(
+      "real-input-listitem-in-form",
+      echo: Echo.listItemFormPresses,
+      as: "the list item inside a Form.Row"
+    )
+
+    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
+    //    asking for that row. Last, because it scrolls the page out from under everything
+    //    above it.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertDragFromRowIsNotAPress(
+      "real-input-listitem",
+      echo: Echo.listItemPresses,
+      as: "the list item with onPress"
+    )
+  }
+
+  /// A drag that begins on a row belongs to the scroll view, so the row presses nobody.
+  ///
+  /// The row's press recogniser starts at once (`minimumPressDuration = 0`, which is what
+  /// made a quick thumb work at all), so it is the finger's *travel* that has to tell a
+  /// press from a scroll: a recogniser that answers `.ended` without looking at where the
+  /// finger went fires on every flick that happened to begin on a row. Ten taps and a
+  /// counter are the other half of this; this is the half that says the counter did not
+  /// move for the drag.
+  ///
+  /// The travel is measured off the row's own frame, and always downhill to the roomier
+  /// half of the window: `scrollIntoView` only promises the row's centre is inside the
+  /// band a tap can land in, which on a row that had to be scrolled *up* to reach means a
+  /// fixed screen fraction can land a few points away from it. A drag of a few points is
+  /// not a scroll, and the row is right to call it a press, so the gesture has to be a
+  /// real flick — 200 pt, twenty times the slop the recogniser allows.
+  private func assertDragFromRowIsNotAPress(
+    _ identifier: String,
+    echo: String,
+    as what: String
+  ) throws {
+    let element = try required(identifier, as: what)
+    let window = app.windows.firstMatch.frame
+    let travel: CGFloat = 200
+    let down = element.frame.midY < window.midY
+    let delta = CGVector(dx: 0, dy: down ? travel : -travel)
+    let before = echoText(echo)
+    element.centre.press(
+      forDuration: 0.25,
+      thenDragTo: element.centre.withOffset(delta),
+      withVelocity: .fast,
+      thenHoldForDuration: 0.1
+    )
+    let after = echoText(echo)
+    let direction = down ? "down" : "up"
+    print(
+      "real-input list-item drag: \(what) (\(identifier)) travelled \(direction) "
+        + "\(Int(travel)) pt from midY \(Int(element.frame.midY)) of a window ending at "
+        + "\(Int(window.maxY)) — echo \"\(before)\" -> \"\(after)\""
+    )
+    XCTAssertEqual(
+      after,
+      before,
+      "\(what) (\(identifier)) reported a press for a drag that started on it: \"\(echo)\" "
+        + "went \"\(before)\" -> \"\(after)\" while the finger travelled \(Int(travel)) pt "
+        + "\(direction) the page. A row that fires on a scroll takes the person "
+        + "to a screen they only meant to scroll past."
+    )
   }
 
   /// Tap `identifier` ten times and require the echo to read exactly 1…10.

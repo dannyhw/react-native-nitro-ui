@@ -35,6 +35,7 @@
 #include "HybridNitroUiPopoverSpecSwift.hpp"
 #include "HybridNitroUiStepperSpecSwift.hpp"
 #include "HybridNitroUiButtonGroupSpecSwift.hpp"
+#include "HybridNitroUiListItemSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -219,6 +220,13 @@
     "NitroUiButtonGroup",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiButtonGroupSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiButtonGroup();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiListItem",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiListItemSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiListItem();
       return hybridObject;
     }
   );
