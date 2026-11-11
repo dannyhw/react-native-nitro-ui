@@ -102,7 +102,7 @@ const meta = {
     variant: {
       control: variantControl,
       description:
-        "`compact` is a field that opens the platform presentation (iOS popover, Android dialog), `inline` is the picker laid out in the app, `wheel` is SwiftUI's wheel - Android has no wheel, so there it renders the inline picker.",
+        '`compact` is a field that opens the platform presentation (iOS popover, Android dialog), `inline` is the picker laid out in the app, `wheel` is SwiftUI\'s wheel on iOS; on Android it is Material 3 1.5\'s time drums for `mode="time"` and the inline calendar for `mode="date"`/`"datetime"`, which has no wheel to draw.',
     },
     minimumDate: {
       control: { type: 'date' },
@@ -213,9 +213,10 @@ export const Variants: Story = {
         <DatePicker mode="datetime" variant="wheel" tintColor={tintColor} />
       </Frame>
       <Note>
-        `wheel` is SwiftUI&apos;s `.wheel` style. Jetpack Compose has no wheel
-        picker, so on Android both `wheel` and `inline` render Material 3&apos;s
-        calendar (a clock for `mode="time"`) - see the matrix in
+        `wheel` is SwiftUI&apos;s `.wheel` style. There is no Material wheel
+        calendar, so this `datetime` frame draws the same calendar `inline` does
+        on Android; `mode="time"` is the exception, where the wheel is a drum
+        per field (`ScrollField`) - see the matrix in
         `docs/components/date-picker.md`.
       </Note>
     </Showcase>
