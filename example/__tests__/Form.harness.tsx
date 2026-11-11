@@ -1206,7 +1206,9 @@ describe('Form (G24)', () => {
     for (const map of [forms, sections, rows]) {
       for (const key of Object.keys(map)) delete map[key];
     }
-    const next = await render(<OneRow label="Named" styled={true} title="Refilled" />);
+    const next = await render(
+      <OneRow label="Named" styled={true} title="Refilled" />
+    );
     const refilled = await reportUntil(
       () => sections.one?.nuiTestSectionReport(),
       (r) => Number(r.rows) === 1,
