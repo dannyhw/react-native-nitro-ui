@@ -1,0 +1,598 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-10T14:45:11.437Z on code tree `c749a35e04e8` at HEAD `b168e20` (branch `task/G29-android-wheels`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit null signal SIGTERM, 974600 ms
+- Load: start 5.13, end 4.04, median 5.56, max 17.49
+- Device: android / device `emulator-5570` / lease `G29-itkdc`
+- Full log: `task/G29-android-wheels/real-input+android-2026-11-10T14-45-10.742Z.log` (<store>/task/G29-android-wheels/real-input+android-2026-11-10T14-45-10.742Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ one roll of the hour reports exactly one change, not one per row crossed — expected 1, saw 2`
+- `✗ the hour drum at rest: real-input-wheel-time-events went to "2" when it should have stayed "1"`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-android-wheels/real-input+android-2026-11-10T14-45-10.742Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-itkdc (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G28-n0naq                G28          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.04 (the ledger line carries the samples across the whole run)
+gate: logcat
+  | --------- beginning of system
+  | 11-10 14:45:15.133  5880  5967 W ResourcesManager: Found a null ResourcesImpl, skipped.
+  | 11-10 14:45:15.137  5880  5967 V ResourcesManager: The following library key has been added: ResourcesKey{ mHash=456f8048 mResDir=null mSplitDirs=[] mOverlayDirs=[/product/overlay/EmulationPixel9/EmulationPixel9Overlay.apk,/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk] mLibDirs=[/data/app/~~685q3rhL2y0nCzACwYnP_A==/com.google.android.webview-qIjhXGG6tZ8dzrPHxkNFLg==/WebViewGoogle.apk,/data/app/~~67Wnu6m-pHOLhztz7_ZHVQ==/com.google.android.trichromelibrary_636771932-0pRUz2z52Ehic86mYIb2mg==/TrichromeLibrary.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v35 mCompatInfo={420dpi always-compat} mLoaders=[]}
+  | --------- beginning of main
+  | 11-10 14:53:56.095  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6c8f9f
+  | 11-10 14:53:58.222  5880  5923 D EGL_emulation: app_time_stats: avg=126.35ms min=5.84ms max=5833.31ms count=53
+  | 11-10 14:53:58.292  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b75060f
+  | 11-10 14:54:00.713  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@37bfb64
+  | 11-10 14:54:04.915  5880  5923 D EGL_emulation: app_time_stats: avg=123.64ms min=1.82ms max=5825.82ms count=53
+  | 11-10 14:54:04.949  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a57d4bf
+  | 11-10 14:54:07.396  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5d152c1
+  | 11-10 14:54:11.566  5880  5923 D EGL_emulation: app_time_stats: avg=125.47ms min=7.31ms max=5793.08ms count=53
+  | 11-10 14:54:17.739  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 25% free, 71MB/95MB, paused 204us,1.412ms total 105.262ms
+  | 11-10 14:54:18.599  5880  5923 D EGL_emulation: app_time_stats: avg=132.69ms min=8.29ms max=6175.72ms count=53
+  | 11-10 14:54:19.723  5880  5923 D EGL_emulation: app_time_stats: avg=24.43ms min=11.16ms max=380.53ms count=46
+  | 11-10 14:54:22.015  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@717f479
+  | 11-10 14:54:24.312  5880  5923 D EGL_emulation: app_time_stats: avg=269.91ms min=14.10ms max=4323.04ms count=17
+  | 11-10 14:54:24.331  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@67d799c
+  | 11-10 14:54:25.440  5880  5923 D EGL_emulation: app_time_stats: avg=24.51ms min=7.36ms max=382.64ms count=46
+  | 11-10 14:54:27.597  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2dbd1b
+  | 11-10 14:54:29.747  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4bc02a6
+  | 11-10 14:54:29.760  5880  5923 D EGL_emulation: app_time_stats: avg=254.10ms min=14.66ms max=4054.19ms count=17
+  | 11-10 14:54:30.888  5880  5923 D EGL_emulation: app_time_stats: avg=24.52ms min=11.48ms max=382.52ms count=46
+  | 11-10 14:54:32.813  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4a221ad
+  | 11-10 14:54:34.913  5880  5923 D EGL_emulation: app_time_stats: avg=236.76ms min=15.63ms max=3759.10ms count=17
+  | 11-10 14:54:36.038  5880  5923 D EGL_emulation: app_time_stats: avg=24.43ms min=11.42ms max=382.11ms count=46
+  | 11-10 14:54:40.249  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1576954
+  | 11-10 14:54:40.252  5880  5923 D EGL_emulation: app_time_stats: avg=247.89ms min=15.47ms max=3946.78ms count=17
+  | 11-10 14:54:41.376  5880  5923 D EGL_emulation: app_time_stats: avg=24.42ms min=7.26ms max=386.80ms count=46
+  | 11-10 14:54:43.415  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c34d033
+  | 11-10 14:54:45.577  5880  5923 D EGL_emulation: app_time_stats: avg=247.13ms min=13.01ms max=3938.51ms count=17
+  | 11-10 14:54:45.599  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a9e109e
+  | 11-10 14:54:46.705  5880  5923 D EGL_emulation: app_time_stats: avg=15.49ms min=1.31ms max=367.51ms count=46
+  | 11-10 14:54:47.729  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 0(0B) LOS objects, 25% free, 71MB/95MB, paused 194us,1.582ms total 114.522ms
+  | 11-10 14:54:48.727  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@39ee47b
+  | 11-10 14:54:50.889  5880  5923 D EGL_emulation: app_time_stats: avg=246.07ms min=15.64ms max=3915.73ms count=17
+  | 11-10 14:54:50.896  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8fad186
+  | 11-10 14:54:52.008  5880  5923 D EGL_emulation: app_time_stats: avg=10.47ms min=1.49ms max=371.08ms count=46
+  | 11-10 14:54:54.330  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3351310
+  | 11-10 14:54:56.796  5880  5923 D EGL_emulation: app_time_stats: avg=281.60ms min=14.29ms max=4522.58ms count=17
+  | 11-10 14:54:57.945  5880  5923 D EGL_emulation: app_time_stats: avg=24.45ms min=11.27ms max=388.47ms count=47
+  | 11-10 14:55:00.014  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c4164e9
+  | 11-10 14:55:02.246  5880  5923 D EGL_emulation: app_time_stats: avg=238.93ms min=11.19ms max=4022.52ms count=18
+  | 11-10 14:55:02.264  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@49264cc
+  | 11-10 14:55:03.372  5880  5923 D EGL_emulation: app_time_stats: avg=24.47ms min=7.78ms max=381.26ms count=46
+  | 11-10 14:55:05.381  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8cb620b
+  | 11-10 14:55:07.631  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a4cac56
+  | 11-10 14:55:09.891  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eb0971d
+  | 11-10 14:55:09.895  5880  5923 D EGL_emulation: app_time_stats: avg=383.69ms min=15.97ms max=6252.56ms count=17
+  | 11-10 14:55:11.040  5880  5923 D EGL_emulation: app_time_stats: avg=24.28ms min=9.04ms max=384.36ms count=47
+  | 11-10 14:55:13.034  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@72e4c90
+  | 11-10 14:55:14.190  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 25% free, 71MB/95MB, paused 389us,1.506ms total 110.650ms
+  | 11-10 14:55:15.249  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5b0da25
+  | 11-10 14:55:15.254  5880  5923 D EGL_emulation: app_time_stats: avg=247.85ms min=11.74ms max=3947.67ms count=17
+  | 11-10 14:55:16.411  5880  5923 D EGL_emulation: app_time_stats: avg=9.86ms min=1.36ms max=372.45ms count=48
+  | 11-10 14:55:20.593  5880  5923 D EGL_emulation: app_time_stats: avg=232.34ms min=12.51ms max=3904.45ms count=18
+  | 11-10 14:55:20.616  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d855b5a
+  | 11-10 14:55:21.778  5880  5923 D EGL_emulation: app_time_stats: avg=24.17ms min=7.34ms max=385.37ms count=49
+  | 11-10 14:55:23.765  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@34061f1
+  | 11-10 14:55:25.911  5880  5923 D EGL_emulation: app_time_stats: avg=243.09ms min=11.12ms max=3871.96ms count=17
+  | 11-10 14:55:27.073  5880  5923 D EGL_emulation: app_time_stats: avg=24.22ms min=12.65ms max=384.89ms count=48
+  | 11-10 14:55:29.048  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2547336
+  | 11-10 14:55:31.180  5880  5923 D EGL_emulation: app_time_stats: avg=241.56ms min=12.37ms max=3837.43ms count=17
+  | 11-10 14:55:32.345  5880  5923 D EGL_emulation: app_time_stats: avg=24.27ms min=10.89ms max=389.06ms count=48
+  | 11-10 14:55:36.519  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b0b1f21
+  | 11-10 14:55:36.524  5880  5923 D EGL_emulation: app_time_stats: avg=232.12ms min=12.63ms max=3900.37ms count=18
+  | 11-10 14:55:37.708  5880  5923 D EGL_emulation: app_time_stats: avg=9.46ms min=1.21ms max=370.53ms count=50
+  | 11-10 14:55:40.874  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 25% free, 71MB/95MB, paused 202us,1.380ms total 114.985ms
+  | 11-10 14:55:41.767  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f5b44c4
+  | 11-10 14:55:41.771  5880  5923 D EGL_emulation: app_time_stats: avg=238.96ms min=13.35ms max=3798.00ms count=17
+  | 11-10 14:55:42.924  5880  5923 D EGL_emulation: app_time_stats: avg=10.08ms min=1.43ms max=370.16ms count=48
+  | 11-10 14:55:44.812  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5832263
+  | 11-10 14:55:46.931  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d10488e
+  | 11-10 14:55:49.029  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@88740b5
+  | 11-10 14:55:51.116  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7c6e308
+  | 11-10 14:55:53.246  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c03a577
+  | 11-10 14:55:55.331  5880  5923 D EGL_emulation: app_time_stats: avg=689.24ms min=13.83ms max=12124.29ms count=18
+  | 11-10 14:55:55.376  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@56736b2
+  | 11-10 14:55:56.511  5880  5923 D EGL_emulation: app_time_stats: avg=24.08ms min=7.47ms max=388.90ms count=49
+  | 11-10 14:56:00.631  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@53615e
+  | 11-10 14:56:02.813  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4716fc5
+  | 11-10 14:56:07.145  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4fce07a
+  | 11-10 14:56:08.459  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 25% free, 71MB/95MB, paused 996us,1.373ms total 113.784ms
+  | 11-10 14:56:09.346  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e3871e7
+  | 11-10 14:56:11.480  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c2f2de2
+  | 11-10 14:56:13.714  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@46cf619
+  | 11-10 14:56:18.080  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@edadc3e
+  | 11-10 14:56:20.216  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9e0a825
+  | 11-10 14:56:22.528  5880  5923 D EGL_emulation: app_time_stats: avg=1445.34ms min=11.52ms max=25738.46ms count=18
+  | 11-10 14:56:22.541  5880  5880 W nitroui.example: Accessing hidden method Landroid/view/ViewTreeObserver;->dispatchOnScrollChanged()V (unsupported, reflection, allowed)
+  | 11-10 14:56:22.565  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9291d05
+  | 11-10 14:56:25.264  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@33ce99f
+  | 11-10 14:56:27.564  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@10268fa
+  | 11-10 14:56:29.833  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@aa94c11
+  | 11-10 14:56:32.146  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c289614
+  | 11-10 14:56:33.275  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 25% free, 71MB/95MB, paused 169us,1.415ms total 106.164ms
+  | 11-10 14:56:34.347  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@208c899
+  | 11-10 14:56:36.528  5880  5923 D EGL_emulation: app_time_stats: avg=459.29ms min=1.80ms max=13489.29ms count=30
+  | 11-10 14:56:36.558  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@64edc3c
+  | 11-10 14:56:37.538  5880  5923 D EGL_emulation: app_time_stats: avg=16.55ms min=8.86ms max=24.17ms count=61
+  | 11-10 14:56:39.684  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a55a596
+  | 11-10 14:56:44.554  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 16MB AllocSpace bytes, 0(0B) LOS objects, 21% free, 86MB/110MB, paused 640us,1.674ms total 113.291ms
+  | 11-10 14:56:45.289  5880  5880 I Choreographer: Skipped 65 frames!  The application may be doing too much work on its main thread.
+  | 11-10 14:56:45.291  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 12MB AllocSpace bytes, 10(244KB) LOS objects, 19% free, 99MB/123MB, paused 663us,1.881ms total 141.166ms
+  | 11-10 14:56:45.531  5880  5923 D EGL_emulation: app_time_stats: avg=420.67ms min=14.24ms max=7325.68ms count=19
+  | 11-10 14:56:45.538  5880  9015 I HWUI    : Davey! duration=1333ms; Flags=0, FrameTimelineVsyncId=101874264, IntendedVsync=608043982571432, Vsync=608045065904722, InputEventId=-910939250, HandleInputStart=608045070067729, AnimationStart=608045070068854, PerformTraversalsStart=608045095852646, DrawStart=608045096563938, FrameDeadline=608043999238098, FrameInterval=608045069570771, FrameStartTime=16666666, SyncQueued=608045296448146, SyncStart=608045296857063, IssueDrawCommandsStart=608045298865354, SwapBuffers=608045306170104, FrameCompleted=608045316504896, DequeueBufferDuration=8084, QueueBufferDuration=91375, GpuCompleted=608045316504896, SwapBuffersCompleted=608045312404813, DisplayPresentTime=0, CommandSubmissionCompleted=608045306170104, 
+  | 11-10 14:56:48.322  5880  5923 D EGL_emulation: app_time_stats: avg=132.85ms min=13.54ms max=1954.18ms count=21
+  | 11-10 14:56:49.848  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a55a92a
+  | 11-10 14:56:50.362  5880  5923 D EGL_emulation: app_time_stats: avg=1020.00ms min=23.52ms max=2016.48ms count=2
+  | 11-10 14:56:52.381  5880  5923 D EGL_emulation: app_time_stats: avg=2018.89ms min=2018.89ms max=2018.89ms count=1
+  | 11-10 14:56:54.380  5880  5923 D EGL_emulation: app_time_stats: avg=1998.58ms min=1998.58ms max=1998.58ms count=1
+  | 11-10 14:56:54.861  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cc52afb
+  | 11-10 14:56:56.396  5880  5923 D EGL_emulation: app_time_stats: avg=2016.74ms min=2016.74ms max=2016.74ms count=1
+  | 11-10 14:56:57.406  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:56:57.406  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:56:57.412  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:56:57.412  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:56:57.415  5880  5923 D EGL_emulation: app_time_stats: avg=1018.30ms min=1018.30ms max=1018.30ms count=1
+  | 11-10 14:56:58.825  5880  5923 D EGL_emulation: app_time_stats: avg=92.05ms min=5.24ms max=1170.63ms count=14
+  | 11-10 14:57:00.436  5880  5923 D EGL_emulation: app_time_stats: avg=139.68ms min=3.04ms max=2664.21ms count=21
+  | 11-10 14:57:01.783  5880  5923 D EGL_emulation: app_time_stats: avg=1346.81ms min=1346.81ms max=1346.81ms count=1
+  | 11-10 14:57:01.808  5880  5923 D EGL_emulation: app_time_stats: avg=2982.31ms min=2982.31ms max=2982.31ms count=1
+  | 11-10 14:57:01.829  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@782916c
+  | 11-10 14:57:01.991  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@24d2d1d
+  | 11-10 14:57:04.482  5880  5923 D EGL_emulation: app_time_stats: avg=899.79ms min=42.04ms max=2435.42ms count=3
+  | 11-10 14:57:04.933  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@50d8710
+  | 11-10 14:57:06.303  5880  5886 W nitroui.example: Cleared Reference was only reachable from finalizer (only reported once)
+  | 11-10 14:57:06.371  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 5(80KB) LOS objects, 19% free, 99MB/123MB, paused 170us,1.537ms total 153.664ms
+  | 11-10 14:57:06.479  5880  5923 D EGL_emulation: app_time_stats: avg=1996.46ms min=1996.46ms max=1996.46ms count=1
+  | 11-10 14:57:08.497  5880  5923 D EGL_emulation: app_time_stats: avg=2018.01ms min=2018.01ms max=2018.01ms count=1
+  | 11-10 14:57:09.996  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:09.996  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:10.000  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:10.000  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:10.004  5880  5923 D EGL_emulation: app_time_stats: avg=1506.74ms min=1506.74ms max=1506.74ms count=1
+  | 11-10 14:57:11.409  5880  5923 D EGL_emulation: app_time_stats: avg=87.06ms min=0.90ms max=1170.89ms count=14
+  | 11-10 14:57:12.318  5880  5923 D EGL_emulation: app_time_stats: avg=578.53ms min=29.32ms max=1840.22ms count=4
+  | 11-10 14:57:12.424  5880  5923 D EGL_emulation: app_time_stats: avg=126.82ms min=12.24ms max=903.85ms count=8
+  | 11-10 14:57:12.529  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@10fe72
+  | 11-10 14:57:12.531  5880  5923 D HWUI    : endAllActiveAnimators on 0xb400007dd98e6d70 (UnprojectedRipple) with handle 0xb400007e28a45ad0
+  | 11-10 14:57:14.546  5880  5923 D EGL_emulation: app_time_stats: avg=742.55ms min=32.27ms max=1966.95ms count=3
+  | 11-10 14:57:15.345  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d8c7f20
+  | 11-10 14:57:16.562  5880  5923 D EGL_emulation: app_time_stats: avg=2015.75ms min=2015.75ms max=2015.75ms count=1
+  | 11-10 14:57:17.812  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:17.812  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:17.816  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:17.816  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:17.821  5880  5923 D EGL_emulation: app_time_stats: avg=1259.26ms min=1259.26ms max=1259.26ms count=1
+  | 11-10 14:57:19.248  5880  5923 D EGL_emulation: app_time_stats: avg=90.27ms min=1.10ms max=1209.45ms count=14
+  | 11-10 14:57:20.214  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3a3a458
+  | 11-10 14:57:20.597  5880  5923 D EGL_emulation: app_time_stats: avg=693.91ms min=21.01ms max=2034.75ms count=4
+  | 11-10 14:57:22.182  5880  5923 D EGL_emulation: app_time_stats: avg=2934.09ms min=2934.09ms max=2934.09ms count=1
+  | 11-10 14:57:22.190  5880  5923 D EGL_emulation: app_time_stats: avg=1593.40ms min=1593.40ms max=1593.40ms count=1
+  | 11-10 14:57:22.392  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@976e0a2
+  | 11-10 14:57:22.394  5880  5923 D HWUI    : endAllActiveAnimators on 0xb400007dd985a6c0 (UnprojectedRipple) with handle 0xb400007e28a46580
+  | 11-10 14:57:24.612  5880  5923 D EGL_emulation: app_time_stats: avg=403.61ms min=22.81ms max=2166.94ms count=6
+  | 11-10 14:57:26.645  5880  5923 D EGL_emulation: app_time_stats: avg=2032.94ms min=2032.94ms max=2032.94ms count=1
+  | 11-10 14:57:27.598  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a169fc3
+  | 11-10 14:57:28.661  5880  5923 D EGL_emulation: app_time_stats: avg=2015.78ms min=2015.78ms max=2015.78ms count=1
+  | 11-10 14:57:30.679  5880  5923 D EGL_emulation: app_time_stats: avg=2018.44ms min=2018.44ms max=2018.44ms count=1
+  | 11-10 14:57:31.667  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 99MB/123MB, paused 308us,1.720ms total 149.724ms
+  | 11-10 14:57:32.695  5880  5923 D EGL_emulation: app_time_stats: avg=2015.60ms min=2015.60ms max=2015.60ms count=1
+  | 11-10 14:57:32.780  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@69c32ce
+  | 11-10 14:57:34.713  5880  5923 D EGL_emulation: app_time_stats: avg=2017.57ms min=2017.57ms max=2017.57ms count=1
+  | 11-10 14:57:37.998  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f6fb7cf
+  | 11-10 14:57:38.765  5880  5923 D EGL_emulation: app_time_stats: avg=4051.59ms min=4051.59ms max=4051.59ms count=1
+  | 11-10 14:57:40.568  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:40.568  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:40.579  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:40.579  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:40.582  5880  5923 D EGL_emulation: app_time_stats: avg=1817.01ms min=1817.01ms max=1817.01ms count=1
+  | 11-10 14:57:42.008  5880  5923 D EGL_emulation: app_time_stats: avg=98.51ms min=5.96ms max=1187.12ms count=14
+  | 11-10 14:57:42.783  5880  5923 D EGL_emulation: app_time_stats: avg=97.31ms min=2.40ms max=1844.39ms count=21
+  | 11-10 14:57:42.948  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4f8b04b
+  | 11-10 14:57:44.780  5880  5923 D EGL_emulation: app_time_stats: avg=1997.34ms min=1997.34ms max=1997.34ms count=1
+  | 11-10 14:57:44.903  5880  5923 D EGL_emulation: app_time_stats: avg=2895.30ms min=2895.30ms max=2895.30ms count=1
+  | 11-10 14:57:45.108  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a636bde
+  | 11-10 14:57:45.109  5880  5923 D HWUI    : endAllActiveAnimators on 0xb400007dd98a6770 (UnprojectedRipple) with handle 0xb400007e28a61df0
+  | 11-10 14:57:47.781  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@337c2c2
+  | 11-10 14:57:48.828  5880  5923 D EGL_emulation: app_time_stats: avg=809.54ms min=43.40ms max=3667.49ms count=5
+  | 11-10 14:57:50.330  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dd81079
+  | 11-10 14:57:50.849  5880  5923 D EGL_emulation: app_time_stats: avg=2020.27ms min=2020.27ms max=2020.27ms count=1
+  | 11-10 14:57:52.877  5880  5923 D EGL_emulation: app_time_stats: avg=2028.34ms min=2028.34ms max=2028.34ms count=1
+  | 11-10 14:57:54.578  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 98MB/122MB, paused 184us,1.472ms total 152.602ms
+  | 11-10 14:57:54.882  5880  5923 D EGL_emulation: app_time_stats: avg=2005.30ms min=2005.30ms max=2005.30ms count=1
+  | 11-10 14:57:55.393  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:55.393  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:55.397  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:57:55.397  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:57:55.478  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dfe85af
+  | 11-10 14:57:56.825  5880  5923 D EGL_emulation: app_time_stats: avg=90.40ms min=1.14ms max=1203.46ms count=14
+  | 11-10 14:57:56.893  5880  5923 D EGL_emulation: app_time_stats: avg=502.74ms min=22.49ms max=1418.67ms count=4
+  | 11-10 14:57:57.813  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b8c2a2
+  | 11-10 14:57:58.918  5880  5923 D EGL_emulation: app_time_stats: avg=2024.58ms min=2024.58ms max=2024.58ms count=1
+  | 11-10 14:57:59.767  5880  5923 D EGL_emulation: app_time_stats: avg=2941.75ms min=2941.75ms max=2941.75ms count=1
+  | 11-10 14:57:59.976  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@623f6e6
+  | 11-10 14:57:59.977  5880  5923 D HWUI    : endAllActiveAnimators on 0xb400007dd98e19c0 (UnprojectedRipple) with handle 0xb400007e28a9de50
+  | 11-10 14:57:59.985  5880  5923 D EGL_emulation: app_time_stats: avg=355.56ms min=83.48ms max=854.00ms count=3
+  | 11-10 14:58:02.684  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2320ccb
+  | 11-10 14:58:02.948  5880  5923 D EGL_emulation: app_time_stats: avg=1481.37ms min=42.14ms max=2920.60ms count=2
+  | 11-10 14:58:04.960  5880  5923 D EGL_emulation: app_time_stats: avg=2011.65ms min=2011.65ms max=2011.65ms count=1
+  | 11-10 14:58:05.247  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@34a5616
+  | 11-10 14:58:06.994  5880  5923 D EGL_emulation: app_time_stats: avg=2034.10ms min=2034.10ms max=2034.10ms count=1
+  | 11-10 14:58:07.896  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@35d4bdd
+  | 11-10 14:58:08.996  5880  5923 D EGL_emulation: app_time_stats: avg=2001.95ms min=2001.95ms max=2001.95ms count=1
+  | 11-10 14:58:10.608  5880  5923 D EGL_emulation: app_time_stats: avg=1611.90ms min=1611.90ms max=1611.90ms count=1
+  | 11-10 14:58:13.044  5880  5923 D EGL_emulation: app_time_stats: avg=1212.60ms min=2.78ms max=2422.42ms count=2
+  | 11-10 14:58:16.083  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:58:16.083  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:58:16.091  5880  5923 D EGL_emulation: app_time_stats: avg=3046.30ms min=3046.30ms max=3046.30ms count=1
+  | 11-10 14:58:16.091  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:58:16.091  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:58:17.558  5880  5923 D EGL_emulation: app_time_stats: avg=96.16ms min=4.87ms max=1237.18ms count=14
+  | 11-10 14:58:18.515  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2cf8843
+  | 11-10 14:58:19.081  5880  5923 D EGL_emulation: app_time_stats: avg=138.25ms min=2.72ms max=2642.55ms count=21
+  | 11-10 14:58:20.908  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ea567ee
+  | 11-10 14:58:21.100  5880  5923 D EGL_emulation: app_time_stats: avg=2019.29ms min=2019.29ms max=2019.29ms count=1
+  | 11-10 14:58:22.737  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@65f7536
+  | 11-10 14:58:22.764  5880  5880 I ImeTracker: nitroui.example:bf4e759e: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_CLOSE_CURRENT_SESSION fromUser false
+  | 11-10 14:58:22.768  5880  5923 D EGL_emulation: app_time_stats: avg=1668.24ms min=1668.24ms max=1668.24ms count=1
+  | 11-10 14:58:24.754  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 2(32KB) LOS objects, 19% free, 99MB/123MB, paused 382us,1.859ms total 185.443ms
+  | 11-10 14:58:25.130  5880  5923 D EGL_emulation: app_time_stats: avg=118.09ms min=10.57ms max=2057.06ms count=20
+  | 11-10 14:58:26.045  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@84f97c3
+  | 11-10 14:58:27.145  5880  5923 D EGL_emulation: app_time_stats: avg=2014.41ms min=2014.41ms max=2014.41ms count=1
+  | 11-10 14:58:29.184  5880  5923 D EGL_emulation: app_time_stats: avg=2038.75ms min=2038.75ms max=2038.75ms count=1
+  | 11-10 14:58:31.178  5880  5923 D EGL_emulation: app_time_stats: avg=1993.76ms min=1993.76ms max=1993.76ms count=1
+  | 11-10 14:58:31.460  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a16367
+  | 11-10 14:58:35.213  5880  5923 D EGL_emulation: app_time_stats: avg=1006.34ms min=2.91ms max=3724.63ms count=4
+  | 11-10 14:58:36.913  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d960a1a
+  | 11-10 14:58:37.246  5880  5923 D EGL_emulation: app_time_stats: avg=2033.60ms min=2033.60ms max=2033.60ms count=1
+  | 11-10 14:58:39.247  5880  5923 D EGL_emulation: app_time_stats: avg=2000.64ms min=2000.64ms max=2000.64ms count=1
+  | 11-10 14:58:39.549  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e3fdfb1
+  | 11-10 14:58:41.278  5880  5923 D EGL_emulation: app_time_stats: avg=2031.31ms min=2031.31ms max=2031.31ms count=1
+  | 11-10 14:58:42.305  5880  5923 D EGL_emulation: app_time_stats: avg=1025.84ms min=1025.84ms max=1025.84ms count=1
+  | 11-10 14:58:45.080  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7772718
+  | 11-10 14:58:45.295  5880  5923 D EGL_emulation: app_time_stats: avg=1494.80ms min=20.04ms max=2969.55ms count=2
+  | 11-10 14:58:46.349  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 2(32KB) LOS objects, 19% free, 99MB/123MB, paused 210us,1.744ms total 165.770ms
+  | 11-10 14:58:47.296  5880  5923 D EGL_emulation: app_time_stats: avg=2001.20ms min=2001.20ms max=2001.20ms count=1
+  | 11-10 14:58:47.669  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:58:47.669  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:58:47.675  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:58:47.675  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:58:49.141  5880  5923 D EGL_emulation: app_time_stats: avg=95.73ms min=5.82ms max=1236.52ms count=14
+  | 11-10 14:58:49.312  5880  5923 D EGL_emulation: app_time_stats: avg=87.84ms min=3.31ms max=1291.76ms count=22
+  | 11-10 14:58:50.117  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@84c3872
+  | 11-10 14:58:51.345  5880  5923 D EGL_emulation: app_time_stats: avg=2032.60ms min=2032.60ms max=2032.60ms count=1
+  | 11-10 14:58:52.365  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@22cc1e9
+  | 11-10 14:58:53.329  5880  5923 D EGL_emulation: app_time_stats: avg=1983.76ms min=1983.76ms max=1983.76ms count=1
+  | 11-10 14:58:54.414  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@67977eb
+  | 11-10 14:58:54.433  5880  5880 I ImeTracker: nitroui.example:4c42e8c7: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_CLOSE_CURRENT_SESSION fromUser false
+  | 11-10 14:58:54.437  5880  5923 D EGL_emulation: app_time_stats: avg=1107.38ms min=1107.38ms max=1107.38ms count=1
+  | 11-10 14:58:57.395  5880  5923 D EGL_emulation: app_time_stats: avg=135.02ms min=2.40ms max=2639.99ms count=20
+  | 11-10 14:58:57.461  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3e199de
+  | 11-10 14:58:59.419  5880  5923 D EGL_emulation: app_time_stats: avg=2023.24ms min=2023.24ms max=2023.24ms count=1
+  | 11-10 14:59:00.078  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@61f0245
+  | 11-10 14:59:01.430  5880  5923 D EGL_emulation: app_time_stats: avg=2010.68ms min=2010.68ms max=2010.68ms count=1
+  | 11-10 14:59:02.760  5880  5923 D EGL_emulation: app_time_stats: avg=1330.57ms min=1330.57ms max=1330.57ms count=1
+  | 11-10 14:59:05.480  5880  5923 D EGL_emulation: app_time_stats: avg=899.39ms min=2.37ms max=2691.98ms count=3
+  | 11-10 14:59:07.497  5880  5923 D EGL_emulation: app_time_stats: avg=2017.72ms min=2017.72ms max=2017.72ms count=1
+  | 11-10 14:59:10.596  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e9090ea
+  | 11-10 14:59:11.512  5880  5923 D EGL_emulation: app_time_stats: avg=4014.62ms min=4014.62ms max=4014.62ms count=1
+  | 11-10 14:59:11.861  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 2(32KB) LOS objects, 19% free, 99MB/123MB, paused 174us,1.961ms total 170.094ms
+  | 11-10 14:59:13.238  5880  5923 D EGL_emulation: app_time_stats: avg=1726.08ms min=1726.08ms max=1726.08ms count=1
+  | 11-10 14:59:15.544  5880  5923 D EGL_emulation: app_time_stats: avg=1152.76ms min=18.87ms max=2286.66ms count=2
+  | 11-10 14:59:16.031  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@befb58b
+  | 11-10 14:59:17.563  5880  5923 D EGL_emulation: app_time_stats: avg=2018.68ms min=2018.68ms max=2018.68ms count=1
+  | 11-10 14:59:18.583  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:59:18.583  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:59:18.590  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:59:18.590  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:59:18.592  5880  5923 D EGL_emulation: app_time_stats: avg=1029.21ms min=1029.21ms max=1029.21ms count=1
+  | 11-10 14:59:20.024  5880  5923 D EGL_emulation: app_time_stats: avg=92.33ms min=5.06ms max=1203.58ms count=14
+  | 11-10 14:59:21.046  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@52c63c7
+  | 11-10 14:59:21.564  5880  5923 D EGL_emulation: app_time_stats: avg=137.44ms min=3.15ms max=2626.56ms count=21
+  | 11-10 14:59:23.314  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3814942
+  | 11-10 14:59:23.613  5880  5923 D EGL_emulation: app_time_stats: avg=2049.13ms min=2049.13ms max=2049.13ms count=1
+  | 11-10 14:59:25.312  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c926e0a
+  | 11-10 14:59:25.334  5880  5880 I ImeTracker: nitroui.example:6e8deeab: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_CLOSE_CURRENT_SESSION fromUser false
+  | 11-10 14:59:25.337  5880  5923 D EGL_emulation: app_time_stats: avg=1724.23ms min=1724.23ms max=1724.23ms count=1
+  | 11-10 14:59:27.643  5880  5923 D EGL_emulation: app_time_stats: avg=97.08ms min=2.35ms max=1972.84ms count=21
+  | 11-10 14:59:28.454  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f778903
+  | 11-10 14:59:29.661  5880  5923 D EGL_emulation: app_time_stats: avg=2018.01ms min=2018.01ms max=2018.01ms count=1
+  | 11-10 14:59:31.096  5880  5923 D EGL_emulation: app_time_stats: avg=1434.78ms min=1434.78ms max=1434.78ms count=1
+  | 11-10 14:59:32.376  5880  5923 D EGL_emulation: app_time_stats: avg=15.91ms min=2.30ms max=370.65ms count=55
+  | 11-10 14:59:33.701  5880  5923 D EGL_emulation: app_time_stats: avg=73.62ms min=14.95ms max=1044.77ms count=18
+  | 11-10 14:59:34.672  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@94d590c
+  | 11-10 14:59:34.714  5880  5923 D EGL_emulation: app_time_stats: avg=253.21ms min=6.37ms max=968.39ms count=4
+  | 11-10 14:59:35.455  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 2(32KB) LOS objects, 19% free, 99MB/123MB, paused 979us,1.627ms total 150.165ms
+  | 11-10 14:59:35.726  5880  5923 D EGL_emulation: app_time_stats: avg=18.81ms min=4.04ms max=154.85ms count=52
+  | 11-10 14:59:37.752  5880  5923 D EGL_emulation: app_time_stats: avg=112.54ms min=14.03ms max=1562.43ms count=18
+  | 11-10 14:59:38.096  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f2969b1
+  | 11-10 14:59:39.745  5880  5923 D EGL_emulation: app_time_stats: avg=1992.90ms min=1992.90ms max=1992.90ms count=1
+  | 11-10 14:59:41.049  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:59:41.049  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:59:41.056  5880  5880 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-10 14:59:41.056  5880  5880 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-10 14:59:41.059  5880  5923 D EGL_emulation: app_time_stats: avg=656.85ms min=13.75ms max=1299.95ms count=2
+  | 11-10 14:59:41.625  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7412ba3
+  | 11-10 14:59:43.779  5880  5923 D EGL_emulation: app_time_stats: avg=100.98ms min=2.88ms max=2007.01ms count=26
+  | 11-10 14:59:44.529  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ad0daac
+  | 11-10 14:59:45.794  5880  5923 D EGL_emulation: app_time_stats: avg=2014.62ms min=2014.62ms max=2014.62ms count=1
+  | 11-10 14:59:47.832  5880  5923 D EGL_emulation: app_time_stats: avg=1018.89ms min=16.92ms max=2020.85ms count=2
+  | 11-10 14:59:49.843  5880  5923 D EGL_emulation: app_time_stats: avg=2011.34ms min=2011.34ms max=2011.34ms count=1
+  | 11-10 14:59:51.845  5880  5923 D EGL_emulation: app_time_stats: avg=2001.20ms min=2001.20ms max=2001.20ms count=1
+  | 11-10 14:59:53.879  5880  5923 D EGL_emulation: app_time_stats: avg=2033.81ms min=2033.81ms max=2033.81ms count=1
+  | 11-10 14:59:54.932  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c001279
+  | 11-10 14:59:55.902  5880  5923 D EGL_emulation: app_time_stats: avg=1011.71ms min=15.97ms max=2007.45ms count=2
+  | 11-10 14:59:56.341  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 99MB/123MB, paused 720us,1.841ms total 149.684ms
+  | 11-10 14:59:57.493  5880  5923 D EGL_emulation: app_time_stats: avg=1590.00ms min=1590.00ms max=1590.00ms count=1
+  | 11-10 14:59:59.931  5880  5923 D EGL_emulation: app_time_stats: avg=46.16ms min=2.90ms max=1574.20ms count=52
+  | 11-10 15:00:01.928  5880  5923 D EGL_emulation: app_time_stats: avg=1996.58ms min=1996.58ms max=1996.58ms count=1
+  | 11-10 15:00:03.095  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ecf2f90
+  | 11-10 15:00:03.948  5880  5923 D EGL_emulation: app_time_stats: avg=1010.04ms min=13.98ms max=2006.11ms count=2
+  | 11-10 15:00:05.628  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@628fb9f
+  | 11-10 15:00:05.964  5880  5923 D EGL_emulation: app_time_stats: avg=2015.70ms min=2015.70ms max=2015.70ms count=1
+  | 11-10 15:00:07.959  5880  5923 D EGL_emulation: app_time_stats: avg=1995.43ms min=1995.43ms max=1995.43ms count=1
+  | 11-10 15:00:08.145  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7c5a2fa
+  | 11-10 15:00:09.997  5880  5923 D EGL_emulation: app_time_stats: avg=2037.92ms min=2037.92ms max=2037.92ms count=1
+  | 11-10 15:00:10.644  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@44dce11
+  | 11-10 15:00:12.012  5880  5923 D EGL_emulation: app_time_stats: avg=2014.33ms min=2014.33ms max=2014.33ms count=1
+  | 11-10 15:00:14.029  5880  5923 D EGL_emulation: app_time_stats: avg=1008.58ms min=15.13ms max=2002.03ms count=2
+  | 11-10 15:00:15.877  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ba28cd6
+  | 11-10 15:00:16.032  5880  5923 D EGL_emulation: app_time_stats: avg=2002.94ms min=2002.94ms max=2002.94ms count=1
+  | 11-10 15:00:17.175  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 99MB/123MB, paused 179us,1.473ms total 141.554ms
+  | 11-10 15:00:18.046  5880  5923 D EGL_emulation: app_time_stats: avg=2013.92ms min=2013.92ms max=2013.92ms count=1
+  | 11-10 15:00:18.379  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ec3302f
+  | 11-10 15:00:19.058  5880  5923 D EGL_emulation: app_time_stats: avg=22.99ms min=7.95ms max=294.54ms count=44
+  | 11-10 15:00:20.093  5880  5923 D EGL_emulation: app_time_stats: avg=103.43ms min=14.30ms max=886.53ms count=10
+  | 11-10 15:00:21.245  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5fa323b
+  | 11-10 15:00:22.111  5880  5923 D EGL_emulation: app_time_stats: avg=1009.14ms min=18.12ms max=2000.17ms count=2
+  | 11-10 15:00:23.762  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2717a46
+  | 11-10 15:00:24.113  5880  5923 D EGL_emulation: app_time_stats: avg=2001.53ms min=2001.53ms max=2001.53ms count=1
+  | 11-10 15:00:26.130  5880  5923 D EGL_emulation: app_time_stats: avg=2016.52ms min=2016.52ms max=2016.52ms count=1
+  | 11-10 15:00:26.280  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b667dcd
+  | 11-10 15:00:28.145  5880  5923 D EGL_emulation: app_time_stats: avg=2014.94ms min=2014.94ms max=2014.94ms count=1
+  | 11-10 15:00:30.162  5880  5923 D EGL_emulation: app_time_stats: avg=2016.91ms min=2016.91ms max=2016.91ms count=1
+  | 11-10 15:00:31.409  5880  5923 D EGL_emulation: app_time_stats: avg=623.57ms min=13.82ms max=1233.33ms count=2
+  | 11-10 15:00:31.478  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3a1362e
+  | 11-10 15:00:34.228  5880  5923 D EGL_emulation: app_time_stats: avg=939.50ms min=11.07ms max=2038.12ms count=3
+  | 11-10 15:00:34.261  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3958ad5
+  | 11-10 15:00:36.211  5880  5923 D EGL_emulation: app_time_stats: avg=1983.27ms min=1983.27ms max=1983.27ms count=1
+  | 11-10 15:00:38.183  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 99MB/123MB, paused 437us,2.245ms total 146.445ms
+  | 11-10 15:00:38.228  5880  5923 D EGL_emulation: app_time_stats: avg=2015.99ms min=2015.99ms max=2015.99ms count=1
+  | 11-10 15:00:39.446  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@28aa608
+  | 11-10 15:00:40.229  5880  5923 D EGL_emulation: app_time_stats: avg=1000.76ms min=13.42ms max=1988.11ms count=2
+  | 11-10 15:00:42.245  5880  5923 D EGL_emulation: app_time_stats: avg=2016.06ms min=2016.06ms max=2016.06ms count=1
+  | 11-10 15:00:44.280  5880  5923 D EGL_emulation: app_time_stats: avg=2034.58ms min=2034.58ms max=2034.58ms count=1
+  | 11-10 15:00:44.598  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f6931e5
+  | 11-10 15:00:45.292  5880  5923 D EGL_emulation: app_time_stats: avg=20.64ms min=7.77ms max=212.54ms count=49
+  | 11-10 15:00:46.293  5880  5923 D EGL_emulation: app_time_stats: avg=200.16ms min=14.00ms max=936.93ms count=5
+  | 11-10 15:00:47.446  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@94cc9a4
+  | 11-10 15:00:48.314  5880  5923 D EGL_emulation: app_time_stats: avg=1010.56ms min=13.70ms max=2007.42ms count=2
+  | 11-10 15:00:50.030  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5abecc3
+  | 11-10 15:00:50.331  5880  5923 D EGL_emulation: app_time_stats: avg=2017.00ms min=2017.00ms max=2017.00ms count=1
+  | 11-10 15:00:52.348  5880  5923 D EGL_emulation: app_time_stats: avg=2017.14ms min=2017.14ms max=2017.14ms count=1
+  | 11-10 15:00:53.672  5880  5923 D EGL_emulation: app_time_stats: avg=26.48ms min=11.74ms max=383.25ms count=50
+  | 11-10 15:00:56.400  5880  5923 D EGL_emulation: app_time_stats: avg=160.41ms min=14.78ms max=2460.74ms count=17
+  | 11-10 15:00:57.526  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 99MB/123MB, paused 186us,1.632ms total 181.193ms
+  | 11-10 15:00:58.412  5880  5923 D EGL_emulation: app_time_stats: avg=2012.57ms min=2012.57ms max=2012.57ms count=1
+  | 11-10 15:00:58.500  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@38a5600
+  | 11-10 15:00:59.676  5880  5923 D EGL_emulation: app_time_stats: avg=26.31ms min=11.51ms max=385.71ms count=48
+  | 11-10 15:01:02.062  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bb314cf
+  | 11-10 15:01:02.434  5880  5923 D EGL_emulation: app_time_stats: avg=153.20ms min=13.74ms max=2477.84ms count=18
+  | 11-10 15:01:04.462  5880  5923 D EGL_emulation: app_time_stats: avg=2028.44ms min=2028.44ms max=2028.44ms count=1
+  | 11-10 15:01:04.612  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@724dea
+  | 11-10 15:01:06.446  5880  5923 D EGL_emulation: app_time_stats: avg=1983.52ms min=1983.52ms max=1983.52ms count=1
+  | 11-10 15:01:09.798  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@56fb0bb
+  | 11-10 15:01:10.500  5880  5923 D EGL_emulation: app_time_stats: avg=4053.79ms min=4053.79ms max=4053.79ms count=1
+  | 11-10 15:01:12.512  5880  5923 D EGL_emulation: app_time_stats: avg=2012.14ms min=2012.14ms max=2012.14ms count=1
+  | 11-10 15:01:14.548  5880  5923 D EGL_emulation: app_time_stats: avg=2035.37ms min=2035.37ms max=2035.37ms count=1
+  | 11-10 15:01:15.560  5880  5923 D EGL_emulation: app_time_stats: avg=18.59ms min=3.06ms max=383.06ms count=39
+  | 11-10 15:01:17.370  5880  5886 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 99MB/123MB, paused 223us,1.673ms total 146.057ms
+  | 11-10 15:01:18.562  5880  5923 D EGL_emulation: app_time_stats: avg=102.74ms min=1.90ms max=2188.66ms count=28
+  | 11-10 15:01:20.576  5880  5923 D EGL_emulation: app_time_stats: avg=2013.85ms min=2013.85ms max=2013.85ms count=1
+  | 11-10 15:01:21.030  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cb08fba
+  | 11-10 15:01:22.578  5880  5923 D EGL_emulation: app_time_stats: avg=2001.73ms min=2001.73ms max=2001.73ms count=1
+  | 11-10 15:01:23.511  5880  5880 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d44a1d1
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: Error occurred, shutting down websocket connection: Websocket exception
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: java.io.EOFException
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.require(RealBufferedSource.kt:199)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.readByte(RealBufferedSource.kt:209)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.readHeader(WebSocketReader.kt:119)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.processNextFrame(WebSocketReader.kt:102)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket.loopReader(RealWebSocket.kt:293)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket$connect$1.onResponse(RealWebSocket.kt:195)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 11-10 15:01:24.413  5880  5930 E unknown:ReconnectingWebSocket: 	at java.lang.Thread.run(Thread.java:1012)
+  | 11-10 15:01:24.413  5880  5930 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8293/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: Cannot connect to Metro.
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: 
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: Try the following to fix the issue:
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: - Ensure that Metro is running and available on the same network
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: - Ensure that your device/emulator is connected to your machine and has USB debugging enabled - run 'adb devices' to see a list of connected devices
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: - If you're on a physical device connected to the same machine, run 'adb reverse tcp:8081 tcp:8081' to forward requests from your device
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: - If your device is on the same Wi-Fi network, set 'Debug server host & port for device' in 'Dev settings' to your machine's IP address and the port of the local dev server - e.g. 10.0.1.1:8081
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: 
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: URL: localhost:8293
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: 
+  | 11-10 15:01:24.415  5880  5959 W ReactNativeJS: Error: undefined
+  | 11-10 15:01:24.612  5880  5923 D EGL_emulation: app_time_stats: avg=2033.62ms min=2033.62ms max=2033.62ms count=1
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 237 — the rest is in the full log above)
+
+```
+    ✓ segment 2 is announced with its own label — expected true, saw true
+    ✓ segment 2 reports the selection the control has (index 1) — expected true, saw true
+    ✓ segment 3 of 3 is still a radio button — expected true, saw true
+    ✓ segment 3 is announced with its own label — expected true, saw true
+    ✓ segment 3 reports the selection the control has (index 1) — expected false, saw false
+    ✓ the three items are one row, not a stack — expected 1, saw 1
+    ✓ segment 2 is within the connected gap of its neighbour (=0px, at most 6px = 2dp)
+    ✓ segment 3 is within the connected gap of its neighbour (=0px, at most 6px = 2dp)
+    · corner probe: segment 1 [42,764 → 142,890], pixels (116, 764) = rgb(93,95,103) and (116, 765) = rgb(93,95,103) against segment 1's own interior at rgb(255,255,255)
+    ✓ segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(93,95,103) / rgb(93,95,103) vs page rgb(255,255,255)
+    · "Real-input segmented control" occupies 42,764 → 367,890
+    ✓ the control did not move out from under the finger — expected 42,764 → 367,890, saw 42,764 → 367,890
+    · "Real-input segmented control" occupies 42,764 → 367,890
+    ✓ a real tap on the first segment reaches JS as index 0 — expected 0, saw 0
+    ✓ two taps report two changes — expected 2, saw 2
+    ✓ the refusing parent pins its SegmentedControl at index 0 — expected 0, saw 0
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1116 → 367,1242
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the index it sends is still 0 — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1116 → 367,1242
+    ✓ a second tap on segment 2 is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 0, saw 0
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ the DatePicker has reported no day before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input date picker" occupies 42,807 → 386,933
+    · tapping dialog day "Monday, November 16, 2026"
+    ✓ a real tap on a dialog day (Monday, November 16, 2026) reaches JS as a change — expected 1, saw 1
+    ✓ the day JS was told is the day React paints: "2026-11-16" is Y-M-D, written by hand so that no locale can move the assertion
+    ✓ the refusing parent pins its DatePicker to one day — expected 2024-06-15, saw 2024-06-15
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting date picker" occupies 42,1159 → 386,1285
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the day it sends is unchanged — expected 2024-06-15, saw 2024-06-15
+    · "Real-input rejecting date picker" occupies 42,1159 → 386,1285
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a second pick is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 2024-06-15, saw 2024-06-15
+    · grid: 31 cells in the band, first = "Thursday, January 1, 2026", value = "2026-01-01 08:30"
+    ✓ the tap moved the value it is echoing: "2026-01-08 08:30" is not "2026-01-01 08:30"
+    ✓ and the day it accepted is the instant that day echoed before, time of day kept — expected 2026-01-01 08:30, saw 2026-01-01 08:30
+    ✓ "Wide inline calendar" is laid out in a 411 dp box, at the 360 dp width that decides the touch target
+    ✓ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 126px, 126px, 126px, 126px, 126px, 126px, 126px (narrowest 48.0 dp)
+    ✓ "Narrow inline calendar" is laid out in a 320 dp box, under the 360 dp width that decides the touch target
+    ✓ the 320 dp inline calendar lays a whole week out on 40 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp)
+    · "Real-input wheel time picker" occupies 172,1947 → 908,2262
+    · "Real-input wheel time picker" occupies 172,1020 → 908,1335
+    ✓ the uncontrolled wheel has reported no time yet — expected -, saw -
+    ✓ and has reported no change — expected 0, saw 0
+    · time wheel box: 172,1020 → 908,1335 at 2.625 x = 120 dp tall, 280 dp wide
+    ✓ the wheel is named in the tree (1 node(s) carry "Real-input wheel time picker")
+    · wheel a11y node: class=android.view.View enabled=true scrollable=false content-desc=Real-input wheel time picker
+    ✓ the tree names both drums, so each fling can be aimed at one of them
+    · hour drum 172,1020 → 435,1335 (100 x 120 dp), minute drum 477,1020 → 740,1335 - 42 px apart
+    WARN the drum rows are NOT in the accessibility tree - `ScrollField` keeps its rows to itself, so the aim is the control's own thirds and the four "the row shown is the value reported" comparisons below cannot be made from a dump (the event-count assertions can, and are the point of the flings). docs/components/date-picker.md records the gap.
+    · "Real-input wheel time picker" occupies 172,1020 → 908,1335
+    ✗ one roll of the hour reports exactly one change, not one per row crossed — expected 1, saw 2
+    ✗ the hour drum at rest: real-input-wheel-time-events went to "2" when it should have stayed "1"
+
+  picker: real tap opens the menu, a real tap on a row reports it, an unmount while open leaks no popup, and the radio variant echoes a real row tap
+    · "Real-input picker" occupies 42,704 → 777,851
+    ✓ the Picker has reported no index before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Real-input picker" occupies 42,704 → 777,851
+    ✓ a real tap on the anchor opens the menu as a popup window — expected 1, saw 1
+    ✓ the open menu marks the current choice ("Onyx") selected to TalkBack
+    ✓ Back shuts the popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 0, saw 0
+    ✓ and the anchor still shows the title it started with — expected Onyx, saw Onyx
+    · "Real-input picker" occupies 42,704 → 777,851
+    ✓ tapping the row that is already chosen closes the menu — expected 0, saw 0
+    ✓ and a choice that changed nothing reports nothing — expected 0, saw 0
+    · "Real-input picker" occupies 42,704 → 777,851
+    ✓ a real tap on a menu row reaches JS as index 2 — expected 2, saw 2
+    ✓ one choice reports one change — expected 1, saw 1
+    ✓ choosing closes its own popup — expected 0, saw 0
+    ✓ the anchor now paints the title that was chosen ("A considerably longer mineral name") — expected A considerably longer mineral name, saw A considerably longer mineral name
+    ✓ the control grew to fit it (735 dp -> 888 dp), with no render to ask for
+    · "Real-input rejecting picker" occupies 42,1206 → 777,1353
+    ✓ the refusing parent pins its Picker at index 0 — expected 0, saw 0
+    · "Real-input rejecting picker" occupies 42,1206 → 777,1353
+    ✓ a real tap on the controlled picker still reaches JS - native paints optimistically — expected 1, saw 1
+    ✓ the parent never accepted the change, so the index it sends is still 0 — expected 0, saw 0
+    ✓ the refused title went away: the anchor shows the parent's title again — expected Summit, saw Summit
+    · "Real-input rejecting picker" occupies 42,1206 → 777,1353
+    ✓ tapping the refused row again is a fresh choice, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ choosing shut that popup too — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1708 → 777,1855
+    · "Real-input drop picker" occupies 42,1708 → 777,1855
+    ✓ cycle 1: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 1: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1708 → 777,1855
+    · "Real-input drop picker" occupies 42,1708 → 777,1855
+    ✓ cycle 2: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 2: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input drop picker" occupies 42,1708 → 777,1855
+    · "Real-input drop picker" occupies 42,1708 → 777,1855
+    ✓ cycle 3: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 3: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input disabled picker" needed 2 scrolls to come on screen
+    · "Real-input disabled picker" occupies 42,1615 → 777,1783
+    ✓ a real tap on the disabled picker opens no menu — expected 0, saw 0
+    · "Real-input enabled picker" occupies 42,1799 → 777,1967
+    ✓ the ordinary picker, tapped the same way, opens one - so the line above measured a refusal — expected 1, saw 1
+    ✓ and that menu goes away again — expected 0, saw 0
+    ✓ one node carries the enabled picker's name, so it is announced once — expected 1, saw 1
+    ✓ and that same node carries the value it shows — expected Mica, saw Mica
+    ✓ it is the node a tap is aimed at, too (the name is not parked on a container) — expected true, saw true
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the disabled picker is one node as well — expected 1, saw 1
+    ✓ and that node is the one that says it is disabled — expected false, saw false
+    · name node reports focusable=false - kept as evidence, not asserted
+    · "Real-input radio picker" occupies 42,408 → 407,786
+    ✓ the radio group has reported no index before a touch — expected -, saw -
+    ✓ and no popup window belongs to it - the rows are the control — expected 0, saw 0
+    ✓ a real tap on radio row 2 reaches JS as index 2 — expected 2, saw 2
+    ✓ one row tap reports one change — expected 1, saw 1
+    ✓ a row tap opened no window — expected 0, saw 0
+    ✓ the tree marks "Basalt" as not chosen — expected false, saw false
+    ✓ the tree marks "Flint" as not chosen — expected false, saw false
+    ✓ the tree marks "Obsidian" as the chosen row — expected true, saw true
+    ✓ the enabled group's row "Basalt" says it is enabled — expected true, saw true
+    ✓ the enabled group's row "Flint" says it is enabled — expected true, saw true
+    ✓ the enabled group's row "Obsidian" says it is enabled — expected true, saw true
+    · radio row node, enabled group: "Obsidian" -> android.view.View enabled=true checkable=true checked=true at 42,660-407,786
+    ✓ the group is named once, so TalkBack announces the group and then its rows — expected 1, saw 1
+    ✓ tapping the row that is already chosen reports nothing — expected 1, saw 1
+    · "Real-input disabled radio picker" occupies 42,1141 → 377,1519
+    ✓ the disabled group's row "Gabbro" says it is not enabled — expected false, saw false
+    ✓ the disabled group's row "Peridot" says it is not enabled — expected false, saw false
+    ✓ the disabled group's row "Scoria" says it is not enabled — expected false, saw false
+    · radio row node, disabled group: "Gabbro" -> android.view.View enabled=false checkable=true checked=true at 42,1141-377,1267
+    ✓ a real tap on a disabled row reports nothing — expected 2, saw 2
+    · "Real-input radio picker" occupies 42,408 → 407,786
+    ✓ and a real tap on row 1 of the enabled group still echoes — expected 1, saw 1
+    · "Real-input wheel picker" occupies 282,1685 → 798,2210
+    · "Real-input wheel picker" occupies 282,787 → 798,1312
+gate: stopped the Metro this run started (13797) on port 8293 - the next gate on this lease gets a free port
+gate: stopped the Metro this run started (13797) on port 8293 - the next gate on this lease gets a free port
+gate: real-input:android FAIL in 974.6 s (signal SIGTERM)
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G29-android-wheels/real-input+android-2026-11-10T14-45-10.742Z.log (5 probe(s))
+
+```

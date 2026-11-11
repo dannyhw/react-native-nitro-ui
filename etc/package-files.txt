@@ -56,6 +56,7 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPixelProbe.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiWheelDrag.kt
 android/src/main/res/drawable/nitroui_add.xml
 android/src/main/res/drawable/nitroui_check.xml
 android/src/main/res/drawable/nitroui_chevron_right.xml

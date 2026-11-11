@@ -1,0 +1,200 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-10T11:44:55.446Z on code tree `919cb6986974` at HEAD `da4b3e0` (branch `task/G29-android-wheels`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1126865 ms
+- Load: start 4.43, end 17.60, median 8.36, max 31.58
+- Device: android / device `emulator-5570` / lease `G29-itkdc`
+- Full log: `task/G29-android-wheels/harness+android-2026-11-10T11-44-54.696Z.log` (<store>/task/G29-android-wheels/harness+android-2026-11-10T11-44-54.696Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● Console`
+- `● DatePicker · wheel variant (G29) › measures the time drum from a poisoned fallback`
+- `● DatePicker · wheel variant (G29) › draws the calendar for a date wheel, because there is no date drum`
+- `expected '2024-06' to be '2024-05' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-android-wheels/harness+android-2026-11-10T11-44-54.696Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-itkdc (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G27-izh0s                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 17.60 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 195 — the rest is in the full log above)
+
+```
+
+    console.log
+      settled platform builds (fresh-inline): 2
+
+
+    console.log
+      settled platform builds (fresh-dialog): 1
+
+
+    console.log
+      re-render bounds (android, tzOffset=0): value=2026-07-04T11:00:00.000Z later=2026-09-15T08:00:00.000Z inline=1783162800000|0|-1|-1|1|3|1767312000006|-2 dialog=1789372800000|1|-1|-1|1|2|1767312000006|1789372800000
+
+
+    console.log
+      settled platform builds (built-bounds): 2
+
+
+    console.log
+      settled platform builds (built-bounds): 3
+
+
+    console.log
+      built bounds (android): built0=2 afterWiden=3 report="1768046400000|0|1767225600000|1|0|3|1764547200000|1768910400000" firstMax=1766232000000 widerMax=1768910400000 between=1768046400000
+
+
+    console.log
+      settled platform builds (built-bounds): 3
+
+
+    console.log
+      dst zone: Wed Jul 01 2026 00:00:00 GMT+0100 zone=Europe/Lisbon winterOffset=0 summerOffset=1
+
+
+    console.log
+      dst cases: 1 of 7 cross a UTC day - summerNight=1783207800000 winterLate=1767656700000
+
+
+    console.log
+      dst (android, tzOffset=0): winter=1767616200000 summer=1783251000000 spring=1774783800000 autumnEve=1792881900000 autumn=1792971900000 summerNight=1783207800000 winterLate=1767656700000
+
+
+    console.log
+      disabled (android): report="1780527600000|0|-1|-1|0|3|1767312000006|-2" log=[]
+
+
+    console.log
+      pair (android, tzOffset=0): narrow=131.05x48.00 wide=131.05x48.00 box=131.05x48.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      mode-keys (android, tzOffset=0): date=131.05x48.00 time=107.81x48.00 boxes=131.05x48.00/107.81x48.00 probeDate="Nov 28, 2288" probeTime="11:59 PM"
+
+
+    console.log
+      mode-change (android, tzOffset=0): date=131.05x48.00 time=107.81x48.00 box=107.81x48.00 probeDate="Nov 28, 2288" probeTime="11:59 PM" delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      remount (android): report="1780527600000|0|-1|-1|0|3|-2|-2" expected=1780527600000|0
+
+
+    console.log
+      date wheel box: 320.00x512.00
+
+
+    console.log
+      wheel to compact: 280.38x120.00 -> 107.81x48.00
+
+  ● DatePicker · wheel variant (G29) › measures the time drum from a poisoned fallback
+
+    testID "wheel-time" (the time drum) never reached 280.38x120.00 - last box 320.00x120.00, control measured 280.38x120.00.
+
+      [0m [90m 364 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 365 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 366 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 367 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 369 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● DatePicker · wheel variant (G29) › draws the calendar for a date wheel, because there is no date drum
+
+    expected '2024-06' to be '2024-05' // Object.is equality
+
+      [0m [90m 2000 |[39m     expect(report[33m.[39mcontrolBuilds)[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+       [90m 2001 |[39m     expect(report[33m.[39mcalendarHasSelection)[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2002 |[39m     expect(monthKeyOf(report[33m.[39mcalendarMonthUtc))[33m.[39mtoBe(expectedMonthKey([35m2024[39m[33m,[39m [35m5[39m))[33m;[39m
+       [90m      |[39m                                                     [31m[1m^[22m[39m
+       [90m 2003 |[39m     drum[33m.[39munmount()[33m;[39m
+       [90m 2004 |[39m     [36mawait[39m settle([35m200[39m)[33m;[39m
+       [90m 2005 |[39m     handles[33m.[39mclear()[33m;[39m[0m
+
+Summary of all failing tests
+FAIL __tests__/DatePicker.harness.tsx
+  ● DatePicker · wheel variant (G29) › measures the time drum from a poisoned fallback
+
+    testID "wheel-time" (the time drum) never reached 280.38x120.00 - last box 320.00x120.00, control measured 280.38x120.00.
+
+      [0m [90m 364 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 365 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 366 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 367 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 368 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 369 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+  ● DatePicker · wheel variant (G29) › draws the calendar for a date wheel, because there is no date drum
+
+    expected '2024-06' to be '2024-05' // Object.is equality
+
+      [0m [90m 2000 |[39m     expect(report[33m.[39mcontrolBuilds)[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+       [90m 2001 |[39m     expect(report[33m.[39mcalendarHasSelection)[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2002 |[39m     expect(monthKeyOf(report[33m.[39mcalendarMonthUtc))[33m.[39mtoBe(expectedMonthKey([35m2024[39m[33m,[39m [35m5[39m))[33m;[39m
+       [90m      |[39m                                                     [31m[1m^[22m[39m
+       [90m 2003 |[39m     drum[33m.[39munmount()[33m;[39m
+       [90m 2004 |[39m     [36mawait[39m settle([35m200[39m)[33m;[39m
+       [90m 2005 |[39m     handles[33m.[39mclear()[33m;[39m[0m
+
+
+Test Suites: 1 failed, 30 passed, 31 total
+Tests:       2 failed, 3 skipped, 652 passed, 657 total
+Snapshots:   0 total
+Time:        1093.373 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 8c40f5867bef, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 16.69/12.23 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G29-android-wheels/harness+android-2026-11-10T11-44-54.696Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        31.119 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 1126.9 s - note: the code tree moved during the run (8c40f5867bef now), so this line describes 919cb6986974
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+
+
+gate: appended the device context to task/G29-android-wheels/harness+android-2026-11-10T11-44-54.696Z.log (5 probe(s))
+
+```

@@ -5516,22 +5516,58 @@ final class RealInputTests: XCTestCase {
     let field = try required("low-date", as: "the last row's DatePicker field")
     let screen = app.windows.firstMatch.frame
 
-    // Scroll to the end of the page. It is at the end when a further swipe no longer
+    // Scroll to the end of the page. It is at the end when a further scroll no longer
     // moves the field - not when the field becomes hittable, which happens rows
     // before the bottom and would leave this check testing a field in the middle.
+    //
+    // The drag runs down the page's own 16pt of left padding rather than across the
+    // middle, and that is not a style choice. This page ends with three `wheel` rows
+    // (G29), and a wheel keeps every vertical drag that starts inside it - correct for
+    // a wheel, fatal for `app.swipeUp()`, which always starts at the centre of the
+    // window. Measured on the run that found this: the first swipe landed on a drum's
+    // selection row, the drums rolled, the page did not move, "no movement" read as
+    // "at the end", and the tap went to a row left at y=1005 of a 912pt window. The
+    // padding belongs to the scroll view and no wheel is laid out inside it, so a drag
+    // started there always scrolls the page.
+    //
+    // Steps rather than full swipes, as in `scrollIntoView`, and the end is three
+    // steps that move nothing rather than one: the page also carries `inline` rows that
+    // reclaim the padding and reach the gutter (the `wideBox` stories), so a step can
+    // still be swallowed on its way down, and one eaten gesture is what the old loop
+    // mistook for the end of the world.
+    let gutter = app.coordinate(
+      withNormalizedOffset: CGVector(dx: 8 / screen.width, dy: 0.72)
+    )
     var position = field.frame
-    for _ in 0..<12 {
-      app.swipeUp()
+    var steps = 0
+    var unmoved = 0
+    while steps < 24 && unmoved < 3 {
+      steps += 1
+      gutter.press(
+        forDuration: 0.05,
+        thenDragTo: gutter.withOffset(CGVector(dx: 0, dy: -240))
+      )
       let after = field.frame
-      if after == position {
-        break
-      }
+      unmoved = after == position ? unmoved + 1 : 0
       position = after
     }
+    print("real-input low row: scrolled in \(steps) steps, last \(unmoved) unmoved")
     let frame = field.frame
     let roomBelow = screen.maxY - frame.maxY
     print("real-input low row: field=\(frame) screen=\(screen) roomBelow=\(roomBelow)")
 
+    // The row has to be *on* the window before any of this means anything: a row
+    // parked under the home indicator is in nobody's lower half and is not tappable,
+    // and a scroll loop that stopped early would otherwise be read as a date picker
+    // that refused a tap. G29's three `wheel` rows are why this needs saying - a
+    // scroll step swallowed by a drum looks exactly like the end of the page.
+    XCTAssertLessThanOrEqual(
+      frame.maxY,
+      screen.maxY,
+      "the last row of the Date screen ended at y \(frame.minY)-\(frame.maxY) of a "
+        + "\(screen.height)pt window, so it is off it: no finger can reach it, which "
+        + "means the page never scrolled to its end rather than that the field refused"
+    )
     // The check is only worth running in the position it is about, so say so loudly
     // rather than pass quietly on a screen that did not scroll.
     XCTAssertGreaterThan(
