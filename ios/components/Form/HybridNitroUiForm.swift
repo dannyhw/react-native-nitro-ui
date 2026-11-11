@@ -97,6 +97,12 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       NitroUiFormRowCell.self,
       forCellWithReuseIdentifier: NitroUiFormItem.rowReuseIdentifier
     )
+    // What the provider answers with when it has nothing to draw has to be a cell UIKit can
+    // account for as much as a row is; see `giveUpCell(in:at:)`.
+    view.register(
+      NitroUiFormBlankCell.self,
+      forCellWithReuseIdentifier: NitroUiFormItem.blankReuseIdentifier
+    )
     let headerKind = UICollectionView.elementKindSectionHeader
     let footerKind = UICollectionView.elementKindSectionFooter
     view.register(
@@ -278,6 +284,17 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     )
     pendingTopReset = true
     topResetTries = 0
+    // Take the list's data source away with the models. `applySnapshot()` below is coalesced to
+    // the next turn, and until it runs this list still holds the *mount that just ended*'s
+    // snapshot while its models are gone — so the next layout of the recycled list asks the
+    // provider of whoever mounts next about index paths that Form has nothing to draw. X25's
+    // aborts are that one question answered three ways (nil for a band, a bare cell for a row,
+    // the cell already on screen for a reconfigure), and UIKit asserts on all three answers.
+    // With no data source there is nothing to ask. `applySnapshotNow` puts one back with the
+    // next mount's own content — a list is allowed to wait a turn for a Form that has nothing
+    // to say yet, which is the same state it is in before the first apply of any mount.
+    list.dataSource = nil
+    dataSource = nil
     applySnapshot()
   }
 
@@ -588,10 +605,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   ///   again". It re-runs the provider and requires it to return *that same cell*, which is only
   ///   possible for a cell that came from this registration — so it is the right ask for ours and
   ///   a fatal one for anything else (see `giveUpCell(in:at:)`);
-  /// - a cell that is not ours — the blank `UICollectionViewCell` a provider call that gave up
-  ///   left behind — cannot be reconfigured for the same reason: the provider cannot obtain it
-  ///   through `nitroui-form-row`. Those items get `reloadItems`, which is allowed to build a
-  ///   new cell, which is the only thing that can replace one.
+  /// - a cell that is not ours — the `NitroUiFormBlankCell` a provider call that gave up left
+  ///   behind — cannot be reconfigured either: the provider cannot hand back *that* cell through
+  ///   any registration, and a freshly dequeued one is another cell, which is the answer that
+  ///   aborts. Those items get `reloadItems`, which is allowed to build a new cell, which is
+  ///   the only thing that can replace one.
   ///
   /// Asked from `reportGeometry`, which is every settle there is — the one after a snapshot
   /// apply and the one after a list came to rest — so a blank cell is chased whether an apply or
@@ -673,8 +691,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // a cell winds up answered with a give-up cell in the middle of a reconfigure.
       guard self.path(for: row) == at else { continue }
       let cell = list.cellForItem(at: at) as? NitroUiFormRowCell
-      // A cell that is not one of ours at all — the blank `UICollectionViewCell` from a
-      // provider call that gave up — has no row either, and reads as `nil` here.
+      // A cell that is not one of ours at all — the `NitroUiFormBlankCell` a provider call that
+      // gave up left behind — has no row either, and reads as `nil` here.
       if cell?.row == nil {
         found.append(RowlessItem(id: .row(row), path: at, cell: cell))
       }
@@ -684,31 +702,51 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
 
   /// The cell to answer with when this Form has nothing to draw at an index path.
   ///
-  /// A fresh blank cell is the right answer while UIKit is *inserting* an item: it goes in the
-  /// list, the next settle notices it holds nothing, and `readoptRowlessCells()` replaces it.
-  /// While UIKit is *reconfiguring* an item it is fatal: a reconfiguration must be answered with
-  /// the cell already on screen, and answering with another one raises
-  /// `NSInternalInconsistencyException` out of `-[UICollectionView _reconfigureCell:forItemAtIndexPath:]`
-  /// and takes the app with it — which is what X25 found in the bench's `mount.form` cell, on
-  /// every launch, when a Section unmounted in the turn between a settle's readopt and the apply
-  /// it queued. The cell already there is also the honest answer: a give-up means "leave this
-  /// one as it is", and the queued `applySnapshot` still has the real fix.
+  /// Every answer has to be a cell UIKit can account for — one it handed out for a registered
+  /// reuse identifier — because UIKit checks. While it is bringing an item on screen the check
+  /// is that the cell came from a registration at all, and a bare `UICollectionViewCell()`
+  /// aborts the app in `_createPreparedCellForItemAtIndexPath:`; that is the crash the harness
+  /// churn case finds, on the fixed tree as much as the broken one, because a Form torn down
+  /// mid-settle leaves items in the list that its models have forgotten, and the next layout
+  /// asks the provider for one of them. While it is *reconfiguring* an item the check is
+  /// narrower: the answer has to be the cell already on screen, and anything else raises
+  /// `NSInternalInconsistencyException` out of
+  /// `-[UICollectionView _reconfigureCell:forItemAtIndexPath:]` — the crash X24's bench hit on
+  /// every launch, when a Section unmounted in the turn between a settle's readopt and the
+  /// apply it queued.
+  ///
+  /// So a reconfigure is answered with the cell it asked about, and anything else with a blank
+  /// cell of this list's own registration. The blank one draws nothing, the next settle finds
+  /// no row in it and reloads it, and the `applySnapshot` queued behind the give-up has the
+  /// real content either way.
   private func giveUpCell(
     in collectionView: UICollectionView,
     at indexPath: IndexPath
   ) -> UICollectionViewCell {
     if let existing = reconfigureTargets[indexPath] { return existing }
-    return UICollectionViewCell()
+    return collectionView.dequeueReusableCell(
+      withReuseIdentifier: NitroUiFormItem.blankReuseIdentifier,
+      for: indexPath
+    )
   }
 
   private func configureDataSource() {
     let dataSource = UICollectionViewDiffableDataSource<
       NitroUiFormSectionModel, NitroUiFormItem
     >(collectionView: list) { [weak self] collectionView, indexPath, item in
-      self?.cell(at: indexPath, for: item, in: collectionView) ?? UICollectionViewCell()
+      // A Form that is gone has nothing to draw either, and the answer is held to the same
+      // rule as one that is still here.
+      self?.cell(at: indexPath, for: item, in: collectionView)
+        ?? collectionView.dequeueReusableCell(
+          withReuseIdentifier: NitroUiFormItem.blankReuseIdentifier,
+          for: indexPath
+        )
     }
     dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
+      // A band is never answerable with nothing, not even by a Form that is gone; see
+      // `emptyBand(kind:at:in:)`.
       self?.supplementary(kind, at: indexPath, in: collectionView)
+        ?? Self.emptyBand(kind: kind, at: indexPath, in: collectionView)
     }
     self.dataSource = dataSource
   }
@@ -871,20 +909,61 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     _ kind: String,
     at indexPath: IndexPath,
     in collectionView: UICollectionView
-  ) -> UICollectionReusableView? {
+  ) -> UICollectionReusableView {
     let isFooter = kind == UICollectionView.elementKindSectionFooter
     let reuse = isFooter
       ? NitroUiFormItem.footerReuseIdentifier
       : NitroUiFormItem.headerReuseIdentifier
-    guard indexPath.section < sections.count,
+    // The Section can be one the models have already dropped — the turn between a settle and
+    // the apply that takes it away — and the band still has to be answered.
+    let model = indexPath.section < sections.count ? sections[indexPath.section] : nil
+    guard
       let cell = collectionView.dequeueReusableSupplementaryView(
         ofKind: kind,
         withReuseIdentifier: reuse,
         for: indexPath
-      ) as? NitroUiFormSupplementaryCell else { return nil }
-    let model = sections[indexPath.section]
-    cell.configure(text: isFooter ? model.footerText : model.title, footer: isFooter)
+      ) as? NitroUiFormSupplementaryCell
+    else {
+      return Self.emptyBand(kind: kind, at: indexPath, in: collectionView)
+    }
+    if let model {
+      cell.configure(text: isFooter ? model.footerText : model.title, footer: isFooter)
+    } else {
+      cell.configure(text: nil, footer: isFooter)
+    }
     return cell
+  }
+
+  /// The band to answer with when there is nothing to paint in it.
+  ///
+  /// `nil` is not an available answer: `__UIDiffableDataSource
+  /// collectionView:viewForSupplementaryElementOfKind:atIndexPath:` asserts on one, and the
+  /// abort takes the app with it. X25 round 1 found that on the device — a Section taken away
+  /// in the turn between a settle and the `applySnapshot` that removes it leaves UIKit asking
+  /// this Form for the header of a Section no model backs any more, and the provider used to
+  /// answer that with nothing. A band of this list's own registration, configured empty, is
+  /// hidden by `configure(text:footer:)` and is replaced by the next settle's apply.
+  private static func emptyBand(
+    kind: String,
+    at indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionReusableView {
+    let isFooter = kind == UICollectionView.elementKindSectionFooter
+    guard
+      let band = collectionView.dequeueReusableSupplementaryView(
+        ofKind: kind,
+        withReuseIdentifier: isFooter
+          ? NitroUiFormItem.footerReuseIdentifier
+          : NitroUiFormItem.headerReuseIdentifier,
+        for: indexPath
+      ) as? NitroUiFormSupplementaryCell
+    else {
+      // Only a list that was not built by `makeList` could get this far, and UIKit wants an
+      // answer whatever the reason.
+      return UICollectionReusableView()
+    }
+    band.configure(text: nil, footer: isFooter)
+    return band
   }
 
   private static func accessories(
@@ -1608,6 +1687,8 @@ extension NitroUiFormItem {
   static let rowReuseIdentifier = "nitroui-form-row"
   static let headerReuseIdentifier = "nitroui-form-header"
   static let footerReuseIdentifier = "nitroui-form-footer"
+  /// The registration for the answer the provider gives when it has nothing to draw.
+  static let blankReuseIdentifier = "nitroui-form-blank"
 }
 
 /// The items of one section: its row views, identified by the view itself.

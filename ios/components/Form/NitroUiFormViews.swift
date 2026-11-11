@@ -523,6 +523,20 @@ final class NitroUiFormRowContainer: UIView {
   }
 }
 
+// MARK: - The cell for an item with nothing to draw
+
+/// The cell a Form answers with when an item has nothing to draw.
+///
+/// UIKit only accepts a cell it can account for: one it handed out for a registered reuse
+/// identifier. A cell from nowhere aborts the app where the item is being brought on screen —
+/// X25's `Assertion failure in -[UICollectionView
+/// _createPreparedCellForItemAtIndexPath:withLayoutAttributes:applyAttributes:isFocused:notify:]`
+/// — exactly as answering a *reconfiguration* with one aborts it in
+/// `_reconfigureCell:forItemAtIndexPath:`. So a Form that has lost the model behind an index
+/// path still dequeues one of these: it draws nothing, the next settle sees a cell with no row
+/// in it and replaces it.
+final class NitroUiFormBlankCell: UICollectionViewCell {}
+
 // MARK: - The header and footer
 
 /// A section header or footer, drawn by UIKit's own grouped configuration.
