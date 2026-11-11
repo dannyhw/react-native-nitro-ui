@@ -135,3 +135,88 @@ found.` (one suite each, `Dialog` then `Tooltip`, ~10 min into the app's life, R
   `.isToggle` yields XCUITest type 41, not 40 — neither is a Checkbox problem.
 - harness: other components' harness cases read the same process-wide sizing-correction
   counter as Checkbox; `settledCorrections` now exists if they flake.
+
+
+## Fix round 1
+
+The review's four must-fixes, and the proofs it asked for.
+
+- **The announcement reads the drawn state.** Both value modifiers now take one call to
+  `NitroUiCheckboxGlyphs.accessibilityValue(checked: model.state.displayed, indeterminate:
+  showsThirdState)`, so `checked` outranks the dash in what a reader hears as it does in what
+  is drawn. Step 8 taps the mixed fixture and requires the element's value to move to `1`.
+- **Two words, said as two.** iOS keeps "mixed" (Apple's `NSControlStateValueMixed`); Compose
+  says **"Partially checked"** (`R.string.indeterminate`, read out of the AAR in the Gradle
+  cache). `checkbox.md`, the README, the changeset and the Swift comment say both words.
+- **`indeterminate` is out of the iOS sizing key**, written `0` like `checked`: the dash is
+  painted inside the same symbol box. The new case measures a mounted row's flip at **0
+  corrections on iOS and 1 on Android**, both keys poisoned.
+- Counters are read after the wait; `total >= made` is gone; the glyph style takes `.tint` and
+  `isEnabled` from the environment (same look); three stale comments say what the code does;
+  `nuiTestStateReport` gained `drops=`/`recycles=`, which is what lets the recycle case prove a
+  view came back before it asserts the reset.
+
+`RealInputTests` runs with `continueAfterFailure = false`, so each of its four reds
+needed a run of its own.
+
+### Red proofs added this round
+
+- `Checkbox.harness.tsx` "recycles into the next owner" -> `prepareForRecycle` keeps
+  `didApplyDefault` -> `"recycled" never drew displayed=1 - it reports
+  "displayed=0;probes=0;merged=none;a11y=none;symbol=circle;drops=3;recycles=3"` (the `free`
+  case went with it: 2 failed).
+- The same case -> `prepareForRecycle` stops calling `clearReports()` -> `expected 2 to be 1`
+  — the round's own probe count, answered by the last owner's report.
+- "re-measures for a new style" -> the `iosStyle` setter stops calling `host.markDirty()` ->
+  `"style-change" (the switch style) still measures 129.33x26.00 - it never re-measured`.
+  Said plainly: dropping `host.noteSizingKeyChanged()` alone, or
+  `host.noteContentSizeMayHaveChanged()` alone, leaves this case green — either path by
+  itself re-measures, so both have to go for the box to stick.
+- "costs nothing to flip a mounted row to the third state on iOS" -> `indeterminate` back in
+  the iOS field of `sizingVariantFor` -> `expected 1 to be +0`.
+- The same case's Android branch -> Android's field written `0` -> `expected 0 to be greater
+  than or equal to 1` (its `made >= 2` third-state bound stayed green: the poisoned *plain*
+  key is still asked, so that bound measures the fallback, not the field).
+- `RealInputTests` step 1 -> the row's overlay `.allowsHitTesting(false)`, the pre-D47 state
+  -> `the real tap that checks the box: 3 real presses on the controlled Checkbox
+  (real-input-checkbox) left it at "off"`.
+- Step 5 -> a 34 pt strip at the row's left cut out of the overlay, so the glyph stops taking
+  touches -> `("3") is not equal to ("4") - a real tap on the switch's own glyph should report
+  exactly one change (the counter was at "3")`.
+- Step 6 -> the overlay installed only when `iosStyle.drawsGlyph` -> `the real tap that checks
+  the switch-style box: 3 real presses on the switch-style Checkbox
+  (real-input-checkbox-switch) left it at "0"`.
+- Step 8 -> `announcedValue = showsThirdState ? "mixed" : nil` (what this said before the
+  round) -> `the real tap that resolves the dash: 3 real presses on the mixed Checkbox left it
+  at "mixed"`.
+
+### Gates this round
+
+This round's bar is `check` plus the three device gates below; `real-input:android` is a
+merge-bar run and this diff does not touch Android's real-input tests (its Kotlin half is
+the diagnostics string). `harness:android` is the retry: the first attempt went red on a
+SearchField case and passed here, and both lines are in the exported ledger.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2018 tests / 85 suites | `3db596b4fe1f` | 2 m 53 s | start 11.5 / med 12.3 / max 15.4 |
+| `harness:ios` | **PASS** | 598 tests / 31 suites + isolated 6 tests / 3 suites | `3db596b4fe1f` (ios tree) | 14 m 43 s | start 12.0 / med 10.4 / max 49.0 |
+| `harness:android` | **PASS** | 654 tests / 31 suites + isolated 6 tests / 3 suites | `3db596b4fe1f` (android tree) | 18 m 25 s | start 10.1 / med 6.5 / max 18.4 |
+| `real-input:ios` | **PASS** | — | `3db596b4fe1f` (ios tree) | 43 m 07 s | start 6.0 / med 7.5 / max 50.4 |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:android:Checkbox` | stale | 1 failed of 15 tests / 1 suites | 82cb378fc503 (not this tree) | 19.7 s | start 23.9 / med 20.9 / max 23.9 |
+| `harness:ios:Checkbox` | **PASS** | 15 tests / 1 suites | `3db596b4fe1f` (ios tree) | 18.2 s | start 4.4 / med 7.0 / max 7.0 |
+| `real-input:ios:--control:checkbox` | **PASS** | — | `3db596b4fe1f` (ios tree) | 16 m 01 s | start 40.4 / med 34.0 / max 383.5 |
+
+### Follow-ups added this round
+
+- a11y: iOS's third state is `Text("mixed")`, an English literal in every locale;
+  Compose's "Partially checked" comes from a localised resource, so ours would want a
+  `.strings` entry before a localised app ships the dash.
+- harness: `SearchField › holds maxLength in UTF-16 units and never splits an emoji`
+  reads `eventsOf('capped').at(-1)`, so a `focus` event landing after the change reddens
+  it while the text assertion two lines above passes. Red once here, green on the retry;
+  not this diff. A wait-for-event would settle it.
+- harness: `re-measures for a new style` stays green with `noteSizingKeyChanged()` or
+  `noteContentSizeMayHaveChanged()` removed singly — only both together make it red, so
+  that case guards neither call on its own.
