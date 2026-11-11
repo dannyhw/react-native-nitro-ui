@@ -20,6 +20,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("defaultChecked", &HybridNitroUiCheckboxSpec::setDefaultChecked);
       prototype.registerHybridGetter("indeterminate", &HybridNitroUiCheckboxSpec::getIndeterminate);
       prototype.registerHybridSetter("indeterminate", &HybridNitroUiCheckboxSpec::setIndeterminate);
+      prototype.registerHybridGetter("iosStyle", &HybridNitroUiCheckboxSpec::getIosStyle);
+      prototype.registerHybridSetter("iosStyle", &HybridNitroUiCheckboxSpec::setIosStyle);
       prototype.registerHybridGetter("mostRecentEventCount", &HybridNitroUiCheckboxSpec::getMostRecentEventCount);
       prototype.registerHybridSetter("mostRecentEventCount", &HybridNitroUiCheckboxSpec::setMostRecentEventCount);
       prototype.registerHybridGetter("label", &HybridNitroUiCheckboxSpec::getLabel);

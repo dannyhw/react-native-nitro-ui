@@ -13,6 +13,7 @@ public protocol HybridNitroUiCheckboxSpec_protocol: HybridObject, HybridView {
   var checked: Variant_Bool_NullType { get set }
   var defaultChecked: Variant_Bool_NullType { get set }
   var indeterminate: Variant_Bool_NullType { get set }
+  var iosStyle: String { get set }
   var mostRecentEventCount: Double { get set }
   var label: Variant_NullType_String { get set }
   var disabled: Bool { get set }

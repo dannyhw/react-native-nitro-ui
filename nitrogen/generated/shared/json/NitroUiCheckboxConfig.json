@@ -7,6 +7,7 @@
     "checked": true,
     "defaultChecked": true,
     "indeterminate": true,
+    "iosStyle": true,
     "mostRecentEventCount": true,
     "label": true,
     "disabled": true,
