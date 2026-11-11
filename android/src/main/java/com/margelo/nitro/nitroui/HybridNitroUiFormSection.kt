@@ -914,35 +914,37 @@ internal fun FormSegmentedLayer(
     //    material3's own `InteractiveListItem` resolves it.
     //
     //
-    // One canvas per row, placed by the same `align`/`offset` pair as the press box and the
-    // accessory under it. That is deliberate: `createOutline` builds an outline at the origin of
-    // the scope that asks for it, so a single canvas over the whole layer has to move every
-    // shape into place by hand, and a shape that forgot where it came from shows up in no number
-    // a test can read - only in the pixels. The `Sections` story shipped exactly that, each
-    // section's rows drawn over its own header. Placed by Compose, a row's container can only
-    // sit where the row sits, and it shares the placement with the accessory, whose box the
-    // `FormFidelity` case reads back out of the layout pass and puts next to the row's own.
+    // One canvas per row, sized and placed by the same layout pass - [placedPixelBox]. The
+    // accessory under it still travels on `align`/`offset`, which is right for a child Compose
+    // sizes itself (`Modifier.size`). It was not right for a child this file sizes, and this
+    // canvas was one for a long time: `offset` and [withPixelSize] each placed the box once, so
+    // every card landed at twice the row's offset from the layer's corner - one row-inset right
+    // and one header-band below the row whose shape it draws. That is the offset
+    // `form-android.png` shows and the one `FormFidelity`'s card case failed on
+    // (`drawnCards=0:24.4,77.0` beside a row at `12.2,37.3`). `createOutline` builds an outline
+    // at the origin of the scope that asks for it, so a single canvas over the whole layer has
+    // to move every shape into place by hand, and a shape that forgot where it came from shows
+    // up in no number a test can read - only in the pixels. The `Sections` story shipped exactly
+    // that, each section's rows drawn over its own header. Placed by the layout pass, a row's
+    // container can only sit where the row sits.
     rows.forEachIndexed { index, rect ->
       Canvas(
         Modifier
           .align(Alignment.TopStart)
-          .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-          // Where this container actually ended up, for the report — the same `onPlaced` trick
-          // the accessory below uses, and for the same reason: what a test can compare with the
-          // row's own frame is the placement, not the numbers the placement was asked for.
-          .onPlaced { placed ->
-            val at = placed.positionInParent()
+          // Sized and placed in the one pass, and reported from inside it: what a test can
+          // compare with the row's own frame is the placement the layout produced, not the
+          // numbers the placement was asked for. See [placedPixelBox].
+          .placedPixelBox(rect.left, rect.top, rect.right - rect.left, rect.height) { at ->
             model.drawnCards[index] =
               FormRowRect(
-                left = at.x,
-                top = at.y,
-                right = at.x + placed.size.width.toFloat(),
-                height = placed.size.height.toFloat(),
+                left = at.left,
+                top = at.top,
+                right = at.right,
+                height = at.height,
                 selected = rect.selected,
                 accessory = rect.accessory,
               )
-          }
-          .withPixelSize(rect.right - rect.left, rect.height),
+          },
       ) {
         if (model.gapPx != gap.toPx()) model.gapPx = gap.toPx()
         drawRowContainer(
@@ -960,8 +962,9 @@ internal fun FormSegmentedLayer(
       Box(
         Modifier
           .align(Alignment.TopStart)
-          .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-          .withPixelSize(rect.right - rect.left, rect.height)
+          // The same single placement as the card above: a ripple sized here but placed by a
+          // second modifier would light up somewhere else in the section than the row pressed.
+          .placedPixelBox(rect.left, rect.top, rect.right - rect.left, rect.height)
           .indication(
             source,
             ripple(focusRingShape = resolvedShape(shapes[index], rect.selected, index == pressed)),
@@ -1093,7 +1096,14 @@ private fun accessoryIcon(accessory: Int): ImageVector? =
     else -> null
   }
 
-/** Give a layer the px size of one row, without a Dp round trip. */
+/**
+ * Give a layer the px size of one row, without a Dp round trip.
+ *
+ * Only for a child that lives at the origin of its box - the section's own layer, which fills
+ * it. A child that has to be *moved* inside that box wants [placedPixelBox]: `Modifier.offset`
+ * and this modifier each place the child once, and the two add up to a box at twice the
+ * distance from the corner.
+ */
 private fun Modifier.withPixelSize(
   widthPx: Float,
   heightPx: Float,
@@ -1104,6 +1114,54 @@ private fun Modifier.withPixelSize(
       val height = heightPx.roundToInt().coerceAtMost(constraints.maxHeight)
       val placeable = measurable.measure(Constraints.fixed(width, height))
       layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+    },
+  )
+
+/**
+ * Size a child of the section's layer *and* put it where its row is, in the layer's own px,
+ * from one layout pass.
+ *
+ * A row's box arrives from the row views as px numbers, so its size and its position both have
+ * to be applied without a Dp round trip - and applied once. The card canvas used to travel on
+ * `Modifier.offset { }` with [withPixelSize] below it, and the placement came out twice: the
+ * box landed at (`2 * rect.left`, `2 * rect.top`), one row-inset and one header-band away from
+ * the row whose shape it draws - in the pixels as much as in the report. Here the modifier that
+ * measures the child is the one that places it, so exactly one place applies a position.
+ *
+ * [onPlaced] is handed the box this pass applied - the width and height the child came back
+ * with, at the position that was placed - so `FormFidelity` can put a drawn container beside
+ * the row's own frame, which is Fabric's reading of the same row and does not come from here.
+ */
+private fun Modifier.placedPixelBox(
+  leftPx: Float,
+  topPx: Float,
+  widthPx: Float,
+  heightPx: Float,
+  onPlaced: ((FormRowRect) -> Unit)? = null,
+): Modifier =
+  this.then(
+    layout { measurable, constraints ->
+      val width = widthPx.roundToInt().coerceAtMost(constraints.maxWidth)
+      val height = heightPx.roundToInt().coerceAtMost(constraints.maxHeight)
+      val placeable = measurable.measure(Constraints.fixed(width, height))
+      layout(placeable.width, placeable.height) {
+        val left = leftPx.roundToInt()
+        val top = topPx.roundToInt()
+        // Absolute, not `placeRelative`: these coordinates come from the row views' own px
+        // positions inside this layer, which the platform has already mirrored for a RTL
+        // layout. Mirroring them a second time would move the card to the far side.
+        placeable.place(left, top)
+        onPlaced?.invoke(
+          FormRowRect(
+            left = left.toFloat(),
+            top = top.toFloat(),
+            right = (left + placeable.width).toFloat(),
+            height = placeable.height.toFloat(),
+            selected = false,
+            accessory = NitroUiFormRowView.ACCESSORY_NONE,
+          ),
+        )
+      }
     },
   )
 
