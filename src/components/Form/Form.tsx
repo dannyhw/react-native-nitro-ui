@@ -548,9 +548,26 @@ function RowRoot({
       onPress={press}
       hybridRef={hybridRefCallback ?? undefined}
     >
-      <InsideRowContext.Provider value={true}>
-        {children}
-      </InsideRowContext.Provider>
+      {/*
+       * One wrapper for the row's content, so that the row can hold its children level
+       * without their co-operation.
+       *
+       * Every self-sizing control carries `{ alignSelf: 'flex-start' }` as its base style —
+       * React Native's own `Switch` does the same, and it is load-bearing here, because a
+       * stretched box decides an intrinsic control's size for it and the measurement is then
+       * never asked. A child's `alignSelf` beats its parent's `alignItems`, so in a row taller
+       * than its content (every row is: the minimum height below) the control in
+       * `<Form.Row><Text style={{flex: 1}} /><Switch /></Form.Row>` took the row's top edge
+       * while its label centred. The wrapper has no minimum height, so it hugs its content and
+       * the row centres *it*; inside it the same `alignItems: 'center'` has no leftover room to
+       * be overruled in, and `flex: 1` here is what hands the content the row's whole content
+       * width, insets included.
+       */}
+      <View style={styles.rowContent}>
+        <InsideRowContext.Provider value={true}>
+          {children}
+        </InsideRowContext.Provider>
+      </View>
     </NativeNitroUiFormRow>
   );
 }
@@ -583,6 +600,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
+  },
+  // The row's content, in the box described at {@link RowRoot}: full content width, level
+  // children, and no minimum height of its own — the row's `minHeight` stays the row's.
+  rowContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flex: 1,
   },
   androidSection: {
     flexDirection: 'column',

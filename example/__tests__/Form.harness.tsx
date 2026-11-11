@@ -1777,23 +1777,28 @@ async function settledBoxes<const K extends readonly string[]>(
   }
 }
 
-/** A row's content box, the way `docs/components/form.md` tells apps to write one. */
-const x24Row = {
+/** One child that takes all the room its row offers — the probe's whole job. */
+const x24Fill = { flex: 1 } as const;
+
+/**
+ * What a self-sizing control is laid out with, and the reason this case exists.
+ *
+ * Every self-sizing nitro-ui control carries `{ alignSelf: 'flex-start' }` as its
+ * base style — the defence React Native's own `Switch` has against a stretching
+ * parent — and a child's `alignSelf` beats its parent's `alignItems`. A wrapper that
+ * carries that style itself therefore lands where an unwrapped control lands, which
+ * is the only way to ask this case's question of a control React Native cannot
+ * measure: `measureInWindow` walks the shadow tree, and a hybrid view's handle
+ * reports the size its native side measured, never where it sits.
+ */
+const x24SelfSizing = { alignSelf: 'flex-start' } as const;
+
+/** The same pair inside a box of an app's own — what an app that copied round 1 has. */
+const x24Box = {
   alignItems: 'center',
   flex: 1,
   flexDirection: 'row',
 } as const;
-
-/**
- * The same pair written the other way, as the second half of the picture.
- *
- * A self-sizing control carries `{ alignSelf: 'flex-start' }` as its base style —
- * the defence React Native's own `Switch` has against a stretching parent — and a
- * child's `alignSelf` beats its parent's `alignItems`. A wrapper that carries that
- * style itself therefore lands where an un-wrapped control lands, which is the only
- * way to ask this case's question about a control React Native cannot measure.
- */
-const x24SelfSizing = { alignSelf: 'flex-start' } as const;
 
 const x24Styles = StyleSheet.create({
   form: { flex: 1 },
@@ -1806,33 +1811,35 @@ const x24Styles = StyleSheet.create({
  *
  * Row one is a probe: one child that takes all the room, so its box *is* the row's
  * content box, insets and all, on a platform this file has to know nothing about.
- * Row two is the README's row. Row three is the same pair with no box around it.
+ * Row two is the README's row written the obvious way — a `flex: 1` label and a
+ * switch, both direct children of the row. Row three is that pair inside a box of
+ * the app's own, so the case also covers an app that wrapped its content already.
  */
 function TrailingEdgeForm() {
   return (
     <Form style={x24Styles.form}>
       <Form.Section title="Notifications">
         <Form.Row>
-          <View ref={keepBox('probe')} style={x24Row} testID="x24-probe">
+          <View ref={keepBox('probe')} style={x24Fill} testID="x24-probe">
             <Text style={x24Styles.text}>Notifications</Text>
           </View>
         </Form.Row>
         <Form.Row>
-          <View style={x24Row}>
-            <View ref={keepBox('label')} style={x24Styles.label}>
-              <Text style={x24Styles.text}>Push notifications</Text>
-            </View>
-            <View ref={keepBox('control')}>
-              <Switch testID="x24-switch" value />
-            </View>
+          <View ref={keepBox('label')} style={x24Styles.label}>
+            <Text style={x24Styles.text}>Push notifications</Text>
+          </View>
+          <View ref={keepBox('control')} style={x24SelfSizing}>
+            <Switch testID="x24-switch" value />
           </View>
         </Form.Row>
         <Form.Row>
-          <View ref={keepBox('bareLabel')} style={x24Styles.label}>
-            <Text style={x24Styles.text}>Play a sound</Text>
-          </View>
-          <View ref={keepBox('bareControl')} style={x24SelfSizing}>
-            <Switch testID="x24-bare-switch" value={false} />
+          <View style={x24Box}>
+            <View ref={keepBox('boxedLabel')} style={x24Styles.label}>
+              <Text style={x24Styles.text}>Play a sound</Text>
+            </View>
+            <View ref={keepBox('boxedControl')} style={x24SelfSizing}>
+              <Switch testID="x24-boxed-switch" value={false} />
+            </View>
           </View>
         </Form.Row>
       </Form.Section>
@@ -1851,57 +1858,58 @@ describe('Form row content (X24)', () => {
   it('lays a row’s content across the row and level with its label (X24)', async () => {
     await render(<TrailingEdgeForm />);
     await screen.findByTestId('x24-switch');
-    const { probe, label, control, bareLabel, bareControl } =
+    const { probe, label, control, boxedLabel, boxedControl } =
       await settledBoxes([
         'probe',
         'label',
         'control',
-        'bareLabel',
-        'bareControl',
+        'boxedLabel',
+        'boxedControl',
       ] as const);
     const right = (box: WindowBox): number => box[0] + box[2];
     const centre = (box: WindowBox): number => box[1] + box[3] / 2;
     const issues: string[] = [];
-    // The row gives its content the row's own content box: the README's
-    // `flex: 1` label starts at its leading edge and the control it pushes ends at
-    // its trailing one. (How wide that box *is* — the width the cell handed the row
-    // — is what the E7 case checks against the list, so nothing is repeated here.)
-    if (Math.abs(label[0] - probe[0]) > 1) {
-      issues.push(
-        `the label starts at x=${label[0].toFixed(1)} while the row's content starts at x=${probe[0].toFixed(1)}`
-      );
+    // The same three promises, asked of the bare pair the README prints and of the
+    // pair inside an app's own box.
+    const pairs: Record<string, { label: WindowBox; control: WindowBox }> = {
+      'a bare row': { label, control },
+      'a boxed row': { label: boxedLabel, control: boxedControl },
+    };
+    for (const [name, pair] of Object.entries(pairs)) {
+      // (How wide the row's content box *is* — the width the cell handed the row — is
+      // what the E7 case checks against the list, so nothing is repeated here.)
+      if (Math.abs(pair.label[0] - probe[0]) > 1) {
+        issues.push(
+          `${name}: the label starts at x=${pair.label[0].toFixed(1)} while the row's content starts at x=${probe[0].toFixed(1)}`
+        );
+      }
+      if (Math.abs(right(pair.control) - right(probe)) > 1) {
+        issues.push(
+          `${name}: the control ends at x=${right(pair.control).toFixed(1)} while the row's content ends at x=${right(probe).toFixed(1)}`
+        );
+      }
+      // The one round 1's `Form.Row` failed: a control whose base style is
+      // `alignSelf: 'flex-start'` was left directly in a row taller than its content
+      // followed that style to the row's top edge, because a child's `alignSelf` beats
+      // the row's `alignItems`. It now follows the wrapper the row centres instead, so
+      // it lands on its label's middle — within a point, which is what "level" means
+      // to a reader of a screenshot.
+      if (Math.abs(centre(pair.control) - centre(pair.label)) > 1) {
+        issues.push(
+          `${name}: the control is centred at y=${centre(pair.control).toFixed(1)} while its label is centred at y=${centre(pair.label).toFixed(1)}`
+        );
+      }
     }
-    if (Math.abs(right(control) - right(probe)) > 1) {
-      issues.push(
-        `the control ends at x=${right(control).toFixed(1)} while the row's content ends at x=${right(probe).toFixed(1)}`
-      );
-    }
-    // The reason a row's content goes in a box: a control left directly in a row
-    // taller than its content follows its own `alignSelf: 'flex-start'`, so the row's
-    // `alignItems: 'center'` never reaches it and it sits above the label's middle.
-    if (Math.abs(centre(control) - centre(label)) > 1) {
-      issues.push(
-        `the control is centred at y=${centre(control).toFixed(1)} while its label is centred at y=${centre(label).toFixed(1)}`
-      );
-    }
-    // The pair with no box: `flex: 1` still reaches the trailing edge, so a switch
-    // that does not is the example's problem, not the row's. The vertical answer is
-    // what the box is for, and it is logged rather than asserted — the number
-    // belongs in `docs/tasks/X24-stepper-form-examples.report.md`, and a control
-    // that ever *does* centre itself only makes the note stale, not wrong.
-    if (Math.abs(right(bareControl) - right(probe)) > 1) {
-      issues.push(
-        `without a box the control ends at x=${right(bareControl).toFixed(1)} while the row's content ends at x=${right(probe).toFixed(1)}`
-      );
-    }
+    const delta = (pair: { label: WindowBox; control: WindowBox }): string =>
+      (centre(pair.control) - centre(pair.label)).toFixed(1);
     console.log(
-      `X24 BARE pair: control centred at y=${centre(bareControl).toFixed(1)}, ` +
-        `label at y=${centre(bareLabel).toFixed(1)} (delta ` +
-        `${(centre(bareControl) - centre(bareLabel)).toFixed(1)})`
+      `X24 BARE pair: row content x=${probe[0].toFixed(1)}..${right(probe).toFixed(1)}, ` +
+        `control x=${control[0].toFixed(1)}..${right(control).toFixed(1)}, centre delta ` +
+        `${delta({ label, control })}`
     );
     console.log(
-      `X24 BOX pair: control x=${control[0].toFixed(1)}..${right(control).toFixed(1)} ` +
-        `y=${control[1].toFixed(1)}x${control[3].toFixed(1)}, probe x=${probe[0].toFixed(1)}..${right(probe).toFixed(1)}`
+      `X24 BOXED pair: control x=${boxedControl[0].toFixed(1)}..${right(boxedControl).toFixed(1)}, ` +
+        `centre delta ${delta({ label: boxedLabel, control: boxedControl })}`
     );
     expect(issues).toEqual([]);
   });

@@ -640,16 +640,12 @@ export function NotificationForm({
         footer="Push arrives on this device only."
       >
         <Form.Row>
-          <View style={{ alignItems: 'center', flex: 1, flexDirection: 'row' }}>
-            <Text style={{ flex: 1 }}>Push notifications</Text>
-            <Switch value={push} onValueChange={setPush} />
-          </View>
+          <Text style={{ flex: 1 }}>Push notifications</Text>
+          <Switch value={push} onValueChange={setPush} />
         </Form.Row>
         <Form.Row>
-          <View style={{ alignItems: 'center', flex: 1, flexDirection: 'row' }}>
-            <Text style={{ flex: 1 }}>Play a sound</Text>
-            <Switch value={sound} onValueChange={setSound} />
-          </View>
+          <Text style={{ flex: 1 }}>Play a sound</Text>
+          <Switch value={sound} onValueChange={setSound} />
         </Form.Row>
       </Form.Section>
       <Form.Section title="Quiet hours">
