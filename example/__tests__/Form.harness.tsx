@@ -1196,24 +1196,23 @@ describe('Form (G24)', () => {
     expect(num(last, 'orphans')).toBe(0);
     if (IOS) expect(num(last, 'stale')).toBe(0);
 
-    // The seat the churn leaves behind, taken by someone else. What the loop ends with is a
-    // list that may still hold items its Form has forgotten, and the abort is not in the
-    // tearing down — it is in the *next* mount, when UIKit asks this Form's provider for a cell
-    // at an index path that has nothing behind it. What that answer is made of is the whole
-    // claim (X25 round 1): a cell the list has no registration for aborts the app in
-    // UIKit's own cell-creation path, so the case cannot stop at "the loop survived".
+    // The seat the churn leaves behind, taken by a Section with a heading in it. The abort is
+    // not in the tearing down: a dropped Form leaves the recycled list holding the items and the
+    // bands of the Form that just ended, and the layout of the *next* mount asks this Form's
+    // provider for them. For a Section band the answer used to be `nil`, and UIKit asserts on
+    // that, so the case cannot end at "the loop survived" — it has to hand the seat to a titled
+    // Section and still have an app.
     surface.unmount();
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    delete forms.churn;
-    const next = await render(
-      <Churn on={true} parts={PARTS - 1} perSection={PER_SECTION} />
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+    const next = await render(<OneRow label="Named" styled={true} title="Refilled" />);
+    const refilled = await reportUntil(
+      () => sections.one?.nuiTestSectionReport(),
+      (r) => Number(r.rows) === 1,
+      'the Section that took the churn seat to hold its row'
     );
-    await handleOf(() => forms.churn, 'the Form that took the churn seat');
-    const refilled = await settledTo(
-      PARTS - 1,
-      'the Form that took the churn seat'
-    );
-    expect(num(refilled, 'orphans')).toBe(0);
+    expect(Number(refilled.rows)).toBe(1);
     next.unmount();
   });
 
