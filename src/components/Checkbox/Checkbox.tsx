@@ -138,15 +138,23 @@ function escapeField(value: string): string {
 
 /**
  * The size configuration of one Checkbox, as the sizing engine sees it:
- * `indeterminate|label` on Android and `indeterminate|iosStyle|label` on iOS.
+ * `indeterminate|label` on Android and `0|iosStyle|label` on iOS.
  *
  * The rule is one sentence - a field goes in the key where it changes what is drawn,
- * and stays out where it does not - and each platform reads it about its own control:
+ * and stays out where it does not - and each platform reads it about its own control.
+ * What a field has to earn is a *box*: a field that only changes what is painted inside
+ * a box that does not move buys a cold configuration, a correction, and a first frame at
+ * the fallback, so it belongs out of the key.
  *
- * - `indeterminate` is `1` where a third glyph appears: on Android
- *   (`TriStateCheckbox`), and on iOS in the two glyph styles, which draw
- *   `minus.circle.fill` / `minus.square.fill` (DECISIONS D47 item 3). The iOS
- *   `'switch'` style has two positions, so it leaves the field at `0`;
+ * - `indeterminate` is Android's field: there it answers `TriStateCheckbox`, Material's
+ *   own third control. On iOS it is written `0` for every style, the way `checked` is,
+ *   because `minus.circle.fill`, `checkmark.circle.fill` and `circle` are one SF Symbol
+ *   box - `Checkbox.harness.tsx` measures the dash and an unchecked row of the *same*
+ *   label at one size, and measures that flipping `indeterminate` on a row already on
+ *   screen costs no correction at all. D47 item 3 gave iOS the dash, and this is the
+ *   field the dash does not earn: keyed, an app that grew a dash on a row it had already
+ *   drawn would watch that row re-lay out at the fallback for a frame to repaint the
+ *   same box;
  * - `iosStyle` is iOS's own field: three styles, three boxes. Android ignores the
  *   prop, so its key does not carry it - a prop that changes nothing that is drawn
  *   must not cost a cold configuration there, and that is the same reason the field
@@ -167,8 +175,10 @@ function sizingVariantFor(
   iosStyle: CheckboxIosStyle
 ): string {
   const android = Platform.OS === 'android';
-  const indeterminateField =
-    (android || iosStyle !== 'switch') && indeterminate ? '1' : '0';
+  // `0` on iOS whatever `indeterminate` says - see the rule above. It stays a field of
+  // the key rather than disappearing so one string shape describes both platforms and
+  // Android's half of the key keeps its position.
+  const indeterminateField = android && indeterminate ? '1' : '0';
   const fields = [indeterminateField];
   if (!android) fields.push(iosStyle);
   fields.push(escapeField(label));

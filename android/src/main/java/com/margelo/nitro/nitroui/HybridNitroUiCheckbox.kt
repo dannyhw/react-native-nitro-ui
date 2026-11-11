@@ -739,7 +739,18 @@ class HybridNitroUiCheckbox(
     }
   }
 
-  override fun nuiTestStateReport(): String = model.stateReport()
+  /**
+   * The mount's own read-outs, then the host's lifetime pair.
+   *
+   * `drops`/`recycles` come from [NitroComposeHost] and survive a recycle deliberately
+   * (`Recycling.harness.tsx` explains why a per-mount flag cannot answer the question):
+   * a fresh instance answers `recycles=0`, so the mount that answers `recycles>=1` is a
+   * view the pool handed back - which is the only kind of mount whose reset a test can
+   * actually be testing. iOS publishes the same two fields from the same kind of counter.
+   */
+  override fun nuiTestStateReport(): String =
+    model.stateReport() +
+    ";drops=${host.lifetimeDrops};recycles=${host.lifetimeRecycles}"
 
   /**
    * The control's accessibility, as two facts in one line:

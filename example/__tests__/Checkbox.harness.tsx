@@ -372,8 +372,11 @@ type IosStyle = (typeof STYLES)[number];
 
 /**
  * The key `Checkbox.tsx` builds: `indeterminate|label` on Android and
- * `indeterminate|iosStyle|label` on iOS, with the third state only where it changes what
- * is drawn (Android always; iOS in the two glyph styles, which have a dash to draw).
+ * `0|iosStyle|label` on iOS. The third state is a field only on Android, where it answers
+ * `TriStateCheckbox`; on iOS the dash is painted inside the same symbol box, so the field
+ * answers `0` for every style - the answer `checked` gets - and a warm row that grows a
+ * dash costs no configuration (the case at "costs nothing to flip..." measures that, and
+ * the Android half of this helper is why the same flip *is* a configuration there).
  * Written out rather than imported, so a wrong helper cannot poison and pass its own test
  * (Chip's rule) - and here it is the whole Android half of G31: a helper that put the
  * style in Android's key would poison three keys, the engine would answer three cold
@@ -387,8 +390,8 @@ function sizingKey(
   if (Platform.OS === 'android') {
     return `${indeterminate ? '1' : '0'}|${label}`;
   }
-  const field = style !== 'switch' && indeterminate ? '1' : '0';
-  return `${field}|${style}|${label}`;
+  // No `indeterminate ? '1' : ...` branch on purpose: on iOS the dash shares the box.
+  return `0|${style}|${label}`;
 }
 
 /** The symbol the iOS drawing code should be handed for one state of one style. */
@@ -670,7 +673,11 @@ describe('Checkbox · G15', () => {
     // platforms, so the two cannot disagree about what the props mean even though one of
     // them has a new picture. And a tap reports `true` from the dash everywhere, so an
     // app's `onCheckedChange` never sees a third value.
-    // Both keys are poisoned: the dash's and the same label's plain unchecked one.
+    // Both keys are poisoned: the dash's and the same label's plain unchecked one. On
+    // Android those are two keys (`TriStateCheckbox` is a configuration of its own); on
+    // iOS `sizingKey` answers the same string for both, because the dash is painted
+    // inside the box the row already had - so on iOS this plants one key that two mounted
+    // instances read, and the corrections below are the two boxes coming off it.
     // Comparing two boxes that were never corrected would only prove the fallback is
     // one number - the equality below is about what the control measured.
     poison([sizingKey(true, 'Select all'), sizingKey(false, 'Select all')]);
@@ -735,9 +742,12 @@ describe('Checkbox · G15', () => {
     } else {
       await waitForLabelBox('mixed', 'the third state');
     }
-    // The third state is its own configuration wherever it is its own glyph; poisoned, it
-    // has to be corrected or the box above is the planted size.
-    // Two poisoned keys, two corrections: the dash's and the plain box's.
+    // Two instances of the dash's configuration and the plain box's, both planted at a
+    // size no checkbox is: the engine has to walk both off it, or the equality below is a
+    // comparison between two failures to measure. Note what this does *not* claim: on iOS
+    // it is two instances of one configuration, not two configurations - which is the
+    // whole point of `sizingKey` answering `0|circle|Select all` for both. How much the
+    // flip costs a row that is already on screen is the next case's question.
     expect(made).toBeGreaterThanOrEqual(2);
     // And neither box is the planted one, or the comparison below is a comparison
     // between two failures to measure.
@@ -755,22 +765,101 @@ describe('Checkbox · G15', () => {
       // same box - which is what keeps `checked` out of the sizing key honest.
       await waitForSymbol('mixed', 'checkmark.circle.fill');
     }
-    // Four cold configurations, counted with a counter the whole app shares - so the
-    // case's own number is only this case's once the counter has stopped moving. Read it
-    // settled, which is also what stops these corrections from landing inside the next
-    // case's window (the Android failure this replaced read exactly that: four late
-    // corrections of this case, arriving as the styles case's own count).
+    // The same counter read once it has stopped moving. That is not a second assertion -
+    // `total >= made` could not fail, since a counter only grows - it is the number this
+    // case prints, and reading the shared counter settled is what stops these corrections
+    // from landing inside the next case's window (the Android failure this replaced read
+    // exactly that: four late corrections of this case, arriving as the styles case's own
+    // count).
     const total = corrections(
       before,
       await settledCorrections('the third state')
     );
-    expect(total).toBeGreaterThanOrEqual(made);
     console.log(
       `checkbox indeterminate: drawn=${reportOf('mixed').displayed} ` +
         `symbol=${reportOf('mixed').symbol ?? '-'} checked-with-dash=` +
         `${reportOf('mixed-on').displayed} switch=${reportOf('mixed-switch').displayed} ` +
         `size=${describeSize(size)} corrections=${total}`
     );
+  });
+
+  it('costs nothing to flip a mounted row to the third state on iOS', async () => {
+    // D47 item 3 gave iOS a dash to draw, and a drawing is not a size:
+    // `minus.circle.fill`, `checkmark.circle.fill` and `circle` are one SF Symbol box, so
+    // `indeterminate` stays out of the iOS key, where Android's `TriStateCheckbox` does
+    // earn a place. That decision is only worth anything on a row the app has already
+    // drawn, which is where a keyed field costs real frames: the row becomes a cold
+    // configuration, goes back through the fallback for a frame, and pays a correction to
+    // come off it. Measured here, both ways round.
+    //
+    // Both keys are poisoned - the dash's included, which iOS never asks about. That is
+    // what makes the iOS bound below a red proof and not a warm cache: put
+    // `indeterminate` back into `sizingVariantFor`'s iOS field and the flip asks the
+    // engine for a configuration whose size it was told is wrong, so the row relayouts at
+    // 11.5 x 57.5 and `made` stops being 0.
+    poison([sizingKey(true, 'Warm flip'), sizingKey(false, 'Warm flip')]);
+    const { rerender } = await render(
+      <Checkbox
+        label="Warm flip"
+        testID="warm"
+        hybridRef={captureHybrid('warm')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('warm');
+    const plain = await waitForMeasured('warm', 'the unchecked row');
+    await waitForBox('warm', plain, 'the unchecked row');
+    // The poison has to have been escaped first, or "nothing was corrected below" is a
+    // sentence about a row that never measured at all.
+    expect(sameSize(plain, WRONG_SIZE)).toBe(false);
+    // The window starts after that correction has landed: the counters are process-wide.
+    await settledCorrections('the warm row');
+    const before = stats();
+    await rerender(
+      <Checkbox
+        label="Warm flip"
+        indeterminate
+        testID="warm"
+        hybridRef={captureHybrid('warm')}
+      />
+    );
+    const handle = await handleOf('warm');
+    // "Nothing happened" only means something once the prop has arrived.
+    await pollUntil(
+      () => (handle.indeterminate === true ? true : null),
+      () =>
+        new Error(
+          `"warm" never took the third state it was sent - it answers indeterminate=` +
+            `${String(handle.indeterminate)}.`
+        )
+    );
+    if (Platform.OS === 'ios') {
+      // The picture really did change, so the zero below is about a row that repainted and
+      // not about a rerender that did nothing at all.
+      await waitForSymbol('warm', 'minus.circle.fill');
+    }
+    await waitForDisplayed('warm', 'mixed');
+    // Settled first, so a correction on its way is inside the count and the box read below
+    // is the answer the engine ended on.
+    const made = corrections(before, await settledCorrections('the warm flip'));
+    const after = measured('warm');
+    console.log(
+      `checkbox warm indeterminate: plain=${describeSize(plain)} ` +
+        `flipped=${describeSize(after)} corrections=${made}`
+    );
+    // One box for the two pictures on both platforms - the third state never moved a box,
+    // which is the fact the key is built out of.
+    expect(sameSize(after, plain)).toBe(true);
+    if (Platform.OS === 'ios') {
+      // Zero: a row already on screen at its own size owes the engine nothing.
+      expect(made).toBe(0);
+    } else {
+      // Android's field is the one that earns its place: the flip is
+      // `TriStateCheckbox`, a configuration of its own, and the planted size under its key
+      // has to be corrected. A run answering 0 here would be a flip that never asked the
+      // engine anything - which is what iOS does, and why the branches differ.
+      expect(made).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it('takes no toggle while disabled', async () => {
@@ -1170,8 +1259,10 @@ describe('Checkbox · G15', () => {
             `iosStyle=${handle.iosStyle}.`
         )
     );
-    const made = corrections(before, stats());
     if (Platform.OS === 'ios') {
+      // The counters are read once the box has actually moved: `made` is this rerender's
+      // correction and the correction is what moves the box, so a count taken while the
+      // engine is still on its way reports the window that has not happened yet.
       const toggled = await waitForRemeasure(
         'style-change',
         circle,
@@ -1179,6 +1270,7 @@ describe('Checkbox · G15', () => {
       );
       await waitForBox('style-change', toggled, 'the switch style');
       await waitForSymbol('style-change', 'switch');
+      const made = corrections(before, stats());
       console.log(
         `checkbox style change: circle=${describeSize(circle)} ` +
           `switch=${describeSize(toggled)} corrections=${made}`
@@ -1186,8 +1278,9 @@ describe('Checkbox · G15', () => {
       expect(made).toBeGreaterThanOrEqual(1);
     } else {
       // Give any correction the engine might still owe a turn to arrive, then read the
-      // box: it may not have moved, and nothing may have been corrected.
+      // box and the counters: it may not have moved, and nothing may have been corrected.
       await sleep(500);
+      const made = corrections(before, stats());
       const after = measured('style-change');
       console.log(
         `checkbox style change (ignored): circle=${describeSize(circle)} ` +
@@ -1210,6 +1303,19 @@ describe('Checkbox · G15', () => {
     // `defaultChecked` - it draws an empty box while its own prop says checked, which no
     // assertion about props would catch because the prop is indeed `true`.
     //
+    // What the first version of this case could not do is go red. Every round's owner
+    // re-sends `iosStyle`, `label` and `defaultChecked`, so the new owner repaints and
+    // re-seeds whatever it likes, and a read of `symbol`/`displayed` after the swap is a
+    // reading of the new owner either way. Two counters close that hole, and they are the
+    // pair the Switch's identity test reads for the same reason:
+    //
+    // - `recycles` is the host object's lifetime, which the reset deliberately does not
+    //   clear. A round whose report answers `recycles>=1` is a view the pool popped, so
+    //   the bound at the end is what says this case tested a reset at all;
+    // - `probes` is the per-mount one, which the reset *does* clear. One probe per round
+    //   therefore has to read 1; a recycled instance that had kept the last owner's report
+    //   answers 2, and that is the assertion `clearReports()` exists to satisfy.
+    //
     // The swap is by `key` inside one parent (drop one instance, ask for another, stay on
     // the surface whose pool this is - see `Recycling.harness.tsx`), and the styles
     // alternate so each round's expected glyph names the round.
@@ -1223,8 +1329,15 @@ describe('Checkbox · G15', () => {
         hybridRef={captureHybrid('recycled')}
       />
     );
+    /** One numeric field of the box's own report. */
+    const fieldOf = (name: string): number =>
+      Number(reportOf('recycled')[name] ?? Number.NaN);
     const { rerender, unmount } = await render(owner('a'), { timeout: 25000 });
     await waitForTestId('recycled', 10000);
+    // Every round's counters, for the message below: a device run carries a thrown Error
+    // out of the process, where `console.log` goes nowhere (Conformance's lesson).
+    const rounds: string[] = [];
+    let maxRecycles = 0;
     try {
       for (const key of ['a', 'b', 'a', 'b'] as const) {
         await rerender(owner(key));
@@ -1252,12 +1365,46 @@ describe('Checkbox · G15', () => {
             )} iosStyle=${handle.iosStyle} report=${handle.nuiTestStateReport()}`
           );
         }
+        // One probe for this mount, read once it has answered, and then the bound: this
+        // mount's own report, not the last owner's.
+        handle.nuiTestProbeAccessibility();
+        await pollUntil(
+          () => (fieldOf('probes') >= 1 ? true : null),
+          () =>
+            new Error(
+              `round ${key}: "recycled" never answered a probe - ` +
+                `"${handle.nuiTestStateReport()}"`
+            )
+        );
+        const probes = fieldOf('probes');
+        const recycles = fieldOf('recycles');
+        const drops = fieldOf('drops');
+        rounds.push(
+          `key=${key} recycles=${String(recycles)} drops=${String(drops)} ` +
+            `probes=${String(probes)}`
+        );
+        maxRecycles = Number.isFinite(recycles)
+          ? Math.max(maxRecycles, recycles)
+          : maxRecycles;
         console.log(
           `checkbox recycle: round=${key} drawn=${
             reportOf('recycled').displayed
           } symbol=${reportOf('recycled').symbol ?? '-'} label=${String(
             handle.label
-          )}`
+          )} ${rounds[rounds.length - 1]}`
+        );
+        expect(probes).toBe(1);
+      }
+      // The witness before the claim: with no round handed back a view that had been
+      // through a mount, every `probes=1` above would be a fresh instance answering
+      // trivially, and the reset would be untested. Thrown, with the whole series.
+      if (maxRecycles < 1) {
+        throw new Error(
+          `no round of the recycle case was a recycled view - highest recycles on a ` +
+            `mounted Checkbox was ${String(maxRecycles)} over ${String(
+              rounds.length
+            )} rounds [${rounds.join(' | ')}], so this case asserted a reset it never ` +
+            `ran: the pool handed no view back`
         );
       }
     } finally {

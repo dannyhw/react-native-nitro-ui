@@ -111,10 +111,16 @@ enum NitroUiCheckboxGlyphs {
   /// so its element can only ever say checked or unchecked - and that is the right
   /// answer for both of those states, which is what XCUITest reads as `value` 0/1 for
   /// the switch look today. The dash is the one state whose picture and value
-  /// disagree, so it is the one state that says so out loud, with Android's word for
-  /// it: TalkBack reads Material's third state as "Mixed"
-  /// (`ToggleableState.Indeterminate`), so both platforms name the third state the
-  /// same thing and neither invents a third `checked` value.
+  /// disagree, so it is the one state that says so out loud.
+  ///
+  /// The word is Apple's, not Android's: `mixed` is what AppKit calls a checkbox that is
+  /// partly on (`NSButton.allowsMixedState`, `NSControlStateValueMixed`), and it is the
+  /// one word this value can be without inventing a third `checked`. Android says
+  /// something else - Compose renders `ToggleableState.Indeterminate` as "Partially
+  /// checked" (`R.string.indeterminate` in `androidx.compose.ui`) - so the platforms
+  /// share the rule and the state, and not the word; `docs/components/checkbox.md` says
+  /// which platform says what. Being an argument to `Text(_:)`, this literal is English
+  /// in every locale, which is the follow-up DECISIONS D47 left behind it.
   ///
   /// `nil` means "apply nothing", not "say nothing": an empty
   /// `accessibilityValue(_:)` would silence the value the control has, which is this

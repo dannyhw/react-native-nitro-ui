@@ -129,9 +129,12 @@ export default function CheckboxScreen() {
             sets `.accessibilityValue("mixed")` for exactly that state
             (`HybridNitroUiCheckbox.swift`), and Android publishes Material's
             `ToggleableState.Indeterminate` - so the element has to be read from outside
-            the app, which is what `real-input` does. It is uncontrolled and has no echo:
-            no test presses it, because the thing under test is the announcement and not
-            the press.
+            the app, which is what `real-input` does. It is uncontrolled and has no echo
+            because the announcement, not the event, is the thing under test - and it is
+            pressed by exactly one step, step 8 of `testRealInputCheckbox`, which taps the
+            dash away and asks the same element what it says once the box shows a
+            checkmark. Nothing else may press it: with no `checked` prop its value walks
+            with every tap, and step 7's claim is about the dash as mounted.
           */}
           <Checkbox
             label="Real input, mixed"

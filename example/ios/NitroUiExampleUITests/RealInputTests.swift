@@ -3424,8 +3424,10 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(
       toggles.first?.valueText, "mixed",
-      "the third state should be announced as \"mixed\" - Android's Material word for it, "
-        + "which is why iOS adopted it - and the tree read: \(announced)"
+      "the third state should be announced as \"mixed\" - the word Apple uses for a "
+        + "checkbox that is partly on (`NSButton.allowsMixedState`), not Android's: Compose "
+        + "renders its third state as \"Partially checked\", which is why step 8 below also "
+        + "asks what the value does once the dash is gone - the tree read: \(announced)"
     )
     // No second stop that says anything. Measured without the representation this subtree
     // read as three named stops: the toggle, the symbol as an image named "Circle", and
@@ -3438,6 +3440,46 @@ final class RealInputTests: XCTestCase {
       secondStops.count, 0,
       "the glyph and the label must be announced as part of the control and not as stops "
         + "of their own - the tree read: \(announced)"
+    )
+
+    // 8. The press that ends the dash, and the value that has to end with it.
+    //
+    // The fixture is uncontrolled, so one press is the whole state change: the model is
+    // optimistic, the row now draws `checkmark.circle.fill`, and a reader still told
+    // "mixed" is being told about the box the finger just replaced. This is the state the
+    // value table exists for - `NitroUiCheckboxGlyphs.accessibilityValue` ranks `checked`
+    // over the dash exactly as `glyph` does - and it is also the state that table's rule
+    // used to stop short of reaching: the row asked its own `indeterminate && drawsGlyph`
+    // flag instead of asking the table, so a box that was `checked` *and* `indeterminate`
+    // drew a checkmark and said "mixed", and so did this very press. Nothing but a finger
+    // and the tree can see that, because the harness has no reader in it.
+    //
+    // One echo is deliberately not asked for: the fixture reports nothing, which is what
+    // keeps this about the announcement rather than about the event the earlier steps
+    // already count.
+    let mixedToggle = mixedRow.descendants(matching: .`switch`).firstMatch
+    XCTAssert(
+      mixedToggle.waitForExistence(timeout: 3),
+      "the mixed Checkbox should still offer its toggle to a reader before the press"
+    )
+    let valueBefore = A11yNode(element: mixedToggle).valueText
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the mixed Checkbox",
+        waitingFor: "the real tap that resolves the dash",
+        press: { _ in mixedRow.atFraction(0.5).fingerTap() },
+        // XCUITest answers a numeric value through `String(describing:)`, which is "1"
+        // here and "1.0" for a control that hands back a double; both mean checked, and
+        // the assertion is about the state, not about the formatter.
+        reading: {
+          let shown = A11yNode(element: mixedToggle).valueText
+          return shown == "1.0" ? "1" : shown
+        }
+      ) { $0 == "1" },
+      "1",
+      "a real tap on the mixed Checkbox should check it and hand a reader value 1, not the "
+        + "word for the state that was just replaced - before the tap the element answered "
+        + "\(quoted(valueBefore))"
     )
   }
 
