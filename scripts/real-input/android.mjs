@@ -75,7 +75,7 @@ import {
 import { runA11ySweep } from './a11y-sweep.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
-import { checkEmulatorEnv, isReservedSerial } from '../lease-core.mjs';
+import { isReservedSerial, requireLeaseDevice } from '../lease-core.mjs';
 import { emulatorLaunchCommand } from '../emulator-launch.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
@@ -9968,37 +9968,49 @@ function avdName(serial, env) {
 /**
  * Which emulator to drive, and a refusal to drive any other.
  *
- * Several tasks share this machine and AGENTS.md names a device that belongs to
- * a person rather than to a task, so the serial is never guessed from a device
- * list: a candidate is checked by the AVD it actually runs, and the human's
- * device is refused by name as well.
+ * X28 removed the last fallback here. This function used to fall back to
+ * `ANDROID_AVD` (default `nitroui`) when no serial was exported, ask `adb devices`
+ * which emulators ran that AVD, and drive the one it found — against the machine's
+ * own adb server when `ANDROID_ADB_SERVER_PORT` was unset too. That is exactly what
+ * happened twice on 2026-11-11 (two G30 runs from shells with no lease env): the
+ * suite drove `emulator-5554`, a device no lease had handed it, and nothing refused,
+ * because the run had answered "which device?" for itself. The device now comes from
+ * `requireLeaseDevice` — serial *and* adb server — and a shell that names neither is
+ * refused before `adb devices` is asked anything.
+ *
+ * What the environment still decides is the *check*: when it names an AVD, the leased
+ * serial has to be running it, which is how a serial that drifted off its console
+ * port is caught here rather than in another task's screenshot.
  *
  * @param {Record<string, string | undefined>} env
- * @returns {{ serial: string, avd: string }}
+ * @returns {{ serial: string, avd: string | null }}
  */
 function resolveDevice(env) {
-  const avd = env.ANDROID_AVD ?? 'nitroui';
-  if (/^PR15\d\d/i.test(avd)) {
+  const device = requireLeaseDevice({
+    env,
+    platform: 'android',
+    command: 'real-input (android)',
+    // Never a fallback, lease named or not: this suite runs on the emulator its
+    // lease exported or it does not run. It is not run on CI, so there is no job
+    // that boots its own emulator and needs the older, guessing behaviour.
+    requireDevice: true,
+  });
+  const assigned = device.avd;
+  if (assigned != null && /^PR15\d\d/i.test(assigned)) {
     throw new Error(
-      `real-input: ANDROID_AVD="${avd}" is the device AGENTS.md says belongs ` +
+      `real-input: ANDROID_AVD="${assigned}" is the device AGENTS.md says belongs ` +
         'to the human. Refusing to touch it.'
     );
   }
 
-  // The lease's rules, applied to whatever it exported (review S5): a reserved
-  // serial is refused whichever variable named it, and a serial that disagrees
-  // with its own port is refused rather than resolved by whoever reads first.
-  // This suite boots nothing, so it is the last place that can still say no
-  // before someone else's device receives an `adb -s`.
-  const lease = checkEmulatorEnv(env);
   // The shared launch config rather than a hand-typed line: this string is what a
   // person pastes when a lease names a device that is not up, so it has to be the
   // same command the harness and the pool run - same port, same GPU mode, same
   // snapshot flags. The hand-written version here had drifted already (`-no-audio`,
   // which is not an emulator flag at all).
   const bootHint = emulatorLaunchCommand({
-    avd,
-    port: lease.port ?? null,
+    avd: assigned ?? '<avd>',
+    port: device.emulatorPort,
     snapshot: 'cold',
   });
 
@@ -10021,40 +10033,22 @@ function resolveDevice(env) {
     // an AVD-name match is not a licence to use the person's console.
     .filter((line) => !isReservedSerial(line));
 
-  const wanted = env.ANDROID_SERIAL;
-  if (wanted != null && wanted !== '') {
-    if (!serials.includes(wanted)) {
-      throw new Error(
-        `real-input: ANDROID_SERIAL=${wanted} is not connected to adb server ` +
-          `${env.ANDROID_ADB_SERVER_PORT ?? 'default'}. If the emulator was ` +
-          `booted by hand, it needs the leased console port:\n  ${bootHint}`
-      );
-    }
-    if (avdName(wanted, env) !== avd) {
-      throw new Error(
-        `real-input: ANDROID_SERIAL=${wanted} runs AVD ` +
-          `"${avdName(wanted, env)}", not the assigned "${avd}".`
-      );
-    }
-    return { serial: wanted, avd };
-  }
-
-  const matching = serials.filter((serial) => avdName(serial, env) === avd);
-  if (matching.length === 0) {
+  const serial = device.serial;
+  if (!serials.includes(serial)) {
     throw new Error(
-      `real-input: no running emulator for AVD "${avd}" on adb server ` +
-        `${env.ANDROID_ADB_SERVER_PORT ?? 'default'}. Boot it first, e.g.\n` +
-        `  ANDROID_ADB_SERVER_PORT=${env.ANDROID_ADB_SERVER_PORT ?? '5042'} ` +
-        bootHint
+      `real-input: ANDROID_SERIAL=${serial} is not connected to adb server ` +
+        `${device.adbServerPort ?? 'default'}. If the emulator was booted by ` +
+        `hand, it needs the leased console port:\n  ${bootHint}`
     );
   }
-  if (matching.length > 1) {
+  const running = avdName(serial, env);
+  if (assigned != null && running !== assigned) {
     throw new Error(
-      `real-input: ${String(matching.length)} emulators run AVD "${avd}" ` +
-        `(${matching.join(', ')}). Set ANDROID_SERIAL to pick one.`
+      `real-input: ANDROID_SERIAL=${serial} runs AVD ` +
+        `"${running}", not the assigned "${assigned}".`
     );
   }
-  return { serial: matching[0], avd };
+  return { serial, avd: running === '' ? assigned : running };
 }
 
 process.exitCode = await main().catch((error) => {

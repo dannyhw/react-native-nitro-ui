@@ -54,6 +54,13 @@ import {
   summarizeLoad,
 } from '../gate-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
+import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import {
+  DEFAULT_PAIR,
+  leaseRecord,
+  leasedEnv,
+  writeLeaseStore,
+} from './helpers/lease-store.js';
 
 const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
 
@@ -284,6 +291,12 @@ function runCli(dir, args, extraEnv = {}, hook = '') {
       NITRO_UI_SIMCTL_BIN: path.join(bin, 'simctl'),
       NITRO_UI_ADB_BIN: path.join(bin, 'adb'),
       ANDROID_HOME: bin,
+      // X28: a device gate is run under a lease here, and a lease exports its pair's
+      // `METRO_PORT`, which is exactly what the Metro pre-flight asks the kernel about.
+      // This suite is about where a run's log lands; on a shared machine the real
+      // answer for pair-a's port is "another task's Metro", so the port gets the same
+      // "nothing is listening" stub the simctl and adb probes get.
+      ...FREE_LSOF,
       ...extraEnv,
     },
   });
@@ -1187,10 +1200,24 @@ describe('logs survive git worktree remove', () => {
         },
       ],
     });
+    // A device gate needs a live lease for its simulator (X28), and this one is
+    // about where the timings file lands, so it is handed one from the shared fixture
+    // rather than the machine's own `~/.nitro-ui`.
+    const timingLease = leaseRecord({
+      id: 'lease-x11',
+      task: 'X11',
+      platform: 'ios',
+    });
+    const home = writeLeaseStore(path.join(dir, 'lease-home'), {
+      leases: [timingLease],
+    });
     const run = runCli(
       dir,
       ['harness:ios'],
-      { FAKE_SUITES_JSON: suites },
+      {
+        ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: timingLease }),
+        FAKE_SUITES_JSON: suites,
+      },
       // The fake runner plays the harness plugin: it writes the file the env names,
       // and prints the gate name the other variable carries.
       '[ -n "$HARNESS_SUITE_TIMING" ] && printf %s "$FAKE_SUITES_JSON" > "$HARNESS_SUITE_TIMING"; echo "plugin env: file=${HARNESS_SUITE_TIMING-unset} gate=${HARNESS_SUITE_TIMING_GATE-unset}"'
@@ -2599,7 +2626,10 @@ describe('a failed device gate records its device context', () => {
               {
                 id: 'lease-x12',
                 task: 'X12',
-                platform: 'android',
+                // The pair below has both halves, and a gate is refused (X28) when
+                // its lease was taken for the other platform — so the fixture's
+                // lease holds what its `devices.json` says it holds.
+                platform: 'both',
                 holds,
                 acquiredAt: Date.now() - 60_000,
                 ttlMinutes: 120,
@@ -2631,6 +2661,23 @@ describe('a failed device gate records its device context', () => {
     );
     return home;
   }
+
+  /**
+   * Hooks that change the lease state *during* the run, written by the fake gate.
+   *
+   * X28 made the pre-run question fatal — a device gate with no live lease never
+   * starts, so "the run holds no lease" is no longer a state a gate reaches. What the
+   * probes still have to survive is a lease that stopped being live *underneath* a run
+   * that was allowed to start: released from another shell, expired at its own ttl, or
+   * handed to somebody else. Those are the two files below, written by the child so
+   * the parent's assertions still describe the failure path.
+   */
+  const RELEASED_LEASE_HOOK =
+    'printf \'{"version":1,"leases":[]}\' > "$NITRO_UI_HOME/leases.json"';
+  const EXPIRED_LEASE_HOOK =
+    'printf \'{"version":1,"leases":[{"id":"lease-x12","task":"X12",' +
+    '"platform":"both","holds":["pair-2"],"acquiredAt":1,"ttlMinutes":1}]}\' ' +
+    '> "$NITRO_UI_HOME/leases.json"';
 
   function failedDeviceRun(dir, extraEnv = {}, hook = '', leaseOptions = {}) {
     const home = leaseHomeFor(dir, leaseOptions);
@@ -2701,11 +2748,14 @@ describe('a failed device gate records its device context', () => {
     expect(excerpt).toContain('Device identifiers are limited to this run');
   });
 
-  it('names no device at all when the run holds no lease', () => {
-    // Without a lease there is no "own" device, so nothing in the host-wide answer
-    // belongs here: every identifier in it is somebody else's.
+  it('names no device at all once the run stops holding a lease', () => {
+    // Without a live lease there is no "own" device, so nothing in the host-wide
+    // answer belongs here: every identifier in it is somebody else's. The lease goes
+    // away *during* the run — X28 means an unleased shell never gets a gate started,
+    // and a lease released underneath a running gate is the state that is left, with
+    // the same rule to hold: nothing out there is ours to name.
     const dir = makeRepo();
-    const { run } = failedDeviceRun(dir, {}, '', { lease: false });
+    const { run } = failedDeviceRun(dir, {}, RELEASED_LEASE_HOOK);
     expect(run.status).toBe(1);
     const context = splitDeviceContext(logOf(dir)).context;
     expect(context).toContain('iPhone 17');
@@ -2796,14 +2846,22 @@ describe('a failed device gate records its device context', () => {
 
   it('takes the serial from the lease record, not from the environment', () => {
     const dir = makeRepo();
-    // The env names a serial the pool says nothing about: the lease holds pair-2
-    // (5574), `ANDROID_SERIAL` claims 5576. The record wins, because the env is a
-    // copy that outlives the shell that sourced it, and the pool is the lease.
-    const { run } = failedDeviceRun(dir, { ANDROID_SERIAL: 'emulator-5576' });
+    // The env still says 5574, the serial the run was allowed to start on; the pool is
+    // rewritten mid-run so the lease's pair is now 5576. The record wins, because the
+    // env is a copy that outlives the shell that sourced it and the pool is the lease.
+    //
+    // X28 moved the *starting* version of this mismatch earlier — a gate whose env
+    // names a serial its lease does not hold never runs at all (that is
+    // `gate-lease-required.test.js`) — so the state left to prove here is the one a
+    // start-time check cannot see: the pair moved underneath a run already in flight.
+    const pairMovesPort =
+      'printf \'{"pairs":[{"id":"pair-2","android":{"avd":"avd_2",' +
+      '"emulatorPort":5576},"metroPort":8297}]}\' > "$NITRO_UI_HOME/devices.json"';
+    const { run } = failedDeviceRun(dir, {}, pairMovesPort);
     expect(run.status).toBe(1);
     const asked = fs.readFileSync(run.calls, 'utf8');
-    expect(asked).toContain('adb -s emulator-5574 get-state');
-    expect(asked).not.toContain('-s emulator-5576');
+    expect(asked).toContain('adb -s emulator-5576 get-state');
+    expect(asked).not.toContain('-s emulator-5574');
   });
 
   it('never addresses the maintainer’s reserved emulator, and says why', () => {
@@ -2812,24 +2870,18 @@ describe('a failed device gate records its device context', () => {
     // supposed to survive. `devices.json` is validated before a pair is read, so the
     // serial is never derived at all and adb is never run against it; the block says
     // which rule refused.
+    // Written while the gate runs, not before it: `devices.json` has to be usable at
+    // the start or X28 refuses the run outright, and a pool edited under a running
+    // gate is exactly how this misconfiguration reaches a probe.
     const home = leaseHomeFor(dir);
-    fs.writeFileSync(
-      path.join(home, 'devices.json'),
-      JSON.stringify({
-        pairs: [
-          {
-            id: 'pair-2',
-            android: { avd: 'avd_2', emulatorPort: 5560 },
-            metroPort: 8297,
-          },
-        ],
-      })
-    );
+    const reservedPool =
+      'printf \'{"pairs":[{"id":"pair-2","android":{"avd":"avd_2",' +
+      '"emulatorPort":5560},"metroPort":8297}]}\' > "$NITRO_UI_HOME/devices.json"';
     const run = runCli(
       dir,
       ['harness:android'],
       { ...leased, NITRO_UI_HOME: home, FAKE_EXIT: '1' },
-      ''
+      reservedPool
     );
     expect(run.status).toBe(1);
     // The fake adb was never invoked with the reserved serial, in either command.
@@ -2843,59 +2895,26 @@ describe('a failed device gate records its device context', () => {
     expect(log).toContain('reserved');
   });
 
-  it('probes no device at all when the run holds no lease', () => {
-    const dir = makeRepo();
-    // No lease id, so nothing is ours to ask - even though ANDROID_SERIAL is set,
-    // which is exactly the leftover-a-shell-leaves case.
-    const { run } = failedDeviceRun(dir, { NITRO_UI_LEASE_ID: undefined }, '', {
-      lease: false,
-    });
-    expect(run.status).toBe(1);
-    const asked = fs.existsSync(run.calls)
-      ? fs.readFileSync(run.calls, 'utf8')
-      : '';
-    // simctl is still fine to ask (it is host-wide, not another task's device), but
-    // adb has no business being run by a task that holds nothing.
-    expect(asked).toContain('simctl');
-    expect(asked).not.toContain('adb');
-    const log = logOf(dir);
-    expect(log).toContain('holds no lease');
-    expect(log).toContain('no device is ours to ask');
-  });
-
-  it('probes nothing for an expired or stolen lease, and says which', () => {
-    const dir = makeRepo();
-    // The run thinks it holds `lease-x12`; the lease file has no such entry (it
-    // expired, or was re-handled). Probing that pair would be reading a device
-    // another task now owns.
-    const home = leaseHomeFor(dir);
-    fs.writeFileSync(
-      path.join(home, 'leases.json'),
-      JSON.stringify({
-        leases: [
-          {
-            id: 'lease-other',
-            task: 'X9',
-            platform: 'android',
-            holds: ['pair-2'],
-            acquiredAt: Date.now(),
-            ttlMinutes: 120,
-          },
-        ],
-      })
-    );
-    const run = runCli(
-      dir,
-      ['harness:android'],
-      { ...leased, NITRO_UI_HOME: home, FAKE_EXIT: '1' },
-      ''
-    );
-    expect(run.status).toBe(1);
-    const asked = fs.existsSync(run.calls)
-      ? fs.readFileSync(run.calls, 'utf8')
-      : '';
-    expect(asked).not.toContain('adb');
-    expect(logOf(dir)).toContain('lease lease-x12 is no longer live');
+  it('probes no device for a lease that stopped being live mid-run', () => {
+    // The two ways that happens: released from another shell, and outlived at its own
+    // ttl. Both start from a live lease — X28 would refuse the run otherwise — and end
+    // with the store saying the pair belongs to the pool again, which is the moment
+    // `ANDROID_SERIAL` stops being a licence to run `adb` against it.
+    for (const hook of [RELEASED_LEASE_HOOK, EXPIRED_LEASE_HOOK]) {
+      const dir = makeRepo();
+      const { run } = failedDeviceRun(dir, {}, hook);
+      expect(run.status).toBe(1);
+      const asked = fs.existsSync(run.calls)
+        ? fs.readFileSync(run.calls, 'utf8')
+        : '';
+      // simctl is still fine to ask (it is host-wide, not another task's device), but
+      // adb has no business being run by a task that no longer holds the emulator.
+      expect(asked).toContain('simctl');
+      expect(asked).not.toContain('adb');
+      const log = logOf(dir);
+      expect(log).toContain('lease lease-x12 is no longer live');
+      expect(log).toContain('not ours to ask');
+    }
   });
 
   it('still records the gate result when a probe itself fails', () => {

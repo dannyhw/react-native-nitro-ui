@@ -638,6 +638,145 @@ export function checkEmulatorEnv(
 }
 
 /**
+ * The instructions every device-side refusal ends with: lease it, source it.
+ *
+ * Exported because the gate (`gate-core.mjs`) refuses for the same reason one
+ * screen earlier, and two hand-written copies of "how do I get a device" drift.
+ */
+export const ACQUIRE_HINT =
+  '  node scripts/lease.mjs acquire --task <ID> --boot --out /tmp/<ID>.env\n' +
+  '  set -a; source /tmp/<ID>.env; set +a\n' +
+  '  (CONTRIBUTING.md: "Leasing a device or port")';
+
+/**
+ * The device a run may use, read out of the lease environment it was handed (X28).
+ *
+ * Before this, a runner that found no `ANDROID_SERIAL` went looking for a device of
+ * its own: `scripts/real-input/android.mjs` scanned `adb devices` for an emulator
+ * running the default AVD, and on 2026-11-11 a `real-input:android` started from a
+ * shell with no lease env drove `emulator-5554` over the machine's own adb server.
+ * Nothing refused it, because nothing had to be told which device to use. So the
+ * question "which device" now has exactly one answer here — what the lease exported
+ * — and a run that cannot answer it is refused before its first `adb`/`simctl` call.
+ *
+ * Two levels, because two things depend on it:
+ *
+ *   - `requireDevice: true` (the real-input runners, which are never run on CI): a
+ *     device must be named, lease or not. There is no fallback left to reach for.
+ *   - a named lease (`NITRO_UI_LEASE_ID` set): every identifier that lease exported
+ *     has to be present. A half-sourced env — one variable exported by hand, the
+ *     rest from an older lease — is the shape that sends a run at a stranger's
+ *     device, and it is refused rather than completed from defaults.
+ *
+ * A run with no lease and `requireDevice: false` gets what the environment says,
+ * including nothing: that is a developer's own `bun run harness:ios`, or a GitHub
+ * runner whose emulator the harness action boots. `gate.mjs` is what refuses that
+ * shape for a *gate* (`gate-core.mjs: deviceGateLeaseRefusal`), so the fallback this
+ * leaves alone is unreachable from a ledger line.
+ *
+ * @param {object} [options]
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {'ios'|'android'|null} [options.platform] what the run drives; null = both sides the lease has
+ * @param {string} [options.command] how to name the run in the refusal
+ * @param {boolean} [options.requireDevice] insist on a device even with no lease named
+ * @returns {{leased: boolean, leaseId: string | null, udid: string | null, serial: string | null,
+ *   avd: string | null, adbServerPort: number | null, emulatorPort: number | null}}
+ * @throws when the device the run may use cannot be read from the environment
+ */
+export function requireLeaseDevice({
+  env = process.env,
+  platform = null,
+  command = 'this run',
+  requireDevice = false,
+} = {}) {
+  const leaseId = String(env.NITRO_UI_LEASE_ID ?? '').trim();
+  const leased = leaseId !== '';
+  // What the lease was taken for. Absent on an env written before the variable
+  // existed, and on a hand-made one: then the lease has no opinion, so every side
+  // the caller asked for has to be there.
+  const forPlatform =
+    String(env.NITRO_UI_LEASE_PLATFORM ?? '').trim() ||
+    (leased ? 'both' : null);
+  /** Does this run need the `side` half of the device? */
+  const wants = (side) =>
+    (platform == null || platform === side) &&
+    (forPlatform == null || forPlatform === 'both' || forPlatform === side);
+  const strict = leased || requireDevice;
+  const answer = {
+    leased,
+    leaseId: leased ? leaseId : null,
+    udid: null,
+    serial: null,
+    avd: null,
+    adbServerPort: null,
+    emulatorPort: null,
+  };
+
+  if (wants('ios')) {
+    const udid = String(env.IOS_SIM_UDID ?? '').trim();
+    if (udid === '' && strict) {
+      throw new Error(
+        `${command}: no simulator to run on - IOS_SIM_UDID is not set. This\n` +
+          '       script never picks a simulator itself, because the one named\n' +
+          "       here may be another task's or the maintainer's. Lease one\n" +
+          '       and source it:\n' +
+          ACQUIRE_HINT
+      );
+    }
+    answer.udid = udid === '' ? null : udid;
+  }
+
+  if (wants('android')) {
+    // The rules a lease's own numbers have to satisfy (reserved serial, a serial
+    // that disagrees with its port) run first: they refuse a wrong device, which is
+    // a different mistake from no device.
+    answer.emulatorPort = checkEmulatorEnv(env).port;
+    const serial = String(env.ANDROID_SERIAL ?? '').trim();
+    const avd = String(env.ANDROID_AVD ?? env.AVD ?? '').trim();
+    const rawServer = String(env.ANDROID_ADB_SERVER_PORT ?? '').trim();
+    if (rawServer !== '' && !/^\d+$/.test(rawServer)) {
+      throw new Error(
+        `lease: ANDROID_ADB_SERVER_PORT="${rawServer}" is not a port number. ` +
+          'It comes from `node scripts/lease.mjs acquire` and must be `source`d, ' +
+          'not edited.'
+      );
+    }
+    if (serial === '' && strict) {
+      throw new Error(
+        `${command}: no emulator to run on - ANDROID_SERIAL is not set. This\n` +
+          '       script does not pick an emulator: `adb devices` answers with\n' +
+          '       every emulator on the machine, which is how a run with no lease\n' +
+          "       ended up driving someone else's on 2026-11-11. Lease one and\n" +
+          '       source it:\n' +
+          ACQUIRE_HINT
+      );
+    }
+    if (leased) {
+      if (rawServer === '') {
+        throw new Error(
+          `${command}: ANDROID_SERIAL=${serial} with no ANDROID_ADB_SERVER_PORT ` +
+            "would address the machine's own adb server, which also sees every " +
+            `device on it. Lease ${leaseId} exports a private server port for this ` +
+            'pair - re-source its env file rather than exporting one variable.'
+        );
+      }
+      if (avd === '') {
+        throw new Error(
+          `${command}: lease ${leaseId} exports ANDROID_AVD and this run cannot ` +
+            'find it, so the emulator behind ANDROID_SERIAL cannot be checked ' +
+            'against the lease. Re-source the lease env file.'
+        );
+      }
+    }
+    answer.serial = serial === '' ? null : serial;
+    answer.avd = avd === '' ? null : avd;
+    answer.adbServerPort = rawServer === '' ? null : Number(rawServer);
+  }
+
+  return answer;
+}
+
+/**
  * Who is listening on one TCP port, as `lsof` answers it (X15 item 1).
  *
  * Why a lease asks: a lease is a naming agreement about a simulator, an emulator and a Metro

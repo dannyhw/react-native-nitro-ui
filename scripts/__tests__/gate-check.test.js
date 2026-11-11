@@ -36,6 +36,13 @@ import {
   stepTimingsOf,
 } from '../gate-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
+import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import {
+  DEFAULT_PAIR,
+  leaseRecord,
+  leasedEnv,
+  writeLeaseStore,
+} from './helpers/lease-store.js';
 
 const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
 const CHECK_STEPS = path.join(process.cwd(), 'scripts', 'check-steps.mjs');
@@ -901,7 +908,7 @@ function makeRepo() {
   write('nitrogen/generated/ios/NitroUiAutolinking.swift', '// marker\n');
   write('ios/core/Core.swift', 'v1\n');
   write('example/package.json', '{"name":"x"}\n');
-  write('.gitignore', '.gates/\nfake-bin/\n');
+  write('.gitignore', '.gates/\nfake-bin/\nstate/\n');
   gitIn(dir, ['init', '-q', '-b', 'main']);
   gitInTempRepo(dir, ['add', '-A']);
   gitInTempRepo(dir, ['commit', '-qm', 'base']);
@@ -941,6 +948,33 @@ function fakeBin(dir, hook = '') {
   return bin;
 }
 
+/**
+ * The lease this suite's runs are sourced with, and the store that backs it (X28).
+ *
+ * `harness:ios` here is a device gate, and a device gate now refuses to start unless
+ * the store named by `NITRO_UI_HOME` holds the lease its environment names — so a
+ * suite that names a device without one gets exit 1 and no ledger line, which is not
+ * what these tests are about. The store lives in the fixture rather than at the
+ * machine's `~/.nitro-ui` for the same reason: the CLI used to read the real one, and
+ * what another task had leased is not this suite's business.
+ */
+const FIXTURE_LEASE = leaseRecord({
+  id: 'X10-1',
+  task: 'X10',
+  platform: 'ios',
+});
+
+function fixtureLeaseEnv(dir) {
+  const home = path.join(dir, 'state');
+  writeLeaseStore(home, { leases: [FIXTURE_LEASE] });
+  // `FREE_LSOF` because leasing a pair exports its Metro port, and the pre-flight then
+  // asks the kernel about it — on this machine that is another task's Metro.
+  return {
+    ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: FIXTURE_LEASE }),
+    ...FREE_LSOF,
+  };
+}
+
 function runCli(dir, args, extraEnv = {}, hook = '') {
   const bin = fakeBin(dir, hook);
   return spawnSync(process.execPath, [CLI, ...args], {
@@ -954,6 +988,7 @@ function runCli(dir, args, extraEnv = {}, hook = '') {
     env: {
       ...gitEnv(dir),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      ...fixtureLeaseEnv(dir),
       ...extraEnv,
     },
   });
