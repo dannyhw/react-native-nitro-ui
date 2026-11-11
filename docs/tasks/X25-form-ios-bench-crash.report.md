@@ -6,44 +6,38 @@
 ## Summary
 
 **Cause.** `readoptRowlessCells()` asks UIKit to rebuild the cell of every visible item whose
-cell holds no row, one turn after a settle. It took those items from
-`dataSource.snapshot()` — the *data source's* snapshot, which is one turn behind this class —
-and asked for a `reconfigureItems` apply of them all. Two facts meet there. Reconfiguration
-must be answered with the cell already on screen: UIKit raises
-`NSInternalInconsistencyException` from
-`-[UICollectionView _reconfigureCell:forItemAtIndexPath:]` if the provider returns any other
-cell. And the Form's provider *does* return another cell whenever it has nothing to draw:
-its guard ends in `return UICollectionViewCell()` when `indexPath.section` is past
-`sections.count`. So any turn in which React removes a Section — or the whole Form — between
-a settle and that apply hands UIKit a reconfigure for an index path whose model is gone, the
-provider gives up, and the app aborts. X24's 27 `nitrouibench` crash reports in
-`~/Library/Logs/DiagnosticReports` are all one stack, all from
-`closure #1 in HybridNitroUiForm.readoptRowlessCells()`, and UIKitCore's own assertion text
-for that frame is "dataSource returned a different cell … than the cell being reconfigured,
-which is not allowed". The harness never saw it because no case drops a mounted Form in the
-turn after its settle; the bench's `mount` arm does that 20+ times per launch.
+cell holds no row, one turn after a settle. It built that list from `dataSource.snapshot()` —
+the *data source's* list, one turn behind this class — and asked for a `reconfigureItems` apply
+of it. Two facts meet there. A reconfiguration must be answered with the cell already on screen:
+UIKit raises `NSInternalInconsistencyException` from
+`-[UICollectionView _reconfigureCell:forItemAtIndexPath:]` when the provider returns any other
+cell. And this Form's provider *does* return another cell when it has nothing to draw — its
+guard ends in `return UICollectionViewCell()` once `indexPath.section` is past `sections.count`.
+So when React removes a Section, or the whole Form, in the turn between a settle and that apply,
+UIKit gets a reconfigure for an index path whose model is gone, the provider gives up, and the
+app aborts. X24's 27 `nitrouibench` crash reports are all that one stack, from
+`closure #1 in HybridNitroUiForm.readoptRowlessCells()`. No harness case drops a mounted Form in
+the turn after its settle; the bench's `mount` arm does it 20+ times per launch.
 
 **Fix**, all in `ios/components/Form/HybridNitroUiForm.swift`:
 
-- The readopt now asks the models, again, in the turn it writes the apply: an item is only
-  chased when `path(for: row)` still puts that row at that index path. Behind-the-models
-  items are exactly what `applySnapshot` is already queued to fix, one turn later.
-- The give-up branch answers a reconfigure with the cell already on screen
-  (`giveUpCell(in:at:)`) instead of a new one, so this class of abort cannot come back from
-  any other path — including the models moving *during* the apply, which `onRowRemoved` can
-  do.
-- Items whose cell is not a `NitroUiFormRowCell` are no longer reconfigured — that was never
-  legal, since the provider cannot obtain a foreign cell through `nitroui-form-row` — they are
-  reloaded, which is allowed to build a new cell. This is the first version of that fix that
-  cannot itself abort.
-- Android has no equivalent path: its Form keeps rows in their Yoga boxes, so `inCells` is a
-  visibility count and there is no cell to come up empty. Checked, nothing to change.
+- The readopt asks the models again in the turn it writes the apply: an item is chased only when
+  `path(for: row)` still puts that row at that index path. Items behind the models are what the
+  already-queued `applySnapshot` is fixing anyway.
+- The give-up branch answers a reconfigure with the cell already on screen (`giveUpCell(in:at:)`)
+  instead of a new one, so no other path can abort this way — including models moving *during*
+  the apply. That window stays open until the run loop moves on: an apply does not promise to
+  run the reconfigure before it returns.
+- Items whose cell is not a `NitroUiFormRowCell` are reloaded, not reconfigured — the provider
+  cannot obtain a foreign cell through the row registration, so reconfiguring one was never
+  legal.
+- Android has no equivalent path: its rows live in Yoga boxes, so `inCells` is a visibility
+  count and no cell can come up empty.
 
-**Also fixed:** the bench app could not bundle at all. `bench/src/implementations/shared.ts`
-required `../assets/circle.png`, which is `bench/src/assets/` — a folder that has never
-existed. The two vectors gained a `-vector` suffix in the same commit because Android names a
-drawable after the require path plus the file name without its extension, so making the
-requires resolve made `assets/circle.png` and `assets/circle.xml` one resource name.
+**Also fixed:** the bench app could not bundle. `bench/src/implementations/shared.ts` required
+`../assets/circle.png`, in a folder that has never existed; the two vectors gained a `-vector`
+suffix so resolving them does not collide `circle.png` with `circle.xml`, which Android would
+name as one drawable.
 
 ## Gates
 
