@@ -24,8 +24,8 @@ the layout engine, and React never sees a native node.
 | `ButtonGroup`        | a row of bordered controls, or `ControlGroup` when connected            | M3 `ButtonGroup` with `customItem` and its overflow menu                                              | next  | [button-group.md](docs/components/button-group.md)           |
 | `Stepper`            | `Stepper(value:in:step:)` + `.labelsHidden()` (hold-to-repeat included) | two Material 3 tonal icon buttons, 8 dp apart — Android has no stepper                                | next  | [stepper.md](docs/components/stepper.md)                     |
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                                     | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                                 | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)                   | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
+| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                                 | `ExposedDropdownMenuBox`, `ScrollField` and a radio group (M3)                                        | 0.1.0 | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)                   | M3 `DatePicker` / `TimePicker` / `ScrollField` drums and their dialogs                                | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`             | `DropdownMenuPopup` + `DropdownMenuGroup`; `SplitButtonLayout` with a `primaryAction` (M3 Expressive) | 0.4.0 | [menu.md](docs/components/menu.md)                           |
 | `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`                      | M3 Expressive `DropdownMenuPopup` opened at the finger                                                | next  | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button`          | M3 `FilterChip` / `AssistChip`                                                                        | 0.6.0 | [chip.md](docs/components/chip.md)                           |
@@ -246,8 +246,8 @@ export function VolumeSlider() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on iOS: loading draws as a ring and wavy draws flat" /></td>
-    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on Android, with Material's morphing and contained loading shapes" /></td>
+    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear, circular, loading and tinted Progress on iOS, where loading draws as a ring" /></td>
+    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear, circular, loading and tinted Progress on Android, with Material’s morphing and contained loading shapes" /></td>
   </tr>
 </table>
 
@@ -475,7 +475,7 @@ toggle in one cannot show what it is.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/stepper-ios.png" width="300" alt="Steppers on iOS: SwiftUI's two-arrow control mid-range, one at its minimum with the down half greyed, one at its maximum with the up half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
+    <td><img src="docs/images/components/stepper-ios.png" width="300" alt="Steppers on iOS: SwiftUI's minus and plus control mid-range, one at its minimum with the minus half greyed, one at its maximum with the plus half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
     <td><img src="docs/images/components/stepper-android.png" width="300" alt="Steppers on Android: two tonal circular icon buttons with a minus and a plus, mid-range, then one at each bound with the inert half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
   </tr>
 </table>
@@ -575,7 +575,7 @@ export function ViewToggle() {
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
     <td><img src="docs/images/components/picker-ios.png" width="300" alt="Picker menu and wheel variants on iOS" /></td>
-    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker's open menu with its selected row checked on Android" /></td>
+    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker’s menu and wheel variants on Android: Material 3’s exposed dropdown for the menu, and a ScrollField drum reading Small, Medium, Large for the wheel" /></td>
   </tr>
 </table>
 
@@ -646,8 +646,8 @@ export function DueDate() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on iOS" /></td>
-    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on Android" /></td>
+    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with a checked row, subtitles and a titled group on iOS" /></td>
+    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with a checked row, subtitles and a titled group on Android" /></td>
   </tr>
 </table>
 
@@ -1554,10 +1554,13 @@ The full list per control is in its doc; these are the ones that bite.
 - **`trackColor` is Android-only** (nothing in SwiftUI addresses the track) and
   **`systemImage` is iOS-only** (Android ignores it). Both are accepted on both
   platforms so the JS API means one thing.
-- **No wheel on Android.** `Picker` and `DatePicker` accept `variant="wheel"`,
-  but Material 3 has no wheel, so Android renders the menu (`Picker`) or the
-  inline calendar (`DatePicker`). Android also has no combined date-and-time
-  control: `mode="datetime"` opens a date dialog and then a time dialog.
+- **Android's wheels are Material's own.** With `variant="wheel"`, `Picker` gets a
+  `ScrollField` drum and a `DatePicker` in `mode="time"` gets Material's time drums —
+  each reporting one change per settled roll. A drum keeps the vertical drag that begins
+  on it, so a page with a wheel in it is scrolled beside the wheel. There is no _date_
+  wheel: `DatePicker` with `mode="date"` or `"datetime"` keeps the inline calendar there.
+  Android also has no combined date-and-time control: `mode="datetime"` opens a date
+  dialog and then a time dialog.
 - **`Menu`'s open state is Android-only, and its splits are iOS's.** SwiftUI's
   `Menu` has no expansion binding, so **iOS never fires `onOpen` or `onClose`**,
   and a `disabled` that arrives while the menu is open closes it on Android only —
