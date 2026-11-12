@@ -273,3 +273,23 @@ The FAIL is kept as evidence, not as a blocker: E4 asks for `probe.log.pressable
 only when it runs without its E3 predecessor, and the same filter with the pre-fix Form restored does
 not run at all (0 tests, the recycle abort) - so that pairing is red on both trees and is X29's, not
 this round's. Every other row is this tree.
+
+## Fix round 2c - the A/B against X29's E4 cause
+
+*(no code change)*
+
+**A/B on pair-b, all at HEAD `d72f591`.** E4 wrote both texts on this one HEAD and this one simulator:
+`expected 10 to be 0` with E3 filtered out (`05:36Z`, `05:38Z`), `No view found at point (0.00, 0.00)`
+with E3 present and the recycle emptying the list (seven runs, `05:42Z`-`06:05Z`). So the detach only
+decides *which* text E4 writes. E4 also runs red in isolation on `main`'s own Form and harness
+(`9b1dd98b05b6`, round 2), and X29 now makes both texts on pair-a from ordering alone. That is X29's
+per-row content box, not X25's recycle work - and the pair difference is width: 402 pt on pair-a's
+iPhone 17, 420 pt on pair-b's iPhone Air.
+
+**Action.** The recycle fix stands as shipped (`60fb2c26`) - it keeps the churn case and E4 green in
+`harness:ios` - and no E4 device time went past the A/B.
+
+**Merge note.** Both branches edit `ios/components/Form/HybridNitroUiForm.swift`; the one likely
+conflict is `prepareForRecycle` (my `retiredSections = sections` at `-262`, X29's counters at `-261`),
+both additive. X29 renames E4, so round 2b's `churn+E4` line is against the old test - re-run it on
+the merged tree.
