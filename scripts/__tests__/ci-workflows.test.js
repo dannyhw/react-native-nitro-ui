@@ -873,48 +873,100 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
    * healthy stub everywhere else — the same rule `ci-emulator-diagnostics.mjs` follows,
    * that a shortened deadline must be tested alongside a tool that is merely alive,
    * since a guard that only fires for a knob nobody sets is not a guard.
+   *
+   * It used to be graded on two wall-clock readings, and both went red over a preflight
+   * that was behaving, under `check`'s load (X29 lost it twice, at `07:12Z` and `07:15Z`,
+   * with `asked: false` beside `saidItGaveUp: true` and `printedRest: true`; the same
+   * class as `FOLLOWUPS.md:119`). What it grades now is the same claim with the machine's
+   * speed divided out:
+   *
+   * - *Who was bounded* is read from the guard's own complaint, which names the command it
+   *   bounded. It used to be the stub's first line, and a stub that is slow to start is
+   *   indistinguishable from the machine the deadline exists for — the guard kills it
+   *   before it prints, which is the flake. That a stub's bytes can reach this step at all
+   *   is asserted where nothing is being killed for being slow: the healthy preflight case
+   *   above, on `accel: kvm usable`.
+   * - *Whether the step waited for the tool* is the hung run's cost over a run of the same
+   *   body against a tool that answers, in the same two-second budget. The old ceiling was
+   *   an absolute 20 s that had to sit between a healthy ~2 s and the ~26 s an unbounded
+   *   body spends, and that healthy 2 s is made of process starts — the first thing a
+   *   loaded machine makes expensive, with none of it present in the unbounded case to
+   *   cancel it out. The allowance here is counted in `sleep 1`s, which is the unit
+   *   `bounded` counts its own patience in and so stretches by the same law as the thing it
+   *   bounds; the stub outlives the deadline by many of them, wherever this runs.
    */
   it('the preflight does not wait forever for -accel-check', () => {
     const job = readYaml('ci.yml').jobs['harness-android'];
     const step = (job.steps ?? []).find((candidate) =>
       String(candidate.name ?? '').includes('Show the emulator configuration')
     );
+    const body = String(step.run);
     const box = sandbox({ accel: 'hang' });
-    const startedAt = Date.now();
-    try {
-      const ran = runStepBody(String(step.run), {
-        ...box,
-        env: { ...box.env, NITRO_UI_CI_ACCEL_TIMEOUT: '2' },
+    const alive = sandbox({ accel: 'ok' });
+    /** The step body with the case's shortened deadline, and what running it cost. */
+    const runWithDeadline = (where) => {
+      const startedAt = Date.now();
+      const ran = runStepBody(body, {
+        cwd: where.cwd,
+        env: { ...where.env, NITRO_UI_CI_ACCEL_TIMEOUT: '2' },
       });
-      const out = String(ran.stdout ?? '') + String(ran.stderr ?? '');
+      return { ran, ms: Date.now() - startedAt };
+    };
+    try {
+      // The healthy run first: it pays this machine's first-exec cost for both sandboxes,
+      // so the hung run is timed on a warm file system and the difference between the two
+      // is the tool's behaviour rather than the page cache's.
+      const aliveRun = runWithDeadline(alive);
+      const hung = runWithDeadline(box);
+      const out = String(hung.ran.stdout ?? '') + String(hung.ran.stderr ?? '');
       expect({
-        status: ran.status,
-        // The stub really was asked — otherwise "it did not hang" would only mean the
-        // step never reached the line the bound is for.
-        asked: out.includes('SANDBOX_ACCEL_HANG'),
-        saidItGaveUp: out.includes('gave no answer in 2s'),
+        status: hung.ran.status,
+        // The stub really was asked, and it really was the accel check that got bounded.
+        // `bounded` names the command it gave up on, and a command that never started
+        // makes the loop's `kill -0` fail before the deadline is ever reached — so the
+        // line can only print about something that was still running at the deadline.
+        // Naming the path is what keeps a swapped-out tool (`sleep 60`, say) red.
+        gaveUpOnTheTool: out.includes(
+          `${box.androidHome}/emulator/emulator -accel-check gave no answer in 2s`
+        ),
         // And the rest of the step still ran, which is the reason this is a per-command
         // deadline rather than a whole-step one.
         printedRest:
           out.includes('gpu mode:') &&
           out.includes('avd (from rn-harness.config.mjs): nitroui'),
-        elapsedMs: Date.now() - startedAt,
+        aliveMs: aliveRun.ms,
+        hungMs: hung.ms,
       }).toEqual(
         expect.objectContaining({
           status: 0,
-          asked: true,
-          saidItGaveUp: true,
+          gaveUpOnTheTool: true,
           printedRest: true,
         })
       );
-      // Two seconds of patience plus the rest of the step's own work. The stub stops
-      // answering for 25 s, so this is the line that separates a bounded call from an
-      // unbounded one: without the guard the body waits for the stub and lands at ~26 s.
-      expect(Date.now() - startedAt).toBeLessThan(20_000);
+      // Print them before grading them: the numbers are the diagnosis, and a bare
+      // `toBeLessThan` red only says that one of them moved.
+      //
+      // `patienceMs` is what the step spent *because the tool never answered* — the two
+      // runs differ in nothing else. A bounded step spends its own patience, a few
+      // `sleep 1` iterations; a step that only says it gave up spends the stub's life,
+      // which is forty of them. Eight is the line: wide enough that no load this host has
+      // recorded (load1 62-68, `FOLLOWUPS.md:119`) puts a working guard on the wrong side
+      // of it, and five times narrower than the unbounded body it exists to catch.
+      const patienceMs = hung.ms - aliveRun.ms;
+      const sleepUnitMs = measureSleepUnit();
+      console.log(
+        `CI PREFLIGHT bounded-call: alive=${String(aliveRun.ms)}ms ` +
+          `hung=${String(hung.ms)}ms patience=${String(patienceMs)}ms ` +
+          `sleepUnit=${String(sleepUnitMs)}ms allowance=${String(8 * sleepUnitMs)}ms`
+      );
+      expect(patienceMs).toBeLessThan(8 * sleepUnitMs);
     } finally {
       box.dispose();
+      alive.dispose();
     }
-  });
+    // A hung-worker backstop, not a budget: the red path is a step that waits out the
+    // stub's whole 40 s, and it has to be allowed to finish to print the numbers above.
+  }, 120_000);
 
   /* The diagnostics pair, executed. Both of these steps exist only to leave
    * evidence, and both managed not to: run 41256853746's Android job reached them
@@ -946,6 +998,25 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       env,
       encoding: 'utf8',
     });
+  }
+
+  /**
+   * What one `sleep 1` costs this machine right now, in ms.
+   *
+   * `bounded()` counts its patience in `sleep 1` iterations, so the wall seconds a working
+   * deadline spends are a whole number of these on a loaded host and a quiet one alike.
+   * Measuring the unit is what lets the bound be stated as a count of them instead of as
+   * guessed seconds. Two samples, the slower kept: the cheapest instrument that cannot
+   * mistake a loaded machine for a quiet one.
+   */
+  function measureSleepUnit() {
+    let unitMs = 0;
+    for (let sample = 0; sample < 2; sample += 1) {
+      const startedAt = Date.now();
+      spawnSync('/bin/sleep', ['1']);
+      unitMs = Math.max(unitMs, Date.now() - startedAt);
+    }
+    return unitMs;
   }
 
   /**
@@ -996,8 +1067,16 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
             // Self-limiting rather than `sleep 600`: the mutation this case exists to
             // catch leaves the step body with nothing to kill it, and a stub that outlives
             // the test is an orphan on a machine running other tasks' emulators. Long
-            // enough to outlast any budget the step might honestly set.
-            'exec sleep 25',
+            // enough to outlast any budget the step might honestly set, and — because the
+            // case grades its patience in `sleep 1`s, which stretch with load — by many
+            // such units rather than by a fixed number of seconds.
+            //
+            // `exec`, so the stub *is* the sleep: a guard that kills the tool closes the
+            // write end of the pipe behind it, which is what lets the step move on at all.
+            // A shell with a sleeping child does not — the orphan keeps the pipe open and
+            // `sed` holds the whole step until the child gives up, twenty-odd seconds of
+            // "bounded" call. Measured, not theorised.
+            'exec sleep 40',
             '',
           ].join('\n')
         : '#!/bin/sh\nif [ "$1" = "-accel-check" ]; then echo "kvm usable"; fi\n',
