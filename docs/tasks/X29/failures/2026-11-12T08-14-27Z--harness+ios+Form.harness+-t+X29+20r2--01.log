@@ -1,0 +1,117 @@
+# Failure excerpt — harness:ios:Form.harness:-t:X29%20r2
+
+- Ran: 2026-11-12T08:14:27.380Z on code tree `168b2bdae41d` at HEAD `411f339` (branch `task/X29-fix2`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness -t X29 r2`
+- Result: fail, exit 1, 23379 ms
+- Load: start 11.20, end 9.09, median 10.56, max 11.20
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-9q56x`
+- Full log: `task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log` (<store>/task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form row boxes (X29 r2) › hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)`
+- `expected 32 to be +0 // Object.is equality`
+- `● Form row boxes (X29 r2) › re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)`
+- `● Form row boxes (X29 r2) › moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-9q56x (still live)
+  |   X25-484f3                X25          both              pair-b
+  |   X29-9q56x                X29          ios               pair-a
+gate: load
+  |   load1 at the moment of failure: 9.09 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 68 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form.harness:-t:X29%20r2
+gate: node ../scripts/harness.mjs --harnessRunner ios Form.harness -t X29 r2 (cwd example)
+gate: code tree 168b2bdae41d at HEAD 411f3398
+gate: git tree 64c50ab58e7a with a DIRTY worktree (not reusable)
+gate: log task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log
+gate:       <store>/task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness -t X29 r2
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 168b2bdae41d, 25 components registered)
+lease: X29-9q56x runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.71/8.80 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form row boxes (X29 r2) › hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)
+
+    expected 32 to be +0 // Object.is equality
+
+      [0m [90m 2205 |[39m     [90m// read back as a take, and the Form queued a walk of the visible cells for every one of[39m
+       [90m 2206 |[39m     [90m// them.[39m
+      [31m[1m>[22m[39m[90m 2207 |[39m     expect(num(after[33m,[39m [32m'losses'[39m) [33m-[39m lossesAtRest)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                     [31m[1m^[22m[39m
+       [90m 2208 |[39m     [90m// …and the chase it used to queue found nothing to reconfigure, which is the cost side.[39m
+       [90m 2209 |[39m     expect(num(after[33m,[39m [32m'applies'[39m) [33m-[39m appliesAtRest)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 2210 |[39m   })[33m;[39m[0m
+
+  ● Form row boxes (X29 r2) › re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)
+
+    Form report never satisfied "the wide Form to settle its twelve rows at their own boxes" - last was sections=1;rows=12;items=12;inCells=7;rowsInCells=7;distinctDrawn=7;claims=0;wrongCells=0;losses=1;screen=1,420.00,682.00,7,7;orphans=0;stale=0;alive=12;reparents=8;reclaims=1;applies=15;width=336.00;listWidth=400.00;boxW=336.00;boxReports=33;boxSpan=22.00;boxMismatch=0.00;heights=52.00,52.00,52.00,52.00,52.00,52.00;taps=0;keyboard=0.00;insetBottom=0.00;adjBottom=0.00;offsetPublishes=1;recycles=2;selfSizing=1;ime=0.00;offset=-62.00;origin=-62.00;received=-62.00;listY=0.00;insetTop=62.00;placed=0;order=Row 1|Row 2|Row 3|Row 4|Row 5|Row 6|Row 7|Row 8|Row 9|Row 10;kind=prototype;listW=400.00;x=16.00;y=40.33;w=368.00;h0=52.00;rowH=44.00;h1=52.00;h2=52.00;headerX=16.00;headerY=0.00;headerH=40.33;footerH=17.67;footerSection=0;radius=0.00;sep=16.00
+
+      [0m [90m 102 |[39m     }
+       [90m 103 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 104 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 105 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 106 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 107 |[39m [32m        )}`[39m[0m
+
+  ● Form row boxes (X29 r2) › moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5)
+
+    report has no "plainBox": {"sections":"1","rows":"3","items":"3","inCells":"3","rowsInCells":"3","distinctDrawn":"3","claims":"0","wrongCells":"0","losses":"0","screen":"1,874.00,210.33,3,3","orphans":"0","stale":"0","alive":"3","reparents":"3","reclaims":"0","applies":"17","width":"338.00","listWidth":"402.00","boxW":"338.00","boxReports":"12","boxSpan":"0.00","boxMismatch":"0.00","heights":"52.00,52.00,52.00","taps":"0","keyboard":"0.00","insetBottom":"0.00","adjBottom":"34.00","offsetPublishes":"2","recycles":"4","selfSizing":"1","ime":"0.00","offset":"-62.00","origin":"-62.00","received":"-62.00","listY":"0.00","insetTop":"62.00","placed":"0","order":"Ringer|Alerts|Notifications","kind":"prototype","listW":"402.00","x":"16.00","y":"40.33","w":"370.00","h0":"52.00","rowH":"44.00","h1":"52.00","h2":"52.00","headerX":"16.00","headerY":"0.00","headerH":"40.33","footerH":"14.00","footerSection":"0","radius":"0.00","sep":"16.00"}
+
+      [0m [90m 73 |[39m   [36mconst[39m value [33m=[39m report[key][33m;[39m
+       [90m 74 |[39m   [36mif[39m (value [33m==[39m [36mnull[39m)
+      [31m[1m>[22m[39m[90m 75 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`report has no "${key}": ${JSON.stringify(report)}`[39m)[33m;[39m
+       [90m    |[39m                    [31m[1m^[22m[39m
+       [90m 76 |[39m   [36mreturn[39m [33mNumber[39m(value)[33m;[39m
+       [90m 77 |[39m }
+       [90m 78 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 15 skipped, 18 total
+Snapshots:   0 total
+Time:        21.576 s
+Ran all test suites matching Form.harness with tests matching "X29 r2".
+gate: harness:ios:Form.harness:-t:X29%20r2 FAIL in 23.4 s
+gate: recorded in .gates/task/X29-fix2.jsonl
+
+
+gate: appended the device context to task/X29-fix2/harness+ios+Form.harness+-t+X29+20r2-2026-11-12T08-14-26.762Z.log (4 probe(s))
+
+```

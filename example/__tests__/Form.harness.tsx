@@ -128,6 +128,10 @@ function trace(what: string, report: Record<string, string>): void {
         'offset',
         'recycles',
         'insetTop',
+        'width',
+        'boxW',
+        'boxSpan',
+        'boxMismatch',
       ]
         .map((key) => `${key}=${report[key] ?? '-'}`)
         .join(';')
@@ -212,6 +216,52 @@ async function formRef(): Promise<FormHandle> {
   return handleOf(() => forms.form, 'the Form');
 }
 
+/**
+ * Wait until the Form is in the state a press is graded in, and hand back the report that said
+ * so. iOS only.
+ *
+ * Five things have to be true before ten presses mean anything, and the Form — not a row
+ * handle — answers every one of them. A handle is only a handle: a row view another case unmounted goes
+ * on answering for itself, `where=holding`, at a frame nothing is drawing, while the Form on
+ * screen has that row in a cell. The Form is also asked about *every* row on screen rather than
+ * the two this case has handles for, which is the difference between a precondition and a hope.
+ *
+ * - `boxMismatch` — the worst gap anywhere on screen between a row's own box and the width
+ *   React laid its content out at. A row laid out wider than its box has its right-hand content
+ *   drawn past its bounds, and UIKit's hit-test stops at those bounds: a press there lands on
+ *   the cell, React Native walks up from wherever the hit-test stopped and never reaches the
+ *   `Pressable`, so the press counts nothing. Laid out *narrower* is not dangerous, only wrong —
+ *   the content moves inward, where a finger still reaches it — but the witness is the absolute
+ *   difference in either direction, because a Form that only looked for an excess would be green
+ *   while a row was drawn 22 pt inside its own cell, and this case is about content being where
+ *   it is drawn. It used to be non-zero on some row whatever the Form said: one list-wide width
+ *   cannot match a plain row's box and its accessory row's narrower one side by side.
+ * - `rowsInCells` against `rows` — every row this Form owns is sitting in a cell. A row left in
+ *   its section's *holding view* is not drawn at all (that view is hidden), and its live view is
+ *   still measurable, so a press aimed at it lands on whichever cell happens to be at those
+ *   pixels: zero presses for a row that is wired perfectly (X29).
+ * - `distinctDrawn` against `inCells` — no row is drawn by two cells, which is the other half of
+ *   the count above: nine cells naming eight rows reads as a full list.
+ * - `wrongCells` — every cell on screen is holding the row its own item names. Without this one
+ *   the two counts above can disagree *silently*: a recycled cell can be on screen holding a
+ *   perfectly live row that belongs to a different item, which reads as a full cell to every
+ *   "does this cell hold a row?" question while the row its item owns draws nothing from its
+ *   section's hidden holding view. That was X29: `rows` 9, `inCells` 9, `rowsInCells` 8, and a
+ *   press delivered ten times at a row whose pixels were somewhere else.
+ */
+async function formReadyToPress(step: string): Promise<Record<string, string>> {
+  return formReport(
+    (report) =>
+      num(report, 'boxMismatch') <= 0.5 &&
+      num(report, 'rowsInCells') === num(report, 'rows') &&
+      num(report, 'distinctDrawn') === num(report, 'inCells') &&
+      num(report, 'claims') === 0 &&
+      num(report, 'wrongCells') === 0,
+    `every row drawn by exactly one cell, at its own box (${step}) - the report ` +
+      'names rowsInCells, rows, distinctDrawn, inCells, claims, wrongCells and boxMismatch'
+  );
+}
+
 /** The reference for a testID, retried: the first pass can find nothing. */
 async function boxOf(
   testId: string
@@ -224,6 +274,39 @@ async function boxOf(
       if (Date.now() > deadline) throw error;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
+  }
+}
+
+/**
+ * Wait until exactly one live view answers each testID, and return the counts as seen.
+ *
+ * `userEvent.press` names the view to press, not a screen coordinate: it takes the native view
+ * the query answered with and delivers the tap at that view's centre in the window. So a second
+ * live view with the same testID — the previous case's surface, on its way out — leaves the case
+ * measuring whichever copy the query happened to answer with, which is a property of the query
+ * and not of the Form.
+ *
+ * Waiting for one is a precondition, not a loosening: with two live copies there is no fact of
+ * the matter about whether "a finger at the row content's drawn position reaches it". It is not
+ * the reason E4 was red on one simulator and green on the other (X29: the row's cell had lost its
+ * row to another cell, and the Form could not see that its own cell was blank) — that is what the
+ * five counts in `formReadyToPress` are for.
+ */
+async function oneLiveViewPer(testIds: readonly string[]): Promise<string> {
+  const deadline = Date.now() + 8000;
+  for (;;) {
+    const seen = testIds.map(
+      (id) => `${id}=${screen.queryAllByTestId(id).length}`
+    );
+    if (seen.every((entry) => entry.endsWith('=1'))) return seen.join(' ');
+    if (Date.now() > deadline) {
+      throw new Error(
+        `a testID does not have exactly one live view: ${seen.join(' ')} - with two copies ` +
+          'on screen a press is aimed at whichever one the query answered with, which is the ' +
+          'previous case’s surface rather than this one'
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 
@@ -983,7 +1066,7 @@ describe('Form (G24)', () => {
     ).toBeLessThanOrEqual(1);
   });
 
-  it('aims a row content at its Yoga origin on iOS and presses it on Android (E4)', async () => {
+  it('aims a row content at its Yoga origin and presses it on both platforms (E4)', async () => {
     const probe = await mount({ mode: 'base', ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     const pressable = await boxOf('inner-press');
@@ -993,32 +1076,76 @@ describe('Form (G24)', () => {
       `FORM TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
     if (IOS) {
-      // Both waits below are for the row to be *drawn in a cell*, because on a screen short
-      // enough to leave the last row in its holding view the Switch answers nothing for a
-      // different reason - it is not on screen - and that would make the number below a
-      // property of one simulator's height instead of the answer to question 4. A finger at
-      // the drawn position reaches both, ten taps each, and `testRealInputForm` is what
-      // measures that half.
-      //
-      // Asked of the Form rather than of `rows.pressable`/`rows.silent`: a handle is only a
-      // handle, and a row view that another case unmounted answers for itself forever (it
-      // reports `where=holding` for as long as you ask, whether or not the Form on screen has
-      // that row in a cell). `inCells` against the items on screen is the Form's own answer
-      // to the same question, and at this box every row is on screen, so it says the
-      // Pressable's row and the Switch's row are both drawn.
+      // Everything the ten presses below are graded on is waited for here, and of the Form
+      // rather than of `rows.pressable`/`rows.silent`: a handle is only a handle, and a row
+      // view that another case unmounted answers for itself forever (it reports
+      // `where=holding` for as long as you ask, whether or not the Form on screen has that row
+      // in a cell). What the case needs is the Form's own account of every row it is drawing —
+      // drawn, once each, by a cell that holds it, at the box that cell gives it. Without that,
+      // the press count below is a property of the list's state at the moment of the aim.
       await drawnOnScreen('before the presses');
+      const geometry = await formReadyToPress('before the presses');
+      const live = await oneLiveViewPer(['inner-press', 'switch-silent']);
+      // Re-aim from the certified tree: a press names a view, never a place. The JavaScript side
+      // sends (0, 0) beside the `nativeId` the query answered with (`@react-native-harness/ui`'s
+      // `userEvent.ts:80`), the native side substitutes the centre of the view the registry holds
+      // under that id (`HarnessUI.mm:248`) and hit-tests *that* — and the rejection it prints
+      // formats the *arguments*, so a rejected press reads `No view found at point (0.00, 0.00)`
+      // whatever the point was (`HarnessUI.mm:277`). Handles taken before the waits above answer
+      // for wherever their views ended up: a row at rest in a section's holding view keeps the
+      // absolute position its cell would have had (`NitroUiFormViews.swift:18-23`), and a settle
+      // moves rows through that state. Pressed then, the aim lands on a neighbour and every
+      // counter below stays at zero, or it lands outside the window's bounds and `hitTest:`
+      // answers nil — the two texts pair-b produced from one tree, 35 minutes apart (X29). A
+      // fresh query cannot name the row that has left: E6's `f49` is `Unable to find element`, not
+      // a press.
+      const aim = {
+        pressable: await boxOf('inner-press'),
+        toggle: await boxOf('switch-silent'),
+      };
+      // Print them before grading them: when one of them stops holding, the numbers say
+      // which, and a press count on its own says only "something was wrong".
+      console.log(
+        `FORM TAP geometry rows=${geometry.rows} rowsInCells=${geometry.rowsInCells} ` +
+          `inCells=${geometry.inCells} distinct=${geometry.distinctDrawn} ` +
+          `claims=${geometry.claims} wrong=${geometry.wrongCells} ` +
+          `losses=${geometry.losses} ` +
+          `mismatch=${geometry.boxMismatch} boxSpan=${geometry.boxSpan} ` +
+          `width=${geometry.width} boxW=${geometry.boxW} live=${live}`
+      );
+      // Asserted rather than only waited for, so that a Form which stops reaching this state
+      // fails by name. A row counted twice (`distinctDrawn` short of `inCells`) and a row in no
+      // cell at all (`rowsInCells` short of `rows`) are the same mix-up seen from the two ends;
+      // a cell `claims` a row it is not holding is the reason the Form could not see either.
+      expect(Number(geometry.rowsInCells)).toBe(Number(geometry.rows));
+      expect(Number(geometry.distinctDrawn)).toBe(Number(geometry.inCells));
+      expect(Number(geometry.claims)).toBe(0);
+      expect(Number(geometry.wrongCells)).toBe(0);
+      // The box wait is only worth anything because the rows on this screen do *not* share a
+      // box: `boxSpan` is the widest row box minus the narrowest, and a Form whose rows were all
+      // the same width would satisfy `boxMismatch` 0 with one list-wide number — which is the
+      // code that was wrong. It is asserted rather than remembered from a measurement so that a
+      // future iOS that stops reserving the accessory's room fails here instead of quietly
+      // turning this case into one that proves nothing.
+      expect(Number(geometry.boxSpan)).toBeGreaterThan(0);
       // Question 4, the half that is not a finger, and it splits by who hit-tests the touch.
-      // The row view is reparented into a cell, so React Native's own hit-test - which walks
-      // the shadow tree, where the row is still inside its section's holding view - does not
-      // find row content where it is drawn. Ten presses of the `Pressable` therefore reach
-      // nothing, while the same case on Android counts ten. A hosted control is different: it
-      // is a native view that answers for the point it is drawn at, and takes all ten.
+      // A press lands on whichever UIView UIKit says owns the point, and a row drawn from its
+      // cell owns the points inside itself: React Native walks *up* the view tree from wherever
+      // that stopped until it finds a view that can emit a touch, so a `Pressable` in a row
+      // answers here just as it does on Android — ten of ten, which is what `testRealInputForm`
+      // counts with real fingers (D45) and what Android has always counted. It stopped answering
+      // for the point in one row for two reasons, and the wait above is what keeps this case out
+      // of both (X29): a row laid out *wider* than its own box has that content drawn past the
+      // bounds UIKit will hit-test, and a row that is not in a cell at all is drawn nowhere —
+      // the tap then lands on whatever cell owns those pixels, and the row's own content counts
+      // nothing. A hosted control takes all ten for a third reason: it is a native control, and
+      // it answers for its own point without React Native in the path at all.
       for (let index = 0; index < 10; index += 1) {
-        await userEvent.press(pressable);
-        await userEvent.press(toggle);
+        await userEvent.press(aim.pressable);
+        await userEvent.press(aim.toggle);
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
-      expect(probe.log.pressable).toBe(0);
+      expect(probe.log.pressable).toBe(10);
       expect(probe.log.switches).toBe(10);
       // The positive control: the very same two callbacks, outside any Form, where React
       // Native's hit-test has its content where it is drawn. Both counters are the ones the
@@ -1034,6 +1161,11 @@ describe('Form (G24)', () => {
           onSwitchChange={probe.onSwitchChange}
         />
       );
+      // The same for the positive control: `cleanup()` is still on its way out when this render
+      // lands, so until the pair is the only live copy of itself the query can answer with the
+      // copy that is going away — an aim whose view leaves with it is pressed at wherever its last
+      // frame was, which is the pair of texts above rather than a control.
+      await oneLiveViewPer(['loose-press', 'loose-switch']);
       await userEvent.press(await boxOf('loose-press'));
       await userEvent.press(await boxOf('loose-switch'));
       expect(probe.log.pressable - loose.pressable).toBe(1);
@@ -2127,5 +2259,338 @@ describe('Form row content (X24)', () => {
         `centre delta ${delta({ label: boxedLabel, control: boxedControl })}`
     );
     expect(issues).toEqual([]);
+  });
+});
+
+// MARK: - X29 fix round 2: the box a row is told, and who is told about it
+
+/**
+ * A Form inside a box of the app's own, whose width the app changes mid-case.
+ *
+ * The two deep rows are what the case is about. Twelve 52 pt rows in a 420 pt box put them
+ * off screen at rest; the case scrolls them into view so their own cells report a box, then
+ * scrolls them back out again, which parks them in their section's holding view. From there
+ * nothing lays them out again — not the resize, and not a `measure`, which reads the shadow
+ * tree. What they answer afterwards is the width the row *remembers*, which is exactly the
+ * thing a rotation used to leave behind.
+ *
+ * Row 2 has an accessory and stays on screen: it is what teaches the Form what an accessory
+ * costs under the new width, so the parked accessory row's expected number is measured in this
+ * Form rather than typed here.
+ */
+function SizedForm({ boxWidth }: { boxWidth: number }) {
+  return (
+    <View style={{ height: 420, width: boxWidth }} testID="resize-host">
+      <Form
+        hybridRef={(view) => {
+          if (view != null) forms.resize = view;
+        }}
+        style={styles.form}
+      >
+        <Form.Section title="Rows">
+          {Array.from({ length: 12 }, (_, index) => (
+            <Form.Row
+              accessory={index === 1 || index === 11 ? 'disclosure' : 'none'}
+              hybridRef={
+                index === 9
+                  ? (view) => {
+                      if (view != null) rows.resizePlain = view;
+                    }
+                  : index === 11
+                    ? (view) => {
+                        if (view != null) rows.resizeAccessory = view;
+                      }
+                    : undefined
+              }
+              key={`resize-${index}`}
+            >
+              <Text testID={`resize-label-${index}`}>Row {index + 1}</Text>
+            </Form.Row>
+          ))}
+        </Form.Section>
+      </Form>
+    </View>
+  );
+}
+
+/**
+ * Three rows, the middle of which the case gives a trailing accessory between two renders.
+ *
+ * A visible row gaining an accessory is the cheapest way to make one cell report a narrower
+ * box than its neighbours *after* the list has already settled — which is the case the
+ * list-wide number has to survive without moving.
+ */
+function AccessoryForm({ accessoried }: { accessoried: boolean }) {
+  return (
+    <Form
+      hybridRef={(view) => {
+        if (view != null) forms.toggle = view;
+      }}
+      style={styles.form}
+    >
+      <Form.Section title="Sound">
+        <Form.Row>
+          <Text testID="toggle-label-steady">Ringer</Text>
+        </Form.Row>
+        <Form.Row
+          accessory={accessoried ? 'disclosure' : 'none'}
+          hybridRef={(view) => {
+            if (view != null) rows.toggled = view;
+          }}
+        >
+          <Text testID="toggle-label-target">Alerts</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text testID="toggle-label-third">Notifications</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+
+describe('Form row boxes (X29 r2)', () => {
+  afterEach(() => {
+    cleanup();
+    forgetPromisedHandles();
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+  });
+
+  it('hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)', async () => {
+    // iOS only: a give-back is a cell emptying, and Android has no cells — its rows stay where
+    // Yoga put them, so there is nothing here for Android to be red about.
+    if (!IOS) return;
+    await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
+    await formReport((r) => num(r, 'rows') === 9, 'nine rows');
+
+    // A cycle is one jump down and one back up, each asked of the list rather than assumed:
+    // `nuiTestScrollTo(400)` is clamped to the bottom of a 646 pt content in a 420 pt box, and
+    // a list at rest sits at its own top inset, so the only honest target is "moved away from
+    // where it was" — which is what recycles a cell, which is what this case counts.
+    let rest = await formReport(() => true, 'the report at rest');
+    const cycle = async (step: string): Promise<void> => {
+      const at = num(rest, 'offset');
+      need(forms.form).nuiTestScrollTo(400);
+      const down = await formReport(
+        (r) => num(r, 'offset') > at + 20,
+        `${step}: the list to have scrolled down from ${at} pt`
+      );
+      await drawnOnScreen(`${step} down`);
+      need(forms.form).nuiTestScrollTo(0);
+      rest = await formReport(
+        (r) => num(r, 'offset') < num(down, 'offset') - 20,
+        `${step}: the list to have come back up from ${down.offset} pt`
+      );
+      await drawnOnScreen(`${step} back up`);
+    };
+    // A warm-up cycle first, so the reading below is taken from a list that has already
+    // recycled once and is not still settling from its own mount.
+    await cycle('warm-up 1');
+    await cycle('warm-up 2');
+    const lossesAtRest = num(rest, 'losses');
+
+    for (const step of ['1', '2', '3', '4']) {
+      await cycle(`cycle ${step}`);
+    }
+    const after = await formReport(() => true, 'the report after four scrolls');
+    // The rows on screen are still the ones their items name — the claim the chase exists to
+    // repair, asked directly so this case cannot go green by the chase never having run.
+    expect(num(after, 'claims')).toBe(0);
+    expect(num(after, 'wrongCells')).toBe(0);
+    // Four 400 pt scrolls move a 9-row Form's whole content twice over, so every cell on
+    // screen was emptied and refilled several times. A give-back is not a lost row: before fix
+    // round 2 the container was still naming the row while `onGiveBack` moved it, so each one
+    // read back as a take, and the Form queued a walk of the visible cells for every one of
+    // them.
+    expect(num(after, 'losses') - lossesAtRest).toBe(0);
+    // `applies` — the chases that ran — is deliberately not asserted: every settle asks the
+    // same question of the visible cells (`reportGeometry` -> the chase), and a settle that
+    // lands while UIKit is mid-reuse really does find a cell to reconfigure. What had to stop
+    // moving is the number above, because each loss queued that walk on its own turn.
+  });
+
+  it('re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)', async () => {
+    // iOS only, and iOS-only by cause: the row's own box is reported by its iOS cell, and
+    // Android lays every row out at the width the list gives it.
+    if (!IOS) return;
+    const { rerender } = await render(<SizedForm boxWidth={400} />);
+    await handleOf(() => forms.resize, 'the resizable Form');
+    const wide = await formReport(
+      (r) =>
+        num(r, 'rows') === 12 &&
+        num(r, 'width') > 100 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      // `inCells` against the items on screen, not against twelve: five of these rows are
+      // parked off screen by design, and a Form that drew every visible row from a cell is the
+      // settle this case can ask for.
+      'the wide Form to draw every visible row at its own box',
+      'resize'
+    );
+    const wideWidth = num(wide, 'width');
+    const restingOffset = num(wide, 'offset');
+
+    // Show the deep rows, so the cells that draw them are the ones that tell them their box —
+    // and wait on the Form's own witness that every row on screen sits at the box of the cell
+    // drawing it. Reading a row before that settles reads the box its view carried in from the
+    // case that ran *before* this one: a row view is pooled and reused, and its content keeps
+    // the last Yoga width until the new one arrives. That is what this case first went red on —
+    // an accessory row apparently 2 pt wider than the list drawing it — and it is the same race
+    // that made E4 depend on which case ran ahead of it, so the wait is the finding, not a
+    // workaround for it.
+    need(forms.resize).nuiTestScrollTo(400);
+    const shown = await formReport(
+      (r) =>
+        num(r, 'offset') > restingOffset + 60 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the list to have scrolled to the deep rows, each drawn by its own cell at its own box',
+      'resize'
+    );
+    // What an accessory costs, from two real cell reports rather than a typed constant — and
+    // from the Form rather than from a row, because this is the number the Form goes on to hand
+    // the rows that cannot ask their own cell. Asked before the rows are read, so a Form that
+    // never learned it cannot make the accessory expectations below coincide with the plain one.
+    const wideInset = num(shown, 'accessoryInset');
+    expect(wideInset).toBeGreaterThan(4);
+    await reportUntil(
+      () => rows.resizePlain?.nuiTestRowReport(),
+      (r) => r.where === 'cell' && Math.abs(Number(r.laid) - wideWidth) <= 0.5,
+      `the deep plain row to be drawn in a cell at the Form’s ${wideWidth} pt box`
+    );
+    await reportUntil(
+      () => rows.resizeAccessory?.nuiTestRowReport(),
+      (r) =>
+        r.where === 'cell' &&
+        Math.abs(Number(r.laid) - (wideWidth - wideInset)) <= 0.5,
+      `the deep accessory row to be drawn in a cell at ${wideWidth} - ${wideInset} pt`
+    );
+
+    // Park them again: off screen, in the section's holding view, remembered at the wide box.
+    need(forms.resize).nuiTestScrollTo(0);
+    await formReport(
+      // Relative, like every other scroll in this file: the list is clamped by its own content
+      // and rests at its top inset, so "came back up" is the claim and an absolute number is
+      // one this Form cannot make.
+      (r) => num(r, 'offset') < num(shown, 'offset') - 60,
+      'the list to be back at the top again',
+      'resize'
+    );
+    for (const [name, handle, remembered] of [
+      ['plain', rows.resizePlain, wideWidth],
+      ['accessory', rows.resizeAccessory, wideWidth - wideInset],
+    ] as const) {
+      const parked = await reportUntil(
+        () => handle?.nuiTestRowReport(),
+        (r) => r.where === 'holding',
+        `the deep ${name} row to be off screen again`
+      );
+      // Still the box their own cells last reported: nothing lays a parked row out, which is
+      // exactly the state a rotation used to find them in and leave.
+      expect(Math.abs(Number(parked.laid) - remembered)).toBeLessThanOrEqual(
+        0.5
+      );
+    }
+
+    // The app changes a parent's width — the same thing a rotation does to the Form's box.
+    await rerender(<SizedForm boxWidth={320} />);
+    const narrow = await formReport(
+      (r) =>
+        num(r, 'width') > 100 &&
+        wideWidth - num(r, 'width') > 20 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the Form to publish a new, narrower box for the rows it can see',
+      'resize'
+    );
+    const narrowWidth = num(narrow, 'width');
+    // What an accessory costs is the cell's own margins, which a width change does not move, and
+    // the Form had to learn it again from the cells it has now. Both rows are graded against
+    // this measured number, and it is checked to be real before either is read.
+    const narrowInset = num(narrow, 'accessoryInset');
+    expect(narrowInset).toBeGreaterThan(4);
+    const expectedAccessory = narrowWidth - narrowInset;
+
+    // Neither row was in a cell for that layout pass. The Form has to tell them anyway: a row
+    // measured at a width the list stopped having is D45.4's promise broken at rest.
+    const plainRelaid = await reportUntil(
+      () => rows.resizePlain?.nuiTestRowReport(),
+      (r) => Math.abs(Number(r.laid) - narrowWidth) <= 0.5,
+      `the parked plain row to be laid out at the new ${narrowWidth} pt box (where it ` +
+        'is parked, at what the Form publishes now)'
+    );
+    expect(plainRelaid.where).toBe('holding');
+    const accessoryRelaid = await reportUntil(
+      () => rows.resizeAccessory?.nuiTestRowReport(),
+      (r) => Math.abs(Number(r.laid) - expectedAccessory) <= 0.5,
+      `the parked accessory row to be laid out at ${narrowWidth} - ${narrowInset} = ` +
+        `${expectedAccessory} pt`
+    );
+    expect(accessoryRelaid.where).toBe('holding');
+
+    // Then the Form's own witnesses, which have to agree with the rows: the published number is
+    // the plain box, and what an accessory costs did not move with the width. Asked after the
+    // rows, so a Form that never re-told them fails on its rows first.
+    expect(Math.abs(narrowInset - wideInset)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(num(narrow, 'plainBox') - narrowWidth)).toBeLessThanOrEqual(
+      0.5
+    );
+  });
+
+  it('moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5)', async () => {
+    // iOS only: on Android the section paints the accessory and the row reserves its room with
+    // padding, so there is one box for every row and nothing to flip.
+    if (!IOS) return;
+    const { rerender } = await render(<AccessoryForm accessoried={false} />);
+    await handleOf(() => forms.toggle, 'the accessory Form');
+    const before = await formReport(
+      (r) =>
+        num(r, 'rows') === 3 &&
+        num(r, 'width') > 100 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the all-plain Form to settle',
+      'toggle'
+    );
+    const plainBox = num(before, 'plainBox');
+    const published = num(before, 'widthPublishes');
+    // The published number is the plain box, and with no accessories every box is that one.
+    expect(Math.abs(num(before, 'width') - plainBox)).toBeLessThanOrEqual(0.5);
+    expect(num(before, 'boxSpan')).toBeLessThanOrEqual(0.5);
+
+    await rerender(<AccessoryForm accessoried={true} />);
+    // Item 5: the row that gained the accessory has to be re-aimed at its own narrower box —
+    // `boxMismatch` is the Form's own answer to "is every row on screen laid out at the box of
+    // the cell drawing it", and one wide row on screen is the whole of X29.
+    const after = await formReport(
+      (r) =>
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'boxSpan') > 4 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the toggled row to be laid out at its own narrower box, and its neighbours at theirs',
+      'toggle'
+    );
+    const inset = num(after, 'accessoryInset');
+    expect(inset).toBeGreaterThan(4);
+    expect(Math.abs(inset - num(after, 'boxSpan'))).toBeLessThanOrEqual(0.5);
+    const toggled = await reportUntil(
+      () => rows.toggled?.nuiTestRowReport(),
+      (r) =>
+        r.where === 'cell' &&
+        Math.abs(Number(r.laid) - (plainBox - inset)) <= 0.5,
+      `the toggled row to be laid out at ${plainBox} - ${inset} = ${plainBox - inset} pt`
+    );
+    expect(toggled.where).toBe('cell');
+
+    // Item 3: and it moved nothing else. The narrower box belongs to that one row; the
+    // list-wide number is the plain box, published once per list width — every Section and
+    // `RowRoot` renders again for each publish, so this is the difference between one row
+    // changing and the Form re-rendering its whole tree because a cell laid out last.
+    expect(num(after, 'widthPublishes')).toBe(published);
+    expect(Math.abs(num(after, 'width') - plainBox)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(num(after, 'plainBox') - plainBox)).toBeLessThanOrEqual(
+      0.5
+    );
   });
 });

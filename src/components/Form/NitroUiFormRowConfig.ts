@@ -20,6 +20,7 @@ export const NitroUiFormRowConfig: ViewConfig<NativeNitroUiFormRowProps> = {
     pressable: true,
     nuiPerfId: true,
     onPress: true,
+    onContentBox: true,
     hybridRef: true,
   },
 };
