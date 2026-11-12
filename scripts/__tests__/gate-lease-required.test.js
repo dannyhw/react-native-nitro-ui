@@ -56,7 +56,19 @@ afterAll(() => {
 });
 
 function gitIn(dir, args) {
-  const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+  // A fixture identity: CI runners have no git user, and `commit` refuses without one.
+  // Signing off too: a host whose global config signs commits has no key for this identity.
+  const result = spawnSync('git', ['-c', 'commit.gpgsign=false', ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    },
+  });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
   }
