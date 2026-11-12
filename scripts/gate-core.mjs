@@ -52,7 +52,10 @@ export const LOG_STORE_BASENAME = 'nitro-ui-gates';
  *   - `trees`: `{ios, android}` - the code-tree digest restricted to the files
  *     that belong to that platform. This is what makes the fix-round rule real:
  *     a round that edits only `android/` leaves `trees.ios` alone, so a
- *     `harness:ios` pass from earlier in the branch still counts at review.
+ *     `harness:ios` pass from earlier in the branch still counts at review - and,
+ *     since X30 item 1, at merge too, which is the half that stopped every branch
+ *     owing four device runs again whenever a tooling-only commit landed on
+ *     `main`. See `digestKeyFor` for the rule and its soundness argument.
  *   - `treeAfter`: the code tree when the run *finished*. A line whose tree moved
  *     under it is not evidence about either tree, so it never reads green (N1).
  *   - `summaries`: every test summary the gate printed, in order. `check` runs
@@ -598,6 +601,100 @@ export function parseLedger(text) {
 }
 
 /**
+ * Ledger text -> `[{raw, entry}]`, in append order and index-aligned.
+ *
+ * `parseLedger` alone loses the original bytes, and an exported ledger has to keep
+ * them (a corrupt line stays exactly as corrupt as it was, rather than becoming a
+ * plausible-looking re-serialisation). Pairing them here means the pairing cannot
+ * drift between the two callers of the merge below.
+ *
+ * @param {string} text
+ * @returns {Array<{raw: string, entry: object}>}
+ */
+export function ledgerPairs(text) {
+  const pairs = [];
+  for (const line of String(text ?? '').split('\n')) {
+    if (line.trim() === '') continue;
+    const [entry] = parseLedger(line);
+    pairs.push({ raw: line, entry: entry ?? { corrupt: true, raw: line } });
+  }
+  return pairs;
+}
+
+/**
+ * What makes two ledger lines the same run (X30 item 2).
+ *
+ * Timestamp + gate + code tree: the clock second a run started, which gate ran,
+ * and the code it ran against. Two runs of one gate on one tree in the same second
+ * are the same evidence twice, which is the case the export must not multiply; a
+ * re-run a second later is a different run and stays.
+ *
+ * A line that cannot be parsed has no fields to read, so its identity is its own
+ * text - it is then only ever deduplicated against a byte-identical line, which is
+ * the conservative answer for something whose meaning is unknown.
+ *
+ * @param {{raw: string, entry: object}} pair
+ * @returns {string}
+ */
+export function ledgerLineIdentity({ raw, entry }) {
+  if (entry == null || entry.corrupt === true) return `raw:${raw}`;
+  const ts = entry.ts == null ? '' : String(entry.ts);
+  const gate = entry.gate == null ? '' : String(entry.gate);
+  const tree = entry.tree == null ? '' : String(entry.tree);
+  if (ts === '' && gate === '' && tree === '') return `raw:${raw}`;
+  return `${ts}|${gate}|${tree}`;
+}
+
+/**
+ * Union of an existing exported ledger and the branch ledger being exported now.
+ *
+ * `export --task <ID>` used to write *this branch's lines* over
+ * `docs/tasks/<ID>/gates.jsonl`, so every fix round and merge round republished the
+ * file from its own branch and quietly dropped the earlier rounds' lines - and
+ * every round then restored them by hand, which is a manual step over the file that
+ * holds the evidence. The committed file is the union: existing lines are kept
+ * **byte-verbatim and in their existing order**, this branch's new lines are
+ * appended in append order, and a line already in the file is not written twice
+ * (`ledgerLineIdentity` says what "already" means).
+ *
+ * Nothing here re-orders, rewrites or drops an existing line, including a corrupt
+ * one: the merge is additive, and a line nobody can parse is evidence of *something*
+ * until a person says otherwise.
+ *
+ * @param {{existing?: Array<{raw: string, entry: object}>,
+ *   incoming?: Array<{raw: string, entry: object}>}} options
+ * @returns {{merged: Array<{raw: string, entry: object, from: 'existing'|'incoming'}>,
+ *   lines: string[], kept: number, added: number, duplicates: number}}
+ */
+export function mergeLedgerExports({ existing = [], incoming = [] } = {}) {
+  const seen = new Set();
+  const merged = [];
+  let kept = 0;
+  let added = 0;
+  let duplicates = 0;
+  const take = (pair, from) => {
+    const identity = ledgerLineIdentity(pair);
+    if (seen.has(identity)) {
+      duplicates += 1;
+      return;
+    }
+    seen.add(identity);
+    merged.push({ ...pair, from });
+    if (from === 'existing') kept += 1;
+    else added += 1;
+  };
+  for (const pair of existing) take(pair, 'existing');
+  for (const pair of incoming) take(pair, 'incoming');
+  return {
+    merged,
+    lines: merged.map((row) => row.raw),
+    kept,
+    added,
+    duplicates,
+  };
+}
+
+/**
  * The lines for each gate name, in append order.
  *
  * Append order decides, not the timestamp: two runs in the same second on a
@@ -652,18 +749,39 @@ export function platformOfGate(gate) {
 }
 
 /**
- * Which tree a line is evidence for at a given stage.
+ * Which tree a line is evidence for.
  *
- * `review` keys a device gate to its own platform's tree - that is the whole
- * point of recording `trees` (M2). `merge`, and every gate that is not
- * per-platform, keys to the full code tree, so merge still wants every gate once
- * on the final tree.
+ * A **device** gate is evidence about one binary, so it is keyed to that
+ * platform's own half of the tree at *both* stages (X30 item 1). It used to be
+ * the review rule and only the review rule: `need --for merge` asked every device
+ * gate for a line whose *whole* code tree matched, so a tooling-only commit
+ * landing on `main` - a test fixture, a `gate*.mjs` fix, a `.changeset` - moved
+ * the whole tree under every branch gated before it and re-owed all four device
+ * runs. G29+X27 paid a real ~2.5 h for exactly that over a fixture change. The
+ * run being asked for would read the same binary either way: the tooling that
+ * decided *when* to run it is not in it.
+ *
+ * What is not per-platform keeps the whole tree at both stages: `check` reads
+ * every platform's files plus the docs, so the merge asks for one `check` on the
+ * whole final tree, and a tooling change re-owns it. That is the half of the rule
+ * that keeps this sound rather than merely cheap.
+ *
+ * The other half is how the halves are built (`platformTreesFromEntries`): each is
+ * the same digest as the full tree over the same file set, restricted to the files
+ * that belong to that platform. So a change inside `ios/` moves only `trees.ios`
+ * and voids only the iOS runs; a change in `src/` or `cpp/` moves both and voids
+ * both; and a code path the mapping does not recognise is *both* halves by
+ * definition (`platformMappingFor`'s `unmapped`), which keeps "we did not know
+ * what this touched" expensive instead of free. There is no third kind.
+ *
+ * `stage` is no longer part of the decision, and callers that still pass it are
+ * not wrong: the merge bar is now the review bar plus `real-input` and a whole-tree
+ * `check`, not a stricter tree.
  *
  * @param {{gate: string, stage?: string}} options
  * @returns {'ios'|'android'|'full'}
  */
-export function digestKeyFor({ gate, stage = 'merge' }) {
-  if (stage !== 'review') return 'full';
+export function digestKeyFor({ gate }) {
   return platformOfGate(gate) ?? 'full';
 }
 
