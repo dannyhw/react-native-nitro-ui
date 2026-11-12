@@ -242,3 +242,34 @@ three fatal answers.
    round did not touch it.
 2. Nothing else is open. Round 1's question 1 (device time) answered itself: a pair came free twice,
    and its question 2 (FIFO grants) is X26.
+
+## Fix round 2b - the merge round's E4 regression
+
+*(on `task/X25-fix2` from `d72f591f`; `## Fix round 2` above is the `task/X25-fix1` device round)*
+
+**Cause.** The switch is `prepareForRecycle`'s `list.dataSource = nil`. Pair-b, `E3+E4`: red with it (`No view found at point (0.00, 0.00)`), green without, on an identical Form report (`items=9 inCells=9`, same tops). It could not simply come out - without it the churn case aborts, `*** Assertion failure in -[UICollectionView _updateVisibleCellsNow:]`, after nine `giveUp` answers at [1,0]...[2,1]. Every way of emptying the list at the recycle costs E4: an extra empty layout instead of one coalesced old-to-new apply.
+
+**Fix.** Nothing is emptied. The ended mount's models stay answerable (`retiredSections`, cleared by the apply that replaces their snapshot), and the provider asks which model owns the row the item names, not whether its index path exists - so a recycled list coming back on screen sees the rows it already showed. Nine asks, nine real cells, no give-up.
+
+**Item 2.** The churn case is declared after E4 (`:1111` vs `:986`), never before. `E3+E4` green; `E4` alone red on both trees (X29's); `churn+E4` red both ways - on the pre-fix Form by that abort.
+
+## Fix round 2b — gates
+
+HEAD `60fb2c26`, code tree `536599555c84`, lease X25-484f3 (pair-b: iPhone Air / iOS 27.0,
+`emulator-5570`). `need --for merge` exits 0 on this tree.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2093 tests / 88 suites | `536599555c84` | 2 m 50 s | start 8.4 / med 11.6 / max 15.6 |
+| `harness:ios` | **PASS** | 625 tests / 32 suites + isolated 6 tests / 3 suites | `536599555c84` | 17 m 11 s | start 7.1 / med 7.0 / max 39.9 |
+| `harness:android` | **PASS** | 681 tests / 32 suites + isolated 6 tests / 3 suites | `536599555c84` | 18 m 56 s | start 26.0 / med 7.7 / max 26.0 |
+| `real-input:ios` | **PASS** | — | `536599555c84` | 52 m 31 s | start 8.8 / med 13.0 / max 130.0 |
+| `real-input:android` | **PASS** | — | `536599555c84` | 71 m 27 s | start 10.6 / med 7.0 / max 50.5 |
+| `harness:ios:Form.harness:-t:gives%20a%20row%20the%20height%7Caims%20a%20row%20content` | **PASS** | 16 tests / 1 suites | `536599555c84` | 14.8 s | start 7.9 / med 8.1 / max 8.4 |
+| `harness:ios:Form.harness:-t:survives%20a%20Form%20scrolled` | **PASS** | 16 tests / 1 suites | `536599555c84` | 12.0 s | start 6.4 / med 7.1 / max 7.9 |
+| `harness:ios:Form.harness:-t:survives%20a%20Form%20scrolled%7Caims%20a%20row%20content` | **FAIL** | 1 failed of 16 tests / 1 suites | `536599555c84` | 20.5 s | start 8.1 / med 10.8 / max 11.9 |
+
+The FAIL is kept as evidence, not as a blocker: E4 asks for `probe.log.pressable` to be 0 and gets 10
+only when it runs without its E3 predecessor, and the same filter with the pre-fix Form restored does
+not run at all (0 tests, the recycle abort) - so that pairing is red on both trees and is X29's, not
+this round's. Every other row is this tree.
