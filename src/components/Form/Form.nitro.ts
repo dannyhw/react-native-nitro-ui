@@ -66,11 +66,21 @@ export interface NitroUiFormProps extends HybridViewProps {
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
   /**
-   * The width a row may be: the list's width minus the section insets and the cell's own
-   * margins — on iOS the box a cell actually draws a row in, which is narrower than the
-   * list's idea of a cell. The wrapper writes it into every row's `style.width`, which is
-   * what makes a row's Yoga height the height of its cell (the same round trip as
-   * BottomSheet's `onContentBox`).
+   * The box a *plain* row's cell gives it: the list's width minus the section insets and the
+   * cell's own margins — narrower than the list's idea of a cell, and the width the wrapper
+   * starts every row's `style.width` from.
+   *
+   * It is one number for the list, and it is published once per list width, because every
+   * `Section` and `RowRoot` renders again for each publish. Reporting the box of whichever cell
+   * laid out last used to make it follow the cells: 338 pt and 316 pt alternate on one screen,
+   * and a Form re-rendered its whole tree per flip (X29 fix round 2).
+   *
+   * Being one number is also why it cannot be the last word on any row: a cell that draws a
+   * trailing accessory shrinks its own margins for that row, so every row follows its own cell
+   * through {@link NitroUiFormRowProps.onContentBox}. The Form re-sends this number to every row
+   * it holds when the list becomes a different width — a rotation, an iPad resize, an app
+   * changing a parent's width — which is how a row that is off screen, and so not laid out
+   * again by that pass, stops holding the previous orientation's box.
    */
   onContentBox?: (width: number) => void;
   /**
@@ -240,14 +250,34 @@ export interface NitroUiFormRowProps extends HybridViewProps {
   nuiPerfId: number | null;
   /** Called when the row is tapped, through the platform's own cell highlight. */
   onPress?: () => void;
+  /**
+   * The width *this row's* cell gives its content, reported whenever the cell lays the row
+   * out — the number this row's `style.width` follows.
+   *
+   * It is per row because the box is per row: a cell that draws a trailing accessory shrinks
+   * its own content margins for it, so an accessory row on the same screen is 22 pt narrower
+   * than its plain neighbours. The Form's {@link NitroUiFormProps.onContentBox} is one number
+   * for the whole list, which can only be right for one of the two — and being too wide is
+   * not a cosmetic error, because a row laid out wider than its own box draws content past
+   * its bounds, where UIKit's hit-test never looks (X29).
+   *
+   * iOS only in effect: Android has no cells, so every row there is laid out at the width the
+   * list gives it and the row reserves its accessory's room with padding instead.
+   *
+   * The Form also sends this prop an *estimate* — the plain box less what an accessory costs —
+   * for a row its own cell has not reported, which is the only way a row parked off screen
+   * behind a resize is told the box it will be drawn in when it comes back.
+   */
+  onContentBox?: (width: number) => void;
 }
 
 export interface NitroUiFormRowMethods extends HybridViewMethods {
   /**
    * TEMPORARY, test-only: `key=value` report — `where` (iOS: `cell` or `holding`), `frame`
    * (the row's box in its current superview), `box` (the width the cell gives the row), `h`
-   * (the height the last Fabric layout gave it), `presses`, `taps`, and `yoga` (the row's own
-   * Yoga origin, which is what `measure` starts from).
+   * (the height the last Fabric layout gave it), `laid` (the width the row's React content was
+   * last laid out at, which is only ever `frame`'s width or less), `presses`, `taps`, and
+   * `yoga` (the row's own Yoga origin, which is what `measure` starts from).
    *
    * @internal Not app API (D14).
    */

@@ -137,6 +137,11 @@ export interface NativeNitroUiFormRowProps extends HybridViewProps {
   pressable: boolean;
   nuiPerfId: number | null;
   onPress: NitroCallbackProp<PressHandler>;
+  /**
+   * The width *this row's* cell gives its content, reported by the cell that draws it — see
+   * `NitroUiFormRowProps.onContentBox` for why it is per row and not the Form's one number.
+   */
+  onContentBox: NitroCallbackProp<ContentBoxHandler>;
   hybridRef?: NitroCallbackProp<(view: NitroUiFormRowHandle) => void>;
 }
 
