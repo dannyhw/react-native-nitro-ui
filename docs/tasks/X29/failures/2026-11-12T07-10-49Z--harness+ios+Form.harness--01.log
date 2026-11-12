@@ -1,0 +1,92 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-12T07:10:49.750Z on code tree `433f64dd1a5e` at HEAD `b2fe86f` (branch `task/X29-form-e4-pair-a`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 22363 ms
+- Load: start 20.91, end 18.59, median 19.78, max 20.91
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-48jce`
+- Full log: `task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log` (<store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)`
+- `expected +0 to be 10 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-48jce (still live)
+  |   X25-484f3                X25          both              pair-b
+  |   X29-48jce                X29          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 18.59 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form.harness
+gate: node ../scripts/harness.mjs --harnessRunner ios Form.harness (cwd example)
+gate: code tree 433f64dd1a5e at HEAD b2fe86f9
+gate: git tree 8a2b5156a055 with a DIRTY worktree (not reusable)
+gate: log task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log
+gate:       <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 433f64dd1a5e, 25 components registered)
+lease: X29-48jce runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 20.91/23.01 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)
+
+    expected +0 to be 10 // Object.is equality
+
+      [0m [90m 1084 |[39m       }
+       [90m 1085 |[39m       [36mawait[39m [36mnew[39m [33mPromise[39m((resolve) [33m=>[39m setTimeout(resolve[33m,[39m [35m250[39m))[33m;[39m
+      [31m[1m>[22m[39m[90m 1086 |[39m       expect(probe[33m.[39mlog[33m.[39mpressable)[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m      |[39m                                       [31m[1m^[22m[39m
+       [90m 1087 |[39m       expect(probe[33m.[39mlog[33m.[39mswitches)[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 1088 |[39m       [90m// The positive control: the very same two callbacks, outside any Form, where React[39m
+       [90m 1089 |[39m       [90m// Native's hit-test has its content where it is drawn. Both counters are the ones the[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        20.2 s
+Ran all test suites matching Form.harness.
+gate: harness:ios:Form.harness FAIL in 22.4 s
+gate: recorded in .gates/task/X29-form-e4-pair-a.jsonl
+
+
+gate: appended the device context to task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log (4 probe(s))
+
+```
