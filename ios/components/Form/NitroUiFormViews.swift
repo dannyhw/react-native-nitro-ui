@@ -259,7 +259,10 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   /// Someone else took this cell's row, so the cell is now drawing nothing. Forwarded from the
   /// container (see its `onRowLost`); the cell clears its own pointer first, and the Form uses
   /// this to chase the blank cell without waiting for a settle that a resting list never sends.
-  var onRowLost: ((UIView) -> Void)?
+  ///
+  /// `ownHandOver` says whether this cell asked for the trip itself (`giveBack`) or somebody
+  /// else took the row: the Form counts only the foreign ones and chases both.
+  var onRowLost: ((UIView, _ ownHandOver: Bool) -> Void)?
   /// A row Fabric unmounted while this cell was holding it. The generated
   /// `unmountChildComponentView:` detaches it from whichever view has it, so the container
   /// - not the section's holding view - is where that signal arrives.
@@ -312,14 +315,14 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
       // row that no chase can find - which is how a row ends up drawing from its section's
       // hidden holding view (X29).
       //
-      // Only a cell that still *names* the row lost one. A cell that had already stopped
-      // naming it gave it back: `giveBack` clears the pointer before the hand-over, so a
-      // signal for a row this cell no longer owns is somebody else's ordinary recycling, and
-      // forwarding it made every cell leaving the screen a lost row - `losses` climbing and a
-      // misdrawn-cell chase queued for each turn of a fling (fix round 2, item 1).
-      guard let self, self.row === row else { return }
-      self.row = nil
-      self.onRowLost?(row)
+      // The trip is labelled, not swallowed: `ownHandOver` says whether this cell asked for the
+      // move. A cell handing the row over is not losing it, and counting the ordinary trip of
+      // every cell leaving the screen made `losses` climb through a fling for something that is
+      // not wrong (fix round 2, item 1). The signal itself still goes out, so the chase behind
+      // it runs exactly as it did before: what had to change was what the Form *counts*, and
+      // dropping the signal instead would have silently switched that repair off as well.
+      if self?.row === row { self?.row = nil }
+      self?.onRowLost?(row, self?.handingOverRow ?? false)
     }
     container.onRowRemoved = { [weak self] row in
       // Fabric took the row out of this cell, so this cell must stop saying it is showing
@@ -449,6 +452,16 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   /// that is being drawn elsewhere: the cell that took it keeps showing a row whose
   /// superview is a hidden holding view, which is a blank row on screen and no wrong count
   /// anywhere (fix round 1).
+  /// Raised while this cell hands its row over, to label the `willRemoveSubview` that the
+  /// hand-over itself causes.
+  ///
+  /// `onGiveBack` reparents the row, and the Form has no other way to tell that trip from
+  /// somebody else taking the row out from under it. The label travels *with* the signal: the
+  /// container keeps naming the row across the move, because `ownsRow` and `path(for:)` are
+  /// asked mid-move by the code that is moving it, and the chase behind the signal keeps running
+  /// on both kinds of trip (fix round 2, item 1).
+  private var handingOverRow = false
+
   func giveBack() {
     guard let row else { return }
     self.row = nil
@@ -462,13 +475,13 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     // moment, and a row that loses its parent while Fabric still owns it trips the
     // "unmount a view which is mounted inside a different view" assertion.
     if onGiveBack != nil {
-      // Hand the row over with the container already *not* naming it. The taker `addSubview`s
-      // it inside `NitroUiFormHoldingView.moving`, and a container still named as the row's
-      // owner when that move happens is asked "was my row taken from under me?" and answers
-      // yes - so every ordinary give-back, which is what happens to a cell as it leaves the
-      // screen, was counted as a lost row and queued a chase through the visible cells
-      // (fix round 2, item 1). `releaseRow` would detach it, which the note above is about.
-      container.relinquish(row)
+      // The container keeps naming the row across the hand-over - the taker is `addSubview`ing
+      // the very view it names, and every reader of that pointer has to keep seeing this cell as
+      // the row's home until the move is done. The flag only *labels* the `willRemoveSubview`
+      // trip this move causes, so the Form can keep its chase and still not count a hand-over as
+      // a lost row (fix round 2, item 1).
+      handingOverRow = true
+      defer { handingOverRow = false }
       onGiveBack?(row)
     } else {
       container.releaseRow()
@@ -492,10 +505,10 @@ final class NitroUiFormRowContainer: UIView {
   /// This container lost a row by itself, i.e. React Native unmounted it out of the cell.
   var onRowRemoved: ((UIView) -> Void)?
   /// Someone else took this container's row: another cell adopted it, or a section's holding
-  /// view took it back. Only the *foreign* take fires this, and both ways this container hands
-  /// a row over keep that promise: `releaseRow` and `relinquish` (the give-back path) each drop
-  /// the pointer before the row moves, so a row this container gave away is never read back at
-  /// it as a take.
+  /// view took it back. It also fires for the trip a `giveBack` hand-over makes, which the cell
+  /// labels as its own (`ownHandOver`) on the way to the Form: the Form chases every trip and
+  /// counts only the foreign ones (fix round 2, item 1). The container still names the row while
+  /// the taker moves it - the label is the whole difference, not the pointer.
   ///
   /// The distinction is the whole bug. A move out of a cell is wrapped in
   /// `NitroUiFormHoldingView.moving` so that no section reads it as an unmount, which also
@@ -553,17 +566,6 @@ final class NitroUiFormRowContainer: UIView {
     if row.superview === self {
       NitroUiFormHoldingView.moving { row.removeFromSuperview() }
     }
-  }
-
-  /// Stop naming `rowView` without detaching it, because the caller is handing it to somebody
-  /// else in this same step.
-  ///
-  /// The give-back path cannot use `releaseRow`: the row may not be detached while Fabric owns
-  /// it, and the taker moves it in one step. Detaching is the caller's business and naming is
-  /// this container's, and a container that is still named the row's owner while that move
-  /// happens reads it as a *foreign* take - see `NitroUiFormRowCell.giveBack`.
-  func relinquish(_ rowView: UIView) {
-    if row === rowView { row = nil }
   }
 
   override func willRemoveSubview(_ subview: UIView) {
