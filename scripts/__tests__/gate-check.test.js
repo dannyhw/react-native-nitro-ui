@@ -772,6 +772,9 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     // X30: the hand-in checker, listed the same way and proven the same way below.
     'scripts/task-ready.mjs',
     'scripts/task-ready-core.mjs',
+    // The ESLint config, whose rules directory is already tooling: a commit turning
+    // one of them on was asking for two harness runs.
+    'eslint.config.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);

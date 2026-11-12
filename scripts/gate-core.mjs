@@ -243,6 +243,12 @@ export const TOOLING_FILES = [
   // a README-only change used to ask for two harness runs over a file no device
   // mounts (D3).
   'example/src/readme-examples.tsx',
+  // The config that wires `eslint-rules/` (already tooling as a directory) to the
+  // files it checks. It was unmapped, which is the expensive answer: a commit that
+  // only turned a lint rule on for `scripts/` read as "touches ios + android" and
+  // asked for two harness runs over a file no build reads. Nothing compiles it -
+  // `lint` is the step that proves it, and `check` runs `lint`.
+  'eslint.config.mjs',
   '.gitignore',
   '.prettierignore',
 ];

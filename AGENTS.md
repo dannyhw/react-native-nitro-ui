@@ -121,7 +121,8 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
   both halves and re-owns both platforms, and so does any code path the mapping does not claim:
   unknown is expensive, never free. Benches are never required by `need` (they belong to the bench
   host), and neither is anything under the check-only tooling list in `scripts/gate-core.mjs`
-  (`scripts/gate*.mjs`, `scripts/__tests__`, `eslint-rules/`, `etc/`, `.changeset/`): those touch
+  (`scripts/gate*.mjs`, `scripts/__tests__`, `eslint-rules/` and its `eslint.config.mjs`,
+  `etc/`, `.changeset/`): those touch
   no platform half, so `check` proves them. **Editing that list is the exception** to "tooling is
   free": the list is an input to the mapping, so a path that moves on or off it can change which
   half owns it and re-key that half's tree hash — every branch already in flight then reads its
