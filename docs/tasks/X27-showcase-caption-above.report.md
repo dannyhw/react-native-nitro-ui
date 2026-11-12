@@ -131,3 +131,37 @@ One width question has no picture to defend it: a `fillWidth` control
 `Row` holding one fills the page under its caption as it did beside it. Nothing needed a per-story
 width to keep that true. And nothing on this branch's base worked around the old `Row` — X24's
 Stepper caption column has not landed on `main` — so no story needed unwinding.
+
+## Merge round — with G29, and the one story X27 could not unwind
+
+**Branch:** `task/G29-X27-merge` from `main` at `0e49f00b` · **Lease:** `G29X27-pe9pk` (pair-b —
+`nitro-ui B` iPhone Air 27.0, `emulator-5570`, Metro 8293)
+
+The appendix's loose end — "X24's Stepper caption column has not landed on `main`" — is closed. On the
+merged tree `Stepper`'s `States` renders through the shared `Row`, `SettingRow` is gone with its
+`flexShrink: 0` (the shared row wraps, and nothing shrinks its children), and the wheel rows the merge
+brought in sit under their captions on both devices: the re-taken `picker-android` is that tree's
+`Variants` story, drum and all.
+
+Three README pictures moved with the merge, none of them for the layout: `stepper-{ios,android}`
+because the photographed story changed and iOS now draws a disabled Stepper dimmed, and
+`picker-android` because `variant="wheel"` is a `ScrollField` drum there where the picture had a second
+exposed dropdown. `picker-ios` and `date-picker-{ios,android}` were re-photographed and measured
+against their committed bands — same story, same band — so those three stay as they are.
+
+### Gates on the merged tree
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2093 tests / 88 suites | `166f18689ce8` | 2 m 52 s | start 5.5 / med 9.5 / max 14.0 |
+| `harness:ios` | **PASS** | 624 tests / 32 suites + isolated 6 tests / 3 suites | `166f18689ce8` (ios tree) | 15 m 12 s | start 10.3 / med 6.2 / max 18.4 |
+| `harness:android` | **PASS** | 680 tests / 32 suites + isolated 6 tests / 3 suites | `166f18689ce8` (android tree) | 19 m 28 s | start 5.4 / med 8.0 / max 92.9 |
+| `real-input:ios` | **PASS** | — | `166f18689ce8` (ios tree) | 46 m 22 s | start 5.5 / med 9.8 / max 143.6 |
+| `real-input:android` | **PASS** | — | `166f18689ce8` (android tree) | 71 m 44 s | start 5.3 / med 6.0 / max 21.8 |
+
+`node scripts/gate.mjs need --for merge` → `need: merge is satisfied on this code tree.` (exit 0)
+
+### Follow-ups
+
+- `bun run task-ready` still asks for a `docs/tasks/<merge-branch>.report.md`; merge rounds write
+  their sections into the two task reports they belong to, as `task/X24-merge` did.
