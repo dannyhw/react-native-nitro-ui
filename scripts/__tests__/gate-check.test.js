@@ -28,6 +28,7 @@ import {
   decideNeed,
   findReusableCheck,
   fullTreesMatch,
+  groupLedgerLinesByBranch,
   isToolingPath,
   ledgerLineFromRun,
   platformsOwningFile,
@@ -543,6 +544,86 @@ describe('findReusableCheck (may a merge borrow this check?)', () => {
     );
     expect(dirty.join(' ')).toContain('dirty worktree');
   });
+
+  /**
+   * A committed `docs/tasks/<ID>/gates.jsonl` has held two branches' lines since the
+   * merging export (X30 item 2), and every line says which branch wrote it. Labelling
+   * the file by its *first* line — round 1's rule — is not a presentation bug: the
+   * "not this branch's own ledger" filter then excludes nothing (own lines are wearing
+   * another round's name), and the reuse note credits whichever round sorted first with
+   * a run it never did. So the grouping is tested through the same `ask` as the rules
+   * that read its output.
+   */
+  describe('one committed ledger, two branches (X30 fix 1)', () => {
+    const SOURCE = 'docs/tasks/X30/gates.jsonl';
+    const line = (branch, over = {}) => ({ ...checkLine(over), branch });
+    const FILE_LINES = [
+      line('task/X30-round-1', { ts: '2026-10-27T00:00:00.000Z' }),
+      line('task/X30-fix-1', { ts: '2026-10-28T00:00:00.000Z' }),
+    ];
+
+    it('splits the file on the branch each line carries', () => {
+      expect(groupLedgerLinesByBranch(FILE_LINES, SOURCE)).toEqual([
+        {
+          branch: 'task/X30-round-1',
+          entries: [FILE_LINES[0]],
+          source: SOURCE,
+        },
+        {
+          branch: 'task/X30-fix-1',
+          entries: [FILE_LINES[1]],
+          source: SOURCE,
+        },
+      ]);
+    });
+
+    it('excludes one branch, not one file — the own-ledger filter still works', () => {
+      // The direction that matters is "my own lines leave", because a round reading its
+      // own exported line back as another branch's evidence is how a merge certifies
+      // itself. Both directions are asserted so this cannot pass by taking the first
+      // or the last group.
+      const withoutFix = groupLedgerLinesByBranch(
+        FILE_LINES,
+        SOURCE,
+        'task/X30-fix-1'
+      );
+      expect(withoutFix.map((group) => group.branch)).toEqual([
+        'task/X30-round-1',
+      ]);
+      expect(
+        groupLedgerLinesByBranch(FILE_LINES, SOURCE, 'task/X30-round-1').map(
+          (group) => group.branch
+        )
+      ).toEqual(['task/X30-fix-1']);
+    });
+
+    it('labels a line with no branch with the file it came from', () => {
+      // A ledger written before `branch` existed, or a hand-made one: the honest label
+      // is the path, which is also what the reuse note cites beside it.
+      expect(groupLedgerLinesByBranch([checkLine()], SOURCE)).toEqual([
+        { branch: SOURCE, entries: [checkLine()], source: SOURCE },
+      ]);
+    });
+
+    it('credits the round whose line it is, in the file and in the verdict', () => {
+      // Round 1 red at 10:00, the fix round green at 11:00, one file. Read as one
+      // branch the answer is `task/X30-round-1` — a round whose own check failed is
+      // said to have satisfied the merge — and the round that really ran it has no
+      // name in the ledger at all.
+      const lines = [
+        line('task/X30-round-1', {
+          result: 'fail',
+          ts: '2026-10-28T10:00:00.000Z',
+        }),
+        line('task/X30-fix-1', { ts: '2026-10-28T11:00:00.000Z' }),
+      ];
+      const found = ask(groupLedgerLinesByBranch(lines, SOURCE));
+      expect(found).not.toBeNull();
+      expect(found.branch).toBe('task/X30-fix-1');
+      expect(found.source).toBe(SOURCE);
+      expect(found.entry.ts).toBe('2026-10-28T11:00:00.000Z');
+    });
+  });
 });
 
 describe('applyReusedCheckRow (what a local verdict does to reuse) - M2', () => {
@@ -719,6 +800,7 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
         '-l',
         'task-ready',
         '--',
+        'scripts',
         'example',
         'src',
         'ios',
@@ -730,9 +812,22 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
       { cwd: process.cwd(), encoding: 'utf8' }
     );
     expect(hits.status).toBe(0);
-    // The npm script that names it, and nothing else: no import, no require, no
-    // harness config, no app source.
-    expect(hits.stdout.trim().split('\n')).toEqual(['package.json']);
+    // Everything left after the tooling paths are subtracted. Round 1 searched four
+    // app directories and stopped at the edge of `scripts/`, which is exactly where a
+    // device runner lives — `scripts/harness.mjs` importing the checker would have
+    // looked clean. So the search now covers `scripts/` too and removes only what the
+    // same list already calls tooling, which is the checker's own files, its tests and
+    // the comment in `gate-core.mjs` that names them. What must remain is the npm
+    // script that runs it, and nothing else: no import, no require, no harness config,
+    // no app source, no runner (X30 fix round 1).
+    const readers = hits.stdout
+      .trim()
+      .split('\n')
+      .filter((file) => file !== '' && !isToolingPath(file));
+    expect(readers).toEqual(['package.json']);
+    // The widening is real: without the tooling paths, `scripts/` does answer, so a
+    // search that silently matched nothing there would not look different from this.
+    expect(hits.stdout).toContain('scripts/task-ready.mjs');
   });
 
   it('a commit that only changes the checker re-owns check and no device run', () => {
