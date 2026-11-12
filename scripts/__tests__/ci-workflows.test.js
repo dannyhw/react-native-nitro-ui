@@ -877,7 +877,7 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
    * It used to be graded on two wall-clock readings, and both went red over a preflight
    * that was behaving, under `check`'s load (X29 lost it twice, at `07:12Z` and `07:15Z`,
    * with `asked: false` beside `saidItGaveUp: true` and `printedRest: true`; the same
-   * class as `FOLLOWUPS.md:119`). What it grades now is the same claim with the machine's
+   * class as `docs/tasks/FOLLOWUPS.md:119`). What it grades now is the same claim with the machine's
    * speed divided out:
    *
    * - *Who was bounded* is read from the guard's own complaint, which names the command it
@@ -950,7 +950,7 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       // runs differ in nothing else. A bounded step spends its own patience, a few
       // `sleep 1` iterations; a step that only says it gave up spends the stub's life,
       // which is forty of them. Eight is the line: wide enough that no load this host has
-      // recorded (load1 62-68, `FOLLOWUPS.md:119`) puts a working guard on the wrong side
+      // recorded (load1 62-68, `docs/tasks/FOLLOWUPS.md:119`) puts a working guard on the wrong side
       // of it, and five times narrower than the unbounded body it exists to catch.
       const patienceMs = hung.ms - aliveRun.ms;
       const sleepUnitMs = measureSleepUnit();

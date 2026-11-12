@@ -8,28 +8,47 @@
  * anchor on the lower fold: Material measures the room under an anchor and opens *above* it
  * when there is none, which is correct behaviour and made the check depend on where an
  * earlier check had left the scroll (X24 fix round 1 and the X24 merge, 2026-11-11, both
- * with the anchor at y 2243-2411).
+ * with the anchor at y 2242-2410 of a 2 424 px window).
  *
  * So the side is now part of the claim rather than an assumption: the menu has to open on the
- * side that has room, and on either side its near edge has to be against the box it was
- * opened from. "Not at the top of the screen" is what the second half catches, and it catches
- * it with the room test as well — a menu parked at the top of the window is far from its
- * anchor *and* on the side that did not need it.
+ * side that has room, and on either side it has to be against the box it was opened from.
+ * "Not at the top of the screen" is what the second half catches, and the room test catches it
+ * too — a menu parked at the top of the window is far from its anchor *and* on the side that
+ * did not need it.
  *
  * The boxes handed in are the option rows, not the popup's surface: a Compose popup is a
  * window of its own and `uiautomator dump` answers with its accessibility tree, which carries
- * the rows and not the surface behind them (see `uiautomator.mjs`). That is why
- * `nearGapMaxPx` is a band rather than an exact number like the popover's placement judge
- * can use — the rows sit inside the surface's own padding, so the near edge is a few dp from
- * the anchor's wherever the surface's edge is exactly on it; and an open menu is allowed to
- * *overlap* its anchor, because Material 3 brings the selected row onto the field rather than
- * under it. The distance graded is therefore the one between the two boxes — zero when they
- * overlap — and not the gap between two chosen edges: on the measured above-placement
- * (anchor 2 242..2 410, rows down to 2 294, X24) an edge-to-edge rule lands 1 px inside a
- * 20 dp allowance, which is a flake with a new name. What the band has to be tighter than is
- * the failure: on the device this exists for, a parked menu is ~1 900 px from an anchor that
- * sits at the bottom of the window, against a 20 dp allowance.
+ * the rows and not the surface behind them (see `uiautomator.mjs`). That is why the near
+ * distance is a band (`MENU_NEAR_GAP_DP`) rather than an exact number like the popover's
+ * placement judge can use — the rows sit inside the surface's padding, so their box starts a
+ * few dp away from the surface's edge wherever that edge is on the anchor.
+ *
+ * The distance graded is between the two *boxes* — zero when they overlap — and not between
+ * two chosen edges. An open Material menu is allowed to overlap its anchor, bringing the
+ * selected row onto the field: on the measured above-placement (anchor 2 242..2 410, rows down
+ * to 2 294, X24) an edge-to-edge rule grades 52 px against a 20 dp allowance and passes with
+ * one pixel to spare, which is a flake with a new name; between the boxes that same menu is 0
+ * px away. What the band has to stay tighter than is the failure it exists for: a parked menu
+ * measured ~1 900 px from the anchor above it.
  */
+
+/**
+ * How far a menu's near edge may sit from the box it was opened from, in dp.
+ *
+ * Measured, not guessed: on the lease's API 35 emulator a hosted Picker centred in the window
+ * opens its first row 58 px (22 dp at 2.625) under the box the Host drew — the surface's own
+ * padding plus Material's stand-off from the anchor. 32 dp is that measurement with half
+ * again on it, and still less than a twentieth of the ~1 900 px the check is looking for.
+ */
+export const MENU_NEAR_GAP_DP = 32;
+
+/**
+ * How much narrower than the menu the room on a side may be and still count as room, in dp.
+ * The room test decides which side is *wrong*, and the rows' box understates the surface the
+ * platform measured — its padding and shadow are outside it. Generous on purpose: the
+ * narrower this is, the closer a healthy run can sit to that line.
+ */
+export const MENU_ROOM_SLOP_DP = 48;
 
 /**
  * Judge one opened dropdown.
