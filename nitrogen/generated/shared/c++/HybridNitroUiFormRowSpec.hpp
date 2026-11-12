@@ -60,6 +60,8 @@ namespace margelo::nitro::nitroui {
       virtual void setNuiPerfId(const std::variant<nitro::NullType, double>& nuiPerfId) = 0;
       virtual std::optional<std::function<void()>> getOnPress() = 0;
       virtual void setOnPress(const std::optional<std::function<void()>>& onPress) = 0;
+      virtual std::optional<std::function<void(double /* width */)>> getOnContentBox() = 0;
+      virtual void setOnContentBox(const std::optional<std::function<void(double /* width */)>>& onContentBox) = 0;
 
     public:
       // Methods

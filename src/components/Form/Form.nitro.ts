@@ -240,14 +240,30 @@ export interface NitroUiFormRowProps extends HybridViewProps {
   nuiPerfId: number | null;
   /** Called when the row is tapped, through the platform's own cell highlight. */
   onPress?: () => void;
+  /**
+   * The width *this row's* cell gives its content, reported whenever the cell lays the row
+   * out — the number this row's `style.width` follows.
+   *
+   * It is per row because the box is per row: a cell that draws a trailing accessory shrinks
+   * its own content margins for it, so an accessory row on the same screen is 22 pt narrower
+   * than its plain neighbours. The Form's {@link NitroUiFormProps.onContentBox} is one number
+   * for the whole list, which can only be right for one of the two — and being too wide is
+   * not a cosmetic error, because a row laid out wider than its own box draws content past
+   * its bounds, where UIKit's hit-test never looks (X29).
+   *
+   * iOS only in effect: Android has no cells, so every row there is laid out at the width the
+   * list gives it and the row reserves its accessory's room with padding instead.
+   */
+  onContentBox?: (width: number) => void;
 }
 
 export interface NitroUiFormRowMethods extends HybridViewMethods {
   /**
    * TEMPORARY, test-only: `key=value` report — `where` (iOS: `cell` or `holding`), `frame`
    * (the row's box in its current superview), `box` (the width the cell gives the row), `h`
-   * (the height the last Fabric layout gave it), `presses`, `taps`, and `yoga` (the row's own
-   * Yoga origin, which is what `measure` starts from).
+   * (the height the last Fabric layout gave it), `laid` (the width the row's React content was
+   * last laid out at, which is only ever `frame`'s width or less), `presses`, `taps`, and
+   * `yoga` (the row's own Yoga origin, which is what `measure` starts from).
    *
    * @internal Not app API (D14).
    */
