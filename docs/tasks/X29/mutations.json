@@ -1,0 +1,50 @@
+{
+  "task": "X29",
+  "round": 1,
+  "how": "Row 1 is not a mutation: it is the failure the task was called to fix, on main's own files, recorded in the shape X14/X15 use for the organic kind. Rows 2-4 are the shipped tree with one source line changed (or one new line removed), the same `build-app.mjs` artefact the gates use, and the file restored before the next row. Every run is `harness:ios` filtered to Form.harness under an X29 lease on pair-a (simulator \"nitro-ui A\" / iOS 27.0, Metro 8295), so each filtered gate name satisfies nothing but itself. Logs: `node scripts/gate.mjs logs --branch task/X29-form-e4-pair-a`.",
+  "mutations": [
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a aims a row content at its Yoga origin on iOS and presses it on Android (E4)",
+      "file": "(organic \u2014 main's own Form files)",
+      "mutation": "none: the case as shipped, on main's own code, on pair-a. The Form published one width for rows whose cells give different boxes, so the row's content hung past its own bounds and how far depended on the screen width.",
+      "run": "harness:ios:Form.harness:-t:aims%20a%20row%20content \u2014 FAIL, 1 of 15 \u2014 harness+ios+Form.harness+-t+aims+20a+20row+20content-2026-11-12T02-24-22.861Z.log",
+      "redTests": [
+        "expected 10 to be 0 \u2014 `expect(probe.log.pressable).toBe(0)`, and the case's own tap trace printed `tap9 pressable=10`: ten presses of a row content that iOS was supposed to be unable to hit. The same assertion on pair-b counted 0 and passed."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the geometry wait",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the container reports a box 22 pt wider than the one it has, which is what the Form's one list-wide number did to an accessory row",
+      "before": "    HybridNitroUiForm.rowOwner(of: row)?.contentBoxReported(bounds.width)",
+      "after": "    HybridNitroUiForm.rowOwner(of: row)?.contentBoxReported(bounds.width + 22)",
+      "run": "harness:ios:Form.harness \u2014 FAIL, 1 of 15 (28.4 s), tree 0fe6ca553de3 \u2014 harness+ios+Form.harness-2026-11-12T04-45-10.196Z.log",
+      "redTests": [
+        "Form report never satisfied \"every row drawn by exactly one cell, at its own box (before the presses)\" with `boxMismatch=22.00` in the report the failure printed \u2014 the witness sees a row laid out 22 pt away from the box it is drawn in."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the geometry wait",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the state before the fix: drop the `onRowLost` hand-back (and with it the identity chase it feeds), so a cell whose row is adopted elsewhere keeps naming it and the chase asks \"which cells hold no row\"",
+      "before": "    container.onRowLost = { [weak self] row in\n      if self?.row === row { self?.row = nil }\n      self?.onRowLost?(row)\n    }",
+      "after": "    // (no onRowLost wiring \u2014 a foreign take stays invisible to the cell and the Form)",
+      "run": "harness:ios:Form.harness \u2014 FAIL 3 of 4 runs (28.4 s each), tree a8cb220ad57c \u2014 harness+ios+Form.harness-2026-11-12T03-52-12.258Z.log, -2026-11-12T03-52-41.772Z.log, -2026-11-12T03-53-11.061Z.log",
+      "redTests": [
+        "expected 8 to be 9 \u2014 `expect(Number(geometry.rowsInCells)).toBe(Number(geometry.rows))`, with the report printing `rows=9 inCells=9 rowsInCells=8 claims=1 wrongCells=1 losses=1`: nine full cells, eight rows drawn, and a cell naming a row it was not holding.",
+        "the fourth run of the same tree passed \u2014 the settle chase sometimes got there first, which is the flake the fix removes; 4 of 4 green with the hand-back in place (03:55:30Z, 03:55:51Z, 03:56:13Z, 03:56:34Z, tree ac6c2220478b)."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the ten presses",
+      "file": "ios/components/Form/HybridNitroUiForm.swift",
+      "mutation": "not a one-line mutation: the intermediate tree where the row still took the Form's list-wide number instead of the box its own cell reported, with E4 already expecting 10 presses \u2014 i.e. the new assertion graded against the old geometry",
+      "before": "      ? laid > 0\n        ? { width: laid }",
+      "after": "      ? width > 0\n        ? { width }",
+      "run": "harness:ios:Form.harness \u2014 FAIL, 1 of 15, trees b5501fd8a458 / 49203cb0c2a5 / ad8716d0fd2f \u2014 harness+ios+Form.harness-2026-11-12T03-31-16.518Z.log, -2026-11-12T03-37-23.873Z.log",
+      "redTests": [
+        "expected +0 to be 10 \u2014 `expect(probe.log.pressable).toBe(10)`: not one of the ten presses reached a `Pressable` whose row was drawn past its own bounds, which is the count pair-b had always reported and the case now refuses to accept."
+      ]
+    }
+  ]
+}
