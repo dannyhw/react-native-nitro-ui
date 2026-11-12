@@ -129,3 +129,4 @@
 | X27 | Examples: caption above the control in every story, all affected README screenshots retaken (owner) | Apex | Opus | merged (PR #66; combined merge with G29, gates 5/5 on code tree `b9700c15`; Stepper story on the shared Row, Stepper and Android Picker shots retaken) |
 | X28 | Device gates refuse to run without a live lease (G30 drove a stray emulator without one) | Apex | Opus | merged (combined merge with X24 and G30, gates 5/5 on code tree `cd6b3aa2`) |
 | X29 | Form E4 harness case red on pair-a's iOS simulator only (found by X25) | Apex | Opus | running |
+| R09 | 0.9.0 release notes rewritten for app developers (3,690 to 1,220 words) | Opus | orchestrator | ready on task/R09-release-notes; lands just before 0.9.0 is staged, after X25 |
