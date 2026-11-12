@@ -2,10 +2,9 @@
 'react-native-nitro-ui': minor
 ---
 
-Both wheels are the platform's own now. `Picker` with `variant="wheel"`, and `DatePicker` with `variant="wheel"` and `mode="time"`, draw Material 3 1.5's wheel drums on Android, where they were a menu and the inline calendar.
+Wheel pickers on Android now draw real wheels. `Picker` with `variant="wheel"`, and `DatePicker` with `variant="wheel"` and `mode="time"`, use Material 3's `ScrollField` drums, where they previously showed a menu and the inline calendar.
 
-- **A drum, not a dropdown.** `Picker variant="wheel"` draws `ScrollField` — Material's own pager — with the same `options`, `selectedIndex`, `disabled`, `tintColor` and `accessibilityLabel`, so the variant that used to be iOS-only is one control on both platforms. `tintColor` paints the row the drum is stopped on; the rows that are not selected keep Material's own content colour, which is the one thing on a wheel it cannot reach.
-- **One event per settled roll.** A drum reports the row nearest its centre line as it turns, so both wheels read the value at a _rest_ — a finger off the drum and its own snap animation finished, the same rule on both wheels and no timer anywhere in it: a roll across four rows is one `onChange`, and the index or instant it carries is the row the drum came to rest on. Rolling to the row already shown reports nothing, a value the parent refuses rolls back, and a disabled wheel sends nothing at all.
-- **`DatePicker`'s wheel is a time wheel.** `mode="time"` gets a drum per field, drawn with the same `ScrollField` Material builds its own `TimeScroll` from — hour, minute, and an AM/PM column beside them on a 12-hour device, as iOS's wheel has had all along, the two drums named by Material's own localised strings; `mode="date"` and `"datetime"` stay the inline calendar, because Material 3 has no wheel calendar and a drum of days would be a control of ours with Material's paint on it. It is the one place `variant` does not mean the same thing on both platforms, and `docs/components/date-picker.md` says so.
-- **Sizes are the widget's own, measured on the device.** Each wheel reports what it laid out at, under a sizing key of its own, and a variant change remounts rather than reuses — a wheel and a menu are different widgets with different boxes, and a size carried from one to the other was never measured.
-- **Recycling resets the drum.** A host that goes from wheel to menu, or comes back as a wheel, leaves no scroll position, no provisional row and no pending report behind.
+- `Picker variant="wheel"` takes the same `options`, `selectedIndex`, `disabled`, `tintColor` and `accessibilityLabel` on both platforms.
+- A wheel reports one `onChange` when it comes to rest, not one per row it passes.
+- `DatePicker`'s time wheel has a drum for hours and minutes, plus AM/PM on a 12-hour device.
+- `mode="date"` and `"datetime"` with `variant="wheel"` still show the inline calendar on Android, because Material 3 has no date wheel.
