@@ -57,7 +57,8 @@ afterAll(() => {
 
 function gitIn(dir, args) {
   // A fixture identity: CI runners have no git user, and `commit` refuses without one.
-  const result = spawnSync('git', args, {
+  // Signing off too: a host whose global config signs commits has no key for this identity.
+  const result = spawnSync('git', ['-c', 'commit.gpgsign=false', ...args], {
     cwd: dir,
     encoding: 'utf8',
     env: {
