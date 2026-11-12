@@ -40,24 +40,29 @@ vacuous, and expects ten presses on iOS as on Android.
 
 ## Gates
 
+The one table `gate.mjs table` prints for the tree this branch now carries — `effa2d29e8e2`, which
+is fix round 1. Round 1's own runs (tree `b3412f3174e7`) are in the exported ledger,
+`docs/tasks/X29/gates.jsonl`, as are the filtered reds listed under Red proofs.
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2093 tests / 88 suites | `b3412f3174e7` | 2 m 48 s | start 5.1 / med 6.0 / max 8.8 |
-| `harness:ios` | **PASS** | 613 tests / 32 suites + isolated 6 tests / 3 suites | `b3412f3174e7` (ios tree) | 20 m 17 s | start 5.3 / med 8.3 / max 23.6 |
-| `harness:android` | **PASS** | 669 tests / 32 suites + isolated 6 tests / 3 suites | `b3412f3174e7` (android tree) | 18 m 48 s | start 21.3 / med 6.7 / max 21.3 |
+| `check` | **PASS** | 2093 tests / 88 suites | `effa2d29e8e2` | 2 m 58 s | start 20.2 / med 41.3 / max 138.0 |
+| `harness:ios` | **PASS** | 613 tests / 32 suites + isolated 6 tests / 3 suites | `effa2d29e8e2` (ios tree) | 15 m 03 s | start 19.2 / med 10.7 / max 24.5 |
+| `harness:android` | **PASS** | 669 tests / 32 suites + isolated 6 tests / 3 suites | `effa2d29e8e2` (android tree) | 18 m 51 s | start 11.9 / med 8.4 / max 27.3 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:ios:Form.harness` | **PASS** | 15 tests / 1 suites | `b3412f3174e7` (ios tree) | 20.4 s | start 5.1 / med 5.3 / max 5.4 |
+| `harness:ios:Form.harness` | stale | 1 failed of 15 tests / 1 suites | 433f64dd1a5e (not this tree) | 22.4 s | start 20.9 / med 19.8 / max 20.9 |
 | `harness:ios:Form.harness:--background` | stale | — | 8383afbb6aab (not this tree) | 1.2 s | start 9.9 / med 9.9 / max 9.9 |
 | `harness:ios:Form.harness:-t:aims%20a%20row%20content` | stale | 1 failed of 15 tests / 1 suites | f1e7470b926d (not this tree) | 19.7 s | start 42.8 / med 34.8 / max 42.8 |
 | `harness:ios:Form.harness:-t:aims%20a%20row%20content:--background` | stale | — | 07b85d8fdec9 (not this tree) | 1.4 s | start 4.3 / med 4.3 / max 4.3 |
 | `harness:ios:Form.harness:-t:grows%20a%20row%7Caims%20a%20row` | stale | — | 49203cb0c2a5 (not this tree) | 1.3 s | start 6.3 / med 6.3 / max 6.3 |
 
-Every device row above is pair-a (simulator `49D5024D…`, `emulator-5574`, Metro 8295); the
-pair-b row X29 was also asked for is the one it could not run — see Follow-ups.
+Every device row above is pair-a (simulator `49D5024D…`, `emulator-5574`, Metro 8295) under lease
+`X29-48jce`; the pair-b row X29 was also asked for is the one it could not run — see Follow-ups.
 
-`need --for review`: `need: review is satisfied on this code tree.` (`check`, `harness:ios` on
-the ios tree, `harness:android` on the android tree; `Form.harness.tsx` counts as both platforms.)
+`need --for review`: `need: review is satisfied on this code tree.` (`check`, `harness:ios` on the
+ios tree, `harness:android` on the android tree; `Form.harness.tsx` counts as both platforms, which
+is why this round owes both device runs and got them.)
 
 ## Red proofs
 
@@ -133,9 +138,9 @@ once, by its own cell, at its own box; the control waits for one live copy of it
 
 ### Gates (fix round 1)
 
-TABLE_PLACEHOLDER
-
-NEED_PLACEHOLDER
+The table in `## Gates` is this round's: `check`, `harness:ios` and `harness:android` all green on
+`effa2d29e8e2`, and `need --for review` satisfied on it. The gate that matters for the finding is the
+stale `harness:ios:Form.harness` row — that is row 9's red, on the mutated tree, listed below.
 
 ### Red proofs (fix round 1)
 
