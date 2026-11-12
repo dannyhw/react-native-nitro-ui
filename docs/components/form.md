@@ -101,11 +101,24 @@ is laid out in, and v1 gives that no meaning: it logs an error in development an
 renders as plain content. Extract the row's *content* into a component and leave the
 `<Form.Row>` in the list.
 
-A row's own content is laid out by Yoga at the width the row is given, which on iOS
-is the width a cell hands it — narrower than the list's own bounds by the grouped
-insets. The Form reports that width and applies it to every row, which is what makes a
-row's Yoga height equal the cell's height, and what makes a wrapping `Text` grow the
-cell that holds it.
+A row's own content is laid out by Yoga at the width *its own cell* hands it, which on
+iOS is narrower than the list's own bounds by the grouped insets and the cell's own
+margins. It is a per-row number, not a per-list one: a cell makes room for a trailing
+accessory by shrinking its own margins for the row it is drawing, so on one screen a
+row with an `accessory` is 22 pt narrower than its plain neighbours (measured on a
+402 pt screen). Each row takes the box its own cell reports. What the `Form` reports is
+the *plain* row's box — one number for the list, published once per list width — which
+a row uses as its starting estimate before its own cell has laid anything out, and
+which the Form re-sends to every row it holds when the list becomes a different width
+(a rotation, an iPad resize, an app changing a parent's width), so a row that is off
+screen does not go on being measured at the old orientation's box. Being laid out
+wider than the box a row is drawn in is the one direction that has teeth: content is
+drawn past the row's bounds, where UIKit stops hit-testing, and a control at a row's
+trailing edge stops answering taps.
+
+A row's Yoga width equaling the box its cell draws it in is also what makes a row's
+height right: the cell takes the height Yoga gives the row, and a wrapping `Text` grows
+the cell that holds it.
 
 A row lays its children out as one row of their own: `flexDirection: 'row'`,
 `alignItems: 'center'`, across the row's whole content width. A
