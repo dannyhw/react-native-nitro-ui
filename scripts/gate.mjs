@@ -76,6 +76,7 @@ import {
   failureExcerptName,
   findReusableCheck,
   gateLogStoreDir,
+  groupLedgerLinesByBranch,
   isDeviceGate,
   isFailedRunWithLog,
   isUsageProbe,
@@ -156,8 +157,8 @@ const USAGE =
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
   '\n' +
   '       (NITRO_UI_GATE_DEVICE_FORCE=1 claims a device another live run holds)\n' +
-  "       (--background is gate.mjs's own flag: beside the gate name or after it, ";
-'never\n' +
+  "       (--background is gate.mjs's own flag: beside the gate name or after it, " +
+  'never\n' +
   '        after `--`, where the arguments belong to the gate)\n' +
   '       (--background starts a gate detached and returns at once, so waiting\n' +
   '        costs no polling; `wait` then blocks until it ends, prints a progress\n' +
@@ -177,12 +178,12 @@ const USAGE =
   '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl and, for every\n' +
   '        FAILED run, a scrubbed excerpt in docs/tasks/<ID>/failures/ - the failing\n' +
   '        test names, the assertion messages, the last 150 lines, the device\n' +
-  '        context and the load at both ends. Passing runs get no file. Export ';
-'*merges*:\n' +
-  '        lines already in the committed file stay, and an excerpt already ';
-'committed is\n' +
-  "        left alone, so a fix round adds its runs instead of erasing round 1's. ";
-'A line is\n' +
+  '        context and the load at both ends. Passing runs get no file. Export ' +
+  '*merges*:\n' +
+  '        lines already in the committed file stay, and an excerpt already ' +
+  'committed is\n' +
+  "        left alone, so a fix round adds its runs instead of erasing round 1's. " +
+  'A line is\n' +
   '        the same line as another by ts + gate + code tree)\n' +
   '\n' +
   "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
@@ -2540,17 +2541,19 @@ function committedTaskLedgers(exceptBranch) {
     }
     const entries = parseLedger(text).filter((line) => !line.corrupt);
     if (entries.length === 0) continue;
-    // `export` copies one branch's ledger verbatim, so the lines carry their own
-    // branch name; the path is the fallback and is also what the note cites.
-    const branch =
-      entries.find((line) => typeof line.branch === 'string')?.branch ??
-      `docs/tasks/${entry.name}/gates.jsonl`;
-    if (branch === exceptBranch) continue;
-    found.push({
-      branch,
-      source: path.relative(repoRoot, file),
-      entries,
-    });
+    // One file, one group **per branch**: the merging export (X30 item 2) put two
+    // rounds' lines in the same `gates.jsonl`, each with its own `branch`, and
+    // labelling the whole file by the first line's branch both silenced the
+    // "not this branch's own ledger" filter and made the reuse note credit the wrong
+    // task with a run it never did (X30 fix round 1). A line with no `branch` is
+    // labelled with the file, which is also what the note cites.
+    found.push(
+      ...groupLedgerLinesByBranch(
+        entries,
+        path.relative(repoRoot, file),
+        exceptBranch
+      )
+    );
   }
   return found;
 }
@@ -2881,14 +2884,33 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
   // of one gate in the same second have the same name and would share one file - the
   // later export overwriting the earlier excerpt while both ledger lines pointed at
   // it. Counting by the name itself is what makes that impossible (review N2).
+  //
+  // It starts by counting the names this checkout has *already spent*. The merging
+  // export (X30 item 2) hands this function round 1's lines as well as this round's,
+  // and round 1's lines point at committed excerpts; counting only the writes below
+  // handed a round-2 failure in round 1's second the same `--01.log` and wrote over
+  // evidence that was already published, while the merged ledger line - kept
+  // byte-for-byte, as the merge must - went on pointing at it (X30 fix round 1).
+  const publishedByIndex = entries.map((entry) => committedExcerptPath(entry));
   const sequenceByName = new Map();
+  publishedByIndex.forEach((published, index) => {
+    if (published == null) return;
+    // Both spellings of the name count: the one in the file (authoritative - that is
+    // the file that must not be written again) and the one this line would be given
+    // today, which is what the loop below allocates. They differ when a line was
+    // exported under one ts and carries another now.
+    const named = path.basename(published).replace(/--\d+\.log$/, '--01.log');
+    for (const key of new Set([named, failureExcerptName(entries[index], 1)])) {
+      sequenceByName.set(key, (sequenceByName.get(key) ?? 0) + 1);
+    }
+  });
   rawLines.forEach((raw, index) => {
     const entry = entries[index];
     if (!isFailedRunWithLog(entry)) {
       lines.push(raw);
       return;
     }
-    const published = committedExcerptPath(entry);
+    const published = publishedByIndex[index];
     if (published != null) {
       // Already in the checkout, already pointing here: nothing to write, and the
       // line's own `failureLogPath` is the pointer we must not lose.

@@ -1787,6 +1787,75 @@ describe('gate.mjs export attaches failure evidence', () => {
     }
   });
 
+  it('does not overwrite a committed excerpt with a same-second run (X30 fix 1)', () => {
+    // N2 gave each *exported* run its own sequence number, and that was right until
+    // the merging export (X30 item 2): the file now arrives with round 1's lines
+    // already in it, each pointing at a committed `…--01.log`. The counter started at
+    // zero anyway, so a round-2 failure in round 1's second was handed `--01.log` too
+    // and wrote over the evidence the first round had already published — the merge
+    // keeps the *ledger* line byte-for-byte and pointed it at a file whose contents
+    // had just changed underneath it. Excerpts already in the checkout are therefore
+    // allocated before new names are.
+    const dir = makeRepo();
+    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
+    const [first] = ledgerIn(dir, 'task/x12-fixture');
+    const branchDir = path.join(storeOf(dir), 'task', 'x12-fixture');
+    fs.appendFileSync(
+      path.join(branchDir, path.basename(first.logPath)),
+      '\nX13-FIRST-ROUND\n'
+    );
+    expect(runCli(dir, ['export', '--task', 'X13']).status).toBe(0);
+    const failures = path.join(dir, 'docs', 'tasks', 'X13', 'failures');
+    const committed = fs.readdirSync(failures);
+    expect(committed).toHaveLength(1);
+    expect(committed[0]).toMatch(/--01\.log$/);
+    const committedFile = path.join(failures, committed[0]);
+    expect(fs.readFileSync(committedFile, 'utf8')).toContain('X13-FIRST-ROUND');
+
+    // Round 2, milliseconds later: the same wall-clock second, which is the only
+    // second the excerpt name knows — `ts` carries the milliseconds,
+    // `failureExcerptName` throws them away, so both rounds name the same file.
+    const secondTs = String(first.ts).replace(/(\.\d{1,3})?Z$/, '.500Z');
+    const secondLog = `check-${secondTs.replaceAll(':', '-')}.log`;
+    fs.writeFileSync(
+      path.join(branchDir, secondLog),
+      'the second round\nFAIL Second.test.tsx\nX13-SECOND-ROUND\n'
+    );
+    const live = path.join(dir, '.gates', 'task', 'x12-fixture.jsonl');
+    fs.appendFileSync(
+      live,
+      `${JSON.stringify({
+        ...first,
+        ts: secondTs,
+        logPath: `task/x12-fixture/${secondLog}`,
+      })}\n`
+    );
+
+    expect(runCli(dir, ['export', '--task', 'X13']).status).toBe(0);
+    // Round 1's excerpt is untouched — same file, still its own run's log.
+    expect(fs.readFileSync(committedFile, 'utf8')).toContain('X13-FIRST-ROUND');
+    expect(fs.readFileSync(committedFile, 'utf8')).not.toContain(
+      'X13-SECOND-ROUND'
+    );
+    // And round 2 got the next name rather than the first one.
+    const written = fs.readdirSync(failures).sort();
+    expect(written).toHaveLength(2);
+    expect(written[1]).toMatch(/--02\.log$/);
+    expect(fs.readFileSync(path.join(failures, written[1]), 'utf8')).toContain(
+      'X13-SECOND-ROUND'
+    );
+    const lines = fs
+      .readFileSync(
+        path.join(dir, 'docs', 'tasks', 'X13', 'gates.jsonl'),
+        'utf8'
+      )
+      .split('\n')
+      .filter((raw) => raw.trim() !== '')
+      .map((raw) => JSON.parse(raw));
+    expect(lines).toHaveLength(2);
+    expect(new Set(lines.map((line) => line.failureLogPath)).size).toBe(2);
+  });
+
   it('writes nothing at all when the ledger holds only passes', () => {
     const dir = makeRepo();
     expect(runCli(dir, ['check']).status).toBe(0);

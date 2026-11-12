@@ -3183,3 +3183,66 @@ describeCli('gate.mjs refuses a misplaced --background (X30 item 3)', () => {
     ]);
   });
 });
+
+describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
+  /** The marker `repoRootOf()` needs; a fixture without it dies at import. */
+  const CHECKOUT = {
+    'nitrogen/generated/ios/NitroUiAutolinking.swift': '// x\n',
+  };
+  const cleanup = [];
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * `USAGE` is a chain of literals joined with `+`, and a `'…';` where a `'… ' +`
+   * belongs is not a syntax error: the assignment ends at the semicolon and every
+   * literal after it is a no-op expression statement that lints and formats clean.
+   * X30's `--background` edit did that four times, so the help stopped mid-sentence
+   * and the flag, the merge-reuse rule, `export` and `logs` had no explanation
+   * anywhere — including in the usage error about a misplaced `--background`, which
+   * prints the same truncated string. Asserting the *tail* is what catches the shape:
+   * a string that was cut short has no tail, and no amount of middle text shows it.
+   */
+  it('the help runs to the last paragraph, not the first stray semicolon', () => {
+    const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
+    cleanup.push(dir);
+    const help = runCli(dir, ['--help']).stdout;
+    // The four paragraphs that went missing, by the words only the whole string has.
+    for (const section of [
+      'never\n        after `--`, where the arguments belong to the gate',
+      '--background starts a gate detached and returns at once',
+      "at merge, `check` may be satisfied by another branch's ledger",
+      'Export *merges*',
+      "(`logs` lists this clone's stored gate logs",
+    ]) {
+      expect(help).toContain(section);
+    }
+    // And the end really is the end: the `logs` line and the last clause of the file.
+    expect(help).toContain('node scripts/gate.mjs logs [--branch <b>]');
+    expect(help.trimEnd().endsWith('retention without listing)')).toBe(true);
+  });
+
+  it('and the refusal for a misplaced --background carries all of it', () => {
+    const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
+    cleanup.push(dir);
+    const run = runCli(dir, ['harness:android', '--', '--background']);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('goes with the gate name, not after --');
+    // Whoever mistyped the flag is reading this text to find the right form, so the
+    // half of it that explains `--background` and `wait` has to be in there.
+    expect(run.stderr).toContain('--background starts a gate detached');
+    expect(run.stderr).toContain('retention without listing)');
+  });
+
+  it('and eslint is set to catch the shape of the bug itself', () => {
+    // The test above catches this one string; the rule catches the next one. A
+    // literal expression statement is a bug in a script and never a style choice,
+    // and `scripts/` is clean under the rule today, so keeping it on costs nothing.
+    const config = fs.readFileSync(
+      path.join(process.cwd(), 'eslint.config.mjs'),
+      'utf8'
+    );
+    expect(config).toContain("'no-unused-expressions': [");
+  });
+});

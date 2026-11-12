@@ -207,9 +207,21 @@ export const TOOLING_FILES = [
   // import two env *guards* from here (`checkEmulatorEnv`, `emulatorSerial`) - pure checks
   // on the variables a lease exported, nothing compiled - and `scripts/__tests__/lease.test.js`
   // ("the console port a lease owns") exercises both, which is the honest version of the
-  // claim this list rests on. The rules themselves are proven by `lease.test.js`,
-  // `lease-queue.test.js` and `lease-pool-cli.test.js`, and `check` is the cheapest place
-  // in the repo to learn that one of them is wrong.
+  // claim this list rests on. Two more importers read the same kind of thing, and round 1
+  // of X30 left them out of this sentence while widening the search that proves it (see
+  // `gate-check.test.js`, which now greps all of `scripts/` and subtracts the tooling
+  // paths rather than three hand-picked directories):
+  // `scripts/real-input/android.mjs:78` takes `isReservedSerial` and `requireLeaseDevice`,
+  // and `scripts/real-input/android-dwell-probe.mjs:44` takes `checkEmulatorEnv` and
+  // `isReservedSerial`. Both are Android *runner* files, so unlike the harness config they
+  // are mapped to a platform half, and the question is worth answering rather than waving:
+  // these three functions read `ANDROID_SERIAL`, `ANDROID_ADB_SERVER_PORT` and the reserved
+  // serial, and refuse a run that names a device its lease does not own. They decide who
+  // may be *addressed*, never what is compiled or what the app does — a wrong one turns
+  // into `gate: refused before the run`, an exit in the shell, not a different binary. The
+  // rules themselves are proven by `lease.test.js`, `lease-queue.test.js`,
+  // `lease-pool-cli.test.js` and `gate-lease-required.test.js`, and `check` is the cheapest
+  // place in the repo to learn that one of them is wrong.
   'scripts/lease.mjs',
   'scripts/lease-core.mjs',
   // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
@@ -629,6 +641,47 @@ export function ledgerPairs(text) {
     pairs.push({ raw: line, entry: entry ?? { corrupt: true, raw: line } });
   }
   return pairs;
+}
+
+/**
+ * One ledger file's lines, grouped by the branch that wrote each one.
+ *
+ * A committed `docs/tasks/<ID>/gates.jsonl` is a **merge** since X30 item 2: round 1's
+ * lines from `task/X30-…` and round 2's from `task/X30-fix1` sit in the same file, each
+ * carrying its own `branch`. Reading the file as one branch — labelling every line by
+ * the first one's, which is what round 1 did — has two costs, and neither is cosmetic.
+ * The reuse rule's "not this branch's own ledger" filter then excludes nothing (own
+ * lines are wearing another branch's name), and the note a reader trusts, "`task/round-1`'s
+ * newest check line on this tree is a fail", names the branch that happens to be first
+ * in the file rather than the one that ran the gate.
+ *
+ * A line with no `branch` (a ledger from before the field, or a hand-written fixture)
+ * is labelled with the file it came from, which is the honest answer and the one the
+ * note can cite.
+ *
+ * @param {object[]} entries the file's parsed lines, in file order
+ * @param {string} source repo-relative path of the file, e.g. `docs/tasks/X30/gates.jsonl`
+ * @param {string | null} [exceptBranch] a group to drop: the caller's own branch, whose
+ *   evidence is already being read from `.gates/`
+ * @returns {Array<{branch: string, entries: object[], source: string}>} one group per
+ *   branch, in order of first appearance, each group's lines in file order
+ */
+export function groupLedgerLinesByBranch(entries, source, exceptBranch = null) {
+  const groups = new Map();
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const branch =
+      typeof entry?.branch === 'string' && entry.branch !== ''
+        ? entry.branch
+        : String(source);
+    if (exceptBranch != null && branch === exceptBranch) continue;
+    let group = groups.get(branch);
+    if (group == null) {
+      group = { branch, entries: [], source: String(source) };
+      groups.set(branch, group);
+    }
+    group.entries.push(entry);
+  }
+  return [...groups.values()];
 }
 
 /**
