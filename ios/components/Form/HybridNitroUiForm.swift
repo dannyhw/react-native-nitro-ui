@@ -124,6 +124,12 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   private var dataSource:
     UICollectionViewDiffableDataSource<NitroUiFormSectionModel, NitroUiFormItem>?
   private var sections: [NitroUiFormSectionModel] = []
+  /// The models of the mount that has just ended, kept only so that the provider can still
+  /// answer for them: `prepareForRecycle` leaves the list's snapshot alone (emptying it costs
+  /// a layout pass that the next mount then has to undo), so UIKit lays these items out again
+  /// when the recycled list comes back on screen. Cleared by the next apply, which replaces
+  /// the snapshot they are in.
+  private var retiredSections: [NitroUiFormSectionModel] = []
   /// The component view, so rows can be given back to the tree the list is not showing.
   private weak var component: UIView?
   private var framedList = false
@@ -262,6 +268,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       }
       section.rows.removeAll()
     }
+    retiredSections = sections
     sections.removeAll()
     knownRows.removeAllObjects()
     reportedPlacement.removeAll()
@@ -284,17 +291,15 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     )
     pendingTopReset = true
     topResetTries = 0
-    // Take the list's data source away with the models. `applySnapshot()` below is coalesced to
-    // the next turn, and until it runs this list still holds the *mount that just ended*'s
-    // snapshot while its models are gone — so the next layout of the recycled list asks the
-    // provider of whoever mounts next about index paths that Form has nothing to draw. X25's
-    // aborts are that one question answered three ways (nil for a band, a bare cell for a row,
-    // the cell already on screen for a reconfigure), and UIKit asserts on all three answers.
-    // With no data source there is nothing to ask. `applySnapshotNow` puts one back with the
-    // next mount's own content — a list is allowed to wait a turn for a Form that has nothing
-    // to say yet, which is the same state it is in before the first apply of any mount.
-    list.dataSource = nil
-    dataSource = nil
+    // The list keeps its data source and its content, and the models the ended mount left
+    // behind stay drawable (`retiredSections`, and `model(owning:)` below), so the recycle
+    // asks nothing of the next mount. Emptying the list here — detaching its data source,
+    // or applying the empty snapshot before returning — also keeps UIKit from asking about
+    // items this Form has forgotten, and was this fix's first answer, but each costs E4: the
+    // recycled list then passes through an empty layout before the new content arrives,
+    // instead of going from the old content to the new in the one coalesced apply below, and
+    // the row content the case presses is then aimed at a box the shadow tree has not been
+    // told about (pair-b, fix round 2: both eager variants red, this one green).
     applySnapshot()
   }
 
@@ -545,6 +550,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // Whatever reconfigure was in flight is superseded by this snapshot.
     reconfigureTargets = [:]
     dataSource?.apply(snapshot, animatingDifferences: false)
+    // The ended mount's models were only owed an answer until this snapshot replaced theirs.
+    retiredSections.removeAll()
     // A snapshot moves every cell below it, so the rows positions the shadow tree knows about are
     // now wrong. One turn later, when UIKit has placed the cells, they are read again. The
     // delegate also reports a settle that moves the offset; this hop is the one that covers a
@@ -751,6 +758,18 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     self.dataSource = dataSource
   }
 
+  /// The model that owns a row, including one whose mount has ended.
+  ///
+  /// Asked of the row rather than of the index path UIKit is holding: after a recycle the two
+  /// disagree, and the list is entitled to be shown the row it was shown before either way.
+  private func model(owning row: UIView) -> NitroUiFormSectionModel? {
+    for section in sections + retiredSections
+    where section.rows.contains(where: { $0 === row }) {
+      return section
+    }
+    return nil
+  }
+
   private func cell(
     at indexPath: IndexPath,
     for item: NitroUiFormItem,
@@ -760,12 +779,19 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       let cell = collectionView.dequeueReusableCell(
         withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
         for: indexPath
-      ) as? NitroUiFormRowCell,
-      indexPath.section < sections.count
+      ) as? NitroUiFormRowCell
     else {
       return giveUpCell(in: collectionView, at: indexPath)
     }
-    let model = sections[indexPath.section]
+    // The model may be gone: the mount that had it ended, or React unmounted the Section in
+    // the turn since the last settle, while the list's snapshot still holds the item. Asked
+    // about such an item, the list is entitled to be shown the row it was shown before, and the
+    // item names it — so the ask is still answerable with a real cell of this list's own
+    // registration. Every other answer is an abort: the harness churn case measures a
+    // `NitroUiFormBlankCell` here as an assertion failure in
+    // -[UICollectionView _updateVisibleCellsNow:] nine index paths deep, and round 1's bench
+    // crash is the same question answered into a reconfigure.
+    let model = model(owning: row)
     // Name this Form to the cell here, where the cell is *configured*. A
     // `UICollectionViewCell` has no back-reference to its collection view, so everything a
     // cell has to ask its Form - the box it draws a row in, a chrome refresh - goes through
@@ -776,11 +802,22 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     cell.formOwner = self
     cell.onGiveBack = { [weak self] given in
       self?.reclaims += 1
+      guard let model = model else {
+        // No section to go back to: the Form's own holding view keeps it out of the list,
+        // and whoever mounts next takes it from there.
+        NitroUiFormHoldingView.moving {
+          if let form = self {
+            form.holding.addSubview(given)
+          }
+        }
+        return
+      }
       // Back to its section's holding view, where Fabric put it. The Form's own move, so
       // the holding view must not read it as a Fabric remount.
       NitroUiFormHoldingView.moving { model.holding?.addSubview(given) }
     }
     cell.onRowRemoved = { [weak self] removed in
+      guard let model = model else { return }
       // Fabric unmounted this row out of the cell it was showing.
       self?.rowUnmounted(removed, in: model)
     }
