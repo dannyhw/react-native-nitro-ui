@@ -243,8 +243,23 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   private var pressed = false
   /// The row this cell is showing.
   private(set) weak var row: UIView?
+  /// Whether the row this cell names is the one it is drawing. A cell whose pointer went stale
+  /// names a row it is not holding, which is a blank line on screen that no "does this cell hold
+  /// a row?" question can find (X29).
+  var isDrawingRow: Bool {
+    guard let row else { return false }
+    return container.isHolding(row)
+  }
+  /// Whether this cell names a row it is not holding at all.
+  var claimsRowItDoesNotHold: Bool {
+    row != nil && !isDrawingRow
+  }
   /// What to do with a row this cell is finished with - back to its section.
   var onGiveBack: ((UIView) -> Void)?
+  /// Someone else took this cell's row, so the cell is now drawing nothing. Forwarded from the
+  /// container (see its `onRowLost`); the cell clears its own pointer first, and the Form uses
+  /// this to chase the blank cell without waiting for a settle that a resting list never sends.
+  var onRowLost: ((UIView) -> Void)?
   /// A row Fabric unmounted while this cell was holding it. The generated
   /// `unmountChildComponentView:` detaches it from whichever view has it, so the container
   /// - not the section's holding view - is where that signal arrives.
@@ -288,6 +303,15 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     automaticallyUpdatesContentConfiguration = false
     automaticallyUpdatesBackgroundConfiguration = false
     contentView.addSubview(container)
+    container.onRowLost = { [weak self] row in
+      // The row was taken out of this container by someone else, so this cell must stop
+      // naming it. `row` is weak and the pointer is what the Form reads to decide whether
+      // this cell is blank, so a cell that keeps naming a row another cell adopted is a blank
+      // row that no chase can find - which is how a row ends up drawing from its section's
+      // hidden holding view (X29).
+      if self?.row === row { self?.row = nil }
+      self?.onRowLost?(row)
+    }
     container.onRowRemoved = { [weak self] row in
       // Fabric took the row out of this cell, so this cell must stop saying it is showing
       // it. `row` is weak and a Fabric component view is pooled rather than freed, so a
@@ -451,6 +475,23 @@ final class NitroUiFormRowContainer: UIView {
   private weak var row: UIView?
   /// This container lost a row by itself, i.e. React Native unmounted it out of the cell.
   var onRowRemoved: ((UIView) -> Void)?
+  /// Someone else took this container's row: another cell adopted it, or a section's holding
+  /// view took it back. Only the *foreign* take fires this - a row this container gave away
+  /// through `releaseRow` is a row its cell already stopped naming.
+  ///
+  /// The distinction is the whole bug. A move out of a cell is wrapped in
+  /// `NitroUiFormHoldingView.moving` so that no section reads it as an unmount, which also
+  /// keeps it silent toward the cell: the cell goes on naming a row it is not drawing, and
+  /// nothing below it looks blank. `HybridNitroUiForm.misdrawnVisibleItemIdentifiers` asks
+  /// each cell whether it is holding the row its item names, and a cell holding a row it is
+  /// entitled to no answer at all would leave the row that item owns in its section's hidden
+  /// holding view while the list draws somebody else's (X29).
+  var onRowLost: ((UIView) -> Void)?
+
+  /// Whether `view` is the row this container is drawing right now.
+  func isHolding(_ view: UIView) -> Bool {
+    row === view && view.superview === self
+  }
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -488,7 +529,11 @@ final class NitroUiFormRowContainer: UIView {
   override func willRemoveSubview(_ subview: UIView) {
     // Before `super`, so the row is still this container's when the callback looks at it.
     defer { super.willRemoveSubview(subview) }
-    if row === subview { row = nil }
+    let wasOurs = row === subview
+    if wasOurs { row = nil }
+    // Taken by someone else, mid-move: the cell has to hear about it even though no section
+    // may hear about it. See `onRowLost`.
+    if wasOurs, NitroUiFormHoldingView.isMovingRow { onRowLost?(subview) }
     guard !NitroUiFormHoldingView.isMovingRow else { return }
     onRowRemoved?(subview)
   }
@@ -514,12 +559,16 @@ final class NitroUiFormRowContainer: UIView {
   private func layoutRow() {
     guard let row else { return }
     row.frame = CGRect(x: 0, y: 0, width: bounds.width, height: row.frame.height)
-    // The Form has to lay this row's content out at the width it is *drawn* at, which is this
-    // container's, not the list's idea of a cell. Guarded on change inside the Form, so the
-    // per-layout call is a comparison rather than a round trip.
-    if bounds.width > 0, let cell = owningCell() {
-      cell.formOwner?.rowBoxWidthReported(bounds.width)
-    }
+    if bounds.width <= 0 { return }
+    // This row's content has to be laid out at the width it is *drawn* at, which is this
+    // container's, not the list's idea of a cell — and it has to be told to *this row*,
+    // because the box is per row: a cell drawing an accessory row shrinks its own margins for
+    // it, and the Form's list-wide number is then wrong for one row whatever it says. Guarded
+    // on change on both sides, so the per-layout call is a comparison rather than a round trip.
+    HybridNitroUiForm.rowOwner(of: row)?.contentBoxReported(bounds.width)
+    // The Form's own number: still the estimate a row gets before its first cell lays it out,
+    // and the number the harness reads as `width=`.
+    owningCell()?.formOwner?.rowBoxWidthReported(bounds.width)
   }
 }
 

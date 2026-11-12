@@ -65,6 +65,20 @@ abstract class HybridNitroUiFormRowSpec: HybridView() {
     set(value) {
       onPress = value?.let { it }
     }
+  
+  abstract var onContentBox: ((width: Double) -> Unit)?
+  
+  private var onContentBox_cxx: Func_void_double?
+    @Keep
+    @DoNotStrip
+    get() {
+      return onContentBox?.let { Func_void_double_java(it) }
+    }
+    @Keep
+    @DoNotStrip
+    set(value) {
+      onContentBox = value?.let { it }
+    }
 
   // Methods
   @DoNotStrip

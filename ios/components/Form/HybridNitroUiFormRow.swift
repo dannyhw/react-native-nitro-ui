@@ -34,6 +34,14 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private var rawPressable = false
   private var perfInstanceId: Int32 = nitroUiPerfNoInstance
   private var press: (() -> Void)?
+  private var contentBox: ((_ width: Double) -> Void)?
+  /// The width this row's cell last said it gives the row, so the round trip to JavaScript
+  /// happens on a change and not on every layout of the cell. `-1` is "not told yet", and a
+  /// recycled row goes back to it: the next occupant of this view is a different row whose
+  /// JavaScript side has never been told anything, and swallowing its first report because
+  /// this number remembered the *previous* row's box is how a recycled row ends up laid out
+  /// at the Form's list-wide guess again.
+  private var reportedBoxWidth: CGFloat = -1
 
   /// `onPress` calls delivered through the cell, for the harness's 10/10.
   private(set) var presses = 0
@@ -52,6 +60,14 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   /// The row's component view - what the Form moves into a cell.
   var componentView: UIView? {
     host.superview
+  }
+
+  /// The width React was last told to lay this row's *content* out at: the row's content view,
+  /// whose frame Fabric writes from the row's Yoga content box. Asked by the Form's overhang
+  /// witness (`overhang=` in `nuiTestFormReport`), because a row's own `frame` is the box the
+  /// cell gave it and the two disagreeing is the row drawing past itself.
+  var contentLaidWidth: CGFloat {
+    host.bounds.width
   }
 
   // MARK: Props
@@ -91,6 +107,11 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     set { press = newValue }
   }
 
+  var onContentBox: ((_ width: Double) -> Void)? {
+    get { contentBox }
+    set { contentBox = newValue }
+  }
+
   func afterUpdate() {
     nitroUiAssertMainThread()
     guard let component = componentView else { return }
@@ -106,11 +127,35 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     rawSelected = false
     rawPressable = false
     presses = 0
+    reportedBoxWidth = -1
   }
 
   func onDropView() {
     nitroUiAssertMainThread()
     press = nil
+    contentBox = nil
+    reportedBoxWidth = -1
+  }
+
+  // MARK: - The box this row is drawn in
+
+  /// The cell holding this row laid it out at `width`.
+  ///
+  /// Per row, and that is the whole point: a cell with a trailing accessory shrinks its own
+  /// content margins for the row it is drawing, so on one screen an accessory row's box is
+  /// narrower than its plain neighbours' - 338 pt against 316 pt at the harness's box. The
+  /// Form's own `onContentBox` is one number for the entire list and can only ever be right
+  /// for one of the two, and *too wide* is not a cosmetic answer: React lays the row's content
+  /// out at it, the content is drawn past the row's own bounds, and UIKit's hit-test stops at
+  /// those bounds, so the right-hand end of the row - a `Pressable`, a `Switch`, a value -
+  /// answers nothing. X29 found it as a harness case that pressed the same row on two
+  /// simulators and got ten presses on one and none on the other: whether the overhang escapes
+  /// depends on the screen width and on how wide the content is, which is a lottery, not a
+  /// device property.
+  func contentBoxReported(_ width: CGFloat) {
+    guard width > 0, abs(width - reportedBoxWidth) > 0.25 else { return }
+    reportedBoxWidth = width
+    contentBox?(Double(width))
   }
 
   // MARK: - Events
@@ -200,6 +245,10 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
       // compare what JavaScript is told with what the screen shows.
       "window=\(Self.inWindow(component, inCell: inCell))",
       "h=\(String(format: "%.1f", component.bounds.height))",
+      // What React was last told to lay *this row's* content out at, against `frame` above - the
+      // per-row half of the Form's `overhang`, and the number that says *which* row is drawn
+      // past itself when that one says only that some row is.
+      "laid=\(String(format: "%.1f", host.bounds.width))",
       "presses=\(presses)",
       // What a screen reader would read out for this row. Android answers the same field, and
       // a recycled view that keeps the previous mount's name is a finding there; iOS answers it

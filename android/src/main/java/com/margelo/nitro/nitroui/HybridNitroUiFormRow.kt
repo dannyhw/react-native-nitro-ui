@@ -93,6 +93,14 @@ internal class HybridNitroUiFormRow(
 
   override var onPress: (() -> Unit)? = null
 
+  /**
+   * Received and never answered: iOS asks a row for the box its cell gives it because a cell
+   * shrinks its own margins for an accessory row, and there is no cell here. Android rows keep
+   * the width the list gives them and pay for their accessory with padding
+   * (`Form.tsx`'s `ANDROID_ACCESSORY_RESERVE`), so nothing per row is left to report.
+   */
+  override var onContentBox: ((width: Double) -> Unit)? = null
+
   override fun afterUpdate() {
     view.applyChrome(rawAccessory, rawSelected, rawPressable)
   }
