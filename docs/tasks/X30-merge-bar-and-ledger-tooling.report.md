@@ -7,46 +7,59 @@ runners.
 
 ## Summary
 
-Four rules changed, each with tests that were shown red first.
+Five rules changed, each shown red first.
 
-**1. Merge matches a device run on its platform's half.** `digestKeyFor` used to
-return `full` for everything at merge, so `need --for merge` asked each of the four
-device gates for a line whose whole code tree matched. A tooling-only commit
-landing on `main` moved that tree under every branch gated before it and re-owed
-all four — G29+X27's ~2.5 h for a test fixture. Device gates are keyed to
-`trees.ios` / `trees.android` at **both** stages now; `check` stays on the whole
-tree at both, because that run reads both platforms and the docs. Soundness is
-where it was: a half is the full digest restricted to that platform's files, so
-shared code (`src/`, `cpp/`) moves both halves, and a code path the mapping does
-not claim is both halves by definition — unknown stays expensive. `AGENTS.md` and
-CONTRIBUTING now state what a merge needs: one `check` on the whole tree, plus
-`harness:ios` + `real-input:ios` on a matching iOS half and the Android pair on a
+**1. Merge matches a device run on its platform's half.** `digestKeyFor` returned
+`full` for everything at merge, so each of the four device gates had to be re-run on
+every new tree: a tooling-only commit landing on `main` moved that tree under every
+branch gated before it and asked all four back — G29+X27's ~2.5 h for a test fixture.
+Device gates now key to `trees.ios` / `trees.android` at **both** stages, and `check` stays on the
+whole tree: that run reads both platforms and the docs.
+Soundness is unchanged: a half is the full digest over that platform's files, so
+shared code (`src/`, `cpp/`) moves both and an unclaimed path is both by definition —
+unknown stays expensive. `AGENTS.md` and CONTRIBUTING now say what a merge needs:
+`check` on the whole tree, the iOS pair on a matching iOS half, the Android pair on a
 matching Android half.
 
 **2. `export --task <ID>` merges.** It read only the current branch's ledger and
-wrote that over `docs/tasks/<ID>/gates.jsonl`, dropping every line an earlier
-round on another branch had committed. Existing lines are now kept byte-for-byte
-in their existing order, this branch's are appended, and identity (ts + gate +
-code tree) stops duplicates — `mergeLedgerExports` in `gate-core.mjs`, with
-`ledgerPairs` keeping raw bytes beside the parse so a corrupt line stays corrupt.
-A failure excerpt that is already committed is left alone: a red row's
-`failureLogPath` and its file are a pair, and re-writing it from a store log that
-another machine no longer has orphaned both.
+wrote that over `docs/tasks/<ID>/gates.jsonl`, dropping every line an earlier round on
+another branch had committed. Existing lines stay byte-for-byte in their order,
+this branch's are appended, and identity (ts + gate + code tree) stops
+duplicates — `mergeLedgerExports` in `gate-core.mjs`, with `ledgerPairs` keeping raw
+bytes beside the parse so a corrupt line stays corrupt. A committed failure excerpt is
+left alone: a red row's `failureLogPath` and its file are a pair, and re-writing it
+from a store log this machine no longer has orphaned both.
 
-**3. `-- --background` is a usage error.** Past the separator the arguments belong
-to the gate, and `--background` is not one; it became a jest option or a gate
-named `harness:android:--background` and the ledger recorded a red for code nobody
+**3. `-- --background` is a usage error.** Past the separator the arguments belong to
+the gate and `--background` is not one; it became a jest option or a gate named
+`harness:android:--background`, and the ledger recorded a red for code nobody
 measured. It is refused before a runner, a log or a ledger line exists, and the
-message spells the working command, filter included.
+message spells the working command.
 
 **4. `task-ready` reads the id off the branch.** `merge/X30` and
-`refs/heads/task/X29-fix2` resolve to `X30` / `X29`; the leading token must contain
-a digit, so a prose branch name still asks for `--task` rather than being pointed at
-a report it never wrote.
+`refs/heads/task/X29-fix2` resolve to `X30` / `X29`; the leading token needs a digit,
+so a prose branch still asks for `--task` rather than a report it never wrote.
+
+**5. `scripts/task-ready*.mjs` is check-only tooling.** An unclaimed path under
+`scripts/` is both-platforms by design, so this diff owed two harness runs for editing
+the hand-in checker. Listed with the other check-only tools; "no device run reads
+them" is a `git grep` in the test, not a sentence.
 
 ## Gates
 
-TABLE_PLACEHOLDER
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2117 tests / 88 suites | `5a52f66df35c` | 2 m 50 s | start 6.6 / med 14.7 / max 22.8 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+Both `check` rows are in the committed ledger, and exporting it a second time printed
+`2 kept from the file, 0 from task/X30-merge-bar-and-ledger-tooling, 2 already there`
+— item 2, running on its own task.
+
+`need --for review`: `need: review is satisfied on this code tree.` (exit 0) - the whole diff is check-only tooling, so no device gate is asked for. That is item 1 proving itself on its own task: the same diff used to owe two harness runs.
 
 ## Red proofs
 
@@ -70,6 +83,9 @@ TABLE_PLACEHOLDER
   `✕ says so, for a device gate, without running anything` (status 1, a run
   recorded; the third test stays green under it, which is the "must not
   over-block" half)
+- `gate-check.test.js → TOOLING_FILES` (4 of 12) → the two `task-ready` entries
+  removed from `TOOLING_FILES` →
+  `✕ a commit that only changes the checker re-owns check and no device run`
 - `task-ready.test.js → the task a branch name belongs to` (2 of 4)
   → branch parsing back to `/^task\/([A-Za-z0-9._-]+)$/` →
   `✕ reads the id off a fix round, a merge round, and any prefix`
@@ -86,6 +102,8 @@ TABLE_PLACEHOLDER
 - `scripts/__tests__/gate.test.js`, `scripts/__tests__/gate-logs.test.js`,
   `scripts/__tests__/task-ready.test.js`: the rules above, two M2 assertions
   corrected, and the CLI fixtures they need.
+- `scripts/gate-core.mjs` (`TOOLING_FILES`), `scripts/__tests__/gate-check.test.js`:
+  the checker is check-only tooling, with the search that keeps that honest.
 - `AGENTS.md`, `CONTRIBUTING.md`: what a merge needs, what an export does, where
   `--background` belongs, where a task id comes from.
 
