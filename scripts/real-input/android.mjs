@@ -40,6 +40,7 @@ import {
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { judgePopupPlacement } from './popover-placement.mjs';
+import { judgeMenuAnchoring } from './menu-placement.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -787,8 +788,13 @@ const CHECKS = {
     // match name a popup row.
     const CHOSEN = 'Beta';
     const PICK = 'Gamma';
+    const CHOICES = ['Alpha', CHOSEN, PICK];
 
-    const anchor = await t.requireControlOnScreen('Hosted picker');
+    // Pressed at the middle of the window rather than wherever the page happens to have
+    // come to rest, because the platform places this menu and places it by the room under
+    // the anchor: found on the lower fold, it opens above, and the claim below is then
+    // about the scroll position rather than about the Host. See [centreOnScreen].
+    const anchor = await centreOnScreen(t, 'Hosted picker');
     t.log.checkEquals(
       'the hosted Picker shows the index JS gave it',
       t.requireEcho(ECHO.hostPickerIndex),
@@ -821,9 +827,53 @@ const CHECKS = {
         anchor.bounds.y1
       )} -> ${String(anchor.bounds.x2)},${String(anchor.bounds.y2)}`
     );
-    t.log.check(
-      'the menu opens below the top of the box the Host drew, not at the top of the screen',
-      row.bounds.y1 >= anchor.bounds.y1
+    // The menu's own extent, read from its rows. With the menu open the dump carries the
+    // popup's window and nothing else (see `uiautomator.mjs`), so every one of the fixture's
+    // three labels in it is a row of this menu, and their union box is the menu as a person
+    // sees it less the surface padding around it — which is what the room slop is for.
+    //
+    // Every row that answers is taken rather than an expectation of exactly three: a row that
+    // the tree names twice (its text node and its clickable node) must not turn a healthy menu
+    // into "the menu is not in the dump", and one row is already enough to say which side of
+    // the anchor the menu opened on. `waitForOption` above is what proves the menu is up.
+    const rows = t.dump().filter((node) => CHOICES.includes(node.text));
+    const menuBox =
+      rows.length === 0
+        ? null
+        : {
+            y1: Math.min(...rows.map((node) => node.bounds.y1)),
+            y2: Math.max(...rows.map((node) => node.bounds.y2)),
+            cy:
+              (Math.min(...rows.map((node) => node.bounds.y1)) +
+                Math.max(...rows.map((node) => node.bounds.y2))) /
+              2,
+          };
+    t.log.note(
+      `${String(rows.length)} menu row(s) in the dump, ${
+        menuBox == null
+          ? 'none — nothing to measure the placement against'
+          : `${String(menuBox.y1)}..${String(menuBox.y2)} against the anchor at ${String(
+              anchor.bounds.y1
+            )}..${String(anchor.bounds.y2)}`
+      }`
+    );
+    const placement = judgeMenuAnchoring({
+      menuBox,
+      anchorBox: anchor.bounds,
+      windowHeight: t.screenSize().height,
+      // 20 dp of stand-off for the rows' own padding inside the surface, and 48 dp of
+      // generosity on the room test, which is a guess at a surface taller than the rows it
+      // carries. Against the failure this exists for — a menu parked at the top of a
+      // 2 424 px window over an anchor at 2 242..2 410, ~1 900 px away — both are an order
+      // of magnitude of slack, and `real-input-menu-placement.test.js` grades the boundary.
+      nearGapMaxPx: Math.round(20 * t.density()),
+      roomSlopPx: Math.round(48 * t.density()),
+    });
+    t.log.checkEquals(
+      `the menu sits against the box the Host drew, on the side that has room ` +
+        `(${placement.branch}: ${placement.detail})`,
+      placement.ok,
+      true
     );
     t.log.check(
       `the hosted menu marks the current choice ("${CHOSEN}") selected to TalkBack`,
@@ -7272,6 +7322,57 @@ async function positionWheel(t, label, echoIds) {
     );
   }
   return t.requireControl(label);
+}
+
+/**
+ * Bring a control's centre to the middle of the window, and hand back its node there.
+ *
+ * `requireControlOnScreen` stops as soon as a control's centre is *anywhere* inside the
+ * window, which is the right ask for a check whose only business is pressing it. It is the
+ * wrong ask for a check about to open a window that the platform places for itself:
+ * Material measures the room under an anchor and opens above it when there is none, so a
+ * control that was found on the lower fold decides where its menu appears, and a check that
+ * expects the menu under the anchor is at the mercy of wherever the previous check left the
+ * page. That is the shape `hosted-picker` failed twice in — the anchor at y 2242-2410 of a
+ * 2 424 px window, three option rows and no room under it.
+ *
+ * So this positions rather than finds, on the same principle as [positionWheel]: aim the
+ * band at the middle of the window, iterate because a 400 ms swipe carries momentum, and
+ * bound the loop because a control that cannot be centred is a control this page will not
+ * show, which the caller's own `requireControl` then says.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} label the control's `accessibilityLabel`
+ */
+async function centreOnScreen(t, label) {
+  const { height } = t.screenSize();
+  const middle = Math.round(height / 2);
+  // 12 % of the window: close enough that "is there room below?" has one clear answer for
+  // anything of a control's size, and far enough that a scroll with a little momentum left
+  // in it does not send the loop around again for nothing.
+  const slack = Math.round(height * 0.12);
+  let node = await t.requireControlOnScreen(label);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const offset = node.bounds.cy - middle;
+    if (Math.abs(offset) <= slack) {
+      t.log.note(
+        `"${label}" centred for this check: centre ${String(
+          node.bounds.cy
+        )} of a ${String(height)} px window (within ${String(slack)} px of ${String(
+          middle
+        )}, ${String(attempt)} scroll${attempt === 1 ? '' : 's'})`
+      );
+      return node;
+    }
+    await t.scrollPage(Math.max(-700, Math.min(700, offset)));
+    node = t.requireControl(label);
+  }
+  t.log.note(
+    `"${label}" would not come to the middle within 4 scrolls; its centre is ${String(
+      node.bounds.cy
+    )} of a ${String(height)} px window`
+  );
+  return node;
 }
 
 /**
