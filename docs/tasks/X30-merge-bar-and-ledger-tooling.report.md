@@ -49,15 +49,16 @@ them" is a `git grep` in the test, not a sentence.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2117 tests / 88 suites | `5a52f66df35c` | 2 m 50 s | start 6.6 / med 14.7 / max 22.8 |
+| `check` | **PASS** | 2117 tests / 88 suites | `5a52f66df35c` | 2 m 44 s | start 5.6 / med 12.5 / max 17.3 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 
-Both `check` rows are in the committed ledger, and exporting it a second time printed
-`2 kept from the file, 0 from task/X30-merge-bar-and-ledger-tooling, 2 already there`
-— item 2, running on its own task.
+All three `check` runs are in the committed ledger, and the export that added the
+third printed `2 kept from the file, 1 from
+task/X30-merge-bar-and-ledger-tooling, 2 already there` — item 2, running on its own
+task: the earlier rounds' lines survived, and nothing was written twice.
 
 `need --for review`: `need: review is satisfied on this code tree.` (exit 0) - the whole diff is check-only tooling, so no device gate is asked for. That is item 1 proving itself on its own task: the same diff used to owe two harness runs.
 
