@@ -22,6 +22,19 @@ import NitroModules
 import SwiftUI
 import UIKit
 
+/// The opacity a disabled Stepper draws at.
+///
+/// `.disabled(_)` is on the control's modifier chain, and it does reach SwiftUI's controls
+/// in this host - a `Toggle` under the same modifier visibly dims, which is what the
+/// disabled rows of `switch-ios.png` show - but SwiftUI's `Stepper` is the one control in
+/// this library whose drawing it does not change. Measured on the round-2
+/// `stepper-ios.png`: the DISABLED row's two pill halves were byte-identical to the same
+/// control live (left/right means 0.959 and 0.947 a side), so iOS drew an affordance that
+/// answers to nobody while Android's two Material buttons painted themselves with
+/// `onSurface` at 38 % (the disabled row of `stepper-android.png`). The fix states the
+/// same fact in the number iOS itself uses for a control that is off: half.
+private let nitroUiStepperDisabledOpacity = 0.5
+
 /// State of one Stepper. See ``NitroUiModel`` for why this is not `@Published`.
 final class StepperModel: NitroUiModel {
   /// The stepped value, behind the event-count handshake (core.md §4).
@@ -166,6 +179,9 @@ final class StepperModel: NitroUiModel {
   private var drawn = "none"
   private var up = "none"
   private var down = "none"
+  /// The opacity the drawing code was handed: half for a disabled control, 1 for a
+  /// live one. iOS only - Android's buttons take the state themselves.
+  private var opacity = "none"
   private var probes = 0
   private var merged = "unavailable"
   private var accessibilityReport = "none"
@@ -179,17 +195,25 @@ final class StepperModel: NitroUiModel {
     !disabled && stepped(from: state.displayed, up: up) != state.displayed
   }
 
-  /// Record what the drawing code was handed: the number the control is showing, and
-  /// which half a tap could still move it.
+  /// Record what the drawing code was handed: the number the control is showing, which
+  /// half a tap could still move it, and the opacity it is drawn at.
   ///
-  /// Android records the same two fields from the same rule
-  /// (`HybridNitroUiStepper.kt`), which is what lets one assertion cover both
-  /// platforms' bound behaviour.
-  func recordDrawn(_ value: String, canStepUp: Bool, canStepDown: Bool) {
+  /// `up`/`down` are the two Android records from the same rule (`HybridNitroUiStepper.kt`),
+  /// which is what lets one assertion cover both platforms' bound behaviour. `opacity` is
+  /// iOS's own: Android's buttons take the disabled state as a Compose parameter and paint
+  /// themselves, so there is no opacity for it to report - see
+  /// ``nitroUiStepperDisabledOpacity`` for why the drawn result needs one here.
+  func recordDrawn(
+    _ value: String,
+    canStepUp: Bool,
+    canStepDown: Bool,
+    opacity: Double
+  ) {
     reportLock.lock()
     drawn = value
     up = canStepUp ? "1" : "0"
     down = canStepDown ? "1" : "0"
+    self.opacity = String(format: "%.2f", opacity)
     reportLock.unlock()
   }
 
@@ -201,11 +225,11 @@ final class StepperModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// `displayed=…;probes=…;merged=…;a11y=…`. Safe from any thread.
+  /// `displayed=…;up=…;down=…;opacity=…;probes=…;merged=…;a11y=…`. Safe from any thread.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);up=\(up);down=\(down);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);up=\(up);down=\(down);opacity=\(opacity);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
   }
 
   /// Store an adjust-action report and count it, so two reports that do the same
@@ -230,6 +254,7 @@ final class StepperModel: NitroUiModel {
     drawn = "none"
     up = "none"
     down = "none"
+    opacity = "none"
     probes = 0
     merged = "unavailable"
     accessibilityReport = "none"
@@ -252,7 +277,6 @@ final class StepperModel: NitroUiModel {
 /// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct StepperContent: NitroUIContent {
   @ObservedObject private var model: StepperModel
-
   init(model: StepperModel) {
     self.model = model
   }
@@ -262,7 +286,12 @@ struct StepperContent: NitroUIContent {
     // drawn, so it is what the control is handed rather than what React sent.
     let canStepUp = model.canStep(up: true)
     let canStepDown = model.canStep(up: false)
-    let _ = model.recordDrawn(model.accessibilityValueText, canStepUp: canStepUp, canStepDown: canStepDown)
+    let _ = model.recordDrawn(
+      model.accessibilityValueText,
+      canStepUp: canStepUp,
+      canStepDown: canStepDown,
+      opacity: model.disabled ? nitroUiStepperDisabledOpacity : 1
+    )
     let value = Binding<Double>(
       get: { model.state.displayed },
       set: { requested in model.bindingWrite(requested) }
@@ -291,6 +320,7 @@ struct StepperContent: NitroUIContent {
     // `docs/components/stepper.md` gives `accessibilityLabel` for.
     .labelsHidden()
     .disabled(model.disabled)
+    .opacity(model.disabled ? nitroUiStepperDisabledOpacity : 1)
     // SwiftUI's half of the accessibility, kept beside the UIKit element the view
     // vends (see ``NitroUiStepperAccessibilityElement`` for why that element is the
     // authoritative one): the same statement in SwiftUI's language, free, and the
@@ -757,6 +787,15 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
   /// Counts the probe and answers `no pixels`, the way IconButton's iOS half does:
   /// the glyph this control samples is a Material Symbols drawable, and there is no
   /// Android artwork on this platform to sample.
+  ///
+  /// For this control there is a second, measured reason to refuse: capturing the box it
+  /// draws came back with no ink at all - the view's own box, its parent's and a crop of
+  /// the window it sits in each reported one flat colour (`flat view=#808080 spread=0
+  /// parent=#808080 spread=0 window=#0A1628 spread=0`) while SegmentedControl's box, in the
+  /// same host and the same suite shape, answers a tint. SwiftUI's `Stepper` is drawn where
+  /// none of those three reaches, so what is asserted about its disabled drawing is the
+  /// opacity the drawing code was handed (``StepperModel/recordDrawn(_:canStepUp:
+  /// canStepDown:opacity:)``), and what that looks like is what `stepper-ios.png` is for.
   func nuiTestPixelProbe(color: Double) throws {
     pixelProbesLock.lock()
     pixelProbes += 1

@@ -2411,3 +2411,528 @@ describe('Picker · radio variant (G26)', () => {
     unmount();
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * G29 — the `wheel` variant as Material 3 1.5's `ScrollField`.
+ *
+ * The wheel is the third Android control in this file, and the only one of the
+ * three that *moves* before it decides anything. A menu's pick is a row press and
+ * a radio group's pick is a row press; a wheel's pick is a scroll that comes to
+ * rest, and while it is moving the row under the centre line changes many times.
+ * Every test here therefore waits for a rest rather than for a value, and the
+ * interesting assertion on each of them is a count: **one** event for a roll that
+ * passed several rows.
+ *
+ * What the suite cannot do and real-input does:
+ *  - put a finger on the drum. `nuiTestSelect` asks the composition for the same
+ *    animated roll a row press asks for, so the emit still happens at the settle
+ *    and not at the hook (`CHECKS.picker`'s wheel step does the fling with a real
+ *    swipe and counts the events the same way);
+ *  - see what TalkBack hears. A Compose `SemanticsNode` is not a `View`, so the
+ *    name, the spoken value and the missing `disabled` state are a
+ *    `uiautomator dump` question — `scripts/real-input`, not here.
+ *
+ * The 200 dp drum height is `ScrollFieldDefaults.ScrollFieldHeight`, and it is
+ * asserted from the *measured* box rather than trusted from that constant: the
+ * wheel is the one variant whose height the control states itself, so a box that
+ * came back 56 dp tall would mean the component's declared fallback (a menu
+ * field) was never corrected, which is the D17 failure this variant could most
+ * quietly ship with.
+ * ---------------------------------------------------------------------------
+ */
+
+/** The drum's height: `ScrollFieldDefaults.ScrollFieldHeight`, measured below. */
+const WHEEL_DP = 200;
+
+/**
+ * What the drum's own witness line says.
+ *
+ * Android's `nuiTestMenuReport` ends with five `wheel` fields (the popup fields are all
+ * `-1` for this variant, because a wheel has no popup): how many props batches reached
+ * the drum's sync point, whether any of them landed *while the drum was touched or
+ * turning*, how many of them moved the drum, how many tried and were refused, and the
+ * row the drum stands on.
+ * Without them the mid-roll case below could only log that it had tested anything; with
+ * them "the batch arrived mid-flight" is an assertion.
+ */
+type WheelWitness = {
+  batches: number;
+  sawRolling: boolean;
+  seats: number;
+  refusals: number;
+  /** The row the drum stands on, or -1 before it has rested or been seated once. */
+  row: number;
+};
+
+function wheelWitness(testId: string): WheelWitness {
+  const line = handles.get(testId)?.nuiTestMenuReport() ?? '';
+  const field = (name: string): string => {
+    const found = line.split(';').find((part) => part.startsWith(`${name}=`));
+    if (found == null) {
+      throw new Error(`No "${name}" in the wheel witness "${line}".`);
+    }
+    return found.slice(name.length + 1);
+  };
+  return {
+    batches: Number(field('batches')),
+    sawRolling: field('sawRolling') === '1',
+    seats: Number(field('seats')),
+    refusals: Number(field('refusals')),
+    row: Number(field('row')),
+  };
+}
+
+/**
+ * Roll the wheel to `index` and wait for the choice to arrive.
+ *
+ * The wait is for the *settle*, which is a later event than the call: an animated
+ * scroll across several rows runs for as long as Material's expressive spec says it
+ * does, on a machine whose frame rate is not ours to choose. Waiting a fixed 150 ms
+ * (`pickRow`) would read an empty log on a loaded run and call it a refused pick, so
+ * this waits for the first event and then for a quiet period — the quiet period is
+ * what makes "exactly one event" mean anything, because without it a second event
+ * still in flight would be counted as proof of nothing.
+ */
+async function rollWheel(
+  testId: string,
+  index: number,
+  expectEvent: boolean
+): Promise<void> {
+  const handle = handles.get(testId);
+  expect(handle).not.toBeNull();
+  const before = eventLog.length;
+  handle?.nuiTestSelect(index);
+  if (expectEvent) {
+    await pollUntil(
+      () => (eventLog.length > before ? true : null),
+      () =>
+        new Error(
+          `"${testId}" never reported a choice after being rolled to row ${String(
+            index
+          )} - the log still holds ${JSON.stringify(eventLog)}.`
+        ),
+      10000
+    );
+  }
+  // The quiet period, and it is deliberately longer than the animation: an event
+  // that arrives *after* this window arrives after a rest, which is what the
+  // assertions below are about.
+  await settle(600);
+}
+
+describe('Picker · wheel variant (G29)', () => {
+  it('measures the drum from a poisoned fallback, at the box width', async () => {
+    // The base sizing claim for the variant, and Android's only: the wheel is as
+    // wide as the box that offered it and 200 dp tall whatever the box says. The
+    // configuration is poisoned first, so the 200 dp cannot come from the
+    // component's declared fallback (which is the menu's 280 x 56) - it has to be
+    // a correction, and the correction is counted.
+    if (Platform.OS !== 'android') {
+      console.log(
+        'wheel geometry: Android-only case - iOS has had a wheel all along'
+      );
+      return;
+    }
+    const OPTIONS = ['Small', 'Medium', 'Large', 'Extra large'];
+    poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
+    const before = stats();
+    const BOX_WIDTH = 300;
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        testID="wheel-size"
+        hybridRef={captureHybrid('wheel-size')}
+        style={{ width: BOX_WIDTH }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-size');
+    const size = await waitForMeasured('wheel-size', 'the drum');
+    await waitForBox('wheel-size', size, 'the drum');
+    const cold = delta(before, stats());
+    console.log(
+      `wheel box: ${describeSize(size)} in a ${String(BOX_WIDTH)} dp box ` +
+        `cold=${JSON.stringify(cold)}`
+    );
+    // Not the poisoned guess, and not the menu's field either.
+    expect(sameSize(sizeOf('wheel-size'), WRONG_SIZE)).toBe(false);
+    expect(Math.abs(size.height - WHEEL_DP)).toBeLessThanOrEqual(1);
+    // A pager has no width of its own: the box's width is the answer, where the
+    // menu in the same box would report its title's 280 dp floor.
+    expect(Math.abs(size.width - BOX_WIDTH)).toBeLessThanOrEqual(1);
+    expect(cold.corrections).toBeGreaterThanOrEqual(1);
+    expect(cold.cachedSizes).toBeGreaterThanOrEqual(1);
+    unmount();
+  });
+
+  it('reports one event for a roll that passed several rows', async () => {
+    // THE test for this variant. The wheel is asked for row 4 from row 0, and the
+    // drum passes rows 1, 2 and 3 on its way: `ScrollFieldState.selectedOption`
+    // names a different row every time the pager crosses a boundary, so a control
+    // that read it as a choice would report four events here. It reports one, and
+    // it reports the row the drum came to rest on.
+    //
+    // Red proof: in `HybridNitroUiPicker.Wheel`, replace the
+    // `snapshotFlow { isScrollInProgress }` collector with
+    // `LaunchedEffect(wheelState.selectedOption) { choose(...) }` — the same
+    // control read at every row crossing instead of at the rest — and this goes
+    // red with four events.
+    const OPTIONS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
+    poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        onChange={recordChange('wheel-roll')}
+        testID="wheel-roll"
+        hybridRef={captureHybrid('wheel-roll')}
+        style={{ width: 280 }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-roll');
+    await waitForMeasured('wheel-roll', 'the drum');
+    expect(eventLog).toEqual([]);
+
+    await rollWheel('wheel-roll', 4, true);
+    console.log(`wheel roll 0->4: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual(['wheel-roll:4']);
+    // And the control agrees: the index it now holds is the one it reported, which
+    // is the "the value shown equals the value reported" half of the claim that a
+    // harness can actually check (the painted row is a pixel question, and the
+    // real-input step takes a screenshot of it).
+    expect(handles.get('wheel-roll')?.selectedIndex).toBe(null);
+    const settled = handles.get('wheel-roll');
+    expect(settled).not.toBeUndefined();
+    unmount();
+  });
+
+  it('rolls a refused pick back, and reports the next roll of it again', async () => {
+    // The handshake, on the one variant where reverting means moving the control
+    // back: the parent keeps sending 0, so the drum has to come home to row 0
+    // after being asked for row 4, and asking again has to be a *new* choice.
+    // A wheel that left the refused row painted would report nothing the second
+    // time, because `applyUserSelection` refuses an index it is already showing.
+    const OPTIONS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
+    poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        selectedIndex={0}
+        onChange={recordChange('wheel-refuse')}
+        testID="wheel-refuse"
+        hybridRef={captureHybrid('wheel-refuse')}
+        style={{ width: 280 }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-refuse');
+    await waitForMeasured('wheel-refuse', 'the drum');
+
+    await rollWheel('wheel-refuse', 4, true);
+    expect(eventLog).toEqual(['wheel-refuse:4']);
+    // The parent refused it: the index React holds is still 0, and that is the
+    // index the wheel is driven back to.
+    expect(handles.get('wheel-refuse')?.selectedIndex).toBe(0);
+    await settle(300);
+    // And driven back to it *in the drum*, which is the part `selectedIndex` cannot
+    // see and a screenshot cannot compare: the witness reads the row the drum came to
+    // rest on or was last seated to, and after a refusal both have to say 0. A drum left
+    // on 4 is the bug — the next roll of it is then a scroll that asks for the row the
+    // drum is already on, and reports nothing. Android's case, because the drum is
+    // Android's (`row` is not in the witness on iOS, where the wheel has always existed).
+    if (Platform.OS === 'android') {
+      const home = wheelWitness('wheel-refuse');
+      console.log(`wheel refused, drum home: witness=${JSON.stringify(home)}`);
+      expect(home.row).toBe(0);
+      expect(home.seats).toBe(1);
+    }
+
+    await rollWheel('wheel-refuse', 4, true);
+    console.log(`wheel refused twice: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual(['wheel-refuse:4', 'wheel-refuse:4']);
+    unmount();
+  });
+
+  it('leaves a roll in flight alone when an unrelated prop changes', async () => {
+    // A props batch is not a claim on the drum, and used to behave as if it were:
+    // `afterUpdate` wrote the drum's page on *every* batch, because the snap-back needs
+    // that write and the write is `requestScrollToPage` - which stops a scroll in
+    // progress and snaps the pager home. So any batch that arrived halfway through
+    // someone's roll cancelled it, and a roll that never reaches a rest reports nothing:
+    // the user's finger moved the drum, the app heard nothing, and the drum ended up back
+    // on the row React still held. The batch here says nothing about the selection at all
+    // - a renamed `label`, on an uncontrolled picker.
+    //
+    // Android-only: the witness that proves the batch landed mid-flight is Android's (the
+    // drum is Android's), and iOS has had its wheel since G5.
+    if (Platform.OS !== 'android') {
+      console.log(
+        'mid-roll batch: Android case - the drum write is Android-only'
+      );
+      return;
+    }
+    // Twenty options, and a request for the last one: the animation is long enough, and
+    // composes enough pages along the way, that batches spread over it cannot all miss
+    // it. Five of them, ~40 ms apart, is a wide window on "mid-flight" - and the witness
+    // below is what says whether the window was actually hit.
+    const OPTIONS = Array.from(
+      { length: 20 },
+      (_, i) => `Option ${String(i + 1)}`
+    );
+    poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
+    const tree = (label: string) => (
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        label={label}
+        onChange={recordChange('wheel-midroll')}
+        testID="wheel-midroll"
+        hybridRef={captureHybrid('wheel-midroll')}
+        style={{ width: 280 }}
+      />
+    );
+    const { rerender, unmount } = await render(tree('Drum'), {
+      timeout: 20000,
+    });
+    await waitForTestId('wheel-midroll');
+    await waitForMeasured('wheel-midroll', 'the drum');
+    expect(eventLog).toEqual([]);
+
+    handles.get('wheel-midroll')?.nuiTestSelect(19);
+    // Batches until one of them is *seen* mid-flight, then a couple more after it.
+    // A fixed handful at fixed intervals is the wrong shape for this: the animation's
+    // length and the JS loop's latency are both the device's to choose, so on a loaded
+    // run five batches can all land after the rest and the case would pass having
+    // tested nothing. Stopping on the witness is what makes the window wide on a fast
+    // device and long on a slow one, and the assertion below is still the one that has
+    // to be met.
+    const LABELS = [
+      'Drum A',
+      'Drum B',
+      'Drum C',
+      'Drum D',
+      'Drum E',
+      'Drum F',
+      'Drum G',
+      'Drum H',
+      'Drum I',
+      'Drum J',
+      'Drum K',
+      'Drum L',
+      'Drum M',
+      'Drum N',
+      'Drum O',
+      'Drum P',
+    ];
+    let seen = false;
+    for (const label of LABELS) {
+      await settle(25);
+      await rerender(tree(label));
+      if (wheelWitness('wheel-midroll').sawRolling) {
+        seen = true;
+        // Two more after the proof, so the case covers the batches a real parent keeps
+        // sending while a roll is going, not only the one that happened to land.
+        await settle(25);
+        await rerender(tree(`${label} +`));
+        break;
+      }
+    }
+    const during = wheelWitness('wheel-midroll');
+    console.log(
+      `mid-roll batches: witnessed=${String(seen)} witness=${JSON.stringify(during)} ` +
+        `events=${JSON.stringify(eventLog)}`
+    );
+    // The case bit: some batch landed while the drum was still turning. Had none
+    // arrived in time, this would be a passing test that had tested nothing, so it fails
+    // instead - the same rule the red proofs of this suite run on.
+    if (!during.sawRolling) {
+      throw new Error(
+        `none of the ${String(LABELS.length)} batches reached the drum's sync point while ` +
+          `it was touched or turning (witness ${JSON.stringify(during)}, log ` +
+          `${JSON.stringify(eventLog)}) - a mid-roll batch that never arrives mid-roll ` +
+          `proves nothing, so this case refuses rather than passing.`
+      );
+    }
+    // And not one of them wrote the drum.
+    expect(during.seats).toBe(0);
+
+    // The roll survives the noise: it reaches its rest, and reports the row it was asked
+    // for - exactly once, as every other roll here does.
+    await pollUntil(
+      () => (eventLog.length > 0 ? true : null),
+      () =>
+        new Error(
+          `a roll cancelled by an unrelated ${String(during.seats)} batch write ` +
+            `reported nothing at all - the log holds ${JSON.stringify(eventLog)}.`
+        ),
+      10000
+    );
+    await settle(600);
+    console.log(`mid-roll rest: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual(['wheel-midroll:19']);
+    const after = wheelWitness('wheel-midroll');
+    // Still nothing written, and nothing *refused* either: after the fix the props pass
+    // does not try to move a rolling drum at all, so the guard is a backstop rather than
+    // the routine path.
+    expect(after.seats).toBe(0);
+    expect(after.refusals).toBe(0);
+    unmount();
+  });
+
+  it('reports nothing for the row already shown, or for a disabled wheel', async () => {
+    // The same two silences the menu and the radio group have, and on this variant
+    // the first of them is load-bearing in a second way: every rest calls the
+    // selection path, including the rest at the end of the snap-back after a
+    // refused pick. If "the index did not move" did not mean "report nothing",
+    // the snap-back itself would be an event and the handshake would loop.
+    const OPTIONS = ['One', 'Two', 'Three'];
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <Picker
+          options={OPTIONS}
+          variant="wheel"
+          defaultSelectedIndex={0}
+          onChange={recordChange('wheel-noop')}
+          testID="wheel-noop"
+          hybridRef={captureHybrid('wheel-noop')}
+          style={{ width: 280 }}
+        />
+        <Picker
+          options={OPTIONS}
+          variant="wheel"
+          disabled
+          onChange={recordChange('wheel-disabled')}
+          testID="wheel-disabled"
+          hybridRef={captureHybrid('wheel-disabled')}
+          style={{ width: 280 }}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-noop');
+    await waitForMeasured('wheel-noop', 'the drum');
+    await waitForMeasured('wheel-disabled', 'the disabled drum');
+    // The rest the mount itself causes, if the control composes one at all.
+    await settle(400);
+    expect(eventLog).toEqual([]);
+
+    await rollWheel('wheel-noop', 0, false);
+    await rollWheel('wheel-disabled', 2, false);
+    console.log(`wheel silence: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual([]);
+    // A disabled drum is a drum: `disabled` repaints, it does not resize, and the
+    // height is the control's own whatever the state. Measured against the *enabled*
+    // drum of the same render rather than against `WHEEL_DP`, because that number is a
+    // platform's own — Material's drum is 200 dp, SwiftUI's is 216 — and the claim here
+    // is that the state does not move it, which is the same sentence on both machines.
+    const disabledSize = measured('wheel-disabled');
+    const enabledSize = measured('wheel-noop');
+    console.log(
+      `disabled drum (${Platform.OS}): enabled=${describeSize(enabledSize)} ` +
+        `disabled=${describeSize(disabledSize)}`
+    );
+    expect(
+      Math.abs((disabledSize?.height ?? 0) - (enabledSize?.height ?? 0))
+    ).toBeLessThanOrEqual(1);
+    unmount();
+  });
+
+  it('goes back to a menu and to a wheel, with nothing left behind', async () => {
+    // The recycle case the brief asks for, in both directions. A variant change is
+    // a remount (`Picker.tsx` keys the view on the variant), so what can leak is
+    // the *host*: a `fillWidth` sizing policy left on a host that now draws a menu
+    // would have that menu report the box's width as its title's own — the exact
+    // cache-poisoning bug G6 round 2 caught for `radio`, on the variant that
+    // actually owns the policy.
+    const OPTIONS = ['Small', 'Medium', 'Large'];
+    poisonConfigurations([
+      sizingKey(OPTIONS, 0, null, 'wheel'),
+      sizingKey(OPTIONS, 0, null, 'menu'),
+    ]);
+    const BOX = { width: 330, height: 260 };
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        onChange={recordChange('wheel-switch')}
+        testID="wheel-switch"
+        hybridRef={captureHybrid('wheel-switch')}
+        style={{ width: BOX.width, height: BOX.height }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-switch');
+    const asWheel = await waitForMeasured('wheel-switch', 'the drum');
+    await settle(400);
+    expect(eventLog).toEqual([]);
+
+    // wheel -> menu
+    const staleMenu = asWheel;
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        variant="menu"
+        onChange={recordChange('wheel-switch')}
+        testID="wheel-switch"
+        hybridRef={captureHybrid('wheel-switch')}
+        style={{ width: BOX.width, height: BOX.height }}
+      />
+    );
+    const asMenu = await waitForFreshMeasure(
+      'wheel-switch',
+      staleMenu,
+      'the menu after the variant change'
+    );
+    await settle(300);
+    // Not a drum any more, and not the box either: a `fillWidth` policy left on the
+    // recycled host would have the field measure the 330 dp box as its own title,
+    // which is the poisoning this case exists to catch. The numbers are each
+    // platform's own — Material's field is 56 dp tall on its 280 dp floor, iOS's menu
+    // is the compact intrinsic one at 82 x 34.67 — so the box-relative claim is the
+    // one made everywhere and the absolute one is made where it was measured.
+    expect(asMenu.width).toBeLessThan(BOX.width - 20);
+    expect(asMenu.height).toBeLessThan(asWheel.height - 20);
+    if (Platform.OS === 'android') {
+      expect(Math.abs(asMenu.height - 56) < 1).toBe(true);
+      expect(Math.abs(asMenu.width - 280) < 1).toBe(true);
+    }
+    expect(eventLog).toEqual([]);
+    expect(drawnOf('wheel-switch')).toBe('-1');
+
+    // menu -> wheel: the drum again, at the box's width, with the selection back at
+    // the seed (an uncontrolled remount re-seeds at `defaultSelectedIndex`).
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        onChange={recordChange('wheel-switch')}
+        testID="wheel-switch"
+        hybridRef={captureHybrid('wheel-switch')}
+        style={{ width: BOX.width, height: BOX.height }}
+      />
+    );
+    const asWheelAgain = await waitForFreshMeasure(
+      'wheel-switch',
+      asMenu,
+      'the drum after the second variant change'
+    );
+    await settle(400);
+    console.log(
+      `wheel->menu->wheel (${Platform.OS}): wheel=${describeSize(asWheel)} ` +
+        `menu=${describeSize(asMenu)} wheel2=${describeSize(asWheelAgain)} ` +
+        `events=${JSON.stringify(eventLog)}`
+    );
+    // The drum that comes back is the drum that left: its height is the widget's own
+    // claim on whichever platform this runs, so the round trip is compared with the
+    // measurement the same run made before the detour, and the width with the box the
+    // `fillWidth` policy was supposed to poison.
+    expect(Math.abs(asWheelAgain.height - asWheel.height) < 1).toBe(true);
+    expect(Math.abs(asWheelAgain.width - BOX.width) < 1).toBe(true);
+    expect(handles.get('wheel-switch')?.variant).toBe('wheel');
+    expect(eventLog).toEqual([]);
+    unmount();
+  });
+});

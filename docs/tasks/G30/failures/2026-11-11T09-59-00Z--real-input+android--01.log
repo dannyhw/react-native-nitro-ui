@@ -1,0 +1,197 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-11T09:59:00.513Z on code tree `d8c92dbd7655` at HEAD `d2c2293` (branch `task/G30-fix1`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 3939520 ms
+- Load: start 6.04, end 5.64, median 5.11, max 47.10
+- Device: android / device `emulator-5574` / lease `G30-o7nwh`
+- Full log: `task/G30-fix1/real-input+android-2026-11-11T09-59-00.076Z.log` (<store>/task/G30-fix1/real-input+android-2026-11-11T09-59-00.076Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the row inside the Form is darker with the finger down than at rest (held 0.9530 against rest 0.9530): an item that presses inside a row has to show it, and inside a row only the section's own pressed state can`
+- `✗ no control with accessibilityLabel "Real-input item" in the accessibility tree — the hosted control offers nothing a real tap could be aimed at`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-fix1/real-input+android-2026-11-11T09-59-00.076Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-o7nwh (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   X24-wd8i4                X24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.64 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 931 — the rest is in the full log above)
+
+```
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted picker" occupies 42,1546 → 777,1714
+    ✓ a real tap on the hosted anchor opens the menu as a popup window — expected 1, saw 1
+    · menu row "Gamma" at 106,2024 -> 234,2077; hosted anchor at 42,1546 -> 777,1714
+    ✓ the menu opens below the top of the box the Host drew, not at the top of the screen
+    ✓ the hosted menu marks the current choice ("Beta") selected to TalkBack
+    ✓ and the row reaches JS as index 2 — expected 2, saw 2
+    ✓ a real tap on a hosted menu row closes the popup — expected 0, saw 0
+    · "Hosted picker" occupies 42,1546 → 777,1714
+    ✓ Back shuts the hosted popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 2, saw 2
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+    · "Hosted date picker" needed 2 scrolls to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted date picker" occupies 42,1162 → 386,1288
+    ✓ the hosted DatePicker shows the day JS gave it — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1162 → 386,1288
+    ✓ the hosted dialog's day cells are in the accessibility tree (31 of them, clickable and named with a year)
+    ✓ the dialog opens on the month the Host is drawing, not on a default
+    ✓ while the hosted dialog is up it is a window of its own - the app's own echo is not in the same dump
+    ✓ Back closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    ✓ and the app text is readable again once the dialog is gone
+    · "Hosted date picker" occupies 42,1162 → 386,1288
+    ✓ Cancel closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1162 → 386,1288
+    · tapping dialog day "Saturday, May 16, 2026"
+    ✓ a real tap on a dialog day ("Saturday, May 16, 2026") reaches JS through the Host as a new day
+    ✓ and OK closed it: the app text is readable again
+    ✓ and no popup window of any kind is left owned by the app — expected 0, saw 0
+    · "Hosted date picker" occupies 42,1183 → 386,1309
+    ✓ removing only the hosted DatePicker child leaves no dialog window behind
+    ✓ a teardown is not a choice - the day JS holds is the one it was given — expected 2026-05-16, saw 2026-05-16
+    · "Hosted date picker" occupies 42,1162 → 386,1288
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][367,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:icon-button: IconButton a11y
+    ✓ NitroUiIconButton is named on one node a person can act on
+
+  a11y:button-group: ButtonGroup a11y
+    ✓ NitroUiButtonGroup is named on one node a person can act on
+
+  a11y:stepper: Stepper a11y
+    · known failing (G25 a11y: the Stepper's RangeInfo node is not actionable in a dump): NitroUiStepper: the node that carries "Real-input stepper" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,770][315,896]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiStepper has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2185][1038,2311]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2225][535,2351]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:search-field: SearchField a11y
+    ✓ NitroUiSearchField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+  a11y:form: Form a11y
+    ✓ NitroUiForm is named on one node a person can act on
+
+  a11y:list-item: ListItem a11y
+    ✓ NitroUiListItem is named on one node a person can act on
+
+switch: PASS (no retries)
+slider: PASS (no retries)
+button: PASS (no retries)
+segmented-control: PASS (no retries)
+date-picker: PASS (retried 1 input sequence(s))
+picker: PASS (no retries)
+menu: PASS (no retries)
+dialog: PASS (no retries)
+text-field: PASS (no retries)
+bottom-sheet: PASS (no retries)
+chip: PASS (no retries)
+checkbox: PASS (no retries)
+context-menu: PASS (no retries)
+search-field: PASS (no retries)
+tooltip: PASS (no retries)
+icon-button: PASS (no retries)
+popover: PASS (no retries)
+form: PASS (no retries)
+button-group: PASS (no retries)
+stepper: PASS (no retries)
+list-item: FAIL (no retries)
+    failed: the row inside the Form is darker with the finger down than at rest (held 0.9530 against rest 0.9530): an item that presses inside a row has to show it, and inside a row only the section's own pressed state can
+    failed: no control with accessibilityLabel "Real-input item" in the accessibility tree — the hosted control offers nothing a real tap could be aimed at
+hosted-switch: PASS (no retries)
+hosted-button: PASS (no retries)
+hosted-slider: PASS (no retries)
+hosted-mixed: PASS (no retries)
+hosted-segmented: PASS (no retries)
+hosted-picker: PASS (no retries)
+hosted-date-picker: PASS (no retries)
+
+real-input (android): 27/28 controls passed · 1 input sequence(s) needed a retry - see the retried notes above for which · 25/25 auxiliary checks passed
+gate: real-input:android FAIL in 3939.5 s - note: the code tree moved during the run (95041450bc55 now), so this line describes d8c92dbd7655
+gate: recorded in .gates/task/G30-fix1.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G30-fix1/real-input+android-2026-11-11T09-59-00.076Z.log (5 probe(s))
+
+```

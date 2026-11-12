@@ -64,7 +64,7 @@ clamp, and the pick test is routed through it.
 | `compact` `time` | same field, popover shows `.wheel` | field opens `TimePickerDialog` |
 | `compact` `datetime` | popover shows `.graphical` with `[.date, .hourAndMinute]` (calendar + time row) | **two dialogs**: the date one commits, then the time one opens |
 | `inline` | `DatePicker` with `.graphical` | `DatePicker(state, showModeToggle = false)`; `time` → `TimePicker` |
-| `wheel` | `DatePicker` with `.wheel` | **no M3 wheel** — renders the inline picker |
+| `wheel` | `DatePicker` with `.wheel` | `time` → a drum per field — hour, minute, and AM/PM on a 12-hour device — drawn with Material 3 1.5's `ScrollField`; `date` / `datetime` → the inline calendar, unchanged |
 | Bounds | `DatePicker(in: ClosedRange<Date>)` | `SelectableDates` + the calendar's `yearRange` |
 | Host | `UIHostingController` inside `NitroSwiftUIHost`, plus containment for the popover (`needsContainment`) | `NitroComposeHost<M>: AbstractComposeView`; the dialog is composed from `model.presented` inside that composition |
 | Test id | RN `testID` → `accessibilityIdentifier` | `host.tag` (Compose has no test id) |
@@ -182,6 +182,41 @@ new bounds has both bounds before it has a value to clamp.
 An uncontrolled picker seeds from `defaultValue` (or the mount moment) once; a remount
 starts from its own default, not from what the previous mount ended with.
 
+Android's `wheel` reads a pick at a **rest**, not as it turns. A drum names the row nearest
+its snap line continuously, so the dial's rule ("the fields moved, so somebody picked")
+would price a roll from 09:20 to 14:05 at fifty-odd events, each with its own event count.
+The rule is kept and the trigger replaced: the time is read when the drums have come to
+rest, one rest one report. The write-back that reverts a refused pick is **not** that rest:
+it is an instant `scrollToOption` on each drum, asked for where the value is decided — on
+the props pass, right after the reconcile that reverts the instant. A refused pick can
+write the new instant and the parent's back inside one frame, and an effect keyed on the
+instant then never sees the change it was waiting for, which would leave the refused pair on
+the drums and the next roll reporting nothing (`Picker variant="wheel"` documents the same
+race, and answers it the same way). It is `scrollToOption` and not the `selectedOption`
+write the `Picker` drum gets away with because these are three pagers that draw nothing from
+their own value: `selectedOption` only *asks* for a scroll, and a drum nobody is reading has
+no reason to measure again, so it reports the new page while still standing on the old one.
+Two more things travel with that seat, both learned the hard way: the wheel's own-write
+guard — the pair the drums were last put on, which is what stops a rest the control caused
+from being read as a pick — has to be moved with it, or the *next* roll is swallowed as
+exactly that; and every road that moves a drum (that seat, a new `value`, a roll, a rest's
+tail) takes one mutex, so a roll asked for a frame after a revert starts from where the
+drums have got to. The rest's own tail re-seats the drums too, so a roll
+that lands on a value the app refuses is home again by the time the finger has left. The
+rest is the wheel's own, on both of this library's wheels and in one helper: a
+finger on the drum or a drum still turning is *active*, and a drum's scroll flag falls when
+its own snap animation finishes — so the report lands after the pointer is up and after the
+coasting has ended, never on a timer. (A quiet period is what this used to be, and a loaded
+machine could watch one fling cross rows slowly enough to split it into two events.) The
+drums are drawn here rather than by `TimeScroll` for the same reason: Material's widget keeps
+its `ScrollFieldState`s to itself, and a settle needs one. The dial (`compact` / `inline`
+time dialogs) is untouched: a dial writes its hour once, when the finger lifts.
+
+A drum keeps the vertical drag that begins on it, so a page with a wheel in it is scrolled
+beside the wheel rather than over it — the same bargain `Picker variant="wheel"` makes, for
+the same reason: the scroll view claims a vertical drag at touch slop, which before the
+drum asked for it left the drums frozen while the page moved.
+
 ## Accessibility
 
 A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 March 2026",
@@ -203,17 +238,38 @@ A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 Marc
   otherwise TalkBack offers every day cell of a disabled calendar as an enabled button.
 - The invisible width probe is `clearAndSetSemantics`, so TalkBack never reads a date
   nobody picked.
+- **The `wheel`'s drums are one stop each.** The control is one named node (`content-desc`,
+  `enabled`, and — read from a dump — `scrollable=false`), and inside it each drum publishes
+  a node of its own, named with Material's own localised strings ("Select hour", "Select
+  minutes") rather than invented ones, so the words are the words a stock wheel says; on a
+  12-hour device the AM/PM column is a third drum, named by the two values it holds, as it
+  is on iOS. A screen reader therefore hears one stop per drum, and each drum speaks the row
+  it is on; the rows themselves are not in the tree, which is the gap in Limits.
 
 ## Limits
 
-- **Android has no wheel** (`variant: 'wheel'` renders the inline picker), and **no
-  combined date+time control**: `datetime` is a date dialog followed by a time dialog, and
-  the inline form of `datetime` shows the calendar only.
+- **Android's wheel is a time wheel**: `variant: 'wheel'` with `mode: 'time'` draws the
+  drums above — Material's
+  `ScrollField`, the widget Material builds its own `TimeScroll` out of, drawn one per
+  field so the settle has a scroll state to read — and `variant: 'wheel'` in `date` or
+  `datetime` renders the inline picker, because Material 3 has no wheel calendar to draw —
+  its calendar is a grid of day cells, and a drum of days would be a control of ours with
+  Material's paint on it. So on Android the variant chooses a *widget* where a time is
+  shown and changes nothing where a date is, which is the one place `variant` does not mean
+  the same thing on both platforms. There is **no combined date+time control**: `datetime`
+  is a date dialog followed by a time dialog, and the inline form of `datetime` shows the
+  calendar only.
 - **Android's Material 3 pickers are dialogs or full inline calendars** — there is no
   small inline field, and `DatePickerDialog` is modal. Nothing else of theirs is exposed:
   not the calendar's year-picker *mode toggle* (it swaps the grid for text entry, which is
   a keyboard nobody asked for), nor the time picker's text-input toggle, nor a `TimePicker`
   in the dialog's date step.
+- **The time wheel's rows are not in the accessibility tree.** A `ScrollField` keeps its
+  rows to itself, so outside the app there is nothing to compare the reported time
+  against — `scripts/real-input` asserts the event count a fling produces rather than the
+  row it landed on, and a screen reader gets one stop per drum with no row to activate.
+  The drum's spoken value comes from Material's own drum semantics; the control node
+  itself says `scrollable=false`, so no scroll actions are offered on it.
 - The `compact` field's width is the widest value the mode can produce, not the current
   one. That is the trade described in Sizing, not a bug to file.
 - Locale and time zone come from the device; there is no `locale` or `timeZone` prop, and

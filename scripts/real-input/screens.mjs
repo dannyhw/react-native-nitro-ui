@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'buttongroup'|'form'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'buttongroup'|'form'|'listitem'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -41,6 +41,7 @@ export const SCREEN_FILE = Object.freeze({
   form: 'example/src/FormScreen.tsx',
   buttongroup: 'example/src/ButtonGroupScreen.tsx',
   stepper: 'example/src/StepperScreen.tsx',
+  listitem: 'example/src/ListItemScreen.tsx',
 });
 
 /**
@@ -74,6 +75,20 @@ export const ECHO = Object.freeze({
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  // G29: the `variant="wheel"` drum's own echo. Its rows are in the app's window like
+  // the radio group's, but a drum is rolled rather than pressed, so the count matters as
+  // much as the index: one settle, one event, whatever rows it passed.
+  wheelIndex: 'real-input-wheel-index',
+  wheelEvents: 'real-input-wheel-events',
+  // G29: the same pair on the `wheel` + `mode="time"` DatePicker, where the value is an
+  // instant and the drums are one per field, drawn from Material's own `ScrollField`.
+  wheelTimeValue: 'real-input-wheel-time-value',
+  wheelTimeEvents: 'real-input-wheel-time-events',
+  // G29: the count on the drum whose parent refuses every roll. The time it reports
+  // never moves - the parent keeps sending the one it was built with - so this echo is
+  // the only thing that says the roll was seen, and the accessibility tree is what says
+  // whether the drums rolled back afterwards.
+  wheelRefuseEvents: 'real-input-wheel-refuse-events',
   // G26: the `variant="radio"` group's own echo. Its rows are in the app's window,
   // so a real tap goes straight to one and this is what that tap moves.
   radioIndex: 'real-input-radio-index',
@@ -172,6 +187,15 @@ export const ECHO = Object.freeze({
   stepperRefusedLast: 'real-input-stepper-refused-last',
   stepperRefusedEvents: 'real-input-stepper-refused-events',
   stepperDisabledEvents: 'real-input-stepper-disabled-events',
+  // G30: a ListItem has no value to hold, so the readings are the press count, the
+  // title of the last row that answered `onPress` (the one check that a tap fired the
+  // *right* row), the counter a tap on a disabled item would move, and the counter for
+  // the item that lives inside a `Form.Row` — whose press has to reach the leaf through
+  // a row that owns the cell's shape and insets (DECISIONS D46 item 2).
+  listItemPresses: 'real-input-listitem-presses',
+  listItemLast: 'real-input-listitem-last',
+  listItemDisabledEvents: 'real-input-listitem-disabled-events',
+  listItemFormPresses: 'real-input-listitem-form-presses',
 });
 
 /**
@@ -281,6 +305,7 @@ export const SCREEN_TAB = Object.freeze({
   iconbutton: { anchor: ECHO.iconButtonValue },
   buttongroup: { anchor: ECHO.buttonGroupPresses },
   stepper: { anchor: ECHO.stepperValue },
+  listitem: { anchor: ECHO.listItemPresses },
   host: { anchor: ECHO.hostValue },
   form: { anchor: ECHO.formScreenEcho },
 });

@@ -1,0 +1,197 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-11T00:13:57.644Z on code tree `69a070726be5` at HEAD `ddd90c2` (branch `task/G30-list-item`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 3586229 ms
+- Load: start 7.69, end 5.48, median 6.14, max 19.64
+- Device: android / device `emulator-5574` / lease `G30-16rcb`
+- Full log: `task/G30-list-item/real-input+android-2026-11-11T00-13-56.784Z.log` (<store>/task/G30-list-item/real-input+android-2026-11-11T00-13-56.784Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the row is darker with the finger down than at rest (0.9880 against 0.9880): the platform's own press feedback is drawn, not just wired`
+- `✗ a real tap on the live item after the disabled one: 3 real taps left real-input-listitem-presses at "14" rather than "11" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-list-item/real-input+android-2026-11-11T00-13-56.784Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-16rcb (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.48 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 849 — the rest is in the full log above)
+
+```
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ the hosted Switch starts off — expected off, saw off
+    · "Hosted switch 0" occupies 42,925 → 179,1009
+    ✓ one real tap flips a hosted Switch (React renders "on") — expected on, saw on
+    · "Hosted switch 0" occupies 42,925 → 179,1009
+    ✓ a second real tap flips it back, so the check is not one fluke — expected off, saw off
+    ✓ the Host reported both changes it was asked for — expected 2, saw 2
+    · tree positions — section=29, hosted=35/39/43, note=46; named nodes: 12:Popover | 13:Popover | 14:Form | 15:Form | 16:Groups | 17:Groups | 18:Stepper | 19:Stepper | 20:List items | 21:List items | 22:Host | 23:Host | 27:react-native-nitro-ui  | 28:Everything inside a Ho | 29:THREE SWITCHES, ONE CO | 30:Outside the form | 35:Hosted switch 0 | 39:Hosted switch 1 | 43:Hosted switch 2 | 46:The Host has a height; | 47:first switch, as JS se | 48:off | 49:changes JS has accepte | 50:2 | 51:flip the first from JS | 52:flip the first from JS | 53:A SLIDER AND A BUTTON, | 54:hosted Slider, as JS s | 55:0.40 | 56:hosted Slider gestures | 57:start=0 complete=0 | 58:presses the hosted But | 59:0 | 64:Hosted slider | 66:Hosted button | 67:Hosted action | 70:Hosted disabled button | 71:Hosted action, disable
+    ✓ the tree carries the RN text above the Host — expected true, saw true
+    ✓ the tree carries the RN note below the Host — expected true, saw true
+    ✓ the tree carries a node for each hosted Switch — expected true,true,true, saw true,true,true
+    ✓ each hosted Switch is its own labelled node, in mount order — expected 35,39,43, saw 35,39,43
+    ✓ the RN text above the Host is read before every hosted Switch — expected true,true,true, saw true,true,true
+    ✓ the RN note below the Host is read after every hosted Switch — expected true,true,true, saw true,true,true
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · "Hosted button" occupies 42,2322 → 355,2424
+    · "Hosted disabled button" needed 1 scroll to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted disabled button" occupies 42,1195 → 509,1300
+    ✓ the hosted Buttons start with no presses recorded — expected 0, saw 0
+    · "Hosted button" occupies 42,1069 → 355,1174
+    ✓ one real tap on a hosted Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled hosted Button does not press it — expected 1, saw 1
+    · "Hosted button" occupies 42,1069 → 355,1174
+    ✓ a second real tap presses the hosted Button again — expected 2, saw 2
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    · "Hosted slider" occupies 42,2185 → 1038,2311
+    ✓ the hosted Slider starts at 0.40 — expected 0.4, saw 0.4
+    ✓ the hosted Slider fills the Host (996 of 1080 px wide)
+    ✓ the hosted Slider is a track rather than a square
+    ✓ a real drag moves a hosted Slider and React renders it (0.4 -> 0.89)
+    ✓ the hosted Slider closed the gesture it opened (start=1 complete=1)
+    ✓ dragging back moves a hosted Slider the other way (0.89 -> 0.11)
+    ✓ a drag the machine stretches out still lands where the finger left it (0.11 -> 0.83)
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    · "Mixed button" needed 1 scroll to come on screen
+    · "Mixed button" occupies 42,2210 → 335,2315
+    ✓ the mixed Host starts with nothing answered — expected off 0.50 0, saw off 0.50 0
+    · named nodes in the tree: 12:Popover | 13:Popover | 14:Form | 15:Form | 16:Groups | 17:Groups | 18:Stepper | 19:Stepper | 20:List items | 21:List items | 22:Host | 23:Host | 27:Outside the form | 32:Hosted switch 0 | 36:Hosted switch 1 | 40:Hosted switch 2 | 43:The Host has a height; | 44:first switch, as JS se | 45:off | 46:changes JS has accepte | 47:2 | 48:flip the first from JS | 49:flip the first from JS | 50:A SLIDER AND A BUTTON, | 51:hosted Slider, as JS s | 52:0.83 | 53:hosted Slider gestures | 54:start=3 complete=3 | 55:presses the hosted But | 56:2 | 61:Hosted slider | 63:Hosted button | 64:Hosted action | 67:Hosted disabled button | 68:Hosted action, disable | 70:The Slider fills the H | 71:FOUR KINDS OF CONTROL, | 72:mixed Host, as JS sees | 73:off 0.50 0 | 74:Press me inside a row | 79:Mixed switch | 82:Mixed slider | 83:Mixed linear progress | 84:Mixed circular progres | 86:Mixed button | 87:Mixed action
+    ✓ the mixed Host publishes a node for each of its five children — expected true,true,true,true,true, saw true,true,true,true,true
+    ✓ each kind of control is its own node, in mount order — expected 79,82,83,84,86, saw 79,82,83,84,86
+    · widths in px - slider=996, bar=996, indicator=105, switch=137
+    ✓ the linear bar is as wide as the Slider (996 vs 996)
+    ✓ the circular indicator keeps its own width (105 vs 996)
+    ✓ the Switch keeps its own width too (137 vs 996)
+    ✓ the indicator is drawn as a square, not stretched across the Host (105 x 105)
+    · "Mixed button" occupies 42,2210 → 335,2315
+    ✓ the Button in a mixed Host presses, and nothing else in it moved — expected off 0.50 1, saw off 0.50 1
+    · "Mixed switch" occupies 42,1852 → 179,1936
+    ✓ the Switch in the same Host answers too, and the press count stays — expected on 0.50 1, saw on 0.50 1
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    · "Hosted segmented" needed 2 scrolls to come on screen
+    · "Hosted segmented" occupies 42,2183 → 535,2309
+    ✓ the hosted SegmentedControl shows the index JS gave it — expected 0, saw 0
+    ✓ no window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted segmented" occupies 42,2183 → 535,2309
+    ✓ a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1 — expected 1, saw 1
+    · "Hosted segmented" occupies 42,2183 → 535,2309
+    ✓ the drawing did not move out from under the finger — expected 42,2183 → 535,2309, saw 42,2183 → 535,2309
+    · "Hosted segmented" occupies 42,2183 → 535,2309
+    ✓ a real tap on the last segment reaches JS as index 2 — expected 2, saw 2
+    ✓ and a SegmentedControl opens no window of its own, hosted or not — expected 0, saw 0
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    · "Hosted picker" needed 2 scrolls to come on screen
+    · "Hosted picker" occupies 42,1537 → 777,1705
+    ✓ the hosted Picker shows the index JS gave it — expected 1, saw 1
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted picker" occupies 42,1537 → 777,1705
+    ✓ a real tap on the hosted anchor opens the menu as a popup window — expected 1, saw 1
+    · menu row "Gamma" at 106,2015 -> 234,2068; hosted anchor at 42,1537 -> 777,1705
+    ✓ the menu opens below the top of the box the Host drew, not at the top of the screen
+    ✓ the hosted menu marks the current choice ("Beta") selected to TalkBack
+    ✓ and the row reaches JS as index 2 — expected 2, saw 2
+    ✓ a real tap on a hosted menu row closes the popup — expected 0, saw 0
+    · "Hosted picker" occupies 42,1537 → 777,1705
+    ✓ Back shuts the hosted popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 2, saw 2
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+    · "Hosted date picker" needed 3 scrolls to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted date picker" occupies 42,1388 → 386,1514
+    ✓ the hosted DatePicker shows the day JS gave it — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1388 → 386,1514
+    ✓ the hosted dialog's day cells are in the accessibility tree (31 of them, clickable and named with a year)
+    ✓ the dialog opens on the month the Host is drawing, not on a default
+    ✓ while the hosted dialog is up it is a window of its own - the app's own echo is not in the same dump
+    ✓ Back closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    ✓ and the app text is readable again once the dialog is gone
+    · "Hosted date picker" occupies 42,1388 → 386,1514
+    ✓ Cancel closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1388 → 386,1514
+    · tapping dialog day "Saturday, May 16, 2026"
+    ✓ a real tap on a dialog day ("Saturday, May 16, 2026") reaches JS through the Host as a new day
+    ✓ and OK closed it: the app text is readable again
+    ✓ and no popup window of any kind is left owned by the app — expected 0, saw 0
+    · "Hosted date picker" occupies 42,1409 → 386,1535
+    ✓ removing only the hosted DatePicker child leaves no dialog window behind
+    ✓ a teardown is not a choice - the day JS holds is the one it was given — expected 2026-05-16, saw 2026-05-16
+    · "Hosted date picker" occupies 42,1388 → 386,1514
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+
+real-input (android): Error: real-input: `uiautomator dump` returned nothing usable. The device may be asleep or the app may have crashed. The app log ends:
+11-11 01:13:17.064 31140 31200 D EGL_emulation: app_time_stats: avg=600.11ms min=29.17ms max=1171.06ms count=2
+11-11 01:13:18.297 31140 31200 D EGL_emulation: app_time_stats: avg=24.16ms min=12.13ms max=401.46ms count=51
+11-11 01:13:19.517 31140 31200 D EGL_emulation: app_time_stats: avg=609.86ms min=28.39ms max=1191.33ms count=2
+11-11 01:13:20.683 31140 31200 D EGL_emulation: app_time_stats: avg=583.00ms min=26.80ms max=1139.21ms count=2
+11-11 01:13:21.933 31140 31200 D EGL_emulation: app_time_stats: avg=24.99ms min=11.95ms max=437.92ms count=50
+11-11 01:13:23.165 31140 31200 D EGL_emulation: app_time_stats: avg=616.36ms min=26.97ms max=1205.75ms count=2
+11-11 01:13:24.316 31140 31200 D EGL_emulation: app_time_stats: avg=575.50ms min=28.82ms max=1122.19ms count=2
+11-11 01:13:24.380 31140 31140 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9db05b4
+11-11 01:13:25.597 31140 31200 D EGL_emulation: app_time_stats: avg=12.18ms min=1.60ms max=438.63ms count=51
+11-11 01:13:26.814 31140 31200 D EGL_emulation: app_time_stats: avg=608.25ms min=29.64ms max=1186.86ms count=2
+11-11 01:13:27.991 31140 31140 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@460a14e
+11-11 01:13:27.993 31140 31200 D EGL_emulation: app_time_stats: avg=589.64ms min=30.90ms max=1148.38ms count=2
+11-11 01:13:29.230 31140 31200 D EGL_emulation: app_time_stats: avg=11.22ms min=1.98ms max=404.82ms count=51
+11-11 01:13:30.466 31140 31200 D EGL_emulation: app_time_stats: avg=617.96ms min=28.87ms max=1207.04ms count=2
+11-11 01:13:31.861 31140 31152 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 0(0B) LOS objects, 16% free, 118MB/142MB, paused 947us,2.228ms total 160.323ms
+11-11 01:13:32.001 31140 31200 D EGL_emulation: app_time_stats: avg=767.22ms min=27.62ms max=1506.82ms count=2
+11-11 01:13:33.229 31140 31200 D EGL_emulation: app_time_stats: avg=614.33ms min=33.13ms max=1195.52ms count=2
+11-11 01:13:35.715 31140 31200 D EGL_emulation: app_time_stats: avg=130.80ms min=14.31ms max=1967.24ms count=19
+11-11 01:13:36.717 31140 31200 D EGL_emulation: app_time_stats: avg=111.34ms min=14.23ms max=836.20ms count=9
+11-11 01:13:37.750 31140 31200 D EGL_emulation: app_time_stats: avg=23.48ms min=12.74ms max=322.59ms count=44
+11-11 01:13:39.089 31140 31152 I nitroui.example: Background concurrent mark compact GC freed 39MB AllocSpace bytes, 1(16KB) LOS objects, 18% free, 108MB/132MB, paused 626us,2.138ms total 165.723ms
+11-11 01:13:39.750 31140 31200 D EGL_emulation: app_time_stats: avg=666.50ms min=12.62ms max=1970.99ms count=3
+11-11 01:13:40.037 31140 31140 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@11dfe3f
+11-11 01:13:40.761 31140 31200 D EGL_emulation: app_time_stats: avg=21.98ms min=8.89ms max=243.80ms count=46
+11-11 01:13:41.769 31140 31200 D EGL_emulation: app_time_stats: avg=55.95ms min=15.19ms max=724.10ms count=18
+gate: real-input:android FAIL in 3586.2 s - note: the code tree moved during the run (5ee0fd36f857 now), so this line describes 69a070726be5
+gate: recorded in .gates/task/G30-list-item.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G30-list-item/real-input+android-2026-11-11T00-13-56.784Z.log (5 probe(s))
+
+```

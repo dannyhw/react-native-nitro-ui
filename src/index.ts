@@ -32,6 +32,15 @@ export type {
 } from './NitroUiCore.nitro';
 
 export { Slider, type SliderProps } from './components/Slider/Slider';
+
+// The row content of a list row (D46): UIKit's `UIListContentView` on iOS, Material 3's
+// `ListItem` on Android, so a settings screen reads like the platform's.
+export {
+  ListItem,
+  type ListItemAccessory,
+  type ListItemProps,
+} from './components/ListItem/ListItem';
+
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 
 // An opt-in shared native composition (H1): a container whose nitro-ui children render
@@ -175,11 +184,17 @@ export {
 } from './components/Tooltip/Tooltip';
 
 // A checkbox (G15): Material 3 `Checkbox`, or `TriStateCheckbox` while
-// `indeterminate`, on Android - and SwiftUI `Toggle(isOn:)` with the switch style on
-// iOS, which has no checkbox (`CheckboxToggleStyle` is unavailable there), as Expo's
-// universal Checkbox renders. `checked` is controlled through the event-count
-// handshake; `indeterminate` is a display and is Android-only.
-export { Checkbox, type CheckboxProps } from './components/Checkbox/Checkbox';
+// `indeterminate`, on Android - and on iOS a SwiftUI `Toggle(isOn:)` wearing a style
+// that draws Apple's checklist glyph (`checkmark.circle.fill` over `circle`), because
+// iOS has no checkbox (`CheckboxToggleStyle` is unavailable there) and a Checkbox that
+// looked like a Switch read as the wrong component (D47). `iosStyle` picks the picture
+// there and is ignored here; `indeterminate` is a display, not a value. `checked` is
+// controlled through the event-count handshake.
+export {
+  Checkbox,
+  type CheckboxIosStyle,
+  type CheckboxProps,
+} from './components/Checkbox/Checkbox';
 // A `View` that opens Menu's `group` on a long press (G16, DECISIONS D36/D37):
 // `UIContextMenuInteraction` on iOS, a Material 3 `DropdownMenu` at the finger on
 // Android. The children stay in place, a hold cancels their touch, and `onOpen`/

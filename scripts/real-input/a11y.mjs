@@ -123,7 +123,7 @@ import { findByTestId, findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'|'stepper'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'|'stepper'|'listitem'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -248,10 +248,11 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Real-input checkbox',
     role: 'interactive',
     anchorTestId: 'real-input-checkbox',
-    // iOS has no checkbox, so this is a `Toggle(.switch)`: the toggle trait, which
-    // XCUITest reports as `switch` with `value` 0/1 — the same answer Chip's filter
-    // chip measures, for the same reason (`Checkbox` renders that Toggle; see
-    // `docs/components/checkbox.md`). Android's `Role.Checkbox` is read from the
+    // iOS has no checkbox control, so every `iosStyle` is SwiftUI's `Toggle` — G31's
+    // glyph styles change what it *draws* (Apple's `checkmark.circle.fill`, D47) and not
+    // the element: still the toggle trait, which XCUITest reports as `switch` with
+    // `value` 0/1 — the same answer Chip's filter chip measures. See
+    // `docs/components/checkbox.md`. Android's `Role.Checkbox` is read from the
     // uiautomator tree by `CHECKS.checkbox`, which asserts `checkable`/`checked`.
     iosTrait: 'switch',
   },
@@ -482,6 +483,23 @@ export const A11Y_CONTROLS = Object.freeze([
     // What the row has to be announced as, not what it is: a pressable row is a button
     // because the row presses. `other` is what the tree reports today, and recording the
     // measurement here would freeze the bug into the expectation.
+    iosTrait: 'button',
+  },
+  {
+    id: 'list-item',
+    component: 'ListItem',
+    hybridView: 'NitroUiListItem',
+    screen: 'listitem',
+    // The leaf has one element by construction: on iOS the row view is `isAccessibilityElement`
+    // and its subtree is closed, on Android the Compose node carries `role = Button` and the
+    // `contentDescription`, and the row's own texts are merged into it. The label is written by
+    // the screen because the component would otherwise read title + subtitle in its own order —
+    // which the harness asserts separately, in-app, where the order is readable.
+    label: 'Real-input item',
+    role: 'interactive',
+    anchorTestId: 'real-input-listitem',
+    // A row with `onPress` is a button (DECISIONS D46 item 1). What the tree reports today is
+    // measured by the pass itself; a deviation goes in `A11Y_EXEMPTIONS`, never here.
     iosTrait: 'button',
   },
 ]);

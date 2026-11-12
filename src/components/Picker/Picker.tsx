@@ -5,6 +5,7 @@ import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiPicker } from './NativeNitroUiPicker';
 
 /**
@@ -74,9 +75,10 @@ export interface PickerProps extends ViewProps {
    * `'menu'` (default), `'wheel'` or `'radio'`.
    *
    * A menu is a button that opens a list, sized by the title it shows. A wheel
-   * fills its box's width and measures its own height — **on iOS only**:
-   * Material 3 has no wheel, so `'wheel'` renders the menu control on Android
-   * under the wheel's layout policy rather than a fake wheel.
+   * fills its box's width and measures its own height on both platforms:
+   * SwiftUI's `.wheel` there, and Material 3 1.5's `ScrollField` on Android — a
+   * drum of the options whose choice is a roll that comes to rest, so one
+   * settled value is one `onChange` whatever rows it passed.
    *
    * A radio group shows every option at once: one `RadioButton` row per
    * option, 48 dp tall, sized by its widest label — **on Android only**. iOS
@@ -237,9 +239,10 @@ type ResolvedPickerVariant = 'menu' | 'wheel' | 'radio';
  * iOS's `RadioGroupPickerStyle` is `@available(iOS, unavailable)`, so there is
  * no control to host there and DECISIONS D38 item 4 rules that `radio` renders
  * the menu - the same "build it from the platform's real controls, never imitate
- * one" rule that makes `wheel` the menu on Android. The resolution happens here,
+ * one" rule (`wheel` needs no such rule: both platforms have a wheel).
+ * The resolution happens here,
  * in the one place that decides all three of the things a variant picks: the
- * native `variant` prop, the sizing policy behind it (`SELF_SIZING_BASE_STYLE`
+ * native `variant` prop, the sizing policy behind it (`useSelfSizingBaseStyle`
  * versus `FILL_WIDTH_BASE_STYLE`) and the `nuiSizingKey`. Resolving it only
  * inside SwiftUI would leave the key naming a `radio` configuration whose width
  * follows a title, and the menu's title-dependent width would be filed against a
@@ -262,18 +265,6 @@ function resolveVariant(variant: PickerVariant): ResolvedPickerVariant {
   }
   return variant === 'wheel' ? 'wheel' : 'menu';
 }
-
-/**
- * What a `menu` picker is laid out with, before any `style`: the control's own
- * fitting size, so a parent must not stretch it.
- *
- * `alignItems: stretch` (the default in a column) otherwise decides the
- * control's width for it: Yoga gives a stretched child the row's width as an
- * *exact* constraint, so the measured size is never even asked for. Same rule as
- * `Switch`, `Button` and `SegmentedControl`; an explicit `width`, `flex` or
- * `alignSelf: 'stretch'` in the caller's `style` still wins.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
 
 /**
  * What a `wheel` picker is laid out with: `alignSelf: 'stretch'`, because the
@@ -299,9 +290,9 @@ function clampToOptions(index: number, optionCount: number): number {
 
 /**
  * The platform picker: SwiftUI `Picker` with `.pickerStyle(.menu)` or `.wheel`
- * on iOS, Material 3's `ExposedDropdownMenuBox` on Android (both variants -
- * Material 3 has no wheel, and rendering the menu is what we ship rather than a
- * faked wheel).
+ * on iOS; on Android Material 3's `ExposedDropdownMenuBox` for `menu`, a
+ * `ScrollField` drum for `wheel` and a radio group for `radio` - every variant
+ * the platform's own control, on both platforms.
  *
  * ```tsx
  * const [index, setIndex] = useState(0)
@@ -332,6 +323,7 @@ export function Picker({
   style,
   ...restProps
 }: PickerProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   // `options` may be `undefined` at runtime despite the type; treat that as no
   // options rather than throwing inside a render.
   const safeOptions = options ?? [];
@@ -443,9 +435,7 @@ export function Picker({
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
       style={[
-        nativeVariant === 'wheel'
-          ? FILL_WIDTH_BASE_STYLE
-          : SELF_SIZING_BASE_STYLE,
+        nativeVariant === 'wheel' ? FILL_WIDTH_BASE_STYLE : selfSizingBaseStyle,
         style,
       ]}
     />

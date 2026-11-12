@@ -211,6 +211,17 @@ open class HybridNitroUiCheckboxSpec_cxx {
     }
   }
   
+  public final var iosStyle: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.iosStyle)
+    }
+    @inline(__always)
+    set {
+      self.__implementation.iosStyle = String(newValue)
+    }
+  }
+  
   public final var mostRecentEventCount: Double {
     @inline(__always)
     get {

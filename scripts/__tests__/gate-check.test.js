@@ -30,11 +30,19 @@ import {
   fullTreesMatch,
   isToolingPath,
   ledgerLineFromRun,
+  platformsOwningFile,
   renderGateTable,
   renderStepTimings,
   stepTimingsOf,
 } from '../gate-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
+import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import {
+  DEFAULT_PAIR,
+  leaseRecord,
+  leasedEnv,
+  writeLeaseStore,
+} from './helpers/lease-store.js';
 
 const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
 const CHECK_STEPS = path.join(process.cwd(), 'scripts', 'check-steps.mjs');
@@ -661,11 +669,14 @@ describe('fullTreesMatch (the one comparison reuse rests on)', () => {
 
 /* --------------------------- the tooling allow-list -------------------------- */
 
-describe('TOOLING_FILES (X10 additions)', () => {
+describe('TOOLING_FILES (X10, X26 additions)', () => {
   it.each([
     // Each of these used to count as "both platforms", so a one-line change to a
     // dev-only script owed four device runs. None of them can reach the app binary:
     // they run checks, schedule them, or describe a device pool the app never sees.
+    // The lease pair is X26's: `lease.mjs` is a machine's own allocator, it ships in
+    // no package, and no app binary contains it - what it decides is *when* a run may
+    // start, which is the same argument that put `build-slot-core.mjs` on this list.
     'scripts/check.mjs',
     'scripts/check-steps.mjs',
     'scripts/gen-registry.mjs',
@@ -673,9 +684,14 @@ describe('TOOLING_FILES (X10 additions)', () => {
     'scripts/build-slot-core.mjs',
     'scripts/devices.example.json',
     'scripts/sync-example-lock.mjs',
+    'scripts/lease.mjs',
+    'scripts/lease-core.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);
+    // ... and belongs to neither platform's half, which is what stops a lease change
+    // from re-owing two device runs on top of `check`.
+    expect(platformsOwningFile(file)).toEqual([]);
   });
 
   it('the files are real, so the list cannot guard a path that does not exist', () => {
@@ -692,7 +708,6 @@ describe('TOOLING_FILES (X10 additions)', () => {
       'scripts/harness.mjs',
       'scripts/app-stamp.mjs',
       'scripts/patch-nitrogen.mjs',
-      'scripts/lease.mjs',
     ]) {
       expect(isToolingPath(file)).toBe(false);
     }
@@ -893,7 +908,7 @@ function makeRepo() {
   write('nitrogen/generated/ios/NitroUiAutolinking.swift', '// marker\n');
   write('ios/core/Core.swift', 'v1\n');
   write('example/package.json', '{"name":"x"}\n');
-  write('.gitignore', '.gates/\nfake-bin/\n');
+  write('.gitignore', '.gates/\nfake-bin/\nstate/\n');
   gitIn(dir, ['init', '-q', '-b', 'main']);
   gitInTempRepo(dir, ['add', '-A']);
   gitInTempRepo(dir, ['commit', '-qm', 'base']);
@@ -933,6 +948,33 @@ function fakeBin(dir, hook = '') {
   return bin;
 }
 
+/**
+ * The lease this suite's runs are sourced with, and the store that backs it (X28).
+ *
+ * `harness:ios` here is a device gate, and a device gate now refuses to start unless
+ * the store named by `NITRO_UI_HOME` holds the lease its environment names — so a
+ * suite that names a device without one gets exit 1 and no ledger line, which is not
+ * what these tests are about. The store lives in the fixture rather than at the
+ * machine's `~/.nitro-ui` for the same reason: the CLI used to read the real one, and
+ * what another task had leased is not this suite's business.
+ */
+const FIXTURE_LEASE = leaseRecord({
+  id: 'X10-1',
+  task: 'X10',
+  platform: 'ios',
+});
+
+function fixtureLeaseEnv(dir) {
+  const home = path.join(dir, 'state');
+  writeLeaseStore(home, { leases: [FIXTURE_LEASE] });
+  // `FREE_LSOF` because leasing a pair exports its Metro port, and the pre-flight then
+  // asks the kernel about it — on this machine that is another task's Metro.
+  return {
+    ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: FIXTURE_LEASE }),
+    ...FREE_LSOF,
+  };
+}
+
 function runCli(dir, args, extraEnv = {}, hook = '') {
   const bin = fakeBin(dir, hook);
   return spawnSync(process.execPath, [CLI, ...args], {
@@ -946,6 +988,7 @@ function runCli(dir, args, extraEnv = {}, hook = '') {
     env: {
       ...gitEnv(dir),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      ...fixtureLeaseEnv(dir),
       ...extraEnv,
     },
   });

@@ -75,7 +75,7 @@ import {
 import { runA11ySweep } from './a11y-sweep.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
-import { checkEmulatorEnv, isReservedSerial } from '../lease-core.mjs';
+import { isReservedSerial, requireLeaseDevice } from '../lease-core.mjs';
 import { emulatorLaunchCommand } from '../emulator-launch.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
@@ -4372,6 +4372,8 @@ const CHECKS = {
     // And the thing no press can see: that the calendar in the README's 320 dp box is
     // laid out as a week rather than as six columns and a sliver.
     await checkInlineCalendarGrids(t);
+
+    await checkTimeDrums(t);
   },
   /**
    * A menu picker: a real tap must open a popup, a real tap on a row must bring the
@@ -5470,6 +5472,200 @@ const CHECKS = {
       ),
       '1'
     );
+
+    // 10. The `wheel` variant as material3 1.5 draws it (G29). A drum is not a row to
+    //     press: the pick is a scroll that comes to rest, and while it moves the row
+    //     under the centre line changes many times. So this step does the one thing a
+    //     harness cannot — put a finger on the drum and fling it — and the assertion is
+    //     a count: **one** event for a fling that crossed several rows.
+    //
+    //     Red proof: in `HybridNitroUiPicker.kt`'s `Wheel`, replace the
+    //     `snapshotFlow { isScrollInProgress }` settle collector with an emit on every
+    //     `wheelState.selectedOption` change — the same control read at each row crossing
+    //     instead of at the rest — and the fling below reports several events and goes
+    //     red.
+    const WHEEL_ROWS = ['Cinder', 'Dolomite', 'Fluorite', 'Shale', 'Till'];
+    const drum = await positionWheel(t, 'Real-input wheel picker', [
+      ECHO.wheelIndex,
+      ECHO.wheelEvents,
+    ]);
+    t.log.checkEquals(
+      'the wheel has reported no index before a roll',
+      t.requireEcho(ECHO.wheelIndex),
+      '-'
+    );
+    t.log.checkEquals(
+      'and no change before a roll',
+      t.requireEcho(ECHO.wheelEvents),
+      '0'
+    );
+    // The drum's box, printed rather than asserted: `Picker.harness.tsx`'s sizing test is
+    // the one that pins the 200 dp and the box width, from a poisoned fallback, on the
+    // same device. What a screenshot-height number proves here is only that the drum came
+    // up at all, and this step's own fling needs it to do more than that.
+    t.log.note(
+      `drum box: ${t.boundsText(drum)} at ${String(t.density())} x = ` +
+        `${String(Math.round(drum.bounds.height / t.density()))} dp tall`
+    );
+    // What a screen reader is offered, read out of the tree it navigates.
+    const drumNodes = t.nodesNamed('Real-input wheel picker');
+    t.log.checkEquals(
+      'the drum is named once, so TalkBack announces the control once',
+      drumNodes.length,
+      1
+    );
+    t.log.checkEquals(
+      'the node carrying its name says it is enabled',
+      drumNodes[0]?.enabled,
+      'true'
+    );
+    // `scrollable` is the adjust actions: with it TalkBack offers "scroll forward /
+    // backward", which is how a wheel is moved without a sighted aim. Recorded, and
+    // raised as a finding when it is missing, because `ScrollField`'s own semantics are
+    // what decides it and this gate is the only thing that can see them — a check that
+    // asserted the absent flag would be a check that asserts a gap.
+    if (drumNodes[0]?.scrollable !== 'true') {
+      t.log.warn(
+        `the drum's node says scrollable=${String(drumNodes[0]?.scrollable)}: ` +
+          'TalkBack is not offered scroll actions on it, so a wheel can only be moved ' +
+          "by a finger with a sighted aim (or by the a11y tree's own " +
+          'scroll-forward/BackwardNodeActions when the platform exposes them). ' +
+          "docs/components/picker.md records this as the wheel's a11y gap."
+      );
+    }
+    t.log.note(
+      `wheel a11y node: class=${String(drumNodes[0]?.className)} ` +
+        `content-desc=${String(drumNodes[0]?.contentDesc)} ` +
+        `checkable=${String(drumNodes[0]?.checkable)} ` +
+        `selected=${String(drumNodes[0]?.selected)} at ` +
+        `${t.boundsText(drumNodes[0] ?? drum)} - the spoken value itself is ` +
+        '`stateDescription`, which this dump does not transcribe'
+    );
+    // A fling, aimed at the middle of the drum and covering most of its height, so the
+    // pager crosses several rows and keeps moving after the finger leaves it.
+    // `up` rolls toward the later options and `down` back toward the first: two rolls in
+    // the same direction run into the end of the list, where the second one has nowhere
+    // to go and would be silent for a correct reason and a wrong-looking one at once.
+    const rollDrum = async (label, expected, direction) => {
+      const box = t.requireControl('Real-input wheel picker');
+      const x = Math.round((box.bounds.x1 + box.bounds.x2) / 2);
+      const pad = Math.round(box.bounds.height * 0.12);
+      const near =
+        direction === 'up' ? box.bounds.y2 - pad : box.bounds.y1 + pad;
+      const far =
+        direction === 'up' ? box.bounds.y1 + pad : box.bounds.y2 - pad;
+      await t.swipePx(x, near, x, far, 130);
+      const reported = t.echoWithin(
+        ECHO.wheelEvents,
+        (value) => value === expected,
+        8000
+      );
+      t.log.checkEquals(
+        `${label}: one fling across several rows reports exactly one change`,
+        reported,
+        expected
+      );
+      // The quiet period after it: an event that lands *here* landed after a rest,
+      // which is the difference between a settle and a scroll that is still settling.
+      t.requireEchoToStay(
+        ECHO.wheelEvents,
+        expected,
+        `${label}: the rest of the fling`,
+        1500
+      );
+      return t.requireEcho(ECHO.wheelIndex);
+    };
+    const firstRow = await rollDrum('the first fling', '1', 'up');
+    t.log.checkEquals(
+      `and the row it settled on is a row of the drum ("${firstRow}")`,
+      Number.isInteger(Number(firstRow)) &&
+        Number(firstRow) >= 0 &&
+        Number(firstRow) < WHEEL_ROWS.length,
+      true
+    );
+    t.log.note(
+      `the rows are ${WHEEL_ROWS.join(', ')} - the index JS was told is ` +
+        `${firstRow}, so the drum moved off the row it was seeded on`
+    );
+    // A second fling is a second settle, not a continuation of the first: two events,
+    // never one per row. And the drum has to answer again rather than sit where it was.
+    const secondRow = await rollDrum(
+      'the second fling, back up the list',
+      '2',
+      'down'
+    );
+    t.log.check(
+      `the second roll moved the drum again ("${firstRow}" then "${secondRow}")`,
+      secondRow !== firstRow
+    );
+
+    // 11. The same drum inside a *horizontal* scroller has to give that scroller its
+    //     gesture back (G29 fix round). `nuiOwnVerticalDrags` asks the ancestors to stand
+    //     down on the pointer's *down* — waiting to see which way the finger goes is the
+    //     delay the page's interception beats — so the direction is decided by the first
+    //     move past touch slop, and a drag that leaves sideways hands the ask back. This is
+    //     the only shape that can show the hand-back, and the evidence is the drum's own
+    //     bounds: they move left exactly when the scroller takes the swipe.
+    //
+    //     Red proof: delete the `handedSideways` release in `NitroUiWheelDrag.kt`, so the
+    //     drum keeps every gesture that starts on it, and the drum does not move: the
+    //     swipe is eaten by a control that has no use for it.
+    const sideLabel = 'Real-input wheel in a scroller';
+    const sideDrum = await positionWheel(t, sideLabel, [ECHO.wheelEvents]);
+    const sideBefore = t.requireControl(sideLabel).bounds;
+    const eventsBefore = t.requireEcho(ECHO.wheelEvents);
+    // A swipe of most of the drum's width, purely horizontal, over 300 ms: past slop by a
+    // mile, slow enough that the scroller's own interception runs on the move that decides
+    // the axis, and short enough to stay inside the drum's box at both ends.
+    const travel = Math.round(Math.min(sideBefore.width * 0.7, 600));
+    await t.swipePx(
+      sideBefore.cx,
+      sideBefore.cy,
+      sideBefore.cx - travel,
+      sideBefore.cy,
+      300
+    );
+    const sideAfter = t.requireControl(sideLabel).bounds;
+    const moved = sideBefore.x1 - sideAfter.x1;
+    t.log.note(
+      `sideways swipe: ${String(travel)} px across the drum moved it ` +
+        `${String(moved)} px (x1 ${String(sideBefore.x1)} -> ${String(sideAfter.x1)}) ` +
+        `and the wheel reported ${eventsBefore} -> ` +
+        `${String(t.requireEcho(ECHO.wheelEvents))} changes`
+    );
+    t.log.check(
+      `a sideways swipe on the drum is handed back to the scroller it sits in ` +
+        `(the drum moved ${String(moved)} px of a ${String(travel)} px drag)`,
+      moved >= 40
+    );
+    t.log.checkEquals(
+      'and the swipe the drum gave back reported no roll',
+      t.requireEcho(ECHO.wheelEvents),
+      eventsBefore
+    );
+    // Handing the gesture back must not cost the drum its own: a vertical fling on this
+    // very drum still rolls it, which is the whole reason the disallow exists.
+    const sideIndexBefore = t.requireEcho(ECHO.wheelIndex);
+    const sideBox = t.requireControl(sideLabel).bounds;
+    const pad = Math.round(sideBox.height * 0.12);
+    await t.swipePx(
+      sideBox.cx,
+      sideBox.y2 - pad,
+      sideBox.cx,
+      sideBox.y1 + pad,
+      130
+    );
+    const rolled = t.echoWithin(
+      ECHO.wheelEvents,
+      (value) => value !== eventsBefore,
+      8000
+    );
+    t.log.check(
+      `the drum under that scroller still answers a vertical fling ` +
+        `(changes ${eventsBefore} -> ${String(rolled)}, index ` +
+        `${sideIndexBefore} -> ${String(t.requireEcho(ECHO.wheelIndex))})`,
+      rolled !== eventsBefore
+    );
   },
 
   /**
@@ -5680,6 +5876,408 @@ const CHECKS = {
       );
     });
     await t.hideKeyboard();
+  },
+
+  'list-item': async (t) => {
+    // The three rows are named by their accessibility label, which on Android is both the
+    // node a reader stops on and the only handle a check has: React Native's `testID` is a
+    // view tag and never reaches a dump.
+    const LIVE = 'Real-input item';
+    const DISABLED = 'Real-input disabled item';
+    const IN_FORM = 'Item inside a Form row';
+    const boundsText = (node) =>
+      `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
+      `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
+    /**
+     * The average luminance of a grid inside one row's box.
+     *
+     * A grid and not one pixel: a bounded ripple is brightest near the touch point, and a
+     * single sample could land on the one spot it has not reached at the instant the
+     * screenshot was taken. Inset 4 dp from every edge so the sample is the row's fill and
+     * not a pixel of whatever is drawn outside it.
+     */
+    const meanLuma = (screen, node) => {
+      const inset = Math.max(2, Math.round(4 * t.density()));
+      const step = Math.max(1, Math.round(3 * t.density()));
+      // Whole pixels, and inside the image: a grid cell's edge is a fifth of a row's
+      // width, which is a fraction whenever the row does not divide by five, and
+      // `png-pixel.mjs` refuses a fractional coordinate rather than rounding it into a
+      // neighbouring pixel and a reading of the wrong thing. Clamped rather than
+      // assumed-on-screen, so a row parked against the edge of the window samples the
+      // part that is visible instead of ending the run with an out-of-image error.
+      const x1 = Math.max(0, Math.round(node.bounds.x1) + inset);
+      const x2 = Math.min(screen.width - 1, Math.round(node.bounds.x2) - inset);
+      const y1 = Math.max(0, Math.round(node.bounds.y1) + inset);
+      const y2 = Math.min(
+        screen.height - 1,
+        Math.round(node.bounds.y2) - inset
+      );
+      let total = 0;
+      let samples = 0;
+      for (let y = y1; y <= y2; y += step) {
+        for (let x = x1; x <= x2; x += step) {
+          const pixel = screen.pixel(x, y);
+          if (pixel == null) {
+            continue;
+          }
+          total +=
+            (0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]) / 255;
+          samples += 1;
+        }
+      }
+      return samples === 0 ? 0 : total / samples;
+    };
+    /**
+     * Where two screenshots differ, across the whole content area.
+     *
+     * The grid above answers "did this row get darker". This answers the question a
+     * flat grid cannot: *was anything painted at all*. A press whose indication is
+     * drawn over a different row and a press whose indication is drawn nowhere look
+     * identical to fifteen samples of one box, and they are different bugs — one is a
+     * layer with the wrong rect, the other is a press that never reached a painter.
+     *
+     * Every pixel, not a sample: a ripple is tens of pixels wide and can fall between
+     * two grid points. The strip the status bar owns is left out, because its clock
+     * changes on its own and a diff that reports it has answered nothing.
+     *
+     * @param {{pixels?: Uint8Array, channels?: number, width: number, height: number}} before
+     * @param {{pixels?: Uint8Array, channels?: number, width: number, height: number}} after
+     * @param {number} top the first row inside the app's content, below the tab strip
+     */
+    const changedBox = (before, after, top) => {
+      if (before?.pixels == null || after?.pixels == null) {
+        return 'no decoded frame to compare';
+      }
+      if (before.pixels.length !== after.pixels.length) {
+        return 'a window of a different size';
+      }
+      const channels = after.channels ?? 4;
+      const bottom = after.height - 4;
+      let changed = 0;
+      let x1 = -1;
+      let x2 = -1;
+      let y1 = -1;
+      let y2 = -1;
+      for (let y = top; y <= bottom; y += 1) {
+        const line = y * after.width * channels;
+        for (let x = 0; x < after.width; x += 1) {
+          const at = line + x * channels;
+          let differs = false;
+          for (let channel = 0; channel < channels; channel += 1) {
+            if (before.pixels[at + channel] !== after.pixels[at + channel]) {
+              differs = true;
+              break;
+            }
+          }
+          if (!differs) continue;
+          changed += 1;
+          if (x1 < 0 || x < x1) x1 = x;
+          if (x > x2) x2 = x;
+          if (y1 < 0) y1 = y;
+          y2 = y;
+        }
+      }
+      return changed === 0
+        ? 'nothing changed anywhere in the content area'
+        : `${String(changed)} px changed, x ${String(x1)}-${String(x2)}, ` +
+            `y ${String(y1)}-${String(y2)}`;
+    };
+    const contentTop = Math.round(t.tabBarBottom()) + 4;
+    const counters = () =>
+      `${t.requireEcho(ECHO.listItemPresses)}/` +
+      `${t.requireEcho(ECHO.listItemDisabledEvents)}/` +
+      `${t.requireEcho(ECHO.listItemFormPresses)}`;
+
+    // 1. At rest, so every claim below is about a number that moved.
+    t.log.checkEquals(
+      `no item has been pressed before a touch (${counters()})`,
+      counters(),
+      '0/0/0'
+    );
+
+    // 2. One element per item, read out of the tree rather than from inside the app: the
+    //    harness can say the leaf publishes one semantics node, and only this dump can
+    //    say a TalkBack swipe gets one stop and not a title, a subtitle and a value.
+    const live = await t.requireControlOnScreen(LIVE);
+    t.log.checkEquals(
+      "exactly one node carries the item's name — the title, subtitle and value are " +
+        'merged into the row, not three stops of their own',
+      String(t.dump().filter((node) => node.contentDesc === LIVE).length),
+      '1'
+    );
+    t.log.note(
+      `the named node is a ${live.className ?? 'missing'} at ` +
+        `${boundsText(live)}, clickable=${live.clickable} enabled=${live.enabled} — ` +
+        'clickable because it has an onPress, which is the same modifier that installs ' +
+        'the ripple the highlight sample below looks for'
+    );
+
+    // 3. Ten taps, ten presses, and the *row that answered* is named — the counter alone
+    //    would be satisfied by whichever item last happened to hold a callback.
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => t.requireControl(LIVE),
+        ECHO.listItemPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a list item`
+      );
+    }
+    t.log.checkEquals(
+      'ten real taps are ten presses, from this item and no other',
+      `${t.requireEcho(ECHO.listItemPresses)} ${t.requireEcho(ECHO.listItemLast)}`,
+      '10 real'
+    );
+
+    // 4. The row's own highlight: Material's ripple, sampled the way the iOS half samples
+    //    UIKit's — the same band of pixels at rest and with the finger still down. Two
+    //    injections of a held finger are tried, because they are not the same thing to the
+    //    input stack: `input motionevent DOWN` is one event whose process then exits with
+    //    the pointer left down, and `input swipe x y x y 2200` is one gesture stream that
+    //    is genuinely in flight while the screenshot is taken. Both are readings of one
+    //    claim — the row is darker while a finger is on it — and the log prints both, each
+    //    with a 5x3 grid over the row, so a flat reading is evidence in the ledger rather
+    //    than a mystery a later round has to re-run to understand.
+    const shoot = (node) => {
+      const screen = t.screencap();
+      const cols = 5;
+      const rows = 3;
+      const cells = [];
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          cells.push(
+            meanLuma(screen, {
+              bounds: {
+                x1: node.bounds.x1 + (col * node.bounds.width) / cols,
+                y1: node.bounds.y1 + (row * node.bounds.height) / rows,
+                x2: node.bounds.x1 + ((col + 1) * node.bounds.width) / cols,
+                y2: node.bounds.y1 + ((row + 1) * node.bounds.height) / rows,
+              },
+            }).toFixed(3)
+          );
+        }
+      }
+      return {
+        mean: meanLuma(screen, node),
+        screen,
+        grid: `${cells.slice(0, 5).join(' ')} | ${cells.slice(5, 10).join(' ')} | ${cells
+          .slice(10, 15)
+          .join(' ')}`,
+      };
+    };
+    const atRest = shoot(live);
+    const pressX = live.bounds.x1 + Math.round(live.bounds.width * 0.5);
+    const pressY = live.bounds.cy;
+    const pressesBefore = t.requireEcho(ECHO.listItemPresses);
+
+    await t.rawTouch('DOWN', pressX, pressY);
+    await t.settle(400);
+    const heldDown = shoot(live);
+    await t.settle(700);
+    let released = true;
+    try {
+      await t.rawTouch('UP', pressX, pressY);
+    } catch (error) {
+      released = false;
+      t.log.note(`the raw UP did not take: ${String(error)}`);
+    }
+    await t.settle(500);
+
+    // The same question with a gesture that stays in flight, so the screenshot cannot be
+    // of a row whose finger had already gone.
+    // Caught up front: `rawHold` rejects on an adb failure, and a rejection left unhandled
+    // through the awaits below would end the whole run instead of failing this check.
+    let holdFailure = null;
+    const heldSwipe = t.rawHold(pressX, pressY, 2200).catch((error) => {
+      holdFailure = error;
+    });
+    await t.settle(900);
+    const heldStream = shoot(live);
+    await heldSwipe;
+    if (holdFailure) {
+      t.log.abort(`the held press could not be made: ${String(holdFailure)}`);
+    }
+    await t.settle(500);
+    const afterRelease = shoot(live);
+    if (!released) {
+      t.log.abort(
+        'the highlight press could not be closed, so nothing after it is evidence'
+      );
+    }
+    t.log.note(
+      `highlight sample over a ${String(live.bounds.width)}x${String(live.bounds.height)} px ` +
+        `row — rest=${atRest.mean.toFixed(4)} ${atRest.grid}`
+    );
+    t.log.note(
+      `  motionevent DOWN, +400 ms: ${heldDown.mean.toFixed(4)} ${heldDown.grid}`
+    );
+    t.log.note(
+      `  held swipe in flight, +900 ms: ${heldStream.mean.toFixed(4)} ${heldStream.grid}`
+    );
+    t.log.note(
+      `  released: ${afterRelease.mean.toFixed(4)} ${afterRelease.grid} — presses ` +
+        `"${pressesBefore}" -> "${t.requireEcho(ECHO.listItemPresses)}"`
+    );
+    t.log.note(
+      `  whole window under the held finger: ` +
+        `${changedBox(atRest.screen, heldStream.screen, contentTop)}`
+    );
+    const heldDarker = Math.min(heldDown.mean, heldStream.mean);
+    t.log.check(
+      `the row is darker with the finger down than at rest (best held reading ` +
+        `${heldDarker.toFixed(4)} — ${heldDown.mean.toFixed(4)} under a raw DOWN, ` +
+        `${heldStream.mean.toFixed(4)} under a held swipe — against rest ` +
+        `${atRest.mean.toFixed(4)}): the platform's own press feedback is drawn, not ` +
+        'just wired',
+      heldDarker < atRest.mean - 0.005
+    );
+    t.log.check(
+      `and it is back where it started once the finger lifts (${afterRelease.mean.toFixed(4)} ` +
+        `against rest ${atRest.mean.toFixed(4)}) — a highlight, not a state the row got ` +
+        'stuck in',
+      Math.abs(afterRelease.mean - atRest.mean) < 0.01
+    );
+
+    // 5. A disabled item takes nothing, and the tree says so before the taps do. Then the
+    //    live item proves the silence was a refusal and not a dead screen.
+    await t.requireControlOnScreen(DISABLED);
+    t.log.checkEquals(
+      'the disabled item is in the tree as disabled, so a reader is told it is inert ' +
+        'instead of being handed a control that does nothing',
+      t.nativeEnabled(DISABLED),
+      'false'
+    );
+    const disabledNode = await t.requireControlOnScreen(DISABLED);
+    for (let tap = 1; tap <= 3; tap += 1) {
+      await t.tapNode(disabledNode);
+    }
+    t.log.checkEquals(
+      'three real taps on a disabled item report nothing',
+      t.requireEchoToStay(
+        ECHO.listItemDisabledEvents,
+        '0',
+        'three real taps on a disabled item'
+      ),
+      '0'
+    );
+    // Read from the counter rather than hard-coded: the held press in the highlight
+    // sample above is itself a press this counter has counted, so the absolute number is
+    // a fact about how many checks ran above, while "one more after one more tap" is the
+    // claim. A hard-coded 11 here failed on the first real run for exactly that reason.
+    const beforeBarrier = Number(t.requireEcho(ECHO.listItemPresses));
+    const wantedBarrier = String(beforeBarrier + 1);
+    t.log.checkEquals(
+      `and input is alive: the live item still presses (${beforeBarrier} -> ` +
+        `${wantedBarrier})`,
+      await t.tapUntilValue(
+        () => t.requireControl(LIVE),
+        ECHO.listItemPresses,
+        wantedBarrier,
+        'a real tap on the live item after the disabled one'
+      ),
+      wantedBarrier
+    );
+
+    // 6. Inside a `Form.Row` the leaf is a different code path — the row owns the cell, the
+    //    item draws content edge-to-edge (DECISIONS D46 item 2) — and the tap has to reach
+    //    the item through a row that has a shape and insets of its own.
+    const inForm = await t.requireControlOnScreen(IN_FORM);
+    t.log.checkEquals(
+      'inside a Form.Row the item is still one named node',
+      String(t.dump().filter((node) => node.contentDesc === IN_FORM).length),
+      '1'
+    );
+    t.log.checkEquals(
+      'a real tap inside a Form.Row reaches the item, once',
+      await t.tapUntilValue(
+        () => t.requireControl(IN_FORM),
+        ECHO.listItemFormPresses,
+        '1',
+        'a real tap on the item inside a Form.Row'
+      ),
+      '1'
+    );
+    t.log.note(
+      `the in-form row is ${boundsText(inForm)} and the standalone item is ` +
+        `${boundsText(live)} — the boxes the harness reads insets from are in ` +
+        '`ListItem.harness.tsx`, which is where `insets=` is asserted'
+    );
+
+    // 7. The same press has to *look* like a press. Inside a row the leaf installs no
+    //    indication of its own (the cell owns the shape, and the Form's section paints
+    //    the pressed state for every row in it), so the only feedback this row can have
+    //    is the section's - and the section paints one only for a row that is pressable.
+    //    The fixture and the README's `list-item-in-form` example both write the handler
+    //    on the *item*, so an item's `onPress` that never reaches the row is a row that
+    //    presses in silence: the tap above arrives, and the screen says nothing.
+    const formPressBefore = t.requireEcho(ECHO.listItemFormPresses);
+    const formX = inForm.bounds.x1 + Math.round(inForm.bounds.width * 0.5);
+    const formRest = shoot(inForm);
+    const formHold = t.rawHold(formX, inForm.bounds.cy, 2200);
+    await t.settle(900);
+    const formStream = shoot(inForm);
+    await formHold;
+    await t.settle(500);
+    const formAfter = shoot(inForm);
+    t.log.note(
+      `in-Form highlight sample over a ${String(inForm.bounds.width)}x` +
+        `${String(inForm.bounds.height)} px row — rest=${formRest.mean.toFixed(4)} ` +
+        `${formRest.grid}`
+    );
+    t.log.note(
+      `  held swipe in flight, +900 ms: ${formStream.mean.toFixed(4)} ${formStream.grid}`
+    );
+    t.log.note(
+      `  released: ${formAfter.mean.toFixed(4)} ${formAfter.grid} — presses ` +
+        `"${formPressBefore}" -> "${t.requireEcho(ECHO.listItemFormPresses)}"`
+    );
+    // And where, if anywhere, the cell painted. The reading that matters here is the
+    // boring one: "nothing changed anywhere" says the touch reached a row that owns a
+    // press and no painter was told about it, which is a different bug from a ripple
+    // drawn over the wrong rect — and the two need different fixes.
+    t.log.note(
+      `  whole window under the held finger: ` +
+        `${changedBox(formRest.screen, formStream.screen, contentTop)}`
+    );
+    t.log.check(
+      `the row inside the Form is darker with the finger down than at rest ` +
+        `(held ${formStream.mean.toFixed(4)} against rest ${formRest.mean.toFixed(4)}): ` +
+        'an item that presses inside a row has to show it, and inside a row only the ' +
+        "section's own pressed state can",
+      formStream.mean < formRest.mean - 0.005
+    );
+
+    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
+    //    asking for that row. Last, because it scrolls the page out from under everything
+    //    above it. Compose's own press handles this (a touch that travels past the slop
+    //    cancels), so this claim is a guard here rather than a bug report - iOS needed the
+    //    same check as a red first.
+    //
+    //    Back to the top of the screen first. The Form section above has scrolled the
+    //    page past this row by now, and `requireControlOnScreen` only walks forward, so
+    //    the six scrolls it can do all go the way that puts this row further out of the
+    //    dump. The first real run of this check ended right there, with the drag aimed
+    //    at a row it could no longer see. Scrolling back is not a softer aim: the row
+    //    is still required to be on screen and hittable before the finger goes down.
+    await t.scrollToTop();
+    const dragNode = await t.requireControlOnScreen(LIVE);
+    const dragBefore = t.requireEcho(ECHO.listItemPresses);
+    const dragX = dragNode.bounds.x1 + Math.round(dragNode.bounds.width * 0.5);
+    await t.swipePx(
+      dragX,
+      dragNode.bounds.cy,
+      dragX,
+      dragNode.bounds.cy - Math.round(160 * t.density()),
+      300
+    );
+    await t.settle(600);
+    const dragAfter = t.requireEcho(ECHO.listItemPresses);
+    t.log.checkEquals(
+      `a drag that starts on the row is a scroll, not a press (${dragBefore} -> ` +
+        `${dragAfter}) — a row that fires on a scroll takes the person to a screen ` +
+        'they only meant to scroll past',
+      dragAfter,
+      dragBefore
+    );
   },
 };
 
@@ -6541,6 +7139,565 @@ function isCancelLabel(node) {
 }
 
 /**
+ * The drums of a time wheel, as the accessibility tree shows them.
+ *
+ * The time wheel is a vertical pager per field, side by side. When a dump carries a
+ * drum's rows they are plain `Text` nodes — a handful of two-digit rows per column, one
+ * of which sits under the centre line — and that is enough to
+ * aim a fling (the column's own x, not a fraction of the control's box) and — the
+ * half that matters for G29 — to read *which row the drum stopped on*, which is the
+ * only way this gate can say "the time shown is the time reported" about a wheel
+ * rather than assert it from the Kotlin.
+ *
+ * Whether the rows are there is the control's business, not this check's: on
+ * `nitroui_b` a `ScrollField` publishes the drum and not its rows, which is why
+ * [wheelColumns] says out loud what a run loses when they are missing.
+ *
+ * Columns are found by clustering on x rather than by dividing the box: a 12-hour
+ * wheel keeps an AM/PM column to the right of the two drums, and the drums are
+ * not symmetric inside the control's box. Rows of one drum share an x exactly, so a
+ * gap of more than 20 px is a different column.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {import('./uiautomator.mjs').UiautomatorNode} drum the wheel's own node
+ */
+function timeWheelColumns(t, drum) {
+  const rows = t
+    .dump()
+    .filter(
+      (node) =>
+        /^\d{1,2}$/.test(node.text.trim()) &&
+        node.bounds.cx >= drum.bounds.x1 &&
+        node.bounds.cx <= drum.bounds.x2 &&
+        node.bounds.cy >= drum.bounds.y1 &&
+        node.bounds.cy <= drum.bounds.y2
+    )
+    .sort((a, b) => a.bounds.cx - b.bounds.cx);
+  /** @type {Array<typeof rows>} */
+  const columns = [];
+  for (const row of rows) {
+    const previous = columns.at(-1);
+    if (previous != null && row.bounds.cx - previous.at(-1).bounds.cx <= 20) {
+      previous.push(row);
+    } else {
+      columns.push([row]);
+    }
+  }
+  return columns.map((column) => ({
+    x: Math.round(
+      column.reduce((sum, node) => sum + node.bounds.cx, 0) / column.length
+    ),
+    // The row a person reads as the value: the one whose centre is nearest the middle
+    // of the drum, which is where `ScrollField`'s selection line is.
+    centre: column.reduce((best, node) =>
+      Math.abs(node.bounds.cy - drum.bounds.cy) <
+      Math.abs(best.bounds.cy - drum.bounds.cy)
+        ? node
+        : best
+    ),
+    count: column.length,
+    pitch:
+      column.length > 1
+        ? Math.round(
+            (column.at(-1).bounds.cy - column[0].bounds.cy) /
+              (column.length - 1)
+          )
+        : 0,
+  }));
+}
+
+/**
+ * Bring a whole drum into the window, with the echo rows beside it.
+ *
+ * `requireControlOnScreen` stops the moment a control's *centre* is inside the window,
+ * and a drum is 120-200 dp — 315-525 px of this device's ~2 000 px of window — so half
+ * of it can still be hanging off the bottom edge. Two things the wheel checks then do
+ * would be quietly wrong: the row under the centre line is not in the dump at all when
+ * that line is off screen (so "the row shown is the value reported" would compare the
+ * nearest *visible* row), and a swipe that leaves the window drags the page instead of
+ * the drum. So the *visible band* — drum plus the echoes a check has to read while the
+ * finger is on it — is what gets positioned.
+ *
+ * The band is centred rather than nudged to the nearest edge, so the next correction
+ * has room in either direction, and the loop is bounded: a band taller than the window
+ * can never satisfy it, and that is a fixture too tall for the device, said by the
+ * caller's own `requireControl` rather than by an infinite scroll.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} label the drum's `accessibilityLabel`
+ * @param {string[]} echoIds testIDs that have to be visible with it
+ */
+async function positionWheel(t, label, echoIds) {
+  const screen = t.screenSize();
+  // The usable band is not the whole window: the example app's tab bar sits over the
+  // bottom of it and its header over the top, and a node under either keeps real bounds
+  // in the dump while a finger there would press the bar instead. 12 % / 14 % of the
+  // window is comfortably more than either on this device's profile.
+  const bandTop = Math.round(screen.height * 0.12);
+  const bandBottom = Math.round(screen.height * 0.86);
+  // Reach it first, and in both directions. `requireControlOnScreen` scrolls six times
+  // from wherever the page happens to be and then gives up naming what it never found,
+  // which is the wrong instrument for a control at either end of a page as long as
+  // these two screens are — the wheel fixtures sit below everything the earlier checks
+  // read, so the page arrives at them from above, and a control that has slid past is
+  // not a control that has gone away.
+  const found = () => t.nodesNamed(label).length > 0;
+  for (const direction of [1, -1]) {
+    for (let attempt = 0; attempt < 12 && !found(); attempt += 1) {
+      await t.scrollPage(direction * 700);
+    }
+    if (found()) {
+      break;
+    }
+  }
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const drum = t.requireControl(label);
+    const echoes = echoIds
+      .map((id) => t.nodeByTestId(id))
+      .filter((node) => node != null);
+    const top = Math.min(drum.bounds.y1, ...echoes.map((n) => n.bounds.y1));
+    const bottom = Math.max(drum.bounds.y2, ...echoes.map((n) => n.bounds.y2));
+    if (
+      echoes.length === echoIds.length &&
+      top >= bandTop &&
+      bottom <= bandBottom
+    ) {
+      return drum;
+    }
+    await t.scrollPage(
+      Math.max(
+        -700,
+        Math.min(700, Math.round((top + bottom) / 2 - screen.height / 2))
+      )
+    );
+  }
+  return t.requireControl(label);
+}
+
+/**
+ * The two drums as Material itself names them.
+ *
+ * Each drum publishes a semantics node with the content description Material chose for its
+ * own wheel's field — "Select hour" and "Select minutes" (`m3c_time_picker_*`, so the words
+ * are localised) — and each of those nodes has the drum's own box. Measured on `nitroui_b`
+ * in the full-width story, whose control is `42,952 → 1038,1267` (379 × 120 dp): hour
+ * `174,952 → 348,1266` (66 dp wide), minutes `390,952 → 601,1266` (80 dp wide), 42 px
+ * apart, and an AM/PM column beside them on a 12-hour device. So a fling can be aimed at a
+ * *measured* drum rather than at a sixth of the control's box, which is what makes a missed
+ * aim a failure of the control rather than of the check.
+ *
+ * Rows, by contrast, are not in the tree at all (see [wheelColumns]), so this is the only
+ * reading of the drum's geometry available here.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {import('./uiautomator.mjs').UiautomatorNode} control the wheel's own node
+ * @returns {Array<import('./uiautomator.mjs').UiautomatorNode> | null} hour, minute — or
+ *   `null` when the tree does not name both drums
+ */
+function timeWheelDrums(t, control) {
+  const found = ['Select hour', 'Select minutes'].map((description) =>
+    t
+      .dump()
+      .find(
+        (node) =>
+          node.contentDesc === description &&
+          node.bounds.cx >= control.bounds.x1 &&
+          node.bounds.cx <= control.bounds.x2 &&
+          node.bounds.cy >= control.bounds.y1 &&
+          node.bounds.cy <= control.bounds.y2
+      )
+  );
+  return found.every((node) => node != null)
+    ? /** @type {any} */ (found)
+    : null;
+}
+
+/**
+ * [timeWheelColumns] with a fallback for a drum whose rows the tree does not carry.
+ *
+ * A `ScrollField` puts its own semantics on the drum and its rows are plain `Text`, so
+ * whether a `uiautomator dump` can see them is the control's business and not this
+ * check's. When it can, the row under the centre line is the strongest oracle available
+ * for "the value shown is the value reported" — and the only one for a snap-back that
+ * moves a wheel rather than a model. When it cannot, the fling still has an aim (the
+ * two drums are the left and middle thirds of the control) and the event-count
+ * assertions still mean what they say, so what is lost is the row comparisons, which
+ * are then *said to be lost* rather than skipped quietly.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {import('./uiautomator.mjs').UiautomatorNode} drum
+ */
+function wheelColumns(t, drum) {
+  const columns = timeWheelColumns(t, drum);
+  if (columns.length >= 2) {
+    return columns;
+  }
+  // No rows to cluster on: aim at the drums' own boxes when the tree names them, and
+  // only then at the thirds, which are a guess about Material's layout rather than a
+  // reading of it.
+  const drums = timeWheelDrums(t, drum);
+  return [0, 1].map((index) => ({
+    x:
+      drums != null
+        ? drums[index].bounds.cx
+        : Math.round(
+            drum.bounds.x1 + drum.bounds.width * (index === 0 ? 1 / 6 : 1 / 2)
+          ),
+    centre: { text: '' },
+    count: 0,
+    pitch: Math.round(40 * t.density()),
+    synthetic: true,
+  }));
+}
+
+/**
+ * G29: the two `variant="wheel"` drums, rolled with a finger.
+ *
+ * Split out of the `date-picker` check because it is the only part of that screen
+ * that presses nothing: a drum is rolled, and what a roll is worth asserting is
+ * how many events it costs. Same reason `checkInlineCalendarGrids` is separate.
+ */
+async function checkTimeDrums(t) {
+  // ---------------------------------------------------------------------------
+  // G29: `variant="wheel"` with `mode="time"` is a drum per field, and a pick is a roll
+  // that comes to rest. Everything the dialog tests above
+  // do with a tap, this does with a fling, and the assertion that matters is a count:
+  // a roll across three rows reports **one** change, not three. A `ScrollField` names the
+  // row nearest its snap line continuously, so a control that read each of those as a pick
+  // would report one event per row here, on the real input path, with the real timing a
+  // pager has.
+  //
+  // Red proof: make the settle a wall-clock window again instead of the wheel's own rest —
+  // in `syncTimeWheel`, trade `nuiReportAtWheelRest(active) { … }` for
+  // `snapshotFlow { readTimeDrums(…) }.collectLatest { rolled -> delay(60); … }` — and the
+  // first fling below reports two changes for one roll ("expected 1, saw 2"), which is the
+  // defect the 180 ms window had on a loaded box: the gap between two row crossings is as
+  // long as the machine's frames let it be, so a window can expire mid-roll. Shortening it
+  // to 60 ms only makes the same defect arrive without waiting for load.
+  // ---------------------------------------------------------------------------
+  const SEEDED = '2024-06-15 09:20';
+  // Not `requireControlOnScreen`: a 200 dp drum is 525 px of a ~2 000 px window, so
+  // "the centre is on screen" can still mean "the snap line and half the rows are
+  // not", which would make both the row reading and the fling below wrong.
+  const wheel = await positionWheel(t, 'Real-input wheel time picker', [
+    ECHO.wheelTimeValue,
+    ECHO.wheelTimeEvents,
+  ]);
+  // The echo is empty, and that is the assertion: this picker is uncontrolled, so
+  // what it shows is its own business and what it has *reported* is the echo's. The
+  // seeded 09:20 is what the drums are on, and a `ScrollField` keeps its rows out of
+  // the accessibility tree, so the check learns the roll moved the time from the two
+  // echoes below rather than from a row it cannot read.
+  t.log.checkEquals(
+    'the uncontrolled wheel has reported no time yet',
+    t.requireEcho(ECHO.wheelTimeValue),
+    '-'
+  );
+  t.log.checkEquals(
+    'and has reported no change',
+    t.requireEcho(ECHO.wheelTimeEvents),
+    '0'
+  );
+  const density = t.density();
+  t.log.note(
+    `time wheel box: ${t.boundsText(wheel)} at ${String(density)} x = ` +
+      `${String(Math.round(wheel.bounds.height / density))} dp tall, ` +
+      `${String(Math.round(wheel.bounds.width / density))} dp wide`
+  );
+
+  // What TalkBack is offered, read out of the tree it navigates. The value itself
+  // travels as `stateDescription`, which a `uiautomator dump` does not transcribe, so
+  // this records the node's class, its name and whether it says it scrolls (the
+  // adjust actions). What the flings below carry is the *event count*, which is readable
+  // whatever the tree looks like. They also try to read the rows - and on this device's
+  // tree they cannot: `ScrollField` keeps its rows out of the accessibility tree, so
+  // `rowsReadable` is false, every "the row shown is the value reported" comparison below
+  // is skipped, and the WARN two lines later is the sentence that says so. A PASS on this
+  // control is not a claim that the rows were compared; on `nitroui_b` they never are.
+  const wheelNodes = t.nodesNamed('Real-input wheel time picker');
+  // The assertion is that the wheel is named at all - zero is the failure this can
+  // catch, and does if `nuiControlSemantics` is dropped. How many nodes end up
+  // carrying the name is the widget's decision, not ours: each drum publishes semantics of
+  // its own (the column's name and its rows), so a name that lands on the control can also
+  // land on a drum. Recorded rather than asserted, and raised as the a11y finding it is - a
+  // reader that meets the label twice hears it twice.
+  t.log.check(
+    `the wheel is named in the tree (${String(wheelNodes.length)} node(s) carry ` +
+      '"Real-input wheel time picker")',
+    wheelNodes.length >= 1
+  );
+  if (wheelNodes.length > 1) {
+    t.log.warn(
+      `the label is on ${String(wheelNodes.length)} nodes, not one: a screen ` +
+        'reader meets "Real-input wheel time picker" once per node, which is the ' +
+        'a11y gap docs/components/date-picker.md records for this wheel. The two ' +
+        'drums themselves are not separately named, so which drum is which is not ' +
+        'said either.'
+    );
+  }
+  t.log.note(
+    `wheel a11y node: class=${String(wheelNodes[0]?.className)} ` +
+      `enabled=${String(wheelNodes[0]?.enabled)} ` +
+      `scrollable=${String(wheelNodes[0]?.scrollable)} ` +
+      `content-desc=${String(wheelNodes[0]?.contentDesc)}`
+  );
+
+  // Material's own names for the two drums, read out of the tree the check aims with.
+  // This is a real assertion because it is the aim: without it the fling below would be
+  // pointed at a fraction of the control's box, and a miss would look like a control that
+  // does not roll.
+  const drums = timeWheelDrums(t, wheel);
+  t.log.check(
+    'the tree names both drums, so each fling can be aimed at one of them',
+    drums != null
+  );
+  if (drums != null) {
+    t.log.note(
+      `hour drum ${t.boundsText(drums[0])} (${String(
+        Math.round(drums[0].bounds.width / density)
+      )} x ` +
+        `${String(Math.round(drums[0].bounds.height / density))} dp), minute drum ` +
+        `${t.boundsText(drums[1])} - ${String(
+          Math.round(drums[1].bounds.x1 - drums[0].bounds.x2)
+        )} px apart`
+    );
+  }
+
+  const columnsBefore = wheelColumns(t, wheel);
+  const rowsReadable = columnsBefore[0]?.synthetic !== true;
+  if (rowsReadable) {
+    t.log.check(
+      `the drum rows are in the tree (${String(columnsBefore.length)} columns: ` +
+        `${columnsBefore.map((c) => String(c.count)).join('+')} rows visible)`,
+      true
+    );
+    t.log.note(
+      `drums: hour column x=${String(columnsBefore[0].x)} ` +
+        `centre="${columnsBefore[0].centre.text}" ` +
+        `pitch=${String(columnsBefore[0].pitch)}px; minute column ` +
+        `x=${String(columnsBefore[1].x)} ` +
+        `centre="${columnsBefore[1].centre.text}" ` +
+        `pitch=${String(columnsBefore[1].pitch)}px`
+    );
+  } else {
+    t.log.warn(
+      'the drum rows are NOT in the accessibility tree - `ScrollField` keeps its ' +
+        "rows to itself, so the aim is the control's own thirds and the four " +
+        '"the row shown is the value reported" comparisons below cannot be made ' +
+        'from a dump (the event-count assertions can, and are the point of the ' +
+        'flings). docs/components/date-picker.md records the gap.'
+    );
+  }
+  /** Re-read a drum's columns, with the same fallback every time. */
+  const columnsOf = (drum) => wheelColumns(t, drum);
+
+  // Roll one drum downwards, into the hours/minutes *before* the seeded 09:20 — the
+  // direction that cannot cross noon and so cannot change the AM/PM half of a
+  // 12-hour drum, which keeps the row-vs-echo comparison below about one field.
+  // The distance is three rows of pitch: far enough that a per-row emit is loud,
+  // short enough to stay inside the drum's own rows without a fling's throw.
+  // `drum` is re-read every time: the page settles after a fling, and a stale box
+  // aimed at where the control was rather than where it is.
+  const rollDown = async (drumLabel, column) => {
+    const box = t.requireControl(drumLabel).bounds;
+    // The drum's own box with a 12 % margin at each end, top to bottom, in 130 ms —
+    // the shape the Picker's drum fling uses and the one measured on `nitroui_b` to
+    // carry the hour drum from 09:20 to 07:20 while reporting exactly one change. The
+    // aim is [timeWheelDrums]'s box, not a fraction of the control's, so a drum that
+    // does not turn under this is the control's problem and not the check's aim.
+    //
+    // Where the tree does show rows the travel shrinks to three rows of the measured
+    // pitch, so the "the row shown is the value reported" comparisons below are about a
+    // roll a reader can count rather than one whose landing page Material decides.
+    const pad = Math.round(box.height * 0.12);
+    const travel = rowsReadable
+      ? Math.min(
+          Math.round(column.pitch * 1.5),
+          Math.round(box.height / 2) - pad
+        )
+      : null;
+    await t.swipePx(
+      column.x,
+      travel == null ? box.y1 + pad : Math.round(box.cy - travel),
+      column.x,
+      travel == null ? box.y2 - pad : Math.round(box.cy + travel),
+      130
+    );
+  };
+
+  // Exactly one event, then a quiet period: an event landing after the quiet window
+  // is one that landed after a rest, which is what the settle is supposed to prevent.
+  const expectOneRoll = (expected, label, echoId) => {
+    const reported = t.echoWithin(echoId, (value) => value === expected, 8000);
+    t.log.checkEquals(
+      `one roll of the ${label} reports exactly one change, not one per row crossed`,
+      reported,
+      expected
+    );
+    t.requireEchoToStay(echoId, expected, `the ${label} drum at rest`, 1500);
+  };
+
+  await rollDown('Real-input wheel time picker', columnsBefore[0]);
+  expectOneRoll('1', 'hour', ECHO.wheelTimeEvents);
+  const afterHour = t.requireEcho(ECHO.wheelTimeValue);
+  t.log.checkEquals(
+    `the hour moved off the seeded one ("${afterHour}")`,
+    afterHour.slice(11, 13) !== SEEDED.slice(11, 13),
+    true
+  );
+  t.log.checkEquals(
+    'and rolling the hour left the day alone',
+    afterHour.slice(0, 10),
+    SEEDED.slice(0, 10)
+  );
+  // The value shown is the value reported. Read out of the tree the person's finger
+  // stopped: the row now under the hour drum's centre line, which in a 12-hour wheel
+  // is the 12-hour form of the hour JS was told - hence the modulo, with the
+  // AM/PM half recorded beside it rather than asserted.
+  if (rowsReadable) {
+    const hourColumn = columnsOf(wheel)[0];
+    t.log.checkEquals(
+      `the row under the hour drum's centre line is the hour reported ` +
+        `(drum "${hourColumn.centre.text}", reported ${afterHour})`,
+      Number(hourColumn.centre.text) % 12,
+      Number(afterHour.slice(11, 13)) % 12
+    );
+  }
+  // Which half of the day a wheel is in is read twice: from the AM/PM column's own node
+  // (the drum is named by the two values it holds), and from any AM/PM row the dump happens
+  // to carry. Reading only the rows would call a 12-hour wheel 24-hour on a tree that
+  // publishes no rows at all — and the modulo below would then look like a bug rather than
+  // as what a 12-hour row cannot say on its own.
+  const periodDrum = t
+    .dump()
+    .find(
+      (node) =>
+        /^(AM|PM)\/(AM|PM)$/.test(node.contentDesc.trim()) &&
+        node.bounds.cx >= wheel.bounds.x1 &&
+        node.bounds.cx <= wheel.bounds.x2
+    );
+  const period = periodDrum
+    ? periodDrum.contentDesc.trim().split('/')
+    : t
+        .dump()
+        .filter(
+          (node) =>
+            /^(AM|PM)$/i.test(node.text.trim()) &&
+            node.bounds.cx >= wheel.bounds.x1 &&
+            node.bounds.cx <= wheel.bounds.x2
+        )
+        .map((node) => node.text.trim());
+  t.log.note(
+    period.length > 0
+      ? `the wheel is a 12-hour one (${period.join('/')} column): the assertion ` +
+          'above compares the row with the reported hour modulo 12, and the half the ' +
+          'row does not carry is the reported day part, which was checked unchanged'
+      : 'the wheel is a 24-hour one, so the row is the reported hour itself'
+  );
+
+  // Two more rolls of the same drum. Every roll is aimed at the hour column and rolls
+  // *downwards*, into the hours before the seeded one: the minute drum's x is a guess
+  // this tree cannot check (its rows are not in the dump), and a swipe that lands on
+  // the AM/PM toggle instead would move the hour by twelve and make the assertion
+  // below about the wrong thing. Downwards also cannot cross noon, so no roll of this
+  // check changes the half of the day the wheel is in.
+  let previous = afterHour;
+  for (const [expected, label] of [
+    ['2', 'second'],
+    ['3', 'third'],
+  ]) {
+    await rollDown('Real-input wheel time picker', columnsBefore[0]);
+    expectOneRoll(expected, `${label} hour roll`, ECHO.wheelTimeEvents);
+    const after = t.requireEcho(ECHO.wheelTimeValue);
+    t.log.checkEquals(
+      `the ${label} roll moved the time again ("${previous}" → "${after}")`,
+      after !== previous,
+      true
+    );
+    t.log.checkEquals(
+      `and the ${label} roll left the day the time picker was seeded on`,
+      after.slice(0, 10),
+      SEEDED.slice(0, 10)
+    );
+    previous = after;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The drum whose parent refuses every roll. On the dial a refused pick is a value
+  // the model never had; a drum *stays* where the finger left it until something
+  // moves it, so the snap-back has to reach the pager — and a drum left on the
+  // refused row would also swallow the next pick of that same time, because the
+  // model refuses an instant it is already showing. Both halves are checked: the
+  // roll is reported, and the rows in the tree are back on the seeded time.
+  // ---------------------------------------------------------------------------
+  const refusedLabel = 'Real-input wheel refusing picker';
+  const refused = await positionWheel(t, refusedLabel, [
+    ECHO.wheelRefuseEvents,
+  ]);
+  const refusedBefore = columnsOf(refused);
+  if (rowsReadable) {
+    t.log.checkEquals(
+      'the refusing drum starts on the time its parent holds',
+      Number(refusedBefore[0].centre.text) % 12,
+      9
+    );
+  }
+  t.log.checkEquals(
+    'and has reported nothing',
+    t.requireEcho(ECHO.wheelRefuseEvents),
+    '0'
+  );
+  await rollDown(refusedLabel, refusedBefore[0]);
+  expectOneRoll('1', 'refusing drum', ECHO.wheelRefuseEvents);
+  // The rollback, read where a person reads it. One settle, then the parent's no,
+  // then the widget's own road home — so give it a beat before the tree is asked.
+  // The beat is also an assertion: the rollback must not itself be an event, or the
+  // snap-back would loop — settle, report, revert, settle, report.
+  t.requireEchoToStay(
+    ECHO.wheelRefuseEvents,
+    '1',
+    'the refused roll, rolled back',
+    1500
+  );
+  if (rowsReadable) {
+    const refusedAfter = columnsOf(refused);
+    t.log.checkEquals(
+      `the refused roll left the hour drum on the parent's hour, not the rolled ` +
+        `one (row "${refusedAfter[0].centre.text}")`,
+      Number(refusedAfter[0].centre.text) % 12,
+      9
+    );
+  }
+  // And the reason that matters: with the drum back where it started, the same roll
+  // is a fresh selection again rather than the instant the model already holds.
+  await rollDown(refusedLabel, columnsOf(refused)[0]);
+  expectOneRoll('2', 'refusing drum, second roll', ECHO.wheelRefuseEvents);
+  t.log.checkEquals(
+    'the parent still refuses, so the time it sends never moved',
+    t.requireEcho(ECHO.wheelRefuseEvents),
+    '2'
+  );
+
+  // `mode="date"` with the same variant is *not* a drum: there is no Material date
+  // wheel, so the variant keeps the inline calendar (documented). The box says it -
+  // a calendar is far taller than a 200 dp drum, and a drum 58 dp wide is not a grid.
+  const dateWheel = await positionWheel(t, 'Real-input wheel date picker', []);
+  const dateHeightDp = Math.round(dateWheel.bounds.height / density);
+  const drumHeightDp = Math.round(wheel.bounds.height / density);
+  t.log.note(
+    `wheel + mode="date" box: ${t.boundsText(dateWheel)} = ` +
+      `${String(dateHeightDp)} dp tall, against the time wheel's ` +
+      `${String(drumHeightDp)} dp`
+  );
+  t.log.check(
+    `the "wheel" that is a calendar is unmistakably a calendar ` +
+      `(${String(dateHeightDp)} dp tall, more than the drum's ` +
+      `${String(drumHeightDp)} dp plus a week of rows)`,
+    dateHeightDp > drumHeightDp + 100
+  );
+}
+
+/**
  * The two inline calendars whose grid the box is supposed to decide, both measured.
  *
  * The rule is in `./android-calendar.mjs`, and the reason it lives outside the app is
@@ -6916,6 +8073,11 @@ class DeviceHarness {
     return {
       width: image.width,
       height: image.height,
+      // The decoded frame itself, beside the accessor: a check that wants to know
+      // *where* two screenshots differ has to walk the frame, and `pixel(x, y)` one
+      // call at a time is 2.6 million calls to answer it.
+      pixels: image.pixels,
+      channels: image.channels,
       pixel: (x, y) => pixelAt(image, x, y),
     };
   }
@@ -8224,6 +9386,74 @@ function makeContext(harness, log) {
     },
 
     /**
+     * Bring the page back to its own top.
+     *
+     * `requireControlOnScreen` walks *forward*: it swipes the page down until the
+     * node comes round, which is the right direction for every control a case has
+     * not reached yet. A check that got there first and scrolled past it needs the
+     * other direction, and a forward walk cannot aim at a row above the window: the
+     * six scrolls end with the node still out of the dump, and the case is left with
+     * nothing to press. See `DeviceHarness.scrollToTop`.
+     */
+    scrollToTop: () => harness.scrollToTop(),
+
+    /**
+     * One raw touch event, injected without waiting for the injection to finish.
+     *
+     * For a check that has to ask a question *while the finger is down*, which the
+     * synchronous `input tap` cannot serve: by the time it returns, the platform's press
+     * feedback is gone. `DOWN`, then a read, then `UP` is the same touch a finger makes,
+     * and it is the only way out here can see the row's own highlight.
+     *
+     * The drag path has used [motionAsync] for this since the Android drag flake; this is
+     * the same injection, named for the check that needs it rather than for a gesture.
+     *
+     * @param {'DOWN' | 'MOVE' | 'UP'} action
+     * @param {number} x
+     * @param {number} y
+     * @returns {Promise<void>}
+     */
+    rawTouch: (action, x, y) => motionAsync(action, x, y),
+
+    /**
+     * A finger held still for `ms`, injected as one gesture stream that is *still in
+     * flight* when the caller's next line runs: `input swipe x y x y <ms>`, spawned and
+     * not awaited, so the caller can take its reading mid-press and then await what came
+     * back. `rawTouch('DOWN')` cannot serve that: its process exits with the pointer left
+     * down, which is a press the app sees and the compositor may not.
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number} ms
+     * @returns {Promise<void>} resolves when the gesture's own process is done
+     */
+    rawHold: (x, y, ms) =>
+      new Promise((resolve, reject) => {
+        const child = spawn(
+          'adb',
+          [
+            '-s',
+            harness.serial,
+            'shell',
+            'input',
+            'swipe',
+            String(Math.round(x)),
+            String(Math.round(y)),
+            String(Math.round(x)),
+            String(Math.round(y)),
+            String(Math.round(ms)),
+          ],
+          { stdio: 'ignore', env: process.env }
+        );
+        child.on('error', reject);
+        child.on('close', (code) =>
+          code === 0
+            ? resolve()
+            : reject(new Error(`input swipe exited ${String(code)}`))
+        );
+      }),
+
+    /**
      * Scroll the screen until this control is on it, then look it up.
      *
      * Evidence that lives at the bottom of a screen has to be scrolled to, exactly
@@ -9493,37 +10723,49 @@ function avdName(serial, env) {
 /**
  * Which emulator to drive, and a refusal to drive any other.
  *
- * Several tasks share this machine and AGENTS.md names a device that belongs to
- * a person rather than to a task, so the serial is never guessed from a device
- * list: a candidate is checked by the AVD it actually runs, and the human's
- * device is refused by name as well.
+ * X28 removed the last fallback here. This function used to fall back to
+ * `ANDROID_AVD` (default `nitroui`) when no serial was exported, ask `adb devices`
+ * which emulators ran that AVD, and drive the one it found — against the machine's
+ * own adb server when `ANDROID_ADB_SERVER_PORT` was unset too. That is exactly what
+ * happened twice on 2026-11-11 (two G30 runs from shells with no lease env): the
+ * suite drove `emulator-5554`, a device no lease had handed it, and nothing refused,
+ * because the run had answered "which device?" for itself. The device now comes from
+ * `requireLeaseDevice` — serial *and* adb server — and a shell that names neither is
+ * refused before `adb devices` is asked anything.
+ *
+ * What the environment still decides is the *check*: when it names an AVD, the leased
+ * serial has to be running it, which is how a serial that drifted off its console
+ * port is caught here rather than in another task's screenshot.
  *
  * @param {Record<string, string | undefined>} env
- * @returns {{ serial: string, avd: string }}
+ * @returns {{ serial: string, avd: string | null }}
  */
 function resolveDevice(env) {
-  const avd = env.ANDROID_AVD ?? 'nitroui';
-  if (/^PR15\d\d/i.test(avd)) {
+  const device = requireLeaseDevice({
+    env,
+    platform: 'android',
+    command: 'real-input (android)',
+    // Never a fallback, lease named or not: this suite runs on the emulator its
+    // lease exported or it does not run. It is not run on CI, so there is no job
+    // that boots its own emulator and needs the older, guessing behaviour.
+    requireDevice: true,
+  });
+  const assigned = device.avd;
+  if (assigned != null && /^PR15\d\d/i.test(assigned)) {
     throw new Error(
-      `real-input: ANDROID_AVD="${avd}" is the device AGENTS.md says belongs ` +
+      `real-input: ANDROID_AVD="${assigned}" is the device AGENTS.md says belongs ` +
         'to the human. Refusing to touch it.'
     );
   }
 
-  // The lease's rules, applied to whatever it exported (review S5): a reserved
-  // serial is refused whichever variable named it, and a serial that disagrees
-  // with its own port is refused rather than resolved by whoever reads first.
-  // This suite boots nothing, so it is the last place that can still say no
-  // before someone else's device receives an `adb -s`.
-  const lease = checkEmulatorEnv(env);
   // The shared launch config rather than a hand-typed line: this string is what a
   // person pastes when a lease names a device that is not up, so it has to be the
   // same command the harness and the pool run - same port, same GPU mode, same
   // snapshot flags. The hand-written version here had drifted already (`-no-audio`,
   // which is not an emulator flag at all).
   const bootHint = emulatorLaunchCommand({
-    avd,
-    port: lease.port ?? null,
+    avd: assigned ?? '<avd>',
+    port: device.emulatorPort,
     snapshot: 'cold',
   });
 
@@ -9546,40 +10788,22 @@ function resolveDevice(env) {
     // an AVD-name match is not a licence to use the person's console.
     .filter((line) => !isReservedSerial(line));
 
-  const wanted = env.ANDROID_SERIAL;
-  if (wanted != null && wanted !== '') {
-    if (!serials.includes(wanted)) {
-      throw new Error(
-        `real-input: ANDROID_SERIAL=${wanted} is not connected to adb server ` +
-          `${env.ANDROID_ADB_SERVER_PORT ?? 'default'}. If the emulator was ` +
-          `booted by hand, it needs the leased console port:\n  ${bootHint}`
-      );
-    }
-    if (avdName(wanted, env) !== avd) {
-      throw new Error(
-        `real-input: ANDROID_SERIAL=${wanted} runs AVD ` +
-          `"${avdName(wanted, env)}", not the assigned "${avd}".`
-      );
-    }
-    return { serial: wanted, avd };
-  }
-
-  const matching = serials.filter((serial) => avdName(serial, env) === avd);
-  if (matching.length === 0) {
+  const serial = device.serial;
+  if (!serials.includes(serial)) {
     throw new Error(
-      `real-input: no running emulator for AVD "${avd}" on adb server ` +
-        `${env.ANDROID_ADB_SERVER_PORT ?? 'default'}. Boot it first, e.g.\n` +
-        `  ANDROID_ADB_SERVER_PORT=${env.ANDROID_ADB_SERVER_PORT ?? '5042'} ` +
-        bootHint
+      `real-input: ANDROID_SERIAL=${serial} is not connected to adb server ` +
+        `${device.adbServerPort ?? 'default'}. If the emulator was booted by ` +
+        `hand, it needs the leased console port:\n  ${bootHint}`
     );
   }
-  if (matching.length > 1) {
+  const running = avdName(serial, env);
+  if (assigned != null && running !== assigned) {
     throw new Error(
-      `real-input: ${String(matching.length)} emulators run AVD "${avd}" ` +
-        `(${matching.join(', ')}). Set ANDROID_SERIAL to pick one.`
+      `real-input: ANDROID_SERIAL=${serial} runs AVD ` +
+        `"${running}", not the assigned "${assigned}".`
     );
   }
-  return { serial: matching[0], avd };
+  return { serial, avd: running === '' ? assigned : running };
 }
 
 process.exitCode = await main().catch((error) => {

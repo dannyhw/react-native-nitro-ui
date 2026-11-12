@@ -1,0 +1,104 @@
+# Failure excerpt — harness:ios:Stepper
+
+- Ran: 2026-11-11T11:19:46.804Z on code tree `249a87aacd2c` at HEAD `6754384` (branch `task/X24-fix2`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Stepper`
+- Result: fail, exit 1, 26197 ms
+- Load: start 43.38, end 52.71, median 48.90, max 52.71
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X24-wd8i4`
+- Full log: `task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log` (<store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Stepper.harness.tsx`
+- `● Stepper › sends nothing while disabled, and follows the flag back`
+- `● Stepper › draws its two marks as ink over a surface`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X24-wd8i4 (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   X24-wd8i4                X24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 55.21 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 58 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:Stepper
+gate: node ../scripts/harness.mjs --harnessRunner ios Stepper (cwd example)
+gate: code tree 249a87aacd2c at HEAD 6754384f
+gate: git tree a261b8526a02 with a DIRTY worktree (not reusable)
+gate: log task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log
+gate:       <store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Stepper
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 249a87aacd2c, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 43.38/53.09 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Stepper.harness.tsx
+  ● Stepper › sends nothing while disabled, and follows the flag back
+
+    a disabled stepper paints the same pixels as a live one - the mean colour of the two boxes is #808080 and #808080, only 0 apart on the sampler's own scale, so the screen offers an affordance that answers to nobody
+
+        disabled: n=1 size=94x32 via=view opaque=27072 want=#000000 hits=0 mean=#808080 closest=#808080
+        live:     n=1 size=94x32 via=view opaque=27072 want=#000000 hits=0 mean=#808080 closest=#808080: expected 0 to be greater than or equal to 24
+      [0m [90m 951 |[39m         [32m'own scale, so the screen offers an affordance that answers to nobody\n'[39m [33m+[39m
+       [90m 952 |[39m         [32m`  disabled: ${offPixels.raw}\n  live:     ${livePixels.raw}`[39m
+      [31m[1m>[22m[39m[90m 953 |[39m     )[33m.[39mtoBeGreaterThanOrEqual([35m24[39m)[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 954 |[39m
+       [90m 955 |[39m     [90m// A reader is told the same thing the screen shows.[39m
+       [90m 956 |[39m     [36mconst[39m a11y [33m=[39m [36mawait[39m probeAccessibility([32m'off'[39m)[33m;[39m[0m
+
+  ● Stepper › draws its two marks as ink over a surface
+
+    the "ink" is barely a different colour from the surface it sits on (#808080 vs #808080, 0 apart on the sampler's own scale) - nothing is being drawn on top of it: expected 0 to be greater than 60
+
+      [0m [90m 1278 |[39m [32m          colourDistance(ink.closest, surface.closest)[39m
+       [90m 1279 |[39m [32m        )} apart on the sampler's own scale) - nothing is being drawn on top of it`[39m
+      [31m[1m>[22m[39m[90m 1280 |[39m     )[33m.[39mtoBeGreaterThan([35m60[39m)[33m;[39m
+       [90m      |[39m                      [31m[1m^[22m[39m
+       [90m 1281 |[39m     [90m// The line a stepper with empty glyph slots cannot cross. With nothing painted,[39m
+       [90m 1282 |[39m     [90m// the two extremes are the container and the sampler's own mid-grey backdrop[39m
+       [90m 1283 |[39m     [90m// showing through the box - about 37 apart and near-equal in area - so this and the[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 13 passed, 15 total
+Snapshots:   0 total
+Time:        24.076 s
+Ran all test suites matching Stepper.
+gate: harness:ios:Stepper FAIL in 26.2 s
+gate: recorded in .gates/task/X24-fix2.jsonl
+
+
+gate: appended the device context to task/X24-fix2/harness+ios+Stepper-2026-11-11T11-19-45.977Z.log (4 probe(s))
+
+```

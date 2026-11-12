@@ -59,7 +59,7 @@ const meta = {
       control: { type: 'inline-radio' },
       options: ['menu', 'wheel', 'radio'],
       description:
-        "`menu` (default) is the platform menu. `wheel` is a SwiftUI wheel on iOS; Android has no wheel, so it renders the same menu taking its caller's width. `radio` shows every option at once on Android; iOS has no radio-group picker style, so it renders the menu - see the `Variants` and `Radio` stories.",
+        "`menu` (default) is the platform menu. `wheel` is the platform wheel on both platforms: SwiftUI's `.wheel` on iOS, Material 3 1.5's `ScrollField` drum on Android, where one roll that comes to rest is one event. `radio` shows every option at once on Android; iOS has no radio-group picker style, so it renders the menu - see the `Variants` and `Radio` stories.",
     },
     label: {
       control: { type: 'text' },
@@ -135,10 +135,10 @@ export const Playground: Story = {
 /**
  * The two variants, and what each one is on each platform.
  *
- * Worth reading on a device: iOS gets two different controls, Android gets the
- * same control twice under two different layout policies. That is the honest
- * mapping (Material 3 has no wheel), not a gap the library could close without
- * drawing its own wheel.
+ * Worth reading on a device: neither platform gets the same control twice. iOS
+ * has SwiftUI's menu and SwiftUI's wheel; Android has Material 3's exposed
+ * dropdown and, for the wheel, a `ScrollField` drum - the platform's own control
+ * on both, which is the rule (`docs/DECISIONS.md` D38).
  */
 export const Variants: Story = {
   render: function VariantsStory() {
@@ -166,9 +166,10 @@ export const Variants: Story = {
           />
         </Row>
         <Note>
-          iOS: `.pickerStyle(.menu)` and `.wheel`. Android: Material 3
-          `ExposedDropdownMenuBox` for both - the wheel variant takes its
-          caller&apos;s width instead of its own.
+          iOS: `.pickerStyle(.menu)` and `.wheel`. Android: Material 3&apos;s
+          `ExposedDropdownMenuBox` for the menu and a `ScrollField` drum for the
+          wheel - each measures itself, so the wheel is a drum here rather than
+          a field that takes its caller&apos;s width.
         </Note>
       </Showcase>
     );

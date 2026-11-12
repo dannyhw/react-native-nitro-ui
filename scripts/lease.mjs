@@ -41,6 +41,7 @@ import {
   IDLE_SHUTDOWN_DEFAULT_MINUTES,
   EXCLUSIVE_TTL_MINUTES,
   assertLeasable,
+  formatWaited,
   leaseAcquiredAtMs,
   metroPortReason,
   portListeners,
@@ -54,6 +55,8 @@ import {
   sleepMs,
   stateHome,
   statePaths,
+  waitQueue,
+  waiterRequestedAtMs,
   withLock,
   writeJsonAtomic,
 } from './lease-core.mjs';
@@ -78,7 +81,7 @@ const USAGE =
   '       node scripts/lease.mjs renew <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs reap [--idle-minutes N] [--config <file>]   (the only reaper)\n' +
-  '       node scripts/lease.mjs list [--json]';
+  '       node scripts/lease.mjs list [--json]   (leases, who is queued and warm devices)';
 
 /**
  * How often a waiting `--exclusive` acquire re-reads the lease file. Ten seconds
@@ -400,10 +403,22 @@ function loadDevices(options, paths) {
  * request records itself, so new device leases are held back and it can actually
  * see the machine go quiet instead of being refilled forever; and a lock timeout
  * is retried rather than ending an hour-long wait.
+ *
+ * X26 adds the third thing it owes the *waiters*: every request that is willing to
+ * wait records a ticket when it is refused, so a freed pair goes to whoever has
+ * waited longest rather than to whoever polls first. Before that, a task that
+ * released a pair and asked again within seconds took it back every time - two tasks
+ * starved for four and a half hours that way on 2026-11-11 while the pool turned over
+ * between their polls.
  */
 function acquire({ devices, paths, options, log }) {
   const waitMinutes = options.waitMinutes ?? (options.exclusive ? 60 : 0);
-  const deadline = Date.now() + waitMinutes * 60_000;
+  const startedWaitingAt = Date.now();
+  const deadline = startedWaitingAt + waitMinutes * 60_000;
+  // A `--wait-minutes 0` acquire does not join the queue at all: the rule is that it
+  // either gets a pair now or is refused, and a ticket written on the way out would
+  // reserve that pair for a task that has already given up.
+  const queuesItself = waitMinutes > 0;
   // An exclusive lease is a bench or a baseline mint: 8 to 14 hours of quiet
   // (PROCESS review §4), so it must not inherit the 4-hour device default.
   const ttlMinutes =
@@ -434,6 +449,36 @@ function acquire({ devices, paths, options, log }) {
           const others = (state.pendingExclusive ?? []).filter(
             (entry) => entry.task !== options.task
           );
+          // My own records, if a previous poll (or a previous run of the same
+          // command) left them: their `requestedAt` is my place in the queue, and a
+          // poll must refresh the *touch* time without moving that.
+          const myMarker = (state.pendingExclusive ?? []).find(
+            (entry) => entry?.task === options.task
+          );
+          const myTicket = (state.waiters ?? []).find(
+            (waiter) => waiter?.task === options.task
+          );
+          const waitedSince =
+            waiterRequestedAtMs(myMarker) ??
+            waiterRequestedAtMs(myTicket) ??
+            startedWaitingAt;
+          const otherWaiters = (state.waiters ?? []).filter(
+            (waiter) => waiter?.task !== options.task
+          );
+          // Am I still waiting after this poll? The last one before the caller's
+          // deadline must not leave a record behind: the task is about to give up, and
+          // a ticket that outlives it reserves a pair for nobody for up to a minute,
+          // while a timed-out exclusive marker would hold every lease back that long.
+          const keepWaiting = now + POLL_MS < deadline;
+          /** Stop holding the line: this task has been served, or was refused outright. */
+          const dropMyTicket = () => {
+            if (myTicket == null && myMarker == null) return;
+            const next = { ...state, pendingExclusive: others };
+            if (others.length === 0) delete next.pendingExclusive;
+            if (otherWaiters.length > 0) next.waiters = otherWaiters;
+            else delete next.waiters;
+            writeJsonAtomic(paths.leases, next);
+          };
           const sameTask = state.leases.find(
             (lease) => lease.task === options.task
           );
@@ -448,6 +493,7 @@ function acquire({ devices, paths, options, log }) {
               sameTask.iosRuntime == null
                 ? `a default pair (${sameTask.holds.join(', ')})`
                 : `an iOS ${sameTask.iosRuntime} simulator (${sameTask.holds.join(', ')})`;
+            dropMyTicket();
             return {
               kind: 'refuse',
               reason:
@@ -462,6 +508,7 @@ function acquire({ devices, paths, options, log }) {
             // retried command cannot consume a second pair. No Metro check either:
             // the server on this pair's port would be this task's own run, which is
             // precisely what re-sourcing an env file *during* a suite looks like.
+            dropMyTicket();
             return {
               kind: 'acquired',
               lease: sameTask,
@@ -479,19 +526,62 @@ function acquire({ devices, paths, options, log }) {
             pending: others,
             portBlocked,
             iosRuntime: options.iosRuntime,
+            waiters: waitQueue(state, now).filter(
+              (waiter) => waiter.task !== options.task
+            ),
+            // Where I stand in the line: the ticket I already hold (even a `--wait-minutes 0`
+            // retry keeps the place it is refreshing), the queue I am about to join, or - for
+            // a request with no record at all - right now, which is the back.
+            waitedSince:
+              queuesItself || myTicket != null || myMarker != null
+                ? waitedSince
+                : now,
+            now,
           });
           if (!decision.ok) {
-            if (options.exclusive) {
-              // Refresh our marker on every poll: it is what holds back new
-              // device leases, and a killed waiter stops refreshing it.
-              writeJsonAtomic(paths.leases, {
-                ...state,
-                pendingExclusive: [
-                  ...others,
-                  { task: options.task, id: leaseId, requestedAt: now },
-                ],
-              });
+            // Every waiter records itself, not only the exclusive one (X26). The
+            // exclusive request additionally keeps its drain marker, because that is
+            // what holds *new* leases back while the machine goes quiet around it;
+            // the ticket is what keeps its place in the queue, and `waitQueue` folds
+            // the marker in when there is no ticket, so one waiter is one record.
+            const next = { ...state };
+            if (options.exclusive && keepWaiting) {
+              next.pendingExclusive = [
+                ...others,
+                {
+                  task: options.task,
+                  id: leaseId,
+                  platform: options.platform,
+                  requestedAt: waitedSince,
+                  refreshedAt: now,
+                },
+              ];
+            } else if (others.length > 0) {
+              next.pendingExclusive = others;
+            } else {
+              delete next.pendingExclusive;
             }
+            if (queuesItself && !options.exclusive && keepWaiting) {
+              next.waiters = [
+                ...otherWaiters,
+                {
+                  task: options.task,
+                  id: leaseId,
+                  platform: options.platform,
+                  exclusive: false,
+                  ...(options.iosRuntime == null
+                    ? {}
+                    : { iosRuntime: options.iosRuntime }),
+                  requestedAt: waitedSince,
+                  refreshedAt: now,
+                },
+              ];
+            } else if (otherWaiters.length > 0) {
+              next.waiters = otherWaiters;
+            } else {
+              delete next.waiters;
+            }
+            writeJsonAtomic(paths.leases, next);
             return { kind: 'wait', decision };
           }
 
@@ -500,7 +590,10 @@ function acquire({ devices, paths, options, log }) {
             devices,
             options.platform
           );
-          if (reserved != null) return { kind: 'refuse', reason: reserved };
+          if (reserved != null) {
+            dropMyTicket();
+            return { kind: 'refuse', reason: reserved };
+          }
 
           const lease = {
             id: leaseId,
@@ -523,6 +616,10 @@ function acquire({ devices, paths, options, log }) {
           const next = { ...state, leases: [...state.leases, lease] };
           if (others.length > 0) next.pendingExclusive = others;
           else delete next.pendingExclusive;
+          // Served: my ticket goes with the grant, so the next in line is the one
+          // still waiting and not a task that already has a device.
+          if (otherWaiters.length > 0) next.waiters = otherWaiters;
+          else delete next.waiters;
           writeJsonAtomic(paths.leases, next);
           return {
             kind: 'acquired',
@@ -601,14 +698,18 @@ function main(argv) {
       loadDevicesOrNull(options, paths),
       state.leases
     );
+    // X26: the queue is part of what `list` answers. A refusal now says "somebody
+    // older is waiting", and the one question that follows it is who, since when, and
+    // whether it is the next grant - which is exactly what this list is.
+    const queue = waitQueue(state, Date.now());
     if (options.json) {
       process.stdout.write(
-        `${JSON.stringify({ ...state, pool: poolSummary(listedDevices, paths) }, null, 2)}\n`
+        `${JSON.stringify({ ...state, queue, pool: poolSummary(listedDevices, paths) }, null, 2)}\n`
       );
       for (const warning of unowned) log(`lease: ${warning}`);
       return 0;
     }
-    if (state.leases.length === 0 && state.pendingExclusive == null) {
+    if (state.leases.length === 0 && queue.length === 0) {
       process.stdout.write(`no leases in ${paths.leases}\n`);
       // The pool rows still print: "nothing is leased, and here is what is nevertheless booted"
       // is the answer `list` exists to give, and the case where a warm device matters most.
@@ -631,13 +732,22 @@ function main(argv) {
       ];
       process.stdout.write(`${row.join(' ')}\n`);
     }
-    // Waiting exclusive requests are visible too: they are the reason a new
-    // acquire is being held back, and `list` is where a task looks to find out.
-    for (const entry of state.pendingExclusive ?? []) {
+    // Waiting requests are visible too - including a waiting exclusive one, which is
+    // the reason a new acquire is being held back and used to be the only kind shown.
+    for (const waiter of queue) {
+      const since = waiterRequestedAtMs(waiter);
+      const platform =
+        waiter.iosRuntime == null
+          ? String(waiter.platform ?? 'both')
+          : `ios ${waiter.iosRuntime}`;
       process.stdout.write(
-        `${String(entry.id ?? '').padEnd(24)}${entry.task.padEnd(12)}` +
-          `${'both'.padEnd(8)}${'waiting'.padEnd(10)}${''.padEnd(24)}` +
-          `wants an exclusive lease, ${Math.round((Date.now() - entry.requestedAt) / 1000)}s waiting\n`
+        `queue${String(waiter.position).padStart(4)}. ${String(waiter.task).padEnd(12)}` +
+          `${platform.padEnd(10)}` +
+          `${(waiter.exclusive ? 'exclusive' : 'waiting').padEnd(10)}` +
+          `${String(waiter.id ?? '').padEnd(18)}` +
+          `${waiter.exclusive ? 'wants an exclusive lease' : 'waiting for a pair'}, ` +
+          `waited ${formatWaited(waiter.waitedMs)} ` +
+          `(since ${since == null ? 'unknown' : `${new Date(since).toISOString().slice(11, 16)}Z`})\n`
       );
     }
     for (const row of poolRows(listedDevices, paths)) process.stdout.write(row);
@@ -709,6 +819,15 @@ function main(argv) {
         );
         if (pending.length > 0) next.pendingExclusive = pending;
         else delete next.pendingExclusive;
+        // ... and so does its place in the queue (X26): a task that has let go of the
+        // machine stops reserving a pair, and the next round of `acquire` for it joins
+        // the line at the back like anybody else's.
+        const waiters = (state.waiters ?? []).filter(
+          (waiter) =>
+            waiter?.task !== options.task && waiter?.id !== options.task
+        );
+        if (waiters.length > 0) next.waiters = waiters;
+        else delete next.waiters;
         writeJsonAtomic(paths.leases, next);
         return gone;
       },

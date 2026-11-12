@@ -1,0 +1,184 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-12T01:45:21.096Z on code tree `b53c4f333340` at HEAD `ed1e48c` (branch `task/G29-X27-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 154835 ms
+- Load: start 3.97, end 7.37, median 9.29, max 20.59
+- Device: none recorded (not a device gate)
+- Full log: `task/G29-X27-merge/check-2026-11-12T01-45-20.760Z.log` (<store>/task/G29-X27-merge/check-2026-11-12T01-45-20.760Z.log)
+- Scrubbed: 12 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/gate-lease-required.test.js`
+- `● gate.mjs refuses a device gate with no live lease › refuses harness:android, runs nothing, and records nothing`
+- `● gate.mjs refuses a device gate with no live lease › refuses the gate from the incident — real-input:android with no lease env`
+- `● gate.mjs refuses a device gate with no live lease › refuses a filtered run exactly like the full one`
+- `● gate.mjs refuses a device gate with no live lease › refuses a released lease even with every device variable still exported`
+- `● gate.mjs refuses a device gate with no live lease › refuses an expired lease, by its own ttl`
+- `● gate.mjs refuses a device gate with no live lease › refuses a lease that belongs to another task or the other platform`
+- `● gate.mjs refuses a device gate with no live lease › refuses a serial that is not the lease’s, including a stranger’s emulator`
+- `● gate.mjs refuses a device gate with no live lease › refuses a backgrounded run in the shell that asked for it`
+- `● gate.mjs refuses a device gate with no live lease › lets a live lease through, and records the device it ran on`
+- `● gate.mjs refuses a device gate with no live lease › runs check from a shell with no lease at all`
+- `● gate.mjs refuses a device gate with no live lease › asks a bench the same question, and lets an exclusive lease pass`
+- `● gate.mjs refuses a device gate with no live lease › refuses a smoke run that boots a device, and a pack that does not`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3671 — the rest is in the full log above)
+
+```
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:486:17)
+
+  ● gate.mjs refuses a device gate with no live lease › refuses a serial that is not the lease’s, including a stranger’s emulator
+
+    git commit -qm base: error: gpg failed to sign the data:
+    gpg: skipped "Test <<email>>": No secret key
+    [GNUPG:] INV_SGNR 9 Test <<email>>
+    [GNUPG:] FAILURE sign 17
+    gpg: signing failed: No secret key
+
+    fatal: failed to write commit object
+
+      70 |   });
+      71 |   if (result.status !== 0) {
+    > 72 |     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+         |           ^
+      73 |   }
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:510:17)
+
+  ● gate.mjs refuses a device gate with no live lease › refuses a backgrounded run in the shell that asked for it
+
+    git commit -qm base: error: gpg failed to sign the data:
+    gpg: skipped "Test <<email>>": No secret key
+    [GNUPG:] INV_SGNR 9 Test <<email>>
+    [GNUPG:] FAILURE sign 17
+    gpg: signing failed: No secret key
+
+    fatal: failed to write commit object
+
+      70 |   });
+      71 |   if (result.status !== 0) {
+    > 72 |     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+         |           ^
+      73 |   }
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:541:17)
+
+  ● gate.mjs refuses a device gate with no live lease › lets a live lease through, and records the device it ran on
+
+    git commit -qm base: error: gpg failed to sign the data:
+    gpg: skipped "Test <<email>>": No secret key
+    [GNUPG:] INV_SGNR 9 Test <<email>>
+    [GNUPG:] FAILURE sign 17
+    gpg: signing failed: No secret key
+
+    fatal: failed to write commit object
+
+      70 |   });
+      71 |   if (result.status !== 0) {
+    > 72 |     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+         |           ^
+      73 |   }
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:562:17)
+
+  ● gate.mjs refuses a device gate with no live lease › runs check from a shell with no lease at all
+
+    git commit -qm base: error: gpg failed to sign the data:
+    gpg: skipped "Test <<email>>": No secret key
+    [GNUPG:] INV_SGNR 9 Test <<email>>
+    [GNUPG:] FAILURE sign 17
+    gpg: signing failed: No secret key
+
+    fatal: failed to write commit object
+
+      70 |   });
+      71 |   if (result.status !== 0) {
+    > 72 |     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+         |           ^
+      73 |   }
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:578:17)
+
+  ● gate.mjs refuses a device gate with no live lease › asks a bench the same question, and lets an exclusive lease pass
+
+    git commit -qm base: error: gpg failed to sign the data:
+    gpg: skipped "Test <<email>>": No secret key
+    [GNUPG:] INV_SGNR 9 Test <<email>>
+    [GNUPG:] FAILURE sign 17
+    gpg: signing failed: No secret key
+
+    fatal: failed to write commit object
+
+      70 |   });
+      71 |   if (result.status !== 0) {
+    > 72 |     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+         |           ^
+      73 |   }
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:587:17)
+
+  ● gate.mjs refuses a device gate with no live lease › refuses a smoke run that boots a device, and a pack that does not
+
+    git commit -qm base: error: gpg failed to sign the data:
+    gpg: skipped "Test <<email>>": No secret key
+    [GNUPG:] INV_SGNR 9 Test <<email>>
+    [GNUPG:] FAILURE sign 17
+    gpg: signing failed: No secret key
+
+    fatal: failed to write commit object
+
+      70 |   });
+      71 |   if (result.status !== 0) {
+    > 72 |     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+         |           ^
+      73 |   }
+      74 | }
+      75 |
+
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:72:11)
+      at gitIn (scripts/__tests__/gate-lease-required.test.js:93:3)
+      at Object.makeCheckout (scripts/__tests__/gate-lease-required.test.js:610:17)
+
+
+Test Suites: 1 failed, 87 passed, 88 total
+Tests:       12 failed, 2081 passed, 2093 total
+Snapshots:   0 total
+Time:        148.237 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 154.8 s
+gate: recorded in .gates/task/G29-X27-merge.jsonl
+
+```

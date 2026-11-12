@@ -64,6 +64,40 @@ import {
   runningBackgroundGates,
 } from '../gate-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
+import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import {
+  DEFAULT_PAIR,
+  OTHER_PAIR,
+  leaseRecord,
+  leasedEnv,
+  serialFor,
+  writeLeaseStore,
+} from './helpers/lease-store.js';
+
+/**
+ * The lease every fixture checkout comes sourced with (X28).
+ *
+ * A device gate now refuses to start unless `NITRO_UI_HOME` holds a live lease whose
+ * pair matches the device variables in the environment, so the fixtures that are *not*
+ * about leasing have to answer that question without each inventing its own pair —
+ * which is exactly the drift the gate reads as "two leases in one shell".
+ * `gate-lease-required.test.js` owns the no-lease and wrong-lease cases.
+ */
+const FIXTURE_LEASE = leaseRecord({
+  id: 'X2-1',
+  task: 'X2',
+  platform: 'both',
+  holds: [DEFAULT_PAIR.id],
+});
+
+/** The lease env for a fixture checkout whose store is at `<dir>/state`. */
+function fixtureEnv(dir, lease = FIXTURE_LEASE) {
+  return leasedEnv({
+    home: path.join(dir, 'state'),
+    pair: DEFAULT_PAIR,
+    lease,
+  });
+}
 
 /** Tree digest used as "the code this ledger line was about" in these tests. */
 const TREE_A =
@@ -1079,7 +1113,6 @@ describe('platformMappingFor / tooling class', () => {
     for (const deviceRunInput of [
       'scripts/app-stamp.mjs',
       'scripts/app-stamp-core.mjs',
-      'scripts/lease-core.mjs',
       'scripts/node-version.mjs',
       'scripts/harness-timing-gate.js',
       'scripts/harness.mjs',
@@ -1090,6 +1123,17 @@ describe('platformMappingFor / tooling class', () => {
     ]) {
       expect(isToolingPath(deviceRunInput)).toBe(false);
       expect(platformsOwningFile(deviceRunInput)).toEqual(['ios', 'android']);
+    }
+
+    // X26 moved the lease pair onto the allow-list, which is the one place this rule
+    // has an exception: `example/rn-harness.config.mjs` does read `checkEmulatorEnv`
+    // and `emulatorSerial` out of `lease-core.mjs`. They are guards on the environment
+    // a lease exported - not code the app is built from - both are unit-tested in
+    // `check`, and neither ships in a package. The pair is asserted tooling in
+    // `gate-check.test.js` ("TOOLING_FILES"), where the reason is written out.
+    for (const allocator of ['scripts/lease.mjs', 'scripts/lease-core.mjs']) {
+      expect(isToolingPath(allocator)).toBe(true);
+      expect(platformsOwningFile(allocator)).toEqual([]);
     }
   });
 });
@@ -1573,11 +1617,24 @@ function makeCheckout(files, onBranch = () => {}) {
   // The real repo gitignores `.gates/`; a fixture that does not has its own
   // ledger and logs counted as code, so the tree moves while a gate runs and
   // every line reads stale. (Found by running this file: the N1 check caught it.)
-  fs.writeFileSync(path.join(dir, '.gitignore'), '.gates/\nfake-bin/\n');
+  fs.writeFileSync(
+    path.join(dir, '.gitignore'),
+    '.gates/\nfake-bin/\nstate/\n'
+  );
   gitIn(dir, ['init', '-q', '-b', 'main']);
   gitIn(dir, ['add', '-A']);
   gitIn(dir, ['commit', '-qm', 'base']);
   gitIn(dir, ['checkout', '-qb', 'task/x2-fixture']);
+  // The lease store this checkout's runs are checked against (X28). It is a
+  // directory in the fixture rather than the machine's `~/.nitro-ui`, so no test
+  // here can read or write a real lease. It is gitignored like the real one is
+  // outside every checkout: a device run claims its pair by writing `pool.json`
+  // into `NITRO_UI_HOME`, and a store that counted as code would move the tree
+  // mid-run and make the run's own ledger line read stale.
+  writeLeaseStore(path.join(dir, 'state'), {
+    pairs: [DEFAULT_PAIR, OTHER_PAIR],
+    leases: [FIXTURE_LEASE],
+  });
   onBranch(dir);
   return dir;
 }
@@ -1676,6 +1733,12 @@ function runCli(dir, args, extraEnv = {}) {
       // their own fake `NITRO_UI_HOME` and their own lease ids, and an inherited `METRO_PORT` would
       // have the CLI run its Metro pre-flight against a port this test never chose.
       ...withoutLeaseEnv(process.env),
+      // ... and the fixture's own lease does travel into every run, because a device gate
+      // refuses a shell that names none (X28). `FREE_LSOF` keeps the pre-flight on that
+      // port deterministic: it answers "nothing is listening", which is what a test that is
+      // not about ports needs; `lease-metro-port.test.js` owns the busy-port case.
+      ...fixtureEnv(dir),
+      ...FREE_LSOF,
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...extraEnv,
     },
@@ -1695,6 +1758,8 @@ function spawnCli(dir, args, extraEnv = {}) {
       // Same scrub as `runCli`: a signal test is about the CLI's own process handling, and a lease
       // inherited from the shell would change which pre-flight it runs before it ever got a signal.
       ...withoutLeaseEnv(process.env),
+      ...fixtureEnv(dir),
+      ...FREE_LSOF,
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...extraEnv,
     },
@@ -2448,23 +2513,22 @@ describeCli('gate.mjs --background and wait', () => {
     // fixture needs no pool state - and the fake `node` on PATH stands in for
     // `scripts/bench/run.mjs`, which is the thing under test's child, not its subject.
     const dir = checkout(iosOnly);
+    // A lease for both halves of a pair, which is what an env file with an Android
+    // side in it looks like — the setup that produced the wrong line.
+    const a5 = leaseRecord({ id: 'A5-1', task: 'A5', platform: 'both' });
+    const home = writeLeaseStore(path.join(dir, 'state'), {
+      pairs: [DEFAULT_PAIR, OTHER_PAIR],
+      leases: [a5],
+    });
     const run = runCli(dir, ['bench', '--', '--platform', 'ios'], {
-      NITRO_UI_LEASE_ID: 'A5-1',
-      NITRO_UI_LEASE_TASK: 'A5',
-      NITRO_UI_LEASE_PLATFORM: 'both',
-      IOS_SIM_UDID: 'UDID-A',
-      IOS_SIM: 'iPhone 17',
-      ANDROID_AVD: 'nitro-ui-a',
-      ANDROID_SERIAL: 'emulator-5574',
-      EMULATOR_PORT: '5574',
-      ANDROID_ADB_SERVER_PORT: '5043',
+      ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: a5 }),
     });
     expect(run.status).toBe(0);
     const lines = ledgerLines(dir);
     expect(lines).toHaveLength(1);
     expect(lines[0].platform).toBe('ios');
-    expect(lines[0].device).toBe('UDID-A');
-    expect(lines[0].device).not.toBe('emulator-5574');
+    expect(lines[0].device).toBe(DEFAULT_PAIR.ios.udid);
+    expect(lines[0].device).not.toBe(serialFor(DEFAULT_PAIR));
     expect(lines[0].lease).toBe('A5-1');
     // The bench really was told which platform, and the flag is the runner's, not the
     // ledger's: the log is the only place the child's argv appears.
@@ -2526,7 +2590,12 @@ describeCli('gate.mjs claims the device it runs on', () => {
   function leasedCheckout({ claimedBy = null } = {}) {
     const dir = makeCheckout(IOS_ONLY);
     const home = path.join(dir, 'state');
-    fs.mkdirSync(home, { recursive: true });
+    // The lease the gate checks before it claims anything (X28): live, this task's,
+    // holding the pair whose AVD, console port and adb port the env below exports.
+    writeLeaseStore(home, {
+      pairs: [DEFAULT_PAIR, OTHER_PAIR],
+      leases: [leaseRecord({ id: 'X11-1', task: 'X11', platform: 'both' })],
+    });
     if (claimedBy != null) {
       fs.writeFileSync(
         path.join(home, 'pool.json'),
@@ -2565,17 +2634,11 @@ describeCli('gate.mjs claims the device it runs on', () => {
     return {
       dir,
       home,
-      env: {
-        NITRO_UI_HOME: home,
-        NITRO_UI_LEASE_ID: 'X11-1',
-        NITRO_UI_LEASE_TASK: 'X11',
-        NITRO_UI_LEASE_PLATFORM: 'both',
-        IOS_SIM_UDID: 'UDID-A',
-        ANDROID_AVD: 'nitro-ui-a',
-        EMULATOR_PORT: '5574',
-        ANDROID_SERIAL: 'emulator-5574',
-        ANDROID_ADB_SERVER_PORT: '5043',
-      },
+      env: leasedEnv({
+        home,
+        pair: DEFAULT_PAIR,
+        lease: leaseRecord({ id: 'X11-1', task: 'X11', platform: 'both' }),
+      }),
     };
   }
 
@@ -2811,8 +2874,14 @@ describeCli('gate.mjs refuses a device gate on a look-check lease', () => {
     });
     cleanup.push(dir);
     const home = path.join(dir, 'state');
-    fs.mkdirSync(home, { recursive: true });
-    const lease = { NITRO_UI_HOME: home, NITRO_UI_LEASE_ID: 'G20-ab12' };
+    // A look-check lease is a real lease — live, this task's, holding a real pair —
+    // so it has to survive X28's store check to reach the refusal this case is about.
+    const look = leaseRecord({ id: 'G20-ab12', task: 'G20', platform: 'ios' });
+    writeLeaseStore(home, {
+      pairs: [DEFAULT_PAIR, OTHER_PAIR],
+      leases: [look],
+    });
+    const lease = leasedEnv({ home, pair: DEFAULT_PAIR, lease: look });
 
     const refused = runCli(dir, ['harness:ios'], {
       ...lease,

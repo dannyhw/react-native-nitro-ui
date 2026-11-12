@@ -12,6 +12,7 @@ import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiMenu } from './NativeNitroUiMenu';
 import { useMenuRows, type MenuGroup } from './MenuRows';
 
@@ -218,18 +219,6 @@ function sizingVariantFor(
   ].join(FIELD_SEPARATOR);
 }
 
-/**
- * What a self-sizing control is laid out with, before any `style`.
- *
- * `alignItems: stretch` (the default in a column) otherwise decides a control's
- * width for it: Yoga gives a stretched child the row's width as an *exact*
- * constraint, so the measured size is never even asked for and a Menu becomes a
- * wide box with a small control in it. Same base style as Button, Picker and
- * SegmentedControl; an explicit `width`, `flex` or `alignSelf: 'stretch'` in the
- * caller's `style` still wins.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
 /** Resolve a caller's variant, defaulting anything unrecognised to `'filled'`. */
 function resolveVariant(variant: ButtonVariant | undefined): ButtonVariant {
   return variant != null && VARIANTS.includes(variant) ? variant : 'filled';
@@ -293,6 +282,7 @@ export function Menu({
   style,
   ...restProps
 }: MenuProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   const resolvedVariant = resolveVariant(variant);
   const resolvedSize = resolveSize(size);
   // One string for native whichever form the caller used, exactly as `Button`
@@ -362,7 +352,7 @@ export function Menu({
       )}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }
