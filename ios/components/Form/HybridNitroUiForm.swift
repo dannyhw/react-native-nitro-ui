@@ -192,6 +192,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// Form used to be blind to really does happen here, rather than being a story told about
   /// a red test - `claims` is the number that has to be 0 once it is noticed.
   private var rowLosses = 0
+  private var giveUps = 0
+  /// How many times the provider could not fill an index path and handed back an empty cell
+  /// (fix round 2). A witness, not a bound: it says whether the blank rows a chase repairs ever
+  /// came from here, and it is the number to watch if a Form starts drawing gaps.
   /// How many times this *view* has been prepared for reuse - one `prepareForRecycle`, whether
   /// it came from the pool or from a drop. Deliberately not reset by the reset: the Form
   /// mounted into a recycled list is the only one that can say it was recycled, and a case that
@@ -308,6 +312,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     reparents = 0
     reclaims = 0
     rowLosses = 0
+    giveUps = 0
     taps = 0
     boxReports = 0
     offsetPublishes = 0
@@ -693,8 +698,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // UIKit raises an exception for a reconfigure that does not return the cell on screen.
       // That item is on its way out of the snapshot with the apply React's unmount queued.
       guard let row = id.rowView, self.path(for: row) == path else { continue }
-      // A cell that is not one of ours at all - the blank `UICollectionViewCell` from a
-      // provider call that gave up - holds no row, and reads as a mismatch here too.
+      // A cell from a provider call that gave up holds no row either, and reads as a mismatch
+      // here too - which is why giving up has to hand back a *dequeued* empty cell.
       if self.cell(at: path, isDrawing: id) { continue }
       if !ids.contains(id) { ids.append(id) }
     }
@@ -712,12 +717,96 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     let dataSource = UICollectionViewDiffableDataSource<
       NitroUiFormSectionModel, NitroUiFormItem
     >(collectionView: list) { [weak self] collectionView, indexPath, item in
-      self?.cell(at: indexPath, for: item, in: collectionView) ?? UICollectionViewCell()
+      // Every answer is a view UIKit handed out. A bare `UICollectionViewCell()` - a view
+      // nobody dequeued - is answered on iOS 27 with an `NSInternalInconsistencyException` from
+      // `-[UICollectionView _createPreparedCellForItemAtIndexPath:...]` ("returned a cell
+      // without a reuseIdentifier"), and Swift has no landing place for an ObjC exception, so
+      // the app dies: measured on pair-b at index path 1-2, where the whole Form suite then
+      // reads as "The app bridge disconnected during test execution" instead of as a dead app
+      // (fix round 2).
+      self?.cell(at: indexPath, for: item, in: collectionView)
+        ?? Self.blankCell(for: indexPath, in: collectionView)
     }
     dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
+      // The same rule for a band: iOS 27 raises for
+      // "UICollectionViewDiffableDataSource supplementary view provider returned nil", measured
+      // at index path 1-0 on the same tree that fixed the cell answer above. Both providers are
+      // total because both questions can be asked about a section this Form has already let go.
       self?.supplementary(kind, at: indexPath, in: collectionView)
+        ?? Self.blankBand(ofKind: kind, for: indexPath, in: collectionView)
     }
     self.dataSource = dataSource
+  }
+
+  /// The section UIKit is asking about, read out of the snapshot it is laying out.
+  ///
+  /// Not `sections`: that array is what React Native's mount/unmount stream says *now*, while the
+  /// snapshot is what UIKit is laying out, and the two are only equal between a mutation and the
+  /// next apply - which `applySnapshot` deliberately defers a turn, because applying a snapshot
+  /// inside Fabric's layout pass is itself a UIKit crash. So there is a real window in which a
+  /// section is gone from `sections` and the list is still laying it out, and the way into it
+  /// needs no test of its own: the mounting transaction that removes a Section also resizes the
+  /// Form's holding view, and `safeAreaInsetsDidChange` -> `listNeedsFrame` ->
+  /// `list.layoutIfNeeded()` lays the list out inside that same transaction - before the queued
+  /// apply. UIKit then legitimately asks for section 1 while `sections` has one entry, and an
+  /// index test against `sections` is a test of the wrong thing.
+  ///
+  /// The snapshot answers for the index path UIKit holds by construction, and names the model
+  /// that snapshot was built from, so the band and the cell get the section they were asked for.
+  private func sectionModel(
+    at section: Int,
+    in collectionView: UICollectionView
+  ) -> NitroUiFormSectionModel? {
+    guard collectionView.dataSource === dataSource,
+      let snapshot = dataSource?.snapshot(),
+      section >= 0,
+      section < snapshot.sectionIdentifiers.count
+    else { return nil }
+    return snapshot.sectionIdentifiers[section]
+  }
+
+  /// A cell for `indexPath` that draws nothing - what a provider hands back when it cannot fill
+  /// one. Dequeued, always: `UICollectionViewCell()` is not an option, because UIKit on iOS 27
+  /// raises for a cell it never handed out, and that exception kills the app instead of leaving
+  /// one blank row (X29 fix round 2). `prepareForReuse` has already given whatever row this cell
+  /// used to hold back to its section, so it is empty.
+  private static func blankCell(
+    for indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionViewCell {
+    collectionView.dequeueReusableCell(
+      withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
+      for: indexPath
+    )
+  }
+
+  /// The band answer when there is no Form left to ask - dequeued and empty, for the same
+  /// reason `blankCell` exists.
+  private static func blankBand(
+    ofKind kind: String,
+    for indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionReusableView {
+    let band = dequeueBand(ofKind: kind, for: indexPath, in: collectionView)
+    if let band = band as? NitroUiFormSupplementaryCell {
+      band.configure(text: nil, footer: kind == UICollectionView.elementKindSectionFooter)
+    }
+    return band
+  }
+
+  private static func dequeueBand(
+    ofKind kind: String,
+    for indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionReusableView {
+    let isFooter = kind == UICollectionView.elementKindSectionFooter
+    return collectionView.dequeueReusableSupplementaryView(
+      ofKind: kind,
+      withReuseIdentifier: isFooter
+        ? NitroUiFormItem.footerReuseIdentifier
+        : NitroUiFormItem.headerReuseIdentifier,
+      for: indexPath
+    )
   }
 
   private func cell(
@@ -725,16 +814,25 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     for item: NitroUiFormItem,
     in collectionView: UICollectionView
   ) -> UICollectionViewCell {
+    // The section comes from the snapshot (see `sectionModel`), not from `sections`: a cell can
+    // be asked for while the mount stream has already moved past this index path, and answering
+    // "I have no section 1" is what used to hand UIKit a view it never dequeued. `giveUps` says
+    // how often a provider still cannot fill what it was asked for - it should read 0, and a
+    // Form that draws a blank row is a Form whose snapshot and models disagree.
     guard case let .row(row) = item,
-      let cell = collectionView.dequeueReusableCell(
-        withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
-        for: indexPath
-      ) as? NitroUiFormRowCell,
-      indexPath.section < sections.count
+      let model = sectionModel(at: indexPath.section, in: collectionView)
     else {
-      return UICollectionViewCell()
+      giveUps += 1
+      return Self.blankCell(for: indexPath, in: collectionView)
     }
-    let model = sections[indexPath.section]
+    let cell = collectionView.dequeueReusableCell(
+      withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
+      for: indexPath
+    )
+    guard let cell = cell as? NitroUiFormRowCell else {
+      giveUps += 1
+      return cell
+    }
     // Name this Form to the cell here, where the cell is *configured*. A
     // `UICollectionViewCell` has no back-reference to its collection view, so everything a
     // cell has to ask its Form - the box it draws a row in, a chrome refresh - goes through
@@ -753,7 +851,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // Fabric unmounted this row out of the cell it was showing.
       self?.rowUnmounted(removed, in: model)
     }
-    cell.onRowLost = { [weak self] _ in
+    cell.onRowLost = { [weak self] _, ownHandOver in
       // This cell lost its row to another cell, and is now a blank row on screen. Handing the
       // pointer back is the cell's job (it is what lets `misdrawnVisibleItemIdentifiers` see the
       // gap); noticing the gap is this Form's, and it cannot wait for the next settle —
@@ -761,7 +859,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // ever asks for that cell again. The chase is coalesced per turn and re-reads the
       // visible cells rather than trusting this signal, so a steal during a scroll costs one
       // walk of the visible index paths, and a spurious one costs nothing.
-      self?.rowLosses += 1
+      //
+      // A hand-over (`ownHandOver`) is not a lost row and is not counted as one - that is
+      // `losses` telling the truth (fix round 2, item 1) - but it still runs the chase below,
+      // exactly as it did before the label existed. The label is only about the counting.
+      if !ownHandOver { self?.rowLosses += 1 }
       self?.readoptMisdrawnCells()
     }
     cell.onPressTap = { [weak self, weak cell] in
@@ -889,20 +991,24 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     _ kind: String,
     at indexPath: IndexPath,
     in collectionView: UICollectionView
-  ) -> UICollectionReusableView? {
+  ) -> UICollectionReusableView {
     let isFooter = kind == UICollectionView.elementKindSectionFooter
-    let reuse = isFooter
-      ? NitroUiFormItem.footerReuseIdentifier
-      : NitroUiFormItem.headerReuseIdentifier
-    guard indexPath.section < sections.count,
-      let cell = collectionView.dequeueReusableSupplementaryView(
-        ofKind: kind,
-        withReuseIdentifier: reuse,
-        for: indexPath
-      ) as? NitroUiFormSupplementaryCell else { return nil }
-    let model = sections[indexPath.section]
-    cell.configure(text: isFooter ? model.footerText : model.title, footer: isFooter)
-    return cell
+    let band = Self.dequeueBand(ofKind: kind, for: indexPath, in: collectionView)
+    guard let band = band as? NitroUiFormSupplementaryCell else {
+      giveUps += 1
+      return band
+    }
+    // The band for a section that has gone out of `sections` while the list is still laying it
+    // out still has a home in the snapshot (see `sectionModel`); only a snapshot that has moved
+    // under UIKit leaves this with nothing to say, and an empty band is the answer that keeps
+    // the app up to answer the next question.
+    guard let model = sectionModel(at: indexPath.section, in: collectionView) else {
+      giveUps += 1
+      band.configure(text: nil, footer: isFooter)
+      return band
+    }
+    band.configure(text: isFooter ? model.footerText : model.title, footer: isFooter)
+    return band
   }
 
   private static func accessories(
@@ -1509,6 +1615,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "claims=\(claims)",
       "wrongCells=\(wrongCells)",
       "losses=\(rowLosses)",
+      // How often a provider could not fill what UIKit asked for and handed back an empty cell
+      // or band instead. It reads 0 now that both providers answer from the snapshot; a Form
+      // with a visible blank row and this above 0 is a Form whose snapshot and models disagree
+      // in some new way (fix round 2).
+      "giveUps=\(giveUps)",
       // Where the list itself is: is it in a window, how tall is it, how much content does
       // it hold, how many items does it think are visible, and how many cells has it actually
       // realised. A Form that reports rows and no cells says which of its two jobs stopped
