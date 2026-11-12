@@ -414,3 +414,45 @@ Round 1's two questions were both answered before fix round 2 started, so nothin
   and the cell is left to the bench host as the one follow-up line the brief allows.
 - The gates round 1 owed (`harness:ios`, `real-input:ios`, `real-input:android` twice) are all in
   the generated table in `## Fix round 2`, and `task-ready` is green on this tree.
+
+## Merge round — G29 + X27 on one tree
+
+**Branch:** `task/G29-X27-merge` from `main` at `0e49f00b` · **Lease:** `G29X27-pe9pk` (pair-b —
+`nitro-ui B` iPhone Air 27.0, `emulator-5570`, Metro 8293)
+
+Nothing in the wheels conflicted: the only conflicted paths in the whole merge were
+`docs/images/components/stepper-{ios,android}.png`, and those were re-taken rather than hand-resolved.
+`bun run regen` after the merge moved no generated file, and `registry:check`, `nitrogen:check` and
+`manifest:check` say the lists survived the auto-merge.
+
+X24's Stepper caption column and X27's caption-above `Row` arrived in the same round, so the column
+went: `States` now runs through the shared `Row`, and the `flexShrink: 0` that existed only to fight
+the old side-by-side `Row` went with it — the shared row wraps, and nothing shrinks its children. The
+four sentences that still said Android has no wheel (`Picker.stories.tsx`'s `variant` description and
+`Variants` note, `DatePicker.stories.tsx`'s pair) now say what `picker.md` and `date-picker.md` say.
+`picker-android` and its alt text show the drum in place of the second exposed dropdown, and
+`picker-ios` and `date-picker-*` were re-photographed and measured against their committed bands —
+same story, same band — so they stay.
+
+### Gates on the merged tree
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2093 tests / 88 suites | `166f18689ce8` | 2 m 52 s | start 5.5 / med 9.5 / max 14.0 |
+| `harness:ios` | **PASS** | 624 tests / 32 suites + isolated 6 tests / 3 suites | `166f18689ce8` (ios tree) | 15 m 12 s | start 10.3 / med 6.2 / max 18.4 |
+| `harness:android` | **PASS** | 680 tests / 32 suites + isolated 6 tests / 3 suites | `166f18689ce8` (android tree) | 19 m 28 s | start 5.4 / med 8.0 / max 92.9 |
+| `real-input:ios` | **PASS** | — | `166f18689ce8` (ios tree) | 46 m 22 s | start 5.5 / med 9.8 / max 143.6 |
+| `real-input:android` | **PASS** | — | `166f18689ce8` (android tree) | 71 m 44 s | start 5.3 / med 6.0 / max 21.8 |
+
+`node scripts/gate.mjs need --for merge` → `need: merge is satisfied on this code tree.` (exit 0)
+
+### Follow-ups
+
+- `main`'s `f1d23225` gives the lease fixture a committer gpg has no key for, so on a host whose git
+  signs commits (`commit.gpgsign = true`) `gate-lease-required.test.js` is red — 12 failures,
+  `git commit -qm base: error: gpg failed to sign the data`, in
+  `docs/tasks/G29/failures/2026-11-12T01-45-21Z--check--01.log`. Reproduced in `check` and alone,
+  then the merge of `main` was dropped so this round's rows stay on the base the brief names;
+  `-c commit.gpgsign=false` in the fixture's `gitIn` would fix it.
+- `date-picker-{ios,android}` photograph a `datetime` wheel frame, so the merged `mode="time"` drums
+  appear in no README picture.
