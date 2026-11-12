@@ -1,0 +1,197 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-11T20:09:44.090Z on code tree `d7097d724a7c` at HEAD `04583df` (branch `task/X25-form-ios-bench-crash`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 1358591 ms
+- Load: start 15.53, end 5.54, median 6.89, max 18.14
+- Device: android / device `emulator-5574` / lease `X25-ddpiu`
+- Full log: `task/X25-form-ios-bench-crash/real-input+android-2026-11-11T20-09-43.683Z.log` (<store>/task/X25-form-ios-bench-crash/real-input+android-2026-11-11T20-09-43.683Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ no on-screen text with testID "sheet-log" in the accessibility tree`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X25-form-ios-bench-crash/real-input+android-2026-11-11T20-09-43.683Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X25-ddpiu (still live)
+  |   X25-ddpiu                X25          both              pair-a
+  |   X24M-f0yee               X24M         both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.54 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 330 — the rest is in the full log above)
+
+```
+    · "Real-input enabled picker" occupies 42,1794 → 777,1962
+    ✓ the ordinary picker, tapped the same way, opens one - so the line above measured a refusal — expected 1, saw 1
+    ✓ and that menu goes away again — expected 0, saw 0
+    ✓ one node carries the enabled picker's name, so it is announced once — expected 1, saw 1
+    ✓ and that same node carries the value it shows — expected Mica, saw Mica
+    ✓ it is the node a tap is aimed at, too (the name is not parked on a container) — expected true, saw true
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the disabled picker is one node as well — expected 1, saw 1
+    ✓ and that node is the one that says it is disabled — expected false, saw false
+    · name node reports focusable=false - kept as evidence, not asserted
+    · "Real-input radio picker" occupies 42,403 → 407,781
+    ✓ the radio group has reported no index before a touch — expected -, saw -
+    ✓ and no popup window belongs to it - the rows are the control — expected 0, saw 0
+    ✓ a real tap on radio row 2 reaches JS as index 2 — expected 2, saw 2
+    ✓ one row tap reports one change — expected 1, saw 1
+    ✓ a row tap opened no window — expected 0, saw 0
+    ✓ the tree marks "Basalt" as not chosen — expected false, saw false
+    ✓ the tree marks "Flint" as not chosen — expected false, saw false
+    ✓ the tree marks "Obsidian" as the chosen row — expected true, saw true
+    ✓ the enabled group's row "Basalt" says it is enabled — expected true, saw true
+    ✓ the enabled group's row "Flint" says it is enabled — expected true, saw true
+    ✓ the enabled group's row "Obsidian" says it is enabled — expected true, saw true
+    · radio row node, enabled group: "Obsidian" -> android.view.View enabled=true checkable=true checked=true at 42,655-407,781
+    ✓ the group is named once, so TalkBack announces the group and then its rows — expected 1, saw 1
+    ✓ tapping the row that is already chosen reports nothing — expected 1, saw 1
+    · "Real-input disabled radio picker" occupies 42,1136 → 377,1514
+    ✓ the disabled group's row "Gabbro" says it is not enabled — expected false, saw false
+    ✓ the disabled group's row "Peridot" says it is not enabled — expected false, saw false
+    ✓ the disabled group's row "Scoria" says it is not enabled — expected false, saw false
+    · radio row node, disabled group: "Gabbro" -> android.view.View enabled=false checkable=true checked=true at 42,1136-377,1262
+    ✓ a real tap on a disabled row reports nothing — expected 2, saw 2
+    · "Real-input radio picker" occupies 42,403 → 407,781
+    ✓ and a real tap on row 1 of the enabled group still echoes — expected 1, saw 1
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+    · "Real-input menu" occupies 42,944 → 252,1070
+    ✓ one node carries the trigger's name, so TalkBack announces it once — expected 1, saw 1
+    ✓ and that same node carries the title it paints as its value — expected Actions, saw Actions
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the Menu has reported no pick before a touch — expected -, saw -
+    ✓ and no event of any kind — expected none, saw none
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Real-input menu" occupies 42,944 → 252,1070
+    ✓ a real tap on the trigger opens the menu as a popup window — expected 1, saw 1
+    ✓ the popup carries all three rows in the accessibility tree — expected 3, saw 3
+    · row "Alpha": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    · row "Bravo": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    · row "Locked row": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    ✓ Back shuts the popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no pick — expected -, saw -
+    ✓ and the pair the platform does report: one open, one close — expected open > close, saw open > close
+    · "Real-input menu" occupies 42,944 → 252,1070
+    ✓ a real tap on the row "Bravo" reaches JS — expected bravo, saw bravo
+    ✓ a pick closes its own popup — expected 0, saw 0
+    ✓ one pick reports open, then select, then close - in that order — expected open > close > open > select bravo > close, saw open > close > open > select bravo > close
+    · "Real-input menu" occupies 42,944 → 252,1070
+    · the disabled row's tap left popup windows = 1
+    · that popup came down on the scrim tap; popup windows now 0
+    ✓ a tap on the disabled row reports no pick — expected bravo, saw bravo
+    · "Real-input menu" occupies 42,944 → 252,1070
+    ✓ the enabled row "Alpha", tapped the same way, does report a pick — expected alpha, saw alpha
+    ✓ so the line above measured a refusal, not a dead screen — expected 0, saw 0
+    ✓ the whole echo pairs every open with a close, in the order the gestures happened — expected open > close > open > select bravo > close > open > close > open > select alpha > close, saw open > close > open > select bravo > close > open > close > open > select alpha > close
+    · "Real-input menu" occupies 42,944 → 252,1070
+    · row "Checked row": enabled=true clickable=false checkable=false checked=false class=android.widget.TextView
+    ✓ a real tap on the checked row "Checked row" reaches JS as its id — expected checked, saw checked
+    ✓ a pick of the checked row closes its own popup — expected 0, saw 0
+    ✓ the checked row reported exactly one select — expected 1, saw 1
+    ✓ and the whole echo ends with one more open > select checked > close — expected open > close > open > select bravo > close > open > close > open > select alpha > close > open > select checked > close, saw open > close > open > select bravo > close > open > close > open > select alpha > close > open > select checked > close
+    · "Real-input split menu" needed 2 scrolls to come on screen
+    · "Real-input split menu" occupies 42,1986 → 239,2112
+    · "More options" at 204,1556 → 330,1682 while "Real-input split menu" is at 42,1986 → 239,2112
+    · "More options" at 244,1986 → 370,2112 while "Real-input split menu" is at 42,1986 → 239,2112
+    ✓ the action half is one node, named by the control it belongs to — expected 1, saw 1
+    ✓ the list half is one node in the action half's band, named for the options it opens — expected 1, saw 1
+    · split halves: action 42,1986 → 239,2112 list 244,1986 → 370,2112
+    ✓ the two halves sit side by side without overlapping — expected true, saw true
+    ✓ and they are the same height, so they read as one control — expected true, saw true
+    ✓ the split trigger has reported nothing before a touch — expected none, saw none
+    ✓ a real tap on the action half runs the primary action — expected action, saw action
+    ✓ and raises no list - no window, and no open in the echo either — expected 0 | action, saw 0 | action
+    · "More options" at 204,1556 → 330,1682 while "Real-input split menu" is at 42,1986 → 239,2112
+    · "More options" at 244,1986 → 370,2112 while "Real-input split menu" is at 42,1986 → 239,2112
+    ✓ the list half shuts on Back — expected 0, saw 0
+    ✓ one press of the list half is one open and one close — expected action > open > close, saw action > open > close
+    · "More options" at 204,1556 → 330,1682 while "Real-input split menu" is at 42,1986 → 239,2112
+    · "More options" at 244,1986 → 370,2112 while "Real-input split menu" is at 42,1986 → 239,2112
+    ✓ a real tap on the row "Bravo" of the split list reaches JS and closes its own list — expected action > open > close > open > select bravo > close, saw action > open > close > open > select bravo > close
+    ✓ a pick from the split list closes its own popup — expected 0, saw 0
+    ✓ the split trigger pairs every open with a close, action included — expected action > open > close > open > select bravo > close, saw action > open > close > open > select bravo > close
+
+  dialog: a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one
+    ✓ no dialog has reported anything before a touch — expected none, saw none
+    ✓ no alert is up before a touch — expected 0, saw 0
+    ✓ a disabled action is a node that is not enabled — expected false, saw false
+    ✓ and an ordinary action is enabled — expected true, saw true
+    ✓ a real tap on a disabled action leaves the alert up — expected 1, saw 1
+    ✓ a real tap on an action reports its id, then the close - once each, in order — expected action:delete > presented:false, saw action:delete > presented:false
+    ✓ Back and a tap outside each closed the alert with one close and no action — expected action:delete > presented:false > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false
+    ✓ Back leaves the sticky alert up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ its one action closes it, reporting the action first — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false
+    ✓ the sheet shows the title the app asked to be visible — expected 1, saw 1
+    ✓ the sheet's disabled row is not enabled — expected false, saw false
+    ✓ a real tap on the disabled row leaves the sheet up — expected 1, saw 1
+    ✓ and reports nothing: the log gained only Back's close — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false
+    ✓ a sheet's row reports its id once, then the close; Back before it reported a close alone — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false
+
+  text-field: real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it
+    ✓ the typing field starts empty — expected typed:  (0), saw typed:  (0)
+    · "Capped field" occupies 73,1610 → 1006,1673
+    ✓ maxLength 5 keeps five of seven keys — expected capped: abcde (5), saw capped: abcde (5)
+    ✓ and the field holds the same five — expected abcde, saw abcde
+    · "Frozen field" occupies 73,1334 → 1006,1397
+    ✓ every key into the frozen field is reported to JS — expected frozen: 2 edits refused, saw frozen: 2 edits refused
+    ✓ and each one is reverted: the field still shows what JS kept — expected frozen, saw frozen
+    · "Typing field" occupies 73,1057 → 1006,1120
+    ✓ real keystrokes reach the field, and React sees its text — expected typed: abc12 (5), saw typed: abc12 (5)
+    ✓ the field shows what React was told — expected abc12, saw abc12
+    · "Focus field" occupies 73,672 → 1006,735
+    ✓ a real tap focuses the field (onFocus) — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ Enter submits the text and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✓ a real tap on a button that calls ref.focus() focuses it — expected focus: 2 blur: 1 submitted: go, saw focus: 2 blur: 1 submitted: go
+    ✓ and one that calls ref.blur() blurs it — expected focus: 2 blur: 2 submitted: go, saw focus: 2 blur: 2 submitted: go
+
+  bottom-sheet: a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one
+    ✓ no sheet has reported anything before a touch — expected none, saw none
+    ✓ the sheet's content is not mounted before it is presented — expected 0, saw 0
+    ✓ the presented sheet is the node named sheet-fit-sheet — expected true, saw true
+    ✓ a real tap inside the sheet presses its Pressable once — expected Pressed 1 times, saw Pressed 1 times
+    ✓ a real tap on the sheet's TextInput reaches JS as a whole press — expected Input touches: in 1 out 1, saw Input touches: in 1 out 1
+    ✓ a horizontal drag scrolls the list inside the sheet (Chip 1 moved left or out) — expected true, saw true
+    ✓ and leaves the sheet up — expected 1, saw 1
+    ✓ the Pressable still takes a real tap after the scroll — expected Pressed 2 times, saw Pressed 2 times
+    ✓ Back, a tap outside and a drag down each reported the close, then the dismissal — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss
+    ✓ Back leaves the sticky sheet up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ and so does a drag down — expected 1, saw 1
+    ✗ no on-screen text with testID "sheet-log" in the accessibility tree
+
+  chip: real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither
+
+real-input (android): Error: real-input: no tab of the example is in the accessibility tree, so the "Chip" tab cannot be scrolled to.
+gate: real-input:android FAIL in 1358.6 s
+gate: recorded in .gates/task/X25-form-ios-bench-crash.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X25-form-ios-bench-crash/real-input+android-2026-11-11T20-09-43.683Z.log (5 probe(s))
+
+```

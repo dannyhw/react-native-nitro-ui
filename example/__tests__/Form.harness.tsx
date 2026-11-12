@@ -439,6 +439,73 @@ function CostForm({ count }: { count: number }) {
   );
 }
 
+/** The parts the churn can ask for, in the order the Form holds them. */
+const CHURN_PARTS = ['a', 'b', 'c'] as const;
+
+/**
+ * The Form the churn mounts: `parts` sections of `perSection` rows apiece, in a box short
+ * enough that its content scrolls.
+ *
+ * Several sections rather than the bench's one because the crash needs an index path the
+ * diffable *snapshot* still holds while this Form's models have dropped it, and a
+ * one-section Form can only lose index 0 — the one section index that stays valid as long as
+ * any model is left at all. Three sections also give the churn something to take away one at
+ * a time, which is what a settings screen does when a group is switched off.
+ */
+function ChurnForm({
+  parts,
+  perSection,
+}: {
+  parts: number;
+  perSection: number;
+}) {
+  return (
+    <Form
+      hybridRef={(view) => {
+        if (view != null) forms.churn = view;
+      }}
+      style={[styles.form, SHORT_BOX]}
+    >
+      {CHURN_PARTS.slice(0, parts).map((part) => (
+        <Form.Section key={part} title={`Section ${part}`}>
+          {Array.from({ length: perSection }, (_, index) => (
+            <Form.Row key={`${part}${index}`}>
+              <Text>
+                Row {part}
+                {index}
+              </Text>
+            </Form.Row>
+          ))}
+        </Form.Section>
+      ))}
+    </Form>
+  );
+}
+
+/**
+ * The churn's surface: the Form, or nothing, at the same place in the same tree.
+ *
+ * Toggling it is how the bench's arm tears a Form down and mounts it again — one surface, so
+ * React Native's pool hands the next mount the views the last one dropped. A fresh `render`
+ * per cycle would be a fresh surface and a fresh pool, which is a different mount (see
+ * `OneRow`'s `rowKey`), and the crash is about what the *previous* mount left in the list.
+ */
+function Churn({
+  on,
+  parts,
+  perSection,
+}: {
+  on: boolean;
+  parts: number;
+  perSection: number;
+}) {
+  return on ? (
+    <ChurnForm parts={parts} perSection={perSection} />
+  ) : (
+    <View testID="churn-off" />
+  );
+}
+
 /** A press that asks for nothing, so no case mounts an inline closure as a native callback. */
 function pressNow(): void {
   // The harness counts what it likes; this row's `onPress` exists to make the row pressable.
@@ -1017,6 +1084,139 @@ describe('Form (G24)', () => {
         expect(num(report, 'inCells')).toBeLessThan(count);
       }
     }
+  });
+
+  /**
+   * The bench's `mount.form` arm, in the harness (X25).
+   *
+   * That arm mounts a Form of 20 or 50 rows and drops it again, in a loop, in one surface —
+   * and on `main` it took the app with it on every one of eight launches, inside the
+   * reconfigure that `readoptRowlessCells()` applies one turn after a settle:
+   * `-[UICollectionView _reconfigureCell:forItemAtIndexPath:]`, `NSInternalInconsistencyException`,
+   * at N=20 and at N=50, with and without anything else changing.
+   *
+   * The turn between a settle and that apply is where React's removals land. The list is then
+   * still holding items this Form has forgotten about, and the provider run for one of those
+   * index paths has nothing to draw — and a *reconfigure* is not allowed to answer with a
+   * cell other than the one already on screen. So the case changes the Form's shape in every
+   * way that turn can be met: a scroll (the give-backs that empty a cell in place), a Section
+   * taken away with the rest staying (the index path the snapshot keeps), and the whole Form
+   * gone and back (the bench's own teardown).
+   *
+   * The assertions are that the app is still there and still telling the truth: every shape
+   * has to converge to its own counts, nothing on screen may be a cell holding nothing, and
+   * the Form the loop ends on has to answer for its own rows. A crash inside the loop shows
+   * up as a report that never arrives, and then as the suite's own channel going dead.
+   */
+  it('survives a Form scrolled, reduced and torn down in a loop (X25)', async () => {
+    const PER_SECTION = 7;
+    const PARTS = CHURN_PARTS.length;
+    const SCROLL = 400;
+    const CYCLES = 4;
+
+    /** Wait for the churn's Form to report this shape, snapshot included on iOS. */
+    const settledTo = async (parts: number, step: string) => {
+      const want = parts * PER_SECTION;
+      const report = await formReport(
+        (r) =>
+          num(r, 'rows') === want &&
+          num(r, 'sections') === parts &&
+          (!IOS || num(r, 'items') === want),
+        `${step}: ${String(want)} rows in ${String(parts)} sections`,
+        'churn'
+      );
+      if (IOS) await drawnOnScreen(step, 'churn');
+      return report;
+    };
+
+    const surface = await render(
+      <Churn on={true} parts={PARTS} perSection={PER_SECTION} />
+    );
+    const { rerender } = surface;
+    for (let cycle = 1; cycle <= CYCLES; cycle += 1) {
+      const step = `cycle ${String(cycle)}`;
+      const churn = await handleOf(
+        () => forms.churn,
+        `the churn Form (${step})`
+      );
+      let report = await settledTo(PARTS, `${step}: mounted`);
+
+      // Scrolled, so rows are handed back while their cells stay on screen — one of the
+      // three ways a cell comes up empty, and the one a settle then chases.
+      churn.nuiTestScrollTo(SCROLL);
+      if (IOS) {
+        report = await formReport(
+          (r) => Math.abs(num(r, 'offset') - SCROLL) <= 2,
+          `${step}: the list to have scrolled ${SCROLL} pt`,
+          'churn'
+        );
+      }
+
+      // A Section away with the others staying, and back: a removed index path in a
+      // snapshot that has not been told yet.
+      await rerender(
+        <Churn on={true} parts={PARTS - 1} perSection={PER_SECTION} />
+      );
+      report = await settledTo(PARTS - 1, `${step}: one Section gone`);
+      await rerender(
+        <Churn on={true} parts={PARTS} perSection={PER_SECTION} />
+      );
+      report = await settledTo(PARTS, `${step}: the Section back`);
+
+      console.log(
+        `FORM CHURN ${step} ` +
+          [
+            'sections',
+            'rows',
+            'items',
+            'inCells',
+            'applies',
+            'reparents',
+            'reclaims',
+            'recycles',
+          ]
+            .map((key) => `${key}=${report[key] ?? '-'}`)
+            .join(';')
+      );
+
+      // The bench's own teardown and its next mount.
+      await rerender(
+        <Churn on={false} parts={PARTS} perSection={PER_SECTION} />
+      );
+      delete forms.churn;
+      await rerender(
+        <Churn on={true} parts={PARTS} perSection={PER_SECTION} />
+      );
+      await handleOf(() => forms.churn, `the churn Form (${step}, remounted)`);
+    }
+
+    // Alive, and answering for the rows it has: the loop ends on a mounted Form, so these
+    // reads are the positive control for "the app is still here".
+    const last = await settledTo(PARTS, 'after the loop');
+    trace('after the loop', last);
+    expect(num(last, 'orphans')).toBe(0);
+    if (IOS) expect(num(last, 'stale')).toBe(0);
+
+    // The seat the churn leaves behind, taken by a Section with a heading in it. The abort is
+    // not in the tearing down: a dropped Form leaves the recycled list holding the items and the
+    // bands of the Form that just ended, and the layout of the *next* mount asks this Form's
+    // provider for them. For a Section band the answer used to be `nil`, and UIKit asserts on
+    // that, so the case cannot end at "the loop survived" — it has to hand the seat to a titled
+    // Section and still have an app.
+    surface.unmount();
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+    const next = await render(
+      <OneRow label="Named" styled={true} title="Refilled" />
+    );
+    const refilled = await reportUntil(
+      () => sections.one?.nuiTestSectionReport(),
+      (r) => Number(r.rows) === 1,
+      'the Section that took the churn seat to hold its row'
+    );
+    expect(Number(refilled.rows)).toBe(1);
+    next.unmount();
   });
 
   it('composes a recycled Section, and drops the band of a gone title', async () => {

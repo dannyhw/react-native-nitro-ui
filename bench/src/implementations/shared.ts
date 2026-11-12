@@ -410,7 +410,8 @@ export interface IconButtonGlyph {
    * A PNG rather than the vector nitro-ui draws because RN's `Image` has no
    * vector-drawable path on iOS and refuses an Android `.xml` asset from the dev
    * server (DECISIONS D43, "Loading") — this is the shape it can draw on both
-   * platforms, and `circle.xml`/`square.xml` are the same two drawings for the arm
+   * platforms, and `circle-vector.xml`/`square-vector.xml` are the same two drawings
+   * for the arm
    * that refuses a PNG by design. `bench/assets/README.md` says why one format
    * cannot cover both; the asymmetry is the arms' icon support, not a choice.
    */
@@ -421,8 +422,8 @@ export interface IconButtonGlyph {
    */
   systemImage: SFSymbol;
   /**
-   * The Android glyph nitro-ui resolves, as the asset id
-   * `require('./icons/x.xml')` evaluates to — DECISIONS D43's headline form, and
+   * The Android glyph nitro-ui resolves, as an asset `require('../../assets/x.xml')`
+   * evaluates to — DECISIONS D43's headline form, and
    * the same lookup a consumer pays: in the release build the bench runs that
    * asset *is* a drawable resource.
    */
@@ -444,17 +445,26 @@ export interface IconButtonGlyph {
  *
  * The two are deliberately different shapes at the same 24 dp box: a swap that
  * changed nothing would be invisible. `bench/assets/README.md` says what they are.
+ *
+ * The requires are two hops up because the fixtures are the *bench's* assets and not a
+ * folder of `src/implementations/`: `require('../assets/…')` resolves to
+ * `bench/src/assets/`, which has never existed, and the bench app then fails to bundle on
+ * either platform (X25 found it standing between every cell and a run). The vectors carry
+ * a `-vector` suffix because Android names a drawable after the require path plus the file
+ * name *without* its extension — `assets/circle` for the PNG and `assets/circle` for the
+ * XML are one resource name, and aapt answers "Duplicate resources". Same two drawings, two
+ * names, one folder.
  */
 const ICON_BUTTON_GLYPHS: readonly IconButtonGlyph[] = [
   {
-    source: require('../assets/circle.png'),
+    source: require('../../assets/circle.png'),
     systemImage: 'circle.fill',
-    androidIcon: require('../assets/circle.xml'),
+    androidIcon: require('../../assets/circle-vector.xml'),
   },
   {
-    source: require('../assets/square.png'),
+    source: require('../../assets/square.png'),
     systemImage: 'square.fill',
-    androidIcon: require('../assets/square.xml'),
+    androidIcon: require('../../assets/square-vector.xml'),
   },
 ];
 
