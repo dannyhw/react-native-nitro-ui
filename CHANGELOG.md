@@ -8,6 +8,115 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.9.0
+
+### Minor Changes
+
+- 2c68e4a: New: `Form`, `Form.Section` and `Form.Row` for grouped, settings-style lists whose rows are ordinary React Native views.
+
+  - iOS draws an inset grouped list; Android draws Material 3 Expressive's segmented-list shapes. Any view can be a row, and a nitro-ui control inside one behaves as it does anywhere else.
+  - `Form.Section` takes a `title` and a `footer`. `Form.Row` adds `onPress`, `accessory` (`'none' | 'disclosure' | 'checkmark'`) and `selected`.
+  - A focused field stays above the keyboard on both platforms; pass `keyboardAvoidance={false}` to opt out.
+  - Limitations: no virtualisation, so very long lists should use FlashList or Legend List. A row with `onPress` is one button element on Android; on iOS that merge is still open, so a screen reader can reach the row's content as separate elements.
+
+- 4af11d5: New: `ButtonGroup`, a row of commands (_Copy | Paste | Share_) or independent toggles (_Bold | Italic | Underline_) that moves items it cannot fit into an overflow menu.
+
+  - Items are data: `{ id, title, systemImage, androidIcon, disabled, toggle, checked, defaultChecked }`. The group calls `onPress(id)` for an action and `onCheckedChange(id, checked)` for a toggle (controlled with `checked`, or uncontrolled with `defaultChecked`) from the row or the overflow menu alike.
+  - `appearance: 'connected'` uses Material's connected button group on Android and SwiftUI's `ControlGroup` on iOS. A connected iOS group ignores `variant`, `size` and `tintColor`, and falls back to the standard row if it contains a toggle.
+  - `overflowAccessibilityLabel` names the overflow button. Overflow on iOS needs iOS 16; on iOS 15 the row clips.
+
+- 1b3b4f6: `androidIcon` now works on `Menu` and `ContextMenu` action rows and on `Chip`.
+
+  - It takes the same values as `Button`'s `androidIcon`: a `require()`d vector drawable or a drawable name. iOS keeps using `systemImage`, so a row that wants a glyph on both platforms passes both, with no `Platform.select`.
+  - On Android the glyph uses Material's own leading-icon slot, size and colour, and dims with the row when it is disabled. On a `checked` menu row the check mark takes the slot instead.
+  - A selected filter `Chip` shows its check mark in place of the glyph.
+  - Submenu labels do not take a glyph on either platform.
+
+- 2e62c4e: New: `Popover`, a platform popover whose content is React Native views.
+
+  ```tsx
+  <Popover
+    isPresented={open}
+    onIsPresentedChange={setOpen}
+    anchor={
+      <Pressable onPress={() => setOpen(true)}>
+        <Text>Share</Text>
+      </Pressable>
+    }
+  >
+    <Text>Anything React Native can render</Text>
+  </Popover>
+  ```
+
+  - iOS uses UIKit's popover presentation. Android has no popover control, so it uses a Material 3 surface placed below the anchor, above it when there is no room, and clear of the keyboard.
+  - Content is laid out at up to `maxWidth` (default `320`) and opens at its final size.
+  - It is controlled: `isPresented` in, `onIsPresentedChange` when the user closes it (a tap outside, or Back on Android), and `onDismiss` once it has gone.
+  - An open popover does not follow its anchor if the anchor moves.
+
+- 54fd984: New: `IconButton`, a single-glyph button with an optional toggle form.
+
+  - `accessibilityLabel` is required, because the button has no visible text. Pass `systemImage` for iOS and `androidIcon` for Android, as with `Button`.
+  - `variant` is Material's four icon buttons: `'standard' | 'filled' | 'tonal' | 'outlined'`. iOS has no icon-button control, so it maps them onto its own button styles; `outlined` there is a bordered button rather than Material's ring.
+  - Pass `checked` / `defaultChecked` / `onCheckedChange` to make it a toggle. On iOS the toggle form ignores `variant`.
+  - `size` runs from `'small'` to `'xxlarge'`. `width` (`'narrow' | 'uniform' | 'wide'`) is Android-only. Small sizes still get the platform's minimum touch target.
+
+- ab3aa8d: New: `Stepper`, a pair of minus and plus buttons that move a number by `step`.
+
+  ```tsx
+  <Stepper
+    accessibilityLabel="Quantity"
+    value={quantity}
+    onValueChange={setQuantity}
+    minimumValue={1}
+    maximumValue={99}
+  />
+  ```
+
+  - It does not display the number; render the value in your own `Text`.
+  - Values are clamped and snapped to `step` the same way as `Slider`. Each half is disabled at its bound.
+  - iOS uses SwiftUI's `Stepper`, with hold-to-repeat. Android has no stepper control, so it uses two Material 3 icon buttons, and **has no hold-to-repeat**: a tap steps once.
+  - Screen readers see one adjustable value rather than two buttons.
+
+- 13cb13e: `Picker` now has `variant="radio"`, which shows every option at once instead of behind a menu.
+
+  - Android shows a Material 3 radio group, one tappable row per option. `label` names the group for screen readers and is not drawn; `tintColor` colours the selected option.
+  - iOS falls back to the menu, because SwiftUI has no radio-group style. Use `SegmentedControl` if you need every choice visible on iOS.
+  - The value is still an index, and `onChange`, `label`, `disabled` and `tintColor` mean what they did.
+
+- cfaea16: `ConfirmationDialog`'s actions on Android now use Material 3 Expressive's segmented rows, and disabled actions are properly disabled.
+
+  - On Android the actions draw as one grouped card inside the sheet, with Expressive press feedback.
+  - A disabled action ignores presses, is announced as disabled by TalkBack, and is drawn disabled, including a `destructive` or `tintColor` action.
+  - Action order, `dismissible`, `titleVisibility` and `AlertDialog` are unchanged. iOS is unchanged.
+
+- 7d13f69: Wheel pickers on Android now draw real wheels. `Picker` with `variant="wheel"`, and `DatePicker` with `variant="wheel"` and `mode="time"`, use Material 3's `ScrollField` drums, where they previously showed a menu and the inline calendar.
+
+  - `Picker variant="wheel"` takes the same `options`, `selectedIndex`, `disabled`, `tintColor` and `accessibilityLabel` on both platforms.
+  - A wheel reports one `onChange` when it comes to rest, not one per row it passes.
+  - `DatePicker`'s time wheel has a drum for hours and minutes, plus AM/PM on a 12-hour device.
+  - `mode="date"` and `"datetime"` with `variant="wheel"` still show the inline calendar on Android, because Material 3 has no date wheel.
+
+- d13ff36: New: `ListItem`, a list row drawn by the platform's own row view: UIKit's list content on iOS and Material 3's `ListItem` on Android.
+
+  - Props: `title`, `subtitle`, `value`, a leading `systemImage` / `androidIcon`, `accessory` (`'none' | 'disclosure'`), `onPress` and `disabled`.
+  - Every text slot is one line, truncated at the end, so rows with the same slots filled are the same height.
+  - Inside a `Form.Row` it becomes the row's content without adding its own insets or highlight.
+  - Without `onPress` the row has no highlight, is not a button to screen readers, and lets taps through. A `disabled` row is greyed and ignores presses.
+
+- 54275ee: `Checkbox` on iOS now draws a checkmark instead of a switch. **This changes the default look on iOS.**
+
+  - The new default is Apple's checklist circle, as in Reminders, with the label beside it.
+  - `iosStyle: 'circle' | 'square' | 'switch'` picks the look. Use `'switch'` to keep the previous appearance. Android ignores the prop.
+  - `indeterminate` now draws a dash on iOS too. Screen readers announce the state as "mixed" on iOS and "Partially checked" on Android. If `checked` is also true, the checkmark wins.
+  - Tapping the label toggles the box as well as tapping the glyph.
+
+- db68651: `SearchField` now takes `keyboardType`, `autoCapitalize` and `autoCorrect`.
+
+  - They accept the same values as on `TextField`. The defaults match the old fixed behaviour (`'default'`, `'none'`, autocorrect on), so existing fields are unchanged.
+  - The Return key is still Search and still the only key that submits.
+  - Changing a keyboard prop while the field is focused updates the open keyboard: iOS reloads it, and Android now restarts the keyboard.
+  - On iOS, `'number-pad'` and `'decimal-pad'` have no Return key, so the field cannot be submitted from the keyboard.
+
 ## 0.8.0
 
 ### Minor Changes
