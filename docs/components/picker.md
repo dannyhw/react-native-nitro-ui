@@ -1,10 +1,11 @@
 # Picker
 
 The platform choice control: SwiftUI `Picker` with `.pickerStyle(.menu)` or
-`.wheel` on iOS, Material 3 `ExposedDropdownMenuBox` on Android. Both are hosted by
-the core runtime (`docs/architecture/core.md`), so menu presentation, press
-feedback, a11y behaviour, dynamic type and Material's own field metrics belong to
-the control, not to us.
+`.wheel` on iOS; on Android the `menu` variant is Material 3
+`ExposedDropdownMenuBox`, `wheel` is Material 3 1.5's `ScrollField` and `radio` a
+radio group. Both are hosted by the core runtime (`docs/architecture/core.md`), so
+menu presentation, press feedback, a11y behaviour, dynamic type and Material's own
+field metrics belong to the control, not to us.
 
 ```tsx
 import { Picker } from 'react-native-nitro-ui';
@@ -31,7 +32,7 @@ reused rather than forked; what is new here is a control that *presents* UI.
 | `selectedIndex`        | `number \| undefined`                    | —        | Controlled index. `undefined` makes the picker uncontrolled.      |
 | `defaultSelectedIndex` | `number \| undefined`                    | `0`      | Seed for an uncontrolled picker; ignored while `selectedIndex` is set. |
 | `onChange`             | `((e: {index, value}) => void) \| undefined` | —    | One call per user choice, with the new index and its label.       |
-| `variant`              | `'menu' \| 'wheel' \| 'radio'`           | `'menu'` | SwiftUI `.menu` / `.wheel`; Android the M3 menu or a radio group. |
+| `variant`              | `'menu' \| 'wheel' \| 'radio'`           | `'menu'` | SwiftUI `.menu` / `.wheel`; Android the M3 menu, a `ScrollField` drum or a radio group. |
 | `label`                | `string \| undefined`                    | —        | Android: the field's label. iOS: the `Picker`'s label (a11y). `radio`: the group's a11y name, never drawn. |
 | `disabled`             | `boolean \| undefined`                   | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.                |
 | `tintColor`            | `ColorValue \| undefined`                | platform | iOS: the menu's title. Android: the field's outline, label and chevron accents. |
@@ -51,7 +52,7 @@ so such a prop would be answerable on Android and not on iOS.
 
 | Concept        | iOS                                                     | Android                                                |
 | -------------- | --------------------------------------------------------- | -------------------------------------------------------- |
-| Control        | `Picker(selection:) { … }.pickerStyle(.menu \| .wheel)`; `radio` renders the `.menu` one    | `ExposedDropdownMenuBox` + `OutlinedTextField` + `ExposedDropdownMenu` (Expressive standalone-group shape and colour) of `SelectableDropdownMenuItem` rows; `radio` is a `Column(selectableGroup())` of `RadioButton` rows |
+| Control        | `Picker(selection:) { … }.pickerStyle(.menu \| .wheel)`; `radio` renders the `.menu` one    | `ExposedDropdownMenuBox` + `OutlinedTextField` + `ExposedDropdownMenu` (Expressive standalone-group shape and colour) of `SelectableDropdownMenuItem` rows; `wheel` is `ScrollField` (one drum of the options, the centre one lit); `radio` is a `Column(selectableGroup())` of `RadioButton` rows |
 | Host           | `UIHostingController` inside `NitroSwiftUIHost`            | `NitroComposeHost<M>: AbstractComposeView`                |
 | Containment    | **required** (`needsContainment`) — the first control here that presents a view controller | n/a — the popup is a Compose `Popup`              |
 | Theme          | system traits                                              | `MaterialTheme` + dynamic colour on Android 12+           |
@@ -149,8 +150,8 @@ of rows, each row `selectable(selected, enabled, Role.RadioButton)` around a
 target. iOS **renders the menu**, because SwiftUI's radio-group style —
 `RadioGroupPickerStyle` — is `@available(iOS, unavailable)`: there is nothing to
 host, and DECISIONS D38 rules that a missing control falls back to the platform's
-real one rather than to an imitation drawn by us. The same rule is why `wheel` is
-the menu on Android.
+real one rather than to an imitation drawn by us. (`wheel` is the case where both
+platforms do have the control, so nothing falls back — see The wheel variant.)
 
 That is a decision the JS wrapper makes, not something it leaves to SwiftUI, and
 the reason is the cache: `Picker.tsx` resolves the variant before it sends the
@@ -184,6 +185,64 @@ control iOS does have for "choose one of these, all shown" — or a `Menu` for m
 - **Nothing about it presents**, so the whole popup story above — windows,
   `expanded`, back, dismiss-on-move, containment — does not apply, and
   `nuiTestMenuReport()` answers `-1` for every box and `rows=0`.
+
+## The wheel variant (`variant="wheel"`)
+
+On iOS this is SwiftUI's `.wheel` style, as it always was. On Android it is Material
+3 1.5's `ScrollField`: one drum of the options, the row under the centre line lit,
+rolled with a finger. Both platforms therefore have the real control and nothing
+falls back (DECISIONS D38); what differs is what a *choice* physically is.
+
+A menu row is pressed and a radio row is pressed; a wheel's choice is **a scroll that
+comes to rest**. While the drum moves, the row under the centre line changes once per
+row it crosses, and each of those is a value the control could report. Picker reports
+one: the settle is what reads the drum, so a roll from row 0 to row 4 is **one**
+`onChange`, and the rows it passed are not events at all. That is the same promise the
+other two variants make — one call per user choice — arriving through a different
+trigger, and it is what `Picker.harness.tsx` ("reports one event for a roll that
+passed several rows") and one fling in `scripts/real-input` both hold it to.
+
+- **A refused pick moves the drum, not just the model.** The handshake's snap-back
+  writes `displayed` 4 → 0 inside one props batch, and the drum is not painted from
+  `displayed` — it keeps the page its pager scrolled to. So `afterUpdate()` tells the
+  pager directly (`PickerHost.syncWheelRow`), on the same pass that writes the index.
+  Following it from a `LaunchedEffect` keyed on the shown index does not work: the
+  composition only ever *sees* `0`, the key never changes, and the refused row stays
+  painted under the finger — which is how this was first caught, red on a loaded run.
+  That direct write is made only for a batch that actually *moved* the displayed index,
+  and never while a roll is in flight: writing the pager is `requestScrollToPage`, which
+  stops the scroll in progress, so a `label` change or a re-sent `options` list halfway
+  through someone's fling would cancel it and report nothing. A roll is the user's until
+  it rests; the batch after that rest is what puts a refused value back.
+- **`empty options` draws no drum**, and `disabled` stops the drum answering: the
+  gesture is swallowed and the semantics replaced by one disabled node, so a disabled
+  wheel reports nothing however it is rolled (as on every other variant).
+- **`tintColor` paints the row under the centre line** on Android, through
+  `selectedContentColor`; the rows above and below keep the scheme's colours. On iOS a
+  wheel takes no tint at all (see Tint), so a tinted wheel is a one-row affair on
+  Android and no affair on iOS.
+- **Nothing presents**, so the popup story above does not apply here either: no
+  window, no `expanded`, no containment, and `nuiTestMenuReport()` answers `-1`.
+- **A variant change is a new mount** (`Picker.tsx` keys the view on `variant`), and
+  the drum's state belongs to the mount that composed it: it is cleared on the recycle
+  reset and when the view is dropped, so a recycled host never carries a previous
+  owner's pager. Going `wheel → menu → wheel` re-seeds an uncontrolled picker at
+  `defaultSelectedIndex`, exactly as it does for `radio`.
+- **A vertical drag that begins on the drum rolls the drum.** A `ScrollField` is a pager,
+  and the React Native scroll view above it claims a vertical drag as soon as it passes
+  touch slop — before the pager has seen it — so a drum inside a scrolled page used to
+  receive `ACTION_CANCEL` and never move: the page moved, the drum did not, and no event
+  reached JS. `Modifier.nuiOwnVerticalDrags` asks the parents to stop intercepting for as
+  long as a gesture started inside the drum, and takes that ask back as soon as the first
+  move past touch slop is sideways: a drag leaving the drum horizontally is a page turn, a
+  drawer or a swipeable row, and a drum has no claim on it. So a drum keeps the *vertical*
+  drags begun on it — a page with a wheel in it is scrolled from somewhere else, the trade
+  a drum-shaped control makes wherever it is drawn — while a horizontal one still reaches
+  a pager or drawer beside it. Nothing changes for a drum that is not inside a scroller.
+- **Accessibility**: see Accessibility below — the drum is one named node, and the value a
+  screen reader hears is the row under the centre line. It is not `scrollable` and its
+  rows are not in the tree, so the wheel's a11y gap is that it can be *heard* but not
+  moved by a screen reader's own actions (see Limits).
 
 ## Sizing
 
@@ -228,7 +287,7 @@ an API 35 emulator at 420 dpi, in dp), with nothing overridden:
 | a 40-character title showing                    | 360.33 × 34.67    | 384.76 × 56.00    |
 | `['One','Two','Three']` with `label`            | 72.00 × 34.67     | 280.00 × 64.00    |
 | the same list, `disabled`                       | 72.00 × 34.67     | 280.00 × 56.00    |
-| `wheel`, `['Small','Medium','Large']`, 330 box  | 330.00 × 216.00   | 330.29 × 56.00    |
+| `wheel`, `['Small','Medium','Large']`, 330 box  | 330.00 × 216.00   | 330.29 × 200.00   |
 | `radio`, `['One','Two','Three']`, index 0       | the menu row above  | 114.67 × 144.00   |
 | `radio`, `['Small','Medium','Large']`, index 0  | the menu row above  | 133.33 × 144.00   |
 | `radio`, five options, index 0                  | the menu row above  | 114.67 × 240.00   |
@@ -248,8 +307,10 @@ Three readings from that table are the platforms talking, not us: iOS sizes a me
 to its title (62.67 pt for `Go`, 360.33 pt for 40 characters) while Android keeps
 Material's `MinTextFieldWidth` of **280 dp** as a floor, so a short title still
 measures 280 dp; a `label` costs Android 8 dp of height and nothing on iOS, which
-draws no caption; and a wheel is a wheel only on iOS — Android answers a `wheel`
-with the menu control under the wheel's layout policy (see Limits).
+draws no caption; and the two wheels agree on being as wide as their box and disagree
+on height — Material's `ScrollFieldHeight` is **200 dp** (measured: 330.29 × 200.00 in
+a 330 dp box, 300.19 × 200.00 in a 300 dp one, asserted at ±1 dp from a poisoned
+fallback in `Picker.harness.tsx`), SwiftUI's wheel 216 pt.
 
 **The radio group's box.** The height is one row per option and the row is
 Material's own minimum touch target — 48 dp, which the `RadioButton` inside already
@@ -387,6 +448,17 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
   this control depends on it now, and step 8 counts the nodes so a second one cannot
   come back unnoticed), and the merged node is not `focusable`. The functional refusal —
   a real tap on a disabled field opens no menu — is measured too.
+- **The `wheel` is one node that names itself — and says little else.** `ScrollField`
+  publishes a single semantics node for the whole drum (its `clearAndSetSemantics` carries
+  the name, a state description and a progress range), so `accessibilityLabel` lands on
+  the drum rather than beside it. The state description is the option under the centre
+  line, spelled from the same `options` the rows paint rather than the numbers Material's
+  default field would show — read off the semantics `ScrollField` publishes, since
+  `uiautomator dump` does not transcribe `stateDescription`. What the dump does show, on
+  the API 35 emulator: `android.widget.SeekBar`, the name in `content-desc`, and
+  `enabled=false` when the picker is disabled (which `ScrollField` never publishes itself,
+  so the flag is added on the drum's own layout node). Two things it does not say, both
+  measured and both in Limits: `scrollable=false`, and no rows anywhere under it.
 
 ## Behaviour notes
 
@@ -423,10 +495,23 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
   group is a plain Material radio group — no per-row icons, no grouping, no
   per-row enabled state.
 - Strings only — no icons, no per-option colours, no grouped or disabled rows.
-- **No wheel on Android.** Material 3 has no wheel; `variant='wheel'` renders the
-  menu control under the wheel's layout policy (fills the box, Material's field
-  height) rather than a faked wheel. Ask for `'wheel'` only where iOS-only is
-  acceptable, and expect a menu there.
+- **The Android wheel is a drum, with a drum's limits.** It is 200 dp tall, so it
+  shows a handful of the options at a time and every choice is a roll: there is no
+  popup to scan the list in, no row to press, and nothing to show an option's icon
+  even if strings allowed one. It is as wide as its box and has no width of its own,
+  so a `wheel` in a narrow box is a narrow drum, and unlike the menu — which keeps
+  drawing a field — a `wheel` with empty `options` draws nothing at all.
+- **The wheel's accessibility gap: it can be heard, not moved.** The drum's node is not
+  `scrollable` and its rows are not in the tree, so TalkBack offers no scroll or
+  row-activation actions on it — a screen-reader user can hear the current option but has
+  no wheel gesture to change it, and nothing outside the control can compare "the row
+  shown" with "the value reported" except the app's own echo. This is `ScrollField`'s
+  tree, not a semantics we omitted. It is also Android's gap alone: iOS's `UIPickerView`
+  answers VoiceOver's own scroll, so once the reader is on the wheel, swiping up or down
+  moves it. A layout where the wheel is the only way to choose needs an alternative (a
+  `menu` Picker, or `RadioGroup`) beside it.
+- **A drum inside a scroller takes the vertical drag** (see Behaviour notes): the page it
+  sits in has to be scrolled from beside it, not over it.
 - **Android has a 280 dp field floor**, so a menu with short options is much wider
   than its title. The width follows the title only above that floor.
 - The menu is the platform's, so its look is the platform's: an iOS 26+ menu is a
@@ -441,5 +526,7 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
 - One declared fallback pair per component, so the first instance of a long-title
   list starts from a 72 pt / 280 dp box and is corrected the turn it measures (D17).
   A cold iOS `wheel` pays the same cost in the other axis — its first frame is the
-  menu's 35 pt height against its own 216 — while Android is accurate for both
-  variants because both are 56 dp tall.
+  menu's 35 pt height against its own 216. Android's pair is the `menu` field
+  (280 × 56 dp), which is exact for every menu and for nothing else: a cold `wheel`
+  is laid out 144 dp too short and corrected the turn it measures, and a `radio`
+  group pays the same correction on both axes.

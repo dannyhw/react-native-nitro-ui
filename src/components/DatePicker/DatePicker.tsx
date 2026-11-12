@@ -25,8 +25,10 @@ export type DatePickerMode = 'date' | 'time' | 'datetime';
  * - `compact`: a field showing the value, which opens the platform's picker
  *   (a SwiftUI popover, a Material 3 dialog). Intrinsic size.
  * - `inline`: the picker itself, always on screen. `fillWidth`.
- * - `wheel`: iOS's wheel picker. Android has no wheel, so it renders the inline
- *   picker and says so in its docs. `fillWidth`.
+ * - `wheel`: the wheel picker. On iOS it is SwiftUI's `.wheel` for every `mode`;
+ *   on Android it is Material 3 1.5's time drums for `mode="time"` and the inline
+ *   calendar for `mode="date"`/`"datetime"`, because there is no date wheel to
+ *   draw. `fillWidth`.
  */
 export type DatePickerVariant = 'compact' | 'inline' | 'wheel';
 

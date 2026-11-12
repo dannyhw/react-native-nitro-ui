@@ -3,10 +3,14 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.os.Looper
 import android.view.View
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -24,16 +28,24 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonColors
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.ScrollField
+import androidx.compose.material3.ScrollFieldColors
+import androidx.compose.material3.ScrollFieldDefaults
 import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.ScrollFieldState
 import androidx.compose.material3.TextFieldColors
+import androidx.compose.material3.rememberScrollFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -52,6 +64,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.lerp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
@@ -60,6 +74,10 @@ import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.NuiWheelRow
+import com.margelo.nitro.nitroui.core.nuiOwnVerticalDrags
+import com.margelo.nitro.nitroui.core.nuiReportAtWheelRest
+import com.margelo.nitro.nitroui.core.nuiWheelColors
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -72,16 +90,27 @@ import java.util.concurrent.atomic.AtomicInteger
  * (`HybridNitroUiProgress.kt`), because the variant changes what the control's
  * width means: a menu is as wide as the title it shows, a wheel fills its box.
  *
- * `'wheel'` has no Material 3 equivalent. It renders this same dropdown under the
- * wheel's *layout* policy and says so (`docs/components/picker.md`); the alternative
- * is a hand-drawn wheel, which is not the platform control and not what the brief
- * asks for.
+ * `'wheel'` is Material 3 1.5's `ScrollField` (G29): a vertical pager of the
+ * options, 200 dp tall, three rows visible, the centre one snapped and lit. It is
+ * the platform's own wheel, so this file draws it ([PickerModel.isWheel]) rather
+ * than the dropdown it stood in for while material3 was still 1.4. Two things about
+ * a pager decide the shape of the rest of this variant:
  *
- * `'radio'` is the opposite case: Material 3 *does* have the control - a
+ * - **It has no intrinsic width.** A `ScrollField` is as wide as the box offers,
+ *   which is what the `fillWidth` sizing policy is for; the wheel would measure 0
+ *   wide under the `intrinsic` question a `menu` is asked.
+ * - **It does not commit a value, it scrolls.** A `ScrollFieldState` follows the
+ *   row nearest the snap position *while the finger moves*, so the row under the
+ *   centre of the wheel is a different fact from the row the user chose. The one
+ *   event per pick comes from the [ScrollFieldState.isScrollInProgress] edge
+ *   ([PickerHost.Wheel]): the control reports when a scroll *stops*, never per row
+ *   the wheel passes.
+ *
+ * `'radio'` is the third case: Material 3 *does* have the control - a
  * `selectableGroup()` column of `RadioButton` rows - so that is what it draws
- * ([PickerModel.isRadio]), in this window rather than a popup, and the popup half of
- * this file is not composed for it at all. The variant is Android's; iOS has no
- * radio-group picker style and renders the menu (DECISIONS D38 item 4).
+ * ([PickerModel.isRadio]), in this window rather than a popup. Between them the
+ * three variants compose exactly one of: a field and a popup window, a pager, a
+ * column of rows.
  *
  * This is also the library's first control whose UI leaves the host's window: the
  * menu is a Compose `Popup` with its own `PopupWindow`. It is disposed with the
@@ -129,11 +158,28 @@ internal class PickerModel : NitroUiModel() {
    * `'menu'`, `'wheel'` or `'radio'`; the wrapper normalises, and the setter
    * guards again through [resolvedVariant].
    *
-   * `'radio'` is the one variant that is not a popup: it composes a column of
-   * rows in this window instead of a field and a menu, so nothing here is ever
-   * `expanded` and the popup witness answers "-1" for every box.
+   * `'radio'` and `'wheel'` are the two variants that are not a popup: one composes
+   * a column of rows, the other a pager, in this window instead of a field and a
+   * menu. Neither is ever `expanded`, so the popup witness answers "-1" for every
+   * box on both, and [PickerModel.liveMenus] never moves for them.
    */
   var variant by mutableStateOf("menu")
+
+  /**
+   * A request to move the wheel to an option, from [nuiTestSelect].
+   *
+   * A harness hook cannot call `animateScrollToOption` itself: the pager lives in the
+   * composition, and the method arrives on a UI-thread post outside it. So the hook
+   * writes a request the composition turns into a scroll, the same shape
+   * `HybridNitroUiDatePicker`'s `showTimeDialog` takes. `serial` makes two requests
+   * for the *same* option two requests: keyed on the object, a repeat has to scroll
+   * again rather than be recognised as the one already applied.
+   *
+   * Only the wheel reads it, and only through an *animated* scroll - which is what a
+   * row press does too, so a simulated pick and a real one travel the same road and
+   * commit at the same place (the settle).
+   */
+  var wheelRequest by mutableStateOf<PickerWheelRequest?>(null)
 
   /** The picker's label, drawn as the field's floating label. */
   var label by mutableStateOf<String?>(null)
@@ -419,6 +465,7 @@ internal class PickerModel : NitroUiModel() {
     enabled = true
     tintColor = null
     accessibilityLabel = null
+    wheelRequest = null
     pickStamp = null
     sizingKey = ""
     state.displayed = 0.0
@@ -436,14 +483,13 @@ internal class PickerModel : NitroUiModel() {
      * The control this variant string names, in the one spelling the rest of the
      * file understands.
      *
-     * `'radio'` is Android's own (Q7 Appendix D): Material 3 has a documented
-     * radio-group pattern, so this variant is a real platform control and not an
-     * imitation (DECISIONS D38 item 1). `'wheel'` is the opposite case - Material
-     * 3 has no wheel, so it stays the menu under the wheel's layout policy - and
-     * anything else, including `'radio'` reaching iOS, is the menu. The wrapper
-     * already resolves the variant per platform, so a name outside these three
-     * means a caller that bypassed it, and the answer is the default control
-     * rather than a crash.
+     * All three are Android's own platform controls as of material3 1.5 (G29):
+     * `ExposedDropdownMenuBox` for the menu, a `selectableGroup()` column of
+     * `RadioButton` rows for the radio group (Q7 Appendix D) and `ScrollField` for
+     * the wheel (Q8 Appendix E pass 3 A). Nothing in this file imitates a control
+     * the platform does not have (DECISIONS D38 item 1); iOS keeps its own three
+     * SwiftUI styles, and a name outside these three - which means a caller that
+     * bypassed the wrapper - is the menu rather than a crash.
      */
     fun resolvedVariant(variant: String): String =
       when (variant) {
@@ -454,6 +500,15 @@ internal class PickerModel : NitroUiModel() {
 
     /** Whether [variant] names the radio group rather than the popup control. */
     fun isRadio(variant: String): Boolean = variant == "radio"
+
+    /**
+     * Whether [variant] names the wheel rather than the popup control.
+     *
+     * The wheel is not a popup either, and not a column of rows: it is a pager, so
+     * the three questions this file asks of a variant are `isRadio`, `isWheel` and
+     * "neither", in that order in [PickerHost.Component].
+     */
+    fun isWheel(variant: String): Boolean = variant == "wheel"
 
     /**
      * How many menus this process has open right now.
@@ -571,6 +626,16 @@ internal class PickerPickStamp(
   val options: Array<String>,
   val variant: String,
   val label: String?,
+)
+
+/**
+ * One request to move the wheel to [index], tagged with the [serial] that makes it
+ * this request rather than a repeat of the last one. See
+ * [PickerModel.wheelRequest].
+ */
+internal class PickerWheelRequest(
+  val index: Int,
+  val serial: Int,
 )
 
 /**
@@ -752,6 +817,22 @@ private fun pickerRadioColors(tint: Int?): RadioButtonColors {
   return built
 }
 
+
+/**
+ * The wheel's height: Material's own `ScrollFieldDefaults.ScrollFieldHeight`
+ * (200 dp), stated here because a `ScrollField` does not ask for it.
+ *
+ * It takes the height it is *offered* - it is a pager, and a pager fills its
+ * viewport along its scroll axis - so left alone inside this library's `fillWidth`
+ * question (the box's width, an unbounded height) it would be as tall as the screen
+ * it is on. `ScrollFieldDefaults` says the same thing the other way round: the
+ * constant "can be used as a reference when providing a Modifier.height to the
+ * ScrollField to ensure enough vertical space is available to display the typical
+ * three-item layout". Three rows of 200/3 dp, the middle one snapped.
+ */
+private val WheelHeight = ScrollFieldDefaults.ScrollFieldHeight
+
+
 /**
  * One radio row's minimum height.
  *
@@ -814,27 +895,212 @@ private class PickerHost(
    * Taking the hold after the emit costs nothing: nothing can measure between the
    * emit and the end of the click handler, and `nuiTestSelect` applies its writes
    * only once `choose` has returned.
+   *
+   * The wheel's settle calls this too, from a `LaunchedEffect` rather than a click
+   * handler - see [Wheel] for why the settle and not the row is where a wheel's
+   * selection happens. Both callers are "the user moved the selection", and only a
+   * selection that emitted is worth a hold, so they share the entry point rather than
+   * keep two copies of the hold rule.
+   *
+   * A *refused* pick still moves the wheel variant, and that is the other half of this
+   * entry point: a roll that the model will not accept (the row already shown - or a
+   * control that was disabled while the drum was coasting, which is the same refusal
+   * arriving at the rest) has left the drum on a row this control does not hold, and
+   * `displayed` never moved, so no batch will tell the drum otherwise either. Putting
+   * the drum back here is what keeps "the row under the centre line is the value"
+   * true between the refusal and the next props pass; the same call from [afterUpdate]
+   * covers the batch that refuses it later. `DatePicker` re-seats its drums the same
+   * way, on the same reasoning (`HybridNitroUiDatePicker.seatTimeDrums`).
    */
   fun choose(index: Int) {
     if (model.applyUserSelection(index)) {
       holdSizingReports()
+    } else {
+      syncWheelRow(model.displayed)
     }
   }
 
   /**
-   * The two controls this component is, chosen by the variant the wrapper sent.
+   * The drum's [ScrollFieldState] while a [Wheel] is composed, and null at every
+   * other moment of this view's life.
+   *
+   * The composition owns the pager, so this is only ever a back-reference written
+   * from [Wheel] while it composes and cleared with the mount ([prepareForRecycle],
+   * [drop]). It exists because of [syncWheelRow]: the props pass has to be able to
+   * move the drum, and it cannot reach a state object that lives in a slot table.
+   */
+  var wheelState: ScrollFieldState? = null
+
+  /**
+   * Whether a finger is on the drum, or the drum is still turning; null while no
+   * [Wheel] is composed.
+   *
+   * The same back-reference as [wheelState], for the same reason: the flag is
+   * [Wheel]'s own `derivedStateOf` and a props pass cannot reach a slot table. It is a
+   * [State] rather than a `Boolean` so the pass reads the *live* flag rather than a
+   * copy that was current whenever the composition last happened to run - for a flag
+   * that moves every frame of a roll, that is the difference between a guard and a
+   * decoration. UI-thread reads only ([syncWheelRow], [noteWheelBatch]).
+   */
+  var wheelActive: State<Boolean>? = null
+
+  /**
+   * Make the drum show [row], if it does not already.
+   *
+   * The drum is the one part of this control that is not painted from
+   * [PickerModel.displayed]: a `ScrollField` keeps the page its pager scrolled to,
+   * and a `LaunchedEffect` keyed on the shown index is the obvious way to follow it
+   * - and it is not enough. A refused pick writes `displayed` 4 then back to 0 inside
+   * one frame, the composition then only ever *sees* 0, the key never changes, and the
+   * effect never fires: the drum stays on the row the user rolled to while the model
+   * holds the row React kept, which is the exact failure a snap-back exists to prevent.
+   * (Measured: `Picker.harness.tsx`'s refused-roll test, which went red on a loaded
+   * run exactly that way - the frame the effect needed never came.)
+   *
+   * So the drum follows the value where the value is decided, synchronously, on the UI
+   * thread: `afterUpdate` writes this control's shown index, and immediately after it
+   * the pager is told. Writing [ScrollFieldState.selectedOption] is the non-suspending
+   * road (its setter is `PagerState.requestScrollToPage`), which is what makes this
+   * callable from a props batch at all - `scrollToOption` is a `suspend` function and
+   * belongs to a coroutine.
+   *
+   * Two things keep it off a drum that is *moving*, because writing
+   * [ScrollFieldState.selectedOption] is `requestScrollToPage`, and that stops a scroll
+   * in progress and snaps the pager home - a roll cancelled halfway reports nothing at
+   * all. First, [afterUpdate] calls this only for a batch that actually moved
+   * [PickerModel.displayed]: the ordinary batch (a `label` change, an `options` list
+   * re-sent, a size report landing) has no claim on the drum. Second, a call that does
+   * arrive is refused while [wheelActive] holds.
+   *
+   * A roll is the user's until it rests. What it lands on is then reported like any
+   * other pick, and a value that was refused while the finger was down is put back by
+   * the batch *after* that rest - the same reconcile, with the drum at standstill and
+   * nothing left to cancel.
+   *
+   * A no-op when the drum already shows [row], which is every ordinary pick: the row
+   * arrived there by scrolling, and the value follows the drum, not the other way round.
+   */
+  fun syncWheelRow(row: Int) {
+    val wheel = wheelState ?: return
+    if (wheel.selectedOption == row) {
+      return
+    }
+    if (wheelActive?.value == true) {
+      wheelSeatRefusals += 1
+      return
+    }
+    wheelSeatWrites += 1
+    // The seat decides the row, so it is one of the two places the witness learns it.
+    wheelRow = row
+    wheel.selectedOption = row
+  }
+
+  /**
+   * Props batches that reached the drum's sync point, and what the drum was doing at
+   * each of them; see [noteWheelBatch].
+   *
+   * Witness fields for the `wheel` variant, published on the UI thread and read on the
+   * JS thread because a Nitro method may not wait for one (core.md section 5), and
+   * because the drum's own state belongs to a layout pass. They exist to make one claim
+   * assertable instead of logged - *a props batch landed while a roll was in flight and
+   * left the drum alone* - which `Picker.harness.tsx`'s mid-roll test needs to know
+   * whether it tested anything.
+   */
+  @Volatile
+  var wheelBatches = 0L
+    private set
+
+  /**
+   * Whether any props batch since this mount has landed while the drum was touched or
+   * turning. Sticky rather than per-batch, because what the harness asks is "did a batch
+   * arrive in the middle of a roll at all", and a test that sends several unrelated
+   * batches across one animation should not have to guess which one counted.
+   */
+  @Volatile
+  var wheelBatchSawRolling = false
+    private set
+
+  /** Writes [syncWheelRow] has made to the pager, this mount. */
+  @Volatile
+  var wheelSeatWrites = 0L
+    private set
+
+  /** Writes [syncWheelRow] has refused because the drum was touched or turning. */
+  @Volatile
+  var wheelSeatRefusals = 0L
+    private set
+
+  /**
+   * The row the drum last came to rest on, or was seated to; `-1` before either has
+   * happened.
+   *
+   * The drum's own position, which nothing else in this library can read: it is not
+   * painted from [PickerModel.displayed], its rows are not in the accessibility tree (so
+   * not even a `uiautomator dump` can see them), and its state belongs to a layout pass
+   * no JS call may enter. Published from the two places that *decide* it - a rest, and a
+   * seat - so `Picker.harness.tsx` can assert "the row the drum stands on is the row the
+   * app holds" about a refused pick, instead of trusting that a snap-back happened.
+   */
+  @Volatile
+  var wheelRow = -1
+    private set
+
+  /** Start the drum's witness counters over; see [wheelBatches]. */
+  fun clearWheelWitness() {
+    wheelBatches = 0
+    wheelBatchSawRolling = false
+    wheelSeatWrites = 0
+    wheelSeatRefusals = 0
+    wheelRow = -1
+  }
+
+  /** Record the row the drum settled on; see [wheelRow]. UI-thread only. */
+  fun noteWheelRow(row: Int) {
+    wheelRow = row
+  }
+
+  /**
+   * Record the batch that is being applied, against the drum's live state. Called from
+   * [afterUpdate] whether or not that batch moves the drum.
+   */
+  fun noteWheelBatch() {
+    wheelBatches += 1
+    if (wheelActive?.value == true) {
+      wheelBatchSawRolling = true
+    }
+  }
+
+  /**
+   * Ask the composition to roll the wheel to [index], the way a row press does.
+   *
+   * The hook for `nuiTestSelect` on this variant. The pager is the composition's, so
+   * the request goes on the model and the composition turns it into an animated
+   * scroll; the settle at the end of that scroll is what emits, exactly as it is for
+   * a finger. [PickerModel.wheelRequest]'s serial is what makes a second request for
+   * the same option a second request.
+   */
+  fun requestWheelScroll(index: Int) {
+    wheelRequestSerial += 1
+    model.wheelRequest = PickerWheelRequest(index, wheelRequestSerial)
+  }
+
+  /** Counts [requestWheelScroll] calls for this mount; see [PickerModel.wheelRequest]. */
+  private var wheelRequestSerial = 0
+
+  /**
+   * The three controls this component is, chosen by the variant the wrapper sent.
    *
    * A variant change is a new mount (`Picker.tsx` keys the native view on the
-   * variant), so the two branches never trade slots in a live composition; a
-   * recycled view switching between them is the case `prepareForRecycle` resets,
-   * and the popup branch owns a window that a composition ending takes with it.
+   * variant), so the branches never trade slots in a live composition; a recycled
+   * view switching between them is the case `prepareForRecycle` resets, and the popup
+   * branch owns a window that a composition ending takes with it.
    */
   @Composable
   override fun Component(model: PickerModel) {
-    if (PickerModel.isRadio(model.variant)) {
-      RadioGroup(model)
-    } else {
-      MenuField(model)
+    when {
+      PickerModel.isRadio(model.variant) -> RadioGroup(model)
+      PickerModel.isWheel(model.variant) -> Wheel(model)
+      else -> MenuField(model)
     }
   }
 
@@ -918,6 +1184,172 @@ private class PickerHost(
     }
   }
 
+  /**
+   * The `wheel` variant: Material 3 1.5's `ScrollField` showing [PickerModel.options].
+   *
+   * Three things about a pager decide what goes where here.
+   *
+   * **A wheel does not pick, it scrolls.** `ScrollFieldState.selectedOption` is the
+   * row nearest the snap position, and it moves every time the wheel crosses a row -
+   * during a fling, that is many times. Reading it as a choice would emit one event
+   * per row the wheel passed, which is the failure mode this variant's whole design
+   * is about (Q8 Appendix E pass 3 A: "the value commits on settle"). So the emit
+   * hangs off [nuiReportAtWheelRest] instead - the rule both of this library's wheels
+   * share, armed by a finger on the drum and let off by the drum's own scroll ending -
+   * and goes out through the same [choose] a popup row press uses, so
+   * `applyUserSelection`'s "the index did not move" guard turns the rests that changed
+   * nothing (a snap-back, a scroll that came to rest where it started) into no event at
+   * all. One settled value, one event - never one per row.
+   *
+   * **The wheel's own row is what the drum shows.** The rows are the option's text,
+   * not the number `ScrollFieldDefaults.Item` draws, so [NuiWheelRow] supplies the text
+   * and keeps Material's own typography lerp and motion for the centre row.
+   * `fieldAccessibilityDescription` says the same text to TalkBack, which is the pair
+   * that makes the spoken value and the painted value the same fact.
+   *
+   * **A drum is as wide as its box and 200 dp tall.** [WheelHeight] is why the wheel
+   * answers the `fillWidth` question with a height of its own instead of the screen's.
+   */
+  @Composable
+  private fun Wheel(model: PickerModel) {
+    val options = model.options
+    val shown = model.displayed
+    val enabled = model.enabled
+    val colors = nuiWheelColors(model.tintColor)
+    // Is a finger on the wheel? [nuiOwnVerticalDrags] already awaits the down and the up,
+    // so it keeps this flag and the settle below reads it: a roll is not over when the
+    // finger leaves (the drum is still coasting then), but nothing can be over without
+    // the finger having left.
+    val touching = remember { mutableStateOf(false) }
+    // The wheel has no visible label of its own - a drum of options is the whole
+    // control - so `label` names it for accessibility, and an explicit
+    // `accessibilityLabel` wins, as it does on the anchor and in the radio group.
+    val spokenLabel = model.accessibilityLabel ?: model.label
+    Box(
+      modifier =
+        Modifier
+          // A pager has no width of its own to answer with: under `fillWidth` the box's
+          // width is the question, and this line is what takes the answer. Height goes
+          // the other way - the wheel states it, because a pager fills whatever height
+          // it is offered and the host offers it the unbounded height that made this
+          // variant's box "as tall as the caller wants".
+          .fillMaxWidth()
+          .height(WheelHeight)
+          // A drag that starts on the drum belongs to the drum: inside React Native's
+          // scroll container the page would otherwise intercept it and the wheel would
+          // never turn. See [nuiOwnVerticalDrags] - and the same await tells the settle
+          // whether a finger is on the wheel, which is half of what a rest is.
+          .nuiOwnVerticalDrags(enabled, touching),
+      contentAlignment = Alignment.Center,
+    ) {
+      // `rememberScrollFieldState` requires a positive item count, so an empty choice
+      // list composes no drum at all: the box keeps the wheel's height and draws
+      // nothing, which is the wheel's version of the empty field the anchor draws for
+      // an empty `options` - a control with nothing to show, not a placeholder word
+      // the caller never asked for.
+      if (options.isNotEmpty()) {
+        val wheelState = rememberScrollFieldState(itemCount = options.size, index = shown)
+        // The host's back-reference, taken in the composition rather than in an effect:
+        // [PickerHost.syncWheelRow] is called from the props pass, which can land before
+        // the next frame has run any effect of this mount. `remember` runs with the
+        // composition itself, so the drum is reachable as soon as it exists. Cleared
+        // with the mount, next to `host.drop()`.
+        remember(wheelState) {
+          this@PickerHost.wheelState = wheelState
+        }
+        // One report per rest, on the shared rule: the drum is "active" while a finger is
+        // on it or it is still scrolling, and the row it is on when that stops is the pick.
+        // Not a quiet period on the value stream - the rule's doc in
+        // [nuiReportAtWheelRest] keeps the reason, which is a real fling on a loaded box
+        // reporting two changes at one. A seat this component asked for (the snap-back
+        // below, or [syncWheelRow] following React) is a scroll too, so it arrives here
+        // and reports the index it was just given, which the handshake refuses.
+        val active =
+          remember(wheelState, touching) {
+            derivedStateOf { wheelState.isScrollInProgress || touching.value }
+          }
+        // ... and published to the host beside the state it reads, for the same reason
+        // [wheelState] is: the props pass needs the flag as it is *now*, and it is the
+        // guard [syncWheelRow] refuses to write through while a roll is in flight.
+        remember(wheelState, active) {
+          this@PickerHost.wheelActive = active
+        }
+        nuiReportAtWheelRest(active) {
+          // The row the user's roll ended on, recorded before the pick is applied so that
+          // a refused pick still says where the drum actually stands.
+          noteWheelRow(wheelState.selectedOption)
+          choose(wheelState.selectedOption)
+        }
+        // The value React holds moves the drum - the direction that closes a refused
+        // pick. An instant `scrollToOption`, never an animation: a rejected choice has
+        // to be off the centre line before the user looks, and this write must not
+        // start a scroll that could be read as the user's (it cannot - the settle it
+        // causes reports the index we were just given - but an instant snap does not
+        // even open that question).
+        //
+        // Keyed on [ScrollFieldState] as well as the index, because the state object is
+        // rebuilt when `options` changes length while the underlying pager keeps its
+        // page: `selectedOption` is then `oldPage % newCount`, which is a row nobody
+        // chose. This effect is what re-seats it - the one job [PickerHost.syncWheelRow]
+        // cannot do, because a new state object exists only in the composition, after
+        // the props pass that changed the list has already run.
+        LaunchedEffect(wheelState, shown) {
+          if (wheelState.selectedOption != shown) {
+            wheelState.scrollToOption(shown)
+          }
+        }
+        // A request from `nuiTestSelect`, on the animated road a real row press takes.
+        val request = model.wheelRequest
+        var readRequestSerial by remember { mutableStateOf(0) }
+        LaunchedEffect(wheelState, request) {
+          if (request != null && request.serial > readRequestSerial) {
+            readRequestSerial = request.serial
+            // Consumed by serial, and the field is cleared only once the roll is over.
+            // This effect is keyed on [PickerModel.wheelRequest] itself, so writing that
+            // field from inside the body re-keys the effect while its own scroll is still
+            // running, and Compose cancels the scroll with it: `harness:android` asks the
+            // drum to roll 0 -> 4 and finds it - and the rest it reports - on 1. A
+            // remembered serial says "this request has been read" without touching a key,
+            // which is the guard the clear was reaching for: the next new
+            // [ScrollFieldState] (`options` changing length while this roll is still
+            // coasting) recomposes the effect and does not scroll it a second time.
+            // Clearing after the animation cancels nothing - the body has already run.
+            wheelState.animateScrollToOption(request.index)
+            if (model.wheelRequest === request) {
+              model.wheelRequest = null
+            }
+          }
+        }
+        ScrollField(
+          state = wheelState,
+          contentDescription = spokenLabel,
+          // `ScrollField` publishes its own single semantics node, and publishes no
+          // disabled state: `clearAndSetSemantics` inside it carries the name, the
+          // spoken value and a progress range, and nothing says "not operable". This
+          // modifier rides the same layout node as that block - it is the head of the
+          // chain the pager builds its own modifiers onto - so the flag lands on the
+          // node TalkBack stops on rather than becoming a stop of its own. Measured,
+          // not assumed: `Picker.harness.tsx` reads the tree.
+          modifier = if (enabled) Modifier else Modifier.semantics { disabled() },
+          enabled = enabled,
+          colors = colors,
+          // The spoken value, spelled from the same `options` the rows paint.
+          fieldAccessibilityDescription = { index -> options.getOrElse(index) { "" } },
+          interactionSource = null,
+          field = { index, selected, rowEnabled ->
+            NuiWheelRow(
+              text = options.getOrElse(index) { "" },
+              selected = selected,
+              enabled = rowEnabled,
+              colors = colors,
+            )
+          },
+        )
+      }
+    }
+  }
+
+
   /** The `menu` and `wheel` variants: the field anchor and the popup it opens. */
   @Composable
   private fun MenuField(model: PickerModel) {
@@ -937,14 +1369,11 @@ private class PickerHost(
     // `accessibilityLabel` wins over the visible `label`, which is what both
     // platforms' own controls do.
     val spokenLabel = accessibilityLabel ?: labelText
-    // A `wheel` fills the box it was offered - that is the whole point of its
-    // `fillWidth` policy, and the only visual difference Android's wheel has from
-    // its menu (`docs/components/picker.md`). A `menu` takes no width modifier at
-    // all: under the `intrinsic` policy the host asks Compose with no maximum, so
-    // the field is as wide as the title it shows plus M3's own minimum for a text
-    // field, and `fillMaxWidth()` there would be ignored by the constraints anyway.
-    val widthModifier =
-      if (model.variant == "wheel") Modifier.fillMaxWidth() else Modifier
+    // Only the menu reaches this composable now that `wheel` has a control of its own
+    // ([Wheel]), and a menu takes no width modifier at all: under the `intrinsic`
+    // policy the host asks Compose with no maximum, so the field is as wide as the
+    // title it shows plus M3's own minimum for a text field, and `fillMaxWidth()`
+    // there would be ignored by the constraints anyway.
     // The view that owns *this composition*: the control's own when it is mounted
     // alone, the `<Host>`'s `AndroidComposeView` when it is hosted. The anchor's
     // on-screen box is its box inside that view plus that view's place on screen, so
@@ -993,7 +1422,7 @@ private class PickerHost(
       // `menuAnchor` is a member of the box's scope, so the anchor's Modifier is
       // built here rather than beside the other reads of the model.
       val anchorModifier =
-        widthModifier
+        Modifier
           .menuAnchor(
             ExposedDropdownMenuAnchorType.PrimaryNotEditable,
             enabled = enabled,
@@ -1348,13 +1777,15 @@ class HybridNitroUiPicker(
         return
       }
       model.variant = resolved
-      // The one prop that changes the control's *size policy*. On Android the wheel
-      // renders this same dropdown (Material 3 has no wheel), so what the variant
-      // buys here is the policy: `fillWidth` asks Compose for the height this
-      // control wants at the box's width, and the field is told to take that width
-      // - which is the only sense in which Android's "wheel" differs from its menu.
-      // A `radio` keeps the menu's `intrinsic` policy: its box is the widest row
-      // and the option count, not the box it was offered (Q7 Appendix D, D17).
+      // The one prop that changes the control's *size policy*, and it changed twice:
+      // `wheel` used to buy the policy alone because Android had no wheel and this
+      // drew the menu in a wider box (G6); from material3 1.5 it buys the control too
+      // ([Wheel]). The policy story is unchanged and still the reason a variant change
+      // remounts: `fillWidth` asks Compose for the height this control wants at the
+      // box's width, which is the only way a pager - a control with no intrinsic width
+      // - can be measured at all. A `radio` keeps the menu's `intrinsic` policy: its
+      // box is the widest row and the option count, not the box it was offered
+      // (Q7 Appendix D, D17).
       host.sizingPolicy =
         if (resolved == "wheel") {
           NitroUiSizing.POLICY_FILL_WIDTH
@@ -1493,6 +1924,10 @@ class HybridNitroUiPicker(
 
   override fun afterUpdate() {
     val optionCount = model.options.size
+    // What the composition was showing when this batch arrived. The batch is interpreted
+    // below, and only a batch that *moves* the shown index has anything to tell the drum
+    // - see [PickerHost.syncWheelRow] for what writing to a rolling drum costs.
+    val shownBefore = model.displayed
     // `options`, `selectedIndex` and `defaultSelectedIndex` can all land in one
     // batch in any order, so none of them is interpreted until the batch is
     // complete - an index of 4 only means something once the choice list it belongs
@@ -1528,6 +1963,18 @@ class HybridNitroUiPicker(
       model.displayed = shown
       host.markDirty()
     }
+    // The drum follows a value it did not take part in choosing, in the same breath as
+    // the writes above and for the reason spelled out on [PickerHost.syncWheelRow]: it is
+    // not painted from `displayed`, so it has to be told. Only a batch that moved
+    // `displayed` has a row to put there; every other batch (a `label`, an `options` list
+    // that came back equal, a size report) says nothing about the drum and must not
+    // interrupt a roll that is being had on it. A no-op for the other two variants, which
+    // have no drum at all - and the witness below counts them alike, because what it is
+    // counting is the batch.
+    host.noteWheelBatch()
+    if (model.displayed != shownBefore) {
+      host.syncWheelRow(model.displayed)
+    }
     // A list that shrank under an *open* popup has fewer rows than the window
     // already showed. It does not close itself here (the user did not ask it to),
     // but an index that no longer exists can leave it pointing at nothing, and the
@@ -1554,6 +2001,11 @@ class HybridNitroUiPicker(
   }
 
   override fun prepareForRecycle() {
+    // The drum's state belonged to the composition that is about to go.
+    host.wheelState = null
+    host.wheelActive = null
+    // And the witness counts this mount, so the next one starts at zero.
+    host.clearWheelWitness()
     host.tag = null
     // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
     // marked the recycle: clearing it here would hide that mark.
@@ -1568,6 +2020,8 @@ class HybridNitroUiPicker(
   }
 
   override fun onDropView() {
+    host.wheelState = null
+    host.wheelActive = null
     model.onChange = null
     // Ends the composition, which dismisses the popup with it - the one
     // "unmount while the menu is open" case that has to hold on both platforms.
@@ -1596,7 +2050,16 @@ class HybridNitroUiPicker(
    */
   override fun nuiTestSelect(index: Double) {
     val run = {
-      host.choose(model.clamp(index))
+      // A wheel has no row to press: what a real pick on this variant *is*, is the
+      // wheel rolling and settling, so the hook asks for that roll and lets the settle
+      // at the end of it emit (see [PickerHost.Wheel]). The popup and the radio group
+      // still press their row. Either way the emitted event comes from
+      // [PickerModel.applyUserSelection], never from this method.
+      if (PickerModel.isWheel(model.variant)) {
+        host.requestWheelScroll(model.clamp(index))
+      } else {
+        host.choose(model.clamp(index))
+      }
       // The half a press gets for free: its handler runs inside Compose's input
       // handling, which applies the snapshot the handler wrote. This is a plain
       // UI-thread post, so without the apply the choice would not paint (and would
@@ -1618,9 +2081,27 @@ class HybridNitroUiPicker(
    * a hosted popup needs a witness of its own. Reads a lock-protected snapshot of a
    * few integers, so it is safe on the JS thread and never waits for the UI thread
    * (core.md section 5).
+   *
+   * The `wheel` variant's own counters ride on the end of the same line as four more
+   * named fields, because this is the component's only test string and a wheel has no
+   * popup to witness - every box field is `-1` for the whole mount. They are *trailing*
+   * and named, so a reader that knows only the popup fields (HostPopups', Menu's
+   * `parseMenuReport`) is unaffected by them.
    */
   override fun nuiTestMenuReport(): String {
     MenuDrawnWitness.wanted = true
-    return model.readMenuReport()
+    return (
+      model.readMenuReport() +
+        ";batches=" +
+        host.wheelBatches +
+        ";sawRolling=" +
+        (if (host.wheelBatchSawRolling) 1 else 0) +
+        ";seats=" +
+        host.wheelSeatWrites +
+        ";refusals=" +
+        host.wheelSeatRefusals +
+        ";row=" +
+        host.wheelRow
+      )
   }
 }

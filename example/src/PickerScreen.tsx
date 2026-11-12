@@ -105,6 +105,19 @@ const RADIO_OPTIONS = ['Basalt', 'Flint', 'Obsidian'];
 /** The disabled radio group's options. */
 const RADIO_LOCKED_OPTIONS = ['Gabbro', 'Peridot', 'Scoria'];
 
+/**
+ * The options of the `variant="wheel"` drum — two more sets of private words.
+ *
+ * G29 made this variant a `ScrollField`: a pager of the options with the centre one
+ * lit, so its rows are in the app's own window like the radio group's — with one
+ * difference that decides the check. A radio row is *pressed*; a drum is *rolled*, and
+ * the row that lands under the centre line is a different event from the rows it
+ * passed. `scripts/real-input/android.mjs` therefore flings the drum and counts events
+ * rather than aiming at a row, and the words have to be readable in the dump for the
+ * "the row the drum stopped on is the index JS was told" half of that.
+ */
+const WHEEL_OPTIONS = ['Cinder', 'Dolomite', 'Fluorite', 'Shale', 'Till'];
+
 /** How long the "drop while open" row stays mounted after the button is tapped. */
 // Platform-split, because the two platforms are in different moods about a popup.
 //
@@ -156,6 +169,11 @@ export default function PickerScreen() {
   // one is a real pick and this is the witness the check waits for.
   const [radioIndex, setRadioIndex] = useState('-');
   const [radioEvents, setRadioEvents] = useState(0);
+  // The wheel's own echo (G29): the index the drum settled on, and how many settles
+  // JS was told about. The count is the point of the check — a drum that reported every
+  // row it rolled past would move this by four on a fling across four rows.
+  const [wheelIndex, setWheelIndex] = useState('-');
+  const [wheelEvents, setWheelEvents] = useState(0);
   // Pinned: the parent never moves it, so choosing in the popup has to snap back
   // natively. `rejectEvents` is what proves the choice was reported at all.
   const [rejectIndex] = useState(0);
@@ -203,6 +221,10 @@ export default function PickerScreen() {
     setRejectEvents((current) => current + 1);
   }, []);
 
+  const countWheelChange = useCallback((event: { index: number }) => {
+    setWheelIndex(`${event.index}`);
+    setWheelEvents((current) => current + 1);
+  }, []);
   const countRadioChange = useCallback((event: { index: number }) => {
     setRadioEvents((current) => current + 1);
     setRadioIndex(String(event.index));
@@ -500,6 +522,73 @@ export default function PickerScreen() {
             testID="wheel-basic"
           />
         </View>
+        {/* G29: the wheel as Material 3 1.5 draws it. Five options, so the drum has
+            rows above and below the centre one and a fling has somewhere to go; the
+            check flings it and asserts one event, not one per row crossed. */}
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.ink }]}>
+            Wheel variant — roll it (Android)
+          </Text>
+          <Picker
+            options={WHEEL_OPTIONS}
+            variant="wheel"
+            defaultSelectedIndex={0}
+            onChange={countWheelChange}
+            accessibilityLabel="Real-input wheel picker"
+            testID="real-input-wheel"
+          />
+          <Text style={[styles.readout, { color: ink.muted }]}>
+            last index reported
+          </Text>
+          <Text
+            testID="real-input-wheel-index"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {wheelIndex}
+          </Text>
+          <Text style={[styles.readout, { color: ink.muted }]}>changes</Text>
+          <Text
+            testID="real-input-wheel-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {wheelEvents}
+          </Text>
+        </View>
+
+        {/* G29: the same drum inside a *horizontal* scroller, which is the only shape
+            that can show what `nuiOwnVerticalDrags` gives back. The drum disallows its
+            ancestors' interception on the down (a page would otherwise eat the roll), and
+            the fix round's rule is that a drag whose first move past touch slop is
+            sideways hands that disallow back — so a swipe across this drum must move the
+            *scroller*, not the drum. `scripts/real-input/android.mjs` reads this row's
+            bounds either side of such a swipe.
+
+            Android-only, and deliberately: the drum is Android's, the check is Android's,
+            and the iOS screen keeps the exact tree its geometry assertions were written
+            against. The drum's width is stated rather than stretched because a horizontal
+            scroller offers its children unbounded width — that is the whole point — and a
+            `fillWidth` question there has no answer to take. */}
+        {Platform.OS === 'android' ? (
+          <View style={styles.row}>
+            <Text style={[styles.label, { color: ink.ink }]}>
+              Wheel in a side-scroller — swipe it sideways (Android)
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.sideScroller}>
+                <Picker
+                  options={WHEEL_OPTIONS}
+                  variant="wheel"
+                  defaultSelectedIndex={0}
+                  onChange={countWheelChange}
+                  accessibilityLabel="Real-input wheel in a scroller"
+                  testID="real-input-wheel-scroller"
+                  style={{ width: 280 }}
+                />
+                <View style={styles.scrollerSpacer} />
+              </View>
+            </ScrollView>
+          </View>
+        ) : null}
 
         <Text style={[styles.section, { color: ink.muted }]}>
           Too wide for its box (fits it, C1)
@@ -557,6 +646,18 @@ const styles = StyleSheet.create({
   },
   row: {
     gap: 6,
+  },
+  // The row inside the horizontal `ScrollView`: side by side, so the spacer really is
+  // somewhere the scroller can go, and centred so the drum sits where a drum sits.
+  sideScroller: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Wider than the screen minus the drum, so the content overflows by enough that a
+  // handed-back swipe has somewhere to be seen going.
+  scrollerSpacer: {
+    width: 420,
+    height: 8,
   },
   label: {
     fontSize: 15,
