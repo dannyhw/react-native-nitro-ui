@@ -5,57 +5,48 @@
 
 ## Summary
 
-Four claims were graded on the wrong thing. Each is fixed by measuring the claim; nothing was
-loosened to make a run pass, and one rule I wrote too tight went red on a correct menu and was
-then measured (item 1).
+Four claims were graded on the wrong thing. Each is fixed by measuring the claim, not by loosening a
+tolerance; one rule I wrote too tight went red on a correct menu and is now measured.
 
-**1 · `real-input:android` `hosted-picker`.** The check asserted `row.y1 >= anchor.y1`, which
-only holds while the page has come to rest with the anchor on the upper fold. Material measures
-the room under an anchor and opens *above* it when there is none — right behaviour, red check
-(`docs/tasks/FOLLOWUPS.md:298`, X24 fix round 1 and its merge, both with the anchor at
-`42,2242 → 777,2410` of a 2 424 px window: 14 px under it). Two causes, two fixes. The anchor's
-position was whatever the previous check left behind, so the check now *positions* it
-(`centreOnScreen`, the instrument `positionWheel` already used). And the placement is judged by
-`judgeMenuAnchoring`: the menu must open on the side that has room, and its box must be against
-the box the Host drew — overlap allowed, because an open Material menu brings the selected row
-onto the field. That distance is between the two **boxes**, not two chosen edges: on the measured
-above-placement an edge rule passes with one pixel to spare, which is a flake with a new name.
-The band itself is measured too — this run printed a healthy menu 58 px (22 dp) under its anchor,
-so the allowance is 32 dp; my first draft was a guessed 20 dp and went red on that healthy menu.
+**1 · `real-input:android` `hosted-picker`.** The check asserted `row.y1 >= anchor.y1`, which holds
+only while an earlier check left the anchor on the upper fold: Material opens a menu *above* an
+anchor with no room under it — right behaviour, red check (`docs/tasks/FOLLOWUPS.md:298`: 14 px of
+window left under the anchor). The check now *positions* the anchor (`centreOnScreen`) and
+`judgeMenuAnchoring` grades it: the side with room, and against the box the Host drew — overlap
+allowed, an open menu brings the selected row onto the field. The distance is between the two
+**boxes**, not two edges: on the measured above-placement an edge rule passes one pixel inside its
+allowance. The 32 dp band is a healthy menu's own 58 px (22 dp) with half again; the guessed 20 dp
+before it went red on that menu.
 
 **2 · Form give-ups.** `giveUps` counts an iOS cell or band provider answering a stale index path
-with a blank, and nothing read it (`docs/tasks/FOLLOWUPS.md:303`). The E1, E4 and churn cases
-assert the *symptoms* a give-up used to produce, and those went quiet as soon as the give-up was
-answered well enough for the layout to recover — which is what X25 and X29 made it do.
+with a blank, and nothing read it (`docs/tasks/FOLLOWUPS.md:303`). E1, E4 and the churn assert the
+*symptoms* a give-up used to produce, which went quiet once X25 and X29 made the layout recover.
 `expectNoGiveUps` grades the count on the cases that walk those paths on purpose, at every churn
-settle, where the counter belongs to the mount that just ended. iOS only: Android's Form has no
-cells to answer with a blank.
+settle — where the counter belongs to the mount that just ended. iOS only.
 
-**3 · The refused-press message.** `No view found at point (0.00, 0.00)` prints the arguments the
-JS side sends, not the point the native side resolved; X29's two red runs — a press on a
-neighbouring row and a press off-window — printed the same two zeros
-(`docs/tasks/X29-form-e4-pair-a.report.md:129`). `pressAimed` keeps upstream's sentence verbatim
-and appends the `testID`, its `nativeId` and the centre read back from the box that identifier
-answers for. The harness is a dependency, so this sits on our side of the boundary; a new case
-refuses a press 6 000 pt down on purpose and grades the message it gets.
+**3 · The refused-press message.** `No view found at point (0.00, 0.00)` prints the arguments JS
+sends, not the point native resolved — X29's red runs, a press on a neighbouring row and one
+off-window, printed the same two zeros (`docs/tasks/X29-form-e4-pair-a.report.md:129`).
+`pressAimed` keeps upstream's sentence and adds the `testID`, its `nativeId` and the centre read
+back from that identifier's box. The harness is a dependency, so that is our side to fix.
 
 **4 · The 2 s CI budget.** The case graded a wall-clock ceiling between a healthy ~2 s and an
-unbounded ~26 s, and `check`'s own load put the healthy 2 s — process starts, nothing else — over
-it (`docs/tasks/FOLLOWUPS.md:119`, twice on X29). It now times the *same body* against a tool that
-answers and against one that hangs and grades the difference, in `sleep 1` units — the unit
-`bounded()` counts its patience in, so the allowance stretches with the machine instead of
-fighting it.
-
+unbounded ~26 s, and `check`'s own load put the healthy 2 s over it (`docs/tasks/FOLLOWUPS.md:119`,
+twice on X29). It now times the *same body* against a tool that answers and one that hangs, grading
+the difference in `sleep 1` units — the unit `bounded()` counts patience in — so the allowance fits
+the machine.
 ## Gates
 
 GATE_TABLE_PLACEHOLDER
 
 `need --for review`: NEED_LINE_PLACEHOLDER
 
-Two ledger rows are mine and are junk, not findings: `real-input:android:hosted-picker` and
-`real-input:android:hosted-picker:--background` (0.2 s and 0.4 s) are one mistyped filter — the
-runner got `hosted-picker` and `--background` as positional arguments and refused them. The
-filtered run that means is `real-input:android:--control:hosted-picker`.
+Three ledger rows are mine and are junk, not findings: `real-input:android:hosted-picker`,
+`real-input:android:hosted-picker:--background` (0.2 s and 0.4 s) and
+`harness:ios:Conformance.harness:--background` (1.5 s) are two mistyped filters — the runner got
+the filter and `--background` as positional arguments and refused them. The filtered runs that
+mean something are `real-input:android:--control:hosted-picker` and
+`harness:ios:Conformance.harness`.
 
 ## Red proofs
 
@@ -95,6 +86,14 @@ Both were run as one filtered `harness:ios:Form.harness` against an app rebuilt 
 tree (log `harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log`), and the tree was restored and
 rebuilt before the green runs.
 
+The four judge mutations were re-run on the restored tree at `9a2bd29` before this round trusted
+them, and each turned the named cases red and the file green again on restore: 2 red with the side
+rule out, 3 with the pre-X31 edge-to-edge gap, 2 with the distance rule out, 2 with the band back
+to the guessed 20 dp — the last also trips the boundary case's `expect(NEAR_GAP).toBe(84)`, which
+is why that line is there. The accel case was re-run too: `patience=38975ms allowance=8120ms`
+with `kill -KILL` taken out of `bounded()` (38 975 ms is the stub's own 40 s, which is the
+unbounded body), and `gaveUpOnTheTool: false` with the command the guard names typo'd.
+
 ## Files changed
 
 - `scripts/real-input/menu-placement.mjs` — new: the placement judge and its two dp allowances.
@@ -108,6 +107,18 @@ rebuilt before the green runs.
 
 ## Follow-ups
 
+- `harness:ios` needed six attempts on this host tonight to go green on this tree; five reds are
+  in the gate log store. Two lost the app mid-run with no crash report (`Sizing`, then
+  `ButtonGroup`) on a host with 735 MiB of 17.4 GiB swap free, five simulators and three emulators
+  booted; one was `Form row boxes (X29 r2) · hands no row back as a loss across 400 pt scrolls`
+  timing out on a scroll that never moved the list (`offset=226.67` unchanged, `losses=0`,
+  `giveUps=0`); two were `Conformance · ButtonGroup · no-leak-on-drop: 1 ledger entry survived 50
+  drops`. `harness:ios:Conformance.harness` on its own is 110/110 in 209 s on the same app, so the
+  extra entry is cross-suite state or a deallocation losing to a slow host rather than a
+  `NitroUiSizing::forget` that never ran — and `ios/`, `cpp/`, `src/`, `example/` are byte-for-byte
+  the tree whose `harness:ios` went green at 16:19Z (only `scripts/` and `docs/` moved since). If
+  `no-leak-on-drop` goes red again on a quiet machine it is a ButtonGroup leak to chase, not an
+  X31 flake.
 - `real-input:android` `search-field`: one full run of the pre-X31 tree lost
   `timed out waiting for the prop to change (search-switching-echo="switching: number-pad")`
   while every other search-field check passed; not this round's code, and no second sample yet.
