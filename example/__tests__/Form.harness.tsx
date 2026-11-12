@@ -1019,6 +1019,23 @@ describe('Form (G24)', () => {
       await drawnOnScreen('before the presses');
       const geometry = await formReadyToPress('before the presses');
       const live = await oneLiveViewPer(['inner-press', 'switch-silent']);
+      // Re-aim from the certified tree: a press names a view, never a place. The JavaScript side
+      // sends (0, 0) beside the `nativeId` the query answered with (`@react-native-harness/ui`'s
+      // `userEvent.ts:80`), the native side substitutes the centre of the view the registry holds
+      // under that id (`HarnessUI.mm:248`) and hit-tests *that* — and the rejection it prints
+      // formats the *arguments*, so a rejected press reads `No view found at point (0.00, 0.00)`
+      // whatever the point was (`HarnessUI.mm:277`). Handles taken before the waits above answer
+      // for wherever their views ended up: a row at rest in a section's holding view keeps the
+      // absolute position its cell would have had (`NitroUiFormViews.swift:18-23`), and a settle
+      // moves rows through that state. Pressed then, the aim lands on a neighbour and every
+      // counter below stays at zero, or it lands outside the window's bounds and `hitTest:`
+      // answers nil — the two texts pair-b produced from one tree, 35 minutes apart (X29). A
+      // fresh query cannot name the row that has left: E6's `f49` is `Unable to find element`, not
+      // a press.
+      const aim = {
+        pressable: await boxOf('inner-press'),
+        toggle: await boxOf('switch-silent'),
+      };
       // Print them before grading them: when one of them stops holding, the numbers say
       // which, and a press count on its own says only "something was wrong".
       console.log(
@@ -1057,8 +1074,8 @@ describe('Form (G24)', () => {
       // nothing. A hosted control takes all ten for a third reason: it is a native control, and
       // it answers for its own point without React Native in the path at all.
       for (let index = 0; index < 10; index += 1) {
-        await userEvent.press(pressable);
-        await userEvent.press(toggle);
+        await userEvent.press(aim.pressable);
+        await userEvent.press(aim.toggle);
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
       expect(probe.log.pressable).toBe(10);
@@ -1077,6 +1094,11 @@ describe('Form (G24)', () => {
           onSwitchChange={probe.onSwitchChange}
         />
       );
+      // The same for the positive control: `cleanup()` is still on its way out when this render
+      // lands, so until the pair is the only live copy of itself the query can answer with the
+      // copy that is going away — an aim whose view leaves with it is pressed at wherever its last
+      // frame was, which is the pair of texts above rather than a control.
+      await oneLiveViewPer(['loose-press', 'loose-switch']);
       await userEvent.press(await boxOf('loose-press'));
       await userEvent.press(await boxOf('loose-switch'));
       expect(probe.log.pressable - loose.pressable).toBe(1);
