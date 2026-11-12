@@ -283,14 +283,23 @@ And before the round is handed in — `bun run task-ready`. It is the definition
 list from AGENTS.md as one command, so a reviewer is not the first to find it: the
 registry agrees with the control set, every manifest has the conformance coverage above,
 no `TODO`/`FIXME` sits in a declared fallback or a generated region, every backticked
-repo path in `docs/tasks/<ID>.report.md` exists at HEAD (unless this branch's diff adds
+repo path in the branch's report exists at HEAD (unless this branch's diff adds
 or deletes it), `gate.mjs need --for review` is satisfied, and the report's gate table
 still matches `gate.mjs table` for this code tree. It reports every problem at once and
 runs nothing itself — no builds, no gates — because those belong to `gate.mjs`, whose
-ledger these checks read. `<ID>` comes from `--task` or the branch name — the leading
-letters-and-digits of it, whatever the prefix, so `task/X29-fix2`, `task/X29-merge` and
-`merge/X29` all find `docs/tasks/X29.report.md` without being told (X30); a branch named
-in prose (`main`, `t3/…`) has no id in it and still needs `--task`. And
+ledger these checks read. Which report that is: `<ID>` comes from `--task` or the branch
+name — the leading letters-and-digits of it, whatever the prefix, so `task/X29-fix2`,
+`task/X29-merge` and `merge/X29` all know they are about `X29` — and the file is then
+looked for under three names, in this order: `docs/tasks/<branch>.report.md` (a round
+writes its report beside its own brief), `docs/tasks/<ID>.report.md`, and
+`docs/tasks/<ID>-*.report.md` **when exactly one file matches**. That last rule is the one
+that matters here: every report in `docs/tasks/` is `<ID>-<slug>.report.md`
+(`G29-android-wheels.report.md`) and none is the bare id, while a fix-round branch knows
+the id and not round 1's slug (X30 fix round 1). Several matches is a failure that names
+them all, never a pick; and a branch naming _two_ ids (`task/G25-G26-merge`) is refused
+until it is told which — `--task` once per task, because a merge checked against one of
+two reports still prints `ready`. A branch named in prose (`main`, `t3/…`) has no id in it
+and needs `--task` for the same reason. And
 `--only coverage,report` runs a subset while iterating and prints `PARTIAL`, so a subset
 cannot be read as a pass.
 
@@ -857,7 +866,15 @@ what a merge needs, exactly: one `check` whose _whole_ tree matches, plus a
 round therefore re-runs only the platforms its diff touched, and a tooling-only
 commit landing on `main` — a test fixture, a `gate*.mjs` fix, a `.changeset` —
 re-owns nobody's device gates (it re-owns `check`, which is the run that reads
-everything). Shared code (`src/`, `cpp/`) moves both halves and re-owns both
+everything). One tooling commit does not get that free pass: the one that edits the
+check-only list in `scripts/gate-core.mjs` **itself**. That list is an input to the
+mapping, so a path moving on or off it can move which half owns it and re-key that
+half's tree — a branch already in flight reads its own device rows as stale once it has
+merged the change, and owes them again, once (a path moving between the list and
+_unmapped_ code leaves both hashes alone and only changes what a diff over that path
+demands). X30 shipped such a commit: after merging one, ask `gate.mjs status` what your
+branch now owes instead of carrying the previous round's rows forward. Shared code
+(`src/`, `cpp/`) moves both halves and re-owns both
 platforms, and so does any code path the mapping does not claim: unknown is
 expensive, never free. `table --full` adds the log path to every
 row and, under it, the per-step durations of the `check` run — `check` is the one
