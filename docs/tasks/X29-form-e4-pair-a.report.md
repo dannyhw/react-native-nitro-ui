@@ -113,3 +113,70 @@ Reds as data: `docs/tasks/X29/mutations.json`.
   whose geometry is wrong, so a pair-b pass there is real evidence; (b) hand X29 a fix round when
   pair-b frees. Recommend (a): the guards are device-independent, and the 22 pt `boxSpan` that makes
   the wait non-vacuous was measured on pair-b in stored runs (`340` against `318`).
+
+## Fix round 1
+
+**Cause of the second symptom: the same parked row — and its zero is not a point.** A press names a
+*view*: `userEvent.press` sends (0, 0) beside the `nativeId` (`userEvent.ts:80`), native substitutes
+the centre of the view held under that id (`HarnessUI.mm:248`) and hit-tests *that*; the rejection
+then formats the *arguments* (`HarnessUI.mm:277`), so a rejected press always reads
+`(0.00, 0.00)`. So it is not a hit test before layout (an unregistered id, point truly (0, 0),
+presses fine: N1) and not a released id (N2): it is a named view whose centre has left the window.
+Force that ordering on pair-a (aim, scroll 400 pt, press) and the state writes the *other* text,
+`expected +0 to be 10` (row 9) — which text it is depends only on where the parked row's frame
+lands. Pair-b wrote both, 35 minutes apart. A fresh query cannot name a row parked that far out
+(N4): the hazard is a handle, not a query.
+
+**Fix.** Aim after the certification, so a press names the row the Form has just reported as drawn
+once, by its own cell, at its own box; the control waits for one live copy of itself. Rows 5-10 of
+`docs/tasks/X29/mutations.json`.
+
+### Gates (fix round 1)
+
+TABLE_PLACEHOLDER
+
+NEED_PLACEHOLDER
+
+### Red proofs (fix round 1)
+
+- Aim ordering (row 9) -> take E4's handle for `label-wifi`, move the list 400 pt, press the handle
+  the case took before it moved -> `expected +0 to be 10` — pair-b's second text, made to happen on
+  pair-a on order (`07:10:49Z`, tree `433f64dd`).
+- `oneLiveViewPer` (row 5) -> a second live `loose-press` in the positive control's own tree -> `a
+  testID does not have exactly one live view: loose-press=2 loose-switch=1` (`05:48:34Z`, tree
+  `080fd244`).
+- N1, green on purpose -> press `{ nativeId: 'x29-no-such-view' }`, so the point truly is (0, 0) ->
+  **green**: the origin is hittable in this app, which is what rules the zero-point reading out
+  (`06:34:11Z`, tree `3793e746`).
+- N2, green on purpose -> press the pre-wait handle after its tree was replaced -> **green**: a
+  stale handle is silent, so re-aiming is a guard and not the writer of that text (`06:32:31Z`, tree
+  `e2258ea0`).
+- N3, green on purpose -> scroll 400 pt, then press a *fresh* aim at a reclaimed row -> **green**:
+  pair-a parks reclaimed rows inside the window (`06:36:53Z`, tree `11a95a44`).
+- N4 (row 10) -> press `boxOf('f49')`, a row parked 50 deep -> `Unable to find element with testID:
+  f49`: the query refuses a row parked out of reach, so only a handle can aim there. That line was
+  caught by a Metro reload mid-run, so its tree and `treeAfter` differ and it is recorded as void.
+- Not claimed: pair-a never wrote the `(0.00, 0.00)` text itself, and X29 never held pair-b to try.
+  What is measured is what that text can and cannot mean, and that the ordering reaches its family.
+
+### Follow-ups (fix round 1)
+
+- The harness's `NO_VIEW` text formats `x, y` rather than the resolved centre
+  (`@react-native-harness/ui`'s `HarnessUI.mm:277`), so it reads as a coordinate; that is what sent
+  this task looking for a zero point. Worth an upstream issue.
+- `Conformance.harness`'s `no-leak-on-drop` ledger is load-sensitive: this tree went red on
+  `IconButton` at `1 ledger entry(ies) survived 50 drops` — 1 of 613 tests, E4 itself green in the
+  same run, load1 8.88 at the start, 33.69 max (`06:38:53Z`). Round 1 was red on the same check with
+  `SegmentedControl` at `-1` (`02:49:20Z`); `task/G30-list-item` and `task/G24-form` carry it too.
+  Not a Form failure and not mine to fix.
+- `scripts/__tests__/ci-workflows.test.js:902` (the preflight's 2 s `-accel-check` budget) went red
+  twice under load with `asked: false` (`07:12Z`, `elapsedMs` 2266; `07:15Z`, 562) and green 3 m
+  later at load 7.5 — that budget wants widening or a fake clock.
+- The lease env still leaks into `check`'s bench step (`05:50Z`,
+  `scripts/__tests__/bench-baseline-merge.test.js:1694`); with it unset the step is green, so
+  `check` should clear it itself.
+- pair-b was again never leased to X29 — `X25M-29avv`, `X25-47fmy` and `X25-484f3` held it through
+  the task, which is why both symptoms are argued from stored runs here.
+- `task/X25-fix2` is editing `ios/components/Form/HybridNitroUiForm.swift` over the same E4 (its
+  `recycledTitle` cell that measures 353 and asks 236), and `main` has moved to `8df23709`: the two
+  Form fixes will conflict at merge, which is a call for whoever merges.
