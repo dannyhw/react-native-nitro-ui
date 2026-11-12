@@ -49,7 +49,7 @@ them" is a `git grep` in the test, not a sentence.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2117 tests / 88 suites | `5a52f66df35c` | 2 m 44 s | start 5.6 / med 12.5 / max 17.3 |
+| `check` | **PASS** | 2133 tests / 88 suites | `7010316fa575` | 2 m 50 s | start 8.7 / med 16.8 / max 30.0 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
@@ -128,3 +128,27 @@ task: the earlier rounds' lines survived, and nothing was written twice.
   Recommendation: treat this branch as the whole of X30 as briefed here, and say so
   before anything merges, rather than let two versions of the same file meet in a
   merge commit.
+
+## Fix round 1
+
+Items 1-8 on `task/X30-fix1` from `66e77bcf`. The table above is this round's;
+`need --for review` is satisfied (a check-only tooling diff). Export:
+`3 kept from the file, 2 from task/X30-fix1`.
+
+Red proofs — break the guard, name the line that went red:
+
+- `USAGE` truncated → no `logs` help, none in the `--background` refusal.
+- Pre-fix file linted → 4 × "Expected an assignment or function call".
+- Round 1's lookup → `X30-fix1.report.md or X30.report.md: not found`.
+- Slug rule → 5 tests red, one over the real directory.
+- Two-id branch → exit 2 naming `G25, G26`; chosen: `--task` per task.
+- Same-second failure → committed `--01.log` rewritten, round 1's marker gone.
+- Grouping back-mutated → `task/X30-round-1` credited with `task/X30-fix-1`'s pass.
+- Widened guard → a `task-ready` mention in `scripts/harness.mjs` goes red.
+- `(id, branch)` spread → now an order the two disagree on.
+
+Also listed `eslint.config.mjs` as check-only: unclaimed, a lint rule owed two harness
+runs.
+
+Follow-up: committed-ledger `check` reuse looks unreachable — the export commit moves
+`HEAD^{tree}` after the run it certifies.
