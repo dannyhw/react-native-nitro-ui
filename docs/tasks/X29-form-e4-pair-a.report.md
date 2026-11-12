@@ -40,22 +40,44 @@ vacuous, and expects ten presses on iOS as on Android.
 
 ## Gates
 
-The one table `gate.mjs table` prints for the tree this branch now carries — `effa2d29e8e2`, which
-is fix round 1. Round 1's own runs (tree `b3412f3174e7`) are in the exported ledger,
-`docs/tasks/X29/gates.jsonl`, as are the filtered reds listed under Red proofs.
+The one table `gate.mjs table` prints for the tree this branch now carries — `00664591cf2a`, which is
+fix round 2. The full `harness:ios` and the four red proofs ran under lease `X29-cq1q0` on **pair-b**
+(simulator "nitro-ui B", iOS 27.0) — the device that died; `harness:ios:Form.harness` and
+`harness:android` ran under lease `X29-go41j` on **pair-a** ("nitro-ui A" / `emulator-5574`). Every
+`stale` row is a mutation run from some round, not a gap: rows 11-14 below-the-line are this round's.
+Round 1's runs (tree `effa2d29e8e2`) and the earlier reds are in the exported ledger,
+`docs/tasks/X29/gates.jsonl`.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2093 tests / 88 suites | `effa2d29e8e2` | 2 m 58 s | start 20.2 / med 41.3 / max 138.0 |
-| `harness:ios` | **PASS** | 613 tests / 32 suites + isolated 6 tests / 3 suites | `effa2d29e8e2` (ios tree) | 15 m 03 s | start 19.2 / med 10.7 / max 24.5 |
-| `harness:android` | **PASS** | 669 tests / 32 suites + isolated 6 tests / 3 suites | `effa2d29e8e2` (android tree) | 18 m 51 s | start 11.9 / med 8.4 / max 27.3 |
+| `check` | **PASS** | 2093 tests / 88 suites | `00664591cf2a` | 2 m 43 s | start 8.3 / med 8.4 / max 11.3 |
+| `harness:ios` | **PASS** | 616 tests / 32 suites + isolated 6 tests / 3 suites | `00664591cf2a` (ios tree) | 14 m 58 s | start 5.5 / med 5.6 / max 22.1 |
+| `harness:android` | **PASS** | 672 tests / 32 suites + isolated 6 tests / 3 suites | `00664591cf2a` (android tree) | 18 m 45 s | start 9.8 / med 5.6 / max 14.3 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:ios:Form.harness` | stale | 1 failed of 15 tests / 1 suites | 433f64dd1a5e (not this tree) | 22.4 s | start 20.9 / med 19.8 / max 20.9 |
-| `harness:ios:Form.harness:--background` | stale | — | 8383afbb6aab (not this tree) | 1.2 s | start 9.9 / med 9.9 / max 9.9 |
-| `harness:ios:Form.harness:-t:aims%20a%20row%20content` | stale | 1 failed of 15 tests / 1 suites | f1e7470b926d (not this tree) | 19.7 s | start 42.8 / med 34.8 / max 42.8 |
-| `harness:ios:Form.harness:-t:aims%20a%20row%20content:--background` | stale | — | 07b85d8fdec9 (not this tree) | 1.4 s | start 4.3 / med 4.3 / max 4.3 |
-| `harness:ios:Form.harness:-t:grows%20a%20row%7Caims%20a%20row` | stale | — | 49203cb0c2a5 (not this tree) | 1.3 s | start 6.3 / med 6.3 / max 6.3 |
+| `harness:ios:Form` | stale | 1 failed of 130 tests / 3 suites | f5792bd32323 (not this tree) | 3 m 46 s | start 15.3 / med 7.3 / max 15.3 |
+| `harness:ios:Form.harness` | **PASS** | 18 tests / 1 suites | `00664591cf2a` (ios tree) | 25.6 s | start 10.3 / med 10.7 / max 10.9 |
+| `harness:ios:Form.harness:--verbose` | stale | 0 tests / 1 suites | 1b1fa80a815f (not this tree) | 20.1 s | start 19.5 / med 19.5 / max 19.8 |
+| `harness:ios:Form.harness:-t:Form.G24.%7CForm.measure` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 11.2 s | start 21.8 / med 21.6 / max 21.8 |
+| `harness:ios:Form.harness:-t:Form.measure` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 11.0 s | start 13.6 / med 13.6 / max 13.6 |
+| `harness:ios:Form.harness:-t:Form.measure%7CForm.row.content` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 10.9 s | start 9.9 / med 11.2 / max 12.5 |
+| `harness:ios:Form.harness:-t:Form.measure%7CForm.row.content%7CForm.row.boxes` | stale | 0 tests / 1 suites | 1b1fa80a815f (not this tree) | 11.1 s | start 15.8 / med 15.0 / max 15.8 |
+| `harness:ios:Form.harness:-t:Form.row.boxes` | **PASS** | 18 tests / 1 suites | `00664591cf2a` (ios tree) | 11.2 s | start 6.3 / med 6.5 / max 6.7 |
+| `harness:ios:Form.harness:-t:Form.row.content` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 9.9 s | start 13.5 / med 13.3 / max 13.5 |
+| `harness:ios:Form.harness:-t:Form.row.content%7CForm.row.boxes` | stale | 0 tests / 1 suites | 1b1fa80a815f (not this tree) | 10.1 s | start 12.5 / med 11.8 / max 12.5 |
+| `harness:ios:Form.harness:-t:Form%20.G24.` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 19.1 s | start 29.6 / med 26.2 / max 29.6 |
+| `harness:ios:Form.harness:-t:gains.an.accessory` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 10.5 s | start 37.8 / med 36.6 / max 37.8 |
+| `harness:ios:Form.harness:-t:item%202` | stale | 1 failed of 18 tests / 1 suites | d5fbcfcfe15f (not this tree) | 11.8 s | start 5.9 / med 6.6 / max 7.3 |
+| `harness:ios:Form.harness:-t:no.row.back.as.a.loss` | stale | 1 failed of 18 tests / 1 suites | 4591ebc3dcec (not this tree) | 11.2 s | start 7.7 / med 8.0 / max 8.3 |
+| `harness:ios:Form.harness:-t:no.row.back%7CForm%20.G24.` | stale | — | 659d1a63edaf (not this tree) | 1.1 s | start 6.1 / med 6.1 / max 6.1 |
+| `harness:ios:Form.harness:-t:no.row.back%7Cgains` | stale | 0 tests / 1 suites | 1b1fa80a815f (not this tree) | 10.1 s | start 10.9 / med 10.3 / max 10.9 |
+| `harness:ios:Form.harness:-t:no.row.back%7Cre-lays` | stale | 0 tests / 1 suites | 1b1fa80a815f (not this tree) | 10.2 s | start 10.2 / med 10.2 / max 10.2 |
+| `harness:ios:Form.harness:-t:re-lays.a.row` | stale | 1 failed of 18 tests / 1 suites | 30b89b4dfc02 (not this tree) | 19.3 s | start 9.2 / med 9.8 / max 9.8 |
+| `harness:ios:Form.harness:-t:re-lays%20a%20row` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 11.4 s | start 13.3 / med 25.0 / max 36.8 |
+| `harness:ios:Form.harness:-t:re-lays%7Cgains` | stale | 18 tests / 1 suites | 1b1fa80a815f (not this tree) | 10.8 s | start 10.2 / med 10.6 / max 10.9 |
+| `harness:ios:Form.harness:-t:X29%20r2` | stale | 2 failed of 18 tests / 1 suites | cd5b419f2107 (not this tree) | 11.4 s | start 10.4 / med 10.4 / max 10.5 |
+| `harness:ios:Form.harness:-t:X29%20r2:--background` | stale | — | 168b2bdae41d (not this tree) | 2.0 s | start 15.3 / med 15.3 / max 15.3 |
+| `harness:ios:Form%20row%20boxes` | stale | — | d44e2c1ef83e (not this tree) | 1.8 s | start 5.3 / med 5.3 / max 5.3 |
 
 Every device row above is pair-a (simulator `49D5024D…`, `emulator-5574`, Metro 8295) under lease
 `X29-48jce`; the pair-b row X29 was also asked for is the one it could not run — see Follow-ups.
@@ -185,3 +207,65 @@ stale `harness:ios:Form.harness` row — that is row 9's red, on the mutated tre
 - `task/X25-fix2` is editing `ios/components/Form/HybridNitroUiForm.swift` over the same E4 (its
   `recycledTitle` cell that measures 353 and asks 236), and `main` has moved to `8df23709`: the two
   Form fixes will conflict at merge, which is a call for whoever merges.
+
+## Fix round 2
+
+**Cause: the list answered UIKit with a view nobody had dequeued.** A Section leaves `sections` on
+unmount, but the snapshot trails that array by one apply, and the same mount resizes the holding view
+so `listNeedsFrame` lays the list out *inside* it. Asked for a section it no longer has, the provider
+gave up: a bare `UICollectionViewCell()` for a row, `nil` for a band. iOS 27 raises for both, Swift
+catches no ObjC exception, the app dies, and every Form case reads as a bridge disconnect. Pair-b's
+E4 (`No view found at point (0.00, 0.00)`) is the same give-up without the death: no row, nothing to
+press.
+
+**Fix.** Both providers read the section from the snapshot UIKit is laying out, so nothing is left to
+give up (`giveUps`). Item 1: `giveBack()` labels its hand-over, so `losses` counts foreign takes only
+and the chase still runs. Item 2: a row's box is stamped with the width it was reported under, and the
+Form re-tells parked rows at a new width. Item 3: the published number is the plain box, once per list
+width, plus the measured `accessoryInset`; items 4 and 5 are its docs row and the toggle test.
+
+### Gates (fix round 2)
+
+The table in `## Gates` is this round's: `check`, `harness:ios` and `harness:android` green on
+`00664591cf2a`, `need --for review` satisfied on it, and `harness:ios:Form.harness` green as a filtered
+run on pair-a. The rows that carry the finding are the stale ones beside it — each is a red proof on a
+mutated tree, and none of them satisfies anything but its own name.
+
+**Leases:** `X29-cq1q0` (pair-b) and `X29-go41j` (pair-a).
+
+### Red proofs (fix round 2)
+
+Rows 11-14 of `docs/tasks/X29/mutations.json`; every run is `harness:ios` filtered to `Form.harness`
+under lease `X29-cq1q0` on pair-b, each mutation reverted before the next.
+
+- `Form.harness`, whole suite -> the two provider answers this round replaces (`UICollectionViewCell()`
+  for a row, `nil` for a band, the section read back out of `sections`) -> `● Test suite failed to run:
+  The app bridge disconnected during test execution`, 0 tests run, with
+  `*** Assertion failure in -[UICollectionView _createPreparedCellForItemAtIndexPath:…]` in the device
+  log. Same tree, providers as shipped: 3 passed.
+- `hands no row back as a loss across 400 pt scrolls` -> `giveBack()` stops labelling its hand-over
+  (`handingOverRow = false`) -> `expected 32 to be +0` at
+  `expect(num(after, 'losses') - lossesAtRest).toBe(0)` — four scrolls, 32 give-backs counted as lost
+  rows.
+- `moves no row of the list when one row gains an accessory` -> `rowBoxWidthReported` takes every cell
+  report as a plain-row one (`let accessory = false`), the pre-fix "publish whichever cell laid out
+  last" -> `expected 0 to be greater than 4` for `accessoryInset`, in that case and in the resize one.
+- `re-lays a row that is off screen at the Form's new width` -> both halves of item 2 out: parked rows
+  are never re-told, and a row trusts its remembered box forever -> `never saw "the parked plain row to
+  be laid out at the new 256 pt box" - last was where=holding;frame=0.0,0.0,336.0,44.0`. Either half
+  alone leaves it green — the JS clamp and the native push each cover for the other, which is why both
+  ship.
+
+### Follow-ups (fix round 2)
+
+- `giveUps` is in the Form report and read 0 in every green run here; if it rises, a snapshot and the
+  models disagree in a way neither the chase nor this round covers.
+- Two full `harness:ios` runs on the pre-fix tree died *mid-suite* with the bridge gone (09:34, 09:50)
+  — the same give-up, seen far from the mount that caused it. Both are green on this tree.
+- `check` has to run with `EMULATOR_PORT` unset: a lease env exports it, and the bench step then asks
+  that leased device to boot.
+- The pool hands out pair-a whenever it is free, so pair-b was only reachable through a narrowed
+  `--config`; a `lease.mjs --pair <name>` flag would retire the trick.
+- `task-ready` names the report after the branch, so on this branch it looks in `docs/tasks` for a
+  file called after `X29-fix2` rather than after the brief; with `--task X29-form-e4-pair-a` it is
+  ready. Worth teaching it the brief's name too.

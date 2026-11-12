@@ -1,7 +1,7 @@
 {
   "task": "X29",
   "round": 2,
-  "how": "Row 1 is not a mutation: it is the failure the task was called to fix, on main's own files, recorded in the shape X14/X15 use for the organic kind. Rows 2-4 are the shipped tree with one source line changed (or one new line removed), the same `build-app.mjs` artefact the gates use, and the file restored before the next row. Every run is `harness:ios` filtered to Form.harness under an X29 lease on pair-a (simulator \"nitro-ui A\" / iOS 27.0, Metro 8295), so each filtered gate name satisfies nothing but itself. Logs: `node scripts/gate.mjs logs --branch task/X29-form-e4-pair-a`. Rows 1-4 are round 1. Rows 5-9 are fix round 1: row 5 is a mutation of the shipped witness, rows 6-8 and row 10 are the negative controls that decide what pair-b's `No view found at point (0.00, 0.00)` can and cannot mean, and a green run is written as one on purpose; row 9 forces the pre-fix aim ordering and lands on pair-b's other text.",
+  "how": "Row 1 is not a mutation: it is the failure the task was called to fix, on main's own files, recorded in the shape X14/X15 use for the organic kind. Rows 2-4 are the shipped tree with one source line changed (or one new line removed), the same `build-app.mjs` artefact the gates use, and the file restored before the next row. Every run is `harness:ios` filtered to Form.harness under an X29 lease on pair-a (simulator \"nitro-ui A\" / iOS 27.0, Metro 8295), so each filtered gate name satisfies nothing but itself. Logs: `node scripts/gate.mjs logs --branch task/X29-form-e4-pair-a`. Rows 1-4 are round 1. Rows 5-9 are fix round 1: row 5 is a mutation of the shipped witness, rows 6-8 and row 10 are the negative controls that decide what pair-b's `No view found at point (0.00, 0.00)` can and cannot mean, and a green run is written as one on purpose; row 9 forces the pre-fix aim ordering and lands on pair-b's other text. Rows 11-14 are fix round 2, on pair-b (simulator \"nitro-ui B\" / iOS 27.0, lease X29-cq1q0): row 11 is the app death behind pair-b's E4, reproduced on the shipped tree with the two provider answers this round replaces; rows 12-14 are the guards this round adds, and row 14 needed both halves of item 2 out at once to go red.",
   "mutations": [
     {
       "test": "example/__tests__/Form.harness.tsx \u203a aims a row content at its Yoga origin on iOS and presses it on Android (E4)",
@@ -110,6 +110,51 @@
       "run": "harness:ios \u2014 the mutation landed mid-run and recorded on tree 015c317a82f5 with treeAfter 311ddbfc64e7 (void for reuse, kept for the message) \u2014 harness+ios-2026-11-12T06-54-03.204Z.log",
       "redTests": [
         "Unable to find element with testID: f49 \u2014 the query itself refuses a row parked that far out, so a press can only name a row that was on screen when it was aimed at. That is the whole case for taking the aim after the waits: the danger is a handle, not a query."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u2014 the whole suite (the app death behind pair-b's E4)",
+      "file": "ios/components/Form/HybridNitroUiForm.swift",
+      "mutation": "the shipped tree with the two provider answers it had before this round: the section looked up in the mutable `sections` again, a bare `UICollectionViewCell()` for a row the provider cannot fill and `nil` for a band",
+      "before": "self?.cell(at: indexPath, for: item, in: collectionView) ?? Self.blankCell(...) / self?.supplementary(...) ?? Self.blankBand(...)",
+      "after": "self?.cell(at: indexPath, for: item, in: collectionView) ?? UICollectionViewCell() / self?.supplementary(kind, at: indexPath, in: collectionView)",
+      "run": "harness:ios:Form.harness:-t:Form.row.boxes \u2014 FAIL (10.5 s), pair-b (lease X29-cq1q0): `\u25cf Test suite failed to run \u2014 The app bridge disconnected during test execution`, 0 tests run; the device logged `*** Assertion failure in -[UICollectionView _createPreparedCellForItemAtIndexPath:\u2026], UICollectionView.m:3989`. Same tree without the mutation: 3 passed",
+      "redTests": [
+        "Form.harness.tsx \u2014 the whole suite died with the app: the 3 X29 r2 cases plus every other Form case"
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u203a hands no row back as a loss across 400 pt scrolls (item 1)",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the hand-over stops labelling itself: `giveBack()` sets `handingOverRow = false`, so the removal its own `onGiveBack` causes reads back as a foreign take",
+      "before": "handingOverRow = true\n      defer { handingOverRow = false }",
+      "after": "handingOverRow = false\n      defer { handingOverRow = false }",
+      "run": "harness:ios:Form.harness:-t:no.row.back.as.a.loss \u2014 FAIL (12 s), pair-b",
+      "redTests": [
+        "expected 32 to be +0 \u2014 `expect(num(after, 'losses') - lossesAtRest).toBe(0)`, Form.harness.tsx:2206: four 400 pt scrolls counted 32 ordinary give-backs as lost rows"
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u203a moves no row of the list when one row gains an accessory (items 3 and 5)",
+      "file": "ios/components/Form/HybridNitroUiForm.swift",
+      "mutation": "the pre-fix publish: `rowBoxWidthReported` treats every cell report as a plain-row one (`let accessory = false`), so whichever cell laid out last owns the list-wide number",
+      "before": "func rowBoxWidthReported(_ width: CGFloat, accessory: Bool) {\n    boxReports += 1",
+      "after": "func rowBoxWidthReported(_ width: CGFloat, accessory: Bool) {\n    let accessory = false\n    boxReports += 1",
+      "run": "harness:ios:Form.harness:-t:Form.row.boxes \u2014 FAIL (12 s), pair-b: 2 of 3 cases red",
+      "redTests": [
+        "Form row boxes (X29 r2) \u203a moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5) \u2014 expected 0 to be greater than 4 (`expect(inset).toBeGreaterThan(4)`): the accessory inset was never learned",
+        "Form row boxes (X29 r2) \u203a re-lays a row that is off screen at the Form\u2019s new width (X29 r2, item 2) \u2014 the same `accessoryInset` witness, read before the resize"
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u203a re-lays a row that is off screen at the Form\u2019s new width (item 2)",
+      "file": "ios/components/Form/HybridNitroUiForm.swift + src/components/Form/Form.tsx",
+      "mutation": "both halves of item 2 out together: `pushRowBoxEstimates` skips a row that has ever reported, so a parked row is never re-told, and the row trusts its remembered box whatever the Form publishes now",
+      "before": "guard !row.isShownInCell || !row.hasReportedBox else { continue } / laid = ownBox.under === width || width <= 0 ? ownBox.width : Math.min(ownBox.width, width);",
+      "after": "guard !row.hasReportedBox else { continue }\n        if row.isShownInCell { continue } / laid = ownBox.width;",
+      "run": "harness:ios:Form.harness:-t:re-lays.a.row \u2014 FAIL (20 s), pair-b. Either half alone leaves the case green (the JS clamp and the native push each cover for the other), which is why both are shipped",
+      "redTests": [
+        "never saw \"the parked plain row to be laid out at the new 256 pt box\" - last was where=holding;frame=0.0,0.0,336.0,44.0: the row kept the 400 pt box after the parent went to 320 pt"
       ]
     }
   ]
