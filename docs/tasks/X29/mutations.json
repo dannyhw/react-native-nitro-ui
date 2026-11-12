@@ -1,0 +1,161 @@
+{
+  "task": "X29",
+  "round": 2,
+  "how": "Row 1 is not a mutation: it is the failure the task was called to fix, on main's own files, recorded in the shape X14/X15 use for the organic kind. Rows 2-4 are the shipped tree with one source line changed (or one new line removed), the same `build-app.mjs` artefact the gates use, and the file restored before the next row. Every run is `harness:ios` filtered to Form.harness under an X29 lease on pair-a (simulator \"nitro-ui A\" / iOS 27.0, Metro 8295), so each filtered gate name satisfies nothing but itself. Logs: `node scripts/gate.mjs logs --branch task/X29-form-e4-pair-a`. Rows 1-4 are round 1. Rows 5-9 are fix round 1: row 5 is a mutation of the shipped witness, rows 6-8 and row 10 are the negative controls that decide what pair-b's `No view found at point (0.00, 0.00)` can and cannot mean, and a green run is written as one on purpose; row 9 forces the pre-fix aim ordering and lands on pair-b's other text. Rows 11-14 are fix round 2, on pair-b (simulator \"nitro-ui B\" / iOS 27.0, lease X29-cq1q0): row 11 is the app death behind pair-b's E4, reproduced on the shipped tree with the two provider answers this round replaces; rows 12-14 are the guards this round adds, and row 14 needed both halves of item 2 out at once to go red.",
+  "mutations": [
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a aims a row content at its Yoga origin on iOS and presses it on Android (E4)",
+      "file": "(organic \u2014 main's own Form files)",
+      "mutation": "none: the case as shipped, on main's own code, on pair-a. The Form published one width for rows whose cells give different boxes, so the row's content hung past its own bounds and how far depended on the screen width.",
+      "run": "harness:ios:Form.harness:-t:aims%20a%20row%20content \u2014 FAIL, 1 of 15 \u2014 harness+ios+Form.harness+-t+aims+20a+20row+20content-2026-11-12T02-24-22.861Z.log",
+      "redTests": [
+        "expected 10 to be 0 \u2014 `expect(probe.log.pressable).toBe(0)`, and the case's own tap trace printed `tap9 pressable=10`: ten presses of a row content that iOS was supposed to be unable to hit. The same assertion on pair-b counted 0 and passed."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the geometry wait",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the container reports a box 22 pt wider than the one it has, which is what the Form's one list-wide number did to an accessory row",
+      "before": "    HybridNitroUiForm.rowOwner(of: row)?.contentBoxReported(bounds.width)",
+      "after": "    HybridNitroUiForm.rowOwner(of: row)?.contentBoxReported(bounds.width + 22)",
+      "run": "harness:ios:Form.harness \u2014 FAIL, 1 of 15 (28.4 s), tree 0fe6ca553de3 \u2014 harness+ios+Form.harness-2026-11-12T04-45-10.196Z.log",
+      "redTests": [
+        "Form report never satisfied \"every row drawn by exactly one cell, at its own box (before the presses)\" with `boxMismatch=22.00` in the report the failure printed \u2014 the witness sees a row laid out 22 pt away from the box it is drawn in."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the geometry wait",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the state before the fix: drop the `onRowLost` hand-back (and with it the identity chase it feeds), so a cell whose row is adopted elsewhere keeps naming it and the chase asks \"which cells hold no row\"",
+      "before": "    container.onRowLost = { [weak self] row in\n      if self?.row === row { self?.row = nil }\n      self?.onRowLost?(row)\n    }",
+      "after": "    // (no onRowLost wiring \u2014 a foreign take stays invisible to the cell and the Form)",
+      "run": "harness:ios:Form.harness \u2014 FAIL 3 of 4 runs (28.4 s each), tree a8cb220ad57c \u2014 harness+ios+Form.harness-2026-11-12T03-52-12.258Z.log, -2026-11-12T03-52-41.772Z.log, -2026-11-12T03-53-11.061Z.log",
+      "redTests": [
+        "expected 8 to be 9 \u2014 `expect(Number(geometry.rowsInCells)).toBe(Number(geometry.rows))`, with the report printing `rows=9 inCells=9 rowsInCells=8 claims=1 wrongCells=1 losses=1`: nine full cells, eight rows drawn, and a cell naming a row it was not holding.",
+        "the fourth run of the same tree passed \u2014 the settle chase sometimes got there first, which is the flake the fix removes; 4 of 4 green with the hand-back in place (03:55:30Z, 03:55:51Z, 03:56:13Z, 03:56:34Z, tree ac6c2220478b)."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the ten presses",
+      "file": "ios/components/Form/HybridNitroUiForm.swift",
+      "mutation": "not a one-line mutation: the intermediate tree where the row still took the Form's list-wide number instead of the box its own cell reported, with E4 already expecting 10 presses \u2014 i.e. the new assertion graded against the old geometry",
+      "before": "      ? laid > 0\n        ? { width: laid }",
+      "after": "      ? width > 0\n        ? { width }",
+      "run": "harness:ios:Form.harness \u2014 FAIL, 1 of 15, trees b5501fd8a458 / 49203cb0c2a5 / ad8716d0fd2f \u2014 harness+ios+Form.harness-2026-11-12T03-31-16.518Z.log, -2026-11-12T03-37-23.873Z.log",
+      "redTests": [
+        "expected +0 to be 10 \u2014 `expect(probe.log.pressable).toBe(10)`: not one of the ten presses reached a `Pressable` whose row was drawn past its own bounds, which is the count pair-b had always reported and the case now refuses to accept."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the positive control's own witness",
+      "file": "example/__tests__/Form.harness.tsx",
+      "mutation": "render a second live `loose-press` beside the first, so the tree the case aims at is not the only live copy of itself \u2014 the state `oneLiveViewPer` is asserted against",
+      "before": "        <Loose onPressablePress={probe.onPressablePress} onSwitchChange={probe.onSwitchChange} />",
+      "after": "        <Loose \u2026 /> + a second <Pressable testID=\"loose-press\" /> in the same tree",
+      "run": "harness:ios:Form.harness \u2014 FAIL, 1 of 15 (28.4 s), tree 080fd244cf19 \u2014 harness+ios+Form.harness-2026-11-12T05-48-34.054Z.log",
+      "redTests": [
+        "a testID does not have exactly one live view: loose-press=2 loose-switch=1 \u2014 `oneLiveViewPer(['loose-press', 'loose-switch'])`, Form.harness.tsx:302. The witness has teeth: with two live copies the case refuses to press at all rather than press whichever copy the query happened to answer with."
+      ]
+    },
+    {
+      "test": "negative control N1 \u2014 is `No view found at point (0.00, 0.00)` what an aim the registry cannot resolve says?",
+      "file": "example/__tests__/Form.harness.tsx",
+      "mutation": "after the case is green, press `{ nativeId: 'x29-no-such-view' }`: the native side cannot resolve the id, so it keeps the (0, 0) that `userEvent.press` sent (`HarnessUI.mm:248`) and hit-tests the window's own corner",
+      "before": "(no such press)",
+      "after": "await userEvent.press({ nativeId: 'x29-no-such-view' } as \u2026);",
+      "run": "harness:ios:Form.harness \u2014 PASS, 15 of 15 (22.4 s), tree 3793e746e0ce \u2014 harness+ios+Form.harness-2026-11-12T06-34-11.423Z.log",
+      "redTests": [
+        "green on purpose. An unresolvable aim taps (0, 0), this app has a hittable view there, and nothing is rejected \u2014 so the message pair-b printed is not \"the id died\", and \"(0.00, 0.00)\" is not a hit test before layout: the text formats the *arguments* `x, y`, not the resolved centre (`HarnessUI.mm:277`), so it reads (0.00, 0.00) for every `userEvent.press` that fails."
+      ]
+    },
+    {
+      "test": "negative control N2 \u2014 is it a handle whose tree has gone away?",
+      "file": "example/__tests__/Form.harness.tsx",
+      "mutation": "press the handle E4 took at its very top \u2014 before it waited for anything \u2014 after `cleanup()` and the positive control's render, with 1500 ms for the old tree to be freed",
+      "before": "(the handle is not pressed after the tree changes)",
+      "after": "await new Promise(r => setTimeout(r, 1500)); await userEvent.press(pressable);",
+      "run": "harness:ios:Form.harness \u2014 PASS, 15 of 15 (21.9 s), tree e2258ea093f4 \u2014 harness+ios+Form.harness-2026-11-12T06-32-30.672Z.log",
+      "redTests": [
+        "green on purpose. A stale handle is silent, not an error: the registry's weak entry can still resolve, its centre is converted into the active window anyway, and the tap lands on whatever is drawn there. So a pre-wait aim can be wrong without saying so \u2014 which is the reason to re-aim \u2014 but it is not what writes the (0.00, 0.00) text either."
+      ]
+    },
+    {
+      "test": "negative control N3 \u2014 is it a row the list has recycled out of sight?",
+      "file": "example/__tests__/Form.harness.tsx",
+      "mutation": "scroll the Form 400 pt (`nuiTestScrollTo`, waited for with `offset > 100`) and press a freshly taken aim at `label-wifi`, a row the scroll has reclaimed into its section's holding view",
+      "before": "(no scroll inside E4)",
+      "after": "need(forms.form).nuiTestScrollTo(400); await formReport(r => num(r, 'offset') > 100, \u2026); await userEvent.press(await boxOf('label-wifi'));",
+      "run": "harness:ios:Form.harness \u2014 PASS, 15 of 15 (21.9 s), tree 11a95a44175a \u2014 harness+ios+Form.harness-2026-11-12T06-36-53.431Z.log",
+      "redTests": [
+        "green on purpose, and it narrows the field: on pair-a a row reclaimed by the list is still parked *inside* the window, so its centre hit-tests (onto a neighbour) and the symptom would be a press count of 0, not a rejection. For the rejection the aim's centre has to leave the window's bounds \u2014 the parked-row state of round 1's second bug, at the other end of the list, which is what pair-b had and pair-a has not been seen to have."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a E4 \u2014 the aim's own lifetime (symptom A, reproduced on pair-a)",
+      "file": "example/__tests__/Form.harness.tsx",
+      "mutation": "the pre-fix aim ordering, forced: take the handle for `label-wifi` while its row is on screen, move the list 400 pt (`nuiTestScrollTo`, waited for with `offset > 300`, 400 ms for the settle), then press the handle this case took before the list moved",
+      "before": "        await userEvent.press(aim.pressable);  // aimed after the certification",
+      "after": "        const stale = await boxOf('label-wifi'); need(forms.form).nuiTestScrollTo(400); await formReport((r) => num(r, 'offset') > 300, \u2026); await userEvent.press(stale);",
+      "run": "harness:ios:Form.harness \u2014 FAIL (16 s), tree 433f64dd1a5e \u2014 harness+ios+Form.harness-2026-11-12T07-10-48.973Z.log",
+      "redTests": [
+        "expected +0 to be 10 \u2014 `expect(probe.log.pressable).toBe(10)`, and it is pair-b's second text exactly (`05:19:21Z`): the aim named a row the list had just reclaimed, the press went where that row's view now is, and nothing counted it. This is symptom A made to happen on pair-a on order, which is what says the two texts are one state and not two bugs."
+      ]
+    },
+    {
+      "test": "negative control N4 \u2014 can a fresh query name a row that has left?",
+      "file": "example/__tests__/Form.harness.tsx",
+      "mutation": "in E6, after mounting 50 rows, press `boxOf('f49')` \u2014 a row the list has never adopted, parked far below the fold",
+      "before": "(E6 presses nothing)",
+      "after": "        if (count === 50) { await userEvent.press(await boxOf('f49')); }",
+      "run": "harness:ios \u2014 the mutation landed mid-run and recorded on tree 015c317a82f5 with treeAfter 311ddbfc64e7 (void for reuse, kept for the message) \u2014 harness+ios-2026-11-12T06-54-03.204Z.log",
+      "redTests": [
+        "Unable to find element with testID: f49 \u2014 the query itself refuses a row parked that far out, so a press can only name a row that was on screen when it was aimed at. That is the whole case for taking the aim after the waits: the danger is a handle, not a query."
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u2014 the whole suite (the app death behind pair-b's E4)",
+      "file": "ios/components/Form/HybridNitroUiForm.swift",
+      "mutation": "the shipped tree with the two provider answers it had before this round: the section looked up in the mutable `sections` again, a bare `UICollectionViewCell()` for a row the provider cannot fill and `nil` for a band",
+      "before": "self?.cell(at: indexPath, for: item, in: collectionView) ?? Self.blankCell(...) / self?.supplementary(...) ?? Self.blankBand(...)",
+      "after": "self?.cell(at: indexPath, for: item, in: collectionView) ?? UICollectionViewCell() / self?.supplementary(kind, at: indexPath, in: collectionView)",
+      "run": "harness:ios:Form.harness:-t:Form.row.boxes \u2014 FAIL (10.5 s), pair-b (lease X29-cq1q0): `\u25cf Test suite failed to run \u2014 The app bridge disconnected during test execution`, 0 tests run; the device logged `*** Assertion failure in -[UICollectionView _createPreparedCellForItemAtIndexPath:\u2026], UICollectionView.m:3989`. Same tree without the mutation: 3 passed",
+      "redTests": [
+        "Form.harness.tsx \u2014 the whole suite died with the app: the 3 X29 r2 cases plus every other Form case"
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u203a hands no row back as a loss across 400 pt scrolls (item 1)",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the hand-over stops labelling itself: `giveBack()` sets `handingOverRow = false`, so the removal its own `onGiveBack` causes reads back as a foreign take",
+      "before": "handingOverRow = true\n      defer { handingOverRow = false }",
+      "after": "handingOverRow = false\n      defer { handingOverRow = false }",
+      "run": "harness:ios:Form.harness:-t:no.row.back.as.a.loss \u2014 FAIL (12 s), pair-b",
+      "redTests": [
+        "expected 32 to be +0 \u2014 `expect(num(after, 'losses') - lossesAtRest).toBe(0)`, Form.harness.tsx:2206: four 400 pt scrolls counted 32 ordinary give-backs as lost rows"
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u203a moves no row of the list when one row gains an accessory (items 3 and 5)",
+      "file": "ios/components/Form/HybridNitroUiForm.swift",
+      "mutation": "the pre-fix publish: `rowBoxWidthReported` treats every cell report as a plain-row one (`let accessory = false`), so whichever cell laid out last owns the list-wide number",
+      "before": "func rowBoxWidthReported(_ width: CGFloat, accessory: Bool) {\n    boxReports += 1",
+      "after": "func rowBoxWidthReported(_ width: CGFloat, accessory: Bool) {\n    let accessory = false\n    boxReports += 1",
+      "run": "harness:ios:Form.harness:-t:Form.row.boxes \u2014 FAIL (12 s), pair-b: 2 of 3 cases red",
+      "redTests": [
+        "Form row boxes (X29 r2) \u203a moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5) \u2014 expected 0 to be greater than 4 (`expect(inset).toBeGreaterThan(4)`): the accessory inset was never learned",
+        "Form row boxes (X29 r2) \u203a re-lays a row that is off screen at the Form\u2019s new width (X29 r2, item 2) \u2014 the same `accessoryInset` witness, read before the resize"
+      ]
+    },
+    {
+      "test": "example/__tests__/Form.harness.tsx \u203a Form row boxes (X29 r2) \u203a re-lays a row that is off screen at the Form\u2019s new width (item 2)",
+      "file": "ios/components/Form/HybridNitroUiForm.swift + src/components/Form/Form.tsx",
+      "mutation": "both halves of item 2 out together: `pushRowBoxEstimates` skips a row that has ever reported, so a parked row is never re-told, and the row trusts its remembered box whatever the Form publishes now",
+      "before": "guard !row.isShownInCell || !row.hasReportedBox else { continue } / laid = ownBox.under === width || width <= 0 ? ownBox.width : Math.min(ownBox.width, width);",
+      "after": "guard !row.hasReportedBox else { continue }\n        if row.isShownInCell { continue } / laid = ownBox.width;",
+      "run": "harness:ios:Form.harness:-t:re-lays.a.row \u2014 FAIL (20 s), pair-b. Either half alone leaves the case green (the JS clamp and the native push each cover for the other), which is why both are shipped",
+      "redTests": [
+        "never saw \"the parked plain row to be laid out at the new 256 pt box\" - last was where=holding;frame=0.0,0.0,336.0,44.0: the row kept the 400 pt box after the parent went to 320 pt"
+      ]
+    }
+  ]
+}

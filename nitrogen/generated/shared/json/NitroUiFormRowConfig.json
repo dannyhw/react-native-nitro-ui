@@ -9,6 +9,7 @@
     "pressable": true,
     "nuiPerfId": true,
     "onPress": true,
+    "onContentBox": true,
     "hybridRef": true
   }
 }

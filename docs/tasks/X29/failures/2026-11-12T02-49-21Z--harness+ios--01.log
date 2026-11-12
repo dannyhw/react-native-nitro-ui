@@ -1,0 +1,202 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-12T02:49:21.067Z on code tree `1c5c656bc0b5` at HEAD `7e8bbf1` (branch `task/X29-form-e4-pair-a`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit null signal SIGTERM, 964069 ms
+- Load: start 22.45, end 95.02, median 10.29, max 95.02
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-xf97x`
+- Full log: `task/X29-form-e4-pair-a/harness+ios-2026-11-12T02-49-20.364Z.log` (<store>/task/X29-form-e4-pair-a/harness+ios-2026-11-12T02-49-20.364Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)`
+- `expected +0 to be 10 // Object.is equality`
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · SegmentedControl › leaves the engine where it started across a churn of drops`
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-form-e4-pair-a/harness+ios-2026-11-12T02-49-20.364Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-xf97x (still live)
+  |   G29X27-wep1v             G29X27       both              pair-b
+  |   X29-xf97x                X29          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 95.02 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 1034 — the rest is in the full log above)
+
+```
+    console.log
+          · conformance-button-group residue probe (uncontrolled second owner): an uncontrolled toggle item that started checked and was pressed off, then a second owner whose own default is checked - a state the control can only be showing because `seeded` was re-armed and let the default apply
+
+
+    console.log
+          · conformance-button-group after the uncontrolled second owner: the first press after the second mount reports=conformance-button-group:bold:false (expected conformance-button-group:bold:false)
+
+
+    console.log
+          · conformance-button-group residue probe (controlled second owner): a press that checks an uncontrolled toggle item, then a second owner that is *controlled* at unchecked - the only shape that reads the handshake’s counters
+
+
+    console.log
+          · conformance-button-group after the controlled second owner: the first press on the controlled second mount reports=conformance-button-group:bold:true (expected conformance-button-group:bold:true)
+
+
+    console.log
+          · box=402.0x34.3 labelBox=402.0x34.3
+
+
+    console.log
+          · poisoned measured=94.0x32.0 box=94.0x32.0 corrections=1 poison=97.0x11.0 locale=locale=en-US
+
+
+    console.log
+          · warm measured=94.0x32.0 declared=94.0x32.0 boxRule=both locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-stepper props after the second owner: accessibilityLabel=Conformance stepper, second owner
+
+
+    console.log
+          · conformance-stepper residue probe (uncontrolled second owner): a step up to 4 on an uncontrolled stepper that started on 3, then a second owner whose own `defaultValue` is 6 — a number the control can only be painting because `didApplyDefault` was re-armed and the default applied again
+
+
+    console.log
+          · conformance-stepper after the uncontrolled second owner: the value the second owner’s default paints=6 (expected 6)
+
+
+    console.log
+          · conformance-stepper after the uncontrolled second owner: a step down from that value emits=conformance-stepper:5 (expected conformance-stepper:5)
+
+
+    console.log
+          · conformance-stepper residue probe (controlled second owner): a step up on an uncontrolled stepper, then a second owner that is *controlled* on 7 — a value that cannot be shown unless the handshake’s counters came back at zero, because a write behind the previous owner’s event count is refused
+
+
+    console.log
+          · conformance-stepper after the controlled second owner: the value the controlled second owner wrote=7 (expected 7)
+
+
+    console.log
+          · conformance-stepper after the controlled second owner: a step up from that value emits=conformance-stepper:8 (expected conformance-stepper:8)
+
+
+    console.log
+          · box=94.0x32.0 labelBox=94.0x32.0
+
+
+    console.log
+          · poisoned measured=402.0x52.0 box=402.0x52.0 corrections=1 poison=97.0x11.0 locale=locale=en-US
+
+
+    console.log
+          · warm measured=402.0x52.0 declared=300.0x52.0 boxRule=height locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-list-item props after the second owner: accessibilityLabel=Conformance list item, second owner
+
+
+    console.log
+          · conformance-list-item residue probe (uncontrolled second owner): a press the first owner took, through the tap's own path - one accepted press in the row's counter - and a drawn line the second owner never asked for
+
+
+    console.log
+          · conformance-list-item after the uncontrolled second owner: the line the second owner's row drew=Bluetooth|-|Off|none (expected Bluetooth|-|Off|none)
+
+
+    console.log
+          · conformance-list-item after the uncontrolled second owner: a press on it still reaches the app=conformance-list-item (expected conformance-list-item)
+
+
+    console.log
+          · conformance-list-item after the uncontrolled second owner: and it is the first press this row has had=1 (expected 1)
+
+
+    console.log
+          · box=402.0x52.0 labelBox=402.0x52.0
+
+  ● conformance · every control, four rules › · SegmentedControl › leaves the engine where it started across a churn of drops
+
+    1 conformance finding(s):
+
+        - SegmentedControl × no-leak-on-drop: -1 ledger entry(ies) survived 50 drops — each missing `NitroUiSizing::forget(sizing_.get())` pair in `onDropView` shows up here, and a handle keeps the view alive, so the leaked entry is the leak
+      [0m [90m 1439 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1440 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1441 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1442 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1443 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1444 |[39m [32m        .join('\n')}`[39m[0m
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 14a592c61e6c, 25 components registered)
+lease: X29-xf97x runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 55.28/25.60 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-form-e4-pair-a/harness+ios-2026-11-12T02-49-20.364Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+gate: Metro pid 11294 ignored SIGTERM and was killed
+gate: Metro pid 11294 ignored SIGTERM and was killed
+gate: stopped the Metro this run started (11294) on port 8295 - the next gate on this lease gets a free port
+gate: stopped the Metro this run started (11294) on port 8295 - the next gate on this lease gets a free port
+gate: harness:ios FAIL in 964.1 s (signal SIGTERM) - note: the code tree moved during the run (14a592c61e6c now), so this line describes 1c5c656bc0b5
+gate: recorded in .gates/task/X29-form-e4-pair-a.jsonl
+
+
+gate: appended the device context to task/X29-form-e4-pair-a/harness+ios-2026-11-12T02-49-20.364Z.log (4 probe(s))
+
+```

@@ -1,0 +1,73 @@
+# Failure excerpt — harness:ios:Form%20row%20boxes
+
+- Ran: 2026-11-12T08:23:57.621Z on code tree `d44e2c1ef83e` at HEAD `ec4c943` (branch `task/X29-fix2`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form row boxes`
+- Result: fail, exit 1, 1849 ms
+- Load: start 5.29, end 5.35, median 5.32, max 5.35
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-9q56x`
+- Full log: `task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log` (<store>/task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-9q56x (still live)
+  |   X25-484f3                X25          both              pair-b
+  |   X29-9q56x                X29          ios               pair-a
+gate: load
+  |   load1 at the moment of failure: 5.35 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 28 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form%20row%20boxes
+gate: node ../scripts/harness.mjs --harnessRunner ios Form row boxes (cwd example)
+gate: code tree d44e2c1ef83e at HEAD ec4c943f
+gate: git tree 21dfb4fdb0ca with a DIRTY worktree (not reusable)
+gate: log task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log
+gate:       <store>/task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form row boxes
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree d44e2c1ef83e, 25 components registered)
+lease: X29-9q56x runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.35/7.93 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+No tests found, exiting with code 1
+Run with `--passWithNoTests` to exit with code 0
+In <repo>/example
+  434 files checked.
+  testMatch: <repo>/example/**/__tests__/**/*.harness.[jt]s?(x), !**/__tests__/isolated/** - 32 matches
+  testPathIgnorePatterns: \.(android)\.harness\.(?:[mc]?[jt]sx?)$ - 434 matches
+  testRegex:  - 0 matches
+Pattern: Form row boxes - 0 matches
+gate: harness:ios:Form%20row%20boxes FAIL in 1.8 s
+gate: recorded in .gates/task/X29-fix2.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X29-fix2/harness+ios+Form+20row+20boxes-2026-11-12T08-23-56.909Z.log (4 probe(s))
+
+```

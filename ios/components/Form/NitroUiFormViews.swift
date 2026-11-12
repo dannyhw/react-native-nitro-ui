@@ -243,8 +243,26 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   private var pressed = false
   /// The row this cell is showing.
   private(set) weak var row: UIView?
+  /// Whether the row this cell names is the one it is drawing. A cell whose pointer went stale
+  /// names a row it is not holding, which is a blank line on screen that no "does this cell hold
+  /// a row?" question can find (X29).
+  var isDrawingRow: Bool {
+    guard let row else { return false }
+    return container.isHolding(row)
+  }
+  /// Whether this cell names a row it is not holding at all.
+  var claimsRowItDoesNotHold: Bool {
+    row != nil && !isDrawingRow
+  }
   /// What to do with a row this cell is finished with - back to its section.
   var onGiveBack: ((UIView) -> Void)?
+  /// Someone else took this cell's row, so the cell is now drawing nothing. Forwarded from the
+  /// container (see its `onRowLost`); the cell clears its own pointer first, and the Form uses
+  /// this to chase the blank cell without waiting for a settle that a resting list never sends.
+  ///
+  /// `ownHandOver` says whether this cell asked for the trip itself (`giveBack`) or somebody
+  /// else took the row: the Form counts only the foreign ones and chases both.
+  var onRowLost: ((UIView, _ ownHandOver: Bool) -> Void)?
   /// A row Fabric unmounted while this cell was holding it. The generated
   /// `unmountChildComponentView:` detaches it from whichever view has it, so the container
   /// - not the section's holding view - is where that signal arrives.
@@ -274,7 +292,9 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     // and 402 pt before the layout had any attributes at all) instead of the 338 pt it is
     // drawn in, which pushes right-aligned content out past the cell.
     if container.bounds.width > 0 {
-      formOwner?.rowBoxWidthReported(container.bounds.width)
+      formOwner?.rowBoxWidthReported(
+        container.bounds.width, accessory: container.drawsAccessoryRow
+      )
     }
   }
 
@@ -288,6 +308,22 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     automaticallyUpdatesContentConfiguration = false
     automaticallyUpdatesBackgroundConfiguration = false
     contentView.addSubview(container)
+    container.onRowLost = { [weak self] row in
+      // The row was taken out of this container by someone else, so this cell must stop
+      // naming it. `row` is weak and the pointer is what the Form reads to decide whether
+      // this cell is blank, so a cell that keeps naming a row another cell adopted is a blank
+      // row that no chase can find - which is how a row ends up drawing from its section's
+      // hidden holding view (X29).
+      //
+      // The trip is labelled, not swallowed: `ownHandOver` says whether this cell asked for the
+      // move. A cell handing the row over is not losing it, and counting the ordinary trip of
+      // every cell leaving the screen made `losses` climb through a fling for something that is
+      // not wrong (fix round 2, item 1). The signal itself still goes out, so the chase behind
+      // it runs exactly as it did before: what had to change was what the Form *counts*, and
+      // dropping the signal instead would have silently switched that repair off as well.
+      if self?.row === row { self?.row = nil }
+      self?.onRowLost?(row, self?.handingOverRow ?? false)
+    }
     container.onRowRemoved = { [weak self] row in
       // Fabric took the row out of this cell, so this cell must stop saying it is showing
       // it. `row` is weak and a Fabric component view is pooled rather than freed, so a
@@ -416,6 +452,16 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   /// that is being drawn elsewhere: the cell that took it keeps showing a row whose
   /// superview is a hidden holding view, which is a blank row on screen and no wrong count
   /// anywhere (fix round 1).
+  /// Raised while this cell hands its row over, to label the `willRemoveSubview` that the
+  /// hand-over itself causes.
+  ///
+  /// `onGiveBack` reparents the row, and the Form has no other way to tell that trip from
+  /// somebody else taking the row out from under it. The label travels *with* the signal: the
+  /// container keeps naming the row across the move, because `ownsRow` and `path(for:)` are
+  /// asked mid-move by the code that is moving it, and the chase behind the signal keeps running
+  /// on both kinds of trip (fix round 2, item 1).
+  private var handingOverRow = false
+
   func giveBack() {
     guard let row else { return }
     self.row = nil
@@ -429,6 +475,13 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     // moment, and a row that loses its parent while Fabric still owns it trips the
     // "unmount a view which is mounted inside a different view" assertion.
     if onGiveBack != nil {
+      // The container keeps naming the row across the hand-over - the taker is `addSubview`ing
+      // the very view it names, and every reader of that pointer has to keep seeing this cell as
+      // the row's home until the move is done. The flag only *labels* the `willRemoveSubview`
+      // trip this move causes, so the Form can keep its chase and still not count a hand-over as
+      // a lost row (fix round 2, item 1).
+      handingOverRow = true
+      defer { handingOverRow = false }
       onGiveBack?(row)
     } else {
       container.releaseRow()
@@ -451,6 +504,36 @@ final class NitroUiFormRowContainer: UIView {
   private weak var row: UIView?
   /// This container lost a row by itself, i.e. React Native unmounted it out of the cell.
   var onRowRemoved: ((UIView) -> Void)?
+  /// Someone else took this container's row: another cell adopted it, or a section's holding
+  /// view took it back. It also fires for the trip a `giveBack` hand-over makes, which the cell
+  /// labels as its own (`ownHandOver`) on the way to the Form: the Form chases every trip and
+  /// counts only the foreign ones (fix round 2, item 1). The container still names the row while
+  /// the taker moves it - the label is the whole difference, not the pointer.
+  ///
+  /// The distinction is the whole bug. A move out of a cell is wrapped in
+  /// `NitroUiFormHoldingView.moving` so that no section reads it as an unmount, which also
+  /// keeps it silent toward the cell: the cell goes on naming a row it is not drawing, and
+  /// nothing below it looks blank. `HybridNitroUiForm.misdrawnVisibleItemIdentifiers` asks
+  /// each cell whether it is holding the row its item names, and a cell holding a row it is
+  /// entitled to no answer at all would leave the row that item owns in its section's hidden
+  /// holding view while the list draws somebody else's (X29).
+  var onRowLost: ((UIView) -> Void)?
+
+  /// Whether `view` is the row this container is drawing right now.
+  func isHolding(_ view: UIView) -> Bool {
+    row === view && view.superview === self
+  }
+
+  /// Whether the row this container is drawing has a trailing accessory.
+  ///
+  /// The accessory is the only thing that makes one row's box narrower than the plain rows
+  /// around it, so it is what the Form has to know about a box report: the list-wide number
+  /// is the *plain* box, and an accessory row is told its own narrower one by this container
+  /// (fix round 2, item 3). A container holding nothing reports the plain box, which is true.
+  var drawsAccessoryRow: Bool {
+    guard let row, let owner = HybridNitroUiForm.rowOwner(of: row) else { return false }
+    return owner.accessoryValue != .none
+  }
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -488,7 +571,11 @@ final class NitroUiFormRowContainer: UIView {
   override func willRemoveSubview(_ subview: UIView) {
     // Before `super`, so the row is still this container's when the callback looks at it.
     defer { super.willRemoveSubview(subview) }
-    if row === subview { row = nil }
+    let wasOurs = row === subview
+    if wasOurs { row = nil }
+    // Taken by someone else, mid-move: the cell has to hear about it even though no section
+    // may hear about it. See `onRowLost`.
+    if wasOurs, NitroUiFormHoldingView.isMovingRow { onRowLost?(subview) }
     guard !NitroUiFormHoldingView.isMovingRow else { return }
     onRowRemoved?(subview)
   }
@@ -514,28 +601,27 @@ final class NitroUiFormRowContainer: UIView {
   private func layoutRow() {
     guard let row else { return }
     row.frame = CGRect(x: 0, y: 0, width: bounds.width, height: row.frame.height)
-    // The Form has to lay this row's content out at the width it is *drawn* at, which is this
-    // container's, not the list's idea of a cell. Guarded on change inside the Form, so the
-    // per-layout call is a comparison rather than a round trip.
-    if bounds.width > 0, let cell = owningCell() {
-      cell.formOwner?.rowBoxWidthReported(bounds.width)
-    }
+    if bounds.width <= 0 { return }
+    // This row's content has to be laid out at the width it is *drawn* at, which is this
+    // container's, not the list's idea of a cell — and it has to be told to *this row*,
+    // because the box is per row: a cell drawing an accessory row shrinks its own margins for
+    // it, and the Form's list-wide number is then wrong for one row whatever it says. Guarded
+    // on change on both sides, so the per-layout call is a comparison rather than a round trip.
+    let owner = HybridNitroUiForm.rowOwner(of: row)
+    owner?.contentBoxReported(bounds.width)
+    // The Form's own number: still the estimate a row gets before its first cell lays it out,
+    // and the number the harness reads as `width=` - which is the *plain* box, published once
+    // per list width. Offering this row's box as the list-wide number made the one number
+    // every Section and RowRoot renders against follow whichever cell laid out last (338 and
+    // 316 on the harness's screen), so a Form re-rendered its whole tree per flip of it
+    // (fix round 2, item 3).
+    owningCell()?.formOwner?.rowBoxWidthReported(
+      bounds.width, accessory: drawsAccessoryRow
+    )
   }
 }
 
 // MARK: - The cell for an item with nothing to draw
-
-/// The cell a Form answers with when an item has nothing to draw.
-///
-/// UIKit only accepts a cell it can account for: one it handed out for a registered reuse
-/// identifier. A cell from nowhere aborts the app where the item is being brought on screen —
-/// X25's `Assertion failure in -[UICollectionView
-/// _createPreparedCellForItemAtIndexPath:withLayoutAttributes:applyAttributes:isFocused:notify:]`
-/// — exactly as answering a *reconfiguration* with one aborts it in
-/// `_reconfigureCell:forItemAtIndexPath:`. So a Form that has lost the model behind an index
-/// path still dequeues one of these: it draws nothing, the next settle sees a cell with no row
-/// in it and replaces it.
-final class NitroUiFormBlankCell: UICollectionViewCell {}
 
 // MARK: - The header and footer
 
