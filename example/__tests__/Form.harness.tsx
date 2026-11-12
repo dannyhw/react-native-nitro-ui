@@ -128,6 +128,10 @@ function trace(what: string, report: Record<string, string>): void {
         'offset',
         'recycles',
         'insetTop',
+        'width',
+        'boxW',
+        'boxSpan',
+        'boxMismatch',
       ]
         .map((key) => `${key}=${report[key] ?? '-'}`)
         .join(';')
@@ -212,6 +216,52 @@ async function formRef(): Promise<FormHandle> {
   return handleOf(() => forms.form, 'the Form');
 }
 
+/**
+ * Wait until the Form is in the state a press is graded in, and hand back the report that said
+ * so. iOS only.
+ *
+ * Five things have to be true before ten presses mean anything, and the Form — not a row
+ * handle — answers every one of them. A handle is only a handle: a row view another case unmounted goes
+ * on answering for itself, `where=holding`, at a frame nothing is drawing, while the Form on
+ * screen has that row in a cell. The Form is also asked about *every* row on screen rather than
+ * the two this case has handles for, which is the difference between a precondition and a hope.
+ *
+ * - `boxMismatch` — the worst gap anywhere on screen between a row's own box and the width
+ *   React laid its content out at. A row laid out wider than its box has its right-hand content
+ *   drawn past its bounds, and UIKit's hit-test stops at those bounds: a press there lands on
+ *   the cell, React Native walks up from wherever the hit-test stopped and never reaches the
+ *   `Pressable`, so the press counts nothing. Laid out *narrower* is not dangerous, only wrong —
+ *   the content moves inward, where a finger still reaches it — but the witness is the absolute
+ *   difference in either direction, because a Form that only looked for an excess would be green
+ *   while a row was drawn 22 pt inside its own cell, and this case is about content being where
+ *   it is drawn. It used to be non-zero on some row whatever the Form said: one list-wide width
+ *   cannot match a plain row's box and its accessory row's narrower one side by side.
+ * - `rowsInCells` against `rows` — every row this Form owns is sitting in a cell. A row left in
+ *   its section's *holding view* is not drawn at all (that view is hidden), and its live view is
+ *   still measurable, so a press aimed at it lands on whichever cell happens to be at those
+ *   pixels: zero presses for a row that is wired perfectly (X29).
+ * - `distinctDrawn` against `inCells` — no row is drawn by two cells, which is the other half of
+ *   the count above: nine cells naming eight rows reads as a full list.
+ * - `wrongCells` — every cell on screen is holding the row its own item names. Without this one
+ *   the two counts above can disagree *silently*: a recycled cell can be on screen holding a
+ *   perfectly live row that belongs to a different item, which reads as a full cell to every
+ *   "does this cell hold a row?" question while the row its item owns draws nothing from its
+ *   section's hidden holding view. That was X29: `rows` 9, `inCells` 9, `rowsInCells` 8, and a
+ *   press delivered ten times at a row whose pixels were somewhere else.
+ */
+async function formReadyToPress(step: string): Promise<Record<string, string>> {
+  return formReport(
+    (report) =>
+      num(report, 'boxMismatch') <= 0.5 &&
+      num(report, 'rowsInCells') === num(report, 'rows') &&
+      num(report, 'distinctDrawn') === num(report, 'inCells') &&
+      num(report, 'claims') === 0 &&
+      num(report, 'wrongCells') === 0,
+    `every row drawn by exactly one cell, at its own box (${step}) - the report ` +
+      'names rowsInCells, rows, distinctDrawn, inCells, claims, wrongCells and boxMismatch'
+  );
+}
+
 /** The reference for a testID, retried: the first pass can find nothing. */
 async function boxOf(
   testId: string
@@ -224,6 +274,39 @@ async function boxOf(
       if (Date.now() > deadline) throw error;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
+  }
+}
+
+/**
+ * Wait until exactly one live view answers each testID, and return the counts as seen.
+ *
+ * `userEvent.press` names the view to press, not a screen coordinate: it takes the native view
+ * the query answered with and delivers the tap at that view's centre in the window. So a second
+ * live view with the same testID — the previous case's surface, on its way out — leaves the case
+ * measuring whichever copy the query happened to answer with, which is a property of the query
+ * and not of the Form.
+ *
+ * Waiting for one is a precondition, not a loosening: with two live copies there is no fact of
+ * the matter about whether "a finger at the row content's drawn position reaches it". It is not
+ * the reason E4 was red on one simulator and green on the other (X29: the row's cell had lost its
+ * row to another cell, and the Form could not see that its own cell was blank) — that is what the
+ * five counts in `formReadyToPress` are for.
+ */
+async function oneLiveViewPer(testIds: readonly string[]): Promise<string> {
+  const deadline = Date.now() + 8000;
+  for (;;) {
+    const seen = testIds.map(
+      (id) => `${id}=${screen.queryAllByTestId(id).length}`
+    );
+    if (seen.every((entry) => entry.endsWith('=1'))) return seen.join(' ');
+    if (Date.now() > deadline) {
+      throw new Error(
+        `a testID does not have exactly one live view: ${seen.join(' ')} - with two copies ` +
+          'on screen a press is aimed at whichever one the query answered with, which is the ' +
+          'previous case’s surface rather than this one'
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 
@@ -916,7 +999,7 @@ describe('Form (G24)', () => {
     ).toBeLessThanOrEqual(1);
   });
 
-  it('aims a row content at its Yoga origin on iOS and presses it on Android (E4)', async () => {
+  it('aims a row content at its Yoga origin and presses it on both platforms (E4)', async () => {
     const probe = await mount({ mode: 'base', ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     const pressable = await boxOf('inner-press');
@@ -926,32 +1009,59 @@ describe('Form (G24)', () => {
       `FORM TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
     if (IOS) {
-      // Both waits below are for the row to be *drawn in a cell*, because on a screen short
-      // enough to leave the last row in its holding view the Switch answers nothing for a
-      // different reason - it is not on screen - and that would make the number below a
-      // property of one simulator's height instead of the answer to question 4. A finger at
-      // the drawn position reaches both, ten taps each, and `testRealInputForm` is what
-      // measures that half.
-      //
-      // Asked of the Form rather than of `rows.pressable`/`rows.silent`: a handle is only a
-      // handle, and a row view that another case unmounted answers for itself forever (it
-      // reports `where=holding` for as long as you ask, whether or not the Form on screen has
-      // that row in a cell). `inCells` against the items on screen is the Form's own answer
-      // to the same question, and at this box every row is on screen, so it says the
-      // Pressable's row and the Switch's row are both drawn.
+      // Everything the ten presses below are graded on is waited for here, and of the Form
+      // rather than of `rows.pressable`/`rows.silent`: a handle is only a handle, and a row
+      // view that another case unmounted answers for itself forever (it reports
+      // `where=holding` for as long as you ask, whether or not the Form on screen has that row
+      // in a cell). What the case needs is the Form's own account of every row it is drawing —
+      // drawn, once each, by a cell that holds it, at the box that cell gives it. Without that,
+      // the press count below is a property of the list's state at the moment of the aim.
       await drawnOnScreen('before the presses');
+      const geometry = await formReadyToPress('before the presses');
+      const live = await oneLiveViewPer(['inner-press', 'switch-silent']);
+      // Print them before grading them: when one of them stops holding, the numbers say
+      // which, and a press count on its own says only "something was wrong".
+      console.log(
+        `FORM TAP geometry rows=${geometry.rows} rowsInCells=${geometry.rowsInCells} ` +
+          `inCells=${geometry.inCells} distinct=${geometry.distinctDrawn} ` +
+          `claims=${geometry.claims} wrong=${geometry.wrongCells} ` +
+          `losses=${geometry.losses} ` +
+          `mismatch=${geometry.boxMismatch} boxSpan=${geometry.boxSpan} ` +
+          `width=${geometry.width} boxW=${geometry.boxW} live=${live}`
+      );
+      // Asserted rather than only waited for, so that a Form which stops reaching this state
+      // fails by name. A row counted twice (`distinctDrawn` short of `inCells`) and a row in no
+      // cell at all (`rowsInCells` short of `rows`) are the same mix-up seen from the two ends;
+      // a cell `claims` a row it is not holding is the reason the Form could not see either.
+      expect(Number(geometry.rowsInCells)).toBe(Number(geometry.rows));
+      expect(Number(geometry.distinctDrawn)).toBe(Number(geometry.inCells));
+      expect(Number(geometry.claims)).toBe(0);
+      expect(Number(geometry.wrongCells)).toBe(0);
+      // The box wait is only worth anything because the rows on this screen do *not* share a
+      // box: `boxSpan` is the widest row box minus the narrowest, and a Form whose rows were all
+      // the same width would satisfy `boxMismatch` 0 with one list-wide number — which is the
+      // code that was wrong. It is asserted rather than remembered from a measurement so that a
+      // future iOS that stops reserving the accessory's room fails here instead of quietly
+      // turning this case into one that proves nothing.
+      expect(Number(geometry.boxSpan)).toBeGreaterThan(0);
       // Question 4, the half that is not a finger, and it splits by who hit-tests the touch.
-      // The row view is reparented into a cell, so React Native's own hit-test - which walks
-      // the shadow tree, where the row is still inside its section's holding view - does not
-      // find row content where it is drawn. Ten presses of the `Pressable` therefore reach
-      // nothing, while the same case on Android counts ten. A hosted control is different: it
-      // is a native view that answers for the point it is drawn at, and takes all ten.
+      // A press lands on whichever UIView UIKit says owns the point, and a row drawn from its
+      // cell owns the points inside itself: React Native walks *up* the view tree from wherever
+      // that stopped until it finds a view that can emit a touch, so a `Pressable` in a row
+      // answers here just as it does on Android — ten of ten, which is what `testRealInputForm`
+      // counts with real fingers (D45) and what Android has always counted. It stopped answering
+      // for the point in one row for two reasons, and the wait above is what keeps this case out
+      // of both (X29): a row laid out *wider* than its own box has that content drawn past the
+      // bounds UIKit will hit-test, and a row that is not in a cell at all is drawn nowhere —
+      // the tap then lands on whatever cell owns those pixels, and the row's own content counts
+      // nothing. A hosted control takes all ten for a third reason: it is a native control, and
+      // it answers for its own point without React Native in the path at all.
       for (let index = 0; index < 10; index += 1) {
         await userEvent.press(pressable);
         await userEvent.press(toggle);
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
-      expect(probe.log.pressable).toBe(0);
+      expect(probe.log.pressable).toBe(10);
       expect(probe.log.switches).toBe(10);
       // The positive control: the very same two callbacks, outside any Form, where React
       // Native's hit-test has its content where it is drawn. Both counters are the ones the
