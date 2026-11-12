@@ -99,6 +99,10 @@ in this branch, the measurement is not.
 - pool: `acquire` grants a freed pair to whichever waiter polls first, so a task that has waited
   four hours loses it to one that waited four minutes; a FIFO queue would have given X25 a pair
   at least twice during this round.
+- gates: `gate.mjs export --task <ID>` rewrites `docs/tasks/<ID>/gates.jsonl` from the current
+  branch's ledger only, so an export from a second branch drops the first branch's committed
+  lines; round 2b restored the 45 it dropped and appended its own 38. Two branches gated into
+  one merge should export once, or merge the two files by hand.
 
 ## Questions for orchestrator
 
