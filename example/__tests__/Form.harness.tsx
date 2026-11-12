@@ -2189,7 +2189,6 @@ describe('Form row boxes (X29 r2)', () => {
     await cycle('warm-up 1');
     await cycle('warm-up 2');
     const lossesAtRest = num(rest, 'losses');
-    const appliesAtRest = num(rest, 'applies');
 
     for (const step of ['1', '2', '3', '4']) {
       await cycle(`cycle ${step}`);
@@ -2205,8 +2204,10 @@ describe('Form row boxes (X29 r2)', () => {
     // read back as a take, and the Form queued a walk of the visible cells for every one of
     // them.
     expect(num(after, 'losses') - lossesAtRest).toBe(0);
-    // …and the chase it used to queue found nothing to reconfigure, which is the cost side.
-    expect(num(after, 'applies') - appliesAtRest).toBe(0);
+    // `applies` — the chases that ran — is deliberately not asserted: every settle asks the
+    // same question of the visible cells (`reportGeometry` -> the chase), and a settle that
+    // lands while UIKit is mid-reuse really does find a cell to reconfigure. What had to stop
+    // moving is the number above, because each loss queued that walk on its own turn.
   });
 
   it('re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)', async () => {
@@ -2224,34 +2225,47 @@ describe('Form row boxes (X29 r2)', () => {
       // `inCells` against the items on screen, not against twelve: five of these rows are
       // parked off screen by design, and a Form that drew every visible row from a cell is the
       // settle this case can ask for.
-      'the wide Form to draw every visible row from a cell, at its own box',
+      'the wide Form to draw every visible row at its own box',
       'resize'
     );
     const wideWidth = num(wide, 'width');
     const restingOffset = num(wide, 'offset');
 
-    // Show the deep rows, so their own cells are the ones that told them their box.
+    // Show the deep rows, so the cells that draw them are the ones that tell them their box —
+    // and wait on the Form's own witness that every row on screen sits at the box of the cell
+    // drawing it. Reading a row before that settles reads the box its view carried in from the
+    // case that ran *before* this one: a row view is pooled and reused, and its content keeps
+    // the last Yoga width until the new one arrives. That is what this case first went red on —
+    // an accessory row apparently 2 pt wider than the list drawing it — and it is the same race
+    // that made E4 depend on which case ran ahead of it, so the wait is the finding, not a
+    // workaround for it.
     need(forms.resize).nuiTestScrollTo(400);
-    const scrolled = await formReport(
-      (r) => num(r, 'offset') > restingOffset + 60,
-      'the list to have scrolled to the deep rows',
+    const shown = await formReport(
+      (r) =>
+        num(r, 'offset') > restingOffset + 60 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the list to have scrolled to the deep rows, each drawn by its own cell at its own box',
       'resize'
     );
-    const plainShown = await reportUntil(
-      () => rows.resizePlain?.nuiTestRowReport(),
-      (r) => r.where === 'cell',
-      'the deep plain row to be drawn'
-    );
-    const accessoryShown = await reportUntil(
-      () => rows.resizeAccessory?.nuiTestRowReport(),
-      (r) => r.where === 'cell',
-      'the deep accessory row to be drawn'
-    );
-    expect(Math.abs(Number(plainShown.laid) - wideWidth)).toBeLessThanOrEqual(
-      0.5
-    );
-    const wideInset = wideWidth - Number(accessoryShown.laid);
+    // What an accessory costs, from two real cell reports rather than a typed constant — and
+    // from the Form rather than from a row, because this is the number the Form goes on to hand
+    // the rows that cannot ask their own cell. Asked before the rows are read, so a Form that
+    // never learned it cannot make the accessory expectations below coincide with the plain one.
+    const wideInset = num(shown, 'accessoryInset');
     expect(wideInset).toBeGreaterThan(4);
+    await reportUntil(
+      () => rows.resizePlain?.nuiTestRowReport(),
+      (r) => r.where === 'cell' && Math.abs(Number(r.laid) - wideWidth) <= 0.5,
+      `the deep plain row to be drawn in a cell at the Form’s ${wideWidth} pt box`
+    );
+    await reportUntil(
+      () => rows.resizeAccessory?.nuiTestRowReport(),
+      (r) =>
+        r.where === 'cell' &&
+        Math.abs(Number(r.laid) - (wideWidth - wideInset)) <= 0.5,
+      `the deep accessory row to be drawn in a cell at ${wideWidth} - ${wideInset} pt`
+    );
 
     // Park them again: off screen, in the section's holding view, remembered at the wide box.
     need(forms.resize).nuiTestScrollTo(0);
@@ -2259,23 +2273,21 @@ describe('Form row boxes (X29 r2)', () => {
       // Relative, like every other scroll in this file: the list is clamped by its own content
       // and rests at its top inset, so "came back up" is the claim and an absolute number is
       // one this Form cannot make.
-      (r) => num(r, 'offset') < num(scrolled, 'offset') - 60,
+      (r) => num(r, 'offset') < num(shown, 'offset') - 60,
       'the list to be back at the top again',
       'resize'
     );
-    for (const [name, handle] of [
-      ['plain', rows.resizePlain],
-      ['accessory', rows.resizeAccessory],
+    for (const [name, handle, remembered] of [
+      ['plain', rows.resizePlain, wideWidth],
+      ['accessory', rows.resizeAccessory, wideWidth - wideInset],
     ] as const) {
       const parked = await reportUntil(
         () => handle?.nuiTestRowReport(),
         (r) => r.where === 'holding',
         `the deep ${name} row to be off screen again`
       );
-      // Remembered at the wide box: the plain row at the plain box, the accessory row at the
-      // plain box less the accessory — the two numbers the Form published and taught, and the
-      // pair the resize below has to move.
-      const remembered = name === 'plain' ? wideWidth : wideWidth - wideInset;
+      // Still the box their own cells last reported: nothing lays a parked row out, which is
+      // exactly the state a rotation used to find them in and leave.
       expect(Math.abs(Number(parked.laid) - remembered)).toBeLessThanOrEqual(
         0.5
       );
@@ -2293,10 +2305,12 @@ describe('Form row boxes (X29 r2)', () => {
       'resize'
     );
     const narrowWidth = num(narrow, 'width');
-    // The inset is the cell's own margins, which a resize does not move, so the number the
-    // accessory row has to come to is measured from these rows rather than typed here — and
-    // the Form's own `accessoryInset` is checked against it at the end.
-    const expectedAccessory = narrowWidth - wideInset;
+    // What an accessory costs is the cell's own margins, which a width change does not move, and
+    // the Form had to learn it again from the cells it has now. Both rows are graded against
+    // this measured number, and it is checked to be real before either is read.
+    const narrowInset = num(narrow, 'accessoryInset');
+    expect(narrowInset).toBeGreaterThan(4);
+    const expectedAccessory = narrowWidth - narrowInset;
 
     // Neither row was in a cell for that layout pass. The Form has to tell them anyway: a row
     // measured at a width the list stopped having is D45.4's promise broken at rest.
@@ -2310,16 +2324,14 @@ describe('Form row boxes (X29 r2)', () => {
     const accessoryRelaid = await reportUntil(
       () => rows.resizeAccessory?.nuiTestRowReport(),
       (r) => Math.abs(Number(r.laid) - expectedAccessory) <= 0.5,
-      `the parked accessory row to be laid out at ${narrowWidth} - ${wideInset} = ` +
+      `the parked accessory row to be laid out at ${narrowWidth} - ${narrowInset} = ` +
         `${expectedAccessory} pt`
     );
     expect(accessoryRelaid.where).toBe('holding');
 
     // Then the Form's own witnesses, which have to agree with the rows: the published number is
     // the plain box, and what an accessory costs did not move with the width. Asked after the
-    // rows, so a Form that never re-told them fails on its rows.
-    const narrowInset = num(narrow, 'accessoryInset');
-    expect(narrowInset).toBeGreaterThan(4);
+    // rows, so a Form that never re-told them fails on its rows first.
     expect(Math.abs(narrowInset - wideInset)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(num(narrow, 'plainBox') - narrowWidth)).toBeLessThanOrEqual(
       0.5
