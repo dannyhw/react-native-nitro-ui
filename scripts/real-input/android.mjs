@@ -40,7 +40,11 @@ import {
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { judgePopupPlacement } from './popover-placement.mjs';
-import { judgeMenuAnchoring } from './menu-placement.mjs';
+import {
+  MENU_NEAR_GAP_DP,
+  MENU_ROOM_SLOP_DP,
+  judgeMenuAnchoring,
+} from './menu-placement.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -861,13 +865,8 @@ const CHECKS = {
       menuBox,
       anchorBox: anchor.bounds,
       windowHeight: t.screenSize().height,
-      // 20 dp of stand-off for the rows' own padding inside the surface, and 48 dp of
-      // generosity on the room test, which is a guess at a surface taller than the rows it
-      // carries. Against the failure this exists for — a menu parked at the top of a
-      // 2 424 px window over an anchor at 2 242..2 410, ~1 900 px away — both are an order
-      // of magnitude of slack, and `real-input-menu-placement.test.js` grades the boundary.
-      nearGapMaxPx: Math.round(20 * t.density()),
-      roomSlopPx: Math.round(48 * t.density()),
+      nearGapMaxPx: Math.round(MENU_NEAR_GAP_DP * t.density()),
+      roomSlopPx: Math.round(MENU_ROOM_SLOP_DP * t.density()),
     });
     t.log.checkEquals(
       `the menu sits against the box the Host drew, on the side that has room ` +
