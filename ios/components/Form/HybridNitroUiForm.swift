@@ -98,11 +98,6 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       forCellWithReuseIdentifier: NitroUiFormItem.rowReuseIdentifier
     )
     // What the provider answers with when it has nothing to draw has to be a cell UIKit can
-    // account for as much as a row is; see `giveUpCell(in:at:)`.
-    view.register(
-      NitroUiFormBlankCell.self,
-      forCellWithReuseIdentifier: NitroUiFormItem.blankReuseIdentifier
-    )
     let headerKind = UICollectionView.elementKindSectionHeader
     let footerKind = UICollectionView.elementKindSectionFooter
     view.register(
@@ -162,10 +157,52 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   private var taps = 0
   private var snapshotApplies = 0
   private var reportedWidth: CGFloat = .zero
+  /// The box the most recent laid-out row container handed its row, kept after that cell is
+  /// gone, so a guess about the content box has something real to be measured against. A
+  /// guess is `attributesWidth()`: the width of the *cell*, not of the box inside the cell's
+  /// own margins, so it is wider than every row by those margins - 32 pt on a 402 pt screen,
+  /// 40 pt on a 420 pt one. A row laid out at a guess draws its right-aligned content past
+  /// its own bounds, and UIKit stops hit-testing there, which is why one simulator counted
+  /// ten presses of a `Pressable` at the right end of a row and the other counted none for
+  /// the same Form on the same runtime (X29): the escape needs the content to overhang by
+  /// more than half the content's own width, and only the wider screen quite does it.
+  private var lastRowBoxWidth: CGFloat = -1
+  /// The box a cell gives a row *without* a trailing accessory — the number this class
+  /// publishes to JavaScript as the Form's one width.
+  ///
+  /// It is the plain box and nothing else, because there is one number for the whole list and
+  /// only the plain rows share it: publishing the last box any cell reported made the number
+  /// every `Section` and `RowRoot` renders against flip between 338 and 316 depending on which
+  /// cell laid out last, and each flip re-renders the Form's whole tree (fix round 2, item 3).
+  /// An accessory row does not need the list-wide number to be its own: it is told its box
+  /// through `NitroUiFormRow.contentBoxReported`, and the rows that cannot answer for
+  /// themselves are handed `plainRowBoxWidth - accessoryInset` by `pushRowBoxEstimates`.
+  private var plainRowBoxWidth: CGFloat = -1
+  /// The box a cell gives a row *with* a trailing accessory, or -1 until one has laid out.
+  private var accessoryRowBoxWidth: CGFloat = -1
+  /// What a trailing accessory costs a row: `plainRowBoxWidth - accessoryRowBoxWidth`, the
+  /// 22 pt the accessory's own margins take out of the plain box. Measured, never typed.
+  private var accessoryInset: CGFloat = 0
+  /// The list width the boxes above belong to, so the next resize is visible as one.
+  private var framedBoxWidth: CGFloat = -1
+  /// How many times the list-wide box has been published. The contract is one per list width:
+  /// a number that climbs while the list merely scrolls says the number is following the
+  /// cells rather than the list (fix round 2, item 3).
+  private var widthPublishes = 0
   /// How many times a laid-out cell has offered its row box. A witness, not a counter with
   /// a bound: `width` right and `boxReports` zero means the cell never asked, and the row
   /// was laid out at whatever an earlier, wider guess said.
   private var boxReports = 0
+  /// How many times a cell has had its row taken out from under it (``NitroUiFormRowCell``'s
+  /// `onRowLost`). Not a bound: adoption by another cell is a legitimate repair, and the
+  /// stealing happens all the way through a mount. It is the witness that the *event* the
+  /// Form used to be blind to really does happen here, rather than being a story told about
+  /// a red test - `claims` is the number that has to be 0 once it is noticed.
+  private var rowLosses = 0
+  private var giveUps = 0
+  /// How many times the provider could not fill an index path and handed back an empty cell
+  /// (fix round 2). A witness, not a bound: it says whether the blank rows a chase repairs ever
+  /// came from here, and it is the number to watch if a Form starts drawing gaps.
   /// How many times this *view* has been prepared for reuse - one `prepareForRecycle`, whether
   /// it came from the pool or from a drop. Deliberately not reset by the reset: the Form
   /// mounted into a recycled list is the only one that can say it was recycled, and a case that
@@ -274,8 +311,16 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     reportedPlacement.removeAll()
     reportedOffset = nil
     reportedWidth = .zero
+    lastRowBoxWidth = -1
+    plainRowBoxWidth = -1
+    accessoryRowBoxWidth = -1
+    accessoryInset = 0
+    framedBoxWidth = -1
+    widthPublishes = 0
     reparents = 0
     reclaims = 0
+    rowLosses = 0
+    giveUps = 0
     taps = 0
     boxReports = 0
     offsetPublishes = 0
@@ -367,9 +412,22 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       list.delegate = listDelegate
     }
     if holding.frame.width > 0 {
+      if abs(holding.frame.width - framedBoxWidth) > 0.25 {
+        // The list is a width it has not been laid out at: a rotation, an iPad resize, or the
+        // app changing a parent's width. Every box remembered below belongs to the old one, and
+        // a row that is *off screen* is not laid out again until it is scrolled back — so it
+        // would go on being laid out, and measured, at a box the list no longer gives anybody
+        // (fix round 2, item 2). Forgetting here is also what lets the reports the new pass is
+        // about to make through the change guards on both sides.
+        forgetRowBoxes()
+        framedBoxWidth = holding.frame.width
+      }
       // The layout needs one pass before it can answer what a cell is wide.
       list.layoutIfNeeded()
       reportContentBox()
+      // The rows the new pass did not reach — the ones parked in a section's holding view —
+      // have nothing else that will ever tell them the new box.
+      pushRowBoxEstimates()
       // A resize moves every section's box, so the placements the shadow tree holds are
       // as stale as a scroll would have made them.
       reportGeometry()
@@ -586,7 +644,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
   }
 
-  /// Notice every visible item whose cell has no row, and ask the data source again for it.
+  /// Notice every visible item that its cell is not drawing, and ask the data source again for it.
   ///
   /// A cell can be on screen holding nothing while no count beside it is wrong: the snapshot has
   /// the item, the model has the row, and the row is alive in a section's holding view. Three
@@ -608,15 +666,16 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// again for those items — and which of the two snapshot operations that is depends on what is
   /// actually on screen at that item:
   ///
-  /// - one of *our* cells, holding nothing: `reconfigureItems`, the API for "build this cell
-  ///   again". It re-runs the provider and requires it to return *that same cell*, which is only
-  ///   possible for a cell that came from this registration — so it is the right ask for ours and
-  ///   a fatal one for anything else (see `giveUpCell(in:at:)`);
-  /// - a cell that is not ours — the `NitroUiFormBlankCell` a provider call that gave up left
-  ///   behind — cannot be reconfigured either: the provider cannot hand back *that* cell through
-  ///   any registration, and a freshly dequeued one is another cell, which is the answer that
-  ///   aborts. Those items get `reloadItems`, which is allowed to build a new cell, which is
-  ///   the only thing that can replace one.
+  /// - one of *our* cells — holding nothing, or holding somebody else's row: `reconfigureItems`,
+  ///   the API for "build this cell again". It re-runs the provider and requires it to return
+  ///   *that same cell*, which is only possible for a cell that came from this registration — so
+  ///   it is the right ask for ours and a fatal one for anything else (see `giveUpCell(in:at:)`).
+  ///   The blank a provider that gave up leaves behind is deliberately one of ours, which is why
+  ///   it gets filled by a reconfigure instead of replaced by a reload;
+  /// - a cell that is not ours at all cannot be reconfigured either: the provider cannot hand
+  ///   back *that* cell through any registration, and a freshly dequeued one is another cell,
+  ///   which is the answer that aborts. Those items get `reloadItems`, which is allowed to build
+  ///   a new cell, which is the only thing that can replace one.
   ///
   /// Asked from `reportGeometry`, which is every settle there is — the one after a snapshot
   /// apply and the one after a list came to rest — so a blank cell is chased whether an apply or
@@ -628,7 +687,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// That hop is also why the models are asked, again, in the turn the apply is written: React
   /// can unmount a Section — or the whole Form — in between, which leaves the *snapshot* holding
   /// items this class has forgotten, and a provider run for one of those index paths has nothing
-  /// to draw. `rowlessVisibleItems()` drops them; `applySnapshot` is already queued for the same
+  /// to draw. `misdrawnVisibleItems()` drops them; `applySnapshot` is already queued for the same
   /// change, so it costs nothing but a turn.
   private var readoptQueued = false
 
@@ -638,8 +697,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// insert with a cell that is already on screen is as wrong as the reverse.
   private var reconfigureTargets: [IndexPath: UICollectionViewCell] = [:]
 
-  /// One visible item whose cell holds no row, and the cell that is short of it.
-  private struct RowlessItem {
+  /// One visible item its cell is not drawing, and the cell that is short of its row.
+  private struct MisdrawnItem {
     let id: NitroUiFormItem
     let path: IndexPath
     /// The cell on screen when it is one of ours. `nil` says a different cell is there, or
@@ -647,24 +706,27 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     let cell: NitroUiFormRowCell?
   }
 
-  private func readoptRowlessCells() {
+  private func readoptMisdrawnCells() {
     guard !readoptQueued else { return }
     readoptQueued = true
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       self.readoptQueued = false
-      // A list that has left the window has no blank row to chase, and a Form with no
-      // sections has no rows to put in one — the shape a mount/unmount loop leaves behind
-      // between the settle and this turn.
-      guard self.list.window != nil, !self.sections.isEmpty,
+      // A turn is a long time for a Form whose cell just lost its row: this is the same window
+      // in which React can take the whole tree away, and a reconfigure for an item whose cell is
+      // no longer on screen is answered by UIKit with an exception, not a no-op. The settle path
+      // gets the first two guards from `reportGeometry`; the loss path has to ask for itself. The
+      // third is the shape a mount/unmount loop leaves between the settle and this turn: a Form
+      // with no sections has no rows to put in a cell, and nothing worth chasing.
+      guard self.holding.superview != nil, self.list.window != nil, !self.sections.isEmpty,
         var snapshot = self.dataSource?.snapshot()
       else { return }
-      let rowless = self.rowlessVisibleItems()
-      guard !rowless.isEmpty else { return }
+      let misdrawn = self.misdrawnVisibleItems()
+      guard !misdrawn.isEmpty else { return }
       var reconfigure: [NitroUiFormItem] = []
       var replace: [NitroUiFormItem] = []
       var targets: [IndexPath: UICollectionViewCell] = [:]
-      for item in rowless {
+      for item in misdrawn {
         if let cell = item.cell {
           reconfigure.append(item.id)
           targets[item.path] = cell
@@ -686,27 +748,41 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
   }
 
-  /// The items on screen whose cell holds no row. Main thread only.
-  private func rowlessVisibleItems() -> [RowlessItem] {
+  /// The items on screen that their cell is not drawing, and the cell on screen at each.
+  /// Main thread only.
+  ///
+  /// Asked as "is this the item's row?", not "does this cell hold a row?" — and the difference is
+  /// the bug. A cell's `row` is a pointer to *a* row, and a cell can be on screen holding a
+  /// perfectly live row that is not the one its item names: a recycled list whose cells came
+  /// through a snapshot apply with the previous mount's rows in them, which UIKit sees as
+  /// configured because something is in them. Asked the old question, the answer is "nothing is
+  /// rowless", `inCells` equals the item count, and the row the item *does* own sits in its
+  /// section's hidden holding view drawing nothing — a blank row no count beside it calls wrong,
+  /// and the state X29's harness case pressed ten times at and hit the neighbour's pixels instead
+  /// (measured: `rows` 9, `inCells` 9, `rowsInCells` 8, `wrongCells` 1).
+  ///
+  /// So the question is identity: the cell at this index path has to be holding the row this item
+  /// is. Anything else — nothing, or somebody else's row — is re-run through the provider, which
+  /// is the one place allowed to adopt, and which hands the wrong row back on its way in.
+  ///
+  /// Only an item the models still put at this index path may be chased: reconfiguring one that
+  /// React has already dropped makes the provider answer with a cell of its own, and UIKit raises
+  /// an exception for a reconfigure that does not return the cell on screen. That item is on its
+  /// way out of the snapshot with the apply React's unmount queued.
+  private func misdrawnVisibleItems() -> [MisdrawnItem] {
     guard let dataSource, dataSource.snapshot().numberOfItems > 0 else { return [] }
-    var found: [RowlessItem] = []
+    var found: [MisdrawnItem] = []
     for at in list.indexPathsForVisibleItems {
-      guard case let .row(row)? = dataSource.itemIdentifier(for: at) else { continue }
-      // The models must place this row at this index path *now*. When they do not, the
-      // snapshot is behind this class — the turn since the settle unmounted something — and
-      // the provider would be asked to draw an item its own list no longer has, which is how
-      // a cell winds up answered with a give-up cell in the middle of a reconfigure.
+      guard let id = dataSource.itemIdentifier(for: at), let row = id.rowView else { continue }
       guard self.path(for: row) == at else { continue }
+      if self.cell(at: at, isDrawing: id) { continue }
+      // A cell that is not one of ours at all has no row either, and reads as `nil` here — which
+      // sends it down the `reloadItems` branch, the only one that can replace a cell.
       let cell = list.cellForItem(at: at) as? NitroUiFormRowCell
-      // A cell that is not one of ours at all — the `NitroUiFormBlankCell` a provider call that
-      // gave up left behind — has no row either, and reads as `nil` here.
-      if cell?.row == nil {
-        found.append(RowlessItem(id: .row(row), path: at, cell: cell))
-      }
+      found.append(MisdrawnItem(id: id, path: at, cell: cell))
     }
     return found
   }
-
   /// The cell to answer with when this Form has nothing to draw at an index path.
   ///
   /// Every answer has to be a cell UIKit can account for — one it handed out for a registered
@@ -723,45 +799,64 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// apply it queued.
   ///
   /// So a reconfigure is answered with the cell it asked about, and anything else with a blank
-  /// cell of this list's own registration. The blank one draws nothing, the next settle finds
-  /// no row in it and reloads it, and the `applySnapshot` queued behind the give-up has the
+  /// cell of this list's own registration. The blank one draws nothing, the next settle finds no
+  /// row in it and reconfigures it, and the `applySnapshot` queued behind the give-up has the
   /// real content either way.
+  ///
+  /// Every branch counts a `giveUps`: with the cell provider answering from the item and the band
+  /// provider from the snapshot, a Form that gets here has a list and a model stream that disagree
+  /// in a way neither chase covers, and that is worth a number in the report.
   private func giveUpCell(
     in collectionView: UICollectionView,
     at indexPath: IndexPath
   ) -> UICollectionViewCell {
+    giveUps += 1
     if let existing = reconfigureTargets[indexPath] { return existing }
-    return collectionView.dequeueReusableCell(
-      withReuseIdentifier: NitroUiFormItem.blankReuseIdentifier,
-      for: indexPath
-    )
+    return Self.blankCell(for: indexPath, in: collectionView)
+  }
+
+  /// Whether the cell on screen at `path` is drawing the row `item` names.
+  private func cell(at path: IndexPath, isDrawing item: NitroUiFormItem) -> Bool {
+    guard let expected = item.rowView else { return true }
+    guard let cell = list.cellForItem(at: path) as? NitroUiFormRowCell else { return false }
+    return cell.row === expected && cell.isDrawingRow
   }
 
   private func configureDataSource() {
     let dataSource = UICollectionViewDiffableDataSource<
       NitroUiFormSectionModel, NitroUiFormItem
     >(collectionView: list) { [weak self] collectionView, indexPath, item in
-      // A Form that is gone has nothing to draw either, and the answer is held to the same
-      // rule as one that is still here.
+      // Every answer is a view UIKit handed out. A bare `UICollectionViewCell()` — a view nobody
+      // dequeued — is answered on iOS 27 with an `NSInternalInconsistencyException` from
+      // `-[UICollectionView _createPreparedCellForItemAtIndexPath:...]` ("returned a cell without
+      // a reuseIdentifier"), and Swift has no landing place for an ObjC exception, so the app
+      // dies: measured on pair-b at index path 1-2, where the whole Form suite then reads as
+      // "The app bridge disconnected during test execution" instead of as a dead app (X29 fix
+      // round 2). A Form whose view is gone is held to the same rule as one still here.
       self?.cell(at: indexPath, for: item, in: collectionView)
-        ?? collectionView.dequeueReusableCell(
-          withReuseIdentifier: NitroUiFormItem.blankReuseIdentifier,
-          for: indexPath
-        )
+        ?? Self.blankCell(for: indexPath, in: collectionView)
     }
     dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
-      // A band is never answerable with nothing, not even by a Form that is gone; see
-      // `emptyBand(kind:at:in:)`.
+      // The same rule for a band: iOS 27 raises for
+      // "UICollectionViewDiffableDataSource supplementary view provider returned nil", measured
+      // at index path 1-0 on the same tree that fixed the cell answer above. Both providers are
+      // total because both questions can be asked about a section this Form has already let go.
       self?.supplementary(kind, at: indexPath, in: collectionView)
-        ?? Self.emptyBand(kind: kind, at: indexPath, in: collectionView)
+        ?? Self.blankBand(ofKind: kind, for: indexPath, in: collectionView)
     }
     self.dataSource = dataSource
   }
 
-  /// The model that owns a row, including one whose mount has ended.
+  /// The live section that owns a row, or `nil` when this Form has no live section for it.
   ///
   /// Asked of the row rather than of the index path UIKit is holding: after a recycle the two
-  /// disagree, and the list is entitled to be shown the row it was shown before either way.
+  /// disagree, and the list is entitled to be shown the row it was shown before either way. What
+  /// a model is good for here is *lifecycle* — whose holding view a row goes back to, and which
+  /// section a Fabric unmount is reported against — and an ended mount's section can promise
+  /// neither: its holding view belongs to a tree that is gone, so a row parked in it has no
+  /// pixels and no next owner. A row with no live section goes to the Form's own holding view
+  /// instead (see `cell(at:for:in:)`), which the next mount takes from. What the section *says*
+  /// — a band's title — comes from the snapshot instead, in `sectionModel(at:in:)`.
   private func model(owning row: UIView) -> NitroUiFormSectionModel? {
     for section in sections + retiredSections
     where section.rows.contains(where: { $0 === row }) {
@@ -770,26 +865,114 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     return nil
   }
 
+  /// The section UIKit is asking about, read out of the snapshot it is laying out.
+  ///
+  /// Not `sections`: that array is what React Native's mount/unmount stream says *now*, while the
+  /// snapshot is what UIKit is laying out, and the two are only equal between a mutation and the
+  /// next apply - which `applySnapshot` deliberately defers a turn, because applying a snapshot
+  /// inside Fabric's layout pass is itself a UIKit crash. So there is a real window in which a
+  /// section is gone from `sections` and the list is still laying it out, and the way into it
+  /// needs no test of its own: the mounting transaction that removes a Section also resizes the
+  /// Form's holding view, and `safeAreaInsetsDidChange` -> `listNeedsFrame` ->
+  /// `list.layoutIfNeeded()` lays the list out inside that same transaction - before the queued
+  /// apply. UIKit then legitimately asks for section 1 while `sections` has one entry, and an
+  /// index test against `sections` is a test of the wrong thing.
+  ///
+  /// The snapshot answers for the index path UIKit holds by construction, and names the model
+  /// that snapshot was built from, so a band gets the text of the section it was asked for. A
+  /// row does not ask this: its item names the row itself, and the section a row needs is the one
+  /// that still owns it (`model(owning:)`), which no index path can answer.
+  private func sectionModel(
+    at section: Int,
+    in collectionView: UICollectionView
+  ) -> NitroUiFormSectionModel? {
+    guard collectionView.dataSource === dataSource,
+      let snapshot = dataSource?.snapshot(),
+      section >= 0,
+      section < snapshot.sectionIdentifiers.count
+    else { return nil }
+    return snapshot.sectionIdentifiers[section]
+  }
+
+  /// A cell for `indexPath` that draws nothing - what a provider hands back when it cannot fill
+  /// one. Dequeued, always: `UICollectionViewCell()` is not an option, because UIKit on iOS 27
+  /// raises for a cell it never handed out, and that exception kills the app instead of leaving
+  /// one blank row (X29 fix round 2). `prepareForReuse` has already given whatever row this cell
+  /// used to hold back to its section, so it is empty.
+  ///
+  /// It is a cell of the *row* registration, which is what makes the blank repairable: the chase
+  /// sees one of ours holding nothing and asks for a reconfigure, which the provider can answer
+  /// with that same cell. A second, separate registration could only ever be replaced by a
+  /// reload - a new cell for a row that only needed its old one filled.
+  private static func blankCell(
+    for indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionViewCell {
+    collectionView.dequeueReusableCell(
+      withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
+      for: indexPath
+    )
+  }
+
+  /// The band answer when there is no Form left to ask - dequeued and empty, for the same
+  /// reason `blankCell` exists.
+  private static func blankBand(
+    ofKind kind: String,
+    for indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionReusableView {
+    let band = dequeueBand(ofKind: kind, for: indexPath, in: collectionView)
+    if let band = band as? NitroUiFormSupplementaryCell {
+      band.configure(text: nil, footer: kind == UICollectionView.elementKindSectionFooter)
+    }
+    return band
+  }
+
+  private static func dequeueBand(
+    ofKind kind: String,
+    for indexPath: IndexPath,
+    in collectionView: UICollectionView
+  ) -> UICollectionReusableView {
+    let isFooter = kind == UICollectionView.elementKindSectionFooter
+    return collectionView.dequeueReusableSupplementaryView(
+      ofKind: kind,
+      withReuseIdentifier: isFooter
+        ? NitroUiFormItem.footerReuseIdentifier
+        : NitroUiFormItem.headerReuseIdentifier,
+      for: indexPath
+    )
+  }
+
   private func cell(
     at indexPath: IndexPath,
     for item: NitroUiFormItem,
     in collectionView: UICollectionView
   ) -> UICollectionViewCell {
-    guard case let .row(row) = item,
-      let cell = collectionView.dequeueReusableCell(
-        withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
-        for: indexPath
-      ) as? NitroUiFormRowCell
-    else {
+    // The answer comes from this list's own registration whatever the models say: a cell can be
+    // asked for while the mount stream has already moved past this index path, and answering "I
+    // have no section 1" is what used to hand UIKit a view it never dequeued. `giveUps` says how
+    // often a provider still cannot fill what it was asked for — it should read 0, and a Form
+    // that draws a blank row is a Form whose snapshot and models disagree in some new way.
+    guard case let .row(row) = item else {
       return giveUpCell(in: collectionView, at: indexPath)
     }
-    // The model may be gone: the mount that had it ended, or React unmounted the Section in
-    // the turn since the last settle, while the list's snapshot still holds the item. Asked
-    // about such an item, the list is entitled to be shown the row it was shown before, and the
-    // item names it — so the ask is still answerable with a real cell of this list's own
-    // registration. Every other answer is an abort: the harness churn case measures a
-    // `NitroUiFormBlankCell` here as an assertion failure in
-    // -[UICollectionView _updateVisibleCellsNow:] nine index paths deep, and round 1's bench
+    let cell = collectionView.dequeueReusableCell(
+      withReuseIdentifier: NitroUiFormItem.rowReuseIdentifier,
+      for: indexPath
+    )
+    guard let cell = cell as? NitroUiFormRowCell else {
+      // Only a list that was not built by `makeList` could get this far, and the answer is still
+      // the cell UIKit just handed out, not a new one.
+      giveUps += 1
+      return cell
+    }
+    // The model may be gone: the mount that had it ended, or React unmounted the Section in the
+    // turn since the last settle, while the list's snapshot still holds the item. Asked about
+    // such an item, the list is entitled to be shown the row it was shown before, and the item
+    // names it — so the ask is still answerable with a real cell of this list's own registration,
+    // and only the two lifecycle answers below need a section to be in it. Every other answer is
+    // an abort: the harness churn case measures a give-up here as an assertion failure in
+    // -[UICollectionView _updateVisibleCellsNow:] nine index paths deep, and X25 round 1's bench
     // crash is the same question answered into a reconfigure.
     let model = model(owning: row)
     // Name this Form to the cell here, where the cell is *configured*. A
@@ -820,6 +1003,21 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       guard let model = model else { return }
       // Fabric unmounted this row out of the cell it was showing.
       self?.rowUnmounted(removed, in: model)
+    }
+    cell.onRowLost = { [weak self] _, ownHandOver in
+      // This cell lost its row to another cell, and is now a blank row on screen. Handing the
+      // pointer back is the cell's job (it is what lets `misdrawnVisibleItemIdentifiers` see the
+      // gap); noticing the gap is this Form's, and it cannot wait for the next settle —
+      // a list at rest is exactly the state in which a blank cell appeared, and nothing else
+      // ever asks for that cell again. The chase is coalesced per turn and re-reads the
+      // visible cells rather than trusting this signal, so a steal during a scroll costs one
+      // walk of the visible index paths, and a spurious one costs nothing.
+      //
+      // A hand-over (`ownHandOver`) is not a lost row and is not counted as one - that is
+      // `losses` telling the truth (fix round 2, item 1) - but it still runs the chase below,
+      // exactly as it did before the label existed. The label is only about the counting.
+      if !ownHandOver { self?.rowLosses += 1 }
+      self?.readoptMisdrawnCells()
     }
     cell.onPressTap = { [weak self, weak cell] in
       // Read the row out of the cell when the finger lifts, not the one handed over here:
@@ -948,58 +1146,23 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     in collectionView: UICollectionView
   ) -> UICollectionReusableView {
     let isFooter = kind == UICollectionView.elementKindSectionFooter
-    let reuse = isFooter
-      ? NitroUiFormItem.footerReuseIdentifier
-      : NitroUiFormItem.headerReuseIdentifier
-    // The Section can be one the models have already dropped — the turn between a settle and
-    // the apply that takes it away — and the band still has to be answered.
-    let model = indexPath.section < sections.count ? sections[indexPath.section] : nil
-    guard
-      let cell = collectionView.dequeueReusableSupplementaryView(
-        ofKind: kind,
-        withReuseIdentifier: reuse,
-        for: indexPath
-      ) as? NitroUiFormSupplementaryCell
-    else {
-      return Self.emptyBand(kind: kind, at: indexPath, in: collectionView)
+    let band = Self.dequeueBand(ofKind: kind, for: indexPath, in: collectionView)
+    guard let band = band as? NitroUiFormSupplementaryCell else {
+      giveUps += 1
+      return band
     }
-    if let model {
-      cell.configure(text: isFooter ? model.footerText : model.title, footer: isFooter)
-    } else {
-      cell.configure(text: nil, footer: isFooter)
+    // The band for a section that has gone out of `sections` while the list is still laying it
+    // out still has a home in the snapshot (see `sectionModel`); only a snapshot that has moved
+    // under UIKit leaves this with nothing to say, and an empty band is the answer that keeps the
+    // app up to answer the next question. `nil` is not available either: the diffable data source
+    // asserts on one, and the abort takes the app with it — which is what X25 round 1 found on
+    // the device, one turn between a settle and the `applySnapshot` that removes a Section.
+    guard let model = sectionModel(at: indexPath.section, in: collectionView) else {
+      giveUps += 1
+      band.configure(text: nil, footer: isFooter)
+      return band
     }
-    return cell
-  }
-
-  /// The band to answer with when there is nothing to paint in it.
-  ///
-  /// `nil` is not an available answer: `__UIDiffableDataSource
-  /// collectionView:viewForSupplementaryElementOfKind:atIndexPath:` asserts on one, and the
-  /// abort takes the app with it. X25 round 1 found that on the device — a Section taken away
-  /// in the turn between a settle and the `applySnapshot` that removes it leaves UIKit asking
-  /// this Form for the header of a Section no model backs any more, and the provider used to
-  /// answer that with nothing. A band of this list's own registration, configured empty, is
-  /// hidden by `configure(text:footer:)` and is replaced by the next settle's apply.
-  private static func emptyBand(
-    kind: String,
-    at indexPath: IndexPath,
-    in collectionView: UICollectionView
-  ) -> UICollectionReusableView {
-    let isFooter = kind == UICollectionView.elementKindSectionFooter
-    guard
-      let band = collectionView.dequeueReusableSupplementaryView(
-        ofKind: kind,
-        withReuseIdentifier: isFooter
-          ? NitroUiFormItem.footerReuseIdentifier
-          : NitroUiFormItem.headerReuseIdentifier,
-        for: indexPath
-      ) as? NitroUiFormSupplementaryCell
-    else {
-      // Only a list that was not built by `makeList` could get this far, and UIKit wants an
-      // answer whatever the reason.
-      return UICollectionReusableView()
-    }
-    band.configure(text: nil, footer: isFooter)
+    band.configure(text: isFooter ? model.footerText : model.title, footer: isFooter)
     return band
   }
 
@@ -1062,9 +1225,15 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // reports its own box from `layoutSubviews`, which is the number the row is drawn in,
     // and a later guess must not take the last word over it.
     guard rowBoxWidth() < 0 else { return }
-    guard let width = attributesWidth(), abs(width - reportedWidth) > 0.25 else { return }
-    reportedWidth = width
-    contentBox?(Double(width))
+    guard let guess = attributesWidth() else { return }
+    // The guard above only asks the cells on screen *right now*, and every one of them can be
+    // mid-recycle, so this line is reached with a real box remembered rather than a fresh one.
+    // A guess may not overhang the box it remembers: too narrow only moves content inward,
+    // where it stays reachable, while too wide puts it past the row's own bounds, where
+    // UIKit's hit-test will not look at it again.
+    let width = lastRowBoxWidth > 0 ? min(guess, lastRowBoxWidth) : guess
+    guard abs(width - reportedWidth) > 0.25 else { return }
+    publishRowBox(width)
   }
 
   /// The width a cell actually gets, asked of the layout - not four typed constants. The
@@ -1080,7 +1249,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     return list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame.width
   }
 
-  /// The width a *laid-out cell* gives its row, reported by that cell's container.
+  /// The width a *laid-out cell* gives its row, and what that cell is drawing.
   ///
   /// `contentWidth()` is what the list's attributes say a cell is; this is what the row is
   /// actually drawn in, and the two differ by the cell's own content margins (16 pt on each
@@ -1088,11 +1257,99 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// draws its right-aligned content - a `Switch`, a chevron, a value - past the cell's edge,
   /// and UIKit stops hit-testing at that edge: S6b measured a hosted `Switch` in a row taking
   /// 0 of 10 real taps for exactly this reason, while content on the row's left worked.
-  func rowBoxWidthReported(_ width: CGFloat) {
+  ///
+  /// Two boxes come through here and only one of them is published: the plain row's box is the
+  /// list-wide number, and the accessory row's teaches this class what an accessory costs —
+  /// that row's own number travels by `NitroUiFormRow.contentBoxReported` instead. Publishing
+  /// whichever cell laid out last is what made the list-wide number flip 338/316 and every
+  /// Section and `RowRoot` re-render per flip (fix round 2, item 3).
+  func rowBoxWidthReported(_ width: CGFloat, accessory: Bool) {
     boxReports += 1
-    guard width > 0, abs(width - reportedWidth) > 0.25 else { return }
+    guard width > 0 else { return }
+    // Whether anything a row could be waiting for just moved. A cell reports on every layout
+    // of itself, so the walk in `pushRowBoxEstimates` has to be the exception rather than the
+    // per-frame chore it would be without this.
+    var moved = false
+    if accessory {
+      moved = abs(width - accessoryRowBoxWidth) > 0.25
+      accessoryRowBoxWidth = width
+      // A real box is a real box: the guess in `reportContentBox` is clamped by one, and a Form
+      // whose visible cells all have accessories still has nothing better to remember.
+      if lastRowBoxWidth < 0 { lastRowBoxWidth = width }
+    } else {
+      moved = abs(width - plainRowBoxWidth) > 0.25
+      plainRowBoxWidth = width
+      lastRowBoxWidth = width
+      if abs(width - reportedWidth) > 0.25 {
+        publishRowBox(width)
+        moved = true
+      }
+    }
+    if plainRowBoxWidth > 0, accessoryRowBoxWidth > 0 {
+      let inset = max(0, plainRowBoxWidth - accessoryRowBoxWidth)
+      if abs(inset - accessoryInset) > 0.25 {
+        accessoryInset = inset
+        moved = true
+      }
+    }
+    if moved { pushRowBoxEstimates() }
+  }
+
+  /// Publish the list-wide box. Every publish of it goes through here, so `widthPublishes`
+  /// counts the whole story.
+  private func publishRowBox(_ width: CGFloat) {
     reportedWidth = width
+    widthPublishes += 1
     contentBox?(Double(width))
+  }
+
+  /// Forget every box this Form remembers, and every row's memory of the box it was told.
+  ///
+  /// The rows are included because each one guards its own report the same way this class
+  /// guards the published number: a row parked off screen at 338 pt, asked to remember nothing,
+  /// will take the 256 pt the list now gives it as a report rather than as a repeat of what it
+  /// already had.
+  private func forgetRowBoxes() {
+    lastRowBoxWidth = -1
+    plainRowBoxWidth = -1
+    accessoryRowBoxWidth = -1
+    accessoryInset = 0
+    reportedWidth = .zero
+    for model in sections {
+      for view in model.rows {
+        HybridNitroUiForm.rowOwner(of: view)?.forgetReportedBox()
+      }
+    }
+  }
+
+  /// The box to hand a row that cannot ask its own cell: the plain box, less what an accessory
+  /// costs, or `nil` while the list has not laid out a cell at all.
+  private func estimatedRowBox(accessory: Bool) -> CGFloat? {
+    let base = plainRowBoxWidth > 0 ? plainRowBoxWidth : reportedWidth
+    guard base > 0 else { return nil }
+    return accessory ? max(1, base - accessoryInset) : base
+  }
+
+  /// Tell every row that cannot answer for itself what the list now gives a row of its kind.
+  ///
+  /// A row in a cell knows better than this class does — its own cell reports the box it is
+  /// drawn in — so those are skipped unless they have never been told anything. Who this
+  /// reaches is the rows parked in a section's holding view after a resize, and a row mounted
+  /// before the list knew its own width; neither is ever laid out again by a layout pass that
+  /// this class takes part in, and a row still holding a box from the *previous* orientation
+  /// is measured at a width nothing on screen has (fix round 2, item 2). Each push is guarded
+  /// per row on change, so the steady state is a comparison and no round trip.
+  private func pushRowBoxEstimates() {
+    for model in sections {
+      for view in model.rows {
+        guard let row = HybridNitroUiForm.rowOwner(of: view) else { continue }
+        guard !row.isShownInCell || !row.hasReportedBox else { continue }
+        guard let box = estimatedRowBox(accessory: row.accessoryValue != .none) else {
+          continue
+        }
+        row.contentBoxReported(box)
+      }
+    }
   }
 
   // MARK: - What the layout knows (a Section asks, rather than typing constants)
@@ -1100,6 +1357,41 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// The width a cell gets, for measuring the space a header needs.
   func contentWidthForMetrics() -> CGFloat {
     contentWidth()
+  }
+
+  /// The geometry of the rows on screen, as two numbers a test can be graded on:
+  /// `span` — the widest row box minus the narrowest — and `mismatch`, the worst gap anywhere on
+  /// screen between a row's own box and the width its React content was laid out at.
+  ///
+  /// Asked of the Form rather than of a row handle, because a handle is only a handle: a row view
+  /// another case unmounted goes on answering `where=holding` for itself, at a frame nothing is
+  /// drawing, while the Form on screen has that row in a cell — which is how the first version of
+  /// this witness failed a case that had nothing wrong with it. The Form knows which view it is
+  /// drawing in which cell, so it can answer for *every* row on screen instead of for the two a
+  /// case happens to hold references to.
+  ///
+  /// `mismatch` is the number that was wrong: the Form used to publish one width for the whole
+  /// list, while a cell reserves its accessory's room by shrinking its own margins for the row it
+  /// draws, so no single width can match two rows whose boxes differ — one of them is always
+  /// `span` away from itself. Being laid out *wider* than the box is the dangerous direction
+  /// (content is drawn past the row's bounds, where UIKit's hit-test does not look, which is what
+  /// X29's press count was actually measuring); being narrower only moves content inward. The
+  /// witness is the absolute difference, because "each row at its own box" is the claim worth
+  /// making, and it is the one that cannot be satisfied by luck about which row reported last.
+  private func boxWitness() -> (span: CGFloat, mismatch: CGFloat) {
+    var boxes: [CGFloat] = []
+    var mismatch: CGFloat = 0
+    for case let cell as NitroUiFormRowCell in list.visibleCells {
+      guard cell.rowBoxWidth > 0 else { continue }
+      boxes.append(cell.rowBoxWidth)
+      guard let row = cell.row,
+        let laid = HybridNitroUiForm.rowOwner(of: row)?.contentLaidWidth,
+        laid > 0
+      else { continue }
+      mismatch = max(mismatch, abs(laid - cell.rowBoxWidth))
+    }
+    let span = boxes.count > 1 ? (boxes.max() ?? 0) - (boxes.min() ?? 0) : -1
+    return (span, mismatch)
   }
 
   /// The width a row on screen is drawn in, or -1 while none is. This is the number the
@@ -1300,10 +1592,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       model.hybrid?.applyPlacement(top: top, inset: inset)
     }
 
-    // A list that came to rest with a blank cell on screen stays that way: nothing else asks
-    // for that cell. Every settle ends here, whether it was an apply or a scroll, so this is
-    // where the rowless visible cell is chased (fix round 2, item 1).
-    readoptRowlessCells()
+    // A list that came to rest with a cell that is not drawing its item stays that way:
+    // nothing else asks for that cell. Every settle ends here, whether it was an apply or a
+    // scroll, so this is where the misdrawn visible cell is chased (fix round 2, item 1).
+    readoptMisdrawnCells()
   }
 
   /// The y JavaScript has to put this section at, so that every row's Yoga origin *is* its
@@ -1427,6 +1719,31 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
     let inCells = list.visibleCells.compactMap { ($0 as? NitroUiFormRowCell)?.row }.count
     let heights = visibleHeights()
+    let boxes = boxWitness()
+    // `inCells` counts *cells* that hold a row. This counts the rows: how many of this Form's
+    // own rows are sitting in a cell right now, and how many distinct row views the cells are
+    // showing. A cell holding a row that is not this Form's, and one of its rows held by two
+    // cells, are both invisible to a cell count and both are the shape an identity mix-up takes
+    // — a row whose pixels are elsewhere answers a press aimed at its own content with nothing.
+    var drawn: Set<ObjectIdentifier> = []
+    var claims = 0
+    for case let cell as NitroUiFormRowCell in list.visibleCells {
+      if let row = cell.row { drawn.insert(ObjectIdentifier(row)) }
+      if cell.claimsRowItDoesNotHold { claims += 1 }
+    }
+    // The count that was missing: cells that hold a row that is not their item's. Every other
+    // number about the cells asks whether they are *full*, and a cell full of the wrong row
+    // answers that everything is fine while the row it should be drawing is in a hidden view.
+    var wrongCells = 0
+    if let dataSource {
+      for path in list.indexPathsForVisibleItems {
+        guard let id = dataSource.itemIdentifier(for: path) else { continue }
+        if !self.cell(at: path, isDrawing: id) { wrongCells += 1 }
+      }
+    }
+    let rowsInCells = sections.reduce(0) { total, section in
+      total + section.rows.filter { $0.superview is NitroUiFormRowContainer }.count
+    }
     // A row view sitting in a section's holding view that this Form was never told about:
     // the shape a recycled component view left behind by a careless registration takes.
     var stale = 0
@@ -1443,6 +1760,21 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "rows=\(rows)",
       "items=\(dataSource?.snapshot().numberOfItems ?? -1)",
       "inCells=\(inCells)",
+      "rowsInCells=\(rowsInCells)",
+      "distinctDrawn=\(drawn.count)",
+      // The two numbers that say *why* a row can be missing from the cells while every cell
+      // holds one: `claims` counts cells naming a row they are not drawing (a blank row no
+      // chase can see), and `losses` counts the takes that made them, across this view's
+      // life. A Form with `rowsInCells` short of `rows` and `claims` above 0 is a Form whose
+      // rows are somewhere else and whose own answer about the cells is lying.
+      "claims=\(claims)",
+      "wrongCells=\(wrongCells)",
+      "losses=\(rowLosses)",
+      // How often a provider could not fill what UIKit asked for and handed back an empty cell
+      // or band instead. It reads 0 now that both providers answer from the snapshot; a Form
+      // with a visible blank row and this above 0 is a Form whose snapshot and models disagree
+      // in some new way (fix round 2).
+      "giveUps=\(giveUps)",
       // Where the list itself is: is it in a window, how tall is it, how much content does
       // it hold, how many items does it think are visible, and how many cells has it actually
       // realised. A Form that reports rows and no cells says which of its two jobs stopped
@@ -1456,9 +1788,22 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "reclaims=\(reclaims)",
       "applies=\(snapshotApplies)",
       "width=\(Self.number(reportedWidth))",
+      // The two numbers behind it: the plain box the published width is supposed to be, what
+      // an accessory costs, and how many times anything was published at all — a list-wide
+      // number that moves while the list only scrolls re-renders the Form's whole tree per
+      // move, which is what `widthPublishes` makes visible (fix round 2, item 3).
+      "plainBox=\(Self.number(plainRowBoxWidth))",
+      "accessoryInset=\(Self.number(accessoryInset))",
+      "widthPublishes=\(widthPublishes)",
       "listWidth=\(Self.number(list.bounds.width))",
       "boxW=\(Self.number(rowBoxWidth()))",
       "boxReports=\(boxReports)",
+      // The two halves of "every row here is laid out at the box of its own cell": `boxMismatch`
+      // is the worst gap between the two anywhere on screen, and `boxSpan` is how far apart those
+      // boxes are — which is what makes the first number an assertion, since a Form whose rows
+      // were all one wide could satisfy `boxMismatch` with a single shared width.
+      "boxSpan=\(Self.number(boxes.span))",
+      "boxMismatch=\(Self.number(boxes.mismatch))",
       "heights=\(heights)",
       "taps=\(taps)",
       "keyboard=\(Self.number(keyboardInset))",
@@ -1721,11 +2066,15 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
 }
 
 extension NitroUiFormItem {
+  /// The row an item names, or `nil` for an item that is not one.
+  var rowView: UIView? {
+    if case let .row(view) = self { return view }
+    return nil
+  }
+
   static let rowReuseIdentifier = "nitroui-form-row"
   static let headerReuseIdentifier = "nitroui-form-header"
   static let footerReuseIdentifier = "nitroui-form-footer"
-  /// The registration for the answer the provider gives when it has nothing to draw.
-  static let blankReuseIdentifier = "nitroui-form-blank"
 }
 
 /// The items of one section: its row views, identified by the view itself.

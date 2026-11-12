@@ -215,6 +215,38 @@ open class HybridNitroUiFormRowSpec_cxx {
       }()
     }
   }
+  
+  public final var onContentBox: bridge.std__optional_std__function_void_double____width______ {
+    @inline(__always)
+    get {
+      return { () -> bridge.std__optional_std__function_void_double____width______ in
+        if let __unwrappedValue = self.__implementation.onContentBox {
+          return bridge.create_std__optional_std__function_void_double____width______({ () -> bridge.Func_void_double in
+            let __closureWrapper = Func_void_double(__unwrappedValue)
+            return bridge.create_Func_void_double(__closureWrapper.toUnsafe())
+          }())
+        } else {
+          return .init()
+        }
+      }()
+    }
+    @inline(__always)
+    set {
+      self.__implementation.onContentBox = { () -> ((_ width: Double) -> Void)? in
+        if bridge.has_value_std__optional_std__function_void_double____width______(newValue) {
+          let __unwrapped = bridge.get_std__optional_std__function_void_double____width______(newValue)
+          return { () -> (Double) -> Void in
+            let __wrappedFunction = bridge.wrap_Func_void_double(__unwrapped)
+            return { (__width: Double) -> Void in
+              __wrappedFunction.call(__width)
+            }
+          }()
+        } else {
+          return nil
+        }
+      }()
+    }
+  }
 
   // Methods
   @inline(__always)

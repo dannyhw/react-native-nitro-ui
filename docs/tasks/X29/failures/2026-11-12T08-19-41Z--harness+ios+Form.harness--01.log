@@ -1,0 +1,105 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-12T08:19:41.225Z on code tree `b9f87f5d4abe` at HEAD `ec4c943` (branch `task/X29-fix2`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 21832 ms
+- Load: start 10.90, end 19.78, median 19.76, max 19.78
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-9q56x`
+- Full log: `task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log` (<store>/task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form row boxes (X29 r2) › hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)`
+- `expected 8 to be +0 // Object.is equality`
+- `● Form row boxes (X29 r2) › re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)`
+- `expected 2 to be less than or equal to 0.5`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-9q56x (still live)
+  |   X25-484f3                X25          both              pair-b
+  |   X29-9q56x                X29          ios               pair-a
+gate: load
+  |   load1 at the moment of failure: 18.76 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 56 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form.harness
+gate: node ../scripts/harness.mjs --harnessRunner ios Form.harness (cwd example)
+gate: code tree b9f87f5d4abe at HEAD ec4c943f
+gate: git tree 21dfb4fdb0ca
+gate: log task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log
+gate:       <store>/task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree b9f87f5d4abe, 25 components registered)
+lease: X29-9q56x runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.90/8.72 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form row boxes (X29 r2) › hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)
+
+    expected 8 to be +0 // Object.is equality
+
+      [0m [90m 2207 |[39m     expect(num(after[33m,[39m [32m'losses'[39m) [33m-[39m lossesAtRest)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 2208 |[39m     [90m// …and the chase it used to queue found nothing to reconfigure, which is the cost side.[39m
+      [31m[1m>[22m[39m[90m 2209 |[39m     expect(num(after[33m,[39m [32m'applies'[39m) [33m-[39m appliesAtRest)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                       [31m[1m^[22m[39m
+       [90m 2210 |[39m   })[33m;[39m
+       [90m 2211 |[39m
+       [90m 2212 |[39m   it([32m're-lays a row that is off screen at the Form’s new width (X29 r2, item 2)'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● Form row boxes (X29 r2) › re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)
+
+    expected 2 to be less than or equal to 0.5
+
+      [0m [90m 2248 |[39m       [32m'the deep accessory row to be drawn'[39m
+       [90m 2249 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 2250 |[39m     expect([33mMath[39m[33m.[39mabs([33mNumber[39m(plainShown[33m.[39mlaid) [33m-[39m wideWidth))[33m.[39mtoBeLessThanOrEqual(
+       [90m      |[39m                                                                              [31m[1m^[22m[39m
+       [90m 2251 |[39m       [35m0.5[39m
+       [90m 2252 |[39m     )[33m;[39m
+       [90m 2253 |[39m     [36mconst[39m wideInset [33m=[39m wideWidth [33m-[39m [33mNumber[39m(accessoryShown[33m.[39mlaid)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 16 passed, 18 total
+Snapshots:   0 total
+Time:        19.742 s
+Ran all test suites matching Form.harness.
+gate: harness:ios:Form.harness FAIL in 21.8 s
+gate: recorded in .gates/task/X29-fix2.jsonl
+
+
+gate: appended the device context to task/X29-fix2/harness+ios+Form.harness-2026-11-12T08-19-40.419Z.log (4 probe(s))
+
+```

@@ -15,6 +15,7 @@ public protocol HybridNitroUiFormRowSpec_protocol: HybridObject, HybridView {
   var pressable: Bool { get set }
   var nuiPerfId: Variant_NullType_Double { get set }
   var onPress: (() -> Void)? { get set }
+  var onContentBox: ((_ width: Double) -> Void)? { get set }
 
   // Methods
   func nuiTestRowReport() throws -> String

@@ -50,6 +50,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<bool> pressable;
     nitro::ReactProp<std::variant<nitro::NullType, double>> nuiPerfId;
     nitro::ReactProp<std::optional<std::function<void()>>> onPress;
+    nitro::ReactProp<std::optional<std::function<void(double /* width */)>>> onContentBox;
     nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridNitroUiFormRowSpec>& /* ref */)>>> hybridRef;
 
     [[nodiscard]]
@@ -59,6 +60,7 @@ namespace margelo::nitro::nitroui::views {
              pressable.hasSameValue(other.pressable) &&
              nuiPerfId.hasSameValue(other.nuiPerfId) &&
              onPress.hasSameValue(other.onPress) &&
+             onContentBox.hasSameValue(other.onContentBox) &&
              hybridRef.hasSameValue(other.hybridRef);
     }
 
@@ -69,6 +71,7 @@ namespace margelo::nitro::nitroui::views {
              pressable.isProvided() ||
              nuiPerfId.isProvided() ||
              onPress.isProvided() ||
+             onContentBox.isProvided() ||
              hybridRef.isProvided();
     }
 

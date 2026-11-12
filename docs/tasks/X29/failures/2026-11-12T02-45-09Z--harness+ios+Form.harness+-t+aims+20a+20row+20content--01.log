@@ -1,0 +1,81 @@
+# Failure excerpt — harness:ios:Form.harness:-t:aims%20a%20row%20content
+
+- Ran: 2026-11-12T02:45:09.327Z on code tree `656823078200` at HEAD `7e8bbf1` (branch `task/X29-form-e4-pair-a`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness -t aims a row content`
+- Result: fail, exit 1, 19971 ms
+- Load: start 9.62, end 9.55, median 9.55, max 9.62
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-xf97x`
+- Full log: `task/X29-form-e4-pair-a/harness+ios+Form.harness+-t+aims+20a+20row+20content-2026-11-12T02-45-09.327Z.log` (<store>/task/X29-form-e4-pair-a/harness+ios+Form.harness+-t+aims+20a+20row+20content-2026-11-12T02-45-09.327Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness+-t+aims+20a+20row+20content-2026-11-12T02-45-09.327Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-xf97x (still live)
+  |   G29X27-wep1v             G29X27       both              pair-b
+  |   X29-xf97x                X29          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.55 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 35 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness -t aims a row content
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 656823078200, 25 components registered)
+lease: X29-xf97x runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.62/15.30 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness+-t+aims+20a+20row+20content-2026-11-12T02-45-09.327Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)
+
+    the row content never came inside its box before the presses: the Form publishes a 402.00 pt content box while the pressable row is drawn 0.0,0.0,338.0,44.0 - content past its own bounds cannot be pressed at all, so pressing it now would measure the list, not question 4
+
+      [0m [90m 243 |[39m       [36mreturn[39m[33m;[39m
+       [90m 244 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 245 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 246 |[39m         [32m`the row content never came inside its box ${step}: the Form publishes a `[39m [33m+[39m
+       [90m 247 |[39m           [32m`${form.width ?? '-'} pt content box while the pressable row is drawn `[39m [33m+[39m
+       [90m 248 |[39m           [32m`${row.frame ?? '-'} - content past its own bounds cannot be pressed at all, `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 skipped, 15 total
+Snapshots:   0 total
+Time:        17.703 s
+Ran all test suites matching Form.harness with tests matching "aims a row content".
+
+
+
+```

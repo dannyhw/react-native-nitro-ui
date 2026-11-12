@@ -13,7 +13,7 @@ import com.facebook.proguard.annotations.DoNotStrip
 
 
 /**
- * Represents the JavaScript callback `(top: number) => void`.
+ * Represents the JavaScript callback `(width: number) => void`.
  * This can be either implemented in C++ (in which case it might be a callback coming from JS),
  * or in Kotlin/Java (in which case it is a native callback).
  */
@@ -27,11 +27,11 @@ fun interface Func_void_double: (Double) -> Unit {
    */
   @DoNotStrip
   @Keep
-  override fun invoke(top: Double): Unit
+  override fun invoke(width: Double): Unit
 }
 
 /**
- * Represents the JavaScript callback `(top: number) => void`.
+ * Represents the JavaScript callback `(width: number) => void`.
  * This is implemented in C++, via a `std::function<...>`.
  * The callback might be coming from JS.
  */
@@ -55,14 +55,14 @@ class Func_void_double_cxx: Func_void_double {
 
   @DoNotStrip
   @Keep
-  override fun invoke(top: Double): Unit
-    = invoke_cxx(top)
+  override fun invoke(width: Double): Unit
+    = invoke_cxx(width)
 
-  private external fun invoke_cxx(top: Double): Unit
+  private external fun invoke_cxx(width: Double): Unit
 }
 
 /**
- * Represents the JavaScript callback `(top: number) => void`.
+ * Represents the JavaScript callback `(width: number) => void`.
  * This is implemented in Java/Kotlin, via a `(Double) -> Unit`.
  * The callback is always coming from native.
  */
@@ -72,7 +72,7 @@ class Func_void_double_cxx: Func_void_double {
 class Func_void_double_java(private val function: (Double) -> Unit): Func_void_double {
   @DoNotStrip
   @Keep
-  override fun invoke(top: Double): Unit {
-    return this.function(top)
+  override fun invoke(width: Double): Unit {
+    return this.function(width)
   }
 }

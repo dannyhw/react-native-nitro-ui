@@ -1,0 +1,177 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-12T08:52:19.427Z on code tree `f5792bd32323` at HEAD `b1953ff` (branch `task/X29-fix2`)
+- Command: `bun run check`
+- Result: fail, exit 1, 151320 ms
+- Load: start 4.98, end 7.51, median 10.57, max 15.92
+- Device: android / device `emulator-5574` / lease `X29-b6uey`
+- Full log: `task/X29-fix2/check-2026-11-12T08-52-18.592Z.log` (<store>/task/X29-fix2/check-2026-11-12T08-52-18.592Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/bench-baseline-merge.test.js (76.839 s)`
+- `● run.mjs refuses an incomparable merge before booting › refuses a thin launch count, and lets --force past it to the device`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "No attached emulator"`
+- `Received string:    "fatal: not a git repository (or any of the parent directories): .git`
+- `Error: lease: ANDROID_SERIAL=emulator-5599 and EMULATOR_PORT=5574 disagree about which emulator this run owns. Re-source the lease file ('source <(node scripts/lease.mjs acquire ...)') rather than exporting one of them by hand.`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3191 — the rest is in the full log above)
+
+```
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS scripts/__tests__/doctor.test.js
+PASS src/__tests__/menuSizingKey.test.tsx
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/readme-components.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/real-input-tab-targets.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/ime-frame.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/gate.test.js (52.993 s)
+PASS scripts/__tests__/gate-logs.test.js (59.71 s)
+PASS scripts/__tests__/ci-workflows.test.js (72.157 s)
+FAIL scripts/__tests__/bench-baseline-merge.test.js (76.839 s)
+  ● run.mjs refuses an incomparable merge before booting › refuses a thin launch count, and lets --force past it to the device
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "No attached emulator"
+    Received string:    "fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    Merge:     deferred - Android system image cannot be known before the run starts, so it is checked against the file again after it
+    Merge:     deferred - ART compile state cannot be known before the run starts, so it is checked against the file again after it
+    file://<tmp>/bench-run-Vdrvgp/scripts/lease-core.mjs:629
+          throw new Error(
+                ^·
+    Error: lease: ANDROID_SERIAL=emulator-5599 and EMULATOR_PORT=5574 disagree about which emulator this run owns. Re-source the lease file (`source <(node scripts/lease.mjs acquire ...)`) rather than exporting one of them by hand.
+
+      at checkEmulatorEnv (file:<tmp>/bench-run-Vdrvgp/scripts/lease-core.mjs:629:13)
+      at requireLeaseDevice (file:<tmp>/bench-run-Vdrvgp/scripts/lease-core.mjs:733:27)
+      at resolveAndroidDevice (file:<tmp>/bench-run-Vdrvgp/scripts/bench/devices.mjs:192:18)
+      at main (file:<tmp>/bench-run-Vdrvgp/scripts/bench/run.mjs:930:47)
+      at file:<tmp>/bench-run-Vdrvgp/scripts/bench/run.mjs:1294:9
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)·
+      Node.js v24.22.1
+      "
+      at Object.toContain (scripts/__tests__/bench-baseline-merge.test.js:1694:26)
+
+PASS scripts/__tests__/bench-gate.test.js (144.987 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/bench-baseline-merge.test.js (76.839 s)
+  ● run.mjs refuses an incomparable merge before booting › refuses a thin launch count, and lets --force past it to the device
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "No attached emulator"
+    Received string:    "fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    Merge:     deferred - Android system image cannot be known before the run starts, so it is checked against the file again after it
+    Merge:     deferred - ART compile state cannot be known before the run starts, so it is checked against the file again after it
+    file://<tmp>/bench-run-Vdrvgp/scripts/lease-core.mjs:629
+          throw new Error(
+                ^·
+    Error: lease: ANDROID_SERIAL=emulator-5599 and EMULATOR_PORT=5574 disagree about which emulator this run owns. Re-source the lease file (`source <(node scripts/lease.mjs acquire ...)`) rather than exporting one of them by hand.
+
+      at checkEmulatorEnv (file:<tmp>/bench-run-Vdrvgp/scripts/lease-core.mjs:629:13)
+      at requireLeaseDevice (file:<tmp>/bench-run-Vdrvgp/scripts/lease-core.mjs:733:27)
+      at resolveAndroidDevice (file:<tmp>/bench-run-Vdrvgp/scripts/bench/devices.mjs:192:18)
+      at main (file:<tmp>/bench-run-Vdrvgp/scripts/bench/run.mjs:930:47)
+      at file:<tmp>/bench-run-Vdrvgp/scripts/bench/run.mjs:1294:9
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)·
+      Node.js v24.22.1
+      "
+      at Object.toContain (scripts/__tests__/bench-baseline-merge.test.js:1694:26)
+
+
+Test Suites: 1 failed, 87 passed, 88 total
+Tests:       1 failed, 2092 passed, 2093 total
+Snapshots:   0 total
+Time:        145.399 s, estimated 146 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 151.3 s
+gate: recorded in .gates/task/X29-fix2.jsonl
+
+```
