@@ -269,3 +269,69 @@ under lease `X29-cq1q0` on pair-b, each mutation reverted before the next.
 - `task-ready` names the report after the branch, so on this branch it looks in `docs/tasks` for a
   file called after `X29-fix2` rather than after the brief; with `--task X29-form-e4-pair-a` it is
   ready. Worth teaching it the brief's name too.
+
+## Merge round
+
+*(on `task/X29-merge` from `main` at `d7f34fb9`, merging this branch at `f7efd6a7` and
+`task/R09-release-notes` at `dcb5bab6`. Leases `X29M-hkuk5` (pair-a — "nitro-ui A" / iPhone 17,
+`emulator-5574`) and `X29MF-hkw4c` (pair-b — "nitro-ui B" / iPhone Air, `emulator-5570`).)*
+
+**How the two Form fixes were combined.** One conflict, in `HybridNitroUiForm.swift`; both answer
+UIKit about a section the Form has already dropped, so they were split by what each can actually
+answer rather than stacked:
+
+- the **row** provider answers from the item, which names the row (X25), and takes its lifecycle
+  owner from `model(owning:)`. X29's `sectionModel` read was dropped *from that path*: an index path
+  can name a section but cannot say which mount still owns the row, and a retired section's holding
+  view is the wrong home for a row being given back — X25's nil-model branch parks it in the Form's
+  own holding view, which the next mount takes from. X29's totality is kept: it was never what the
+  two differed about;
+- the **band** provider reads the section out of the snapshot UIKit is laying out (X29), which is
+  the only answer for a band's text — X25's `indexPath.section < sections.count` tests the wrong
+  array, exactly as X29's comment says;
+- the two give-up answers became one: a reconfigure is answered with the cell it asked about (X25's
+  `reconfigureTargets`), everything else with a dequeued blank of the **row** registration (X29's
+  `blankCell`). X25's separate `NitroUiFormBlankCell` and `blankReuseIdentifier` are gone: a blank
+  that is one of ours is refilled by the chase's `reconfigureItems` instead of replaced by a
+  `reloadItems`, and one registration cannot drift from the other. `giveUpCell(in:at:)` keeps X25's
+  shape and X29's `giveUps` count;
+- the chase asks X29's identity question (`cell(at:isDrawing:)`) over X25's reconfigure/reload
+  split, keeping both guard sets (`holding.superview`, `list.window`, `!sections.isEmpty`,
+  `path(for: row) == at`) and `onRowLost`/`isDrawingRow`/`claimsRowItDoesNotHold`.
+
+`prepareForRecycle` resets both sets of state. The Form suite is 19 of 19 on both simulators — inside
+`harness:ios` on "nitro-ui A" and as `harness:ios:Form` on "nitro-ui B" — so X25's churn case and
+X29's E4, row-box, losses, accessory-inset and resize cases are green on one tree.
+
+**R09** merged clean. One line of `.changeset/form-section-row.md` changed: the limitation now names
+the platform (one button element on Android, iOS's merge still open) instead of one tool's reading of
+VoiceOver, which is what `docs/components/form.md` and FOLLOWUPS record for `a11y:form`.
+
+### Gates (merge round)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2093 tests / 88 suites | `3cd5ec72c3d5` | 3 m 32 s | start 7.2 / med 41.8 / max 71.4 |
+| `harness:ios` | **PASS** | 628 tests / 32 suites + isolated 6 tests / 3 suites | `3cd5ec72c3d5` (ios tree) | 15 m 14 s | start 5.5 / med 6.3 / max 15.3 |
+| `harness:android` | **PASS** | 684 tests / 32 suites + isolated 6 tests / 3 suites | `3cd5ec72c3d5` (android tree) | 19 m 05 s | start 7.6 / med 4.8 / max 11.8 |
+| `real-input:ios` | **PASS** | — | `3cd5ec72c3d5` (ios tree) | 50 m 44 s | start 3.5 / med 8.4 / max 62.4 |
+| `real-input:android` | **PASS** | — | `3cd5ec72c3d5` (android tree) | 71 m 50 s | start 24.8 / med 5.3 / max 27.4 |
+| `harness:ios:Form` | **PASS** | 131 tests / 3 suites | `3cd5ec72c3d5` (ios tree) | 3 m 50 s | start 11.9 / med 10.9 / max 21.1 |
+| `harness:ios:Form:--background` | **FAIL** | — | `3cd5ec72c3d5` (ios tree) | 2.1 s | start 16.7 / med 16.7 / max 16.7 |
+
+`need --for merge` exits 0 on this tree: all five merge gates green, no `check` line borrowed.
+The FAIL is this round's own mistake, not the tree's: `--background` was typed after `--`, so jest
+got an unknown flag and the run died in 2.1 s; the run after it, with the flag before `--`, is the
+`harness:ios:Form` row above. No gate needed a re-run for any other reason, and no device other than
+the two leased pairs was touched.
+
+### Follow-ups (merge round)
+
+- form/iOS: nothing asserts `giveUps === 0`, and this round could not add one — `Form.harness.tsx`
+  counts as both platforms, so a new assertion would have voided the four device gates already green
+  here. The merged paths that can raise it are only `collectionView.dataSource !== dataSource` and an
+  item that is not a row; the witnesses a give-up would break (`wrongCells`, `claims`, `rowsInCells`,
+  `boxMismatch`) are asserted and green. Worth adding to `hands no row back as a loss…` by the round
+  that next owes a Form device run.
+- tooling: `gate.mjs <gate> --background -- <filter>` reads better than rejecting the flag — the
+  failure row above is the whole cost of getting it wrong once.
