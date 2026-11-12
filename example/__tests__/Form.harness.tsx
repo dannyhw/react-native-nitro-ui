@@ -2061,3 +2061,324 @@ describe('Form row content (X24)', () => {
     expect(issues).toEqual([]);
   });
 });
+
+// MARK: - X29 fix round 2: the box a row is told, and who is told about it
+
+/**
+ * A Form inside a box of the app's own, whose width the app changes mid-case.
+ *
+ * The two deep rows are what the case is about. Twelve 52 pt rows in a 420 pt box put them
+ * off screen at rest; the case scrolls them into view so their own cells report a box, then
+ * scrolls them back out again, which parks them in their section's holding view. From there
+ * nothing lays them out again — not the resize, and not a `measure`, which reads the shadow
+ * tree. What they answer afterwards is the width the row *remembers*, which is exactly the
+ * thing a rotation used to leave behind.
+ *
+ * Row 2 has an accessory and stays on screen: it is what teaches the Form what an accessory
+ * costs under the new width, so the parked accessory row's expected number is measured in this
+ * Form rather than typed here.
+ */
+function SizedForm({ boxWidth }: { boxWidth: number }) {
+  return (
+    <View style={{ height: 420, width: boxWidth }} testID="resize-host">
+      <Form
+        hybridRef={(view) => {
+          if (view != null) forms.resize = view;
+        }}
+        style={styles.form}
+      >
+        <Form.Section title="Rows">
+          {Array.from({ length: 12 }, (_, index) => (
+            <Form.Row
+              accessory={index === 1 || index === 11 ? 'disclosure' : 'none'}
+              hybridRef={
+                index === 9
+                  ? (view) => {
+                      if (view != null) rows.resizePlain = view;
+                    }
+                  : index === 11
+                    ? (view) => {
+                        if (view != null) rows.resizeAccessory = view;
+                      }
+                    : undefined
+              }
+              key={`resize-${index}`}
+            >
+              <Text testID={`resize-label-${index}`}>Row {index + 1}</Text>
+            </Form.Row>
+          ))}
+        </Form.Section>
+      </Form>
+    </View>
+  );
+}
+
+/**
+ * Three rows, the middle of which the case gives a trailing accessory between two renders.
+ *
+ * A visible row gaining an accessory is the cheapest way to make one cell report a narrower
+ * box than its neighbours *after* the list has already settled — which is the case the
+ * list-wide number has to survive without moving.
+ */
+function AccessoryForm({ accessoried }: { accessoried: boolean }) {
+  return (
+    <Form
+      hybridRef={(view) => {
+        if (view != null) forms.toggle = view;
+      }}
+      style={styles.form}
+    >
+      <Form.Section title="Sound">
+        <Form.Row>
+          <Text testID="toggle-label-steady">Ringer</Text>
+        </Form.Row>
+        <Form.Row
+          accessory={accessoried ? 'disclosure' : 'none'}
+          hybridRef={(view) => {
+            if (view != null) rows.toggled = view;
+          }}
+        >
+          <Text testID="toggle-label-target">Alerts</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text testID="toggle-label-third">Notifications</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+
+describe('Form row boxes (X29 r2)', () => {
+  afterEach(() => {
+    cleanup();
+    forgetPromisedHandles();
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+  });
+
+  it('hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)', async () => {
+    // iOS only: a give-back is a cell emptying, and Android has no cells — its rows stay where
+    // Yoga put them, so there is nothing here for Android to be red about.
+    if (!IOS) return;
+    await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
+    await formReport((r) => num(r, 'rows') === 9, 'nine rows');
+
+    // A cycle is one jump down and one back up, each asked of the list rather than assumed:
+    // `nuiTestScrollTo(400)` is clamped to the bottom of a 646 pt content in a 420 pt box, and
+    // a list at rest sits at its own top inset, so the only honest target is "moved away from
+    // where it was" — which is what recycles a cell, which is what this case counts.
+    let rest = await formReport(() => true, 'the report at rest');
+    const cycle = async (step: string): Promise<void> => {
+      const at = num(rest, 'offset');
+      need(forms.form).nuiTestScrollTo(400);
+      const down = await formReport(
+        (r) => num(r, 'offset') > at + 20,
+        `${step}: the list to have scrolled down from ${at} pt`
+      );
+      await drawnOnScreen(`${step} down`);
+      need(forms.form).nuiTestScrollTo(0);
+      rest = await formReport(
+        (r) => num(r, 'offset') < num(down, 'offset') - 20,
+        `${step}: the list to have come back up from ${down.offset} pt`
+      );
+      await drawnOnScreen(`${step} back up`);
+    };
+    // A warm-up cycle first, so the reading below is taken from a list that has already
+    // recycled once and is not still settling from its own mount.
+    await cycle('warm-up 1');
+    await cycle('warm-up 2');
+    const lossesAtRest = num(rest, 'losses');
+    const appliesAtRest = num(rest, 'applies');
+
+    for (const step of ['1', '2', '3', '4']) {
+      await cycle(`cycle ${step}`);
+    }
+    const after = await formReport(() => true, 'the report after four scrolls');
+    // The rows on screen are still the ones their items name — the claim the chase exists to
+    // repair, asked directly so this case cannot go green by the chase never having run.
+    expect(num(after, 'claims')).toBe(0);
+    expect(num(after, 'wrongCells')).toBe(0);
+    // Four 400 pt scrolls move a 9-row Form's whole content twice over, so every cell on
+    // screen was emptied and refilled several times. A give-back is not a lost row: before fix
+    // round 2 the container was still naming the row while `onGiveBack` moved it, so each one
+    // read back as a take, and the Form queued a walk of the visible cells for every one of
+    // them.
+    expect(num(after, 'losses') - lossesAtRest).toBe(0);
+    // …and the chase it used to queue found nothing to reconfigure, which is the cost side.
+    expect(num(after, 'applies') - appliesAtRest).toBe(0);
+  });
+
+  it('re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)', async () => {
+    // iOS only, and iOS-only by cause: the row's own box is reported by its iOS cell, and
+    // Android lays every row out at the width the list gives it.
+    if (!IOS) return;
+    const { rerender } = await render(<SizedForm boxWidth={400} />);
+    await handleOf(() => forms.resize, 'the resizable Form');
+    const wide = await formReport(
+      (r) =>
+        num(r, 'rows') === 12 &&
+        num(r, 'width') > 100 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      // `inCells` against the items on screen, not against twelve: five of these rows are
+      // parked off screen by design, and a Form that drew every visible row from a cell is the
+      // settle this case can ask for.
+      'the wide Form to draw every visible row from a cell, at its own box',
+      'resize'
+    );
+    const wideWidth = num(wide, 'width');
+    const restingOffset = num(wide, 'offset');
+
+    // Show the deep rows, so their own cells are the ones that told them their box.
+    need(forms.resize).nuiTestScrollTo(400);
+    const scrolled = await formReport(
+      (r) => num(r, 'offset') > restingOffset + 60,
+      'the list to have scrolled to the deep rows',
+      'resize'
+    );
+    const plainShown = await reportUntil(
+      () => rows.resizePlain?.nuiTestRowReport(),
+      (r) => r.where === 'cell',
+      'the deep plain row to be drawn'
+    );
+    const accessoryShown = await reportUntil(
+      () => rows.resizeAccessory?.nuiTestRowReport(),
+      (r) => r.where === 'cell',
+      'the deep accessory row to be drawn'
+    );
+    expect(Math.abs(Number(plainShown.laid) - wideWidth)).toBeLessThanOrEqual(
+      0.5
+    );
+    const wideInset = wideWidth - Number(accessoryShown.laid);
+    expect(wideInset).toBeGreaterThan(4);
+
+    // Park them again: off screen, in the section's holding view, remembered at the wide box.
+    need(forms.resize).nuiTestScrollTo(0);
+    await formReport(
+      // Relative, like every other scroll in this file: the list is clamped by its own content
+      // and rests at its top inset, so "came back up" is the claim and an absolute number is
+      // one this Form cannot make.
+      (r) => num(r, 'offset') < num(scrolled, 'offset') - 60,
+      'the list to be back at the top again',
+      'resize'
+    );
+    for (const [name, handle] of [
+      ['plain', rows.resizePlain],
+      ['accessory', rows.resizeAccessory],
+    ] as const) {
+      const parked = await reportUntil(
+        () => handle?.nuiTestRowReport(),
+        (r) => r.where === 'holding',
+        `the deep ${name} row to be off screen again`
+      );
+      // Remembered at the wide box: the plain row at the plain box, the accessory row at the
+      // plain box less the accessory — the two numbers the Form published and taught, and the
+      // pair the resize below has to move.
+      const remembered = name === 'plain' ? wideWidth : wideWidth - wideInset;
+      expect(Math.abs(Number(parked.laid) - remembered)).toBeLessThanOrEqual(
+        0.5
+      );
+    }
+
+    // The app changes a parent's width — the same thing a rotation does to the Form's box.
+    await rerender(<SizedForm boxWidth={320} />);
+    const narrow = await formReport(
+      (r) =>
+        num(r, 'width') > 100 &&
+        wideWidth - num(r, 'width') > 20 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the Form to publish a new, narrower box for the rows it can see',
+      'resize'
+    );
+    const narrowWidth = num(narrow, 'width');
+    // The inset is the cell's own margins, which a resize does not move, so the number the
+    // accessory row has to come to is measured from these rows rather than typed here — and
+    // the Form's own `accessoryInset` is checked against it at the end.
+    const expectedAccessory = narrowWidth - wideInset;
+
+    // Neither row was in a cell for that layout pass. The Form has to tell them anyway: a row
+    // measured at a width the list stopped having is D45.4's promise broken at rest.
+    const plainRelaid = await reportUntil(
+      () => rows.resizePlain?.nuiTestRowReport(),
+      (r) => Math.abs(Number(r.laid) - narrowWidth) <= 0.5,
+      `the parked plain row to be laid out at the new ${narrowWidth} pt box (where it ` +
+        'is parked, at what the Form publishes now)'
+    );
+    expect(plainRelaid.where).toBe('holding');
+    const accessoryRelaid = await reportUntil(
+      () => rows.resizeAccessory?.nuiTestRowReport(),
+      (r) => Math.abs(Number(r.laid) - expectedAccessory) <= 0.5,
+      `the parked accessory row to be laid out at ${narrowWidth} - ${wideInset} = ` +
+        `${expectedAccessory} pt`
+    );
+    expect(accessoryRelaid.where).toBe('holding');
+
+    // Then the Form's own witnesses, which have to agree with the rows: the published number is
+    // the plain box, and what an accessory costs did not move with the width. Asked after the
+    // rows, so a Form that never re-told them fails on its rows.
+    const narrowInset = num(narrow, 'accessoryInset');
+    expect(narrowInset).toBeGreaterThan(4);
+    expect(Math.abs(narrowInset - wideInset)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(num(narrow, 'plainBox') - narrowWidth)).toBeLessThanOrEqual(
+      0.5
+    );
+  });
+
+  it('moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5)', async () => {
+    // iOS only: on Android the section paints the accessory and the row reserves its room with
+    // padding, so there is one box for every row and nothing to flip.
+    if (!IOS) return;
+    const { rerender } = await render(<AccessoryForm accessoried={false} />);
+    await handleOf(() => forms.toggle, 'the accessory Form');
+    const before = await formReport(
+      (r) =>
+        num(r, 'rows') === 3 &&
+        num(r, 'width') > 100 &&
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the all-plain Form to settle',
+      'toggle'
+    );
+    const plainBox = num(before, 'plainBox');
+    const published = num(before, 'widthPublishes');
+    // The published number is the plain box, and with no accessories every box is that one.
+    expect(Math.abs(num(before, 'width') - plainBox)).toBeLessThanOrEqual(0.5);
+    expect(num(before, 'boxSpan')).toBeLessThanOrEqual(0.5);
+
+    await rerender(<AccessoryForm accessoried={true} />);
+    // Item 5: the row that gained the accessory has to be re-aimed at its own narrower box —
+    // `boxMismatch` is the Form's own answer to "is every row on screen laid out at the box of
+    // the cell drawing it", and one wide row on screen is the whole of X29.
+    const after = await formReport(
+      (r) =>
+        num(r, 'boxMismatch') <= 0.5 &&
+        num(r, 'boxSpan') > 4 &&
+        num(r, 'inCells') === visibleItems(r),
+      'the toggled row to be laid out at its own narrower box, and its neighbours at theirs',
+      'toggle'
+    );
+    const inset = num(after, 'accessoryInset');
+    expect(inset).toBeGreaterThan(4);
+    expect(Math.abs(inset - num(after, 'boxSpan'))).toBeLessThanOrEqual(0.5);
+    const toggled = await reportUntil(
+      () => rows.toggled?.nuiTestRowReport(),
+      (r) =>
+        r.where === 'cell' &&
+        Math.abs(Number(r.laid) - (plainBox - inset)) <= 0.5,
+      `the toggled row to be laid out at ${plainBox} - ${inset} = ${plainBox - inset} pt`
+    );
+    expect(toggled.where).toBe('cell');
+
+    // Item 3: and it moved nothing else. The narrower box belongs to that one row; the
+    // list-wide number is the plain box, published once per list width — every Section and
+    // `RowRoot` renders again for each publish, so this is the difference between one row
+    // changing and the Form re-rendering its whole tree because a cell laid out last.
+    expect(num(after, 'widthPublishes')).toBe(published);
+    expect(Math.abs(num(after, 'width') - plainBox)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(num(after, 'plainBox') - plainBox)).toBeLessThanOrEqual(
+      0.5
+    );
+  });
+});
