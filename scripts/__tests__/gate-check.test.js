@@ -31,8 +31,10 @@ import {
   isToolingPath,
   ledgerLineFromRun,
   platformsOwningFile,
+  platformsTouchedByPaths,
   renderGateTable,
   renderStepTimings,
+  requiredGatesFor,
   stepTimingsOf,
 } from '../gate-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
@@ -686,12 +688,70 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     'scripts/sync-example-lock.mjs',
     'scripts/lease.mjs',
     'scripts/lease-core.mjs',
+    // X30: the hand-in checker, listed the same way and proven the same way below.
+    'scripts/task-ready.mjs',
+    'scripts/task-ready-core.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);
     // ... and belongs to neither platform's half, which is what stops a lease change
     // from re-owing two device runs on top of `check`.
     expect(platformsOwningFile(file)).toEqual([]);
+  });
+
+  it('task-ready is on the list because nothing a device run touches reads it', () => {
+    // The claim a TOOLING_FILES entry rests on is "no binary contains this", and the
+    // honest form of it is a search, not a sentence: X30's own commit had to be
+    // tested as "both platforms" until this pair was listed, because an unclaimed
+    // path under `scripts/` is the expensive answer by design. If a device run ever
+    // does start importing the checker, this goes red and the entry comes off.
+    for (const file of [
+      'scripts/task-ready.mjs',
+      'scripts/task-ready-core.mjs',
+    ]) {
+      expect(isToolingPath(file)).toBe(true);
+      expect(platformsOwningFile(file)).toEqual([]);
+    }
+    const hits = spawnSync(
+      'git',
+      [
+        'grep',
+        '-l',
+        'task-ready',
+        '--',
+        'example',
+        'src',
+        'ios',
+        'android',
+        'nitrogen',
+        'patches',
+        'package.json',
+      ],
+      { cwd: process.cwd(), encoding: 'utf8' }
+    );
+    expect(hits.status).toBe(0);
+    // The npm script that names it, and nothing else: no import, no require, no
+    // harness config, no app source.
+    expect(hits.stdout.trim().split('\n')).toEqual(['package.json']);
+  });
+
+  it('a commit that only changes the checker re-owns check and no device run', () => {
+    // The X30 consequence, stated as behaviour rather than as membership: before the
+    // pair was listed this diff was *unmapped* code - the expensive answer, both
+    // platforms - so a round that touched nothing but the hand-in checker owed two
+    // harness runs no device needed and its task was not allowed to run.
+    const touched = platformsTouchedByPaths([
+      'scripts/task-ready.mjs',
+      'scripts/task-ready-core.mjs',
+    ]);
+    expect(touched.platforms).toEqual([]);
+    expect(touched.tooling).toEqual([
+      'scripts/task-ready.mjs',
+      'scripts/task-ready-core.mjs',
+    ]);
+    expect(
+      requiredGatesFor({ stage: 'review', touchedPlatforms: touched.platforms })
+    ).toEqual(['check']);
   });
 
   it('the files are real, so the list cannot guard a path that does not exist', () => {

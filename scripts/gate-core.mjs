@@ -215,6 +215,16 @@ export const TOOLING_FILES = [
   // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
   // run reads that copy, never this file, and neither is in the app.
   'scripts/devices.example.json',
+  // X30. The hand-in checklist as a command: it reads the ledger, the registry and
+  // the report, and runs nothing. `scripts/__tests__/task-ready.test.js` proves the
+  // rules, `check` is the cheapest place to learn one is wrong, and the claim that
+  // no device run reads these two files is a `git grep` wide - asserted in
+  // `gate-check.test.js` rather than assumed, because a wrong entry here makes a
+  // real change look like it needs no testing. Before this pair was listed, a
+  // commit touching only the checker counted as unmapped code - both platforms -
+  // and asked for two harness runs over a script no binary contains.
+  'scripts/task-ready.mjs',
+  'scripts/task-ready-core.mjs',
   // The README's code samples, kept in sync by `readme:check`. It sits under
   // `example/src/`, so the directory rule would call it both platforms, but no app
   // code imports it - tsc, ESLint, Prettier and `readme:check` are what prove it - so
