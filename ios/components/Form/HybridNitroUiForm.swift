@@ -160,6 +160,28 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// the same Form on the same runtime (X29): the escape needs the content to overhang by
   /// more than half the content's own width, and only the wider screen quite does it.
   private var lastRowBoxWidth: CGFloat = -1
+  /// The box a cell gives a row *without* a trailing accessory — the number this class
+  /// publishes to JavaScript as the Form's one width.
+  ///
+  /// It is the plain box and nothing else, because there is one number for the whole list and
+  /// only the plain rows share it: publishing the last box any cell reported made the number
+  /// every `Section` and `RowRoot` renders against flip between 338 and 316 depending on which
+  /// cell laid out last, and each flip re-renders the Form's whole tree (fix round 2, item 3).
+  /// An accessory row does not need the list-wide number to be its own: it is told its box
+  /// through `NitroUiFormRow.contentBoxReported`, and the rows that cannot answer for
+  /// themselves are handed `plainRowBoxWidth - accessoryInset` by `pushRowBoxEstimates`.
+  private var plainRowBoxWidth: CGFloat = -1
+  /// The box a cell gives a row *with* a trailing accessory, or -1 until one has laid out.
+  private var accessoryRowBoxWidth: CGFloat = -1
+  /// What a trailing accessory costs a row: `plainRowBoxWidth - accessoryRowBoxWidth`, the
+  /// 22 pt the accessory's own margins take out of the plain box. Measured, never typed.
+  private var accessoryInset: CGFloat = 0
+  /// The list width the boxes above belong to, so the next resize is visible as one.
+  private var framedBoxWidth: CGFloat = -1
+  /// How many times the list-wide box has been published. The contract is one per list width:
+  /// a number that climbs while the list merely scrolls says the number is following the
+  /// cells rather than the list (fix round 2, item 3).
+  private var widthPublishes = 0
   /// How many times a laid-out cell has offered its row box. A witness, not a counter with
   /// a bound: `width` right and `boxReports` zero means the cell never asked, and the row
   /// was laid out at whatever an earlier, wider guess said.
@@ -278,6 +300,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     reportedOffset = nil
     reportedWidth = .zero
     lastRowBoxWidth = -1
+    plainRowBoxWidth = -1
+    accessoryRowBoxWidth = -1
+    accessoryInset = 0
+    framedBoxWidth = -1
+    widthPublishes = 0
     reparents = 0
     reclaims = 0
     rowLosses = 0
@@ -363,9 +390,22 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       list.delegate = listDelegate
     }
     if holding.frame.width > 0 {
+      if abs(holding.frame.width - framedBoxWidth) > 0.25 {
+        // The list is a width it has not been laid out at: a rotation, an iPad resize, or the
+        // app changing a parent's width. Every box remembered below belongs to the old one, and
+        // a row that is *off screen* is not laid out again until it is scrolled back — so it
+        // would go on being laid out, and measured, at a box the list no longer gives anybody
+        // (fix round 2, item 2). Forgetting here is also what lets the reports the new pass is
+        // about to make through the change guards on both sides.
+        forgetRowBoxes()
+        framedBoxWidth = holding.frame.width
+      }
       // The layout needs one pass before it can answer what a cell is wide.
       list.layoutIfNeeded()
       reportContentBox()
+      // The rows the new pass did not reach — the ones parked in a section's holding view —
+      // have nothing else that will ever tell them the new box.
+      pushRowBoxEstimates()
       // A resize moves every section's box, so the placements the shadow tree holds are
       // as stale as a scroll would have made them.
       reportGeometry()
@@ -932,8 +972,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // UIKit's hit-test will not look at it again.
     let width = lastRowBoxWidth > 0 ? min(guess, lastRowBoxWidth) : guess
     guard abs(width - reportedWidth) > 0.25 else { return }
-    reportedWidth = width
-    contentBox?(Double(width))
+    publishRowBox(width)
   }
 
   /// The width a cell actually gets, asked of the layout - not four typed constants. The
@@ -949,7 +988,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     return list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame.width
   }
 
-  /// The width a *laid-out cell* gives its row, reported by that cell's container.
+  /// The width a *laid-out cell* gives its row, and what that cell is drawing.
   ///
   /// `contentWidth()` is what the list's attributes say a cell is; this is what the row is
   /// actually drawn in, and the two differ by the cell's own content margins (16 pt on each
@@ -957,15 +996,99 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// draws its right-aligned content - a `Switch`, a chevron, a value - past the cell's edge,
   /// and UIKit stops hit-testing at that edge: S6b measured a hosted `Switch` in a row taking
   /// 0 of 10 real taps for exactly this reason, while content on the row's left worked.
-  func rowBoxWidthReported(_ width: CGFloat) {
+  ///
+  /// Two boxes come through here and only one of them is published: the plain row's box is the
+  /// list-wide number, and the accessory row's teaches this class what an accessory costs —
+  /// that row's own number travels by `NitroUiFormRow.contentBoxReported` instead. Publishing
+  /// whichever cell laid out last is what made the list-wide number flip 338/316 and every
+  /// Section and `RowRoot` re-render per flip (fix round 2, item 3).
+  func rowBoxWidthReported(_ width: CGFloat, accessory: Bool) {
     boxReports += 1
     guard width > 0 else { return }
-    // Kept even when it is the number already published: `reportContentBox` has to know what
-    // a real box was, not only what the last *change* to the published width was.
-    lastRowBoxWidth = width
-    guard abs(width - reportedWidth) > 0.25 else { return }
+    // Whether anything a row could be waiting for just moved. A cell reports on every layout
+    // of itself, so the walk in `pushRowBoxEstimates` has to be the exception rather than the
+    // per-frame chore it would be without this.
+    var moved = false
+    if accessory {
+      moved = abs(width - accessoryRowBoxWidth) > 0.25
+      accessoryRowBoxWidth = width
+      // A real box is a real box: the guess in `reportContentBox` is clamped by one, and a Form
+      // whose visible cells all have accessories still has nothing better to remember.
+      if lastRowBoxWidth < 0 { lastRowBoxWidth = width }
+    } else {
+      moved = abs(width - plainRowBoxWidth) > 0.25
+      plainRowBoxWidth = width
+      lastRowBoxWidth = width
+      if abs(width - reportedWidth) > 0.25 {
+        publishRowBox(width)
+        moved = true
+      }
+    }
+    if plainRowBoxWidth > 0, accessoryRowBoxWidth > 0 {
+      let inset = max(0, plainRowBoxWidth - accessoryRowBoxWidth)
+      if abs(inset - accessoryInset) > 0.25 {
+        accessoryInset = inset
+        moved = true
+      }
+    }
+    if moved { pushRowBoxEstimates() }
+  }
+
+  /// Publish the list-wide box. Every publish of it goes through here, so `widthPublishes`
+  /// counts the whole story.
+  private func publishRowBox(_ width: CGFloat) {
     reportedWidth = width
+    widthPublishes += 1
     contentBox?(Double(width))
+  }
+
+  /// Forget every box this Form remembers, and every row's memory of the box it was told.
+  ///
+  /// The rows are included because each one guards its own report the same way this class
+  /// guards the published number: a row parked off screen at 338 pt, asked to remember nothing,
+  /// will take the 256 pt the list now gives it as a report rather than as a repeat of what it
+  /// already had.
+  private func forgetRowBoxes() {
+    lastRowBoxWidth = -1
+    plainRowBoxWidth = -1
+    accessoryRowBoxWidth = -1
+    accessoryInset = 0
+    reportedWidth = .zero
+    for model in sections {
+      for view in model.rows {
+        HybridNitroUiForm.rowOwner(of: view)?.forgetReportedBox()
+      }
+    }
+  }
+
+  /// The box to hand a row that cannot ask its own cell: the plain box, less what an accessory
+  /// costs, or `nil` while the list has not laid out a cell at all.
+  private func estimatedRowBox(accessory: Bool) -> CGFloat? {
+    let base = plainRowBoxWidth > 0 ? plainRowBoxWidth : reportedWidth
+    guard base > 0 else { return nil }
+    return accessory ? max(1, base - accessoryInset) : base
+  }
+
+  /// Tell every row that cannot answer for itself what the list now gives a row of its kind.
+  ///
+  /// A row in a cell knows better than this class does — its own cell reports the box it is
+  /// drawn in — so those are skipped unless they have never been told anything. Who this
+  /// reaches is the rows parked in a section's holding view after a resize, and a row mounted
+  /// before the list knew its own width; neither is ever laid out again by a layout pass that
+  /// this class takes part in, and a row still holding a box from the *previous* orientation
+  /// is measured at a width nothing on screen has (fix round 2, item 2). Each push is guarded
+  /// per row on change, so the steady state is a comparison and no round trip.
+  private func pushRowBoxEstimates() {
+    for model in sections {
+      for view in model.rows {
+        guard let row = HybridNitroUiForm.rowOwner(of: view) else { continue }
+        guard !row.isShownInCell || !row.hasReportedBox else { continue }
+        guard let box = estimatedRowBox(accessory: row.accessoryValue != .none) else {
+          continue
+        }
+        row.contentBoxReported(box)
+      }
+    }
   }
 
   // MARK: - What the layout knows (a Section asks, rather than typing constants)
@@ -1399,6 +1522,13 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "reclaims=\(reclaims)",
       "applies=\(snapshotApplies)",
       "width=\(Self.number(reportedWidth))",
+      // The two numbers behind it: the plain box the published width is supposed to be, what
+      // an accessory costs, and how many times anything was published at all — a list-wide
+      // number that moves while the list only scrolls re-renders the Form's whole tree per
+      // move, which is what `widthPublishes` makes visible (fix round 2, item 3).
+      "plainBox=\(Self.number(plainRowBoxWidth))",
+      "accessoryInset=\(Self.number(accessoryInset))",
+      "widthPublishes=\(widthPublishes)",
       "listWidth=\(Self.number(list.bounds.width))",
       "boxW=\(Self.number(rowBoxWidth()))",
       "boxReports=\(boxReports)",

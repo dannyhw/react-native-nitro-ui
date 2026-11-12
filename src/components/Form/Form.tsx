@@ -618,13 +618,34 @@ function RowRoot({
   // wrong for one row whatever it says, and a row laid out wider than its own box draws its
   // right-hand content past its bounds, where UIKit's hit-test never looks. Until this row's
   // cell has spoken, the Form's estimate is what the row starts from.
-  const [ownWidth, setOwnWidth] = useState(0);
+  //
+  // The report is stamped with the `width` it arrived under, because it is an answer about the
+  // list that asked it: after a rotation, an iPad resize, or an app changing a parent's width,
+  // the number this row's cell reported belongs to a layout that no longer exists, and a row
+  // that is off screen is not laid out again until it is scrolled back — which is how a row
+  // shown once went on measuring at the old orientation's width (fix round 2, item 2).
+  const [ownBox, setOwnBox] = useState({ width: 0, under: 0 });
   const reportOwnBox = useStableCallback((next: number): void => {
-    setOwnWidth((previous) =>
-      Math.abs(previous - next) < 0.25 ? previous : next
+    setOwnBox((previous) =>
+      Math.abs(previous.width - next) < 0.25 && previous.under === width
+        ? previous
+        : { width: next, under: width }
     );
   }) as NitroCallbackProp<(width: number) => void>;
-  const laid = ownWidth > 0 ? ownWidth : width;
+  // A row's own box, trusted while it still describes the list this row is in. When it does
+  // not, the row falls back on the list — but never *wider* than the number the list has just
+  // published: wider is the direction that draws content past the row's bounds, where UIKit's
+  // hit-test never looks, and an accessory row that falls back to the plain-row number would
+  // be over that line by exactly the accessory's 22 pt. The Form re-tells every row it has
+  // (`pushRowBoxEstimates`) as soon as the new box is known, which is what replaces the stale
+  // number with the right one rather than a safe guess at it.
+  let laid = width;
+  if (ownBox.width > 0) {
+    laid =
+      ownBox.under === width || width <= 0
+        ? ownBox.width
+        : Math.min(ownBox.width, width);
+  }
   // The row centres its own content (`alignItems: 'center'` on the row style, which the app's
   // `style` can still override). It needs no wrapper to do that: what stopped it was each
   // self-sizing control's `alignSelf: 'flex-start'` base style, which `Form.Row` now answers

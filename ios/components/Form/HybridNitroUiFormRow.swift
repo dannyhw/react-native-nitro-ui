@@ -158,6 +158,26 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     contentBox?(Double(width))
   }
 
+  /// Whether this row is being drawn by a cell right now.
+  ///
+  /// While it is, its own cell reports the box it is drawn in, which beats any estimate the
+  /// Form could offer; while it is not, this row is parked in its section's holding view and
+  /// the Form is the only thing that can still tell it anything.
+  var isShownInCell: Bool {
+    componentView?.superview is NitroUiFormRowContainer
+  }
+
+  /// Whether this row has ever been told the box it is drawn in.
+  var hasReportedBox: Bool { reportedBoxWidth > 0 }
+
+  /// Forget the box this row was last told, so the next one reaches JavaScript even when it is
+  /// the number this row had before — which is what the Form does to every row of a list that
+  /// has just become a different width, since a box remembered from the old one is not an
+  /// answer about the new one (fix round 2, item 2).
+  func forgetReportedBox() {
+    reportedBoxWidth = -1
+  }
+
   // MARK: - Events
 
   /// Ask UIKit to activate the accessibility element this row is part of.

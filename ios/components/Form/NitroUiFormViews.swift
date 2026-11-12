@@ -289,7 +289,9 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     // and 402 pt before the layout had any attributes at all) instead of the 338 pt it is
     // drawn in, which pushes right-aligned content out past the cell.
     if container.bounds.width > 0 {
-      formOwner?.rowBoxWidthReported(container.bounds.width)
+      formOwner?.rowBoxWidthReported(
+        container.bounds.width, accessory: container.drawsAccessoryRow
+      )
     }
   }
 
@@ -309,8 +311,15 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
       // this cell is blank, so a cell that keeps naming a row another cell adopted is a blank
       // row that no chase can find - which is how a row ends up drawing from its section's
       // hidden holding view (X29).
-      if self?.row === row { self?.row = nil }
-      self?.onRowLost?(row)
+      //
+      // Only a cell that still *names* the row lost one. A cell that had already stopped
+      // naming it gave it back: `giveBack` clears the pointer before the hand-over, so a
+      // signal for a row this cell no longer owns is somebody else's ordinary recycling, and
+      // forwarding it made every cell leaving the screen a lost row - `losses` climbing and a
+      // misdrawn-cell chase queued for each turn of a fling (fix round 2, item 1).
+      guard let self, self.row === row else { return }
+      self.row = nil
+      self.onRowLost?(row)
     }
     container.onRowRemoved = { [weak self] row in
       // Fabric took the row out of this cell, so this cell must stop saying it is showing
@@ -453,6 +462,13 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     // moment, and a row that loses its parent while Fabric still owns it trips the
     // "unmount a view which is mounted inside a different view" assertion.
     if onGiveBack != nil {
+      // Hand the row over with the container already *not* naming it. The taker `addSubview`s
+      // it inside `NitroUiFormHoldingView.moving`, and a container still named as the row's
+      // owner when that move happens is asked "was my row taken from under me?" and answers
+      // yes - so every ordinary give-back, which is what happens to a cell as it leaves the
+      // screen, was counted as a lost row and queued a chase through the visible cells
+      // (fix round 2, item 1). `releaseRow` would detach it, which the note above is about.
+      container.relinquish(row)
       onGiveBack?(row)
     } else {
       container.releaseRow()
@@ -476,8 +492,10 @@ final class NitroUiFormRowContainer: UIView {
   /// This container lost a row by itself, i.e. React Native unmounted it out of the cell.
   var onRowRemoved: ((UIView) -> Void)?
   /// Someone else took this container's row: another cell adopted it, or a section's holding
-  /// view took it back. Only the *foreign* take fires this - a row this container gave away
-  /// through `releaseRow` is a row its cell already stopped naming.
+  /// view took it back. Only the *foreign* take fires this, and both ways this container hands
+  /// a row over keep that promise: `releaseRow` and `relinquish` (the give-back path) each drop
+  /// the pointer before the row moves, so a row this container gave away is never read back at
+  /// it as a take.
   ///
   /// The distinction is the whole bug. A move out of a cell is wrapped in
   /// `NitroUiFormHoldingView.moving` so that no section reads it as an unmount, which also
@@ -491,6 +509,17 @@ final class NitroUiFormRowContainer: UIView {
   /// Whether `view` is the row this container is drawing right now.
   func isHolding(_ view: UIView) -> Bool {
     row === view && view.superview === self
+  }
+
+  /// Whether the row this container is drawing has a trailing accessory.
+  ///
+  /// The accessory is the only thing that makes one row's box narrower than the plain rows
+  /// around it, so it is what the Form has to know about a box report: the list-wide number
+  /// is the *plain* box, and an accessory row is told its own narrower one by this container
+  /// (fix round 2, item 3). A container holding nothing reports the plain box, which is true.
+  var drawsAccessoryRow: Bool {
+    guard let row, let owner = HybridNitroUiForm.rowOwner(of: row) else { return false }
+    return owner.accessoryValue != .none
   }
 
   override init(frame: CGRect) {
@@ -524,6 +553,17 @@ final class NitroUiFormRowContainer: UIView {
     if row.superview === self {
       NitroUiFormHoldingView.moving { row.removeFromSuperview() }
     }
+  }
+
+  /// Stop naming `rowView` without detaching it, because the caller is handing it to somebody
+  /// else in this same step.
+  ///
+  /// The give-back path cannot use `releaseRow`: the row may not be detached while Fabric owns
+  /// it, and the taker moves it in one step. Detaching is the caller's business and naming is
+  /// this container's, and a container that is still named the row's owner while that move
+  /// happens reads it as a *foreign* take - see `NitroUiFormRowCell.giveBack`.
+  func relinquish(_ rowView: UIView) {
+    if row === rowView { row = nil }
   }
 
   override func willRemoveSubview(_ subview: UIView) {
@@ -565,10 +605,17 @@ final class NitroUiFormRowContainer: UIView {
     // because the box is per row: a cell drawing an accessory row shrinks its own margins for
     // it, and the Form's list-wide number is then wrong for one row whatever it says. Guarded
     // on change on both sides, so the per-layout call is a comparison rather than a round trip.
-    HybridNitroUiForm.rowOwner(of: row)?.contentBoxReported(bounds.width)
+    let owner = HybridNitroUiForm.rowOwner(of: row)
+    owner?.contentBoxReported(bounds.width)
     // The Form's own number: still the estimate a row gets before its first cell lays it out,
-    // and the number the harness reads as `width=`.
-    owningCell()?.formOwner?.rowBoxWidthReported(bounds.width)
+    // and the number the harness reads as `width=` - which is the *plain* box, published once
+    // per list width. Offering this row's box as the list-wide number made the one number
+    // every Section and RowRoot renders against follow whichever cell laid out last (338 and
+    // 316 on the harness's screen), so a Form re-rendered its whole tree per flip of it
+    // (fix round 2, item 3).
+    owningCell()?.formOwner?.rowBoxWidthReported(
+      bounds.width, accessory: drawsAccessoryRow
+    )
   }
 }
 
