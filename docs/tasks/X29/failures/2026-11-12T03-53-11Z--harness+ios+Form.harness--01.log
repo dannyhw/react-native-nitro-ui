@@ -1,0 +1,91 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-12T03:53:11.464Z on code tree `a8cb220ad57c` at HEAD `7e8bbf1` (branch `task/X29-form-e4-pair-a`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 27832 ms
+- Load: start 9.94, end 10.81, median 10.81, max 11.82
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X29-xf97x`
+- Full log: `task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log` (<store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X29-xf97x (still live)
+  |   G29X27-wep1v             G29X27       both              pair-b
+  |   X29-xf97x                X29          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 10.81 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form.harness
+gate: node ../scripts/harness.mjs --harnessRunner ios Form.harness (cwd example)
+gate: code tree a8cb220ad57c at HEAD 7e8bbf1b
+gate: git tree 2f961f803696 with a DIRTY worktree (not reusable)
+gate: log task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log
+gate:       <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree a8cb220ad57c, 25 components registered)
+lease: X29-xf97x runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.94/8.91 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (G24) › aims a row content at its Yoga origin and presses it on both platforms (E4)
+
+    Form report never satisfied "every row drawn by exactly one cell, at its own box (before the presses) - the report names rowsInCells, rows, distinctDrawn, inCells, claims, wrongCells and boxMismatch" - last was sections=3;rows=9;items=9;inCells=9;rowsInCells=8;distinctDrawn=8;claims=1;wrongCells=1;losses=1;screen=1,874.00,646.67,9,9;orphans=0;stale=0;alive=9;reparents=8;reclaims=0;applies=65;width=338.00;listWidth=402.00;boxW=316.00;boxReports=33;boxSpan=22.00;boxMismatch=0.00;heights=52.00,52.00,52.00,52.00,52.00,52.00;taps=0;keyboard=0.00;insetBottom=0.00;adjBottom=34.00;offsetPublishes=1;recycles=6;selfSizing=1;ime=0.00;offset=-62.00;origin=-62.00;received=-62.00;listY=0.00;insetTop=62.00;placed=0;order=Wi-Fi|Bluetooth|Cellular data|Ring on receipt, Pre|ringer|alert|notification|nitro-ui 0.4.0|Silent mode;kind=prototype;listW=402.00;x=16.00;y=40.33;w=370.00;h0=52.00;rowH=44.00;h1=52.00;h2=52.00;headerX=16.00;headerY=0.00;headerH=40.33;footerH=29.67;footerSection=0;radius=0.00;sep=16.00
+
+      [0m [90m 102 |[39m     }
+       [90m 103 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 104 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 105 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 106 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 107 |[39m [32m        )}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        26.024 s
+Ran all test suites matching Form.harness.
+gate: harness:ios:Form.harness FAIL in 27.8 s
+gate: recorded in .gates/task/X29-form-e4-pair-a.jsonl
+
+
+gate: appended the device context to task/X29-form-e4-pair-a/harness+ios+Form.harness-2026-11-12T03-53-11.061Z.log (4 probe(s))
+
+```
