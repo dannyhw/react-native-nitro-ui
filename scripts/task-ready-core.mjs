@@ -467,6 +467,57 @@ function reportRows(text) {
 }
 
 /**
+ * The task a branch belongs to, read off the branch name (X30 item 4).
+ *
+ * A round is not always on `task/<ID>-<slug>`: a fix round is `task/X29-fix2`, a
+ * merge round is often a `merge/X29` or `task/X29-merge` worktree, and a report is
+ * keyed on the orchestrator's *id* (`docs/tasks/<ID>.report.md`, and the ledger
+ * export beside it). Deriving the id from the branch's leading token means a round
+ * hands in with `bun run task-ready` instead of remembering to pass `--task X29`
+ * every time the branch name stops looking like the task name - and a flag nobody
+ * remembers is a check that silently does not run.
+ *
+ * Two decisions a caller cannot see but a reviewer should:
+ *
+ *   - any `prefix/suffix` collapses to its suffix, not just `task/`. `merge/X29` and
+ *     `refs/heads/task/X29-fix2` name the same task as `task/X29-fix2`; refusing
+ *     them because of the prefix is what forced the flag.
+ *   - the id has to *contain a digit*. The ids in this repo are letters plus digits
+ *     (`X30`, `A1b`, `G29`, `FIX4`, `x22`), and a prose branch name (`main`,
+ *     `t3/merge-bar-ledger-tooling`, `dependabot/npm_and_yarn/...`) has no id in it
+ *     - guessing one would point the report checks at a file that is not this
+ *     branch's, which is worse than the error message that asks for `--task`.
+ *
+ * @param {string | null | undefined} branchRef `task/X4-conformance`,
+ *   `refs/heads/merge/X4`, `HEAD`, or null
+ * @returns {{branch: string | null, id: string | null}} the branch suffix (what a
+ *   branch-named report is called after) and the task id, either null
+ */
+export function taskFromBranchName(branchRef) {
+  const ref = String(branchRef ?? '').trim();
+  if (ref === '' || ref === 'HEAD') return { branch: null, id: null };
+  const name = ref.replace(/^refs\/(?:heads|remotes)\//, '');
+  const slash = name.indexOf('/');
+  const branch =
+    slash === -1 ? name : name.slice(slash + 1).replace(/^\/+/, '');
+  const suffix = branch === '' ? null : branch;
+  return { branch: suffix, id: taskIdFromBranch(suffix) };
+}
+
+/**
+ * The leading id of a branch suffix: `X4-conformance` -> `X4`, `X30` -> `X30`,
+ * `merge-bar-ledger-tooling` -> null. See `taskFromBranchName` for the digit rule.
+ *
+ * @param {string | null | undefined} branch
+ * @returns {string | null}
+ */
+export function taskIdFromBranch(branch) {
+  const leading = /^([A-Za-z0-9]+)(?:[-._]|$)/.exec(String(branch ?? ''))?.[1];
+  if (leading == null || !/\d/.test(leading)) return null;
+  return leading;
+}
+
+/**
  * Which report file a task id and a branch name refer to.
  *
  * AGENTS.md says the report is `docs/tasks/<ID>.report.md`, and `gate.mjs export --task <ID>`

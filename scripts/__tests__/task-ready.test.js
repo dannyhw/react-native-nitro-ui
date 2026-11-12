@@ -21,6 +21,8 @@ import {
   missingReportPaths,
   ONLY_GROUPS,
   reportCandidates,
+  taskIdFromBranch,
+  taskFromBranchName,
   reportTableProblems,
   summarise,
   todoFindings,
@@ -701,6 +703,84 @@ describe('which report file a task refers to', () => {
 
   it('does not ask for the same file twice', () => {
     expect(reportCandidates('X4', 'X4')).toEqual(['docs/tasks/X4.report.md']);
+  });
+});
+
+/* --------------------------- the branch -> the task ------------------------------- */
+
+describe('the task a branch name belongs to (X30 item 4)', () => {
+  it('reads the id off a fix round, a merge round, and any prefix', () => {
+    // `bun run task-ready` on the hand-in list is only a check if it runs. Naming the
+    // report after the branch made every fix-round and merge-round branch need
+    // `--task X29`, and a flag people forget is a check that silently did not happen.
+    expect(taskFromBranchName('task/X29-fix2')).toEqual({
+      branch: 'X29-fix2',
+      id: 'X29',
+    });
+    expect(taskFromBranchName('task/X29-merge')).toEqual({
+      branch: 'X29-merge',
+      id: 'X29',
+    });
+    // A merge round is not always under `task/` — `merge/X29` worktrees exist, and a
+    // full ref comes out of `git rev-parse` in some setups. The prefix is not the
+    // task's name.
+    for (const ref of ['merge/X29', 'refs/heads/merge/X29', 'X29']) {
+      expect(taskFromBranchName(ref)).toEqual({ branch: 'X29', id: 'X29' });
+    }
+    // The id shapes this repo actually uses: letter+digits, a trailing letter, an
+    // all-caps word with digits inside, and a lowercase probe branch.
+    for (const [ref, id] of [
+      ['task/A1b-baselines', 'A1b'],
+      ['task/R09-release-notes', 'R09'],
+      ['task/FIX4-merge', 'FIX4'],
+      ['x22-probe', 'x22'],
+      ['task/S6b-form-spike', 'S6b'],
+      ['task/G29-X27-merge', 'G29'],
+    ]) {
+      expect(taskFromBranchName(ref).id).toBe(id);
+    }
+  });
+
+  it('refuses to invent an id for a branch named in prose', () => {
+    // The line the derivation must not cross: `merge-bar-ledger-tooling` has a
+    // leading word but no task in it, and `merge.report.md` would be a file this
+    // branch never wrote. An error that asks for `--task` beats a confident guess.
+    for (const ref of [
+      'main',
+      't3/merge-bar-ledger-tooling',
+      'dependabot/npm_and_yarn/jest-30.0.0',
+      'refs/heads/HEAD',
+      'task/',
+      '',
+      null,
+    ]) {
+      expect(taskFromBranchName(ref).id).toBeNull();
+    }
+    expect(taskIdFromBranch('merge-bar-ledger-tooling')).toBeNull();
+    // A digit in a later word does not make the first word an id.
+    expect(taskIdFromBranch('fix-round-2')).toBeNull();
+  });
+
+  it('still lands on the report that exists, branch-named first', () => {
+    // The two spellings in one flow: the id from the branch, the candidates from
+    // `reportCandidates`, so `task/X29-fix2` reads X29's report without being told.
+    const { branch, id } = taskFromBranchName('task/X29-fix2');
+    expect(reportCandidates(id, branch)).toEqual([
+      'docs/tasks/X29-fix2.report.md',
+      'docs/tasks/X29.report.md',
+    ]);
+    expect(
+      reportCandidates(...Object.values(taskFromBranchName('merge/X29')))
+    ).toEqual(['docs/tasks/X29.report.md']);
+  });
+
+  it('is what the command uses, not a copy of the rule', () => {
+    // The old script had its own `task/`-only regex, which is exactly the line that
+    // made a merge branch give up. Pinning the call is cheap; pinning the absence of
+    // the private re-derivation is what keeps it from coming back.
+    const script = read('scripts/task-ready.mjs');
+    expect(script).toContain('taskFromBranchName(');
+    expect(script).not.toContain('/^task\\/[');
   });
 });
 

@@ -69,6 +69,8 @@ import {
   missingReportPaths,
   ONLY_GROUPS,
   reportCandidates,
+  taskIdFromBranch,
+  taskFromBranchName,
   reportTableProblems,
   summarise,
   todoFindings,
@@ -100,19 +102,16 @@ function arg(name) {
   return index >= 0 ? (argv[index + 1] ?? null) : null;
 }
 
-/** The branch's task suffix: `task/X4-conformance` -> `X4-conformance`, or null. */
-function branchSuffix() {
-  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], '');
-  const match = /^task\/([A-Za-z0-9._-]+)$/.exec(branch);
-  return match == null ? null : match[1];
+/** The branch's task suffix and id, from `task/X4-conformance`, `merge/X4` or `refs/heads/...`. */
+function branchTask() {
+  return taskFromBranchName(git(['rev-parse', '--abbrev-ref', 'HEAD'], ''));
 }
 
-/** The task id: `--task`, or the leading id of the branch name (`X4-conformance` -> `X4`). */
+/** The task id: `--task` wins; otherwise the leading id of the branch name (X30 item 4). */
 function taskId(branch) {
   const explicit = arg('--task');
   if (explicit != null) return explicit;
-  if (branch == null) return null;
-  return /^([A-Za-z0-9]+)-/.exec(branch)?.[1] ?? branch;
+  return taskIdFromBranch(branch);
 }
 
 const ALL = [
@@ -142,15 +141,16 @@ for (const name of only) {
   }
 }
 
-const branch = branchSuffix();
+const branch = branchTask().branch;
 const id = taskId(branch);
 const wantsReport = only.some(
   (name) => name === 'report-paths' || name === 'report-table'
 );
 if (wantsReport && id == null) {
   console.error(
-    'task-ready: no task id — pass --task <ID> or name the branch task/<ID>. ' +
-      'The report checks read docs/tasks/<ID>.report.md and cannot guess it.'
+    'task-ready: no task id — pass --task <ID>, or work on a branch whose name ' +
+      'starts with one (`task/X4-conformance`, `merge/X4`, `X4-fix1`). The report ' +
+      'checks read docs/tasks/<ID>.report.md and cannot guess an id from prose.'
   );
   process.exit(2);
 }
