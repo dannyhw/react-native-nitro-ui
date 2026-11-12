@@ -128,5 +128,5 @@
 | X26 | Device leases first come, first served (X24 and X25 starved for hours) | Apex | Opus | merged (PR #65; its device gates ran on the X24/G30/X28 merge tree, 5/5 green) |
 | X27 | Examples: caption above the control in every story, all affected README screenshots retaken (owner) | Apex | Opus | merged (PR #66; combined merge with G29, gates 5/5 on code tree `b9700c15`; Stepper story on the shared Row, Stepper and Android Picker shots retaken) |
 | X28 | Device gates refuse to run without a live lease (G30 drove a stray emulator without one) | Apex | Opus | merged (combined merge with X24 and G30, gates 5/5 on code tree `cd6b3aa2`) |
-| X29 | Form E4 harness case red on pair-a's iOS simulator only (found by X25) | Apex | Opus | running |
+| X29 | Form E4 harness case red on pair-a's iOS simulator only (found by X25) | Apex | Opus | in review (PR #68; cause: one shared content width for every iOS row while a cell with a trailing accessory is 22 pt narrower, so content overhung its cell past hit-testing; plus silent row moves between cells; fix: per-row content box and a hand-back; merges with X25) |
 | R09 | 0.9.0 release notes rewritten for app developers (3,690 to 1,220 words) | Opus | orchestrator | ready on task/R09-release-notes; lands just before 0.9.0 is staged, after X25 |
