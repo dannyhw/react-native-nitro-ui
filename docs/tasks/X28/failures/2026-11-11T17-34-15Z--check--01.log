@@ -1,0 +1,176 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-11T17:34:15.713Z on code tree `86e593aa25be` at HEAD `54563e5` (branch `task/X28-gate-needs-lease`)
+- Command: `bun run check`
+- Result: fail, exit 1, 156610 ms
+- Load: start 6.94, end 12.34, median 12.68, max 21.80
+- Device: none recorded (not a device gate)
+- Full log: `task/X28-gate-needs-lease/check-2026-11-11T17-34-14.961Z.log` (<store>/task/X28-gate-needs-lease/check-2026-11-11T17-34-14.961Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/gate-logs.test.js (60.502 s)`
+- `● logs survive git worktree remove › puts a harness run's timings in the store, named from its log (X11 v6)`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: 0`
+- `Received: 1`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3220 — the rest is in the full log above)
+
+```
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/gate.test.js (56.258 s)
+FAIL scripts/__tests__/gate-logs.test.js (60.502 s)
+  ● logs survive git worktree remove › puts a harness run's timings in the store, named from its log (X11 v6)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      1216 |       '[ -n "$HARNESS_SUITE_TIMING" ] && printf %s "$FAKE_SUITES_JSON" > "$HARNESS_SUITE_TIMING"; echo "plugin env: file=${HARNESS_SUITE_TIMING-unset} gate=${HARNESS_SUITE_TIMING_GATE-unset}"'
+      1217 |     );
+    > 1218 |     expect(run.status).toBe(0);
+           |                        ^
+      1219 |
+      1220 |     // The gate's own name travels with it, unfolded: the file name is a lossy spelling.
+      1221 |     expect(run.stdout).toContain('plugin env: file=');
+
+      at Object.toBe (scripts/__tests__/gate-logs.test.js:1218:24)
+
+PASS scripts/__tests__/ci-workflows.test.js (72.332 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (81.725 s)
+PASS scripts/__tests__/bench-gate.test.js (151.887 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/gate-logs.test.js (60.502 s)
+  ● logs survive git worktree remove › puts a harness run's timings in the store, named from its log (X11 v6)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      1216 |       '[ -n "$HARNESS_SUITE_TIMING" ] && printf %s "$FAKE_SUITES_JSON" > "$HARNESS_SUITE_TIMING"; echo "plugin env: file=${HARNESS_SUITE_TIMING-unset} gate=${HARNESS_SUITE_TIMING_GATE-unset}"'
+      1217 |     );
+    > 1218 |     expect(run.status).toBe(0);
+           |                        ^
+      1219 |
+      1220 |     // The gate's own name travels with it, unfolded: the file name is a lossy spelling.
+      1221 |     expect(run.stdout).toContain('plugin env: file=');
+
+      at Object.toBe (scripts/__tests__/gate-logs.test.js:1218:24)
+
+
+Test Suites: 1 failed, 86 passed, 87 total
+Tests:       1 failed, 2072 passed, 2073 total
+Snapshots:   0 total
+Time:        152.288 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 156.6 s - note: the code tree moved during the run (a18443a5b89a now), so this line describes 86e593aa25be
+gate: recorded in .gates/task/X28-gate-needs-lease.jsonl
+
+```

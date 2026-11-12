@@ -158,7 +158,11 @@ Both spell the value without a float's noise — `4`, not `4.0`, and `0.1` stays
   implementations — SwiftUI disables the half itself, and Android hands each button
   the same `canStep` answer the harness reads back.
 - **`disabled` sends nothing** in either direction, and follows the flag back on the
-  same instance.
+  same instance. It also has to look disabled, which the two platforms reach by
+  different routes: Android's two Material buttons take the state themselves and paint
+  with `onSurface` at 38 %, while SwiftUI's `Stepper` is the one control here that
+  `.disabled(_)` leaves undrawn-differently — inert and pixel-for-pixel a live control —
+  so iOS states it the way iOS does a control that is off, at half opacity.
 - **An uncontrolled Stepper starts at `minimumValue`**, not at a literal `0`, so
   `<Stepper minimumValue={20} />` never displays a number it cannot hold.
 - **Recycling resets everything**: the value, the range, the step, the name, the

@@ -11,6 +11,7 @@ import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiButton } from './NativeNitroUiButton';
 
 /**
@@ -238,19 +239,6 @@ function sizingVariantFor(
   ].join(FIELD_SEPARATOR);
 }
 
-/**
- * What a self-sizing control is laid out with, before any `style`.
- *
- * `alignItems: stretch` (the default in a column) otherwise decides a control's
- * width for it: Yoga gives a stretched child the row's width as an *exact*
- * constraint, so the measured size is never even asked for and a Button becomes
- * a 402 pt box with a small control in it. React Native's own `Switch` does the
- * same thing for the same reason. It is a base style, not a forced one: an
- * explicit `width`, `flex`, or `alignSelf: 'stretch'` in the caller's `style`
- * wins, because their styles are applied after this.
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
 /** Resolve a caller's variant, defaulting anything unrecognised to `'filled'`. */
 function resolveVariant(variant: ButtonVariant | undefined): ButtonVariant {
   return variant != null && VARIANTS.includes(variant) ? variant : 'filled';
@@ -297,6 +285,7 @@ export function Button({
   style,
   ...restProps
 }: ButtonProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   // A name that cannot be a resource name is a typo the developer can fix right
   // now, and native's answer to it is indistinguishable from a missing file.
   // See `warnAndroidIconName` for why this is development-only and once per name,
@@ -356,7 +345,7 @@ export function Button({
       )}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }

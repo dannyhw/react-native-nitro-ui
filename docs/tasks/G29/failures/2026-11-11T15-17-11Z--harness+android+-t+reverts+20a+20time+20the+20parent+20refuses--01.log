@@ -1,0 +1,113 @@
+# Failure excerpt — harness:android:-t:reverts%20a%20time%20the%20parent%20refuses
+
+- Ran: 2026-11-11T15:17:11.791Z on code tree `d30cb1c33a43` at HEAD `f46d707` (branch `task/G29-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android -t reverts a time the parent refuses`
+- Result: fail, exit 1, 52801 ms
+- Load: start 5.32, end 3.49, median 4.00, max 5.32
+- Device: android / device `emulator-5570` / lease `G29-2s78q`
+- Full log: `task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log` (<store>/task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● Console`
+- `● DatePicker · wheel variant (G29) › reverts a time the parent refuses, and reports the next roll of it`
+- `expected 1778850300000 to be 1778833200000 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-2s78q (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   G29-2s78q                G29          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.49 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 64 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:-t:reverts%20a%20time%20the%20parent%20refuses
+gate: node ../scripts/harness.mjs --harnessRunner android -t reverts a time the parent refuses (cwd example)
+gate: code tree d30cb1c33a43 at HEAD f46d7077
+gate: git tree af9cbd117407 with a DIRTY worktree (not reusable)
+gate: log task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log
+gate:       <store>/task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android -t reverts a time the parent refuses
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree d30cb1c33a43, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.06/7.04 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/DatePicker.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+  ● DatePicker · wheel variant (G29) › reverts a time the parent refuses, and reports the next roll of it
+
+    expected 1778850300000 to be 1778833200000 // Object.is equality
+
+      [0m [90m 2106 |[39m     [36mconst[39m second [33m=[39m [36mawait[39m waitForEvents([35m2[39m)[33m;[39m
+       [90m 2107 |[39m     expect(second[[35m1[39m])[33m.[39mtoBe([32m`wheel-refused:${String(ROLLED)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2108 |[39m     expect(displayedOf([32m'wheel-refused'[39m))[33m.[39mtoBe([33mPARENT[39m)[33m;[39m
+       [90m      |[39m                                              [31m[1m^[22m[39m
+       [90m 2109 |[39m     unmount()[33m;[39m
+       [90m 2110 |[39m   })[33m;[39m
+       [90m 2111 |[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/DatePicker.harness.tsx
+  ● DatePicker · wheel variant (G29) › reverts a time the parent refuses, and reports the next roll of it
+
+    expected 1778850300000 to be 1778833200000 // Object.is equality
+
+      [0m [90m 2106 |[39m     [36mconst[39m second [33m=[39m [36mawait[39m waitForEvents([35m2[39m)[33m;[39m
+       [90m 2107 |[39m     expect(second[[35m1[39m])[33m.[39mtoBe([32m`wheel-refused:${String(ROLLED)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2108 |[39m     expect(displayedOf([32m'wheel-refused'[39m))[33m.[39mtoBe([33mPARENT[39m)[33m;[39m
+       [90m      |[39m                                              [31m[1m^[22m[39m
+       [90m 2109 |[39m     unmount()[33m;[39m
+       [90m 2110 |[39m   })[33m;[39m
+       [90m 2111 |[39m[0m
+
+
+Test Suites: 1 failed, 30 skipped, 1 of 31 total
+Tests:       1 failed, 659 skipped, 660 total
+Snapshots:   0 total
+Time:        51.477 s, estimated 198 s
+Ran all test suites with tests matching "reverts a time the parent refuses".
+gate: harness:android:-t:reverts%20a%20time%20the%20parent%20refuses FAIL in 52.8 s
+gate: recorded in .gates/task/G29-fix1.jsonl
+
+
+gate: appended the device context to task/G29-fix1/harness+android+-t+reverts+20a+20time+20the+20parent+20refuses-2026-11-11T15-17-11.162Z.log (5 probe(s))
+
+```

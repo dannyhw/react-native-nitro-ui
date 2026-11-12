@@ -38,6 +38,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 
 import { Form } from '../../src/components/Form/Form';
+import { useSelfSizingBaseStyle } from '../../src/core/useSelfSizing';
 import { Switch } from '../../src/components/Switch/Switch';
 import { forgetPromisedHandles, handleOf } from './handles';
 
@@ -1894,5 +1895,237 @@ describe('Form measure (E7)', () => {
     // pass on the scroll.
     expect(scrolled.compared).toBeGreaterThanOrEqual(10);
     cleanup();
+  });
+});
+
+// MARK: - X24: does a row's content reach the row's trailing edge, level with its label?
+
+/** `[left, top, width, height]` in the window's own units (pt on iOS, dp on Android). */
+type WindowBox = [number, number, number, number];
+
+/** Anything React gave a `measureInWindow` handle to. */
+type Measurable = {
+  measureInWindow: (
+    callback: (x: number, y: number, width: number, height: number) => void
+  ) => void;
+};
+
+/**
+ * The boxes of {@link TrailingEdgeForm}, held by ref.
+ *
+ * Every one of them is a plain `View`, because a nitro-ui control takes no `ref`:
+ * its handle (`hybridRef`) reports the size its native side measured and never
+ * where it sits, and `measureInWindow` is a walk of the shadow tree, which only a
+ * view React Native lays out answers. So each measured box is a wrapper that hugs
+ * the thing it holds — in a row that centres its children a `View` with no style
+ * is exactly as wide and as tall as the control inside it, which is the box that
+ * control draws in.
+ */
+const contentBoxes: Record<string, Measurable> = {};
+
+/** Hold one box under `key`, ignoring the unmount `null` (E7's pattern). */
+function keepBox(key: string): (handle: Measurable | null) => void {
+  return (handle) => {
+    if (handle != null) contentBoxes[key] = handle as never;
+  };
+}
+
+/** One box, or null while the shadow tree has no size for it yet. */
+async function readBox(key: string): Promise<WindowBox | null> {
+  const handle = contentBoxes[key];
+  if (handle == null) throw new Error(`no box registered for "${key}"`);
+  const box = await new Promise<WindowBox>((resolve) => {
+    handle.measureInWindow((x, y, width, height) =>
+      resolve([x, y, width, height])
+    );
+  });
+  return box[2] > 0 && box[3] > 0 ? box : null;
+}
+
+/**
+ * Every box once the layout has settled, or a complaint naming the last reading.
+ *
+ * Settled means two reads in a row that agree on the probe row's width. On iOS a
+ * row starts at `width: '100%'` and narrows to the width the list's cell reported,
+ * so a box read between those two answers is the row's first frame and not the row
+ * a screenshot shows — and a case that measured then would be comparing a form
+ * that was still being laid out.
+ */
+async function settledBoxes<const K extends readonly string[]>(
+  keys: K
+): Promise<Record<K[number], WindowBox>> {
+  let previous: number | null = null;
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    const boxes: Record<string, WindowBox> = {};
+    for (const key of keys) {
+      const box = await readBox(key);
+      if (box != null) boxes[key] = box;
+    }
+    const width = boxes.probe?.[2];
+    if (width != null && width > 100 && width === previous) {
+      return boxes as Record<K[number], WindowBox>;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `the row content never settled: ${keys
+          .map((key) => `${key}=${JSON.stringify(boxes[key] ?? null)}`)
+          .join(' ')}`
+      );
+    }
+    previous = width ?? null;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+/** One child that takes all the room its row offers — the probe's whole job. */
+const x24Fill = { flex: 1 } as const;
+
+/**
+ * A stand-in for a self-sizing control: a box React Native *can* measure, carrying the
+ * base style the real controls carry because it reads it from the same hook they do.
+ *
+ * This is the whole trick of the case. `measureInWindow` walks the shadow tree, and a
+ * hybrid view's handle reports the size its native side measured, never where it sits —
+ * so the question "where does a `Switch` land in a row?" can only be asked through a
+ * proxy. Reading `useSelfSizingBaseStyle` instead of retyping `{ alignSelf:
+ * 'flex-start' }` is what keeps the proxy honest: the answer the case measures is the
+ * answer the row gives a real control, and on a `Form.Row` that predates the row-aware
+ * base style the proxy follows `flex-start` to the row's top edge and the case goes red
+ * for the reason it exists, not for the reason it was written.
+ */
+function SelfSizingProbe({
+  boxKey,
+  children,
+}: {
+  boxKey: string;
+  children?: ReactElement;
+}) {
+  return (
+    <View ref={keepBox(boxKey)} style={useSelfSizingBaseStyle()}>
+      {children}
+    </View>
+  );
+}
+
+/** The same pair inside a box of an app's own — what an app that copied round 1 has. */
+const x24Box = {
+  alignItems: 'center',
+  flex: 1,
+  flexDirection: 'row',
+} as const;
+
+const x24Styles = StyleSheet.create({
+  form: { flex: 1 },
+  label: { flex: 1 },
+  text: { fontSize: 16 },
+});
+
+/**
+ * The README's `form` example, with measurable boxes.
+ *
+ * Row one is a probe: one child that takes all the room, so its box *is* the row's
+ * content box, insets and all, on a platform this file has to know nothing about.
+ * Row two is the README's row written the obvious way — a `flex: 1` label and a
+ * switch, both direct children of the row. Row three is that pair inside a box of
+ * the app's own, so the case also covers an app that wrapped its content already.
+ */
+function TrailingEdgeForm() {
+  return (
+    <Form style={x24Styles.form}>
+      <Form.Section title="Notifications">
+        <Form.Row>
+          <View ref={keepBox('probe')} style={x24Fill} testID="x24-probe">
+            <Text style={x24Styles.text}>Notifications</Text>
+          </View>
+        </Form.Row>
+        <Form.Row>
+          <View ref={keepBox('label')} style={x24Styles.label}>
+            <Text style={x24Styles.text}>Push notifications</Text>
+          </View>
+          <SelfSizingProbe boxKey="control">
+            <Switch testID="x24-switch" value />
+          </SelfSizingProbe>
+        </Form.Row>
+        <Form.Row>
+          <View style={x24Box}>
+            <View ref={keepBox('boxedLabel')} style={x24Styles.label}>
+              <Text style={x24Styles.text}>Play a sound</Text>
+            </View>
+            <SelfSizingProbe boxKey="boxedControl">
+              <Switch testID="x24-boxed-switch" value={false} />
+            </SelfSizingProbe>
+          </View>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+
+describe('Form row content (X24)', () => {
+  afterEach(() => {
+    cleanup();
+    // A ref callback that only ever stores leaves the next case able to measure a
+    // view this one unmounted, and a dead view answers with its right size at (0, 0).
+    for (const key of Object.keys(contentBoxes)) delete contentBoxes[key];
+  });
+
+  it('lays a row’s content across the row and level with its label (X24)', async () => {
+    await render(<TrailingEdgeForm />);
+    await screen.findByTestId('x24-switch');
+    const { probe, label, control, boxedLabel, boxedControl } =
+      await settledBoxes([
+        'probe',
+        'label',
+        'control',
+        'boxedLabel',
+        'boxedControl',
+      ] as const);
+    const right = (box: WindowBox): number => box[0] + box[2];
+    const centre = (box: WindowBox): number => box[1] + box[3] / 2;
+    const issues: string[] = [];
+    // The same three promises, asked of the bare pair the README prints and of the
+    // pair inside an app's own box.
+    const pairs: Record<string, { label: WindowBox; control: WindowBox }> = {
+      'a bare row': { label, control },
+      'a boxed row': { label: boxedLabel, control: boxedControl },
+    };
+    for (const [name, pair] of Object.entries(pairs)) {
+      // (How wide the row's content box *is* — the width the cell handed the row — is
+      // what the E7 case checks against the list, so nothing is repeated here.)
+      if (Math.abs(pair.label[0] - probe[0]) > 1) {
+        issues.push(
+          `${name}: the label starts at x=${pair.label[0].toFixed(1)} while the row's content starts at x=${probe[0].toFixed(1)}`
+        );
+      }
+      if (Math.abs(right(pair.control) - right(probe)) > 1) {
+        issues.push(
+          `${name}: the control ends at x=${right(pair.control).toFixed(1)} while the row's content ends at x=${right(probe).toFixed(1)}`
+        );
+      }
+      // The one round 1's `Form.Row` failed: a control whose base style is
+      // `alignSelf: 'flex-start'` was left directly in a row taller than its content
+      // followed that style to the row's top edge, because a child's `alignSelf` beats
+      // the row's `alignItems`. A row now answers that base style with `alignSelf:
+      // 'center'` (`src/core/useSelfSizing.ts`), so the control lands on its label's
+      // middle — within a point, which is what "level" means to a reader of a screenshot.
+      if (Math.abs(centre(pair.control) - centre(pair.label)) > 1) {
+        issues.push(
+          `${name}: the control is centred at y=${centre(pair.control).toFixed(1)} while its label is centred at y=${centre(pair.label).toFixed(1)}`
+        );
+      }
+    }
+    const delta = (pair: { label: WindowBox; control: WindowBox }): string =>
+      (centre(pair.control) - centre(pair.label)).toFixed(1);
+    console.log(
+      `X24 BARE pair: row content x=${probe[0].toFixed(1)}..${right(probe).toFixed(1)}, ` +
+        `control x=${control[0].toFixed(1)}..${right(control).toFixed(1)}, centre delta ` +
+        `${delta({ label, control })}`
+    );
+    console.log(
+      `X24 BOXED pair: control x=${boxedControl[0].toFixed(1)}..${right(boxedControl).toFixed(1)}, ` +
+        `centre delta ${delta({ label: boxedLabel, control: boxedControl })}`
+    );
+    expect(issues).toEqual([]);
   });
 });

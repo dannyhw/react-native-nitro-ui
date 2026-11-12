@@ -1,0 +1,94 @@
+# Failure excerpt — harness:ios:Checkbox
+
+- Ran: 2026-11-10T21:46:57.049Z on code tree `adfa0a48549d` at HEAD `20e3eaa` (branch `task/G31-checkbox-ios-checkmark`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Checkbox`
+- Result: fail, exit 1, 17735 ms
+- Load: start 6.08, end 6.15, median 6.08, max 6.15
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G31-5oft1`
+- Full log: `task/G31-checkbox-ios-checkmark/harness+ios+Checkbox-2026-11-10T21-46-57.049Z.log` (<store>/task/G31-checkbox-ios-checkmark/harness+ios+Checkbox-2026-11-10T21-46-57.049Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › draws the third state on both platforms, and off in the switch style`
+- `expected '103.00x26.00' to be 'MEASURE-MIXED' // Object.is equality`
+- `● Checkbox · G15 › lays out every iOS style at the box that style measures`
+- `expected 26 to be -1 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G31-checkbox-ios-checkmark/harness+ios+Checkbox-2026-11-10T21-46-57.049Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G31-5oft1 (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.15 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Checkbox
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree adfa0a48549d, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.08/9.17 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G31-checkbox-ios-checkmark/harness+ios+Checkbox-2026-11-10T21-46-57.049Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › draws the third state on both platforms, and off in the switch style
+
+    expected '103.00x26.00' to be 'MEASURE-MIXED' // Object.is equality
+
+      [0m [90m 695 |[39m     }
+       [90m 696 |[39m     [90m// TEMP PROBE (G31 sizing measurement - revert)[39m
+      [31m[1m>[22m[39m[90m 697 |[39m     expect(describeSize(size))[33m.[39mtoBe([32m'MEASURE-MIXED'[39m)[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 698 |[39m     console[33m.[39mlog(
+       [90m 699 |[39m       [32m`checkbox indeterminate: drawn=${reportOf('mixed').displayed} `[39m [33m+[39m
+       [90m 700 |[39m         [32m`symbol=${reportOf('mixed').symbol ?? '-'} checked-with-dash=`[39m [33m+[39m[0m
+
+  ● Checkbox · G15 › lays out every iOS style at the box that style measures
+
+    expected 26 to be -1 // Object.is equality
+
+      [0m [90m 927 |[39m     }[33m;[39m
+       [90m 928 |[39m     [90m// TEMP PROBE (G31 sizing measurement - revert)[39m
+      [31m[1m>[22m[39m[90m 929 |[39m     expect(bare[33m.[39mwidth)[33m.[39mtoBe([33m-[39m[35m1[39m)[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 930 |[39m     expect(bare[33m.[39mheight)[33m.[39mtoBe([33m-[39m[35m2[39m)[33m;[39m
+       [90m 931 |[39m     expect(boxOf([32m'circle'[39m)[33m.[39mwidth)[33m.[39mtoBe([33m-[39m[35m3[39m)[33m;[39m
+       [90m 932 |[39m     expect(boxOf([32m'circle'[39m)[33m.[39mheight)[33m.[39mtoBe([33m-[39m[35m4[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 12 passed, 14 total
+Snapshots:   0 total
+Time:        15.583 s
+Ran all test suites matching Checkbox.
+
+
+
+```

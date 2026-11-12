@@ -263,6 +263,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiButtonGroup"
       }
+    },
+    "NitroUiListItem": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiListItem"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiListItem"
+      }
     }
   },
   "ignorePaths": [

@@ -79,6 +79,18 @@ export default function DatePickerScreen() {
   const [realDate, setRealDate] = useState<Date | null>(null);
   const [realEvents, setRealEvents] = useState(0);
   const [rejectEvents, setRejectEvents] = useState(0);
+  // The `wheel` pair (G29): the time drum that accepts, and the `date` wheel that is
+  // not a drum. The time one's counter is the whole check — a drum that reported every
+  // row a fling rolled past would move it by more than one.
+  const [wheelTime, setWheelTime] = useState<Date | null>(null);
+  const [wheelTimeEvents, setWheelTimeEvents] = useState(0);
+  // The same pin, on the drum (G29). A dial commits once, when the finger leaves it,
+  // so a refused pick there is a value the model never had. A drum is different: it
+  // *stays* where the finger left it until something moves it back, so this control
+  // exists to be flung and refused — and read again, from the accessibility tree, to
+  // see whether the drums came home or the refused time is still painted.
+  const [rejectWheelEvents, setRejectWheelEvents] = useState(0);
+  const [rejectWheelTime] = useState(() => new Date(2024, 5, 15, 9, 20));
   // Pinned: the parent never moves it, so a date chosen in the dialog has to
   // snap back. The counter is what proves the pick was seen at all - which only
   // happens once native has reverted, because the same value twice reports nothing.
@@ -96,6 +108,17 @@ export default function DatePickerScreen() {
 
   const countRejectChange = useCallback(() => {
     setRejectEvents((current) => current + 1);
+  }, []);
+
+  const countWheelTimeChange = useCallback((date: Date) => {
+    setWheelTimeEvents((current) => current + 1);
+    setWheelTime(date);
+  }, []);
+
+  // Refuses everything, like `countRejectChange`: the time the parent keeps sending
+  // never moves, so the drum has to come back to it.
+  const countRejectWheelChange = useCallback(() => {
+    setRejectWheelEvents((current) => current + 1);
   }, []);
 
   const acceptChange = useCallback((date: Date) => {
@@ -173,6 +196,7 @@ export default function DatePickerScreen() {
             {rejectEvents}
           </Text>
         </View>
+
         <View style={styles.row}>
           <Text style={[styles.label, { color: ink.muted }]}>
             day the parent keeps sending
@@ -411,6 +435,82 @@ export default function DatePickerScreen() {
           label/value/disabled state is read from a `uiautomator dump` instead (the
           report records those dumps).
         */}
+        {/*
+          G29: the `wheel` variant's Android cases, last on the page but the "last row"
+          (which is the worst case a popover has to fit above). Everything the checks
+          above read sits *above* these, because `uiautomator dump` lists no off-screen
+          node and a check reads its echoes while the drum is on screen.
+
+          `mode="time"` becomes a drum per field (Material 3 1.5's `ScrollField`, the widget
+          its own `TimeScroll` is built from): rolled with a
+          finger, one event per settle — which is what the counters are for. The second
+          one is refused by the parent, so its drum has to roll itself back.
+          `mode="date"` with the same variant stays the inline calendar (there is no
+          Material date wheel to draw), and a check reads its box to prove that: a
+          calendar is far taller than the 120 dp drum.
+
+          Every echo is above the control it belongs to, for the same reason: the check
+          brings the *drum* into the window, and what a drum needs is its own 120 dp of it.
+        */}
+        <Text style={[styles.section, { color: ink.ink }]}>
+          Real input · wheel
+        </Text>
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.muted }]}>
+            wheel time reported (uncontrolled)
+          </Text>
+          <Text
+            testID="real-input-wheel-time-value"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {instantOf(wheelTime)}
+          </Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.muted }]}>
+            wheel changes reported (uncontrolled)
+          </Text>
+          <Text
+            testID="real-input-wheel-time-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {wheelTimeEvents}
+          </Text>
+        </View>
+        <DatePicker
+          mode="time"
+          variant="wheel"
+          defaultValue={new Date(2024, 5, 15, 9, 20)}
+          onChange={countWheelTimeChange}
+          accessibilityLabel="Real-input wheel time picker"
+          testID="real-input-wheel-time"
+        />
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.muted }]}>
+            wheel changes refused by the parent
+          </Text>
+          <Text
+            testID="real-input-wheel-refuse-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {rejectWheelEvents}
+          </Text>
+        </View>
+        <DatePicker
+          mode="time"
+          variant="wheel"
+          value={rejectWheelTime}
+          onChange={countRejectWheelChange}
+          accessibilityLabel="Real-input wheel refusing picker"
+          testID="real-input-wheel-refuse"
+        />
+        <DatePicker
+          mode="date"
+          variant="wheel"
+          defaultValue={new Date(2024, 5, 15)}
+          accessibilityLabel="Real-input wheel date picker"
+          testID="real-input-wheel-date"
+        />
         <Text style={[styles.section, { color: ink.ink }]}>
           Last row (a popover has to fit above this one)
         </Text>

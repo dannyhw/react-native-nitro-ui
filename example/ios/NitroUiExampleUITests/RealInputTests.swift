@@ -61,6 +61,7 @@ final class RealInputTests: XCTestCase {
     static let formTab = "tab-form"
     static let buttonGroupTab = "tab-buttongroup"
     static let stepperTab = "tab-stepper"
+    static let listItemTab = "tab-listitem"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -95,6 +96,7 @@ final class RealInputTests: XCTestCase {
     static let checkboxRefusedLast = "real-input-checkbox-refused-last"
     static let checkboxRefusedEvents = "real-input-checkbox-refused-events"
     static let checkboxDisabledEvents = "real-input-checkbox-disabled-events"
+    static let checkboxSwitchEvents = "real-input-checkbox-switch-events"
     static let iconButtonPresses = "real-input-icon-button-presses"
     static let iconButtonValue = "real-input-icon-button-value"
     static let iconButtonEvents = "real-input-icon-button-events"
@@ -117,6 +119,11 @@ final class RealInputTests: XCTestCase {
     static let stepperRefusedLast = "real-input-stepper-refused-last"
     static let stepperRefusedEvents = "real-input-stepper-refused-events"
     static let stepperDisabledEvents = "real-input-stepper-disabled-events"
+    // The ListItem screen's counters - the same testIDs `scripts/real-input/screens.mjs` names.
+    static let listItemPresses = "real-input-listitem-presses"
+    static let listItemLast = "real-input-listitem-last"
+    static let listItemDisabledEvents = "real-input-listitem-disabled-events"
+    static let listItemFormPresses = "real-input-listitem-form-presses"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -510,6 +517,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.contextMenuTab, screenAnchor: Echo.contextMenu),
       A11yCase(id: "form", testId: "form-row", label: "Row with onPress",
                tab: Tab.formTab, screenAnchor: Echo.formScreen),
+      A11yCase(id: "list-item", testId: "real-input-listitem", label: "Real-input item",
+               tab: Tab.listItemTab, screenAnchor: Echo.listItemPresses),
     ]
   }
 
@@ -3078,12 +3087,23 @@ final class RealInputTests: XCTestCase {
   // MARK: - Checkbox
 
   /// A real tap checks a Checkbox, a toggle its parent refuses snaps back, and a disabled
-  /// one takes nothing (G15).
+  /// one takes nothing (G15); the `iosStyle='switch'` fixture is toggled the same way, so
+  /// the look DECISIONS D47 made optional is proved unchanged by a finger and not by a
+  /// comment (G31).
   ///
-  /// iOS has no checkbox, so the control renders SwiftUI `Toggle(isOn:)` with the `.switch`
-  /// style, which XCUITest reports as a switch-type element carrying a toggle trait and
-  /// `value` 0/1 - the same element a filter chip's `Toggle(.button)` produces, read here
-  /// with the Switch's own witness, `nativeSwitchState`.
+  /// iOS has no checkbox, so every style is SwiftUI's `Toggle`, which XCUITest reports as a
+  /// switch-type element carrying a toggle trait and `value` 0/1 - the same element a filter
+  /// chip's `Toggle(.button)` produces, read here with the Switch's own witness,
+  /// `nativeSwitchState`. **The picture changed in G31 and the element did not**: the
+  /// default Checkbox now draws `checkmark.circle.fill` in a style of ours rather than a
+  /// `.switch`, and this check is where that is proved - an element that lost the toggle
+  /// trait would stop answering `nativeSwitchState` at all, and one that gained a second
+  /// stop would double the event count below.
+  ///
+  /// Because the glyph is now on the **left** of the label instead of the right, the aim of
+  /// every tap in this check moved with it: the row's middle is still the label's side of
+  /// the glyph, which is what the guard under "Where the taps land" now says in the other
+  /// direction.
   ///
   /// The element's value is asserted alongside the echo for a reason the Switch check does
   /// not have: a native implementation that always requested `true` would light the "on"
@@ -3117,22 +3137,30 @@ final class RealInputTests: XCTestCase {
     )
 
     // Where the taps below land is part of this check, not a detail of it. The fixture
-    // gives this Checkbox a label, which makes the row wider than the switch, so the
-    // row's middle - where every press here goes - is on the label's side of the glyph.
-    // The taps therefore ask "is touching the label touching the control?", which a
-    // switch-style `Toggle` does not answer on its own (`HybridNitroUiCheckbox.swift`
-    // carries the row's tap target for exactly this reason). Asserted rather than
-    // assumed: a fixture whose label went short would move the aim onto the glyph and
+    // gives this Checkbox a label, which makes the row wider than its glyph, so the row's
+    // middle - where every press here goes - is on the *label's* side of the glyph. The
+    // taps therefore ask "is touching the label touching the control?", which neither a
+    // switch-style `Toggle` (measured: a label press delivered nothing) nor a plain `HStack`
+    // of symbol and text answers on its own - `HybridNitroUiCheckbox.swift` carries the
+    // row's tap target for exactly this reason, for all three styles.
+    //
+    // G31 moved the glyph from the right of the label to the left of it, and the glyph
+    // style's element spans the whole row - measured: one switch element at 107 x 21.67
+    // inside a wrapper 109 x 26 - so "which element is under this press" can no longer
+    // separate the glyph from the label. The whole row *is* the element. Geometry still can:
+    // the glyph is a square of the row's own height at its left, so a row more than twice as
+    // wide as it is tall has its middle past the glyph and on the label. Asserted rather
+    // than assumed: a fixture whose label went short would move the aim onto the glyph and
     // leave the claim unproven while still going green.
     let glyph = enabled.descendants(matching: .`switch`).allElementsBoundByIndex.min {
       $0.frame.width < $1.frame.width
     }
     XCTAssertNotNil(glyph, "the Checkbox should offer a switch element of its own")
     XCTAssert(
-      (glyph?.frame.minX ?? .greatestFiniteMagnitude) > enabled.frame.midX,
-      "the switch glyph starts at x=\(glyph?.frame.minX ?? -1) and the row's middle is at "
-        + "x=\(enabled.frame.midX) - a press at the middle has to land on the label's side "
-        + "of the glyph, or these taps prove nothing about the label"
+      enabled.frame.width > enabled.frame.height * 2,
+      "the row is \(enabled.frame.width) x \(enabled.frame.height) - the glyph is a square of "
+        + "the row's height at its left, so a press at x=\(enabled.frame.midX) only asks about "
+        + "the label while the row is more than twice as wide as it is tall"
     )
 
     // 1. Checked, then unchecked: one change per tap, in both directions.
@@ -3252,7 +3280,11 @@ final class RealInputTests: XCTestCase {
     //    nothing and a counter that was simply read too early.
     let glyphBefore = Int(try read(Echo.checkboxEvents)) ?? -1
     let glyphWanted = String(glyphBefore + 1)
-    glyph?.tap()
+    // The glyph's own strip: the leftmost 8 per cent of the row, which is inside a square
+    // one row-height wide at its left edge. The element's centre is *not* that - the element
+    // is the row, so a centre press here would be one more press on the label's side, which
+    // the steps above have already counted.
+    enabled.atFraction(0.08).fingerTap()
     // The counter first, and read twice: the surplus event in Chip's G12 red proof arrived
     // *after* the count was reached, so a count taken once proves nothing. One press on the
     // glyph is one `onCheckedChange` - a second is the row's tap target and the Toggle's own
@@ -3279,8 +3311,185 @@ final class RealInputTests: XCTestCase {
       waitForNativeSwitchState("real-input-checkbox", "off"), "off",
       "the tapped glyph's own element should report the value it was tapped into"
     )
-  }
 
+    // 6. `iosStyle='switch'` (G31). DECISIONS D47 keeps the old look behind a prop, and a
+    //    prop that chooses a *drawing* must not have quietly chosen a different control -
+    //    so this fixture gets the same two aims as the pair above and the same count. The
+    //    harness cannot stand in for it: on iOS a harness touch reaches no SwiftUI gesture,
+    //    which is the whole reason `nuiTestToggle` exists, and the harness's iOS toggles
+    //    therefore never touch the gesture this style is built from.
+    let switched = try required(
+      "real-input-checkbox-switch", as: "the switch-style Checkbox")
+    XCTAssertEqual(
+      nativeSwitchState(of: "real-input-checkbox-switch"), "off",
+      "the switch-style Checkbox should start by reporting value 0, like the default one"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxSwitchEvents), "0",
+      "the switch-style Checkbox should have reported no change before a touch"
+    )
+    // The mirror of the guard above, and the reason these are two fixtures rather than one:
+    // SwiftUI's `.switch` puts its label on the left and its thumb on the right, while the
+    // glyph row puts the glyph first. Both rows still have their middle on the *label's*
+    // side, which is the only thing the claim below needs.
+    let switchGlyph = switched.descendants(matching: .`switch`).allElementsBoundByIndex.min {
+      $0.frame.width < $1.frame.width
+    }
+    XCTAssertNotNil(switchGlyph, "the switch-style Checkbox should offer a switch element too")
+    XCTAssert(
+      (switchGlyph?.frame.minX ?? .greatestFiniteMagnitude) > switched.frame.midX,
+      "the switch thumb starts at x=\(switchGlyph?.frame.minX ?? -1) and the row's middle is "
+        + "at x=\(switched.frame.midX) - if the switch style's glyph has moved, its row is no "
+        + "longer the layout D47 promised to leave alone"
+    )
+    // The label's side of the row, once: checked, with one event.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox-switch",
+        echo: Echo.checkboxSwitchEvents,
+        expected: "1",
+        as: "the switch-style Checkbox",
+        waitingFor: "the real tap that checks the switch-style box",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox-switch") }
+      ),
+      "1",
+      "one real tap on the switch style's label should check it and report one change"
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox-switch", "on"), "on",
+      "the switch style's element should report value 1, as it did before the style prop "
+        + "existed - the same witness, the same answer"
+    )
+    // Then the glyph, which asks for the other direction: `false`, and a second event.
+    // A style that toggled through both the row's tap target and the `Toggle`'s own
+    // gesture would land back on `on` here, and read 3 or 4 rather than 2.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox-switch",
+        echo: Echo.checkboxSwitchEvents,
+        expected: "2",
+        as: "the switch-style Checkbox",
+        waitingFor: "the real tap that unchecks the switch-style box",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox-switch") }
+      ),
+      "2",
+      "a second real tap should ask for false: two presses, two events, both directions"
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox-switch", "off"), "off",
+      "the switch style should snap its element back to value 0 on the second press"
+    )
+    Thread.sleep(forTimeInterval: 0.5)
+    XCTAssertEqual(
+      try read(Echo.checkboxSwitchEvents), "2",
+      "two presses on the switch style are two `onCheckedChange`s after a quiet period, "
+        + "which is the count a row handler and a gesture both answering would break"
+    )
+
+    // 7. What a reader is told about the third state (G31, DECISIONS D47 item 3).
+    //
+    // The dash is the only state whose picture and value disagree: SwiftUI's `Toggle` has
+    // two positions, so its element can say checked or unchecked and nothing else, and the
+    // component therefore sets `.accessibilityValue("mixed")` for that state alone
+    // (`HybridNitroUiCheckbox.swift`). Whether the word reaches a screen reader is a
+    // question the app cannot answer - `nuiTestProbeAccessibility` reports `unavailable`
+    // for a hosted SwiftUI view on iOS 27 - so it is read from outside, printed, and then
+    // required: one element, the label as its name, and "mixed" as its value.
+    let mixedRow = try required(
+      "real-input-checkbox-mixed", as: "the mixed Checkbox")
+    let mixedNodes: [A11yNode] = [A11yNode(element: mixedRow)]
+      + mixedRow
+        .descendants(matching: .any)
+        .allElementsBoundByIndex
+        .map(A11yNode.init(element:))
+    for node in mixedNodes {
+      print(
+        "real-input checkbox mixed a11y trait=\(quoted(node.traitName)) "
+          + "enabled=\(node.enabled) hittable=\(node.hittable) "
+          + "id=\(quoted(node.identifier)) label=\(quoted(node.label)) "
+          + "value=\(quoted(node.valueText))"
+      )
+    }
+    let announced = mixedNodes
+      .map { "\($0.traitName)|\($0.label)|\($0.valueText)" }
+      .joined(separator: "  ")
+    // The React wrapper carries the testID and the name too - that is RN, not this
+    // component - so it is the one node below that is not counted as a stop, and the
+    // question becomes what *kind* of element the control is and what else a reader would
+    // stop on. The rest of the subtree is containers: XCUITest lists them, and
+    // `scripts/real-input/a11y.mjs` does not count an unnamed box as a stop either - what
+    // a reader hears is the element with something to say.
+    let stops = mixedNodes.filter { $0.identifier != "real-input-checkbox-mixed" }
+    let toggles = stops.filter { $0.traitName == "switch" }
+    XCTAssertEqual(
+      toggles.count, 1,
+      "the mixed Checkbox should be one toggle for a reader - the tree read: \(announced)"
+    )
+    XCTAssertEqual(
+      toggles.first?.label, "Real-input mixed checkbox",
+      "the toggle's name should be the accessibility label it was given - the tree read: "
+        + "\(announced)"
+    )
+    XCTAssertEqual(
+      toggles.first?.valueText, "mixed",
+      "the third state should be announced as \"mixed\" - the word Apple uses for a "
+        + "checkbox that is partly on (`NSButton.allowsMixedState`), not Android's: Compose "
+        + "renders its third state as \"Partially checked\", which is why step 8 below also "
+        + "asks what the value does once the dash is gone - the tree read: \(announced)"
+    )
+    // No second stop that says anything. Measured without the representation this subtree
+    // read as three named stops: the toggle, the symbol as an image named "Circle", and
+    // the row's text as static text of its own - and `.accessibilityHidden(true)` on the
+    // symbol did not remove it, which is the sentence that decided the design. A picture of
+    // a state is not a thing to announce, and neither is text the control already carries
+    // as its own name.
+    let secondStops = stops.filter { !$0.label.isEmpty && $0.traitName != "switch" }
+    XCTAssertEqual(
+      secondStops.count, 0,
+      "the glyph and the label must be announced as part of the control and not as stops "
+        + "of their own - the tree read: \(announced)"
+    )
+
+    // 8. The press that ends the dash, and the value that has to end with it.
+    //
+    // The fixture is uncontrolled, so one press is the whole state change: the model is
+    // optimistic, the row now draws `checkmark.circle.fill`, and a reader still told
+    // "mixed" is being told about the box the finger just replaced. This is the state the
+    // value table exists for - `NitroUiCheckboxGlyphs.accessibilityValue` ranks `checked`
+    // over the dash exactly as `glyph` does - and it is also the state that table's rule
+    // used to stop short of reaching: the row asked its own `indeterminate && drawsGlyph`
+    // flag instead of asking the table, so a box that was `checked` *and* `indeterminate`
+    // drew a checkmark and said "mixed", and so did this very press. Nothing but a finger
+    // and the tree can see that, because the harness has no reader in it.
+    //
+    // One echo is deliberately not asked for: the fixture reports nothing, which is what
+    // keeps this about the announcement rather than about the event the earlier steps
+    // already count.
+    let mixedToggle = mixedRow.descendants(matching: .`switch`).firstMatch
+    XCTAssert(
+      mixedToggle.waitForExistence(timeout: 3),
+      "the mixed Checkbox should still offer its toggle to a reader before the press"
+    )
+    let valueBefore = A11yNode(element: mixedToggle).valueText
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the mixed Checkbox",
+        waitingFor: "the real tap that resolves the dash",
+        press: { _ in mixedRow.atFraction(0.5).fingerTap() },
+        // XCUITest answers a numeric value through `String(describing:)`, which is "1"
+        // here and "1.0" for a control that hands back a double; both mean checked, and
+        // the assertion is about the state, not about the formatter.
+        reading: {
+          let shown = A11yNode(element: mixedToggle).valueText
+          return shown == "1.0" ? "1" : shown
+        }
+      ) { $0 == "1" },
+      "1",
+      "a real tap on the mixed Checkbox should check it and hand a reader value 1, not the "
+        + "word for the state that was just replaced - before the tap the element answered "
+        + "\(quoted(valueBefore))"
+    )
+  }
 
   /// Poll one item's element until it reports `expected`, and return its last word.
   private func waitForItemState(
@@ -5307,22 +5516,58 @@ final class RealInputTests: XCTestCase {
     let field = try required("low-date", as: "the last row's DatePicker field")
     let screen = app.windows.firstMatch.frame
 
-    // Scroll to the end of the page. It is at the end when a further swipe no longer
+    // Scroll to the end of the page. It is at the end when a further scroll no longer
     // moves the field - not when the field becomes hittable, which happens rows
     // before the bottom and would leave this check testing a field in the middle.
+    //
+    // The drag runs down the page's own 16pt of left padding rather than across the
+    // middle, and that is not a style choice. This page ends with three `wheel` rows
+    // (G29), and a wheel keeps every vertical drag that starts inside it - correct for
+    // a wheel, fatal for `app.swipeUp()`, which always starts at the centre of the
+    // window. Measured on the run that found this: the first swipe landed on a drum's
+    // selection row, the drums rolled, the page did not move, "no movement" read as
+    // "at the end", and the tap went to a row left at y=1005 of a 912pt window. The
+    // padding belongs to the scroll view and no wheel is laid out inside it, so a drag
+    // started there always scrolls the page.
+    //
+    // Steps rather than full swipes, as in `scrollIntoView`, and the end is three
+    // steps that move nothing rather than one: the page also carries `inline` rows that
+    // reclaim the padding and reach the gutter (the `wideBox` stories), so a step can
+    // still be swallowed on its way down, and one eaten gesture is what the old loop
+    // mistook for the end of the world.
+    let gutter = app.coordinate(
+      withNormalizedOffset: CGVector(dx: 8 / screen.width, dy: 0.72)
+    )
     var position = field.frame
-    for _ in 0..<12 {
-      app.swipeUp()
+    var steps = 0
+    var unmoved = 0
+    while steps < 24 && unmoved < 3 {
+      steps += 1
+      gutter.press(
+        forDuration: 0.05,
+        thenDragTo: gutter.withOffset(CGVector(dx: 0, dy: -240))
+      )
       let after = field.frame
-      if after == position {
-        break
-      }
+      unmoved = after == position ? unmoved + 1 : 0
       position = after
     }
+    print("real-input low row: scrolled in \(steps) steps, last \(unmoved) unmoved")
     let frame = field.frame
     let roomBelow = screen.maxY - frame.maxY
     print("real-input low row: field=\(frame) screen=\(screen) roomBelow=\(roomBelow)")
 
+    // The row has to be *on* the window before any of this means anything: a row
+    // parked under the home indicator is in nobody's lower half and is not tappable,
+    // and a scroll loop that stopped early would otherwise be read as a date picker
+    // that refused a tap. G29's three `wheel` rows are why this needs saying - a
+    // scroll step swallowed by a drum looks exactly like the end of the page.
+    XCTAssertLessThanOrEqual(
+      frame.maxY,
+      screen.maxY,
+      "the last row of the Date screen ended at y \(frame.minY)-\(frame.maxY) of a "
+        + "\(screen.height)pt window, so it is off it: no finger can reach it, which "
+        + "means the page never scrolled to its end rather than that the field refused"
+    )
     // The check is only worth running in the position it is about, so say so loudly
     // rather than pass quietly on a screen that did not scroll.
     XCTAssertGreaterThan(
@@ -6748,6 +6993,229 @@ final class RealInputTests: XCTestCase {
 
     try assertRowShowsCellHighlight("form-row", echo: Echo.formRowPresses, as: "the form row with onPress")
     try assertFormKeepsFieldAboveKeyboard()
+  }
+
+  /// Question 3 on iOS (G30): a `ListItem` is the row content, drawn by UIKit's own
+  /// `UIListContentView`, and a real finger has to reach it through the SwiftUI host that
+  /// carries it. Every reading is React's own render of a counter, so a number moves only
+  /// if the touch reached UIKit's row, the row told Nitro, and Nitro told JS.
+  ///
+  /// The three fixtures are the three answers the component has to give: a row that presses
+  /// and highlights, a row that is disabled and says so to a reader, and a row inside a
+  /// `Form.Row`, where the cell is the Form's and the leaf draws content into it (DECISIONS
+  /// D46 item 2).
+  func testRealInputListItem() throws {
+    try goToTab(Tab.listItemTab, showing: Echo.listItemPresses)
+
+    // The three fixtures sit at three heights of one page taller than the window, and
+    // XCUITest taps an element's frame without scrolling a plain view to reach it (see
+    // `scrollIntoView`), so each one is brought into the band a tap can land in just
+    // before the claim that taps it. Both hittability claims below are made of a node
+    // after *its own* scroll, which is the only form of that claim that means anything
+    // here; a fixture the screen cannot bring into view fails inside `scrollIntoView`,
+    // naming the screen, rather than being tapped off-screen and reading as a refusal
+    // nobody delivered.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    let item = try required("real-input-listitem", as: "the list item with onPress")
+    XCTAssert(
+      item.isHittable,
+      "the item with onPress should be touchable once it is in the tappable band, "
+        + "before any tap is delivered"
+    )
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    let inForm = try required("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    XCTAssert(
+      inForm.isHittable,
+      "the item inside the Form should be touchable once it is in the band, before any "
+        + "tap is delivered — inside a row the leaf still has to be reachable (D46 item 2)"
+    )
+    let disabled = try required("real-input-listitem-disabled", as: "the disabled list item")
+    // The row inside that wrapper, which is where the leaf publishes its own element
+    // (`hostedControl`, the same addressing the disabled Picker's case uses).
+    let disabledRow = try hostedControl(in: "real-input-listitem-disabled", as: "the disabled list item")
+
+    // 1. At rest, so every claim below is about a number that moved.
+    XCTAssertEqual(
+      try read(Echo.listItemPresses), "0",
+      "no item press should be reported before a touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.listItemFormPresses), "0",
+      "the item inside the Form should have been asked for nothing yet"
+    )
+    XCTAssertEqual(
+      try read(Echo.listItemDisabledEvents), "0",
+      "the counter the disabled item reports into should start at zero, so a stray "
+        + "delivery is a number that moved rather than a callback nobody saw"
+    )
+
+    // 2. One element, named, and the row's own text is not a stop of its own. The names
+    //    below are the fixture's title and subtitle: if UIKit published them as elements
+    //    beside the merged one, a screen reader would read the row twice, which is the
+    //    G6 symptom this repo's a11y rule exists to catch.
+    XCTAssertEqual(
+      item.label, "Real-input item",
+      "the item should be one element carrying the label the app chose, not the "
+        + "three texts the row is built out of"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: "Real input"), 0,
+      "and the row's title should not also be an element of its own — one stop per item"
+    )
+    // The chevron is the same claim from the other side. It is a sibling of the content
+    // subtree rather than inside it, and `chevron.right` vends its own label, so a row
+    // with a disclosure can gain a second stop that nothing in the row's own label
+    // explains. Measured in this case's own node dump before it was stood down: an
+    // `other` element named "Forward" at the arrow's 14 pt box, inside the row.
+    XCTAssertEqual(
+      optionLabels(containing: "Forward"), 0,
+      "the disclosure chevron is decoration inside the row, not a stop of its own — one "
+        + "element per item (D46 item 1) includes the arrow that says what the role says"
+    )
+    // The disabled claim is taken on the row's own element rather than on the React
+    // Native view that hosts it, because RN owns the wrapper's element and a Hybrid View
+    // speaks `disabled` to the platform control — the Picker's disabled case made this
+    // the rule here for the same reason. Both readings are printed *before* the claim,
+    // so a red run says which of the two elements moved instead of leaving the reader to
+    // rerun it to find out.
+    print(
+      "real-input list-item: item traits label=\(item.label) enabled=\(item.isEnabled) "
+        + "frame=\(item.frame); disabled wrapper enabled=\(disabled.isEnabled) "
+        + "row enabled=\(disabledRow.isEnabled) row traits label=\(disabledRow.label)"
+    )
+    XCTAssert(item.isEnabled, "an enabled item should not read as disabled")
+    XCTAssertFalse(
+      disabledRow.isEnabled,
+      "a disabled item should say so in the tree, so a reader is told it is inert "
+        + "instead of being handed a control that does nothing "
+        + "(row isEnabled=\(disabledRow.isEnabled), React Native wrapper isEnabled=\(disabled.isEnabled))"
+    )
+
+    // 3. Ten taps, ten presses, one per tap (`assertOnePressPerTap` reads the counter
+    //    between taps, which is what tells an overshoot from a drop), and the *named* row
+    //    is the one that answered.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertOnePressPerTap("real-input-listitem", echo: Echo.listItemPresses, times: 10, as: "the list item with onPress")
+    XCTAssertEqual(
+      try read(Echo.listItemLast), "real",
+      "the presses should be attributed to the item that was tapped"
+    )
+
+    // 4. The row's own highlight: UIKit's press colour, sampled the same way the Form's
+    //    cell is (same helper, same bounded mid-press wait, same UNSAMPLED discipline).
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertRowShowsCellHighlight("real-input-listitem", echo: Echo.listItemPresses, as: "the list item with onPress")
+
+    // 5. The disabled item takes nothing, and the live item then proves the silence was a
+    //    refusal rather than a screen that had stopped answering.
+    try scrollIntoView("real-input-listitem-disabled", as: "the disabled list item")
+    try assertTapsGoNowhere(
+      "real-input-listitem-disabled",
+      echoes: [Echo.listItemDisabledEvents, Echo.listItemPresses, Echo.listItemFormPresses],
+      taps: 10,
+      as: "the disabled list item"
+    )
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    // The wanted count is read from the counter rather than hard-coded. The held press in
+    // the highlight check above is itself a press this counter counted, so the absolute
+    // number is a fact about how many checks ran above; "one more press after one more
+    // tap" is the claim. Android's half hard-coded 11 and its first real run arrived at 12.
+    let beforeBarrier = Int(try read(Echo.listItemPresses)) ?? -1
+    let wantedBarrier = String(beforeBarrier + 1)
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-listitem",
+        echo: Echo.listItemPresses,
+        expected: wantedBarrier,
+        as: "the list item with onPress",
+        waitingFor: "the barrier tap after the disabled item"
+      ),
+      wantedBarrier,
+      "the live item, tapped the same way, should still answer (\(beforeBarrier) -> "
+        + "\(wantedBarrier))"
+    )
+
+    // 6. Inside a `Form.Row` the leaf is the other code path: the cell, the shape and the
+    //    insets belong to the row, so the item's own box is the row's content box and its
+    //    press has to arrive through the row that owns the touch.
+    XCTAssertEqual(
+      inForm.label, "Item inside a Form row",
+      "inside a Form.Row the item is still the element that carries its own name"
+    )
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    try assertOnePressPerTap("real-input-listitem-in-form", echo: Echo.listItemFormPresses, times: 5, as: "the list item inside a Form.Row")
+
+    // 7. The same press has to *look* like a press. Inside a `Form.Row` the leaf paints
+    //    nothing of its own (step 6 is about the insets that prove it), so the only
+    //    feedback this row can have is the cell's - and the cell paints one only for a row
+    //    that is pressable. The README's own example and this screen's fixture both write
+    //    the handler on the *item* (`list-item-in-form`), so an item's `onPress` that never
+    //    reaches the row is a row that presses in silence.
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
+    try assertRowShowsCellHighlight(
+      "real-input-listitem-in-form",
+      echo: Echo.listItemFormPresses,
+      as: "the list item inside a Form.Row"
+    )
+
+    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
+    //    asking for that row. Last, because it scrolls the page out from under everything
+    //    above it.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    try assertDragFromRowIsNotAPress(
+      "real-input-listitem",
+      echo: Echo.listItemPresses,
+      as: "the list item with onPress"
+    )
+  }
+
+  /// A drag that begins on a row belongs to the scroll view, so the row presses nobody.
+  ///
+  /// The row's press recogniser starts at once (`minimumPressDuration = 0`, which is what
+  /// made a quick thumb work at all), so it is the finger's *travel* that has to tell a
+  /// press from a scroll: a recogniser that answers `.ended` without looking at where the
+  /// finger went fires on every flick that happened to begin on a row. Ten taps and a
+  /// counter are the other half of this; this is the half that says the counter did not
+  /// move for the drag.
+  ///
+  /// The travel is measured off the row's own frame, and always downhill to the roomier
+  /// half of the window: `scrollIntoView` only promises the row's centre is inside the
+  /// band a tap can land in, which on a row that had to be scrolled *up* to reach means a
+  /// fixed screen fraction can land a few points away from it. A drag of a few points is
+  /// not a scroll, and the row is right to call it a press, so the gesture has to be a
+  /// real flick — 200 pt, twenty times the slop the recogniser allows.
+  private func assertDragFromRowIsNotAPress(
+    _ identifier: String,
+    echo: String,
+    as what: String
+  ) throws {
+    let element = try required(identifier, as: what)
+    let window = app.windows.firstMatch.frame
+    let travel: CGFloat = 200
+    let down = element.frame.midY < window.midY
+    let delta = CGVector(dx: 0, dy: down ? travel : -travel)
+    let before = echoText(echo)
+    element.centre.press(
+      forDuration: 0.25,
+      thenDragTo: element.centre.withOffset(delta),
+      withVelocity: .fast,
+      thenHoldForDuration: 0.1
+    )
+    let after = echoText(echo)
+    let direction = down ? "down" : "up"
+    print(
+      "real-input list-item drag: \(what) (\(identifier)) travelled \(direction) "
+        + "\(Int(travel)) pt from midY \(Int(element.frame.midY)) of a window ending at "
+        + "\(Int(window.maxY)) — echo \"\(before)\" -> \"\(after)\""
+    )
+    XCTAssertEqual(
+      after,
+      before,
+      "\(what) (\(identifier)) reported a press for a drag that started on it: \"\(echo)\" "
+        + "went \"\(before)\" -> \"\(after)\" while the finger travelled \(Int(travel)) pt "
+        + "\(direction) the page. A row that fires on a scroll takes the person "
+        + "to a screen they only meant to scroll past."
+    )
   }
 
   /// Tap `identifier` ten times and require the echo to read exactly 1…10.

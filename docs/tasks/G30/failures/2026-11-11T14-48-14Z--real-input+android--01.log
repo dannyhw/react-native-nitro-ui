@@ -1,0 +1,197 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-11T14:48:14.096Z on code tree `a1dd2f0426f7` at HEAD `bc68a7a` (branch `task/G30-fix1`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 1749123 ms
+- Load: start 11.19, end 4.59, median 5.75, max 20.42
+- Device: android
+- Full log: `task/G30-fix1/real-input+android-2026-11-11T14-48-13.365Z.log` (<store>/task/G30-fix1/real-input+android-2026-11-11T14-48-13.365Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ near the bottom edge the popup opens above the finger`
+- `✗ and that ContextMenu reported the open — expected 1, saw NaN`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-fix1/real-input+android-2026-11-11T14-48-13.365Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G30-o7nwh                G30          both              pair-a
+  |   G29-2s78q                G29          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.59 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 428 — the rest is in the full log above)
+
+```
+    ✓ Back and a tap outside each closed the alert with one close and no action — expected action:delete > presented:false > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false
+    ✓ Back leaves the sticky alert up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ its one action closes it, reporting the action first — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false
+    ✓ the sheet shows the title the app asked to be visible — expected 1, saw 1
+    ✓ the sheet's disabled row is not enabled — expected false, saw false
+    ✓ a real tap on the disabled row leaves the sheet up — expected 1, saw 1
+    ✓ and reports nothing: the log gained only Back's close — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false
+    ✓ a sheet's row reports its id once, then the close; Back before it reported a close alone — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false
+
+  text-field: real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it
+    ✓ the typing field starts empty — expected typed:  (0), saw typed:  (0)
+    · "Capped field" occupies 73,1452 → 1006,1515
+    ✓ maxLength 5 keeps five of seven keys — expected capped: abcde (5), saw capped: abcde (5)
+    ✓ and the field holds the same five — expected abcde, saw abcde
+    · "Frozen field" occupies 73,1176 → 1006,1239
+    ✓ every key into the frozen field is reported to JS — expected frozen: 2 edits refused, saw frozen: 2 edits refused
+    ✓ and each one is reverted: the field still shows what JS kept — expected frozen, saw frozen
+    · "Typing field" occupies 73,899 → 1006,962
+    ✓ real keystrokes reach the field, and React sees its text — expected typed: abc12 (5), saw typed: abc12 (5)
+    ✓ the field shows what React was told — expected abc12, saw abc12
+    · "Focus field" occupies 73,514 → 1006,577
+    ✓ a real tap focuses the field (onFocus) — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ Enter submits the text and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✓ a real tap on a button that calls ref.focus() focuses it — expected focus: 2 blur: 1 submitted: go, saw focus: 2 blur: 1 submitted: go
+    ✓ and one that calls ref.blur() blurs it — expected focus: 2 blur: 2 submitted: go, saw focus: 2 blur: 2 submitted: go
+
+  bottom-sheet: a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one
+    ✓ no sheet has reported anything before a touch — expected none, saw none
+    ✓ the sheet's content is not mounted before it is presented — expected 0, saw 0
+    ✓ the presented sheet is the node named sheet-fit-sheet — expected true, saw true
+    ✓ a real tap inside the sheet presses its Pressable once — expected Pressed 1 times, saw Pressed 1 times
+    ✓ a real tap on the sheet's TextInput reaches JS as a whole press — expected Input touches: in 1 out 1, saw Input touches: in 1 out 1
+    ✓ a horizontal drag scrolls the list inside the sheet (Chip 1 moved left or out) — expected true, saw true
+    ✓ and leaves the sheet up — expected 1, saw 1
+    ✓ the Pressable still takes a real tap after the scroll — expected Pressed 2 times, saw Pressed 2 times
+    ✓ Back, a tap outside and a drag down each reported the close, then the dismissal — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss
+    ✓ Back leaves the sticky sheet up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ and so does a drag down — expected 1, saw 1
+    ✓ only the sticky sheet button closed it — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss
+    · bottom-sheet: the two-detent header moved from y=1391 to y=242
+    ✓ a drag up on the header expands the sheet (its top moves up by more than a third) — expected true, saw true
+    ✓ Back from the expanded detent leaves the sheet up, half expanded — expected 1, saw 1
+    ✓ a drag up reported detent 1, Back stepped down to detent 0, and Back closed it — expected presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss, saw presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss
+
+  chip: real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither
+    ✓ the filter chip starts unselected — expected off, saw off
+    ✓ the filter chip's own node starts not checked — expected off, saw off
+    · "Real-input chip" occupies 42,627 → 280,711
+    ✓ one real tap selects the filter chip (React renders "on") — expected on, saw on
+    ✓ the selected chip's node says it is checked — expected on, saw on
+    · "Real-input chip" occupies 42,627 → 327,711
+    ✓ a second real tap deselects it (React renders "off") — expected off, saw off
+    ✓ two taps report two changes — expected 2, saw 2
+    ✓ the deselected chip's node stops saying it is checked — expected off, saw off
+    · "Real-input refusing chip" occupies 301,627 → 521,711
+    ✓ refused request 1 reaches onSelectedChange — expected 1, saw 1
+    ✓ refused request 1 asks for true (a chip that kept the refused selection would ask for false on the second tap) — expected true, saw true
+    ✓ the refused chip snaps back to unchecked after request 1 — expected off, saw off
+    · "Real-input refusing chip" occupies 301,627 → 521,711
+    ✓ refused request 2 reaches onSelectedChange — expected 2, saw 2
+    ✓ refused request 2 asks for true (a chip that kept the refused selection would ask for false on the second tap) — expected true, saw true
+    ✓ the refused chip snaps back to unchecked after request 2 — expected off, saw off
+    · "Real-input assist chip" occupies 42,769 → 231,853
+    ✓ one real tap on the assist chip reaches onPress once — expected 1, saw 1
+    · "Real-input disabled chip" occupies 542,627 → 934,711
+    · "Real-input disabled assist chip" occupies 252,769 → 595,853
+    ✓ the disabled filter chip announces itself not enabled — expected false, saw false
+    ✓ the disabled assist chip announces itself not enabled — expected false, saw false
+    ✓ its enabled twin announces itself enabled (so the reads above can say true) — expected true, saw true
+    ✓ a real tap on the disabled filter chip is refused — expected 2, saw 2
+    ✓ a real tap on the disabled assist chip is refused — expected 1, saw 1
+    · "Real-input assist chip" occupies 42,769 → 231,853
+    ✓ the enabled assist chip still presses after the refused taps — expected at least 2, saw 2
+
+  checkbox: real tap checks the checkbox and JS sees the new value, a refused change snaps back, and a disabled one takes nothing
+    ✓ the checkbox starts unchecked (React renders "off") — expected off, saw off
+    ✓ the checkbox has reported no change before a touch — expected 0, saw 0
+    ✓ the counter the disabled checkbox reports into starts at zero, so a stray delivery is a number that moved rather than a callback nobody saw — expected 0, saw 0
+    ✓ the box publishes a toggleable state, and it says unchecked — expected off, saw off
+    · name node "Real-input checkbox": checkable=false checked=false enabled=true clickable=false class=android.view.View
+    · "Real-input checkbox" occupies 42,606 → 387,732
+    ✓ one real tap checks the checkbox (React renders "on") — expected on, saw on
+    ✓ the checked box's node says it is checked — expected on, saw on
+    ✓ one real tap reports one change — expected 1, saw 1
+    · "Real-input checkbox" occupies 42,606 → 387,732
+    ✓ a second real tap unchecks it (React renders "off") — expected off, saw off
+    ✓ the unchecked box reports it back — expected off, saw off
+    ✓ two taps report two changes, one per tap — expected 2, saw 2
+    · "Real-input refusing checkbox" occupies 42,742 → 365,868
+    ✓ refused request 1 reaches onCheckedChange — expected 1, saw 1
+    ✓ refused request 1 asks for true — a checkbox that kept the refused change would ask for false on the second tap — expected true, saw true
+    ✓ the refused checkbox snaps back to unchecked after request 1 — expected off, saw off
+    · "Real-input refusing checkbox" occupies 42,742 → 365,868
+    ✓ refused request 2 reaches onCheckedChange — expected 2, saw 2
+    ✓ refused request 2 asks for true — a checkbox that kept the refused change would ask for false on the second tap — expected true, saw true
+    ✓ the refused checkbox snaps back to unchecked after request 2 — expected off, saw off
+    · "Real-input disabled checkbox" occupies 42,879 → 577,1005
+    · disabled box node: enabled=true checkable=false class=android.view.View — kept as evidence, not asserted, for the reason given above
+    ✓ a real tap on the disabled checkbox reports no change — expected 0, saw 0
+    ✓ and nothing reached the enabled checkbox either — expected 2, saw 2
+    ✓ the refused tap leaves the value echo where it was — expected off, saw off
+    · "Real-input checkbox" occupies 42,606 → 387,732
+    ✓ the enabled checkbox, tapped the same way, still answers — expected on, saw on
+
+  context-menu: a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing
+    ✓ a quick tap presses the child once and opens nothing (of 3) — expected 3, saw 3
+    · popup top-start minus the press point, px at density 2.625: 0,0 | 0,0 | 0,0
+    ✓ a still hold opens the menu (of 3) — expected 3, saw 3
+    ✓ and the child is never pressed by a hold that opened it — expected 0, saw 0
+    ✓ a row picks (of 3) — expected 3, saw 3
+    ✓ a pick reports select before close, every time — expected 3, saw 3
+    ✓ a fresh tap after each menu presses once (of 3) — expected 3, saw 3
+    ✓ the popup's top-start is the finger, within 1 dp (of 3) — expected 3, saw 3
+    ✓ a drag starting on the ContextMenu scrolls the page (of 3) — expected 3, saw 3
+    ✓ and opens no menu — expected 0, saw 0
+    ✓ a hold then a drag opens the menu
+    ✓ and the page under it did not move (scrollY) — expected 0, saw 0
+    ✓ Back closes it, reported once — expected 1, saw 1
+    ✓ the inner horizontal ScrollView pans
+    ✓ and opens no menu — expected 0, saw 0
+    ✓ the hold before the outside tap opens the menu
+    ✓ an outside tap closes the menu — expected 1, saw 1
+    ✓ and the press under it never lands — expected 0, saw 0
+    ✓ a hold on the inner ContextMenu opens the inner menu (rows Inner action)
+    ✓ the inner reports the open — expected 1, saw 1
+    ✓ the outer does not — expected 0, saw 0
+    ✓ a disabled ContextMenu opens nothing on a hold
+    ✓ and reports no open — expected 0, saw 0
+    ✓ the child keeps the gesture: one press on release — expected 1, saw 1
+    ✓ one node carries "Message from Grace" — expected 1, saw 1
+    ✓ and it is long-clickable — expected true, saw true
+    ✓ and focusable — expected true, saw true
+    ✓ a ContextMenu that is not accessible offers TalkBack no long-click — expected false, saw false
+    ✓ and is not focusable — expected false, saw false
+    · bottom edge: press=324,2351 popup=-
+    ✗ near the bottom edge the popup opens above the finger
+    ✗ and that ContextMenu reported the open — expected 1, saw NaN
+
+  search-field: real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, the Search key submits then dismisses the keyboard, and a keyboard prop reaches the IME as the keyboard it names with the Search key still on it
+
+real-input (android): Error: real-input: no tab of the example is in the accessibility tree, so the "Search" tab cannot be scrolled to.
+gate: real-input:android FAIL in 1749.1 s
+gate: recorded in .gates/task/G30-fix1.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G30-fix1/real-input+android-2026-11-11T14-48-13.365Z.log (5 probe(s))
+
+```

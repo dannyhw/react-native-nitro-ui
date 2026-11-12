@@ -1,0 +1,618 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-11T23:21:48.145Z on code tree `166f18689ce8` at HEAD `873a397` (branch `task/G29-X27-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1050 ms
+- Load: start 7.18, end 7.18, median 7.18, max 7.18
+- Device: android / device `emulator-5570` / lease `G29X27-pe9pk`
+- Full log: `task/G29-X27-merge/harness+android-2026-11-11T23-21-47.537Z.log` (<store>/task/G29-X27-merge/harness+android-2026-11-11T23-21-47.537Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-X27-merge/harness+android-2026-11-11T23-21-47.537Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29X27-pe9pk (still live)
+  |   X25-ovlyd                X25          both              pair-a
+  |   G29X27-pe9pk             G29X27       both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.18 (the ledger line carries the samples across the whole run)
+gate: logcat (last 500 of 1171 lines)
+  | 11-11 23:05:37.486 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:39.492 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:41.502 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:43.510 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:45.514 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:47.518 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:49.522 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:51.528 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:53.535 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:55.540 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:57.547 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:05:59.558 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:01.566 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:03.572 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:05.579 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:07.588 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:09.593 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:11.599 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:13.606 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:15.609 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:17.616 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:19.623 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:21.637 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:23.640 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:25.647 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:27.653 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:29.661 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:31.667 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:33.671 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:35.675 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:37.682 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:39.686 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:41.696 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:43.707 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:45.623 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:45.625 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:06:45.713 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:47.720 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:49.727 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:51.734 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:53.740 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:55.746 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:57.754 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:06:59.757 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:01.766 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:03.773 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:05.784 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:07.791 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:09.798 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:11.806 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:13.815 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:15.821 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:17.831 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:19.840 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:21.855 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:23.863 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:25.874 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:27.884 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:29.890 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:31.897 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:33.901 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:35.904 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:37.908 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:39.918 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:41.925 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:43.941 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:45.945 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:47.949 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:49.958 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:51.970 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:53.978 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:55.986 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:07:57.994 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:00.002 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:02.008 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:04.015 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:06.018 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:08.022 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:10.034 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:12.040 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:14.046 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:16.059 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:18.065 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:20.074 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:22.081 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:24.084 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:26.090 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:28.096 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:30.106 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:32.113 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:34.118 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:36.127 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:38.133 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:40.145 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:42.155 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:44.160 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:45.633 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:45.635 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:08:46.168 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:48.174 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:50.186 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:52.193 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:54.202 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:56.204 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:08:58.209 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:00.214 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:02.219 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:04.225 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:06.234 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:08.236 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:10.240 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:12.244 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:14.251 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:16.256 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:18.262 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:20.267 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:22.272 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:24.276 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:26.281 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:28.289 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:30.296 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:32.307 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:34.316 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:36.321 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:38.324 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:40.333 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:42.336 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:44.342 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:46.345 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:48.348 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:50.353 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:52.357 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:54.363 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:56.368 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:09:58.372 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:00.376 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:02.384 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:04.390 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:06.397 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:08.401 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:10.406 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:12.413 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:14.416 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:16.420 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:18.422 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:20.429 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:22.433 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:24.436 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:26.440 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:28.444 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:30.449 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:32.452 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:34.457 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:36.461 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:38.469 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:40.474 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:42.482 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:44.486 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:45.637 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:45.640 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:10:46.491 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:48.497 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:50.503 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:52.508 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:54.517 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:56.524 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:10:58.530 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:00.539 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:02.545 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:04.552 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:06.556 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:08.568 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:10.573 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:12.578 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:14.589 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:16.597 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:18.601 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:20.605 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:22.609 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:24.612 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:26.617 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:28.622 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:30.628 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:32.640 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:34.645 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:36.649 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:38.654 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:40.661 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:42.668 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:44.675 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:46.684 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:48.688 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:50.694 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:52.702 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:54.708 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:56.712 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:11:58.728 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:00.734 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:02.744 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:04.759 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:06.768 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:08.772 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:10.777 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:12.792 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:14.800 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:16.803 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:18.808 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:20.812 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:22.816 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:24.820 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:26.829 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:28.842 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:30.845 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:32.851 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:34.854 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:36.860 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:38.869 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:40.873 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:42.883 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:44.885 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:45.643 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:45.647 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:12:46.891 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:48.896 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:50.905 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:52.909 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:54.915 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:56.920 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:12:58.925 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:00.936 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:02.941 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:04.947 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:06.954 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:08.964 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:10.974 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:12.980 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:14.986 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:16.994 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:19.007 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:21.014 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:23.020 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:25.029 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:27.037 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:29.043 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:31.051 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:33.058 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:35.066 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:37.068 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:39.073 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:41.078 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:43.092 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:45.101 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:47.107 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:49.118 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:51.122 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:53.135 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:55.140 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:57.144 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:13:59.150 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:01.154 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:03.158 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:05.161 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:07.167 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:09.174 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:11.190 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:13.198 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:15.205 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:17.209 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:19.216 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:21.221 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:23.228 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:25.242 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:27.253 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:29.260 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:31.269 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:33.279 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:35.284 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:37.288 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:39.291 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:41.299 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:43.301 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:45.306 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:45.651 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:45.654 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:14:47.312 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:49.316 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:51.323 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:53.334 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:55.341 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:57.348 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:14:59.352 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:01.357 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:03.365 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:05.374 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:07.382 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:09.386 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:11.389 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:13.395 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:15.404 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:17.411 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:19.417 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:21.422 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:23.429 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:25.438 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:27.441 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:29.448 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:31.453 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:33.458 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:35.468 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:37.473 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:39.481 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:41.487 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:43.492 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:45.496 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:47.501 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:49.504 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:51.509 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:53.513 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:55.519 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:57.527 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:15:59.537 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:01.540 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:03.545 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:05.550 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:07.560 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:09.571 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:11.578 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:13.586 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:15.590 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:17.595 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:19.605 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:21.610 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:23.617 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:25.623 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:27.634 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:29.638 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:31.643 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:33.653 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:35.656 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:37.659 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:39.670 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:41.673 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:43.677 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:45.657 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:45.660 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:16:45.682 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:47.688 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:49.694 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:51.701 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:53.708 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:55.712 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:57.716 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:16:59.721 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:01.725 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:03.736 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:05.741 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:07.747 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:09.756 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:11.760 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:13.771 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:15.776 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:17.780 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:19.786 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:21.790 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:23.795 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:25.801 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:27.809 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:29.823 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:31.828 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:33.837 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:35.842 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:37.853 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:39.859 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:41.863 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:43.868 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:45.872 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:47.878 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:49.884 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:51.887 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:53.891 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:55.899 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:57.903 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:17:59.907 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:01.916 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:03.923 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:05.928 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:07.937 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:09.942 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:11.946 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:13.956 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:15.961 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:17.964 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:19.969 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:21.974 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:23.979 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:25.985 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:27.988 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:29.993 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:32.002 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:34.009 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:36.012 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:38.020 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:40.025 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:42.028 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:44.033 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:45.668 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:45.669 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:18:46.038 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:48.041 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:50.049 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:52.056 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:54.061 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:56.070 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:18:58.077 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:00.083 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:02.088 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:04.093 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:06.099 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:08.111 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:10.117 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:12.123 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:14.133 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:16.145 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:18.155 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:20.162 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:22.171 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:24.175 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:26.182 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:28.185 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:30.190 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:32.196 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:34.204 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:36.209 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:38.216 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:40.221 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:42.229 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:44.236 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:46.240 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:48.243 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:50.252 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:52.265 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:54.274 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:56.282 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:19:58.286 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:00.294 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:02.305 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:04.310 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:06.316 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:08.318 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:10.324 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:12.327 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:14.332 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:16.336 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:18.340 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:20.348 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:22.354 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:24.359 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:26.366 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:28.370 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:30.373 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:32.378 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:34.384 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:36.386 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:38.390 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:40.394 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:42.401 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:44.406 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:45.673 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:45.675 14987 14987 I ReactNativeJNI: Error occurred, shutting down websocket connection: WebSocket exception Failed to connect to localhost/127.0.0.1:8293
+  | 11-11 23:20:46.412 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:48.416 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:50.421 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:52.429 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:54.436 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:56.442 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:20:58.446 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:00.453 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:02.459 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:04.468 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:06.471 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:08.476 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:10.482 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:12.485 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:14.488 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:16.494 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:18.500 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:20.504 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:22.508 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:24.513 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:26.516 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:28.520 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:30.524 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:32.535 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:34.543 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:36.549 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:38.553 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:40.556 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:42.562 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:44.567 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-11 23:21:46.573 14987 15009 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+gate: ---- end device context ----
+```
+
+## Last 72 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 166f18689ce8 at HEAD 873a3972
+gate: git tree c2487311c995
+gate: log task/G29-X27-merge/harness+android-2026-11-11T23-21-47.537Z.log
+gate:       <store>/task/G29-X27-merge/harness+android-2026-11-11T23-21-47.537Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - no app.stamp for android at <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk: nothing proves this binary was built from this checkout
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - no app.stamp for android at <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk: nothing proves this binary was built from this checkout
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - no app.stamp for android at <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk: nothing proves this binary was built from this checkout
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - no app.stamp for android at <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk: nothing proves this binary was built from this checkout
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:android FAIL in 1.1 s
+gate: recorded in .gates/task/G29-X27-merge.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G29-X27-merge/harness+android-2026-11-11T23-21-47.537Z.log (5 probe(s))
+
+```

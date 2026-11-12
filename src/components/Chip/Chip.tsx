@@ -3,6 +3,7 @@ import { Platform, type ViewProps } from 'react-native';
 
 import { useControlled } from '../../core/useControlled';
 import { useSizingId } from '../../core/useSizingId';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import {
   useStableCallback,
   type NitroCallbackProp,
@@ -183,13 +184,6 @@ function sizingVariantFor(
   ].join(FIELD_SEPARATOR);
 }
 
-/**
- * What a self-sizing control is laid out with, before any `style`: Button's and
- * Switch's base style, for their reason (a column's `alignItems: stretch` would
- * otherwise decide the width and the measurement would never be asked for).
- */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
-
 /** Resolve a caller's variant, defaulting anything unrecognised to `'filter'`. */
 function resolveVariant(variant: ChipVariant | undefined): ChipVariant {
   return variant != null && VARIANTS.includes(variant) ? variant : 'filter';
@@ -227,6 +221,7 @@ export function Chip({
   style,
   ...restProps
 }: ChipProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   const resolvedVariant = resolveVariant(variant);
   // One string for native whichever form the caller used, and the same rules
   // `Button.tsx` applies - see there for why only a typed name is checked. Resolved
@@ -321,7 +316,7 @@ export function Chip({
       )}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }

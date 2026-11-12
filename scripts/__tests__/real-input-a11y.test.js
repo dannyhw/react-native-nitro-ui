@@ -145,6 +145,13 @@ describe('the a11y rule, on measured trees', () => {
       // there the named node *is* the control's box - but the shape the rule exists to
       // accept: an actionable node wrapping the name it announces.
       'form',
+      // G30's ListItem, measured on pair-a: the row's name is on one `View` at the item's
+      // whole box ([42,764][1038,953] — title, supporting line and value, merged, with no
+      // text node left under it), and the node *around* it is `clickable|focusable` at that
+      // same box, with Material's `Button` role on a sibling inside it. So the stop a reader
+      // hears and the thing a person presses are the one box — Form's shape, not the
+      // Checkbox's, and what `hasActableHome` exists to accept.
+      'list-item',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(

@@ -54,6 +54,18 @@ export const EXCLUSIVE_TTL_MINUTES = 960;
  */
 export const PENDING_EXCLUSIVE_TTL_MS = 60_000;
 
+/**
+ * How long a waiting acquire's **queue ticket** stays alive without a refresh (X26).
+ *
+ * Every waiter - exclusive or not - records one with the time it *started* waiting
+ * and stamps `refreshedAt` on every poll, so a killed waiter drops out of the queue
+ * in about a minute instead of reserving a pair for a task that no longer exists.
+ * The same gap as the exclusive marker, deliberately: both only have to outlive one
+ * poll (`POLL_MS`, 10 s by default), and two different numbers here would be two
+ * different answers to "how long may a waiter disappear".
+ */
+export const WAITER_TICKET_TTL_MS = PENDING_EXCLUSIVE_TTL_MS;
+
 /** How long a lock file may sit before its owner is assumed dead. */
 export const LOCK_STALE_MS = 30_000;
 
@@ -626,6 +638,145 @@ export function checkEmulatorEnv(
 }
 
 /**
+ * The instructions every device-side refusal ends with: lease it, source it.
+ *
+ * Exported because the gate (`gate-core.mjs`) refuses for the same reason one
+ * screen earlier, and two hand-written copies of "how do I get a device" drift.
+ */
+export const ACQUIRE_HINT =
+  '  node scripts/lease.mjs acquire --task <ID> --boot --out /tmp/<ID>.env\n' +
+  '  set -a; source /tmp/<ID>.env; set +a\n' +
+  '  (CONTRIBUTING.md: "Leasing a device or port")';
+
+/**
+ * The device a run may use, read out of the lease environment it was handed (X28).
+ *
+ * Before this, a runner that found no `ANDROID_SERIAL` went looking for a device of
+ * its own: `scripts/real-input/android.mjs` scanned `adb devices` for an emulator
+ * running the default AVD, and on 2026-11-11 a `real-input:android` started from a
+ * shell with no lease env drove `emulator-5554` over the machine's own adb server.
+ * Nothing refused it, because nothing had to be told which device to use. So the
+ * question "which device" now has exactly one answer here — what the lease exported
+ * — and a run that cannot answer it is refused before its first `adb`/`simctl` call.
+ *
+ * Two levels, because two things depend on it:
+ *
+ *   - `requireDevice: true` (the real-input runners, which are never run on CI): a
+ *     device must be named, lease or not. There is no fallback left to reach for.
+ *   - a named lease (`NITRO_UI_LEASE_ID` set): every identifier that lease exported
+ *     has to be present. A half-sourced env — one variable exported by hand, the
+ *     rest from an older lease — is the shape that sends a run at a stranger's
+ *     device, and it is refused rather than completed from defaults.
+ *
+ * A run with no lease and `requireDevice: false` gets what the environment says,
+ * including nothing: that is a developer's own `bun run harness:ios`, or a GitHub
+ * runner whose emulator the harness action boots. `gate.mjs` is what refuses that
+ * shape for a *gate* (`gate-core.mjs: deviceGateLeaseRefusal`), so the fallback this
+ * leaves alone is unreachable from a ledger line.
+ *
+ * @param {object} [options]
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {'ios'|'android'|null} [options.platform] what the run drives; null = both sides the lease has
+ * @param {string} [options.command] how to name the run in the refusal
+ * @param {boolean} [options.requireDevice] insist on a device even with no lease named
+ * @returns {{leased: boolean, leaseId: string | null, udid: string | null, serial: string | null,
+ *   avd: string | null, adbServerPort: number | null, emulatorPort: number | null}}
+ * @throws when the device the run may use cannot be read from the environment
+ */
+export function requireLeaseDevice({
+  env = process.env,
+  platform = null,
+  command = 'this run',
+  requireDevice = false,
+} = {}) {
+  const leaseId = String(env.NITRO_UI_LEASE_ID ?? '').trim();
+  const leased = leaseId !== '';
+  // What the lease was taken for. Absent on an env written before the variable
+  // existed, and on a hand-made one: then the lease has no opinion, so every side
+  // the caller asked for has to be there.
+  const forPlatform =
+    String(env.NITRO_UI_LEASE_PLATFORM ?? '').trim() ||
+    (leased ? 'both' : null);
+  /** Does this run need the `side` half of the device? */
+  const wants = (side) =>
+    (platform == null || platform === side) &&
+    (forPlatform == null || forPlatform === 'both' || forPlatform === side);
+  const strict = leased || requireDevice;
+  const answer = {
+    leased,
+    leaseId: leased ? leaseId : null,
+    udid: null,
+    serial: null,
+    avd: null,
+    adbServerPort: null,
+    emulatorPort: null,
+  };
+
+  if (wants('ios')) {
+    const udid = String(env.IOS_SIM_UDID ?? '').trim();
+    if (udid === '' && strict) {
+      throw new Error(
+        `${command}: no simulator to run on - IOS_SIM_UDID is not set. This\n` +
+          '       script never picks a simulator itself, because the one named\n' +
+          "       here may be another task's or the maintainer's. Lease one\n" +
+          '       and source it:\n' +
+          ACQUIRE_HINT
+      );
+    }
+    answer.udid = udid === '' ? null : udid;
+  }
+
+  if (wants('android')) {
+    // The rules a lease's own numbers have to satisfy (reserved serial, a serial
+    // that disagrees with its port) run first: they refuse a wrong device, which is
+    // a different mistake from no device.
+    answer.emulatorPort = checkEmulatorEnv(env).port;
+    const serial = String(env.ANDROID_SERIAL ?? '').trim();
+    const avd = String(env.ANDROID_AVD ?? env.AVD ?? '').trim();
+    const rawServer = String(env.ANDROID_ADB_SERVER_PORT ?? '').trim();
+    if (rawServer !== '' && !/^\d+$/.test(rawServer)) {
+      throw new Error(
+        `lease: ANDROID_ADB_SERVER_PORT="${rawServer}" is not a port number. ` +
+          'It comes from `node scripts/lease.mjs acquire` and must be `source`d, ' +
+          'not edited.'
+      );
+    }
+    if (serial === '' && strict) {
+      throw new Error(
+        `${command}: no emulator to run on - ANDROID_SERIAL is not set. This\n` +
+          '       script does not pick an emulator: `adb devices` answers with\n' +
+          '       every emulator on the machine, which is how a run with no lease\n' +
+          "       ended up driving someone else's on 2026-11-11. Lease one and\n" +
+          '       source it:\n' +
+          ACQUIRE_HINT
+      );
+    }
+    if (leased) {
+      if (rawServer === '') {
+        throw new Error(
+          `${command}: ANDROID_SERIAL=${serial} with no ANDROID_ADB_SERVER_PORT ` +
+            "would address the machine's own adb server, which also sees every " +
+            `device on it. Lease ${leaseId} exports a private server port for this ` +
+            'pair - re-source its env file rather than exporting one variable.'
+        );
+      }
+      if (avd === '') {
+        throw new Error(
+          `${command}: lease ${leaseId} exports ANDROID_AVD and this run cannot ` +
+            'find it, so the emulator behind ANDROID_SERIAL cannot be checked ' +
+            'against the lease. Re-source the lease env file.'
+        );
+      }
+    }
+    answer.serial = serial === '' ? null : serial;
+    answer.avd = avd === '' ? null : avd;
+    answer.adbServerPort = rawServer === '' ? null : Number(rawServer);
+  }
+
+  return answer;
+}
+
+/**
  * Who is listening on one TCP port, as `lsof` answers it (X15 item 1).
  *
  * Why a lease asks: a lease is a naming agreement about a simulator, an emulator and a Metro
@@ -862,9 +1013,144 @@ export function leaseIsLive(lease, now) {
   return now - acquiredAt < ttlMinutes * 60_000;
 }
 
+/**
+ * Read one timestamp field from a state file, tolerating what a hand-edited file
+ * realistically holds (a number, or an ISO string). `leaseAcquiredAtMs` explains why
+ * guessing here is expensive; waiters have the same exposure - `~/.nitro-ui` is a
+ * person's home directory - so they read the same two formats.
+ *
+ * @returns {number | null}
+ */
+function timestampMs(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) return parsed;
+    const asNumber = Number(raw);
+    if (Number.isFinite(asNumber)) return asNumber;
+  }
+  return null;
+}
+
+/** When this waiter started waiting (its queue position), or null when unreadable. */
+export function waiterRequestedAtMs(waiter) {
+  return timestampMs(waiter?.requestedAt);
+}
+
+/** The last time this waiter touched its record, or null when unreadable. */
+export function waiterTouchedAtMs(waiter) {
+  return timestampMs(waiter?.refreshedAt) ?? waiterRequestedAtMs(waiter);
+}
+
+/**
+ * Is this waiting request still refreshing its record?
+ *
+ * Judged on the **refresh**, not on the start of the wait: X26 makes `requestedAt`
+ * mean "when I joined the queue" for every waiter, and a waiter that is still
+ * polling stamps `refreshedAt` each time. Writers before X26 refreshed
+ * `requestedAt` itself, which is also readable here.
+ *
+ * An unreadable timestamp means *dead*, which is the opposite of `leaseIsLive` and
+ * for the opposite reason: a lease that wrongly expires powers off a device somebody
+ * is using, while a waiter record that wrongly stays alive reserves a pair nobody is
+ * coming back for, and the next task is told to queue behind a ghost. A live waiter
+ * rewrites its own record every poll, so this only costs a fresh queue position.
+ */
+export function waiterIsLive(waiter, now) {
+  const touched = waiterTouchedAtMs(waiter);
+  if (touched == null) return false;
+  return now - touched < WAITER_TICKET_TTL_MS;
+}
+
 /** A waiting exclusive request that is still refreshing its marker? */
 export function pendingIsLive(pending, now) {
-  return now - pending.requestedAt < PENDING_EXCLUSIVE_TTL_MS;
+  return waiterIsLive(pending, now);
+}
+
+/**
+ * Queue order: the time a waiter started waiting, oldest first, with the task name
+ * breaking an exact tie.
+ *
+ * The tie-break is not decoration. Two tickets written in the same millisecond would
+ * otherwise each see the other as *not older*: both would reserve the same free pair,
+ * and whichever polled second would find it gone and queue behind a task that never
+ * got it. One millisecond apart, or alphabetically, exactly one of them is first.
+ */
+export function compareWaiters(a, b) {
+  const byRequested =
+    (waiterRequestedAtMs(a) ?? Number.POSITIVE_INFINITY) -
+    (waiterRequestedAtMs(b) ?? Number.POSITIVE_INFINITY);
+  if (byRequested !== 0) return byRequested;
+  return String(a?.task ?? '').localeCompare(String(b?.task ?? ''));
+}
+
+/**
+ * The queue (X26): every waiter still refreshing its record, oldest first, each
+ * stamped with its `position` (1 = next in line) and `waitedMs`.
+ *
+ * Two arrays, one queue. `pendingExclusive` is the *drain* marker - it is what holds
+ * new device leases back while a bench waits for a quiet machine - and it predates
+ * the queue, so a waiting exclusive acquire keeps recording there and is folded in as
+ * a ticket rather than written twice. An ordinary waiter records in `waiters`. Either
+ * way there is one record per waiter, merged here, so a position is never read from
+ * two places that can disagree.
+ */
+export function waitQueue(state, now) {
+  const tickets = (Array.isArray(state?.waiters) ? state.waiters : []).filter(
+    (ticket) => waiterIsLive(ticket, now)
+  );
+  const waiting = new Set(tickets.map((ticket) => ticket?.task));
+  for (const marker of Array.isArray(state?.pendingExclusive)
+    ? state.pendingExclusive
+    : []) {
+    if (waiting.has(marker?.task) || !waiterIsLive(marker, now)) continue;
+    // An exclusive request needs the whole machine, so it is a `both` request for
+    // the purposes of who may take which pair.
+    tickets.push({ ...marker, exclusive: true, platform: 'both' });
+  }
+  return tickets.sort(compareWaiters).map((ticket, index) => {
+    const requestedAt = waiterRequestedAtMs(ticket);
+    return {
+      ...ticket,
+      position: index + 1,
+      waitedMs: requestedAt == null ? 0 : Math.max(0, now - requestedAt),
+    };
+  });
+}
+
+/**
+ * Would this pair satisfy this waiting request? The mirror of the filter
+ * `decideAcquire` applies to the pairs it may offer, so "the pair the waiter would
+ * have taken" is not a guess: same platform halves, same iOS-runtime rule, and an
+ * exclusive waiter reserves every pair because that is what it takes.
+ *
+ * This is the whole platform half of the X26 rule: a waiter holds a claim on the pairs
+ * that would satisfy *it*, and on no others. An iOS-only waiter therefore does not idle
+ * an Android-only pair - that pair still goes out to whoever asks - while a `both`
+ * waiter claims every pair the pool could hand it, because that is what it would take.
+ */
+export function pairSatisfiesWaiter(pair, waiter) {
+  if (pair == null || waiter == null) return false;
+  if (waiter.exclusive) return true;
+  const runtime =
+    waiter.iosRuntime == null ? null : iosRuntimeKey(waiter.iosRuntime);
+  if ((pair.iosRuntime ?? null) !== runtime) return false;
+  if (waiter.platform === 'ios' && pair.ios == null) return false;
+  if (waiter.platform === 'android' && pair.android == null) return false;
+  return pair.ios != null || pair.android != null;
+}
+
+/**
+ * A wait long enough to refuse somebody for should read like one: `4m`, `2h 11m`.
+ * Seconds are noise (a ticket only moves on a 10 s poll), and a bare `252m` hides
+ * that the task in front of you has been waiting the morning away.
+ */
+export function formatWaited(ms) {
+  const minutes = Math.max(0, Math.round(Number(ms) / 60_000 || 0));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
 /**
@@ -893,9 +1179,17 @@ export function pruneExpired(state, now) {
   const pending = (
     Array.isArray(state?.pendingExclusive) ? state.pendingExclusive : []
   ).filter((entry) => pendingIsLive(entry, now));
+  // X26: the queue expires by the same gap. A waiter that was killed - or a task
+  // that was interrupted between two polls - stops refreshing and stops reserving a
+  // pair about a minute later, which is what keeps a ghost from holding the line.
+  const waiters = (Array.isArray(state?.waiters) ? state.waiters : []).filter(
+    (ticket) => waiterIsLive(ticket, now)
+  );
   const pruned = { ...state, leases: activeLeases(state, now) };
   if (pending.length > 0) pruned.pendingExclusive = pending;
   else delete pruned.pendingExclusive;
+  if (waiters.length > 0) pruned.waiters = waiters;
+  else delete pruned.waiters;
   return pruned;
 }
 
@@ -926,7 +1220,16 @@ export function pruneExpired(state, now) {
  * @param {string | null} [options.iosRuntime] `--ios-runtime`: hand out only a simulator on this
  *   iOS runtime (an `iosRuntimes` entry), and never a default pair. Without it, those simulators
  *   are never handed out (X20 item 3), so a default acquire cannot land a merge gate on them.
- * @returns {{ok: true, pair: object, note?: string} | {ok: false, reason: string, waiting: string[]}}
+ * @param {object[]} [options.waiters] the live queue, as `waitQueue` returns it - other tasks'
+ *   tickets included, this task's own ignored (X26). A pair is granted only when no *older* ticket
+ *   can use it, so a freed pair goes to whoever has waited longest rather than to whoever polls
+ *   first: read pair by pair, the oldest live ticket that pair would satisfy owns that pair.
+ * @param {number | null} [options.waitedSince] when this request started waiting. `null` means it
+ *   holds no ticket - a `--wait-minutes 0` acquire, which is served immediately when nothing older
+ *   is waiting, and refused rather than queued when something is.
+ * @param {number} [options.now] used to word a queue refusal and to order an unreadable ticket,
+ *   never to grant one
+ * @returns {{ok: true, pair: object, note?: string} | {ok: false, reason: string, waiting: string[], queueAhead?: object[]}}
  */
 export function decideAcquire({
   active,
@@ -938,6 +1241,9 @@ export function decideAcquire({
   pending = [],
   portBlocked = [],
   iosRuntime = null,
+  waiters = [],
+  waitedSince = null,
+  now = Date.now(),
 }) {
   const runtime = iosRuntime == null ? null : iosRuntimeKey(iosRuntime);
   const held = active.filter((lease) => lease.task !== task);
@@ -1053,6 +1359,113 @@ export function decideAcquire({
       waiting,
     };
   }
+  // X26: first come, first served. A freed pair goes to the oldest ticket that can use
+  // it, not to whoever happens to poll first - which is what starved two tasks for five
+  // hours on 2026-11-11: every task that released a pair asked again within seconds and
+  // won, while the ones that had been waiting since morning lost it every time. The
+  // task that just released a pair is the one most likely to ask again immediately, so
+  // it queues behind everybody older too - that is the case this rule exists for, and it
+  // is why "I hold no ticket" is read as *newest*, not as *first*.
+  //
+  // An exclusive acquire is not held to the queue: one free pair does not satisfy it (it
+  // needs the machine, and every other lease gone), and the drain rule above already
+  // holds the whole queue back for it. A bench that is first in line is precisely why the
+  // queue is not being served.
+  const served = new Set(held.map((lease) => lease.task));
+  const myTurnAt = waitedSince ?? now;
+  /** Is this ticket in front of this request? */
+  const aheadOfMe = (ticket) => {
+    // A ticket belonging to a task that already holds a lease is stale, not senior
+    // (it expires on its own within a minute; it must not hold the line meanwhile).
+    if (served.has(ticket?.task)) return false;
+    const theirs = waiterRequestedAtMs(ticket);
+    // An unreadable start time is given the benefit of the line: it holds a pair for
+    // at most a minute, where guessing the other way lets a fresh acquire take a pair
+    // from somebody who really has been waiting since morning.
+    if (theirs == null) return true;
+    // The same millisecond: `compareWaiters` decides, so exactly one of us is first.
+    if (theirs === myTurnAt) return String(ticket.task).localeCompare(task) < 0;
+    return theirs < myTurnAt;
+  };
+  // Positions come from `waitQueue`; a caller that hands over raw tickets gets them
+  // numbered here, in the same order, rather than reading `undefined` in a refusal.
+  const line = (Array.isArray(waiters) ? waiters : [])
+    .filter((ticket) => ticket?.task != null && ticket.task !== task)
+    .sort(compareWaiters)
+    .map((ticket, index) => {
+      const requestedAt = waiterRequestedAtMs(ticket);
+      return {
+        ...ticket,
+        position: ticket.position ?? index + 1,
+        waitedMs:
+          ticket.waitedMs ??
+          (requestedAt == null ? 0 : Math.max(0, now - requestedAt)),
+      };
+    });
+  // The rule, read pair by pair: **the oldest live ticket a pair would satisfy owns
+  // that pair.** Not "one pair per waiter, chosen by whoever asks first" - that would
+  // let an unticketed task take a second free pair from in front of a waiter who could
+  // use it, which is the same jump dressed up as utilization. The cost is stated
+  // plainly: with a waiter in the line, a pair it could use may sit idle until that
+  // waiter's next poll (one `POLL_MS`, 10 s) or until an unrefreshed ticket expires
+  // (60 s). A bench or a build does not notice 10 s; a task that waited five hours
+  // notices everything else.
+  //
+  // Because it is per pair, a waiter only holds what it can actually use: an iOS-only
+  // waiter cannot use an Android-only pair, so that pair still goes out to whoever asks
+  // (the platform clause in the brief, in the direction the pool's own grant rule makes
+  // real - a `both` request can take either half, so the asymmetry that matters is the
+  // half a request *cannot* take).
+  const claims = exclusive
+    ? new Map()
+    : new Map(
+        usable.map((pair) => [
+          pair.id,
+          line.find((ticket) => pairSatisfiesWaiter(pair, ticket)),
+        ])
+      );
+  const mine = usable.filter((pair) => {
+    const claimant = claims.get(pair.id);
+    return claimant == null || !aheadOfMe(claimant);
+  });
+  if (mine.length === 0) {
+    const claimants = [
+      ...new Set(
+        usable
+          .map((pair) => claims.get(pair.id))
+          .filter((claimant) => claimant != null && aheadOfMe(claimant))
+      ),
+    ];
+    const who = claimants.map(
+      (waiter) =>
+        `${waiter.task} (queue position ${waiter.position}, waited ${formatWaited(
+          waiter.waitedMs
+        )})`
+    );
+    return {
+      ok: false,
+      reason:
+        `${who.join(', ')} ${who.length === 1 ? 'is' : 'are'} already waiting for ` +
+        `a pair this one could satisfy, and leases go first come, first served - ` +
+        `node scripts/lease.mjs list shows the queue`,
+      waiting: [
+        ...waiting,
+        ...claimants.map(
+          (waiter) =>
+            `${waiter.task} (waiting ${formatWaited(
+              waiter.waitedMs
+            )}, queue position ${waiter.position})`
+        ),
+      ],
+      queueAhead: claimants.map((waiter) => ({
+        task: waiter.task,
+        id: waiter.id ?? null,
+        platform: waiter.platform ?? null,
+        position: waiter.position,
+        waitedMs: waiter.waitedMs,
+      })),
+    };
+  }
   // The warning an exclusive acquire owes the human who is about to measure on a machine
   // somebody's Metro is still serving. `decideAcquire` is a pure decision, so it travels
   // as a note and `lease.mjs` prints it - a wait would be wrong (above), and silence
@@ -1060,13 +1473,13 @@ export function decideAcquire({
   if (exclusive && portWait.length > 0) {
     return {
       ok: true,
-      pair: usable[0],
+      pair: mine[0],
       note:
         `an exclusive lease does not wait on Metro ports (a bench builds its bundle in, ` +
         `so it never uses one): proceeding over ${portWait.join('; ')}`,
     };
   }
-  return { ok: true, pair: usable[0] };
+  return { ok: true, pair: mine[0] };
 }
 
 /**

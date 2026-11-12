@@ -50,6 +50,12 @@ abstract class HybridNitroUiCheckboxSpec: HybridView() {
   @get:Keep
   @set:DoNotStrip
   @set:Keep
+  abstract var iosStyle: String
+  
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
   abstract var mostRecentEventCount: Double
   
   @get:DoNotStrip

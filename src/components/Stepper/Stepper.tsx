@@ -3,6 +3,7 @@ import type { ViewProps } from 'react-native';
 import { useControlled } from '../../core/useControlled';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
+import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiStepper } from './NativeNitroUiStepper';
 
 /**
@@ -16,9 +17,6 @@ import { NativeNitroUiStepper } from './NativeNitroUiStepper';
  * whole app, and the one `prewarm(['NitroUiStepper'])` can pre-warm.
  */
 const SIZING_VARIANT = '';
-
-/** An intrinsic control is not stretched; the same base style Switch's uses. */
-const SELF_SIZING_BASE_STYLE = { alignSelf: 'flex-start' } as const;
 
 /**
  * Props of {@link Stepper}.
@@ -137,6 +135,7 @@ export function Stepper({
   style,
   ...restProps
 }: StepperProps) {
+  const selfSizingBaseStyle = useSelfSizingBaseStyle();
   // A step of 0 or less is not a small step, it is no step: the control would sit
   // at one value and report nothing while looking like it worked. Throwing in
   // development is the only honest answer, and it is the same call Slider makes
@@ -177,7 +176,7 @@ export function Stepper({
       nuiSizingKey={SIZING_VARIANT}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
-      style={[SELF_SIZING_BASE_STYLE, style]}
+      style={[selfSizingBaseStyle, style]}
     />
   );
 }
