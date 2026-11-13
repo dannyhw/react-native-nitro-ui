@@ -10,7 +10,7 @@ Four `FOLLOWUPS.md` lines that have each cost another task hours, plus two regre
 **1. `check` from a leased shell.** Five suites in `scripts/__tests__` spawn device-aware CLIs and
 inherited this shell's lease, so `bench-baseline-merge.test.js` died on "ANDROID_SERIAL and
 EMULATOR_PORT disagree", the only shell a device task has. They spawn through
-`helpers/scrubbed-env.js` now, and `test-env-scrub.test.js` audits every suite that spawns at all:
+`scripts/__tests__/helpers/scrubbed-env.js` now, and `test-env-scrub.test.js` audits every suite that spawns at all:
 unscrubbed `process.env` reaching a device-aware `spawn` fails it. The auditor masks strings and
 comments first, so a `spawn(` inside fixture source stays data.
 
