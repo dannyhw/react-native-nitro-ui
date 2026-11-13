@@ -1,0 +1,213 @@
+# Failure excerpt — real-input:ios:--control:popover
+
+- Ran: 2026-11-13T15:27:49.208Z on code tree `49ecf2f6e24c` at HEAD `d9dcd3c` (branch `task/X34-gate-hygiene`)
+- Command: `node scripts/real-input/ios.mjs --control popover`
+- Result: fail, exit 1, 1389936 ms
+- Load: start 10.33, end 4.74, median 6.04, max 10.95
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X34-vv27s`
+- Full log: `task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T15-27-48.633Z.log` (<store>/task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T15-27-48.633Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputPopover in 74.446s`
+- `✗ tab "Switch" (tab-switch) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Slider" (tab-slider) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Button" (tab-button) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Progress" (tab-progress) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Segments" (tab-segmented) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Dates" (tab-datepicker) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Picker" (tab-picker) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Menu" (tab-menu) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Dialogs" (tab-dialog) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Sheet" (tab-sheet) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Text" (tab-textfield) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Chip" (tab-chip) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Checkbox" (tab-checkbox) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Context" (tab-contextmenu) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Search" (tab-searchfield) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Tooltip" (tab-tooltip) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Icons" (tab-iconbutton) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Popover" (tab-popover) was never measured, so nothing says a finger can reach it`
+- `✗ tab "Form" (tab-form) was never measured, so nothing says a finger can reach it`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T15-27-48.633Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X34-vv27s (still live)
+  |   X34-vv27s                X34          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.74 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 239 — the rest is in the full log above)
+
+```
+
+  a11y:switch: Switch a11y (XCUITest)
+    · other id="switch-controlled" label="Controlled switch" value="" box (343, 239.66666412353516, 61x28) [the React Native wrapper]
+    · other id="" label="" value="" box (343, 239.66666412353516, 61x28)
+    · other id="" label="" value="" box (343, 239.66666412353516, 61x28)
+    · other id="" label="" value="" box (343, 239.66666412353516, 61x28)
+    · switch id="" label="Controlled switch" value="0" box (343, 239.66666412353516, 61x28)
+    · switch id="" label="" value="0" box (343, 239.66666412353516, 63x28)
+    ✓ NitroUiSwitch is named on one element, at the control's own box, as the switch it claims to be
+
+  a11y:slider: Slider a11y (XCUITest)
+    · other id="slider-controlled" label="Controlled slider" value="" box (16, 239.66666412353516, 388x30.999984741210938) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 239.66666412353516, 388x30.999984741210938)
+    · other id="" label="Controlled slider" value="0.25" box (16, 239.66666412353516, 388x30.999984741210938)
+    · known failing (X4 a11y: the Slider is announced as other and not as a slider): NitroUiSlider: "Controlled slider" is announced as an other and not as a slider — the announcement lost the kind of control this is, so a person hears a name with no idea what can be done with it
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:button: Button a11y (XCUITest)
+    · other id="real-input-enabled" label="Real-input button" value="" box (16, 256.3333282470703, 99.33333587646484x34.33331298828125) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 256.3333282470703, 99.33333587646484x34.33331298828125)
+    · other id="" label="" value="" box (16, 256.3333282470703, 99.33333587646484x34.33331298828125)
+    · other id="" label="" value="" box (16, 256.3333282470703, 99.33333587646484x34.33331298828125)
+    · button id="" label="Real-input button" value="" box (16, 256.3333282470703, 99.33333333333333x34.333333333333314)
+    ✓ NitroUiButton is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:segmented-control: SegmentedControl a11y (XCUITest)
+    · other id="real-input-segmented" label="Real-input segmented control" value="" box (16, 239.66666412353516, 96x30.999984741210938) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 239.66666412353516, 96x30.999984741210938)
+    · other id="" label="" value="" box (16, 239.66666412353516, 96x30.999984741210938)
+    · other id="" label="" value="" box (16, 239.66666412353516, 96x30.999984741210938)
+    · segmented control id="" label="Real-input segmented control" value="" box (16, 239.66666412353516, 96x31)
+    · button id="" label="1" value="" box (16, 239.66666412353516, 32x32)
+    · button id="" label="2" value="" box (48, 239.66666412353516, 32x32)
+    · button id="" label="3" value="" box (80, 239.66666412353516, 32x32)
+    ✓ NitroUiSegmentedControl is named on one element, at the control's own box, as the segmented control it claims to be
+
+  a11y:date-picker: DatePicker a11y (XCUITest)
+    ✗ no elements were printed for date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:picker: Picker a11y (XCUITest)
+    ✗ no elements were printed for picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:menu: Menu a11y (XCUITest)
+    ✗ no elements were printed for menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:chip: Chip a11y (XCUITest)
+    ✗ no elements were printed for chip, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:checkbox: Checkbox a11y (XCUITest)
+    ✗ no elements were printed for checkbox, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:icon-button: IconButton a11y (XCUITest)
+    ✗ no elements were printed for icon-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:button-group: ButtonGroup a11y (XCUITest)
+    ✗ no elements were printed for button-group, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:stepper: Stepper a11y (XCUITest)
+    ✗ no elements were printed for stepper, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-switch: Switch a11y (XCUITest)
+    ✗ no elements were printed for hosted-switch, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-slider: Slider a11y (XCUITest)
+    ✗ no elements were printed for hosted-slider, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-button: Button a11y (XCUITest)
+    ✗ no elements were printed for hosted-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-segmented: SegmentedControl a11y (XCUITest)
+    ✗ no elements were printed for hosted-segmented, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-picker: Picker a11y (XCUITest)
+    ✗ no elements were printed for hosted-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-date-picker: DatePicker a11y (XCUITest)
+    ✗ no elements were printed for hosted-date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-progress: Progress a11y (XCUITest)
+    ✗ no elements were printed for hosted-progress, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:text-field: TextField a11y (XCUITest)
+    ✗ no elements were printed for text-field, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:search-field: SearchField a11y (XCUITest)
+    ✗ no elements were printed for search-field, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:context-menu: ContextMenu a11y (XCUITest)
+    ✗ no elements were printed for context-menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:form: Form a11y (XCUITest)
+    ✗ no elements were printed for form, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:list-item: ListItem a11y (XCUITest)
+    ✗ no elements were printed for list-item, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+popover: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputPopover in 74.446s
+tab-targets: failed: tab "Switch" (tab-switch) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Slider" (tab-slider) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Button" (tab-button) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Progress" (tab-progress) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Segments" (tab-segmented) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Dates" (tab-datepicker) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Picker" (tab-picker) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Menu" (tab-menu) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Dialogs" (tab-dialog) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Sheet" (tab-sheet) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Text" (tab-textfield) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Chip" (tab-chip) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Checkbox" (tab-checkbox) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Context" (tab-contextmenu) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Search" (tab-searchfield) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Tooltip" (tab-tooltip) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Icons" (tab-iconbutton) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Popover" (tab-popover) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Form" (tab-form) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Groups" (tab-buttongroup) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Stepper" (tab-stepper) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "List items" (tab-listitem) was never measured, so nothing says a finger can reach it
+tab-targets: failed: tab "Host" (tab-host) was never measured, so nothing says a finger can reach it
+a11y:date-picker: failed: no elements were printed for date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:picker: failed: no elements were printed for picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:menu: failed: no elements were printed for menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:chip: failed: no elements were printed for chip, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:checkbox: failed: no elements were printed for checkbox, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:icon-button: failed: no elements were printed for icon-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:button-group: failed: no elements were printed for button-group, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:stepper: failed: no elements were printed for stepper, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-switch: failed: no elements were printed for hosted-switch, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-slider: failed: no elements were printed for hosted-slider, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-button: failed: no elements were printed for hosted-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-segmented: failed: no elements were printed for hosted-segmented, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-picker: failed: no elements were printed for hosted-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-date-picker: failed: no elements were printed for hosted-date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-progress: failed: no elements were printed for hosted-progress, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:text-field: failed: no elements were printed for text-field, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:search-field: failed: no elements were printed for search-field, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:context-menu: failed: no elements were printed for context-menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:form: failed: no elements were printed for form, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:list-item: failed: no elements were printed for list-item, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+real-input (ios): 0/1 controls passed · 0 input sequence(s) needed a retry · 4/25 auxiliary checks passed
+gate: real-input:ios:--control:popover FAIL in 1389.9 s
+gate: recorded in .gates/task/X34-gate-hygiene.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T15-27-48.633Z.log (4 probe(s))
+
+```
