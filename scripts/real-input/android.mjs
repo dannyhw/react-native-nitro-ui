@@ -801,11 +801,11 @@ const CHECKS = {
     const placed = await centreOnScreen(t, 'Hosted picker');
     // The box the tap is actually aimed at. `requireControlAt` re-reads it on every attempt —
     // the anchor repaints a wider title as soon as a pick lands — and `tapUntilUp` presses
-    // whatever its lookup last returned, so from the first tap onwards this, not `anchor`, is
-    // the box the Host drew under the finger. The placement judge below has to be handed the
-    // same one: graded against a box the tap did not use, the check would be measuring a
-    // scroll rather than the menu, which is the thing this whole check was rewritten to stop
-    // doing.
+    // whatever its lookup last returned, so from the first tap onwards this is the box the
+    // Host drew under the finger, and not the one [centreOnScreen] read. The placement judge
+    // below has to be handed the same one: graded against a box the tap did not use, the check
+    // would be measuring a scroll rather than the menu, which is the thing this whole check was
+    // rewritten to stop doing.
     let aimed = placed.node;
     t.log.checkEquals(
       'the hosted Picker shows the index JS gave it',
