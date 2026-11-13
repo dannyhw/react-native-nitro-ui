@@ -1,0 +1,62 @@
+# Failure excerpt — real-input:android:hosted-picker
+
+- Ran: 2026-11-12T18:42:10.840Z on code tree `2501a6f37e89` at HEAD `ad7c173` (branch `task/X31-test-flakes`)
+- Command: `node scripts/real-input/android.mjs hosted-picker`
+- Result: fail, exit 1, 219 ms
+- Load: start 5.15, end 5.15, median 5.15, max 5.15
+- Device: android / device `emulator-5574` / lease `X31-ptfed`
+- Full log: `task/X31-test-flakes/real-input+android+hosted-picker-2026-11-12T18-42-10.400Z.log` (<store>/task/X31-test-flakes/real-input+android+hosted-picker-2026-11-12T18-42-10.400Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X31-test-flakes/real-input+android+hosted-picker-2026-11-12T18-42-10.400Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X31-ptfed (still live)
+  |   X31-ptfed                X31          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.15 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:hosted-picker
+gate: node scripts/real-input/android.mjs hosted-picker (cwd .)
+gate: code tree 2501a6f37e89 at HEAD ad7c1733
+gate: git tree e46d1514963b
+gate: log task/X31-test-flakes/real-input+android+hosted-picker-2026-11-12T18-42-10.400Z.log
+gate:       <store>/task/X31-test-flakes/real-input+android+hosted-picker-2026-11-12T18-42-10.400Z.log
+
+real-input (android): Error: real-input: unknown argument "hosted-picker".
+gate: real-input:android:hosted-picker FAIL in 0.2 s
+gate: recorded in .gates/task/X31-test-flakes.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X31-test-flakes/real-input+android+hosted-picker-2026-11-12T18-42-10.400Z.log (5 probe(s))
+
+```
