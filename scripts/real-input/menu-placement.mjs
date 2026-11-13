@@ -10,11 +10,14 @@
  * earlier check had left the scroll (X24 fix round 1 and the X24 merge, 2026-11-11, both
  * with the anchor at y 2242-2410 of a 2 424 px window).
  *
- * So the side is now part of the claim rather than an assumption: the menu has to open on the
- * side that has room, and on either side it has to be against the box it was opened from.
- * "Not at the top of the screen" is what the second half catches, and the room test catches it
- * too — a menu parked at the top of the window is far from its anchor *and* on the side that
- * did not need it.
+ * So the side is now part of the claim rather than an assumption: where one side plainly has
+ * room for the menu and the other plainly does not, the menu has to open on the side that has
+ * it, and on either side it has to be against the box it was opened from. "Not at the top of
+ * the screen" is what the second half catches, and the room test catches it too — a menu parked
+ * at the top of the window is far from its anchor *and* on the side that did not need it. Where
+ * the room under the anchor is ambiguous — wide enough for the rows, too narrow for the surface
+ * around them — the platform is free to choose, and this check says nothing about which it
+ * picked. See `MENU_ROOM_SLOP_DP` for how wide that band is and why it is that wide.
  *
  * The boxes handed in are the option rows, not the popup's surface: a Compose popup is a
  * window of its own and `uiautomator dump` answers with its accessibility tree, which carries
@@ -43,10 +46,24 @@
 export const MENU_NEAR_GAP_DP = 32;
 
 /**
- * How much narrower than the menu the room on a side may be and still count as room, in dp.
- * The room test decides which side is *wrong*, and the rows' box understates the surface the
- * platform measured — its padding and shadow are outside it. Generous on purpose: the
- * narrower this is, the closer a healthy run can sit to that line.
+ * How much *more* room than the rows' box the space under an anchor needs before the check is
+ * allowed to insist the menu opened below, in dp.
+ *
+ * This is not an allowance added to what Material needs — it is the width of the band in which
+ * neither side can be called wrong. Material opens below only when the whole surface fits
+ * under the anchor, and that surface is wider than the rows' box the dump answers with: its
+ * own padding, its shadow and M3's 48 dp window margin are all outside the rows. So between
+ * `menuHeight` and `menuHeight + this` of room, the rows would have fitted and the surface
+ * probably did not, and the platform may honestly open either way. Outside the band the side
+ * is a claim: under `menuHeight` there is not room for even the rows, and above
+ * `menuHeight + this` there is clearly room for the whole thing.
+ *
+ * The number is the 48 dp a Material 3 popup keeps clear of the window's edge — the term the
+ * X31 review names, and the one the rows' box cannot see. The surface's padding and shadow are
+ * the rest of what Material measures, and they only widen the band further. On the lease's
+ * API 35 emulator (density 2.625) it is 126 px: a menu's surface is that wide, so an anchor
+ * pushed near the bottom fold lands *inside* the band rather than outside it, and a judge that
+ * ignored the band would call that run a failure. Both boundaries are fixtures.
  */
 export const MENU_ROOM_SLOP_DP = 48;
 
@@ -61,11 +78,11 @@ export const MENU_ROOM_SLOP_DP = 48;
  * @param {number} input.windowHeight the height of the window the menu is confined to
  * @param {number} input.nearGapMaxPx how far the menu's near edge may sit from the anchor's
  *   near edge and still count as anchored to it
- * @param {number} input.roomSlopPx how much narrower than the menu the room under the anchor
- *   may be and still count as room: Material places against its own measured surface, which
- *   is the rows plus their padding, so the rows' box alone understates what the platform
- *   needed. Generous on purpose — the room test decides which side is *wrong*, and the
- *   narrower the allowance, the closer a healthy run can sit to that line.
+ * @param {number} input.roomSlopPx how much more room than the rows' box the space under the
+ *   anchor needs before opening above is the wrong side: Material places against its own
+ *   measured surface, which is the rows plus their padding, shadow and window margin, so the
+ *   rows' box alone understates what the platform needed. Between the two thresholds either
+ *   side is accepted — see `MENU_ROOM_SLOP_DP`.
  * @returns {{ ok: boolean, branch: string, detail: string }}
  */
 export function judgeMenuAnchoring({
@@ -99,16 +116,32 @@ export function judgeMenuAnchoring({
   const roomBelow = windowHeight - anchorBox.y2;
   const roomAbove = anchorBox.y1;
   const side = menuBox.cy < anchorBox.cy ? 'above' : 'below';
-  const wanted = roomBelow + roomSlopPx >= menuHeight ? 'below' : 'above';
-  if (side !== wanted) {
+  // Three ranges rather than one line, because the rows' box is not the surface Material
+  // measured. Below `menuHeight` there is not room for even the rows, so the menu belongs
+  // above. At or above `menuHeight + roomSlopPx` the whole surface fits with the margin to
+  // spare, so it belongs below. In between, the rows fit and the surface probably did not,
+  // and this check has no basis to prefer one: Material is free to open either way, which is
+  // exactly the band the old one-line rule graded as a failure.
+  const wanted =
+    roomBelow < menuHeight
+      ? 'above'
+      : roomBelow >= menuHeight + roomSlopPx
+        ? 'below'
+        : 'either';
+  if (wanted !== 'either' && side !== wanted) {
     return {
       ok: false,
       branch: 'wrongSide',
-      detail: `${detail}: opened ${side} with ${String(
-        roomBelow
-      )} px below an anchor of ${String(
-        menuHeight
-      )} px of menu, which is the side that did not need it`,
+      detail:
+        `${detail}: a menu of ${String(menuHeight)} px opened ${side} its anchor ` +
+        `with ${String(roomBelow)} px of window under it, which is the side that did not ` +
+        `need it - ${
+          wanted === 'below'
+            ? `${String(roomBelow)} px is room for the whole menu under the anchor, so it ` +
+              'should have opened below'
+            : `${String(roomBelow)} px is less than the menu's own rows, so it could not ` +
+              'have opened below'
+        }`,
     };
   }
   // The vertical distance between the two boxes: zero when the menu overlaps its anchor —
