@@ -171,6 +171,19 @@ run_case "stepper-binding.test (Swift)" \
 # never holds still - none of which a device run produces on demand, and all of
 # which would turn an accessibility rule into a coin flip. It compiles the shipping
 # UI-test file itself, so the host proves the code that runs on the simulator.
+# The same shape of wait, for the two gestures X34 item 4 un-fixed: a tab-bar scroll that
+# dragged eight times and decided on one read of a moving frame, and a popover anchor tapped
+# three times without asking whether a popover was already up. What is proved here is the press
+# count and the bound - a device can show the flake, but it cannot be asked to reproduce it on
+# demand, and a wait that silently stops at one read is exactly what a device run hides.
+run_case "gesture-settlement.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/example/ios/NitroUiExampleUITests/GestureSettlement.swift' \
+      '$ROOT/scripts/native-tests/gesture-settlement.test.swift' \
+      -o '$OUT/gesture-settlement' && '$OUT/gesture-settlement'
+  "
+
 run_case "a11y-frame-stability.test (Swift)" \
   bash -c "
     swiftc -Onone \
