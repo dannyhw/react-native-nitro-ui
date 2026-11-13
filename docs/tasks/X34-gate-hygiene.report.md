@@ -63,9 +63,12 @@ need: review is satisfied on this code tree.
 `need --for merge`:
 
 ```
+  ✓ check — green
+  ✓ harness:ios — green on the ios code tree
+  ✓ harness:android — green on the android code tree
   ✓ real-input:ios — green on the ios code tree
   ✓ real-input:android — green on the android code tree
-  note: no check line was borrowed for this tree: this worktree has uncommitted changes, so nothing here is a committed tree an earlier run can have checked - commit or stash them and ask again
+  note: no check line was borrowed for this tree: no other ledger has a check line on tree 2d7946885451
   note: treated as both platforms (outside the known prefixes): scripts/native-tests.sh, scripts/native-tests/gesture-settlement.test.swift, scripts/real-input/ios.mjs, scripts/real-input/tab-targets.mjs
 need: merge is satisfied on this code tree.
 ```
