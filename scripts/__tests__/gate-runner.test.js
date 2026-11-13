@@ -409,6 +409,56 @@ describe('stopGroup (what the sweep may touch)', () => {
     expect(left).toEqual([77]);
     expect(lines.join('')).toContain('ignored SIGTERM');
   });
+
+  it("sends the real term to the GROUP, so a run's command goes down without the escalation", async () => {
+    // The tests above inject `signal`, so none of them can see the one character this sweep turns
+    // on: `process.kill(-group, …)` signals every process in the group, and `process.kill(group, …)`
+    // signals only the process whose NUMBER equals the group id - the run's own leader. That second
+    // spelling is X32's incident: the leader died, the command it had started kept the Metro port
+    // and the emulator, and no ledger line arrived. Only the kernel answers which tree a term
+    // reached, so this is the real call on a real group this test created and records.
+    //
+    // What is asserted is that the SIGTERM ALONE empties the group: the by-pid escalation is wired
+    // to a spy that refuses to kill anything. Reaching it - or a survivor in the returned list -
+    // means the term did not cover the tree, which is the claim under test. The grace periods are
+    // the real ones: an orphan's reap is a real cost, and a sweep that needs the escalation to
+    // clean up after a term is a sweep the next task pays for.
+    const leader = spawn('sh', ['-c', 'sleep 300 & echo $!; wait'], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    leader.unref();
+    started.push(leader.pid);
+    let out = '';
+    leader.stdout.on('data', (chunk) => {
+      out += String(chunk);
+    });
+    await until(
+      () => /^\d+/m.test(out),
+      'the grandchild to report its pid',
+      15_000
+    );
+    const grandchild = Number(/^\d+/m.exec(out)[0]);
+    started.push(grandchild);
+
+    // `detached` means the leader leads its own group, so the group number is its pid - and the
+    // grandchild is in that group, which is the whole point.
+    expect(groupId(leader.pid)).toBe(leader.pid);
+    expect(pidIsAlive(grandchild)).toBe(true);
+
+    const escalated = [];
+    const left = await stopGroup(leader.pid, {
+      log: () => {},
+      kill: (pid, signal) => {
+        escalated.push([pid, signal]);
+        return true;
+      },
+    });
+
+    expect(escalated).toEqual([]);
+    expect(left).toEqual([]);
+    expect(pidIsAlive(grandchild)).toBe(false);
+  }, 90_000);
 });
 
 describe('writeRunnerRecord (the sidecar a later run attributes a port by)', () => {
