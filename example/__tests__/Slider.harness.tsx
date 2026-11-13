@@ -2059,6 +2059,20 @@ describe('Slider', () => {
       expected: number[]
     ) => {
       const seed = seeds.get(events)!;
+      // How many gestures this control had reported *before* this press - not how
+      // many it has reported by the time the assertions run, which is what this used
+      // to read. The callbacks a press emits arrive asynchronously: native emits on
+      // the UI thread and Nitro hands them to the JS queue, so on a loaded machine
+      // the press's own release can still be in that queue when the probe has
+      // already answered. Reading the array afterwards then made the comparison
+      // below compare it against a prefix of the expected values *of its own length*,
+      // so a press that had not landed passed for free and the missing event turned
+      // up later - at the bare `toEqual` after the "past the top" press, as
+      // `expected [3, 6, 9] to deeply equal [3, 6, 9, 10]`, measured on this tree at
+      // load1 96. Waiting for this press's release is what makes the walk assert the
+      // press it just performed (and puts a wrong value on the press that produced
+      // it) instead of shrinking to whatever had arrived.
+      const press = events.complete.length;
       const report = await accessibilityStepReport(handle, direction);
       // Every press, not just the first. When a walk goes red, the report that
       // matters is the failing press's: it is the only record of what the a11y tree
@@ -2066,13 +2080,14 @@ describe('Slider', () => {
       // FOLLOWUPS:56's flake has been diagnosed three times without it.
       console.log(`a11y step ${what}: ${report}`);
       expectPerformed(report, what);
-      const index = events.complete.length - 1;
-      expect(events.complete).toEqual(expected.slice(0, index + 1));
+      // Every walk step is expected to move, so every one of them owes a release.
+      await dragCompleted(events, press + 1, 5000);
+      expect(events.complete).toEqual(expected.slice(0, press + 1));
       // The start of each step is the value it began from: the control's seed for
       // the first, and each previously reported value after that. And never more
       // starts than ends - the drag that never ends would show up here.
-      expect(events.start[index]).toEqual(
-        index === 0 ? seed : expected[index - 1]
+      expect(events.start[press]).toEqual(
+        press === 0 ? seed : expected[press - 1]
       );
       expect(events.start.length).toBe(events.complete.length);
       expect(handle.nuiTestFramePumpArmed()).toBe(false);
@@ -2089,6 +2104,8 @@ describe('Slider', () => {
       await accessibilityStepReport(alignedHandle, 1),
       'aligned past the top'
     );
+    // Safe to read bare: `walkTo` has waited for the fourth release, and the press
+    // above reported nothing, so there is nothing left in the queue behind it.
     expect(aligned.complete).toEqual([3, 6, 9, 12]);
     await walkTo('aligned -9', alignedHandle, aligned, -1, [3, 6, 9, 12, 9]);
     await walkTo('aligned -3', alignedHandle, aligned, -1, [3, 6, 9, 12, 9, 6]);
@@ -2119,6 +2136,8 @@ describe('Slider', () => {
       'uneven past the top'
     );
     expect(uneven.complete).toEqual([3, 6, 9, 10]);
+    // The fourth press is the one that used to still be in flight here; `walkTo`
+    // waits for it now, so this line only ever fails on a wrong value.
 
     // Starting at the bound: forward does nothing, back steps.
     expectPerformed(
