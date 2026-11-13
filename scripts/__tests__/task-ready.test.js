@@ -13,6 +13,9 @@
  * @file Unit gate: `check`.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -21,6 +24,10 @@ import {
   missingReportPaths,
   ONLY_GROUPS,
   reportCandidates,
+  slugReportNames,
+  taskIdFromBranch,
+  taskIdsFromBranch,
+  taskFromBranchName,
   reportTableProblems,
   summarise,
   todoFindings,
@@ -701,6 +708,221 @@ describe('which report file a task refers to', () => {
 
   it('does not ask for the same file twice', () => {
     expect(reportCandidates('X4', 'X4')).toEqual(['docs/tasks/X4.report.md']);
+  });
+
+  /**
+   * Every report in this repo is `<ID>-<slug>.report.md` — `G29-android-wheels.report.md`,
+   * `X30-merge-bar-and-ledger-tooling.report.md` — and none is the bare
+   * `docs/tasks/<ID>.report.md` the docs claimed (X30 fix round 1). So the two
+   * candidates above matched nothing for the common case: a fix-round branch
+   * (`task/G29-fix1`) knows the id but not the slug, and the checker reported
+   * "not found" about a report that was sitting in the directory. The third
+   * candidate is that slug — and only when it is *unique*, because guessing between
+   * two reports is the confident wrong answer this tool exists to refuse.
+   */
+  it('falls back to the one slug report that carries the id', () => {
+    const files = [
+      'G29-android-wheels.md',
+      'G29-android-wheels.report.md',
+      'X28-gate-needs-lease.report.md',
+    ];
+    expect(reportCandidates('G29', 'G29-fix1', files)).toEqual([
+      'docs/tasks/G29-fix1.report.md',
+      'docs/tasks/G29.report.md',
+      'docs/tasks/G29-android-wheels.report.md',
+    ]);
+    // The brief (`G29-android-wheels.md`) is not a report and never a candidate.
+    expect(slugReportNames('G29', files)).toEqual([
+      'G29-android-wheels.report.md',
+    ]);
+  });
+
+  it('offers no slug when several reports carry the id, and names them all', () => {
+    const files = [
+      'G29-android-wheels.report.md',
+      'G29-form-e4-pair-a.report.md',
+      'G29-android-wheels.md',
+    ];
+    // Nothing appended: a candidate list is a list of files to *use*, and the second
+    // one here would be a coin flip dressed as a lookup.
+    expect(reportCandidates('G29', 'G29-fix1', files)).toEqual([
+      'docs/tasks/G29-fix1.report.md',
+      'docs/tasks/G29.report.md',
+    ]);
+    // The caller's failure names all of them, which is only possible if the core
+    // hands over the matches rather than swallowing them.
+    expect(slugReportNames('G29', files)).toEqual([
+      'G29-android-wheels.report.md',
+      'G29-form-e4-pair-a.report.md',
+    ]);
+  });
+
+  it('still prefers a name that matches exactly, slug rule or not', () => {
+    // A branch with its own report is unambiguous even when the id has two slug
+    // reports in the directory, so the ambiguity complaint has to stay silent here.
+    const files = [
+      'G29-form-e4-pair-a.report.md',
+      'G29-android-wheels.report.md',
+    ];
+    expect(reportCandidates('G29', 'G29-form-e4-pair-a', files)[0]).toBe(
+      'docs/tasks/G29-form-e4-pair-a.report.md'
+    );
+  });
+
+  it('without a listing it asks for exactly what it used to (the 2-arg form)', () => {
+    // Every older caller, and every case above that is about the two names, passes no
+    // directory listing: then the slug rule has nothing to match and must not invent
+    // a candidate out of a pattern it cannot resolve.
+    expect(reportCandidates('G29', 'G29-fix1')).toEqual([
+      'docs/tasks/G29-fix1.report.md',
+      'docs/tasks/G29.report.md',
+    ]);
+    expect(slugReportNames('G29')).toEqual([]);
+    expect(slugReportNames(null, ['G29-a.report.md'])).toEqual([]);
+  });
+});
+
+/* ------------------------- the reports this repo really has ------------------------ */
+
+describe('every report in docs/tasks is findable by its own id (X30 fix 2)', () => {
+  const names = fs
+    .readdirSync(path.join(process.cwd(), 'docs', 'tasks'))
+    .filter((name) => name.endsWith('.report.md'));
+
+  it('none is named for the bare id, which is the rule the docs used to claim', () => {
+    // 125 reports, every one `<ID>-<slug>.report.md`. Had this been true, the
+    // two-candidate lookup would have worked and this fix would not exist.
+    expect(names.length).toBeGreaterThan(50);
+    expect(
+      names.filter((name) => /^[A-Za-z0-9]+\.report\.md$/.test(name))
+    ).toEqual([]);
+  });
+
+  it('a fix-round branch for any of them resolves to that report', () => {
+    // The property the fix exists for, run over the real directory instead of a
+    // fixture: for each task, `task/<ID>-fix1` (which knows the id and nothing else)
+    // has to land on that task's report. Two reports sharing an id would make this
+    // red on purpose — the rule refuses to guess, so the checker would say so.
+    for (const name of names) {
+      const id = taskIdFromBranch(name.replace(/\.report\.md$/, ''));
+      if (id == null) continue;
+      const found = reportCandidates(id, `${id}-fix1`, names).find(
+        (candidate) => names.includes(candidate.replace('docs/tasks/', ''))
+      );
+      expect(found).toBe(`docs/tasks/${name}`);
+    }
+  });
+});
+
+/* --------------------------- the branch -> the task ------------------------------- */
+
+describe('the task a branch name belongs to (X30 item 4)', () => {
+  it('reads the id off a fix round, a merge round, and any prefix', () => {
+    // `bun run task-ready` on the hand-in list is only a check if it runs. Naming the
+    // report after the branch made every fix-round and merge-round branch need
+    // `--task X29`, and a flag people forget is a check that silently did not happen.
+    expect(taskFromBranchName('task/X29-fix2')).toEqual({
+      branch: 'X29-fix2',
+      id: 'X29',
+    });
+    expect(taskFromBranchName('task/X29-merge')).toEqual({
+      branch: 'X29-merge',
+      id: 'X29',
+    });
+    // A merge round is not always under `task/` — `merge/X29` worktrees exist, and a
+    // full ref comes out of `git rev-parse` in some setups. The prefix is not the
+    // task's name.
+    for (const ref of ['merge/X29', 'refs/heads/merge/X29', 'X29']) {
+      expect(taskFromBranchName(ref)).toEqual({ branch: 'X29', id: 'X29' });
+    }
+    // The id shapes this repo actually uses: letter+digits, a trailing letter, an
+    // all-caps word with digits inside, and a lowercase probe branch.
+    for (const [ref, id] of [
+      ['task/A1b-baselines', 'A1b'],
+      ['task/R09-release-notes', 'R09'],
+      ['task/FIX4-merge', 'FIX4'],
+      ['x22-probe', 'x22'],
+      ['task/S6b-form-spike', 'S6b'],
+    ]) {
+      expect(taskFromBranchName(ref).id).toBe(id);
+    }
+  });
+
+  it('refuses to pick a side on a branch that names two tasks (X30 fix 1)', () => {
+    // `task/G25-G26-merge` and `task/G29-X27-merge` are real. Reading the first id
+    // off one of them (which round 1 did) sends the checker to G25's report, it
+    // passes, and the command prints "ready" about a merge that shipped two tasks —
+    // the shape of failure this whole tool was written against. An id is only an
+    // answer when the branch names one; two is a question, and the question is
+    // `--task`, which the runner answers once per task.
+    for (const ref of ['task/G25-G26-merge', 'G29-X27-merge', 'merge/X4-Y9']) {
+      expect(taskFromBranchName(ref).id).toBeNull();
+    }
+    expect(taskIdsFromBranch('G25-G26-merge')).toEqual(['G25', 'G26']);
+    // The message the CLI prints names both, so nobody has to guess what to pass.
+    // A slug word that happens to end in a digit is not a second task: `e4` is a
+    // step of the form, and `fix1` is a round, not a task.
+    for (const ref of [
+      'task/X29-form-e4-pair-a',
+      'task/X29-fix2',
+      'task/X30-merge-bar-and-ledger-tooling',
+    ]) {
+      const { branch: suffix } = taskFromBranchName(ref);
+      expect(taskIdsFromBranch(suffix)).toEqual([suffix.split(/[-._]/)[0]]);
+      expect(taskFromBranchName(ref).id).toBe(suffix.split(/[-._]/)[0]);
+    }
+  });
+
+  it('refuses to invent an id for a branch named in prose', () => {
+    // The line the derivation must not cross: `merge-bar-ledger-tooling` has a
+    // leading word but no task in it, and `merge.report.md` would be a file this
+    // branch never wrote. An error that asks for `--task` beats a confident guess.
+    for (const ref of [
+      'main',
+      't3/merge-bar-ledger-tooling',
+      'dependabot/npm_and_yarn/jest-30.0.0',
+      'refs/heads/HEAD',
+      'task/',
+      '',
+      null,
+    ]) {
+      expect(taskFromBranchName(ref).id).toBeNull();
+    }
+    expect(taskIdFromBranch('merge-bar-ledger-tooling')).toBeNull();
+    // A digit in a later word does not make the first word an id.
+    expect(taskIdFromBranch('fix-round-2')).toBeNull();
+  });
+
+  it('still lands on the report that exists, branch-named first', () => {
+    // The two spellings in one flow: the id from the branch, the candidates from
+    // `reportCandidates`, so `task/X29-fix2` reads X29's report without being told.
+    const { branch, id } = taskFromBranchName('task/X29-fix2');
+    expect(reportCandidates(id, branch)).toEqual([
+      'docs/tasks/X29-fix2.report.md',
+      'docs/tasks/X29.report.md',
+    ]);
+    // By name, not by `Object.values` spread: the signature is (id, branch) and the
+    // object is { branch, id }, so the spread passed them the wrong way round. It
+    // read as proof anyway because on `merge/X29` both halves are `X29` — a test
+    // that cannot tell the two orders apart is not testing the order (X30 fix 1).
+    const merged = taskFromBranchName('merge/X29');
+    expect(reportCandidates(merged.id, merged.branch)).toEqual([
+      'docs/tasks/X29.report.md',
+    ]);
+    // And the order does differ somewhere: on a fix branch, swapping it asks for
+    // `docs/tasks/X29-fix2.report.md` under the id and the reverse.
+    expect(reportCandidates(branch, id)).not.toEqual(
+      reportCandidates(id, branch)
+    );
+  });
+
+  it('is what the command uses, not a copy of the rule', () => {
+    // The old script had its own `task/`-only regex, which is exactly the line that
+    // made a merge branch give up. Pinning the call is cheap; pinning the absence of
+    // the private re-derivation is what keeps it from coming back.
+    const script = read('scripts/task-ready.mjs');
+    expect(script).toContain('taskFromBranchName(');
+    expect(script).not.toContain('/^task\\/[');
   });
 });
 

@@ -29,6 +29,7 @@ import {
   backgroundRecordPath,
   decideNeed,
   deviceFromEnv,
+  digestKeyFor,
   countsForDisplay,
   changedPathsGitArgs,
   gatesSeen,
@@ -1251,10 +1252,14 @@ describe('the fix-round rule (M2)', () => {
     expect(iosRow.state).toBe('green');
     expect(iosRow.matched).toBe('ios');
 
-    // Merge is not impressed: it still wants every gate once on the final tree.
+    // X30 item 1: merge agrees, and it is right to. The iOS half of the tree did
+    // not move, so that run tested the binary the merge would ship. Asking for it
+    // again is the ~2.5 h G29+X27 paid over a change to a test fixture.
+    const merge = decideNeed({ entries, tree, trees, stage: 'merge' });
+    expect(merge.missing).not.toContain('harness:ios');
     expect(
-      decideNeed({ entries, tree, trees, stage: 'merge' }).missing
-    ).toContain('harness:ios');
+      merge.required.find((row) => row.gate === 'harness:ios').matched
+    ).toBe('ios');
   });
 
   it('an iOS-only fix still re-ows Android, because it must', () => {
@@ -1279,11 +1284,17 @@ describe('the fix-round rule (M2)', () => {
       'check',
       'harness:ios',
     ]);
-    // Android is not asked for at review here (the diff is iOS-only), and at
-    // merge the round-1 line is stale: the full tree moved.
+    // Android is not asked for at review here (the diff is iOS-only), and at merge
+    // the round-1 Android line counts: an iOS Swift file is in neither the Android
+    // binary nor the Android half of the tree, so the half that ran did not change
+    // (X30 item 1). What that commit *does* re-own is `check` - it reads the whole
+    // tree - and a shared-code change re-owns both devices, which the next two tests
+    // pin, so this is narrower than it looks and not a loophole.
+    const merge = decideNeed({ entries, tree, trees, stage: 'merge' });
+    expect(merge.missing).not.toContain('harness:android');
     expect(
-      decideNeed({ entries, tree, trees, stage: 'merge' }).missing
-    ).toContain('harness:android');
+      merge.required.find((row) => row.gate === 'harness:android').matched
+    ).toBe('android');
   });
 
   it('a shared-code fix re-ows both platforms', () => {
@@ -1321,6 +1332,192 @@ describe('the fix-round rule (M2)', () => {
     });
     expect(review.required.map((row) => row.gate)).toEqual(['check']);
     expect(review.notes.join(' ')).toMatch(/tooling \(check-only\)/);
+  });
+});
+
+describe('the merge bar keys a device gate on its platform half (X30 item 1)', () => {
+  const GATED = {
+    'ios/components/Button/Switch.swift': 'swift-v1',
+    'android/src/main/ui/Switch.kt': 'kt-v1',
+  };
+  const gatedTree = fullTreeOf(GATED);
+  const gatedTrees = platformTreesOf(GATED);
+
+  function lineOn(gate, tree, trees, result = 'pass') {
+    return line({ gate, tree, trees, result });
+  }
+
+  /** Every merge gate green on the tree round 1 shipped. */
+  function gatedLedger(extra = []) {
+    return [
+      ...MERGE_GATES.map((gate) => lineOn(gate, gatedTree, gatedTrees)),
+      ...extra,
+    ];
+  }
+
+  it('asks a device gate for its own half at both stages, and check for the whole', () => {
+    // The names, before the behaviour: a filtered run belongs to its platform too,
+    // and `bench`/`smoke:*` have no half to be keyed to.
+    for (const stage of ['review', 'merge']) {
+      expect(digestKeyFor({ gate: 'harness:ios', stage })).toBe('ios');
+      expect(digestKeyFor({ gate: 'real-input:android', stage })).toBe(
+        'android'
+      );
+      expect(digestKeyFor({ gate: 'harness:android:ColdSizing', stage })).toBe(
+        'android'
+      );
+      expect(digestKeyFor({ gate: 'check', stage })).toBe('full');
+      expect(digestKeyFor({ gate: 'smoke:pack', stage })).toBe('full');
+      expect(digestKeyFor({ gate: 'bench', stage })).toBe('full');
+    }
+  });
+
+  it('a tooling-only commit on main re-owns check and no device run', () => {
+    // The G29+X27 case, told to the ledger instead of to a person: `main` moves
+    // under a branch that already has all four device gates, and the commit that
+    // moved it is a test fixture.
+    const after = {
+      ...GATED,
+      'scripts/__tests__/gate.test.js': 'fixture-v2',
+      'scripts/gate-core.mjs': 'gate-core-v2',
+    };
+    const tree = fullTreeOf(after);
+    const trees = platformTreesOf(after);
+    expect(tree).not.toBe(gatedTree); // `check` has to run again...
+    expect(trees).toEqual(gatedTrees); // ... and nothing that ran on a device did
+    const decision = decideNeed({
+      entries: gatedLedger(),
+      tree,
+      trees,
+      stage: 'merge',
+    });
+    expect(decision.missing).toEqual(['check']);
+    for (const gate of ['harness:ios', 'harness:android']) {
+      const row = decision.required.find((entry) => entry.gate === gate);
+      expect(row.state).toBe('green');
+      expect(row.matched).toBe(gate.split(':')[1]);
+      // The line it accepted is the older run, which is the whole claim.
+      expect(row.entry.tree).toBe(gatedTree);
+    }
+  });
+
+  it('a change in a platform half still re-owns that platform at merge', () => {
+    const after = { ...GATED, 'android/src/main/ui/Switch.kt': 'kt-v2' };
+    const tree = fullTreeOf(after);
+    const trees = platformTreesOf(after);
+    expect(trees.ios).toBe(gatedTrees.ios);
+    expect(trees.android).not.toBe(gatedTrees.android);
+    const decision = decideNeed({
+      entries: gatedLedger(),
+      tree,
+      trees,
+      stage: 'merge',
+    });
+    // `check` is in the list too, and that is the half of the rule that keeps this
+    // honest: the whole tree moved, so the one run that reads every platform's
+    // files and the docs is owed again even though only Android's binary changed.
+    expect(decision.missing).toEqual([
+      'check',
+      'harness:android',
+      'real-input:android',
+    ]);
+    expect(
+      decision.required.find((row) => row.gate === 'harness:android').why
+    ).toBe('tree');
+  });
+
+  it('shared code re-owns both platforms, and an unmapped path re-owns both too', () => {
+    // The soundness half: the rule is only cheap when the halves really did not
+    // move. `src/` is in both binaries; `example/` is a path the mapping does not
+    // claim, and the ledger's answer to "we do not know what this touched" is the
+    // expensive one, at both stages.
+    for (const [file, expected] of [
+      ['src/ui/Shared.ts', ['harness:ios', 'harness:android']],
+      ['example/src/Main.tsx', ['harness:ios', 'harness:android']],
+    ]) {
+      const after = { ...GATED, [file]: 'v2' };
+      const tree = fullTreeOf(after);
+      const trees = platformTreesOf(after);
+      expect(trees).not.toEqual(gatedTrees);
+      const decision = decideNeed({
+        entries: gatedLedger(),
+        tree,
+        trees,
+        stage: 'merge',
+      });
+      expect(
+        decision.missing.filter((gate) => expected.includes(gate))
+      ).toEqual(expected);
+    }
+  });
+
+  it("never reads one platform's line as the other platform's evidence", () => {
+    // Cheap-but-wrong, the shape this change could have taken: an iOS line has
+    // `trees.android` too, and a rule that keyed both rows to the same digest would
+    // pass on it.
+    const entries = [lineOn('harness:ios', gatedTree, gatedTrees)];
+    const decision = decideNeed({
+      entries,
+      tree: gatedTree,
+      trees: gatedTrees,
+      stage: 'merge',
+    });
+    expect(
+      decision.required.find((row) => row.gate === 'harness:ios').state
+    ).toBe('green');
+    expect(
+      decision.required.find((row) => row.gate === 'harness:android').state
+    ).toBe('missing');
+  });
+
+  it('a v1 line with no halves is still held to the whole tree', () => {
+    // The fallback in `gateStateFor` is what keeps a pre-`trees` line from reading
+    // green forever now that merge uses the halves too: with no half to compare it
+    // compares the whole digest, so an older tree is stale, not free.
+    const moved = { ...GATED, 'ios/extra/New.swift': 'v2' };
+    const stale = gateStateFor({
+      gate: 'harness:ios',
+      entry: lineOn('harness:ios', gatedTree, null),
+      stage: 'merge',
+      tree: fullTreeOf(moved),
+      trees: platformTreesOf(moved),
+    });
+    expect(stale.state).toBe('stale');
+    const same = gateStateFor({
+      gate: 'harness:ios',
+      entry: lineOn('harness:ios', gatedTree, null),
+      stage: 'merge',
+      tree: gatedTree,
+      trees: gatedTrees,
+    });
+    expect(same.state).toBe('green');
+    expect(same.matched).toBe('full');
+  });
+
+  it('a red on this half is still a red at merge, and a moved tree is still moved', () => {
+    // Neither half of "not quietly cheaper": a failure the platform ran on this
+    // code has to block the merge, and a run the tree changed under is not evidence
+    // for any tree.
+    const failed = gateStateFor({
+      gate: 'harness:ios',
+      entry: lineOn('harness:ios', gatedTree, gatedTrees, 'fail'),
+      stage: 'merge',
+      tree: gatedTree,
+      trees: gatedTrees,
+    });
+    expect(failed.state).toBe('red');
+    const moved = gateStateFor({
+      gate: 'harness:ios',
+      entry: {
+        ...lineOn('harness:ios', gatedTree, gatedTrees),
+        treeAfter: TREE_B,
+      },
+      stage: 'merge',
+      tree: gatedTree,
+      trees: gatedTrees,
+    });
+    expect(moved.state).toBe('stale');
+    expect(moved.why).toBe('moved');
   });
 });
 
@@ -2899,5 +3096,153 @@ describeCli('gate.mjs refuses a device gate on a look-check lease', () => {
     expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual([
       'harness:ios',
     ]);
+  });
+});
+
+describeCli('gate.mjs refuses a misplaced --background (X30 item 3)', () => {
+  /** The marker `repoRootOf()` needs; a fixture without it dies at import. */
+  const CHECKOUT = {
+    'nitrogen/generated/ios/NitroUiAutolinking.swift': '// x\n',
+  };
+  const cleanup = [];
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * `gate.mjs <gate> -- <args>` hands `<args>` to the gate's own command line, and
+   * `--background` is not one: jest took it as an unknown option and the suite ended
+   * red, or it was folded into a suite suffix so the run was a gate named
+   * `harness:android:--background`. Either way the ledger recorded a verdict about
+   * code nobody measured, and a typo looked like a test failure (X21's flakes list has
+   * exactly this shape). The answer is a usage error, before a runner exists.
+   */
+  function misplaced(args) {
+    const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
+    cleanup.push(dir);
+    const run = runCli(dir, args);
+    return { run, ledger: ledgerLines(dir) };
+  }
+
+  it('says so, for a device gate, without running anything', () => {
+    const { run, ledger } = misplaced([
+      'harness:android',
+      '--',
+      '--background',
+    ]);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('goes with the gate name, not after --');
+    expect(run.stderr).toContain(
+      'node scripts/gate.mjs harness:android --background'
+    );
+    expect(run.stdout).not.toContain('fake runner');
+    // Not a run, not a log, not a ledger line: the refusal is *before* the run.
+    expect(ledger).toEqual([]);
+  });
+
+  it('does the same for the `=true` spelling, and rewrites what to type instead', () => {
+    for (const [args, suggestion] of [
+      [['check', '--', '--background=true'], 'check --background'],
+      [
+        ['harness:ios', '--', '--background', 'ColdSizing'],
+        'harness:ios --background -- ColdSizing',
+      ],
+    ]) {
+      const { run, ledger } = misplaced(args);
+      expect(run.status).toBe(2);
+      expect(run.stderr).toContain('goes with the gate name');
+      // Not only a refusal: the message spells the working command, filter included,
+      // because whoever typed this is trying to background a *filtered* run and the
+      // filter is the part that is easy to lose when the command is rewritten.
+      expect(run.stderr).toContain(suggestion);
+      expect(run.stdout).not.toContain('fake runner');
+      expect(ledger).toEqual([]);
+    }
+  });
+
+  it('still accepts the flag where it belongs, filter and all', () => {
+    // The other half of the proof: this is not fixed by refusing `--background`
+    // wherever it appears. The documented detached form has to keep working, and the
+    // suite filter after the separator has to still reach the gate.
+    const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
+    cleanup.push(dir);
+    const run = runCli(dir, [
+      'harness:ios',
+      '--background',
+      '--',
+      'ColdSizing',
+    ]);
+    expect(run.status).toBe(0);
+    expect(run.stderr).not.toContain('goes with the gate name');
+    // The detached run really ran, under the *filtered* gate name: a launcher that
+    // ate the filter would have recorded the full harness instead.
+    const waited = runCli(dir, ['wait', '--gate', 'harness:ios:ColdSizing']);
+    expect(waited.status).toBe(0);
+    expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual([
+      'harness:ios:ColdSizing',
+    ]);
+  });
+});
+
+describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
+  /** The marker `repoRootOf()` needs; a fixture without it dies at import. */
+  const CHECKOUT = {
+    'nitrogen/generated/ios/NitroUiAutolinking.swift': '// x\n',
+  };
+  const cleanup = [];
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * `USAGE` is a chain of literals joined with `+`, and a `'…';` where a `'… ' +`
+   * belongs is not a syntax error: the assignment ends at the semicolon and every
+   * literal after it is a no-op expression statement that lints and formats clean.
+   * X30's `--background` edit did that four times, so the help stopped mid-sentence
+   * and the flag, the merge-reuse rule, `export` and `logs` had no explanation
+   * anywhere — including in the usage error about a misplaced `--background`, which
+   * prints the same truncated string. Asserting the *tail* is what catches the shape:
+   * a string that was cut short has no tail, and no amount of middle text shows it.
+   */
+  it('the help runs to the last paragraph, not the first stray semicolon', () => {
+    const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
+    cleanup.push(dir);
+    const help = runCli(dir, ['--help']).stdout;
+    // The four paragraphs that went missing, by the words only the whole string has.
+    for (const section of [
+      'never\n        after `--`, where the arguments belong to the gate',
+      '--background starts a gate detached and returns at once',
+      "at merge, `check` may be satisfied by another branch's ledger",
+      'Export *merges*',
+      "(`logs` lists this clone's stored gate logs",
+    ]) {
+      expect(help).toContain(section);
+    }
+    // And the end really is the end: the `logs` line and the last clause of the file.
+    expect(help).toContain('node scripts/gate.mjs logs [--branch <b>]');
+    expect(help.trimEnd().endsWith('retention without listing)')).toBe(true);
+  });
+
+  it('and the refusal for a misplaced --background carries all of it', () => {
+    const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
+    cleanup.push(dir);
+    const run = runCli(dir, ['harness:android', '--', '--background']);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('goes with the gate name, not after --');
+    // Whoever mistyped the flag is reading this text to find the right form, so the
+    // half of it that explains `--background` and `wait` has to be in there.
+    expect(run.stderr).toContain('--background starts a gate detached');
+    expect(run.stderr).toContain('retention without listing)');
+  });
+
+  it('and eslint is set to catch the shape of the bug itself', () => {
+    // The test above catches this one string; the rule catches the next one. A
+    // literal expression statement is a bug in a script and never a style choice,
+    // and `scripts/` is clean under the rule today, so keeping it on costs nothing.
+    const config = fs.readFileSync(
+      path.join(process.cwd(), 'eslint.config.mjs'),
+      'utf8'
+    );
+    expect(config).toContain("'no-unused-expressions': [");
   });
 });

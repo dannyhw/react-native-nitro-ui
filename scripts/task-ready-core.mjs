@@ -467,27 +467,151 @@ function reportRows(text) {
 }
 
 /**
+ * The task a branch belongs to, read off the branch name (X30 item 4).
+ *
+ * A round is not always on `task/<ID>-<slug>`: a fix round is `task/X29-fix2`, a
+ * merge round is often a `merge/X29` or `task/X29-merge` worktree, and a report is
+ * keyed on the orchestrator's *id* (`docs/tasks/<ID>.report.md`, and the ledger
+ * export beside it). Deriving the id from the branch's leading token means a round
+ * hands in with `bun run task-ready` instead of remembering to pass `--task X29`
+ * every time the branch name stops looking like the task name - and a flag nobody
+ * remembers is a check that silently does not run.
+ *
+ * Two decisions a caller cannot see but a reviewer should:
+ *
+ *   - any `prefix/suffix` collapses to its suffix, not just `task/`. `merge/X29` and
+ *     `refs/heads/task/X29-fix2` name the same task as `task/X29-fix2`; refusing
+ *     them because of the prefix is what forced the flag.
+ *   - the id has to *contain a digit*. The ids in this repo are letters plus digits
+ *     (`X30`, `A1b`, `G29`, `FIX4`, `x22`), and a prose branch name (`main`,
+ *     `t3/merge-bar-ledger-tooling`, `dependabot/npm_and_yarn/...`) has no id in it
+ *     - guessing one would point the report checks at a file that is not this
+ *     branch's, which is worse than the error message that asks for `--task`.
+ *
+ * @param {string | null | undefined} branchRef `task/X4-conformance`,
+ *   `refs/heads/merge/X4`, `HEAD`, or null
+ * @returns {{branch: string | null, id: string | null}} the branch suffix (what a
+ *   branch-named report is called after) and the task id, either null
+ */
+export function taskFromBranchName(branchRef) {
+  const ref = String(branchRef ?? '').trim();
+  if (ref === '' || ref === 'HEAD') return { branch: null, id: null };
+  const name = ref.replace(/^refs\/(?:heads|remotes)\//, '');
+  const slash = name.indexOf('/');
+  const branch =
+    slash === -1 ? name : name.slice(slash + 1).replace(/^\/+/, '');
+  const suffix = branch === '' ? null : branch;
+  return { branch: suffix, id: taskIdFromBranch(suffix) };
+}
+
+/**
+ * The task ids a branch suffix names, in the order they appear at its head.
+ *
+ * Zero for a branch named in prose (`merge-bar-ledger-tooling`), one for a task or a
+ * round of one (`X4-conformance`, `X29-fix2`), and *two* for a merge branch that
+ * carries two tasks — `G25-G26-merge`, `G29-X27-merge` are real branches here.
+ *
+ * The second id is held to a stricter shape than the first on purpose: an id is an
+ * uppercase prefix plus digits, so `X29-fix2` and `X29-form-e4-pair-a` stay one task
+ * (`fix2` is a round, `e4` a step of the form) while `G25-G26-merge` is unmistakably
+ * two. Erring towards two costs one `--task` flag; erring towards one silently checks
+ * half a merge and calls it ready.
+ *
+ * @param {string | null | undefined} branch
+ * @returns {string[]} the ids at the head of the name, empty when there is none
+ */
+export function taskIdsFromBranch(branch) {
+  const tokens = String(branch ?? '')
+    .trim()
+    .split(/[-._]/);
+  const leading = tokens[0];
+  if (leading == null || leading === '' || !/\d/.test(leading)) return [];
+  const ids = [leading];
+  if (/^[A-Z]{1,4}\d{1,3}$/.test(tokens[1] ?? '')) ids.push(tokens[1]);
+  return ids;
+}
+
+/**
+ * The one task a branch belongs to, or null when the branch does not name exactly one.
+ *
+ * `X4-conformance` -> `X4`, `X30` -> `X30`, `merge-bar-ledger-tooling` -> null (no id),
+ * `G25-G26-merge` -> null (two ids: see `taskIdsFromBranch`, and the CLI asks for
+ * `--task` rather than picking the first and checking half the merge).
+ *
+ * @param {string | null | undefined} branch
+ * @returns {string | null}
+ */
+export function taskIdFromBranch(branch) {
+  const ids = taskIdsFromBranch(branch);
+  return ids.length === 1 ? ids[0] : null;
+}
+
+/**
  * Which report file a task id and a branch name refer to.
  *
- * AGENTS.md says the report is `docs/tasks/<ID>.report.md`, and `gate.mjs export --task <ID>`
- * writes its ledger to `docs/tasks/<ID>/gates.jsonl` — both keyed on the orchestrator's id.
- * But a branch is named for the *task*, not the id: X4's brief is `X4-conformance.md`, so its
- * branch is `task/X4-conformance` and the natural report name is
- * `docs/tasks/X4-conformance.report.md`, next to its own brief.
+ * Three spellings, in priority order, because the repo really uses all of them:
  *
- * Rather than pick one spelling and make the other a hard error, the command accepts either
- * and looks for both. What it will not do is run the report checks against a file that does
- * not exist, so it names the candidates it looked for.
+ * 1. `docs/tasks/<branch>.report.md` — the report a round writes next to its own brief,
+ *    which is what a branch-named task has (`X4-conformance`).
+ * 2. `docs/tasks/<ID>.report.md` — the bare id AGENTS.md names, and what
+ *    `gate.mjs export --task <ID>` keys its ledger on beside it.
+ * 3. `docs/tasks/<ID>-*.report.md` — **when exactly one file matches**. This is the
+ *    common case in this repo and the one the first two missed: every report here is
+ *    `<ID>-<slug>.report.md` (`G29-android-wheels.report.md`), none is the bare id, and
+ *    a fix-round branch (`task/G29-fix1`) knows the id but not the round-1 slug. Without
+ *    this candidate the checker reported "not found" about a report sitting in the
+ *    directory, which reads as "the round skipped its report" (X30 fix round 1).
+ *
+ * Several slug matches are deliberately *not* a candidate: choosing between two reports
+ * is a guess, and a guessed report is worse than a missing one because the checks then
+ * pass about the wrong file. `slugReportNames` hands the matches back so the caller can
+ * name them all in the failure instead.
  *
  * @param {string | null} id the orchestrator's task id (`X4`)
  * @param {string | null} branch the branch suffix (`X4-conformance`), or null
+ * @param {string[]} [taskFiles] the file names in `docs/tasks` (basenames or paths);
+ *   omit it and rule 3 has nothing to match, so only rules 1 and 2 are offered
  * @returns {string[]} report paths to look for, in priority order
  */
-export function reportCandidates(id, branch) {
+export function reportCandidates(id, branch, taskFiles = []) {
   const names = [];
   if (branch != null && branch !== '') names.push(branch);
   if (id != null && id !== '' && !names.includes(id)) names.push(id);
-  return names.map((name) => `docs/tasks/${name}.report.md`);
+  const paths = names.map((name) => `docs/tasks/${name}.report.md`);
+  const slugs = slugReportNames(id, taskFiles);
+  if (slugs.length === 1) {
+    const only = `docs/tasks/${slugs[0]}`;
+    if (!paths.includes(only)) paths.push(only);
+  }
+  return paths;
+}
+
+/**
+ * The `<ID>-*.report.md` files in a `docs/tasks` listing, sorted.
+ *
+ * One function so the caller that picks a report and the caller that complains about
+ * not picking one cannot disagree about what matched. A brief (`<ID>-<slug>.md`) is not
+ * a report and never matches.
+ *
+ * @param {string | null} id the orchestrator's task id (`X4`)
+ * @param {Iterable<string> | null} [taskFiles] names in `docs/tasks`; empty when unknown
+ * @returns {string[]} the matching report file names, basenames, sorted
+ */
+export function slugReportNames(id, taskFiles = []) {
+  if (id == null || id === '' || taskFiles == null) return [];
+  const prefix = `${id}-`;
+  const seen = new Set();
+  for (const entry of taskFiles) {
+    const name = String(entry).split('/').pop();
+    if (
+      name.length > prefix.length + '.report.md'.length &&
+      name.startsWith(prefix) &&
+      name.endsWith('.report.md')
+    ) {
+      seen.add(name);
+    }
+  }
+  return [...seen].sort();
 }
 
 /**

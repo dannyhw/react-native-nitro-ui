@@ -112,17 +112,34 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
 
 - `gate.mjs status` says what is green, red or missing for the code in front of you;
 - `gate.mjs need --for review` / `--for merge` exits non-zero with what the stage still needs, so
-  a round checks its own bar instead of claiming one. A docs-only commit invalidates nothing; a
-  fix round re-runs only the platforms its diff touches, because each device run is also keyed to
-  that platform's half of the tree (`trees.ios` / `trees.android`) while `check` and merge are
-  matched on the whole tree; the full harness plus real-input runs once, at merge. Benches are
-  never required by `need` (they belong to the bench host), and neither is anything under the
-  check-only tooling list in `scripts/gate-core.mjs` (`scripts/gate*.mjs`, `scripts/__tests__`,
-  `eslint-rules/`, `etc/`, `.changeset/`): those touch no platform half, so `check` proves them;
+  a round checks its own bar instead of claiming one. **What a merge needs** (X30): `check` on the
+  **whole** code tree, plus `harness:ios` + `real-input:ios` whose **iOS half** (`trees.ios`)
+  matches and `harness:android` + `real-input:android` whose **Android half** matches — a device
+  run is keyed to its platform's half at *both* stages, so a fix round re-runs only the platforms
+  its diff touched and a tooling-only commit on `main` re-owns nobody's device gates (it re-owns
+  `check`, the one run that reads both platforms and the docs). Shared code (`src/`, `cpp/`) moves
+  both halves and re-owns both platforms, and so does any code path the mapping does not claim:
+  unknown is expensive, never free. Benches are never required by `need` (they belong to the bench
+  host), and neither is anything under the check-only tooling list in `scripts/gate-core.mjs`
+  (`scripts/gate*.mjs`, `scripts/__tests__`, `eslint-rules/` and its `eslint.config.mjs`,
+  `etc/`, `.changeset/`): those touch
+  no platform half, so `check` proves them. **Editing that list is the exception** to "tooling is
+  free": the list is an input to the mapping, so a path that moves on or off it can change which
+  half owns it and re-key that half's tree hash — every branch already in flight then reads its
+  own device rows as stale and owes them once, after merging the change. (A path that only moves
+  between the list and *unmapped* code leaves both hashes where they are and changes only what
+  `need` demands of a diff that touches it — `gate.mjs status` says which case you are in, and
+  X30's listing commit is the commit to run it against rather than to assume about);
 - a filtered run records under its own name (`gate.mjs harness:android -- ColdSizing` is
   `harness:android:ColdSizing`), and satisfies nothing else; `check` takes no arguments at all;
+  `--background` is `gate.mjs`'s own flag and belongs before the `--` — past the separator the
+  arguments go to the gate, and that typo is now refused before a run instead of recorded as a
+  red one (X30);
 - `gate.mjs table` renders the report's gate table, and `gate.mjs export --task <ID>` commits the
-  ledger to `docs/tasks/<ID>/gates.jsonl` beside it.
+  ledger to `docs/tasks/<ID>/gates.jsonl` beside it **by merging** (X30): what is already in the
+  file stays byte-for-byte, this branch's lines are appended, and a line already there (same ts +
+  gate + code tree) is not written twice — so a fix round adds its runs instead of erasing
+  round 1's, and a failure excerpt that is already committed is left alone.
 - **Every failure leaves evidence.** A run's log goes in the clone's gate log store —
   `<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log` — which every worktree of the
   clone shares and `git worktree remove` never deletes; `gate.mjs logs [--branch b] [--failed]
