@@ -324,7 +324,12 @@ final class RealInputTests: XCTestCase {
     var seen = Set<String>()
     for id in ids where seen.insert(id).inserted {
       let tab = app.descendants(matching: .any)[id].firstMatch
-      let reached = revealTab(tab)
+      // The word after `reached=` is part of the log format: `tab-targets.mjs` reads
+      // `reached=true|false` and nothing else, so the annotation below is load-bearing and
+      // `scripts/__tests__/real-input-tab-targets.test.js` asks for it by name. Inferred, this line
+      // printed the whole settlement outcome, the parser read no tab at all, and a passing pass
+      // reported 23 tabs as "never measured" (the real-input:ios run of 2026-11-13).
+      let reached: Bool = revealTab(tab).satisfied
       var frame = tab.frame
       for _ in 0..<5 {
         Thread.sleep(forTimeInterval: 0.2)
