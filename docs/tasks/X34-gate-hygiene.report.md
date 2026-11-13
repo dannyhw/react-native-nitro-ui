@@ -40,15 +40,49 @@ same discipline found every `stopGroup` test injects `signal`, so the sign in `p
 …)` — sweeping a run's tree versus orphaning its Metro — was untested.
 ## Gates
 
-GATE_TABLE_PLACEHOLDER
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2198 tests / 91 suites | `743434864778` | 2 m 44 s | start 4.8 / med 8.8 / max 10.8 |
+| `harness:ios` | **PASS** | 629 tests / 32 suites + isolated 6 tests / 3 suites | `743434864778` (ios tree) | 15 m 10 s | start 10.9 / med 6.7 / max 13.0 |
+| `harness:android` | **PASS** | 685 tests / 32 suites + isolated 6 tests / 3 suites | `743434864778` (android tree) | 19 m 01 s | start 4.7 / med 4.8 / max 6.7 |
+| `real-input:ios` | **PASS** | — | `743434864778` (ios tree) | 46 m 30 s | start 5.0 / med 6.5 / max 86.0 |
+| `real-input:android` | **PASS** | — | `743434864778` (android tree) | 72 m 31 s | start 12.1 / med 4.5 / max 12.1 |
+| `real-input:ios:--control:a11y` | stale | — | ffcef98f2b93 (not this tree) | 0.5 s | start 5.6 / med 5.6 / max 5.6 |
+| `real-input:ios:--control:popover` | stale | — | 49ecf2f6e24c (not this tree) | 23 m 10 s | start 10.3 / med 6.0 / max 10.9 |
 
-`need --for review`: NEED_LINE_PLACEHOLDER
+`need --for review`:
 
-The three `real-input:ios:--control:*` rows and the two 1.6 s `harness:ios` rows are not the round's
-health: the first two are the item-4 mutations run on purpose under a filter that satisfies nothing
-but itself, the 1.6 s rows are `harness:ios` refusing an app whose `app.stamp` did not match the
-tree, and the `exitCode: 143` rows are the item-2 kill demo. `gate.mjs export --task X34` commits
-the ledger with a scrubbed excerpt of every failure beside it.
+```
+  ✓ check — green
+  ✓ harness:ios — green on the ios code tree
+  ✓ harness:android — green on the android code tree
+  note: treated as both platforms (outside the known prefixes): scripts/native-tests.sh, scripts/native-tests/gesture-settlement.test.swift, scripts/real-input/ios.mjs, scripts/real-input/tab-targets.mjs
+need: review is satisfied on this code tree.
+```
+
+`need --for merge`:
+
+```
+  ✓ real-input:ios — green on the ios code tree
+  ✓ real-input:android — green on the android code tree
+  note: no check line was borrowed for this tree: this worktree has uncommitted changes, so nothing here is a committed tree an earlier run can have checked - commit or stash them and ask again
+  note: treated as both platforms (outside the known prefixes): scripts/native-tests.sh, scripts/native-tests/gesture-settlement.test.swift, scripts/real-input/ios.mjs, scripts/real-input/tab-targets.mjs
+need: merge is satisfied on this code tree.
+```
+
+The two `real-input:ios:--control:*` rows are the round's red proofs rather than its health: each ran
+a mutated UITests source under a filter that satisfies nothing but itself, and both read `stale`
+because the tree has moved since. The `--control:a11y` row is the filter that does not exist (`a11y`
+rides every run), which is itself a finding, in Follow-ups. Nothing else is hidden by a table that
+keeps one row per gate: `gate.mjs logs --branch task/X34-gate-hygiene` lists every stored log, and
+`gate.mjs export --task X34` commits the ledger with a scrubbed excerpt of each failure — including
+the two `harness:ios` runs that refused an app whose `app.stamp` did not match the tree, and the
+item-2 kill demo whose run ended `exitCode: 143`.
+
+`real-input:ios` is the run that found the drift, re-taken clean: the same 46 minutes, the same
+`max 86.0` load1 spike in one sample, and this time 23 tab lines the parser could read, each with a
+box (`tab-switch` 67.7 × 44 pt … `tab-host` 54.7 × 44 pt) instead of 23 accusations. The pass the
+failing run blamed for never measuring a tab bar now prints `✓` 23 times.
 
 ## Red proofs
 
@@ -82,11 +116,12 @@ rebuild the mutated UITests source before the clean run.
   `scripts/gate.mjs` (background runs start under it; a refused or orphaned port names the dead gate
   and its log), `scripts/gate-core.mjs` (`deadGateBehindPort`), `scripts/lease-core.mjs` (a leased
   Metro port belongs to the pair, not to one platform).
-- Suites: `scripts/__tests__/gate-runner.test.js`, `scripts/__tests__/test-env-scrub.test.js`,
-  `scripts/__tests__/helpers/scrubbed-env.js`, `scripts/__tests__/helpers/spawn-env-audit.js`,
-  `scripts/__tests__/uitests-sources.test.js`, `scripts/__tests__/lease-queue.test.js`, and the five
-  spawning suites (`bench-baseline-merge`, `bench-dry-run`, `build-slot`, `lease`,
-  `lease-metro-port`).
+- Suites: `scripts/__tests__/gate-runner.test.js` (new, and where the real-process cases live),
+  `scripts/__tests__/gate-check.test.js`, `scripts/__tests__/test-env-scrub.test.js` (new) with
+  `scripts/__tests__/helpers/scrubbed-env.js` and `scripts/__tests__/helpers/spawn-env-audit.js`,
+  `scripts/__tests__/uitests-sources.test.js` (new), `scripts/__tests__/real-input-tab-targets.test.js`,
+  `scripts/__tests__/lease-queue.test.js`, and the five spawning suites
+  (`bench-baseline-merge`, `bench-dry-run`, `build-slot`, `lease`, `lease-metro-port`).
 - iOS waits: `example/ios/NitroUiExampleUITests/GestureSettlement.swift` (new) and its call sites in
   `example/ios/NitroUiExampleUITests/RealInputTests.swift`, proved on the host by
   `scripts/native-tests/gesture-settlement.test.swift` through `scripts/native-tests.sh`.
