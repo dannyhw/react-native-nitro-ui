@@ -7016,12 +7016,16 @@ final class RealInputTests: XCTestCase {
 
     // And a tap after that scroll still presses: the check above is worth nothing if the
     // row it just refused had also stopped answering a finger.
+    // The count is not fresh here: the ten taps and the held press above already moved it,
+    // so the three taps are counted from where it stands, which the drag check has just
+    // proved it still holds.
     try scrollIntoView("form-row", as: "the form row with onPress")
     try assertOnePressPerTap(
       "form-row",
       echo: Echo.formRowPresses,
       times: 3,
-      as: "the form row with onPress, after a scroll"
+      as: "the form row with onPress, after a scroll",
+      from: try pressCount(Echo.formRowPresses)
     )
 
     try assertFormKeepsFieldAboveKeyboard()
@@ -7285,7 +7289,18 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Tap `identifier` ten times and require the echo to read exactly 1…10.
+  /// The number an echo reads now, for a tap check that does not start from a fresh count.
+  /// A non-number fails rather than reading as 0, so a stale screen cannot pass as a fresh one.
+  private func pressCount(_ echo: String) throws -> Int {
+    let text = try read(echo)
+    guard let count = Int(text) else {
+      XCTFail("\"\(echo)\" should read a press count before the taps; it reads \"\(text)\".")
+      throw RealInputCheckAborted(identifier: echo)
+    }
+    return count
+  }
+
+  /// Tap `identifier` `times` times and require the echo to read exactly `base + 1`…`base + times`.
   ///
   /// Deliberately one tap, then one wait — not ten taps then a read. Ten taps and a
   /// final count of 10 would also be what a screen looks like after two taps landed
@@ -7294,10 +7309,11 @@ final class RealInputTests: XCTestCase {
     _ identifier: String,
     echo: String,
     times: Int,
-    as what: String
+    as what: String,
+    from base: Int = 0
   ) throws {
     for attempt in 1...times {
-      let wanted = String(attempt)
+      let wanted = String(base + attempt)
       guard pressOnce(identifier) != nil else {
         dumpHierarchy("\(what): \(identifier) is gone before tap \(attempt)")
         XCTFail(
@@ -7312,7 +7328,7 @@ final class RealInputTests: XCTestCase {
         XCTFail(
           "tap \(attempt) of \(times) on \(what) (\(identifier)) should make \"\(echo)\" read "
             + "\(wanted); it reads \"\(shown)\" after \(Int(reactTimeout))s — "
-            + ((Int(shown) ?? 0) > attempt
+            + ((Int(shown) ?? 0) > base + attempt
               ? "it is ahead, so a tap answered more than once."
               : "it is behind, so a tap was dropped before it reached the content.")
         )
