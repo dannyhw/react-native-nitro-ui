@@ -5945,7 +5945,7 @@ final class RealInputTests: XCTestCase {
       dumpHierarchy("tab \(identifier) is still outside the window")
       XCTFail(
         "the example's tab \"\(identifier)\" could not be scrolled wholly into the window "
-          + "in \(revealed.reads) reads and \(revealed.presses) drags over \"
+          + "in \(revealed.reads) reads and \(revealed.presses) drags over "
           + "\(revealed.elapsedMs) ms (it is at \(revealed.last.frame), hittable: "
           + "\(revealed.last.hittable)), so it cannot be tapped reliably. The wait ran out on its "
           + "deadline, not on a drag count, so this is a bar that will not bring the tab in - not a "

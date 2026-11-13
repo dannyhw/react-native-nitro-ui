@@ -184,6 +184,19 @@ run_case "gesture-settlement.test (Swift)" \
       -o '$OUT/gesture-settlement' && '$OUT/gesture-settlement'
   "
 
+# The UI-test target's own sources, parsed on the host. `-frontend -parse` resolves no
+# imports and needs no simulator, so it costs about a second - which is the point. The
+# file no host test compiles is exactly where a mangled quote hides, and the only other
+# compiler that looks at it is a device build: four minutes, one Metro start and one
+# app stamp later. A syntax error should cost a second here, not a gate.
+run_case "ui-test sources parse (Swift)" \
+  bash -c "
+    xcrun swiftc -frontend -parse \
+      '$ROOT/example/ios/NitroUiExampleUITests/A11yFrameStability.swift' \
+      '$ROOT/example/ios/NitroUiExampleUITests/GestureSettlement.swift' \
+      '$ROOT/example/ios/NitroUiExampleUITests/RealInputTests.swift'
+  "
+
 run_case "a11y-frame-stability.test (Swift)" \
   bash -c "
     swiftc -Onone \
