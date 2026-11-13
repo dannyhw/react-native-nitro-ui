@@ -37,9 +37,32 @@ the difference in `sleep 1` units — the unit `bounded()` counts patience in �
 the machine.
 ## Gates
 
-GATE_TABLE_PLACEHOLDER
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2101 tests / 89 suites | `2501a6f37e89` | 2 m 54 s | start 4.2 / med 26.1 / max 71.2 |
+| `harness:ios` | **PASS** | 629 tests / 32 suites + isolated 6 tests / 3 suites | `2501a6f37e89` (ios tree) | 15 m 09 s | start 6.6 / med 7.3 / max 18.9 |
+| `harness:android` | **PASS** | 685 tests / 32 suites + isolated 6 tests / 3 suites | `2501a6f37e89` (android tree) | 18 m 59 s | start 6.7 / med 5.3 / max 10.8 |
+| `real-input:ios` | **FAIL** | — | `2501a6f37e89` (ios tree) | 46 m 54 s | start 12.6 / med 10.9 / max 40.3 |
+| `real-input:android` | **PASS** | — | `2501a6f37e89` (android tree) | 72 m 18 s | start 4.3 / med 5.5 / max 15.4 |
+| `harness:ios:Conformance.harness` | **PASS** | 110 tests / 1 suites | `2501a6f37e89` (ios tree) | 3 m 29 s | start 9.1 / med 9.1 / max 15.7 |
+| `real-input:android:--control:hosted-picker` | **PASS** | — | `2501a6f37e89` (android tree) | 11 m 32 s | start 4.4 / med 5.2 / max 14.2 |
 
-`need --for review`: NEED_LINE_PLACEHOLDER
+(`gate.mjs table` prints four rows not shown here: the three junk rows in the next paragraph, and
+the stale `harness:ios:Form.harness` row, which is the mutated-tree red proof from Red proofs.)
+
+`need --for review`: **satisfied on this code tree** — `check`, `harness:ios` and
+`harness:android` green on `2501a6f37e89`. `need --for merge` also wants `real-input:ios`, which
+the table shows red.
+
+`real-input:ios` is the one gate this tree could not earn tonight, and it was tried twice. At
+22:33Z it lost `IconButton` ("tab `tab-iconbutton` is still outside the window") and `Popover`
+(three real taps on `popover-short-anchor`, each leaving `0 row(s) named "Do the thing"`). At
+23:24Z those two were green and `A11y` was red on the same sentence for
+`tab tab-contextmenu`, with the other 28 controls green. The runner recorded load up to 40.3
+through the second attempt. Nothing that `scripts/real-input/ios.mjs` imports moved between the
+16:38Z run — green in 50 m 41 s — and this tree: the only runner module this round added,
+`menu-placement.mjs`, is imported by `android.mjs` alone, and `real-input:android` (72 m 18 s, the
+runner that *did* change) is green along with its `--control:hosted-picker` filter.
 
 Three ledger rows are mine and are junk, not findings: `real-input:android:hosted-picker`,
 `real-input:android:hosted-picker:--background` (0.2 s and 0.4 s) and
@@ -132,3 +155,22 @@ unbounded body), and `gaveUpOnTheTool: false` with the command the guard names t
 - `MENU_ROOM_SLOP_DP` is a false-red guard, not a graded rule: no fixture sits in the band it
   widens (removing it keeps all 8 cases green), which is deliberate — a fixture there would grade
   Material's exact flip decision, which is not this check's claim.
+
+## Questions for orchestrator
+
+`need --for review` is satisfied. `need --for merge` wants one more thing, `real-input:ios`, and
+this host has not given it in two attempts — three different controls across the two, never the
+same one twice, every one of them "a real tap or a scroll did not land", with load peaking at 40.3
+during the second. Options:
+
+- **a.** Re-run `real-input:ios` in a quiet window, or on the other maintainer machine, and merge on
+  that. No code change is needed for it, and the 16:38Z green run says the suite can pass.
+- **b.** Merge on the review bar plus the 16:38Z run, on the grounds that the only runner file this
+  round changed is the Android one, whose own gate (72 m 18 s) and whose `--control:hosted-picker`
+  filter are both green on this tree.
+- **c.** Open the input-landing flakes as their own task. The a11y sweep's
+  "tab … is still outside the window" wait and the popover's three-tap retry have no FOLLOWUPS line
+  yet, and three controls in two runs — after `harness:ios` lost five runs the same evening — is a
+  pattern worth one owner rather than five task reports.
+
+Recommendation: **a**, and **c** regardless. None of it is X31's code, and X31 has a hard round cap.
