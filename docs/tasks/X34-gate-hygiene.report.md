@@ -68,7 +68,6 @@ need: review is satisfied on this code tree.
   ✓ harness:android — green on the android code tree
   ✓ real-input:ios — green on the ios code tree
   ✓ real-input:android — green on the android code tree
-  note: no check line was borrowed for this tree: no other ledger has a check line on tree 2d7946885451
   note: treated as both platforms (outside the known prefixes): scripts/native-tests.sh, scripts/native-tests/gesture-settlement.test.swift, scripts/real-input/ios.mjs, scripts/real-input/tab-targets.mjs
 need: merge is satisfied on this code tree.
 ```
@@ -80,7 +79,7 @@ rides every run), which is itself a finding, in Follow-ups. Nothing else is hidd
 keeps one row per gate: `gate.mjs logs --branch task/X34-gate-hygiene` lists every stored log, and
 `gate.mjs export --task X34` commits the ledger with a scrubbed excerpt of each failure — including
 the two `harness:ios` runs that refused an app whose `app.stamp` did not match the tree, and the
-item-2 kill demo whose run ended `exitCode: 143`.
+item-2 kill demo whose run ended `exitCode: 143`. Each `need` block is the tool's own output, minus only the line about whether a `check` row could be borrowed from another ledger — that one quotes a git tree hash and so is always one commit stale.
 
 `real-input:ios` is the run that found the drift, re-taken clean: the same 46 minutes, the same
 `max 86.0` load1 spike in one sample, and this time 23 tab lines the parser could read, each with a
