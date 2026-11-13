@@ -231,11 +231,20 @@ async function formRef(): Promise<FormHandle> {
  * what the X25 and X29 rounds made it do. A Form that quietly gave up twice and redrew
  * itself correct on the next settle is a Form with a bug nobody can see.
  *
- * So it is asserted on the cases that walk the stale-section paths on purpose: a Section
- * removed while its index path is still in the snapshot (E1's removal, the churn), a row
- * pressed where the cell is what answers (E4), and a Form torn down mid-settle and handed to
- * the next mount (the churn). iOS only: Android's Form has no cells to come up empty and
- * counts no give-ups.
+ * So it is asserted on the cases that churn a Form on purpose. What each of those calls is
+ * worth is not the same, and the difference is stated where it is read rather than here:
+ *
+ * - the churn case is a *witness*. Round 1's mutation — count a give-up wherever the cell
+ *   provider is asked about a row whose Section has gone — turned it red at 8 give-ups, which
+ *   is the counter agreeing with a window that case really opens.
+ * - E1 and E4 are *guards*. Neither removes a Section, and the four branches that increment
+ *   this counter are a stale Section, two casts that cannot fail with the classes `makeList`
+ *   registers, and the `else` of a guard on an enum with one case. No branch here reaches 0 by
+ *   the case's own doing: the same mutation left them green. They are wired (the same
+ *   mutation, moved to a line every cell ask runs, turns both red at their own
+ *   `expectNoGiveUps`), and they fail if a future version of the Form starts giving up here.
+ *
+ * iOS only: Android's Form has no cells to answer with a blank and counts no give-ups.
  *
  * Printed before it is graded, like the press case: on red the numbers beside it say which
  * disagreement the give-up came out of, which `1 !== 0` does not.
@@ -878,7 +887,9 @@ describe('Form (G24)', () => {
     // Every row view in a section is a row the Form was told about. The shape a phantom
     // takes - a recycled component view registered by a recovery scan - is exactly this.
     if (IOS) expect(num(report, 'stale')).toBe(0);
-    // Mounted, laid out, and nothing had to be answered with a blank on the way here.
+    // Mounted, laid out, and nothing had to be answered with a blank on the way here. A
+    // guard rather than a witness — a clean mount never opens a stale-index window, so
+    // nothing in this case can make this counter move on its own. See `expectNoGiveUps`.
     expectNoGiveUps(report, 'E1 at rest');
   });
 
@@ -1058,7 +1069,10 @@ describe('Form (G24)', () => {
     }
     // The counter runs for the whole mount, so one read at the end is a claim about every
     // insert, removal, reorder and one of the 50 scroll cycles above - each of which is a
-    // window in which the list can be holding an index path the models have let go of.
+    // window in which the list can be holding an index path the models have let go of. It is
+    // a guard at the end of a run rather than a witness in one: this case removes a *row*,
+    // never a Section, and the give-up branches need a Section to have gone (see
+    // `expectNoGiveUps` — the churn case is the one with a red proof behind its count).
     expectNoGiveUps(
       parse(need(forms.form).nuiTestFormReport()),
       'E1 after an insert, a removal, a reorder and 50 cycles'
@@ -1204,7 +1218,9 @@ describe('Form (G24)', () => {
       expect(probe.log.switches).toBe(10);
       // Twenty presses, each landing on whichever view UIKit says owns the point, and no
       // cell had to be filled with a blank on the way. Read here rather than at the end of
-      // the case: the positive control below unmounts this Form.
+      // the case: the positive control below unmounts this Form. A guard, not a witness —
+      // nothing a press does reaches a give-up branch today, so what this catches is a Form
+      // that starts needing one while rows are being pressed (see `expectNoGiveUps`).
       expectNoGiveUps(
         parse(need(forms.form).nuiTestFormReport()),
         'E4 after twenty presses into row content'

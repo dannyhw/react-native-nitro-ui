@@ -49,7 +49,11 @@ export async function pressAimed(
   try {
     await userEvent.press(element);
   } catch (cause) {
-    throw new Error(describeRefusedPress(element, testId, cause));
+    // `describeRefusedPress` reads the view's box to say what was aimed at, and that lookup
+    // can itself fail — a remount with two live copies of a `testID` is exactly when
+    // `queryByTestId` refuses. The refusal above is the thing being diagnosed, so it goes
+    // along as the cause rather than being replaced by a message about the diagnosis.
+    throw new Error(describeRefusedPress(element, testId, cause), { cause });
   }
 }
 
@@ -66,19 +70,35 @@ export function describeRefusedPress(
   cause: unknown
 ): string {
   const upstream = cause instanceof Error ? cause.message : String(cause);
-  const box = harnessUi.queryByTestId(testId);
+  let box: ViewInfo | null = null;
+  let lookedUp = true;
+  try {
+    box = harnessUi.queryByTestId(testId);
+  } catch {
+    // Named rather than swallowed: "answers for no view at all now" below would read like the
+    // view is gone when what happened is that the tree refuses to name one — a different
+    // answer, and the one that matters while a remount is in flight.
+    lookedUp = false;
+  }
   const centreX = box == null ? null : box.x + box.width / 2;
   const centreY = box == null ? null : box.y + box.height / 2;
+  let thisSide: string;
+  if (box == null || centreX == null || centreY == null) {
+    thisSide = lookedUp
+      ? `"${testId}" answers for no view at all now, so the native side had nothing to ` +
+        'resolve and pressed the literal (0, 0) it was handed.'
+      : `"${testId}" would not answer a lookup at all while this was being written, so the ` +
+        'centre that was pressed is unknown here — read the native line above for the point.';
+  } else {
+    thisSide = `"${testId}" is at ${String(box.x)},${String(box.y)} → ${String(
+      box.x + box.width
+    )},${String(box.y + box.height)}, whose centre is (${String(centreX)}, ${String(
+      centreY
+    )}) — the point it pressed.`;
+  }
   return (
     `press on "${testId}" was refused: ${upstream} — upstream prints the arguments it was ` +
     `handed, not the point it pressed. This side: nativeId=${element.nativeId}, and ` +
-    (box == null || centreX == null || centreY == null
-      ? `"${testId}" answers for no view at all now, so the native side had nothing to ` +
-        'resolve and pressed the literal (0, 0) it was handed.'
-      : `"${testId}" is at ${String(box.x)},${String(box.y)} → ${String(
-          box.x + box.width
-        )},${String(box.y + box.height)}, whose centre is (${String(
-          centreX
-        )}, ${String(centreY)}) — the point it pressed.`)
+    thisSide
   );
 }

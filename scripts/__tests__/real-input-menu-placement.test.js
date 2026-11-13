@@ -60,6 +60,16 @@ const rowsBelow = (top) => box(top, top + MENU_HEIGHT);
 const ANCHOR_CENTRED = box(1051, 1219);
 const MENU_BELOW = box(1277, 1582);
 
+/** The anchor the flaked run had: 168 px tall, as the Host draws it. */
+const ANCHOR_HEIGHT = 1219 - 1051;
+
+/**
+ * An anchor whose bottom edge leaves exactly `room` px of window under it — the one number the
+ * side rule reads, so a fixture states its room rather than hiding it in a pair of y values.
+ */
+const anchorWithRoom = (room) =>
+  box(WINDOW - room - ANCHOR_HEIGHT, WINDOW - room);
+
 describe('the Android hosted Picker’s menu box', () => {
   it('accepts the menu below its anchor, as the device placed it', () => {
     const seen = judge(MENU_BELOW, ANCHOR_CENTRED);
@@ -81,6 +91,45 @@ describe('the Android hosted Picker’s menu box', () => {
     // bottom is 52 px *inside* the anchor, and an edge-to-edge rule grades that as 52 px
     // against this same band and passes with one pixel to spare.
     expect(seen.detail).toContain('0 px off its edge');
+  });
+
+  it('accepts either side when the room below fits the rows but not the menu’s surface', () => {
+    // The band `MENU_ROOM_SLOP_DP` exists for, and the one-line rule graded its middle as a
+    // failure: `roomBelow + slop >= menuHeight` asked whether the room plus an allowance was
+    // enough, which subtracts the slop from what Material needs instead of adding it to what
+    // the rows' box measures. With 20 px more room under the anchor than the rows need, the
+    // surface — its padding, its shadow, its window margin — still did not fit, and a menu
+    // that opens above from there is right. Red under the old rule; the band's other boundary
+    // below is red under it too.
+    expect(ROOM_SLOP).toBe(126);
+    const anchor = anchorWithRoom(MENU_HEIGHT + 20);
+    // Overlapping the anchor's top by the 52 px the measured above-placement overlapped it, so
+    // the distance rule is satisfied and only the side rule can speak.
+    const up = judge(box(anchor.y1 + 52 - MENU_HEIGHT, anchor.y1 + 52), anchor);
+    expect(up.ok).toBe(true);
+    expect(up.branch).toBe('above');
+    // …and the same boxes with the menu opened below, which the band has to accept as well: a
+    // judge that only moved its failure somewhere else has not measured the band, only moved
+    // it. Sitting on the anchor's bottom edge, `menuHeight + 20` of room holds it exactly.
+    const down = judge(rowsBelow(anchor.y2), anchor);
+    expect(down.ok).toBe(true);
+    expect(down.branch).toBe('below');
+  });
+
+  it('rejects a menu that opened below with a pixel less room than the menu needs', () => {
+    // The other boundary, one pixel inside it: 304 px of window under an anchor is not room for
+    // a 305 px menu, and the run that opened downward has run off the bottom of the window.
+    // The old rule called this room — 304 + 126 >= 305 — which is the same mistake the case
+    // above makes in the other direction, and the reason the band has two edges rather than a
+    // fudge factor.
+    const anchor = anchorWithRoom(MENU_HEIGHT - 1);
+    const seen = judge(rowsBelow(anchor.y2), anchor);
+    expect(seen.ok).toBe(false);
+    expect(seen.branch).toBe('wrongSide');
+    // The sentence a person reads has to name both numbers it weighed.
+    expect(seen.detail).toContain('a menu of 305 px opened below');
+    expect(seen.detail).toContain('304 px is less than the menu');
+    expect(seen.detail).toContain('could not have opened below');
   });
 
   it('rejects a menu parked at the top of the window over an anchor at the bottom', () => {
