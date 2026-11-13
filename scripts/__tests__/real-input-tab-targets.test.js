@@ -19,6 +19,7 @@ import {
   checkTabTargets,
   exampleTabs,
   parseIosTabTargets,
+  unreadTabTargetLines,
 } from '../real-input/tab-targets.mjs';
 import {
   MANIFEST_BASENAME,
@@ -275,5 +276,68 @@ describe('parseIosTabTargets', () => {
     expect(swift).toContain('"real-input tab-target id=\\(id) | frame="');
     expect(swift).toContain('format: "%.1f,%.1f,%.1f,%.1f"');
     expect(swift).toContain('" | reached=\\(reached)"');
+
+    // The literal string is not the contract. `reached=\(reached)` prints whatever `reached` *is*,
+    // and when `revealTab` started answering with the gesture-settlement outcome instead of a yes
+    // or no, the pass printed 23 well-formed-looking lines that this parser read as nothing — a
+    // device run that blamed the tab bar for a format change. What the parser needs is the word
+    // `true` or `false`, so the annotation is the contract: the compiler holds it, and this asks
+    // for it by name so nobody re-infers their way back into the same red run.
+    expect(swift).toMatch(/let reached: Bool = /);
+  });
+
+  it('says a line could not be read, rather than calling every tab unreachable', () => {
+    // The fixture is the real thing: this is what the pass printed on the run that found the drift
+    // (task/X34-gate-hygiene, real-input+ios), reported here with the type name and the long frame
+    // left in. Read as "never measured", 23 tabs were blamed for one print site.
+    const drifted =
+      'real-input tab-target id=tab-switch | frame=4.0,68.0,67.7,44.0 | ' +
+      'reached=Outcome<TabReveal>(last: RealInputTests.TabReveal(frame: (4.0, 68.0, 67.7, 44.0), ' +
+      'hittable: true, window: (0.0, 0.0, 420.0, 912.0)), reads: 2, presses: 0, satisfied: true, ' +
+      'outOfBudget: false, elapsedMs: 355)';
+    expect(parseIosTabTargets(drifted).size).toBe(0);
+    expect(unreadTabTargetLines(drifted)).toEqual({
+      count: 1,
+      examples: [drifted],
+    });
+
+    const verdicts = checkTabTargets({
+      platform: 'ios',
+      tabs: [{ id: 'switch', label: 'Switch' }],
+      measured: parseIosTabTargets(drifted),
+      pixel: 1 / 3,
+      strays: unreadTabTargetLines(drifted),
+    });
+    expect(verdicts[0].ok).toBe(false);
+    expect(verdicts[0].line).toContain('could not be read');
+    expect(verdicts[0].line).toContain('tab-targets.mjs');
+    // and the tab is still reported, because the rule still has nothing to say about it
+    expect(verdicts[1].line).toContain('was never measured');
+  });
+
+  it('counts no stray for a pass whose lines it can read, and none for other lines', () => {
+    const log = [
+      'real-input tab-target id=tab-switch | frame=4.0,62.0,71.3,44.0 | reached=true',
+      'real-input tab-target id=tab-host | frame=402.0,62.0,60.0,44.0 | reached=false',
+      'real-input a11y case=popover kind=stability reads=3 settled=true moved=0',
+      'Assertion failed: reached=false in some other file',
+    ].join('\n');
+    expect(unreadTabTargetLines(log)).toEqual({ count: 0, examples: [] });
+    // A pass that printed nothing is not a drift: there is no line to fail to read, and every tab
+    // is genuinely unmeasured. `checkTabTargets` says so without blaming a format.
+    const verdicts = checkTabTargets({
+      platform: 'ios',
+      tabs: [{ id: 'switch', label: 'Switch' }],
+      measured: parseIosTabTargets(log),
+      pixel: 1 / 3,
+      strays: unreadTabTargetLines(log),
+    });
+    // One verdict per tab, and no verdict about the format: `host` is in the log and not in the
+    // caller's tab list, which is a different rule and still answered on its own line.
+    expect(verdicts.map((v) => v.id)).toEqual(['switch', 'host']);
+    expect(verdicts[0].line).toContain('is 71.3 × 44 pt');
+    expect(verdicts.some((v) => v.line.includes('could not be read'))).toBe(
+      false
+    );
   });
 });
