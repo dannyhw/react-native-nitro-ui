@@ -303,9 +303,9 @@ The control is the platform's, so the accessibility element is too:
   (`NSControl.StateValue.on/.off/.mixed`), and AppKit is not on this platform. Android is
   the opposite case, and the better one: the word comes from Compose's own string
   resource, so it is localised wherever Compose is. The alternative to an English word is
-  shipping translations of our own for a word Apple does not publish — a translation
-  programme, not a fix — so iOS keeps Apple's word and says plainly that it does not
-  change with the language.
+  shipping translations of our own for a state Apple does not publish on this platform — a
+  translation programme, not a fix — so iOS keeps the one word, English, and says plainly
+  that it does not change with the language.
 - `accessibilityLabel` goes on the control, never on a wrapper, and defaults to
   `label`. A *bare* Android checkbox has no name of its own, which is the argument
   for giving one: pass `accessibilityLabel` when there is no `label`.
