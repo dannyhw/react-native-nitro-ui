@@ -11,6 +11,11 @@
 //  found it on `0...1.05 step 0.1`, where one tap went 0 → 1: ten steps, and
 //  `quantize` approved of the result because 1 *is* a legal value there.
 //
+//  The second half is the range that write happens inside (`trackBounds`), because G25
+//  found a second bug there on the same control: SwiftUI is handed the raw
+//  `maximumValue` while the control shows a tidied one, so on `maximumValue = 0.1 + 0.2`
+//  the plus half stayed live at the top of the grid and answered taps with nothing.
+//
 //  Every fixture below is chosen so the wrong answer differs from the right one:
 //  `check` prints what the literal-write reading would have produced next to the
 //  answer the rule gives, so a fixture that cannot tell the two apart is visible as
@@ -101,7 +106,47 @@ struct StepperBindingTest {
     check(4, afterWrite: 5, minimum: 0, maximum: 10, step: 1, disabled: true, expected: nil,
       "a disabled control takes no write at all")
 
-    // 5. Fixture sanity: the two readings really do disagree on the fixtures that
+    // 5. The range handed to SwiftUI's own control (`trackBounds`). SwiftUI decides
+    //    whether a half is at its end by comparing the value it shows with the bound it
+    //    was given, and this control shows a *tidied* value — so a raw bound leaves the
+    //    two disagreeing by one binary hair, and at the top of the grid the plus half
+    //    stays live. It then answers a tap with no event, because the write quantises
+    //    back to where it was: correct behaviour with the look of a dead control (G25
+    //    review found it on `maximumValue = 0.1 + 0.2`, which is that hair).
+    check(
+      NitroUiStepperBinding.trackBounds(minimum: 0, maximum: 0.1 + 0.2).upperBound == 0.3,
+      "a maximum of 0.1 + 0.2 is handed over as 0.3, the value the control shows"
+    )
+    check(
+      NitroUiStepperBinding.trackBounds(minimum: 0.1 + 0.2, maximum: 1).lowerBound == 0.3,
+      "the same hair on a minimum is tidied too"
+    )
+    // The bound is the top of the grid, not a hair above it: on `0...0.1+0.2 step 0.1`
+    // the highest value `quantize` can produce is 0.3, and SwiftUI's own "am I at the
+    // end" test is the comparison this vector reproduces.
+    check(
+      NitroUiStepperBinding.trackBounds(minimum: 0, maximum: 0.1 + 0.2).upperBound
+        == NitroUiSliderValue.quantize(
+          raw: 0.1 + 0.2, minimum: 0, maximum: 0.1 + 0.2, step: 0.1),
+      "the bound is the grid's top stop, not a value above it"
+    )
+    // Controls: a range that needs no tidying comes back untouched, and a nonsense bound
+    // is decided rather than fatal — `ClosedRange(a...b)` traps when a > b, and an app's
+    // props are not allowed to take the process down.
+    check(
+      NitroUiStepperBinding.trackBounds(minimum: 0, maximum: 10) == 0...10,
+      "bounds that are already stops are handed over untouched"
+    )
+    check(
+      NitroUiStepperBinding.trackBounds(minimum: 10, maximum: 0) == 0...10,
+      "an inverted range comes back ordered instead of trapping"
+    )
+    check(
+      NitroUiStepperBinding.trackBounds(minimum: .nan, maximum: 1) == 0...1,
+      "a non-finite bound falls back to the unit range"
+    )
+
+    // 6. Fixture sanity: the two readings really do disagree on the fixtures that
     //    matter, or this file would pass with the old rule restored.
     let tenths = NitroUiStepperBinding.value(
       afterWrite: 1, displayed: 0, minimum: 0, maximum: 1.05, step: 0.1, disabled: false)
@@ -109,6 +154,14 @@ struct StepperBindingTest {
     let grid = NitroUiStepperBinding.value(
       afterWrite: 4, displayed: 3, minimum: 0, maximum: 10, step: 3, disabled: false)
     check(grid != 4, "the step-3 fixture is not the literal write (fixture sanity)")
+    // The bounds group needs this most: `0.3` and `0.1 + 0.2` are different Doubles, and
+    // a file that asserted `trackBounds(...).upperBound == 0.1 + 0.2` would be green
+    // with the tidying removed.
+    check(
+      0.1 + 0.2 != 0.3
+        && NitroUiStepperBinding.trackBounds(minimum: 0, maximum: 0.1 + 0.2).upperBound != 0.1 + 0.2,
+      "the tidied bound is not the raw prop (fixture sanity)"
+    )
 
     if failures > 0 {
       print("stepper-binding.test: \(failures) failure(s)")

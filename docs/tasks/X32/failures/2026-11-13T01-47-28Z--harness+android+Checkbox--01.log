@@ -1,0 +1,82 @@
+# Failure excerpt — harness:android:Checkbox
+
+- Ran: 2026-11-13T01:47:28.344Z on code tree `06fc809409d7` at HEAD `87caf41` (branch `task/X32-review-debt`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Checkbox`
+- Result: fail, exit 1, 22238 ms
+- Load: start 10.43, end 7.74, median 8.79, max 10.43
+- Device: android / device `emulator-5574` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/harness+android+Checkbox-2026-11-13T01-47-28.344Z.log` (<store>/task/X32-review-debt/harness+android+Checkbox-2026-11-13T01-47-28.344Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › recycles into the next owner with its own picture`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X32-review-debt/harness+android+Checkbox-2026-11-13T01-47-28.344Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X32-9xk2j (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.74 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Checkbox
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 06fc809409d7, 26 components registered)
+lease: X32-9xk2j runs this suite on emulator-5574 (nitroui_a) via adb server 5043
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.83/20.07 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X32-review-debt/harness+android+Checkbox-2026-11-13T01-47-28.344Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › recycles into the next owner with its own picture
+
+    round b: "recycled" arrived with probes=2 - a recycled Checkbox kept the last owner's probe count, so every count after this one is somebody else's: "displayed=1;probes=2;merged=none;a11y=none;labelBox=0.19,24.0;drops=7;recycles=7"
+
+      [0m [90m 1376 |[39m         [36mconst[39m probesBeforeProbe [33m=[39m fieldOf([32m'probes'[39m)[33m;[39m
+       [90m 1377 |[39m         [36mif[39m (probesBeforeProbe [33m!==[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1378 |[39m           [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                          [31m[1m^[22m[39m
+       [90m 1379 |[39m             [32m`round ${key}: "recycled" arrived with probes=${String([39m
+       [90m 1380 |[39m [32m              probesBeforeProbe[39m
+       [90m 1381 |[39m [32m            )} - a recycled Checkbox kept the last owner's probe count, so every count `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        20.893 s
+Ran all test suites matching Checkbox.
+
+
+
+```

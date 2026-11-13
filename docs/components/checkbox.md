@@ -294,6 +294,18 @@ The control is the platform's, so the accessibility element is too:
   two-position `Toggle` otherwise answers `0` or `1`, and `1` once the dash has been
   tapped away (asserted: `testRealInputCheckbox` step 8 presses the mixed row and requires
   the value to move, which is the state where the word could outlive the picture).
+  **On iOS the word is English in every locale.** It is an argument to `Text(_:)`, and
+  there is nothing to hand it instead: iOS has no public localised string for a checkbox
+  in a mixed state. UIKit has no third checkbox state at all — `UIMenuElementStateMixed`
+  is the only `Mixed` in its headers and belongs to menus, whose spoken string has no
+  accessor — `UIAccessibilityTraits` has no mixed trait, and neither SwiftUI nor
+  `Accessibility.framework` publishes the word. Apple's own mixed state is AppKit's
+  (`NSControl.StateValue.on/.off/.mixed`), and AppKit is not on this platform. Android is
+  the opposite case, and the better one: the word comes from Compose's own string
+  resource, so it is localised wherever Compose is. The alternative to an English word is
+  shipping translations of our own for a state Apple does not publish on this platform — a
+  translation programme, not a fix — so iOS keeps the one word, English, and says plainly
+  that it does not change with the language.
 - `accessibilityLabel` goes on the control, never on a wrapper, and defaults to
   `label`. A *bare* Android checkbox has no name of its own, which is the argument
   for giving one: pass `accessibilityLabel` when there is no `label`.

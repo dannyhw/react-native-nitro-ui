@@ -131,4 +131,5 @@
 | X29 | Form E4 harness case red on pair-a's iOS simulator only (found by X25) | Apex | Opus | merged (PR #68; with X25's recycle fix combined and R09's notes; gates 5/5 on code tree `3cd5ec72`, Form suite green on both simulators) |
 | R09 | 0.9.0 release notes rewritten for app developers (3,690 to 1,220 words) | Opus | orchestrator | merged with X29 |
 | X30 | Merge bar matches device gates per platform half; ledger export merges; --background typo guard; task-ready ID from branch | Apex | Opus | done, waits to merge with X31 (fix round 1: USAGE rejoined, task-ready finds <ID>-<slug> reports and refuses two-ID branches, excerpts never overwritten, eslint.config.mjs check-only; all with reds) |
-| X31 | hosted-picker flake, Form giveUps assertion, harness tap error text, ci-workflows 2 s budget | Apex | Opus | running |
+| X31 | hosted-picker flake, Form giveUps assertion, harness tap error text, ci-workflows 2 s budget | Apex | Opus | in review (#70; all five gates green on tree 2501a6f3) |
+| X32 | Form iOS row press after a scroll, form.md VoiceOver contradiction, three Stepper review items, Checkbox probes assert and localised "mixed" | Apex | Opus | running |

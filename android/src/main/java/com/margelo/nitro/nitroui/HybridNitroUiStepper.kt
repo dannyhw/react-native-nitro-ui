@@ -102,6 +102,33 @@ internal class StepperModel : NitroUiModel() {
 
   var didApplyDefault = false
 
+  /**
+   * Adopt `defaultValue` as the shown value, once, while React has sent no `value`.
+   * Returns whether it did anything, which is what makes the caller mark the host dirty.
+   *
+   * **Both copies of the shown value move.** [displayed] is what Compose draws;
+   * `state.displayed` is what the handshake compares React's next write against
+   * ([NitroUiControlledValue.reconcile]). Writing only the first leaves the control
+   * drawn at its default and the handshake believing it is where it started, and the
+   * two disagree about a write in the one direction that matters: with
+   * `defaultValue = 5`, the first controlled `value = 0` reads as "the 0 you already
+   * show" and is dropped, so React holds 0 and the screen keeps 5 until something else
+   * moves. iOS has one field for both jobs (`HybridNitroUiStepper.swift` writes
+   * `state.displayed`), and every other write to the shown value here — [userStep] and
+   * the range-clamp in `afterUpdate` — moves the pair (G25 review).
+   */
+  fun applyDefaultOnce(): Boolean {
+    if (state.js != null || didApplyDefault) {
+      return false
+    }
+    val default = defaultValue ?: return false
+    didApplyDefault = true
+    val shown = quantize(default)
+    displayed = shown
+    state.displayed = shown
+    return true
+  }
+
   var onValueChange: ((Double, Double) -> Unit)? = null
 
   /** Test-only read-outs, behind one lock: probes are posted to main, reports read from JS. */
@@ -301,18 +328,31 @@ internal class StepperModel : NitroUiModel() {
    *
    * Returns whether anything moved, because that is the action's contract.
    */
-  fun accessibilityStepToward(
-    target: Double,
-    publishedProgress: Double,
-  ): Boolean {
+  fun accessibilityStepToward(target: Double): Boolean {
+    val published = publishedProgress
     val up =
       when {
-        target > publishedProgress -> true
-        target < publishedProgress -> false
+        target > published -> true
+        target < published -> false
         else -> return false
       }
     return step(up)
   }
+
+  /**
+   * The progress this node publishes to a reader: [displayed] through the `Float` the
+   * semantics node carries it in.
+   *
+   * Not a curiosity. The target of a `setProgress` arrives as a `Float`, and a reader
+   * that asks for the value it can already read sends back exactly this number, so the
+   * comparison has to be against this number too. Against the `Double` it is not equal
+   * on any grid whose stops are not exact in binary: `0.3` through a `Float` and back is
+   * `0.30000000000000004`, which read against `0.3` is "higher than where you are", and
+   * a reader asking for the value it already holds gets read as one step up — an event,
+   * a move, and an announcement of a number the control never had (G25 review).
+   */
+  val publishedProgress: Double
+    get() = displayed.toFloat().toDouble()
 }
 
 /**
@@ -393,7 +433,10 @@ private class StepperHost(
           // this control's own grid, decided against the progress *this* node
           // publishes (the number the delegate built its target from).
           setProgress { target ->
-            model.accessibilityStepToward(target.toDouble(), publishedProgress = displayed)
+            // The target arrives through the Float this node published, so the model is
+            // asked to compare it with the same Float round-trip — see
+            // [StepperModel.publishedProgress].
+            model.accessibilityStepToward(target.toDouble())
           }
           // `clearAndSetSemantics` on the buttons took M3's own `disabled()` away with
           // them, so a disabled stepper has to restate it here. Without it TalkBack
@@ -654,12 +697,8 @@ class HybridNitroUiStepper(
         model.state.js = quantised
       }
     }
-    if (model.state.js == null && !model.didApplyDefault) {
-      model.defaultValue?.let { default ->
-        model.didApplyDefault = true
-        model.displayed = model.quantize(default)
-        host.markDirty()
-      }
+    if (model.applyDefaultOnce()) {
+      host.markDirty()
     }
     // The handshake decides whether React's write wins over what the user just
     // stepped to (§4).

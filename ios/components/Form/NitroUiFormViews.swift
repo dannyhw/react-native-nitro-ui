@@ -381,15 +381,37 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     return gesture
   }()
 
+  /// The touch this recogniser is tracking, and how far its finger has gone.
+  private var pressTravel = NitroUiPressTravel()
+
   @objc private func pressChanged(_ gesture: UILongPressGestureRecognizer) {
     switch gesture.state {
       case .began:
+        pressTravel.began(at: gesture.location(in: self))
         pressed = true
+      case .changed:
+        // A scroll that began on this row: stand down, and take the highlight with the
+        // press. The recogniser recognises alongside the list's pan precisely so the
+        // React content in the row keeps the same touch, which means the list scrolling
+        // is not a reason for this cell to stop tracking — travel is the only thing left
+        // that says the finger was on its way somewhere else (`NitroUiPressTravel`).
+        if pressTravel.moved(to: gesture.location(in: self), within: bounds) {
+          pressed = false
+        }
       case .ended:
         pressed = false
-        onPressTap?()
+        // The whole difference between a row that presses and a row that fires whenever
+        // someone scrolls past it: `.ended` is where a long press with no minimum says
+        // "the finger lifted", and a flick lifts a finger too. G30 wrote this line for
+        // ListItem's own row (`HybridNitroUiListItem.swift`'s `pressChanged`); the Form's
+        // cell had the same recogniser without it, so a flick that began on a pressable
+        // row scrolled the list *and* took the person to the screen behind the row.
+        if pressTravel.ended() {
+          onPressTap?()
+        }
       default:
         // Cancelled or failed: a scroll that turned out to be a scroll, say.
+        pressTravel.cancelled()
         pressed = false
     }
     setNeedsUpdateConfiguration()

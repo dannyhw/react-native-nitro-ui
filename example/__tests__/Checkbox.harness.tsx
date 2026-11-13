@@ -1365,6 +1365,23 @@ describe('Checkbox · G15', () => {
             )} iosStyle=${handle.iosStyle} report=${handle.nuiTestStateReport()}`
           );
         }
+        // Before the probe, and read the same way the bound below reads it: this mount's
+        // report has to start from no probes at all. `probes >= 1` is not a witness that
+        // *this* mount answered one — `nuiTestStateReport()` is a live read of the host
+        // object, so on an instance whose `clearReports()` had stopped clearing the count,
+        // the poll would be satisfied on its first read by the previous owner's 1 and the
+        // bound would then pass on a number this mount never produced. The reset is the
+        // thing under test, so it is the thing to assert before the test can be satisfied
+        // by its absence.
+        const probesBeforeProbe = fieldOf('probes');
+        if (probesBeforeProbe !== 0) {
+          throw new Error(
+            `round ${key}: "recycled" arrived with probes=${String(
+              probesBeforeProbe
+            )} - a recycled Checkbox kept the last owner's probe count, so every count ` +
+              `after this one is somebody else's: "${handle.nuiTestStateReport()}"`
+          );
+        }
         // One probe for this mount, read once it has answered, and then the bound: this
         // mount's own report, not the last owner's.
         handle.nuiTestProbeAccessibility();
