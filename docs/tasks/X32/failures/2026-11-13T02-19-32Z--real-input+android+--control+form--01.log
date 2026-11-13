@@ -1,0 +1,651 @@
+# Failure excerpt — real-input:android:--control:form
+
+- Ran: 2026-11-13T02:19:32.900Z on code tree `fc50cde27225` at HEAD `65ae9a0` (branch `task/X32-review-debt`)
+- Command: `node scripts/real-input/android.mjs --control form`
+- Result: fail, exit null signal SIGTERM, 716789 ms
+- Load: start 10.46, end 19.67, median 6.45, max 22.27
+- Device: android / device `emulator-5574` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-19-32.141Z.log` (<store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-19-32.141Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a drag that scrolls the list is not a press (10 -> 11) — a row that fires on a scroll takes the person to a screen they only meant to scroll past — expected 10, saw 11`
+- `✗ the pressable row never came to rest in a box the sideways drag could be aimed at`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-19-32.141Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X32-9xk2j (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 19.67 (the ledger line carries the samples across the whole run)
+gate: logcat (last 500 of 688 lines)
+  | 11-13 02:19:36.555 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiDatePickerManager
+  | 11-13 02:19:36.557 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+  | 11-13 02:19:36.558 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativecommunity.slider.ReactSliderManager
+  | 11-13 02:19:36.559 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiFormRowViewManager
+  | 11-13 02:19:36.561 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiMenuManager
+  | 11-13 02:19:36.562 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiIconButtonManager
+  | 11-13 02:19:36.562 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSegmentedControlManager
+  | 11-13 02:19:36.562 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiChipManager
+  | 11-13 02:19:36.563 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiButtonGroupManager
+  | 11-13 02:19:36.563 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiBottomSheetViewManager
+  | 11-13 02:19:36.563 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiFormViewManager
+  | 11-13 02:19:36.563 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiTextFieldManager
+  | 11-13 02:19:36.564 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiCheckboxManager
+  | 11-13 02:19:36.564 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+  | 11-13 02:19:36.564 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewShadowNode
+  | 11-13 02:19:36.565 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiPopoverViewManager
+  | 11-13 02:19:36.565 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.reanimated.view.REASharedTransitionBoundaryManager
+  | 11-13 02:19:36.565 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiContextMenuViewManager
+  | 11-13 02:19:36.566 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiFormSectionViewManager
+  | 11-13 02:19:36.566 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+  | 11-13 02:19:36.567 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiTooltipManager
+  | 11-13 02:19:36.567 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
+  | 11-13 02:19:36.568 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiStepperManager
+  | 11-13 02:19:36.568 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiDialogManager
+  | 11-13 02:19:36.568 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
+  | 11-13 02:19:36.569 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiHostViewManager
+  | 11-13 02:19:36.569 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiProgressManager
+  | 11-13 02:19:36.569 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiPickerManager
+  | 11-13 02:19:36.570 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiListItemManager
+  | 11-13 02:19:36.570 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSearchFieldManager
+  | 11-13 02:19:36.570 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiButtonManager
+  | 11-13 02:19:36.619 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+  | 11-13 02:19:36.620 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.VirtualViewManager$RenderableShadowNode
+  | 11-13 02:19:36.622 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+  | 11-13 02:19:36.624 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerDetectorViewManager
+  | 11-13 02:19:36.626 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+  | 11-13 02:19:36.628 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+  | 11-13 02:19:36.630 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+  | 11-13 02:19:36.632 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+  | 11-13 02:19:36.634 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+  | 11-13 02:19:36.637 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.SvgViewManager
+  | 11-13 02:19:36.640 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+  | 11-13 02:19:36.642 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+  | 11-13 02:19:36.644 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+  | 11-13 02:19:36.646 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+  | 11-13 02:19:36.648 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+  | 11-13 02:19:36.651 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+  | 11-13 02:19:36.654 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+  | 11-13 02:19:36.656 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+  | 11-13 02:19:36.658 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+  | 11-13 02:19:36.661 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+  | 11-13 02:19:36.663 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+  | 11-13 02:19:36.665 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+  | 11-13 02:19:36.668 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+  | 11-13 02:19:36.670 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+  | 11-13 02:19:36.672 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+  | 11-13 02:19:36.674 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+  | 11-13 02:19:36.678 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+  | 11-13 02:19:36.681 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+  | 11-13 02:19:36.683 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.debuggingoverlay.DebuggingOverlayManager
+  | 11-13 02:19:36.685 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+  | 11-13 02:19:36.687 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+  | 11-13 02:19:36.690 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+  | 11-13 02:19:36.692 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+  | 11-13 02:19:36.694 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+  | 11-13 02:19:36.696 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+  | 11-13 02:19:36.698 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+  | 11-13 02:19:36.700 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+  | 11-13 02:19:36.702 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+  | 11-13 02:19:36.704 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+  | 11-13 02:19:36.707 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+  | 11-13 02:19:36.709 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+  | 11-13 02:19:36.711 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+  | 11-13 02:19:36.713 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+  | 11-13 02:19:36.716 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+  | 11-13 02:19:36.719 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+  | 11-13 02:19:36.721 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+  | 11-13 02:19:36.725 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+  | 11-13 02:19:36.727 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager
+  | 11-13 02:19:36.729 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+  | 11-13 02:19:36.731 24446 24526 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager
+  | 11-13 02:19:36.832 24446 24527 I WebViewFactory: Loading com.google.android.webview version 124.0.6367.219 (code 636771932)
+  | --------- beginning of system
+  | 11-13 02:19:36.838 24446 24527 V ResourcesManager: The following library key has been added: ResourcesKey{ mHash=5781c037 mResDir=null mSplitDirs=[] mOverlayDirs=[/product/overlay/EmulationPixel9/EmulationPixel9Overlay.apk,/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk] mLibDirs=[/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk,/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v35 mCompatInfo={420dpi always-compat} mLoaders=[]}
+  | 11-13 02:19:36.840 24446 24527 W ziparchive: Unable to open '/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.dm': No such file or directory
+  | 11-13 02:19:36.840 24446 24527 W ziparchive: Unable to open '/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.dm': No such file or directory
+  | 11-13 02:19:36.840 24446 24527 W nitroui.example: Entry not found
+  | 11-13 02:19:36.843 24446 24527 D nativeloader: Configuring clns-8 for other apk /data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk. target_sdk_version=34, uses_libraries=ALL, library_path=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/lib/arm64:/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+  | 11-13 02:19:36.844 24446 24527 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+  | 11-13 02:19:36.845 24446 24527 D nativeloader: Configuring clns-9 for other apk /data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/lib/arm64:/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+  | 11-13 02:19:36.858 24446 24526 W ReactNativeJS: SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/AppAndFlow/react-native-safe-area-context
+  | 11-13 02:19:36.882 24446 24527 I cr_WVCFactoryProvider: Loaded version=124.0.6367.219 minSdkVersion=29 isBundle=false multiprocess=true packageId=2
+  | 11-13 02:19:36.888 24446 24527 D nativeloader: Load /data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a/libmonochrome_64.so using ns clns-9 from class loader (caller=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk): ok
+  | 11-13 02:19:36.889 24446 24527 D nativeloader: Load /system/lib64/libwebviewchromium_plat_support.so using ns clns-9 from class loader (caller=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk): ok
+  | 11-13 02:19:36.893 24446 24535 I chromium: [1113/021936.892892:INFO:variations_seed_loader.cc(66)] Failed to open file for reading.: No such file or directory (2)
+  | 11-13 02:19:36.893 24446 24535 I cr_VariationsUtils: Failed reading seed file "/data/user/0/nitroui.example/app_webview/variations_seed_new"
+  | 11-13 02:19:36.901 24446 24527 I cr_LibraryLoader: Successfully loaded native library
+  | 11-13 02:19:36.902 24446 24527 I cr_CachingUmaRecorder: Flushed 6 samples from 6 histograms, 0 samples were dropped.
+  | 11-13 02:19:36.916 24446 24539 D TrafficStats: tagSocket(130) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:19:36.954 24446 24526 I NitroModules: Loading NitroModules C++ library...
+  | 11-13 02:19:36.954 24446 24526 D nativeloader: Load /data/app/~~XkiV14xi491tovFPrTCt3A==/nitroui.example-kj1Oyoxsa-1Fo2NrnNEyHg==/base.apk!/lib/arm64-v8a/libNitroModules.so using ns clns-7 from class loader (caller=/data/app/~~XkiV14xi491tovFPrTCt3A==/nitroui.example-kj1Oyoxsa-1Fo2NrnNEyHg==/base.apk!classes11.dex): ok
+  | 11-13 02:19:36.954 24446 24526 I NitroModules: Successfully loaded NitroModules C++ library!
+  | 11-13 02:19:36.955 24446 24526 I Nitro.Dispatcher: Installing global Dispatcher Holder into Runtime "HermesRuntime[RNBridgeless] (mqt_v_js)"...
+  | 11-13 02:19:36.955 24446 24526 I Nitro.JSICache: Creating new JSICache<T> for runtime HermesRuntime[RNBridgeless] (mqt_v_js)..
+  | 11-13 02:19:36.955 24446 24526 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroModulesProxy"...
+  | 11-13 02:19:36.955 24446 24526 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridObject"...
+  | 11-13 02:19:36.972 24446 24446 W nitroui.example: Accessing hidden field Landroid/widget/HorizontalScrollView;->mScroller:Landroid/widget/OverScroller; (unsupported, reflection, allowed)
+  | 11-13 02:19:36.992 24446 24526 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiCoreSpec"...
+  | 11-13 02:19:37.040 24446 24454 W nitroui.example: ApkAssets: Deleting an ApkAssets object '<empty> and /data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk' with 2 weak references
+  | 11-13 02:19:37.255 24446 24446 W nitroui.example: Accessing hidden field Landroid/widget/ScrollView;->mScroller:Landroid/widget/OverScroller; (unsupported, reflection, allowed)
+  | 11-13 02:19:37.325 24446 24542 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:19:38.153 24446 24546 D nativeloader: Load /data/app/~~XkiV14xi491tovFPrTCt3A==/nitroui.example-kj1Oyoxsa-1Fo2NrnNEyHg==/base.apk!/lib/arm64-v8a/libimagepipeline.so using ns clns-7 from class loader (caller=/data/app/~~XkiV14xi491tovFPrTCt3A==/nitroui.example-kj1Oyoxsa-1Fo2NrnNEyHg==/base.apk!classes19.dex): ok
+  | 11-13 02:19:38.658 24446 24446 W nitroui.example: Accessing hidden method Landroid/os/SystemProperties;->addChangeCallback(Ljava/lang/Runnable;)V (unsupported, reflection, allowed)
+  | 11-13 02:19:38.660 24446 24446 I Choreographer: Skipped 80 frames!  The application may be doing too much work on its main thread.
+  | 11-13 02:19:38.685 24446 24457 I HWUI    : Davey! duration=1382ms; Flags=0, FrameTimelineVsyncId=142996848, IntendedVsync=849854685920817, Vsync=849854685920817, InputEventId=0, HandleInputStart=849854686426699, AnimationStart=849854686427158, PerformTraversalsStart=849855825251866, DrawStart=849855944660200, FrameDeadline=849854702587483, FrameInterval=849854686425033, FrameStartTime=16666666, SyncQueued=849856038209866, SyncStart=849856039577033, IssueDrawCommandsStart=849856040274075, SwapBuffers=849856058448241, FrameCompleted=849856069636325, DequeueBufferDuration=1833, QueueBufferDuration=121500, GpuCompleted=849856069636325, SwapBuffersCompleted=849856062163200, DisplayPresentTime=0, CommandSubmissionCompleted=849856058448241, 
+  | 11-13 02:19:38.735 24446 24512 I HWUI    : Davey! duration=1416ms; Flags=0, FrameTimelineVsyncId=142996855, IntendedVsync=849854702587483, Vsync=849856035920763, InputEventId=0, HandleInputStart=849856047246700, AnimationStart=849856047247616, PerformTraversalsStart=849856102388617, DrawStart=849856108730867, FrameDeadline=849856102587427, FrameInterval=849856046070200, FrameStartTime=16666666, SyncQueued=849856109897117, SyncStart=849856110027325, IssueDrawCommandsStart=849856110393742, SwapBuffers=849856111262575, FrameCompleted=849856119618200, DequeueBufferDuration=1875, QueueBufferDuration=85375, GpuCompleted=849856119618200, SwapBuffersCompleted=849856112737283, DisplayPresentTime=0, CommandSubmissionCompleted=849856111262575, 
+  | 11-13 02:19:40.744 24446 24562 D ProfileInstaller: Installing profile for nitroui.example
+  | 11-13 02:19:54.127 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2316b38
+  | 11-13 02:19:56.679 24446 24488 D EGL_emulation: app_time_stats: avg=1058.59ms min=14.11ms max=17508.73ms count=20
+  | 11-13 02:19:56.704 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ad525ae
+  | 11-13 02:20:00.546 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4b04055
+  | 11-13 02:20:00.612 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c346728
+  | 11-13 02:20:03.277 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5397817
+  | 11-13 02:20:08.603 24446 24488 D EGL_emulation: app_time_stats: avg=221.81ms min=1.76ms max=11084.03ms count=51
+  | 11-13 02:20:22.820 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@53e33d8
+  | 11-13 02:20:22.823 24446 24488 D EGL_emulation: app_time_stats: avg=284.35ms min=12.15ms max=13402.49ms count=50
+  | 11-13 02:20:26.511 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@60f6c87
+  | 11-13 02:20:29.077 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ffee902
+  | 11-13 02:20:31.695 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@31f0e4f
+  | 11-13 02:20:34.359 24446 24488 D EGL_emulation: app_time_stats: avg=213.19ms min=1.72ms max=10707.41ms count=51
+  | 11-13 02:20:38.043 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@314f63c
+  | 11-13 02:20:40.695 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@35fe23b
+  | 11-13 02:20:43.241 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4d2ea46
+  | 11-13 02:20:45.782 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3592583
+  | 11-13 02:20:45.786 24446 24488 D EGL_emulation: app_time_stats: avg=228.54ms min=13.26ms max=10616.28ms count=50
+  | 11-13 02:20:49.459 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3f4a62e
+  | 11-13 02:20:57.126 24446 24488 D EGL_emulation: app_time_stats: avg=213.55ms min=1.75ms max=10524.98ms count=50
+  | 11-13 02:21:03.443 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4046113
+  | 11-13 02:21:06.075 24446 24488 D EGL_emulation: app_time_stats: avg=406.72ms min=14.16ms max=8368.39ms count=22
+  | 11-13 02:21:07.087 24446 24488 D EGL_emulation: app_time_stats: avg=26.60ms min=5.19ms max=410.42ms count=38
+  | 11-13 02:21:14.676 24446 24526 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiTextFieldSpec"...
+  | 11-13 02:21:14.677 24446 24526 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiFormSpec"...
+  | 11-13 02:21:15.035 24446 24488 D EGL_emulation: app_time_stats: avg=2649.50ms min=16.42ms max=7914.95ms count=3
+  | 11-13 02:21:16.289 24446 24488 D EGL_emulation: app_time_stats: avg=207.16ms min=8.97ms max=1053.18ms count=6
+  | 11-13 02:21:17.609 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@af7522e
+  | 11-13 02:21:19.680 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@267d5db
+  | 11-13 02:21:29.943 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ec83103
+  | 11-13 02:21:32.044 24446 24488 D EGL_emulation: app_time_stats: avg=787.75ms min=13.68ms max=15441.13ms count=20
+  | 11-13 02:21:36.412 24446 24488 D EGL_emulation: app_time_stats: avg=869.47ms min=3.26ms max=4310.10ms count=5
+  | 11-13 02:21:40.859 24446 24488 D EGL_emulation: app_time_stats: avg=1111.78ms min=13.13ms max=4384.41ms count=4
+  | 11-13 02:21:43.296 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f8b2118
+  | 11-13 02:21:45.275 24446 24488 D EGL_emulation: app_time_stats: avg=883.23ms min=13.61ms max=4334.01ms count=5
+  | 11-13 02:21:49.775 24446 24488 D EGL_emulation: app_time_stats: avg=1124.99ms min=15.22ms max=4438.55ms count=4
+  | 11-13 02:21:54.308 24446 24488 D EGL_emulation: app_time_stats: avg=1133.21ms min=16.41ms max=4470.17ms count=4
+  | 11-13 02:21:56.761 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@18fa557
+  | 11-13 02:21:58.793 24446 24488 D EGL_emulation: app_time_stats: avg=1121.28ms min=15.38ms max=4424.23ms count=4
+  | 11-13 02:22:01.243 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3f042e6
+  | 11-13 02:22:03.261 24446 24488 D EGL_emulation: app_time_stats: avg=1116.91ms min=15.24ms max=4408.38ms count=4
+  | 11-13 02:22:05.694 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b4a9391
+  | 11-13 02:22:07.726 24446 24488 D EGL_emulation: app_time_stats: avg=892.99ms min=12.74ms max=4406.65ms count=5
+  | 11-13 02:22:07.779 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7552e71
+  | 11-13 02:22:12.225 24446 24488 D EGL_emulation: app_time_stats: avg=899.74ms min=10.99ms max=4421.15ms count=5
+  | 11-13 02:22:12.275 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@99798c1
+  | 11-13 02:22:16.778 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@808b1c6
+  | 11-13 02:22:29.342 24446 24488 D EGL_emulation: app_time_stats: avg=5705.52ms min=14.59ms max=17086.51ms count=3
+  | 11-13 02:22:33.850 24446 24488 D EGL_emulation: app_time_stats: avg=4508.73ms min=4508.73ms max=4508.73ms count=1
+  | 11-13 02:22:33.857 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@48da45d
+  | 11-13 02:22:38.272 24446 24488 D EGL_emulation: app_time_stats: avg=4420.57ms min=4420.57ms max=4420.57ms count=1
+  | 11-13 02:22:38.325 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7ec58eb
+  | 11-13 02:22:40.675 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3d390b6
+  | 11-13 02:22:42.773 24446 24488 D EGL_emulation: app_time_stats: avg=4500.84ms min=4500.84ms max=4500.84ms count=1
+  | 11-13 02:22:47.272 24446 24488 D EGL_emulation: app_time_stats: avg=4499.64ms min=4499.64ms max=4499.64ms count=1
+  | 11-13 02:22:51.689 24446 24488 D EGL_emulation: app_time_stats: avg=4416.79ms min=4416.79ms max=4416.79ms count=1
+  | 11-13 02:22:51.727 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fcc23b9
+  | 11-13 02:22:56.040 24446 24488 D EGL_emulation: app_time_stats: avg=4350.85ms min=4350.85ms max=4350.85ms count=1
+  | 11-13 02:23:00.457 24446 24488 D EGL_emulation: app_time_stats: avg=4416.49ms min=4416.49ms max=4416.49ms count=1
+  | 11-13 02:23:00.493 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cdfe8ca
+  | 11-13 02:23:04.972 24446 24488 D EGL_emulation: app_time_stats: avg=4514.97ms min=4514.97ms max=4514.97ms count=1
+  | 11-13 02:23:07.359 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@df83101
+  | 11-13 02:23:09.373 24446 24488 D EGL_emulation: app_time_stats: avg=4400.97ms min=4400.97ms max=4400.97ms count=1
+  | 11-13 02:23:17.994 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c305ed8
+  | 11-13 02:23:24.209 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b7ed78b
+  | 11-13 02:23:28.367 24446 24488 D EGL_emulation: app_time_stats: avg=18993.81ms min=18993.81ms max=18993.81ms count=1
+  | 11-13 02:23:30.833 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a7333a5
+  | 11-13 02:23:34.945 24446 24488 D EGL_emulation: app_time_stats: avg=205.48ms min=10.20ms max=6057.99ms count=32
+  | 11-13 02:23:37.428 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@43dd6eb
+  | 11-13 02:23:41.544 24446 24488 D EGL_emulation: app_time_stats: avg=194.06ms min=11.46ms max=6056.87ms count=34
+  | 11-13 02:23:48.078 24446 24488 D EGL_emulation: app_time_stats: avg=198.00ms min=11.81ms max=6007.62ms count=33
+  | 11-13 02:23:52.643 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f2e6099
+  | 11-13 02:23:54.727 24446 24488 D EGL_emulation: app_time_stats: avg=195.53ms min=11.26ms max=6106.77ms count=34
+  | 11-13 02:23:59.245 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@14fc2a0
+  | 11-13 02:24:01.277 24446 24488 D EGL_emulation: app_time_stats: avg=198.45ms min=11.18ms max=6023.37ms count=33
+  | 11-13 02:24:07.875 24446 24488 D EGL_emulation: app_time_stats: avg=194.06ms min=12.16ms max=6054.86ms count=34
+  | 11-13 02:24:14.512 24446 24488 D EGL_emulation: app_time_stats: avg=201.10ms min=13.78ms max=6108.41ms count=33
+  | 11-13 02:24:19.128 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@301455
+  | 11-13 02:24:21.200 24446 24488 D EGL_emulation: app_time_stats: avg=196.69ms min=12.81ms max=6146.74ms count=34
+  | 11-13 02:24:25.821 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a2c4bcc
+  | 11-13 02:24:27.883 24446 24488 D EGL_emulation: app_time_stats: avg=188.89ms min=1.31ms max=6146.42ms count=33
+  | 11-13 02:24:34.545 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b448bc
+  | 11-13 02:24:38.609 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2e37525
+  | 11-13 02:24:40.643 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6fd6238
+  | 11-13 02:24:42.695 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6bfee67
+  | 11-13 02:24:51.757 24446 24488 D EGL_emulation: app_time_stats: avg=687.73ms min=1.08ms max=23321.48ms count=34
+  | 11-13 02:24:54.161 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a888ed
+  | 11-13 02:24:59.180 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2686a82
+  | 11-13 02:25:01.332 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@abdb39
+  | 11-13 02:25:06.061 24446 24488 D EGL_emulation: app_time_stats: avg=14304.10ms min=14304.10ms max=14304.10ms count=1
+  | 11-13 02:25:07.112 24446 24488 D EGL_emulation: app_time_stats: avg=25.63ms min=11.81ms max=392.13ms count=41
+  | 11-13 02:25:11.479 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9fe0c6d
+  | 11-13 02:25:11.491 24446 24488 D EGL_emulation: app_time_stats: avg=243.19ms min=10.74ms max=4103.93ms count=18
+  | 11-13 02:25:12.503 24446 24488 D EGL_emulation: app_time_stats: avg=26.63ms min=11.81ms max=398.41ms count=38
+  | 11-13 02:25:14.423 24446 24488 D EGL_emulation: app_time_stats: avg=960.16ms min=16.35ms max=1903.98ms count=2
+  | 11-13 02:25:15.436 24446 24488 D EGL_emulation: app_time_stats: avg=26.57ms min=9.39ms max=407.57ms count=38
+  | 11-13 02:25:17.359 24446 24488 D EGL_emulation: app_time_stats: avg=640.81ms min=15.39ms max=1890.51ms count=3
+  | 11-13 02:25:18.369 24446 24488 D EGL_emulation: app_time_stats: avg=26.55ms min=12.38ms max=403.89ms count=38
+  | 11-13 02:25:20.306 24446 24488 D EGL_emulation: app_time_stats: avg=645.43ms min=16.52ms max=1903.17ms count=3
+  | 11-13 02:25:21.320 24446 24488 D EGL_emulation: app_time_stats: avg=20.64ms min=1.13ms max=411.32ms count=38
+  | 11-13 02:25:23.240 24446 24488 D EGL_emulation: app_time_stats: avg=1901.89ms min=1901.89ms max=1901.89ms count=1
+  | 11-13 02:25:24.254 24446 24488 D EGL_emulation: app_time_stats: avg=26.62ms min=12.08ms max=402.10ms count=38
+  | 11-13 02:25:26.155 24446 24488 D EGL_emulation: app_time_stats: avg=950.64ms min=15.67ms max=1885.61ms count=2
+  | 11-13 02:25:27.170 24446 24488 D EGL_emulation: app_time_stats: avg=26.66ms min=12.87ms max=405.20ms count=38
+  | 11-13 02:25:29.113 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ee6f46a
+  | 11-13 02:25:31.674 24446 24488 D EGL_emulation: app_time_stats: avg=1500.97ms min=15.69ms max=4470.96ms count=3
+  | 11-13 02:25:32.687 24446 24488 D EGL_emulation: app_time_stats: avg=26.60ms min=8.53ms max=402.38ms count=38
+  | 11-13 02:25:34.623 24446 24488 D EGL_emulation: app_time_stats: avg=1935.18ms min=1935.18ms max=1935.18ms count=1
+  | 11-13 02:25:35.636 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=12.85ms max=403.99ms count=38
+  | 11-13 02:25:37.561 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9fa8d1b
+  | 11-13 02:25:37.572 24446 24488 D EGL_emulation: app_time_stats: avg=645.30ms min=16.23ms max=1902.43ms count=3
+  | 11-13 02:25:38.587 24446 24488 D EGL_emulation: app_time_stats: avg=26.71ms min=7.53ms max=403.20ms count=38
+  | 11-13 02:25:40.541 24446 24488 D EGL_emulation: app_time_stats: avg=976.95ms min=17.19ms max=1936.71ms count=2
+  | 11-13 02:25:41.553 24446 24488 D EGL_emulation: app_time_stats: avg=26.61ms min=12.02ms max=403.39ms count=38
+  | 11-13 02:25:43.507 24446 24488 D EGL_emulation: app_time_stats: avg=651.03ms min=17.23ms max=1917.28ms count=3
+  | 11-13 02:25:44.520 24446 24488 D EGL_emulation: app_time_stats: avg=26.63ms min=13.11ms max=400.78ms count=38
+  | 11-13 02:25:46.437 24446 24488 D EGL_emulation: app_time_stats: avg=958.56ms min=15.86ms max=1901.26ms count=2
+  | 11-13 02:25:47.452 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=10.56ms max=407.78ms count=38
+  | 11-13 02:25:52.092 24446 24488 D EGL_emulation: app_time_stats: avg=2319.76ms min=17.33ms max=4622.19ms count=2
+  | 11-13 02:25:53.104 24446 24488 D EGL_emulation: app_time_stats: avg=26.60ms min=10.73ms max=407.36ms count=38
+  | 11-13 02:25:55.055 24446 24488 D EGL_emulation: app_time_stats: avg=975.68ms min=15.68ms max=1935.69ms count=2
+  | 11-13 02:25:56.070 24446 24488 D EGL_emulation: app_time_stats: avg=26.66ms min=12.70ms max=405.72ms count=38
+  | 11-13 02:25:58.071 24446 24488 D EGL_emulation: app_time_stats: avg=666.99ms min=16.19ms max=1968.15ms count=3
+  | 11-13 02:25:59.086 24446 24488 D EGL_emulation: app_time_stats: avg=26.67ms min=7.80ms max=406.89ms count=38
+  | 11-13 02:26:01.089 24446 24488 D EGL_emulation: app_time_stats: avg=667.57ms min=13.78ms max=1969.16ms count=3
+  | 11-13 02:26:02.102 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=11.76ms max=405.99ms count=38
+  | 11-13 02:26:04.011 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c15cc4d
+  | 11-13 02:26:04.022 24446 24488 D EGL_emulation: app_time_stats: avg=959.66ms min=18.73ms max=1900.58ms count=2
+  | 11-13 02:26:05.037 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=7.66ms max=407.55ms count=38
+  | 11-13 02:26:06.989 24446 24488 D EGL_emulation: app_time_stats: avg=650.65ms min=15.70ms max=1919.85ms count=3
+  | 11-13 02:26:08.005 24446 24488 D EGL_emulation: app_time_stats: avg=26.69ms min=10.76ms max=405.29ms count=38
+  | 11-13 02:26:10.060 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a2aca62
+  | 11-13 02:26:12.689 24446 24488 D EGL_emulation: app_time_stats: avg=2341.90ms min=14.10ms max=4669.69ms count=2
+  | 11-13 02:26:13.702 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=10.58ms max=409.73ms count=38
+  | 11-13 02:26:15.709 24446 24488 D EGL_emulation: app_time_stats: avg=668.92ms min=16.87ms max=1972.74ms count=3
+  | 11-13 02:26:16.719 24446 24488 D EGL_emulation: app_time_stats: avg=26.54ms min=11.36ms max=402.12ms count=38
+  | 11-13 02:26:18.705 24446 24488 D EGL_emulation: app_time_stats: avg=1985.73ms min=1985.73ms max=1985.73ms count=1
+  | 11-13 02:26:19.720 24446 24488 D EGL_emulation: app_time_stats: avg=26.69ms min=11.66ms max=408.00ms count=38
+  | 11-13 02:26:21.747 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9fd7917
+  | 11-13 02:26:21.772 24446 24488 D EGL_emulation: app_time_stats: avg=2052.26ms min=2052.26ms max=2052.26ms count=1
+  | 11-13 02:26:22.786 24446 24488 D EGL_emulation: app_time_stats: avg=26.66ms min=11.73ms max=405.96ms count=38
+  | 11-13 02:26:24.788 24446 24488 D EGL_emulation: app_time_stats: avg=667.17ms min=16.34ms max=1967.58ms count=3
+  | 11-13 02:26:25.803 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=10.28ms max=401.22ms count=38
+  | 11-13 02:26:27.808 24446 24488 D EGL_emulation: app_time_stats: avg=1002.52ms min=17.47ms max=1987.58ms count=2
+  | 11-13 02:26:28.820 24446 24488 D EGL_emulation: app_time_stats: avg=26.61ms min=12.38ms max=400.16ms count=38
+  | 11-13 02:26:30.829 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e29da6
+  | 11-13 02:26:33.495 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@35578ad
+  | 11-13 02:26:33.499 24446 24488 D EGL_emulation: app_time_stats: avg=4679.05ms min=4679.05ms max=4679.05ms count=1
+  | 11-13 02:26:34.503 24446 24488 D EGL_emulation: app_time_stats: avg=26.39ms min=6.27ms max=404.47ms count=38
+  | 11-13 02:26:36.539 24446 24488 D EGL_emulation: app_time_stats: avg=1017.83ms min=19.03ms max=2016.64ms count=2
+  | 11-13 02:26:37.553 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=13.95ms max=405.41ms count=38
+  | 11-13 02:26:39.577 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b005f42
+  | 11-13 02:26:39.588 24446 24488 D EGL_emulation: app_time_stats: avg=678.50ms min=17.00ms max=2000.74ms count=3
+  | 11-13 02:26:40.603 24446 24488 D EGL_emulation: app_time_stats: avg=26.68ms min=11.14ms max=410.00ms count=38
+  | 11-13 02:26:42.631 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bd356f9
+  | 11-13 02:26:42.639 24446 24488 D EGL_emulation: app_time_stats: avg=1017.89ms min=16.49ms max=2019.30ms count=2
+  | 11-13 02:26:43.653 24446 24488 D EGL_emulation: app_time_stats: avg=26.66ms min=9.73ms max=402.11ms count=38
+  | 11-13 02:26:45.672 24446 24488 D EGL_emulation: app_time_stats: avg=1009.18ms min=17.79ms max=2000.58ms count=2
+  | 11-13 02:26:46.686 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=11.39ms max=405.60ms count=38
+  | 11-13 02:26:48.689 24446 24488 D EGL_emulation: app_time_stats: avg=667.71ms min=16.46ms max=1969.93ms count=3
+  | 11-13 02:26:48.690 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b298b9e
+  | 11-13 02:26:49.703 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=10.82ms max=399.39ms count=38
+  | 11-13 02:26:54.327 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b815f0a
+  | 11-13 02:26:54.341 24446 24488 D EGL_emulation: app_time_stats: avg=2319.25ms min=16.88ms max=4621.63ms count=2
+  | 11-13 02:26:55.358 24446 24488 D EGL_emulation: app_time_stats: avg=26.74ms min=11.84ms max=407.39ms count=38
+  | 11-13 02:26:57.373 24446 24488 D EGL_emulation: app_time_stats: avg=1007.42ms min=12.01ms max=2002.82ms count=2
+  | 11-13 02:26:58.385 24446 24488 D EGL_emulation: app_time_stats: avg=26.60ms min=10.48ms max=408.88ms count=38
+  | 11-13 02:27:00.424 24446 24488 D EGL_emulation: app_time_stats: avg=1019.13ms min=18.45ms max=2019.82ms count=2
+  | 11-13 02:27:01.441 24446 24488 D EGL_emulation: app_time_stats: avg=26.76ms min=9.38ms max=400.39ms count=38
+  | 11-13 02:27:03.428 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3a958c5
+  | 11-13 02:27:03.473 24446 24488 D EGL_emulation: app_time_stats: avg=1015.90ms min=11.85ms max=2019.95ms count=2
+  | 11-13 02:27:04.486 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=12.02ms max=407.54ms count=38
+  | 11-13 02:27:06.405 24446 24488 D EGL_emulation: app_time_stats: avg=959.36ms min=16.23ms max=1902.49ms count=2
+  | 11-13 02:27:07.421 24446 24488 D EGL_emulation: app_time_stats: avg=26.67ms min=13.05ms max=401.01ms count=38
+  | 11-13 02:27:09.354 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@31bd7cc
+  | 11-13 02:27:09.373 24446 24488 D EGL_emulation: app_time_stats: avg=1951.69ms min=1951.69ms max=1951.69ms count=1
+  | 11-13 02:27:10.386 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=10.59ms max=404.61ms count=38
+  | 11-13 02:27:15.095 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e80df18
+  | 11-13 02:27:18.027 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8b1588d
+  | 11-13 02:27:20.090 24446 24488 D EGL_emulation: app_time_stats: avg=3234.62ms min=16.63ms max=9666.76ms count=3
+  | 11-13 02:27:21.104 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=10.52ms max=406.94ms count=38
+  | 11-13 02:27:23.072 24446 24488 D EGL_emulation: app_time_stats: avg=983.96ms min=16.35ms max=1951.57ms count=2
+  | 11-13 02:27:24.086 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=9.94ms max=409.67ms count=38
+  | 11-13 02:27:26.045 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2d4b7b4
+  | 11-13 02:27:26.073 24446 24488 D EGL_emulation: app_time_stats: avg=662.37ms min=16.78ms max=1953.00ms count=3
+  | 11-13 02:27:27.087 24446 24488 D EGL_emulation: app_time_stats: avg=26.63ms min=13.88ms max=402.63ms count=38
+  | 11-13 02:27:29.028 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@239f213
+  | 11-13 02:27:29.040 24446 24488 D EGL_emulation: app_time_stats: avg=1953.14ms min=1953.14ms max=1953.14ms count=1
+  | 11-13 02:27:30.052 24446 24488 D EGL_emulation: app_time_stats: avg=26.63ms min=6.66ms max=409.28ms count=38
+  | 11-13 02:27:31.994 24446 24488 D EGL_emulation: app_time_stats: avg=970.86ms min=16.94ms max=1924.77ms count=2
+  | 11-13 02:27:33.004 24446 24488 D EGL_emulation: app_time_stats: avg=26.55ms min=10.40ms max=406.70ms count=38
+  | 11-13 02:27:35.063 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3a7f2b0
+  | 11-13 02:27:35.071 24446 24488 D EGL_emulation: app_time_stats: avg=688.96ms min=15.77ms max=2034.73ms count=3
+  | 11-13 02:27:36.086 24446 24488 D EGL_emulation: app_time_stats: avg=26.69ms min=10.23ms max=406.30ms count=38
+  | 11-13 02:27:38.077 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6ef193f
+  | 11-13 02:27:40.677 24446 24488 D EGL_emulation: app_time_stats: avg=4591.64ms min=4591.64ms max=4591.64ms count=1
+  | 11-13 02:27:41.687 24446 24488 D EGL_emulation: app_time_stats: avg=26.57ms min=9.69ms max=403.80ms count=38
+  | 11-13 02:27:43.663 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cc6966c
+  | 11-13 02:27:43.707 24446 24488 D EGL_emulation: app_time_stats: avg=1010.02ms min=15.52ms max=2004.52ms count=2
+  | 11-13 02:27:44.724 24446 24488 D EGL_emulation: app_time_stats: avg=26.74ms min=10.96ms max=406.68ms count=38
+  | 11-13 02:27:46.726 24446 24488 D EGL_emulation: app_time_stats: avg=2001.58ms min=2001.58ms max=2001.58ms count=1
+  | 11-13 02:27:47.737 24446 24488 D EGL_emulation: app_time_stats: avg=26.56ms min=12.61ms max=403.24ms count=38
+  | 11-13 02:27:49.773 24446 24488 D EGL_emulation: app_time_stats: avg=678.68ms min=16.22ms max=2003.00ms count=3
+  | 11-13 02:27:50.787 24446 24488 D EGL_emulation: app_time_stats: avg=26.61ms min=6.89ms max=408.56ms count=38
+  | 11-13 02:27:52.808 24446 24488 D EGL_emulation: app_time_stats: avg=1010.46ms min=15.52ms max=2005.40ms count=2
+  | 11-13 02:27:53.820 24446 24488 D EGL_emulation: app_time_stats: avg=20.79ms min=1.12ms max=414.28ms count=38
+  | 11-13 02:27:55.872 24446 24488 D EGL_emulation: app_time_stats: avg=1010.30ms min=1.46ms max=2019.13ms count=2
+  | 11-13 02:27:56.887 24446 24488 D EGL_emulation: app_time_stats: avg=26.69ms min=13.38ms max=399.28ms count=38
+  | 11-13 02:27:58.839 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6dc6573
+  | 11-13 02:28:01.457 24446 24488 D EGL_emulation: app_time_stats: avg=4569.80ms min=4569.80ms max=4569.80ms count=1
+  | 11-13 02:28:02.469 24446 24488 D EGL_emulation: app_time_stats: avg=26.61ms min=11.99ms max=401.41ms count=38
+  | 11-13 02:28:04.456 24446 24488 D EGL_emulation: app_time_stats: avg=662.32ms min=16.11ms max=1954.22ms count=3
+  | 11-13 02:28:05.470 24446 24488 D EGL_emulation: app_time_stats: avg=26.66ms min=11.72ms max=407.48ms count=38
+  | 11-13 02:28:07.411 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3cac4f9
+  | 11-13 02:28:07.455 24446 24488 D EGL_emulation: app_time_stats: avg=992.53ms min=16.42ms max=1968.64ms count=2
+  | 11-13 02:28:08.469 24446 24488 D EGL_emulation: app_time_stats: avg=26.68ms min=13.53ms max=405.61ms count=38
+  | 11-13 02:28:10.409 24446 24488 D EGL_emulation: app_time_stats: avg=969.33ms min=16.12ms max=1922.54ms count=2
+  | 11-13 02:28:11.420 24446 24488 D EGL_emulation: app_time_stats: avg=26.58ms min=10.14ms max=404.38ms count=38
+  | 11-13 02:28:13.356 24446 24488 D EGL_emulation: app_time_stats: avg=968.06ms min=16.57ms max=1919.55ms count=2
+  | 11-13 02:28:14.369 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=11.66ms max=408.05ms count=38
+  | 11-13 02:28:16.323 24446 24488 D EGL_emulation: app_time_stats: avg=976.59ms min=16.80ms max=1936.38ms count=2
+  | 11-13 02:28:17.335 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=11.27ms max=404.77ms count=38
+  | 11-13 02:28:19.295 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@17a81b2
+  | 11-13 02:28:21.860 24446 24488 D EGL_emulation: app_time_stats: avg=2262.08ms min=17.68ms max=4506.48ms count=2
+  | 11-13 02:28:22.869 24446 24488 D EGL_emulation: app_time_stats: avg=26.54ms min=12.16ms max=410.30ms count=38
+  | 11-13 02:28:24.841 24446 24488 D EGL_emulation: app_time_stats: avg=985.96ms min=16.92ms max=1955.00ms count=2
+  | 11-13 02:28:25.853 24446 24488 D EGL_emulation: app_time_stats: avg=26.60ms min=10.95ms max=408.74ms count=38
+  | 11-13 02:28:27.841 24446 24488 D EGL_emulation: app_time_stats: avg=994.23ms min=18.65ms max=1969.80ms count=2
+  | 11-13 02:28:28.853 24446 24488 D EGL_emulation: app_time_stats: avg=26.57ms min=12.54ms max=401.25ms count=38
+  | 11-13 02:28:30.806 24446 24488 D EGL_emulation: app_time_stats: avg=976.09ms min=16.50ms max=1935.68ms count=2
+  | 11-13 02:28:31.821 24446 24488 D EGL_emulation: app_time_stats: avg=26.67ms min=12.99ms max=399.27ms count=38
+  | 11-13 02:28:33.747 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3ce65b1
+  | 11-13 02:28:33.749 24446 24488 D EGL_emulation: app_time_stats: avg=964.11ms min=17.20ms max=1911.01ms count=2
+  | 11-13 02:28:34.753 24446 24488 D EGL_emulation: app_time_stats: avg=17.71ms min=1.08ms max=391.00ms count=38
+  | 11-13 02:28:36.728 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f48fc34
+  | 11-13 02:28:36.732 24446 24488 D EGL_emulation: app_time_stats: avg=989.70ms min=16.37ms max=1963.02ms count=2
+  | 11-13 02:28:37.737 24446 24488 D EGL_emulation: app_time_stats: avg=26.42ms min=7.84ms max=404.75ms count=38
+  | 11-13 02:28:39.736 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3f50093
+  | 11-13 02:28:42.350 24446 24488 D EGL_emulation: app_time_stats: avg=1537.63ms min=15.46ms max=4580.26ms count=3
+  | 11-13 02:28:42.357 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@475b4f5
+  | 11-13 02:28:43.353 24446 24488 D EGL_emulation: app_time_stats: avg=17.74ms min=1.09ms max=385.24ms count=38
+  | 11-13 02:28:45.324 24446 24488 D EGL_emulation: app_time_stats: avg=985.67ms min=16.63ms max=1954.72ms count=2
+  | 11-13 02:28:46.337 24446 24488 D EGL_emulation: app_time_stats: avg=26.59ms min=9.53ms max=408.20ms count=38
+  | 11-13 02:28:48.331 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@66db651
+  | 11-13 02:28:48.335 24446 24488 D EGL_emulation: app_time_stats: avg=666.25ms min=16.48ms max=1965.57ms count=3
+  | 11-13 02:28:49.337 24446 24488 D EGL_emulation: app_time_stats: avg=13.64ms min=1.14ms max=389.58ms count=38
+  | 11-13 02:28:51.322 24446 24488 D EGL_emulation: app_time_stats: avg=646.12ms min=1.29ms max=1935.75ms count=3
+  | 11-13 02:28:52.337 24446 24488 D EGL_emulation: app_time_stats: avg=26.66ms min=11.59ms max=405.38ms count=38
+  | 11-13 02:28:54.306 24446 24488 D EGL_emulation: app_time_stats: avg=656.21ms min=16.59ms max=1935.40ms count=3
+  | 11-13 02:28:55.320 24446 24488 D EGL_emulation: app_time_stats: avg=26.64ms min=12.37ms max=404.69ms count=38
+  | 11-13 02:28:57.290 24446 24488 D EGL_emulation: app_time_stats: avg=656.61ms min=15.91ms max=1936.47ms count=3
+  | 11-13 02:28:58.307 24446 24488 D EGL_emulation: app_time_stats: avg=20.79ms min=0.92ms max=416.20ms count=38
+  | 11-13 02:29:00.284 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a2514aa
+  | 11-13 02:29:02.874 24446 24488 D EGL_emulation: app_time_stats: avg=2269.77ms min=1.04ms max=4538.51ms count=2
+  | 11-13 02:29:03.886 24446 24488 D EGL_emulation: app_time_stats: avg=20.72ms min=0.90ms max=415.05ms count=38
+  | 11-13 02:29:05.862 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bea3e74
+  | 11-13 02:29:05.865 24446 24488 D EGL_emulation: app_time_stats: avg=972.75ms min=1.12ms max=1944.38ms count=2
+  | 11-13 02:29:06.877 24446 24488 D EGL_emulation: app_time_stats: avg=26.63ms min=6.50ms max=405.42ms count=38
+  | 11-13 02:29:08.840 24446 24488 D EGL_emulation: app_time_stats: avg=1963.56ms min=1963.56ms max=1963.56ms count=1
+  | 11-13 02:29:09.852 24446 24488 D EGL_emulation: app_time_stats: avg=26.62ms min=8.85ms max=406.57ms count=38
+  | 11-13 02:29:11.790 24446 24488 D EGL_emulation: app_time_stats: avg=969.03ms min=17.20ms max=1920.86ms count=2
+  | 11-13 02:29:12.803 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=11.00ms max=405.76ms count=38
+  | 11-13 02:29:14.773 24446 24488 D EGL_emulation: app_time_stats: avg=984.79ms min=16.59ms max=1952.99ms count=2
+  | 11-13 02:29:15.786 24446 24488 D EGL_emulation: app_time_stats: avg=26.65ms min=11.69ms max=406.32ms count=38
+  | 11-13 02:29:17.771 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@33a7421
+  | 11-13 02:29:17.788 24446 24488 D EGL_emulation: app_time_stats: avg=667.46ms min=14.80ms max=1968.88ms count=3
+  | 11-13 02:29:18.803 24446 24488 D EGL_emulation: app_time_stats: avg=26.67ms min=11.38ms max=399.82ms count=38
+  | 11-13 02:29:20.832 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c6f5f93
+  | 11-13 02:29:26.460 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@88a5230
+  | 11-13 02:29:28.511 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@64afebf
+  | 11-13 02:29:30.576 24446 24488 D EGL_emulation: app_time_stats: avg=3924.28ms min=16.46ms max=11739.06ms count=3
+  | 11-13 02:29:33.758 24446 24488 D EGL_emulation: app_time_stats: avg=62.39ms min=12.22ms max=2354.82ms count=51
+  | 11-13 02:29:37.041 24446 24488 D EGL_emulation: app_time_stats: avg=65.64ms min=12.16ms max=2469.74ms count=50
+  | 11-13 02:29:40.322 24446 24488 D EGL_emulation: app_time_stats: avg=64.33ms min=10.46ms max=2453.30ms count=51
+  | 11-13 02:29:43.561 24446 24488 D EGL_emulation: app_time_stats: avg=63.49ms min=10.82ms max=2406.67ms count=51
+  | 11-13 02:29:46.808 24446 24488 D EGL_emulation: app_time_stats: avg=63.67ms min=11.27ms max=2421.54ms count=51
+  | 11-13 02:29:50.625 24446 24488 D EGL_emulation: app_time_stats: avg=127.22ms min=13.81ms max=3105.41ms count=30
+  | 11-13 02:29:51.804 24446 24488 D EGL_emulation: app_time_stats: avg=589.67ms min=11.50ms max=1167.84ms count=2
+  | 11-13 02:29:55.991 24446 24488 D EGL_emulation: app_time_stats: avg=246.26ms min=13.41ms max=3919.74ms count=17
+  | 11-13 02:29:57.002 24446 24488 D EGL_emulation: app_time_stats: avg=26.61ms min=10.84ms max=409.65ms count=38
+  | 11-13 02:29:59.463 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@685b8ec
+  | 11-13 02:30:04.742 24446 24488 D EGL_emulation: app_time_stats: avg=3869.90ms min=17.48ms max=7722.32ms count=2
+  | 11-13 02:30:05.753 24446 24488 D EGL_emulation: app_time_stats: avg=26.58ms min=8.92ms max=404.93ms count=38
+  | 11-13 02:30:08.128 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d43be75
+  | 11-13 02:30:10.677 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2d07bc8
+  | 11-13 02:30:14.164 24446 24488 D EGL_emulation: app_time_stats: avg=4205.77ms min=18.65ms max=8392.89ms count=2
+  | 11-13 02:30:14.181 24446 24446 I Choreographer: Skipped 37 frames!  The application may be doing too much work on its main thread.
+  | 11-13 02:30:15.173 24446 24488 D EGL_emulation: app_time_stats: avg=252.16ms min=12.11ms max=961.00ms count=4
+  | 11-13 02:30:18.910 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fee78f2
+  | 11-13 02:30:19.457 24446 24488 D EGL_emulation: app_time_stats: avg=285.58ms min=15.27ms max=4054.11ms count=15
+  | 11-13 02:30:19.482 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@162a6ee
+  | 11-13 02:30:20.470 24446 24488 D EGL_emulation: app_time_stats: avg=19.20ms min=2.29ms max=383.73ms count=38
+  | 11-13 02:30:28.238 24446 24488 D EGL_emulation: app_time_stats: avg=3884.13ms min=16.08ms max=7752.18ms count=2
+  | 11-13 02:30:29.254 24446 24488 D EGL_emulation: app_time_stats: avg=26.73ms min=11.55ms max=405.05ms count=38
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: Cannot connect to Metro.
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: 
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: Try the following to fix the issue:
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: - Ensure that Metro is running and available on the same network
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: - Ensure that your device/emulator is connected to your machine and has USB debugging enabled - run 'adb devices' to see a list of connected devices
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: - If you're on a physical device connected to the same machine, run 'adb reverse tcp:8081 tcp:8081' to forward requests from your device
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: - If your device is on the same Wi-Fi network, set 'Debug server host & port for device' in 'Dev settings' to your machine's IP address and the port of the local dev server - e.g. 10.0.1.1:8081
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: 
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: URL: localhost:8295
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: 
+  | 11-13 02:30:35.377 24446 24526 W ReactNativeJS: Error: undefined
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: Error occurred, shutting down websocket connection: Websocket exception
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: java.io.EOFException
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.require(RealBufferedSource.kt:199)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.readByte(RealBufferedSource.kt:209)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.readHeader(WebSocketReader.kt:119)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.processNextFrame(WebSocketReader.kt:102)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket.loopReader(RealWebSocket.kt:293)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket$connect$1.onResponse(RealWebSocket.kt:195)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 11-13 02:30:35.378 24446 24495 E unknown:ReconnectingWebSocket: 	at java.lang.Thread.run(Thread.java:1012)
+  | 11-13 02:30:35.378 24446 24495 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8295/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 11-13 02:30:36.791 24446 24446 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cce277d
+  | 11-13 02:30:37.381 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:37.383 24446 24496 D TrafficStats: tagSocket(114) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:39.390 24446 24496 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:41.391 24446 24496 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:41.397 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:43.408 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:45.424 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:47.432 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:49.400 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:49.445 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:51.239 24446 30370 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:51.248 24446 30370 W NitroUi : androidIcon "http://localhost:8295/assets/src/assets/icons/share_24px.xml?platform=android&hash=2b2842582219085e9770369b6aaae4da" could not be read (IOException: unexpected end of stream on com.android.okhttp.Address@6439f6da); nothing is drawn for it. In development this is the file Metro serves — see docs/components/button.md, "Android icons".
+  | 11-13 02:30:51.251 24446 24446 W NitroUi : androidIcon "nitroui_test_never_built" is not a drawable in this app's resources (looked up as "nitroui_test_never_built"); nothing is drawn for it. See docs/components/button.md, "Android icons".
+  | 11-13 02:30:52.069 24446 24446 I Choreographer: Skipped 43 frames!  The application may be doing too much work on its main thread.
+  | 11-13 02:30:52.219 24446 24488 D EGL_emulation: app_time_stats: avg=7654.78ms min=15.37ms max=22931.90ms count=3
+  | 11-13 02:30:52.219 24446 24495 D TrafficStats: tagSocket(130) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:52.236 24446 24503 I HWUI    : Davey! duration=868ms; Flags=0, FrameTimelineVsyncId=143313404, IntendedVsync=850528735893855, Vsync=850529452560493, InputEventId=-1016669827, HandleInputStart=850529456067146, AnimationStart=850529456068188, PerformTraversalsStart=850529461633604, DrawStart=850529461977938, FrameDeadline=850528752560521, FrameInterval=850529455467188, FrameStartTime=16666666, SyncQueued=850529591530313, SyncStart=850529591998104, IssueDrawCommandsStart=850529593871854, SwapBuffers=850529597250271, FrameCompleted=850529605211396, DequeueBufferDuration=4125, QueueBufferDuration=735375, GpuCompleted=850529605052979, SwapBuffersCompleted=850529605211396, DisplayPresentTime=0, CommandSubmissionCompleted=850529597250271, 
+  | 11-13 02:30:53.220 24446 24488 D EGL_emulation: app_time_stats: avg=45.29ms min=13.82ms max=455.77ms count=22
+  | 11-13 02:30:54.232 24446 24495 D TrafficStats: tagSocket(137) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:55.026 24446 24488 D EGL_emulation: app_time_stats: avg=601.98ms min=49.64ms max=1170.25ms count=3
+  | 11-13 02:30:56.243 24446 24488 D EGL_emulation: app_time_stats: avg=608.39ms min=46.63ms max=1170.15ms count=2
+  | 11-13 02:30:56.244 24446 24495 D TrafficStats: tagSocket(114) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:57.442 24446 24488 D EGL_emulation: app_time_stats: avg=599.38ms min=44.97ms max=1153.79ms count=2
+  | 11-13 02:30:58.255 24446 24495 D TrafficStats: tagSocket(130) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:30:58.678 24446 24488 D EGL_emulation: app_time_stats: avg=617.82ms min=27.80ms max=1207.85ms count=2
+  | 11-13 02:30:59.740 24446 24488 D EGL_emulation: app_time_stats: avg=27.42ms min=2.90ms max=400.92ms count=34
+  | 11-13 02:31:00.264 24446 24495 D TrafficStats: tagSocket(137) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:01.106 24446 24488 D EGL_emulation: app_time_stats: avg=270.18ms min=5.42ms max=1169.71ms count=5
+  | 11-13 02:31:02.271 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:02.328 24446 24488 D EGL_emulation: app_time_stats: avg=610.62ms min=31.10ms max=1190.14ms count=2
+  | 11-13 02:31:03.543 24446 24488 D EGL_emulation: app_time_stats: avg=607.52ms min=44.43ms max=1170.61ms count=2
+  | 11-13 02:31:04.282 24446 24495 D TrafficStats: tagSocket(130) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:04.759 24446 24488 D EGL_emulation: app_time_stats: avg=608.23ms min=30.37ms max=1186.09ms count=2
+  | 11-13 02:31:05.409 24446 24495 D TrafficStats: tagSocket(115) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:05.994 24446 24488 D EGL_emulation: app_time_stats: avg=617.26ms min=48.89ms max=1185.63ms count=2
+  | 11-13 02:31:06.291 24446 24495 D TrafficStats: tagSocket(134) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:07.225 24446 24488 D EGL_emulation: app_time_stats: avg=615.70ms min=30.12ms max=1201.28ms count=2
+  | 11-13 02:31:08.237 24446 24488 D EGL_emulation: app_time_stats: avg=28.05ms min=14.02ms max=401.43ms count=36
+  | 11-13 02:31:08.305 24446 24495 D TrafficStats: tagSocket(137) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:09.626 24446 24488 D EGL_emulation: app_time_stats: avg=173.65ms min=16.12ms max=1190.20ms count=8
+  | 11-13 02:31:10.312 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:10.841 24446 24488 D EGL_emulation: app_time_stats: avg=607.25ms min=28.13ms max=1186.38ms count=2
+  | 11-13 02:31:12.040 24446 24488 D EGL_emulation: app_time_stats: avg=599.20ms min=50.15ms max=1148.25ms count=2
+  | 11-13 02:31:12.323 24446 24495 D TrafficStats: tagSocket(137) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:13.281 24446 24488 D EGL_emulation: app_time_stats: avg=620.66ms min=29.85ms max=1211.47ms count=2
+  | 11-13 02:31:14.329 24446 24495 D TrafficStats: tagSocket(115) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:14.475 24446 24488 D EGL_emulation: app_time_stats: avg=597.17ms min=40.26ms max=1154.08ms count=2
+  | 11-13 02:31:16.410 24446 24488 D EGL_emulation: app_time_stats: avg=967.31ms min=27.68ms max=1906.94ms count=2
+  | 11-13 02:31:16.421 24446 24456 I HWUI    : Davey! duration=710ms; Flags=0, FrameTimelineVsyncId=143323957, IntendedVsync=850553085892881, Vsync=850553552559529, InputEventId=-489810034, HandleInputStart=850553556315574, AnimationStart=850553556316699, PerformTraversalsStart=850553558731366, DrawStart=850553559304574, FrameDeadline=850553102559547, FrameInterval=850553555992241, FrameStartTime=16666666, SyncQueued=850553735378824, SyncStart=850553735713074, IssueDrawCommandsStart=850553743883699, SwapBuffers=850553793491449, FrameCompleted=850553796832074, DequeueBufferDuration=3417, QueueBufferDuration=377209, GpuCompleted=850553796620783, SwapBuffersCompleted=850553796832074, DisplayPresentTime=0, CommandSubmissionCompleted=850553793491449, 
+  | 11-13 02:31:16.444 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:17.421 24446 24488 D EGL_emulation: app_time_stats: avg=45.93ms min=15.29ms max=537.67ms count=22
+  | 11-13 02:31:18.449 24446 24495 D TrafficStats: tagSocket(115) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:19.108 24446 24452 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 1(16KB) LOS objects, 26% free, 67MB/91MB, paused 1.076ms,1.415ms total 134.011ms
+  | 11-13 02:31:19.779 24446 24488 D EGL_emulation: app_time_stats: avg=196.50ms min=10.65ms max=2008.16ms count=12
+  | 11-13 02:31:20.454 24446 24495 D TrafficStats: tagSocket(134) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:21.759 24446 24488 D EGL_emulation: app_time_stats: avg=989.80ms min=45.04ms max=1934.56ms count=2
+  | 11-13 02:31:22.460 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:23.091 24446 24488 D EGL_emulation: app_time_stats: avg=53.25ms min=9.54ms max=516.71ms count=25
+  | 11-13 02:31:24.469 24446 24495 D TrafficStats: tagSocket(134) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:25.791 24446 24488 D EGL_emulation: app_time_stats: avg=134.97ms min=11.78ms max=1970.55ms count=20
+  | 11-13 02:31:26.476 24446 24495 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:27.473 24446 24452 I nitroui.example: Background concurrent mark compact GC freed 26MB AllocSpace bytes, 0(0B) LOS objects, 26% free, 67MB/91MB, paused 187us,1.354ms total 104.817ms
+  | 11-13 02:31:27.843 24446 24488 D EGL_emulation: app_time_stats: avg=1025.90ms min=47.60ms max=2004.21ms count=2
+  | 11-13 02:31:28.483 24446 24495 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+gate: ---- end device context ----
+```
+
+## Last 104 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:form
+gate: node scripts/real-input/android.mjs --control form (cwd .)
+gate: code tree fc50cde27225 at HEAD 65ae9a09
+gate: git tree c34dddba5df7 with a DIRTY worktree (not reusable)
+gate: log task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-19-32.141Z.log
+gate:       <store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-19-32.141Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Stepper" (tab-stepper) is 73.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "List items" (tab-listitem) is 85.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  form: real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard
+    ✓ the Form screen starts with nothing pressed ({"rows":"0","inner":"0","outside":"0","changes":"0","value":"off"}) — expected 0/0/0/0/off, saw 0/0/0/0/off
+    · "Row with onPress" occupies 32,742 → 1049,889
+    ✓ ten real taps on a row are ten presses, and nothing else fired — expected 10/0/0, saw 10/0/0
+    · "Press me inside a row" occupies 106,1068 → 586,1171
+    ✓ ten real taps inside a row are ten presses, and its row stayed put — expected 10/10, saw 10/10
+    · "Airplane mode" occupies 838,1240 → 975,1324
+    ✓ ten real taps on the Switch are ten changes and are back where they started — expected 10/off, saw 10/off
+    · "Row with no onPress" occupies 74,910 → 1007,1025
+    ✓ a row without onPress does not press — expected 10, saw 10
+    · "Outside the form" occupies 32,514 → 1049,628
+    ✓ and input is alive: a tap outside the Form is one press — expected 1, saw 1
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · "Row with onPress" reads 742-889, still moving — settling before the finger goes down
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · flick on a pressable row: 420 px up from y 815.5 of the row at 742-889, echo "10" -> "11", row moved out of the dump
+    ✓ the flick really scrolled the list (row gone) — without this the check below could pass on a page that never moved
+    ✗ a drag that scrolls the list is not a press (10 -> 11) — a row that fires on a scroll takes the person to a screen they only meant to scroll past — expected 10, saw 11
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · "Row with onPress" reads 644-236, a box no finger can be aimed at — settling
+    ✗ the pressable row never came to rest in a box the sideways drag could be aimed at
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    · navigation: tap 1/3 on the "Button" tab left pid=24446, tab bar shows Switch, Slider, Button, Progress, Segments, Dates - tapping again
+    · navigation: the "Button" tab answered on tap 2/3 - the earlier tap(s) were never delivered
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][367,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+gate: real-input:android:--control:form FAIL in 716.8 s (signal SIGTERM) - note: the code tree moved during the run (170cfa922853 now), so this line describes fc50cde27225
+gate: recorded in .gates/task/X32-review-debt.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-19-32.141Z.log (5 probe(s))
+
+```
