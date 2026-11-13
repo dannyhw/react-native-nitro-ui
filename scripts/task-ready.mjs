@@ -46,7 +46,7 @@
  * bar, and `--only` says so on the last line so a partial pass cannot be read as a pass.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
@@ -69,6 +69,10 @@ import {
   missingReportPaths,
   ONLY_GROUPS,
   reportCandidates,
+  slugReportNames,
+  taskIdFromBranch,
+  taskIdsFromBranch,
+  taskFromBranchName,
   reportTableProblems,
   summarise,
   todoFindings,
@@ -100,19 +104,35 @@ function arg(name) {
   return index >= 0 ? (argv[index + 1] ?? null) : null;
 }
 
-/** The branch's task suffix: `task/X4-conformance` -> `X4-conformance`, or null. */
-function branchSuffix() {
-  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], '');
-  const match = /^task\/([A-Za-z0-9._-]+)$/.exec(branch);
-  return match == null ? null : match[1];
+/** The branch's task suffix and id, from `task/X4-conformance`, `merge/X4` or `refs/heads/...`. */
+function branchTask() {
+  return taskFromBranchName(git(['rev-parse', '--abbrev-ref', 'HEAD'], ''));
 }
 
-/** The task id: `--task`, or the leading id of the branch name (`X4-conformance` -> `X4`). */
+/** The task id: `--task` wins; otherwise the leading id of the branch name (X30 item 4). */
 function taskId(branch) {
   const explicit = arg('--task');
   if (explicit != null) return explicit;
-  if (branch == null) return null;
-  return /^([A-Za-z0-9]+)-/.exec(branch)?.[1] ?? branch;
+  return taskIdFromBranch(branch);
+}
+
+/**
+ * The report files in `docs/tasks`, as names.
+ *
+ * `reportCandidates`' third rule is "`<ID>-*.report.md`, when one matches", and every
+ * report in this repo is spelled that way — so the rule needs the directory. An
+ * unreadable `docs/tasks` returns nothing rather than throwing: the two exact names are
+ * still asked for, and a report that cannot be found is a failure either way, never a
+ * pass. What it must not do is invent a match.
+ */
+function taskReportNames() {
+  try {
+    return readdirSync(join(repoRoot, 'docs', 'tasks'), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.report.md'))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
 }
 
 const ALL = [
@@ -142,15 +162,28 @@ for (const name of only) {
   }
 }
 
-const branch = branchSuffix();
+const branch = branchTask().branch;
 const id = taskId(branch);
 const wantsReport = only.some(
   (name) => name === 'report-paths' || name === 'report-table'
 );
 if (wantsReport && id == null) {
+  // Two ids is a different answer from none: `task/G25-G26-merge` names its tasks
+  // plainly, and reading the first one (what round 1 did) checks G25's report, prints
+  // "ready", and says nothing about G26 — a merge half-checked is the false green this
+  // command exists to refuse. So it asks, and the runner answers twice: once per task.
+  const bothIds = taskIdsFromBranch(branch);
   console.error(
-    'task-ready: no task id — pass --task <ID> or name the branch task/<ID>. ' +
-      'The report checks read docs/tasks/<ID>.report.md and cannot guess it.'
+    bothIds.length > 1
+      ? `task-ready: the branch names ${bothIds.length} task ids (${bothIds.join(
+          ', '
+        )}) and the report checks read one report at a time — run it once per task with ` +
+          `\`--task ${bothIds[0]}\`, then \`--task ${bothIds[1]}\`. Picking the first and ` +
+          'reporting "ready" would leave the other task unreported.'
+      : 'task-ready: no task id — pass --task <ID>, or work on a branch whose name ' +
+          'starts with one (`task/X4-conformance`, `merge/X4`, `X4-fix1`). The report ' +
+          'checks read docs/tasks/<ID>.report.md, docs/tasks/<branch>.report.md and a ' +
+          'unique docs/tasks/<ID>-*.report.md, and cannot guess an id from prose.'
   );
   process.exit(2);
 }
@@ -161,7 +194,9 @@ if (wantsReport && id == null) {
  * names every candidate when none of them is there, so a missing report is still an
  * unambiguous failure rather than a guess.
  */
-const candidates = reportCandidates(id, branch);
+const taskReports = taskReportNames();
+const slugMatches = slugReportNames(id, taskReports);
+const candidates = reportCandidates(id, branch, taskReports);
 const reportPath =
   candidates.find((path) => existsSync(join(repoRoot, path))) ?? null;
 
@@ -307,6 +342,18 @@ function markerProblems() {
 function reportPathProblems() {
   const text = read(reportPath);
   if (text == null) {
+    if (slugMatches.length > 1) {
+      // Not the same complaint as "no report". The file is there — several of them are,
+      // and the id alone cannot say which one this round wrote. Naming every match is
+      // the whole fix: the reader sees the two candidates and which one to rename.
+      return [
+        `${slugMatches.length} reports start with \`docs/tasks/${id}-\` (` +
+          `${slugMatches.map((name) => `docs/tasks/${name}`).join(', ')}), and none is ` +
+          `this branch's own \`docs/tasks/${branch}.report.md\`, so the checker cannot ` +
+          'pick one and will not guess: name the report after the branch, which wins ' +
+          'over the slug rule, or pass --task for an id with one report.',
+      ];
+    }
     return [
       `${candidates.join(' or ')}: not found. AGENTS.md asks for the report ` +
         'before a round is handed in, and the two report checks below depend on it',
