@@ -514,6 +514,8 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     // A row is never in two cells: whatever this one had goes back before anything else.
     super.prepareForReuse()
     pressed = false
+    // A finger still down on the row this cell held must not end as a press on the next one.
+    pressTravel.reset()
     giveBack()
   }
 }

@@ -347,7 +347,7 @@ internal class StepperModel : NitroUiModel() {
    * that asks for the value it can already read sends back exactly this number, so the
    * comparison has to be against this number too. Against the `Double` it is not equal
    * on any grid whose stops are not exact in binary: `0.3` through a `Float` and back is
-   * `0.30000000000000004`, which read against `0.3` is "higher than where you are", and
+   * `0.30000001192092896`, which read against `0.3` is "higher than where you are", and
    * a reader asking for the value it already holds gets read as one step up — an event,
    * a move, and an announcement of a number the control never had (G25 review).
    */
