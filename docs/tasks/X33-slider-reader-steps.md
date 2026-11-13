@@ -8,8 +8,8 @@ port.
 ## Read first
 
 - AGENTS.md: the perf contract, the event-count handshake, red proofs, **never `pkill`/`killall`**.
-- X32's Stepper fix for the same class of bug: the X32 commits on `main` (`git log --oneline --grep X32`, or `git log -S
-  publishedProgress -- android/`), and `docs/tasks/X32-review-debt.report.md`.
+- X32's Stepper fix for the same class of bug, on branch `origin/task/X32-review-debt` (in review, not yet on
+  `main`): `git diff origin/main...origin/task/X32-review-debt -- android/` and its report there.
 - `android/src/main/java/**/SliderModel.kt` (`accessibilityStepToward`), its unit tests in `SliderModelTest.kt`, and
   `example/__tests__/Slider.harness.tsx` around "steps to the next legal value when a screen reader asks" (~line 1982).
 - `docs/tasks/FOLLOWUPS.md` line 56: the long-standing flake of that test.
