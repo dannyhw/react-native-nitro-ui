@@ -651,34 +651,25 @@ final class NitroUiListRowView: UIView {
     }
     return "#" + byte(red) + byte(green) + byte(blue) + byte(alpha)
   }
-  /// How far a finger may travel before the row stops calling the touch its own press.
+  /// The touch this recogniser is tracking, and how far its finger has gone.
   ///
-  /// The recogniser starts at touch-down (`minimumPressDuration = 0`), which is what makes a
-  /// quick thumb work at all, and it recognises alongside the scroll view, which is what lets
-  /// React Native and the list keep their own read of the same touch. Travel is therefore the
-  /// only thing left that tells a tap from a flick that happened to begin on a row, and 10 pt
-  /// is the order of magnitude UIKit itself gives a tap for slop.
-  static let pressTravelLimit: CGFloat = 10
-
-  /// Where this gesture's finger came down, and whether it has since travelled or left.
-  private var pressOrigin: CGPoint?
-  private var pressTravelling = false
+  /// The rule is core's (`NitroUiPressTravel`), shared with the Form row's cell, which
+  /// came to it a component later and for the same reason: the recogniser starts at
+  /// touch-down (`minimumPressDuration = 0`), which is what makes a quick thumb work at
+  /// all, and recognises alongside the scroll view, which is what lets React Native and
+  /// the list keep their own read of the same touch. Travel is therefore the only thing
+  /// left that tells a tap from a flick that happened to begin on a row.
+  private var pressTravel = NitroUiPressTravel()
 
   @objc private func pressChanged(_ gesture: UILongPressGestureRecognizer) {
     switch gesture.state {
       case .began:
-        pressOrigin = gesture.location(in: self)
-        pressTravelling = false
+        pressTravel.began(at: gesture.location(in: self))
         model.recordHighlightPainted(setPressed(true))
       case .changed:
-        // A scroll that began on the row: stand down. The highlight goes, and the flag is
-        // what keeps the release from firing a press anyway.
-        guard let origin = pressOrigin else { break }
-        let here = gesture.location(in: self)
-        let travelled = abs(here.x - origin.x) > Self.pressTravelLimit
-          || abs(here.y - origin.y) > Self.pressTravelLimit
-        if travelled || !bounds.contains(here), !pressTravelling {
-          pressTravelling = true
+        // A scroll that began on the row: stand down. The highlight goes, and what the
+        // rule remembers is what keeps the release from firing a press anyway.
+        if pressTravel.moved(to: gesture.location(in: self), within: bounds) {
           setPressed(false)
           // Not a press after all, so nothing counts as having painted one.
           model.recordHighlightPainted(false)
@@ -688,17 +679,16 @@ final class NitroUiListRowView: UIView {
         // This is the whole difference between a row that presses and a row that fires
         // whenever someone scrolls past it: `.ended` is where a long press with no minimum
         // says "the finger lifted", and a flick lifts a finger too.
-        if pressTravelling {
-          model.recordHighlightPainted(false)
-        } else {
+        if pressTravel.ended() {
           model.press()
+        } else {
+          model.recordHighlightPainted(false)
         }
-        pressTravelling = false
       default:
         // Cancelled or failed: a scroll that turned out to be a scroll.
+        pressTravel.cancelled()
         setPressed(false)
         model.recordHighlightPainted(false)
-        pressTravelling = false
     }
   }
 
@@ -736,8 +726,7 @@ final class NitroUiListRowView: UIView {
   func prepareForReuseForTesting() {
     pressed = false
     backgroundColor = .clear
-    pressOrigin = nil
-    pressTravelling = false
+    pressTravel.reset()
     pressGesture.isEnabled = false
   }
 }

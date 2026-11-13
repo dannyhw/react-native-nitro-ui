@@ -5785,6 +5785,46 @@ const CHECKS = {
       '1'
     );
 
+    // 4b. A drag that begins on a pressable row is the list asking for the page. On iOS
+    //     this was a fix (the cell's recogniser answered `.ended` without looking at where
+    //     the finger had gone); here it is a guard, because `NitroUiFormRowView` reads its
+    //     own touch in `dispatchTouchEvent` and drops the press the moment the finger is
+    //     past `ViewConfiguration`'s slop. X32 was asked which platform this row needed, so
+    //     the answer is in the log: the row above pressed ten times, and this flick presses
+    //     nothing.
+    //
+    //     Back to the top first — the steps above have scrolled the page, and
+    //     `requireControlOnScreen` only walks forward. The row is still required to be on
+    //     screen before the finger goes down: a drag aimed at nothing is a green run that
+    //     measured an empty stretch of list.
+    await t.scrollToTop();
+    const draggedRow = await t.requireControlOnScreen('Row with onPress');
+    const dragBefore = t.requireEcho(ECHO.formRowPresses);
+    const dragX =
+      draggedRow.bounds.x1 + Math.round(draggedRow.bounds.width * 0.5);
+    await t.swipePx(
+      dragX,
+      draggedRow.bounds.cy,
+      dragX,
+      draggedRow.bounds.cy - Math.round(160 * t.density()),
+      300
+    );
+    await t.settle(600);
+    const dragAfter = t.requireEcho(ECHO.formRowPresses);
+    t.log.note(
+      `flick on a pressable row: ${String(Math.round(160 * t.density()))} px up from ` +
+        `y ${String(draggedRow.bounds.cy)} of the row at ` +
+        `${String(draggedRow.bounds.y1)}-${String(draggedRow.bounds.y2)}, echo ` +
+        `"${dragBefore}" -> "${dragAfter}"`
+    );
+    t.log.checkEquals(
+      `a drag that starts on the row is a scroll, not a press (${dragBefore} -> ` +
+        `${dragAfter}) — a row that fires on a scroll takes the person to a screen they ` +
+        'only meant to scroll past',
+      dragAfter,
+      dragBefore
+    );
+
     // 5. Question 5, Android: the note field is below the fold, so getting to it is the
     //    scroll a person would do, and the keyboard that follows is the *software* one -
     //    which needs the preference raised, because every AVD has a hardware keyboard and
