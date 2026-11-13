@@ -1,0 +1,105 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-12T20:38:42.608Z on code tree `21a61fc485b7` at HEAD `ad7c173` (branch `task/X31-test-flakes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 29027 ms
+- Load: start 6.21, end 13.15, median 12.38, max 13.15
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X31-ptfed`
+- Full log: `task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log` (<store>/task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (G24) › survives a Form scrolled, reduced and torn down in a loop (X25)`
+- `expected 8 to be +0 // Object.is equality`
+- `● Form (G24) › names the aim when a press is refused (X31)`
+- `expected 'No view found at point (0.00, 0.00)' to contain 'aimed-off-window'`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X31-ptfed (still live)
+  |   X31-ptfed                X31          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 13.15 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 57 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form.harness
+gate: node ../scripts/harness.mjs --harnessRunner ios Form.harness (cwd example)
+gate: code tree 21a61fc485b7 at HEAD ad7c1733
+gate: git tree e46d1514963b with a DIRTY worktree (not reusable)
+gate: log task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log
+gate:       <store>/task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 21a61fc485b7, 25 components registered)
+lease: X31-ptfed runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.96/5.81 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (G24) › survives a Form scrolled, reduced and torn down in a loop (X25)
+
+    expected 8 to be +0 // Object.is equality
+
+      [0m [90m 260 |[39m         [33m.[39mjoin([32m';'[39m)
+       [90m 261 |[39m   )[33m;[39m
+      [31m[1m>[22m[39m[90m 262 |[39m   expect(num(report[33m,[39m [32m'giveUps'[39m))[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                      [31m[1m^[22m[39m
+       [90m 263 |[39m }
+       [90m 264 |[39m
+       [90m 265 |[39m [90m/**[39m[0m
+
+  ● Form (G24) › names the aim when a press is refused (X31)
+
+    expected 'No view found at point (0.00, 0.00)' to contain 'aimed-off-window'
+
+      [0m [90m 1860 |[39m     [90m// What it was aimed at, by name and by id: the two things the upstream string cannot[39m
+       [90m 1861 |[39m     [90m// carry because the JS side never sends them over the bridge.[39m
+      [31m[1m>[22m[39m[90m 1862 |[39m     expect(message)[33m.[39mtoContain([32m'aimed-off-window'[39m)[33m;[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1863 |[39m     expect(message)[33m.[39mtoContain([32m'nativeId='[39m)[33m;[39m
+       [90m 1864 |[39m     [90m// And the point that was pressed, which is the number the old text refused to print. The[39m
+       [90m 1865 |[39m     [90m// fixture is `left: 40, top: 6000, 120 x 60`, so its centre is (100, 6030) give or take[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 18 passed, 20 total
+Snapshots:   0 total
+Time:        27.028 s
+Ran all test suites matching Form.harness.
+gate: harness:ios:Form.harness FAIL in 29.0 s
+gate: recorded in .gates/task/X31-test-flakes.jsonl
+
+
+gate: appended the device context to task/X31-test-flakes/harness+ios+Form.harness-2026-11-12T20-38-41.735Z.log (4 probe(s))
+
+```

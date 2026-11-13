@@ -76,6 +76,7 @@ import {
   failureExcerptName,
   findReusableCheck,
   gateLogStoreDir,
+  groupLedgerLinesByBranch,
   isDeviceGate,
   isFailedRunWithLog,
   isUsageProbe,
@@ -84,12 +85,14 @@ import {
   ledgerFileName,
   ledgerLineFromRun,
   ledgerLogCandidates,
+  ledgerPairs,
   ledgerRelativePath,
   localPathRedactions,
   logNameFor,
   logRelativePath,
   LOG_RETENTION_DAYS,
   LOG_RETENTION_MAX_BYTES,
+  mergeLedgerExports,
   ownBackgroundRecords,
   ownMetroPids,
   parseLedger,
@@ -154,6 +157,9 @@ const USAGE =
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
   '\n' +
   '       (NITRO_UI_GATE_DEVICE_FORCE=1 claims a device another live run holds)\n' +
+  "       (--background is gate.mjs's own flag: beside the gate name or after it, " +
+  'never\n' +
+  '        after `--`, where the arguments belong to the gate)\n' +
   '       (--background starts a gate detached and returns at once, so waiting\n' +
   '        costs no polling; `wait` then blocks until it ends, prints a progress\n' +
   "        line a minute, and exits with the gate's own code. Exit 13 means\n" +
@@ -172,7 +178,13 @@ const USAGE =
   '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl and, for every\n' +
   '        FAILED run, a scrubbed excerpt in docs/tasks/<ID>/failures/ - the failing\n' +
   '        test names, the assertion messages, the last 150 lines, the device\n' +
-  '        context and the load at both ends. Passing runs get no file)\n' +
+  '        context and the load at both ends. Passing runs get no file. Export ' +
+  '*merges*:\n' +
+  '        lines already in the committed file stay, and an excerpt already ' +
+  'committed is\n' +
+  "        left alone, so a fix round adds its runs instead of erasing round 1's. " +
+  'A line is\n' +
+  '        the same line as another by ts + gate + code tree)\n' +
   '\n' +
   "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
   '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
@@ -2529,17 +2541,19 @@ function committedTaskLedgers(exceptBranch) {
     }
     const entries = parseLedger(text).filter((line) => !line.corrupt);
     if (entries.length === 0) continue;
-    // `export` copies one branch's ledger verbatim, so the lines carry their own
-    // branch name; the path is the fallback and is also what the note cites.
-    const branch =
-      entries.find((line) => typeof line.branch === 'string')?.branch ??
-      `docs/tasks/${entry.name}/gates.jsonl`;
-    if (branch === exceptBranch) continue;
-    found.push({
-      branch,
-      source: path.relative(repoRoot, file),
-      entries,
-    });
+    // One file, one group **per branch**: the merging export (X30 item 2) put two
+    // rounds' lines in the same `gates.jsonl`, each with its own `branch`, and
+    // labelling the whole file by the first line's branch both silenced the
+    // "not this branch's own ledger" filter and made the reuse note credit the wrong
+    // task with a run it never did (X30 fix round 1). A line with no `branch` is
+    // labelled with the file, which is also what the note cites.
+    found.push(
+      ...groupLedgerLinesByBranch(
+        entries,
+        path.relative(repoRoot, file),
+        exceptBranch
+      )
+    );
   }
   return found;
 }
@@ -2704,7 +2718,9 @@ function commandTable({ stage, full, reuse = true }) {
 
 function commandExport({ task, out }) {
   const branch = currentBranch();
-  const { entries, file, exists } = readLedger(branch);
+  // `file`, not `entries`: the export copies raw lines, so nothing here re-reads
+  // them through the parser (a corrupt line has to leave as corrupt as it arrived).
+  const { file, exists } = readLedger(branch);
   if (!exists) {
     process.stderr.write('export: nothing recorded yet - run a gate first.\n');
     return 1;
@@ -2728,7 +2744,24 @@ function commandExport({ task, out }) {
   // corrupt line in particular stays exactly as corrupt as it was, rather than
   // becoming a plausible-looking object.
   const rawText = fs.readFileSync(file, 'utf8');
-  const rawLines = rawText.split('\n').filter((raw) => raw.trim() !== '');
+
+  // The committed file is a **union**, not a re-write (X30 item 2). This command used
+  // to write this branch's lines over `docs/tasks/<ID>/gates.jsonl`, so a fix round
+  // or a merge round republishing the file dropped every line an earlier round on a
+  // different branch had committed there - rounds then restored them by hand, which
+  // is a manual step over the one file that holds a task's evidence. Whatever is
+  // already in the target stays, byte-verbatim and in its existing order; this
+  // branch's lines are appended; a line that is already there by
+  // `ledgerLineIdentity` (ts + gate + code tree) is not written twice.
+  const existingText = fs.existsSync(absolute)
+    ? fs.readFileSync(absolute, 'utf8')
+    : '';
+  const targetHadLines = existingText.trim() !== '';
+  const { merged, kept, added, duplicates } = mergeLedgerExports({
+    existing: ledgerPairs(existingText),
+    incoming: ledgerPairs(rawText),
+  });
+  const lines = merged.map((row) => row.raw);
 
   // Item 2 (X12): a red row in the committed ledger used to arrive with no evidence
   // attached, so the reader had to go to the machine that ran the gate - which is
@@ -2736,17 +2769,36 @@ function commandExport({ task, out }) {
   // Written *before* the ledger, because the ledger is about to name these files.
   const failuresDir =
     task != null ? path.join('docs', 'tasks', task, 'failures') : null;
-  const { lines, written, missing } = exportFailureExcerpts({
-    rawLines,
-    entries,
+  const {
+    lines: exported,
+    written,
+    kept: keptExcerpts,
+    missing,
+  } = exportFailureExcerpts({
+    rawLines: lines,
+    entries: merged.map((row) => row.entry),
     failuresDir,
   });
-  fs.writeFileSync(absolute, `${lines.join('\n')}\n`);
+  // What the excerpt writer hands back, not `lines`: it is the one place that
+  // re-emits a failed line with its `failureLogPath` added, and writing the merged
+  // input instead would publish red rows with no evidence attached - the exact hole
+  // X12 item 2 closed.
+  fs.writeFileSync(absolute, `${exported.join('\n')}\n`);
+  const real = merged.filter((row) => row.entry?.corrupt !== true).length;
   process.stdout.write(
-    `export: ${String(entries.filter((entry) => !entry.corrupt).length)} gate line(s) from ${path.relative(repoRoot, file)} -> ${path.relative(repoRoot, absolute)}\n`
+    `export: ${String(real)} gate line(s) -> ${path.relative(repoRoot, absolute)} ` +
+      `(${targetHadLines ? `${String(kept)} kept from the file, ` : ''}` +
+      `${String(added)} from ${branch}${
+        duplicates > 0 ? `, ${String(duplicates)} already there` : ''
+      })\n`
   );
+  if (keptExcerpts.length > 0) {
+    process.stdout.write(
+      `export: ${String(keptExcerpts.length)} failure excerpt(s) already committed, left as they are\n`
+    );
+  }
   if (failuresDir != null) {
-    const failed = entries.filter(isFailedRunWithLog).length;
+    const failed = merged.filter((row) => isFailedRunWithLog(row.entry)).length;
     process.stdout.write(
       `export: ${String(written.length)} failure excerpt(s) in ${failuresDir}${
         written.length === 0 ? ' (no failed runs in this ledger)' : ''
@@ -2792,12 +2844,22 @@ function commandExport({ task, out }) {
  * A failed line whose log cannot be found keeps its original text and produces a
  * note instead of a file.
  *
+ * An excerpt that is **already committed** is left alone (X30 item 2): a failed
+ * line that already carries `failureLogPath`, and whose file is in the checkout, is
+ * evidence a previous round published. Re-writing it from a store log that may no
+ * longer exist would drop the pointer and orphan the file - and the whole point of
+ * exporting across rounds is that an earlier round's red row keeps its evidence.
+ * When the pointer is set but the file is not there (it was deleted, or this
+ * checkout never had it), the run below re-creates it from the store if the store
+ * still has the log, and notes the miss if it does not.
+ *
  * @param {{rawLines: string[], entries: object[], failuresDir: string | null}} options
- * @returns {{lines: string[], written: Array<{relative: string, scrubbed: number, truncated: boolean}>, missing: Array<{gate: string, logPath: string, candidates: string[]}>}}
+ * @returns {{lines: string[], written: Array<{relative: string, scrubbed: number, truncated: boolean}>, kept: string[], missing: Array<{gate: string, logPath: string, candidates: string[]}>}}
  */
 function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
   const lines = [];
   const written = [];
+  const kept = [];
   const missing = [];
   // Every path this excerpt could leak into a public commit (D25). The header's
   // store path, the lease file in the device block, and the home path in a jest
@@ -2822,10 +2884,37 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
   // of one gate in the same second have the same name and would share one file - the
   // later export overwriting the earlier excerpt while both ledger lines pointed at
   // it. Counting by the name itself is what makes that impossible (review N2).
+  //
+  // It starts by counting the names this checkout has *already spent*. The merging
+  // export (X30 item 2) hands this function round 1's lines as well as this round's,
+  // and round 1's lines point at committed excerpts; counting only the writes below
+  // handed a round-2 failure in round 1's second the same `--01.log` and wrote over
+  // evidence that was already published, while the merged ledger line - kept
+  // byte-for-byte, as the merge must - went on pointing at it (X30 fix round 1).
+  const publishedByIndex = entries.map((entry) => committedExcerptPath(entry));
   const sequenceByName = new Map();
+  publishedByIndex.forEach((published, index) => {
+    if (published == null) return;
+    // Both spellings of the name count: the one in the file (authoritative - that is
+    // the file that must not be written again) and the one this line would be given
+    // today, which is what the loop below allocates. They differ when a line was
+    // exported under one ts and carries another now.
+    const named = path.basename(published).replace(/--\d+\.log$/, '--01.log');
+    for (const key of new Set([named, failureExcerptName(entries[index], 1)])) {
+      sequenceByName.set(key, (sequenceByName.get(key) ?? 0) + 1);
+    }
+  });
   rawLines.forEach((raw, index) => {
     const entry = entries[index];
     if (!isFailedRunWithLog(entry)) {
+      lines.push(raw);
+      return;
+    }
+    const published = publishedByIndex[index];
+    if (published != null) {
+      // Already in the checkout, already pointing here: nothing to write, and the
+      // line's own `failureLogPath` is the pointer we must not lose.
+      kept.push(published);
       lines.push(raw);
       return;
     }
@@ -2896,7 +2985,30 @@ function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
     });
     lines.push(JSON.stringify({ ...entry, failureLogPath: relative }));
   });
-  return { lines, written, missing };
+  return { lines, written, kept, missing };
+}
+
+/**
+ * The committed excerpt a failed line already points at, or null.
+ *
+ * `failureLogPath` is written by `export` as a repo-relative path beside
+ * `gates.jsonl`, so "is it there" is a question about this checkout. Null for a
+ * line with no pointer, and for a pointer whose file is not in the tree - in which
+ * case the caller re-creates the evidence rather than trusting the pointer.
+ *
+ * @param {object | null | undefined} entry
+ * @returns {string | null} the repo-relative path, as the line spells it
+ */
+function committedExcerptPath(entry) {
+  const listed = entry?.failureLogPath;
+  if (typeof listed !== 'string' || listed === '') return null;
+  if (path.isAbsolute(listed)) return null;
+  const absolute = path.join(repoRoot, listed);
+  try {
+    return fs.statSync(absolute).isFile() ? listed : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The largest log an excerpt will read. 200 MiB; see the call site. */
@@ -3345,7 +3457,9 @@ async function main(argv) {
   // `--background` is pulled out before the separator check, so both
   // `harness:android --background -- ColdSizing` and its position after the gate
   // name work; anything *after* `--` is left alone, because past the separator the
-  // arguments belong to the gate's own command line and are not ours to eat.
+  // arguments belong to the gate's own command line and are not ours to eat - with
+  // one exception: `--background` is this script's flag however it is spelled, and
+  // past the separator it is a usage error rather than a gate argument (X30 item 3).
   const separator = rest.indexOf('--');
   const ownArgs = separator === -1 ? rest : rest.slice(0, separator);
   const background =
@@ -3369,6 +3483,29 @@ async function main(argv) {
     separator === -1
       ? ownArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg))
       : rest.slice(separator + 1);
+  // X30 item 3. `--background` after the separator reads like the flag this script
+  // owns, and it used to travel to the runner as an argument of the gate: a
+  // `check`-style gate rejected it under its own name and a harness gate folded it
+  // into the suite suffix (`harness:android -- --background` is a gate named
+  // `harness:android:--background`), the suite went red on an option nobody runs,
+  // and the ledger recorded a verdict about code that was never measured. Past the
+  // separator there is no gate called `--background`, so this is a misplaced flag:
+  // answer it before a runner, a log file or a ledger line exists.
+  if (separator !== -1) {
+    const misplaced = extraArgs.filter((arg) => BACKGROUND_FLAGS.includes(arg));
+    if (misplaced.length > 0) {
+      const suite = extraArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg));
+      process.stderr.write(
+        `gate: ${misplaced.join(', ')} goes with the gate name, not after --: past ` +
+          `the separator the arguments belong to the gate's own command line, and ` +
+          `no gate has a --background. For a detached run, \`node scripts/gate.mjs ` +
+          `${command} --background${
+            suite.length > 0 ? ` -- ${suite.join(' ')}` : ''
+          }\`.\n${USAGE}`
+      );
+      return 2;
+    }
+  }
   let resolved;
   try {
     resolved = resolveGate(command, extraArgs);
