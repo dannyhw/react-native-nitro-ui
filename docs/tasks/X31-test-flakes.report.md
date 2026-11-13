@@ -34,8 +34,8 @@ back from that identifier's box. The harness is a dependency, so that is our sid
 **4 · The 2 s CI budget.** The case graded a wall-clock ceiling between a healthy ~2 s and an
 unbounded ~26 s, and `check`'s own load put the healthy 2 s over it (`docs/tasks/FOLLOWUPS.md:119`,
 twice on X29). It now times the *same body* against a tool that answers and one that hangs, grading
-the difference in `sleep 1` units — the unit `bounded()` counts patience in — so the allowance fits
-the machine.
+the difference in `sleep 1` units — the unit `bounded()` counts patience in, though the allowance
+itself is fixed (fix round 1).
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
@@ -170,30 +170,21 @@ unbounded body), and `gaveUpOnTheTool: false` with the command the guard names t
 
 ## Fix round 1
 
-**1 · The room slop ran the wrong way.** `roomBelow + roomSlopPx >= menuHeight` asked whether the
-room *plus* an allowance covered the rows, so it took the slop off what Material needs. Material
-opens below only when its whole surface fits under the anchor — the rows plus their padding,
-shadow and M3's 48 dp window margin — so there was a band about 300 px wide in which a correct
-above-placement read as `wrongSide`, and `centreOnScreen`'s give-up-after-4-scrolls anchor can sit
-in it. Three ranges now: under the menu's own height means above, the height plus the slop means
-below, and between them either side is accepted and the check says nothing. Both edges are
-fixtures, and the band's case grades *both* placements inside it, so this is not a failure moved
-somewhere else.
+**1 · The room slop ran the wrong way.** `roomBelow + roomSlopPx >= menuHeight` asked whether room
+*plus* an allowance covered the rows, taking the slop off what Material needs — the whole surface:
+rows, padding, shadow, M3's 48 dp window margin. A ~300 px band read a correct
+above-placement as `wrongSide`. Three ranges
+now: under the menu's height means above, the height plus the slop means below, between them either
+side is accepted. Both edges are fixtures.
 
-**2 · The judge graded a box the tap did not use.** The check keeps `aimed` — the box its own
-`requireControlAt` last returned, which is the one `tapNode` pressed — and hands that to the judge
-and to the note beside it. `centreOnScreen` now returns only a box two consecutive dumps agree on,
-and an anchor that never came to the middle says how far off it was in the graded line, not in a
-note two lines above.
+**2 · The judge graded a box the tap did not use.** It hands the judge `aimed` — the box its own
+lookup last returned and `tapNode` pressed — and `centreOnScreen` returns only a box two dumps agree
+on, with an off-centre anchor saying so in that line.
 
-**3 · The E1 and E4 calls are guards, and now say so** — with the distinction next to the counter
-and at each call: the churn case is the witness, `giveUpCell`'s only call site is the `else` of a
-guard on a one-case enum, and E1 removes a row, never a Section.
-
-**4 ·** The accel allowance is half the hanging stub's life and is called a fixed allowance, because
-a `sleep 1` is a timer and obeys no law the guard does; `pressAimed` passes the refusal as
-`{ cause }` when the box lookup itself throws; and `wrongSide` is one sentence naming both numbers
-it weighed.
+**3 · E1/E4's `expectNoGiveUps` are guards** — the churn case is the witness,
+`giveUpCell`'s only call site is a one-case enum's dead `else`, and E1 removes a row, never a Section.
+**4 ·** The accel allowance is half the stub's life, called fixed (`sleep 1` is a timer);
+`pressAimed` keeps the refusal as `{ cause }`; `wrongSide` reads as one sentence.
 
 ### Red proofs (fix round 1)
 
@@ -225,3 +216,52 @@ it weighed.
 - Not claimed: `pressAimed`'s `{ cause }` has no red proof. Nothing makes `queryByTestId` throw in
   any case here — the change is that when it does, upstream's refusal survives as the cause instead
   of becoming the whole message.
+### Follow-ups (fix round 1)
+
+- The first `harness:ios` on this tree lost the app mid-suite in `BottomSheet.harness.tsx` —
+  `The app process exited, but no crash log lines were found`, 599 of 602 tests green, load1 median
+  13.3 and max 64.8, no `NitroUiExample` report in `~/Library/Logs/DiagnosticReports`. The same host
+  symptom round 1 hit twice; the green retry is in the table below. Nothing here reaches BottomSheet
+  (`aimedPress.ts` is imported by `Form.harness.tsx` alone, which passed its 20 tests in 12.9 s in
+  that same run).
+- `real-input:ios` is not owed by this diff and was not run: `menu-placement.mjs` and
+  `centreOnScreen` are reached only from `scripts/real-input/android.mjs`, and the rest of the diff
+  is the two harness suites and a `scripts/__tests__` case.
+- The row `real-input:android:--control:hosted-picker:--background` (0.7 s) is mine and is junk:
+  `--background` belongs before the `--`, so it reached the runner as a filter instead.
+- `harness:android` went red once on this tree on `SearchField › reports the clear button as one
+  empty edit and keeps the focus` — `expected [] to deeply equal [ 'change:' ]`, 1 of 685 tests,
+  green on the retry. Nothing in this diff reaches SearchField; it is the same field round 1 already
+  flagged for a `search-switching-echo` loss.
+- Inside that mutated filtered run, `a11y:hosted-date-picker` also went red — `1 node(s) carry the
+  name "Hosted date picker" and every one of them has a zero-sized box`. The mutation had left the
+  hosted popup open and the page 300 px out of position when the a11y sweep ran, so it reads as an
+  artefact of the aborted check rather than a date-picker finding. Not chased; noted.
+- The first `real-input:android` on this tree (37 s, red on `tab-targets`) is a collision I made:
+  two of my own drivers, and its Metro/device fight was with the `harness:android` retry started
+  the same second on the same lease (`02:50:08Z` against `02:50:54Z`, both on `emulator-5570` and
+  Metro 8293 — the logcat shows `Cannot connect to Metro`). One lease, one run at a time; the
+  clean run below is serialised behind everything else on the pair.
+- `Form.harness.tsx`'s E1/E4 bullet says "No branch here reaches 0 by the case's own doing", where
+  "reaches" wants to be "moves the counter off". Rewording it edits a harness test file, which
+  owes both platforms' device runs for eight words of prose, so it is left for whoever next
+  changes that file for a reason.
+
+### Gates (fix round 1)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2103 tests / 89 suites | `c8cd4fccfb86` | 2 m 45 s | start 5.3 / med 15.7 / max 27.7 |
+| `harness:ios` | **PASS** | 629 tests / 32 suites + isolated 6 tests / 3 suites | `c8cd4fccfb86` (ios tree) | 15 m 06 s | start 10.1 / med 7.3 / max 18.7 |
+| `harness:android` | **PASS** | 685 tests / 32 suites + isolated 6 tests / 3 suites | `c8cd4fccfb86` (android tree) | 18 m 52 s | start 10.7 / med 6.4 / max 12.1 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `c8cd4fccfb86` (android tree) | 72 m 44 s | start 4.6 / med 8.2 / max 201.5 |
+| `harness:ios:Form.harness` | stale | 5 failed of 20 tests / 1 suites | 9cbb365a9ac2 (not this tree) | 42.2 s | start 31.6 / med 30.1 / max 32.6 |
+| `real-input:android:--control:hosted-picker` | stale | — | 69af452cf811 (not this tree) | 12 m 05 s | start 37.2 / med 11.3 / max 80.0 |
+| `real-input:android:--control:hosted-picker:--background` | stale | — | 69af452cf811 (not this tree) | 0.7 s | start 38.2 / med 37.7 / max 38.2 |
+
+`need --for review`: **satisfied on `c8cd4fccfb86`**. `real-input:ios` is not required by it and was
+not run. The two stale filtered rows are this round's mutated-tree red proofs (`Form.harness`, 5 red
+of 20 under the counting mutation; `hosted-picker` under the stale-box mutation); the `--background`
+row is the junk one named above. `real-input:android` passed 28/28 controls and 25/25 auxiliary checks
+with no retries, through a load1 peak of 201.5.

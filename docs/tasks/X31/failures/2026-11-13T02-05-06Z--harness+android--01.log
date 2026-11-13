@@ -1,0 +1,80 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-13T02:05:06.794Z on code tree `e5e33d94c8c8` at HEAD `d37d985` (branch `task/X31-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 359554 ms
+- Load: start 6.18, end 3.73, median 5.53, max 16.54
+- Device: android / device `emulator-5570` / lease `X31-acetc`
+- Full log: `task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log` (<store>/task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X31-acetc (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.73 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree e5e33d94c8c8 at HEAD d37d985c
+gate: git tree 7d0a5e1bfd84 with a DIRTY worktree (not reusable)
+gate: log task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log
+gate:       <store>/task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree e5e33d94c8c8, 26 components registered)
+lease: X31-acetc runs this suite on emulator-5570 (nitroui_b) via adb server 5041
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.18/8.49 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was disposed before the test file finished running.
+
+gate: harness:android FAIL in 359.6 s (signal SIGTERM)
+gate: recorded in .gates/task/X31-fix1.jsonl
+
+
+gate: appended the device context to task/X31-fix1/harness+android-2026-11-13T02-05-05.888Z.log (5 probe(s))
+gate: re-raising SIGTERM
+
+```
