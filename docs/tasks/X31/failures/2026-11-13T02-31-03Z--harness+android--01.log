@@ -1,0 +1,182 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-13T02:31:03.309Z on code tree `c8cd4fccfb86` at HEAD `968f77d` (branch `task/X31-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1143991 ms
+- Load: start 14.80, end 15.55, median 8.21, max 28.76
+- Device: android / device `emulator-5570` / lease `X31-acetc`
+- Full log: `task/X31-fix1/harness+android-2026-11-13T02-31-03.309Z.log` (<store>/task/X31-fix1/harness+android-2026-11-13T02-31-03.309Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● Console`
+- `● SearchField › reports the clear button as one empty edit and keeps the focus`
+- `expected [] to deeply equal [ 'change:' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X31-fix1/harness+android-2026-11-13T02-31-03.309Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X31-acetc (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 15.55 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 132 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c8cd4fccfb86, 26 components registered)
+lease: X31-acetc runs this suite on emulator-5570 (nitroui_b) via adb server 5041
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 14.80/8.86 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X31-fix1/harness+android-2026-11-13T02-31-03.309Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● Console
+
+    console.log
+      search field height 56.00 vs text field 24.00
+
+
+    console.log
+      search field keyboardType="default" read back "default" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="number-pad" read back "number-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="decimal-pad" read back "decimal-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="numeric" read back "decimal-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="email-address" read back "email-address" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="phone-pad" read back "phone-pad" (return key "search", focused true)
+
+
+    console.log
+      search field keyboardType="url" read back "url" (return key "search", focused true)
+
+
+    console.log
+      search field autoCapitalize="words" read back "words"
+
+
+    console.log
+      search field autoCapitalize="characters" read back "characters"
+
+
+    console.log
+      search field autoCapitalize="sentences" read back "sentences"
+
+
+    console.log
+      search field autoCorrect=false read back false
+
+
+    console.log
+      search field all three read back {"text":"","focused":true,"composing":false,"nativeEvents":0,"jsEvents":0,"lastWrite":"none","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"Keyboard search field","returnKeyType":"search","keyboardType":"number-pad","autoCapitalize":"none","autoCorrect":false,"expanded":false,"canClear":false}
+
+
+    console.log
+      search field recycle round 0: drops=8 recycles=8 measuresAfterDrop=155 layoutsAfterDrop=155 giveUps=0 floatingFlushes=0 resetKeyboard=default/none/true
+
+
+    console.log
+      poisoned search field: laidOut 111.0x13.0, corrected 111.0x56.0, drew 280.0x56.0; measured 56.00
+
+  ● SearchField › reports the clear button as one empty edit and keeps the focus
+
+    expected [] to deeply equal [ 'change:' ]
+
+      [0m [90m 540 |[39m     )[33m;[39m
+       [90m 541 |[39m     [36mconst[39m reported [33m=[39m eventsOf([32m'cleared'[39m)[33m.[39mslice(before)[33m;[39m
+      [31m[1m>[22m[39m[90m 542 |[39m     expect(reported)[33m.[39mtoEqual([[32m'change:'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+      [90m 543 |[39m     expect(cleared[33m.[39mnativeEvents)[33m.[39mtoBe(typed[33m.[39mnativeEvents [33m+[39m [35m1[39m)[33m;[39m
+       [90m 544 |[39m     [90m// Focus stays: clearing a query is not leaving the field.[39m
+       [90m 545 |[39m     expect(cleared[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › reports the clear button as one empty edit and keeps the focus
+
+    expected [] to deeply equal [ 'change:' ]
+
+      [0m [90m 540 |[39m     )[33m;[39m
+       [90m 541 |[39m     [36mconst[39m reported [33m=[39m eventsOf([32m'cleared'[39m)[33m.[39mslice(before)[33m;[39m
+      [31m[1m>[22m[39m[90m 542 |[39m     expect(reported)[33m.[39mtoEqual([[32m'change:'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+      [90m 543 |[39m     expect(cleared[33m.[39mnativeEvents)[33m.[39mtoBe(typed[33m.[39mnativeEvents [33m+[39m [35m1[39m)[33m;[39m
+       [90m 544 |[39m     [90m// Focus stays: clearing a query is not leaving the field.[39m
+       [90m 545 |[39m     expect(cleared[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 31 passed, 32 total
+Tests:       1 failed, 3 skipped, 681 passed, 685 total
+Snapshots:   0 total
+Time:        1108.85 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c8cd4fccfb86, 26 components registered)
+lease: X31-acetc runs this suite on emulator-5570 (nitroui_b) via adb server 5041
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 24.02/12.97 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X31-fix1/harness+android-2026-11-13T02-31-03.309Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        32.454 s
+Ran all test suites.
+harness: isolated run passed
+
+
+
+```

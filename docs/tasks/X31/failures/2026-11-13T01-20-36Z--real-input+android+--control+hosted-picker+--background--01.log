@@ -1,0 +1,52 @@
+# Failure excerpt — real-input:android:--control:hosted-picker:--background
+
+- Ran: 2026-11-13T01:20:36.742Z on code tree `69af452cf811` at HEAD `5675652` (branch `task/X31-fix1`)
+- Command: `node scripts/real-input/android.mjs --control hosted-picker --background`
+- Result: fail, exit 1, 713 ms
+- Load: start 38.22, end 37.16, median 37.69, max 38.22
+- Device: android / device `emulator-5570` / lease `X31-acetc`
+- Full log: `task/X31-fix1/real-input+android+--control+hosted-picker+--background-2026-11-13T01-20-36.742Z.log` (<store>/task/X31-fix1/real-input+android+--control+hosted-picker+--background-2026-11-13T01-20-36.742Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X31-fix1/real-input+android+--control+hosted-picker+--background-2026-11-13T01-20-36.742Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X31-acetc (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 37.16 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 5 log line(s)
+
+```
+
+real-input (android): Error: real-input: unknown argument "--background".
+
+
+
+```

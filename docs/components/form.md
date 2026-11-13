@@ -210,7 +210,7 @@ React Native children and so host nitro-ui controls in their rows today.
 ## Accessibility
 
 A row with `onPress` is **one element on Android, and several on iOS**. The iOS half is
-recorded debt (`a11y:form`); this page previously claimed the merge there as well.
+recorded debt (`a11y:form`).
 
 Android turns the row into a single clickable node that carries the row's name. Its
 content stops being read piece by piece, which is what a settings row should do.
