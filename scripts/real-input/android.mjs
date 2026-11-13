@@ -5785,13 +5785,25 @@ const CHECKS = {
       '1'
     );
 
-    // 4b. A drag that begins on a pressable row is the list asking for the page. On iOS
-    //     this was a fix (the cell's recogniser answered `.ended` without looking at where
-    //     the finger had gone); here it is a guard, because `NitroUiFormRowView` reads its
-    //     own touch in `dispatchTouchEvent` and drops the press the moment the finger is
-    //     past `ViewConfiguration`'s slop. X32 was asked which platform this row needed, so
-    //     the answer is in the log: the row above pressed ten times, and this flick presses
-    //     nothing.
+    // 4b. A drag that begins on a pressable row is the list asking for the page, and 4c is
+    //     the same row asked the same question when the list is not involved. On iOS this
+    //     was a fix (the cell's press recogniser answered `.ended` without looking at where
+    //     the finger had gone); here it is a guard, and the two drags are the guard because
+    //     they are answered by two different things — which is what X32 was asked, and the
+    //     answer is in the log.
+    //
+    //     4b's flick goes to the scroll container: a vertical list that can scroll
+    //     intercepts the touch and hands the row an `ACTION_CANCEL`, so `pending` is gone
+    //     before any release and the row presses nobody whatever its own rules say. Proved
+    //     by mutation, not assumed — with `HybridNitroUiFormRow`'s slop check switched off
+    //     this check stays green, because it was never that code answering. Hence 4c.
+    //
+    //     4c drags *sideways*, which a vertical list never intercepts: the row sees the
+    //     moves and the lift itself, and the only thing between that touch and `onPress` is
+    //     `NitroUiFormRowView`'s own slop rule. Switching that rule off turns 4c red. It is
+    //     also the gesture the host vectors call "40 pt sideways is not a press either"
+    //     (`scripts/native-tests/press-travel.test.swift`), so the two platforms are asked
+    //     the same question on the same fixture.
     //
     //     Back to the top first — the steps above have scrolled the page, and
     //     `requireControlOnScreen` only walks forward. The row is still required to be on
@@ -5811,18 +5823,75 @@ const CHECKS = {
     );
     await t.settle(600);
     const dragAfter = t.requireEcho(ECHO.formRowPresses);
+    // Did the list actually take the flick? The Form's own `offset=` echo is a constant on
+    // Android (the Compose list reports no offset), so the witness is the row's box in a
+    // fresh dump: a flick that moved nothing is not a scroll, and a no-press count from it
+    // would be a green that measured a stationary page. Absent from the dump is the same
+    // answer with more conviction — the row scrolled out of the window.
+    const scrolledRow = findByDescription(t.dump(), 'Row with onPress');
+    const scrolledBy =
+      scrolledRow == null
+        ? Number.POSITIVE_INFINITY
+        : draggedRow.bounds.y1 - scrolledRow.bounds.y1;
     t.log.note(
       `flick on a pressable row: ${String(Math.round(160 * t.density()))} px up from ` +
         `y ${String(draggedRow.bounds.cy)} of the row at ` +
         `${String(draggedRow.bounds.y1)}-${String(draggedRow.bounds.y2)}, echo ` +
-        `"${dragBefore}" -> "${dragAfter}"`
+        `"${dragBefore}" -> "${dragAfter}", row moved ` +
+        (Number.isFinite(scrolledBy)
+          ? `${String(scrolledBy)} px up`
+          : 'out of the dump')
+    );
+    t.log.check(
+      `the flick really scrolled the list (${
+        Number.isFinite(scrolledBy) ? `${String(scrolledBy)} px` : 'row gone'
+      }) — without this the check below could pass on a page that never moved`,
+      scrolledBy > 60
     );
     t.log.checkEquals(
-      `a drag that starts on the row is a scroll, not a press (${dragBefore} -> ` +
+      `a drag that scrolls the list is not a press (${dragBefore} -> ` +
         `${dragAfter}) — a row that fires on a scroll takes the person to a screen they ` +
         'only meant to scroll past',
       dragAfter,
       dragBefore
+    );
+
+    // 4c. The sideways drag, aimed at the same row after the scroll above.
+    await t.scrollToTop();
+    const slidRow = await t.requireControlOnScreen('Row with onPress');
+    const slideBefore = t.requireEcho(ECHO.formRowPresses);
+    const slideFrom =
+      slidRow.bounds.x1 + Math.round(slidRow.bounds.width * 0.25);
+    const slideTo = slidRow.bounds.x1 + Math.round(slidRow.bounds.width * 0.75);
+    await t.swipePx(
+      slideFrom,
+      slidRow.bounds.cy,
+      slideTo,
+      slidRow.bounds.cy,
+      300
+    );
+    await t.settle(600);
+    const slideAfter = t.requireEcho(ECHO.formRowPresses);
+    t.log.note(
+      `slide across a pressable row: ${String(slideTo - slideFrom)} px right along y ` +
+        `${String(slidRow.bounds.cy)} of the row at ` +
+        `${String(slidRow.bounds.y1)}-${String(slidRow.bounds.y2)}, echo ` +
+        `"${slideBefore}" -> "${slideAfter}"`
+    );
+    t.log.checkEquals(
+      `a drag that slides along the row is not a press (${slideBefore} -> ` +
+        `${slideAfter}) — a thumb that wanders across a row and lifts did not choose it, ` +
+        'and no list is rescuing this gesture on Android',
+      slideAfter,
+      slideBefore
+    );
+    // The row still answers a tap afterwards: a rule that ate every drag is easy to write,
+    // and worthless.
+    await t.tapUntilValue(
+      () => slidRow,
+      ECHO.formRowPresses,
+      String(Number(slideAfter) + 1),
+      'a real tap on the row after both drags'
     );
 
     // 5. Question 5, Android: the note field is below the fold, so getting to it is the
