@@ -1,0 +1,115 @@
+{
+  "task": "X32",
+  "round": 1,
+  "how": "One source mutation applied to the working tree, the named test run against it, the file restored before the next row (`before` is the shipped source, `after` the text that replaced it). Rows 1-4 are device/harness runs on mutated `build-app.mjs` artefacts under lease X32-9xk2j, pair-a (`iPhone 17` / iOS 27.0, emulator-5574 / API 35, Metro 8295); every filtered gate name satisfies nothing but itself, and no mutated tree was ever committed. Rows 5-8 are host tests, run through `bun run test:native` / `test:native:android` with no device env exported. Row 9 is not a mutation: it is the first version of the Android drag guard staying GREEN with the mutation it was written to catch, which is why rows 3-4 exist. Logs: `gate.mjs logs --branch task/X32-review-debt`.",
+  "mutations": [
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift › testRealInputForm › assertDragFromRowIsNotAPress(\"form-row\")",
+      "file": "ios/components/Form/NitroUiFormViews.swift",
+      "mutation": "the Form cell answers `.ended` without asking where the finger went — the bug as shipped before this task",
+      "before": "        if pressTravel.ended() {\n          onPressTap?()\n        }",
+      "after": "        onPressTap?()",
+      "run": "real-input:ios:--control:form — FAIL, 1004 s — real-input+ios+--control+form-2026-11-13T01-28-24.478Z.log",
+      "redTests": [
+        "RealInputTests.swift:7278 `XCTAssertEqual failed: (\"12\") is not equal to (\"11\") — the form row with onPress (form-row) reported a press for a drag that started on it: \"form-row-presses\" went \"11\" -> \"12\" while the finger travelled`"
+      ],
+      "note": "The same run printed the item-2 measurement: `real-input form a11y kind=nodes nodes=6` and `a11y case=form … nodes=6` — six elements for a row whose content is two texts, none carrying a `.button` trait."
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx › recycles into the next owner with its own picture",
+      "file": "ios/components/Checkbox/HybridNitroUiCheckbox.swift",
+      "mutation": "`clearReports` stops clearing `probes`, so a recycled Checkbox answers with its previous owner's count",
+      "before": "    symbol = \"none\"\n    probes = 0",
+      "after": "    symbol = \"none\"",
+      "run": "harness:ios:Checkbox — FAIL, 1 of 15 (21.3 s) — harness+ios+Checkbox-2026-11-13T01-46-36.514Z.log",
+      "redTests": [
+        "Checkbox.harness.tsx:1378 throw — `round b: \"recycled\" arrived with probes=1 — a recycled Checkbox kept the last owner's probe count, so every count after this one is somebody else's`"
+      ]
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx › recycles into the next owner with its own picture",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt",
+      "mutation": "the Android twin: `reset()` stops clearing `probes`",
+      "before": "      drawn = \"none\"\n      probes = 0",
+      "after": "      drawn = \"none\"",
+      "run": "harness:android:Checkbox — FAIL, 1 of 15 (22.2 s) — harness+android+Checkbox-2026-11-13T01-47-28.344Z.log",
+      "redTests": [
+        "Checkbox.harness.tsx:1378 throw — `round b: \"recycled\" arrived with probes=2 — …`"
+      ]
+    },
+    {
+      "test": "scripts/real-input/android.mjs › 'form' › 4c, a drag that slides along the row",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormRow.kt",
+      "mutation": "the row's touch-slop rule is switched off and the press also fires from `ACTION_CANCEL` (a row that honours neither travel nor cancellation); slop off alone left both drags green",
+      "before": "        if (pending && hypot((event.x - downX).toDouble(), (event.y - downY).toDouble()) > touchSlop) {\n          releasePressed()\n        }",
+      "after": "        if (false && pending && hypot((event.x - downX).toDouble(), (event.y - downY).toDouble()) > touchSlop) {\n          releasePressed()\n        }",
+      "run": "real-input:android:--control:form — FAIL — real-input+android+--control+form-2026-11-13T02-31-36.117Z.log (slide and flick) and …-02-19-32.141Z.log (flick)",
+      "redTests": [
+        "✗ a drag that slides along the row is not a press (10 -> 11)",
+        "✗ a drag that scrolls the list is not a press (12 -> 13)",
+        "✗ a drag that scrolls the list is not a press (10 -> 11) (02-19-32 run)"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/StepperModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiStepper.kt",
+      "mutation": "`publishedProgress` answers the `Double` instead of the `Float` the node carries",
+      "before": "    get() = displayed.toFloat().toDouble()",
+      "after": "    get() = displayed",
+      "run": "test:native:android — FAIL, 2 of 11 in StepperModelTest (3 s)",
+      "redTests": [
+        "aReaderAskingForTheValueAlreadyHeldMovesNothing FAILED",
+        "theFloatRoundTripIsWhatMakesThatFixtureMeanAnything FAILED — the fixture's own sanity vector, which is the assertion that the number under test is not the number the node publishes"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/StepperModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiStepper.kt",
+      "mutation": "`applyDefaultOnce` moves the drawn value and not the handshake's copy",
+      "before": "    displayed = shown\n    state.displayed = shown\n    return true",
+      "after": "    displayed = shown\n    return true",
+      "run": "test:native:android — FAIL, 4 of 11 in StepperModelTest (2 s)",
+      "redTests": [
+        "aDefaultMovesTheDrawnValueAndTheHandshakeTogether FAILED",
+        "theFirstControlledWriteAfterADefaultIsJudgedAgainstTheDefault FAILED",
+        "aDefaultThatSaysTheSameThingAsTheControlIsNoChange FAILED",
+        "aDefaultIsQuantisedLikeEveryOtherWriteToTheShownValue FAILED"
+      ]
+    },
+    {
+      "test": "scripts/native-tests/stepper-binding.test.swift › trackBounds",
+      "file": "ios/components/Stepper/NitroUiStepperBinding.swift",
+      "mutation": "the bounds are handed to SwiftUI raw, which is what the file did before the fix",
+      "before": "    let low = NitroUiSliderValue.tidy(Swift.min(minimum, maximum))\n    let high = NitroUiSliderValue.tidy(Swift.max(minimum, maximum))",
+      "after": "    let low = Swift.min(minimum, maximum)\n    let high = Swift.max(minimum, maximum)",
+      "run": "test:native — FAIL, stepper-binding.test: 4 failure(s)",
+      "redTests": [
+        "FAIL a maximum of 0.1 + 0.2 is handed over as 0.3, the value the control shows",
+        "FAIL the same hair on a minimum is tidied too",
+        "FAIL the bound is the grid's top stop, not a value above it",
+        "FAIL the tidied bound is not the raw prop (fixture sanity)"
+      ]
+    },
+    {
+      "test": "scripts/native-tests/press-travel.test.swift",
+      "file": "ios/core/NitroUiPressTravel.swift",
+      "mutation": "the travel check never fires, so only leaving the box ends a press",
+      "before": "    let travelled = abs(point.x - origin.x) > Self.limit\n      || abs(point.y - origin.y) > Self.limit",
+      "after": "    let travelled = false",
+      "run": "test:native — FAIL, press-travel.test: 3 failure(s)",
+      "redTests": [
+        "FAIL 40 pt sideways is not a press either, whatever it scrolls",
+        "FAIL half a point past the limit is not",
+        "FAIL the limit is on both axes, not only the one a vertical list scrolls"
+      ]
+    }
+  ],
+  "notAMutation": [
+    {
+      "finding": "The first version of the Android drag guard was a vertical flick, and it PASSED (`a drag that starts on the row is a scroll, not a press (10 -> 10)`, real-input:android:--control:form, tree 06fc809409d7) with the Form row's touch-slop rule switched off. A list that can scroll intercepts the touch and answers the row with `ACTION_CANCEL`, so the flick never reaches the row's own decision — the guard had no teeth against this library's code. It now also asserts the list really moved, and a sideways drag (which no vertical container intercepts) is the one the slop rule answers. Same mutation, row 4, turns that red."
+    },
+    {
+      "finding": "testRealInputForm's three taps after the drag asserted an absolute 1…3 on form-row-presses, which the earlier taps had left at 11: red in the full real-input:ios run (real-input+ios-2026-11-13T03-17-26.340Z.log, `it reads \"12\"`), green after 6ba02df3 counts from the echo's current value."
+    }
+  ]
+}

@@ -1,0 +1,177 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-13T01:13:57.102Z on code tree `3d9a87263267` at HEAD `4aaf24b` (branch `task/X32-review-debt`)
+- Command: `bun run check`
+- Result: fail, exit 1, 161818 ms
+- Load: start 68.72, end 15.81, median 42.76, max 71.91
+- Device: android / device `emulator-5574` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/check-2026-11-13T01-13-56.088Z.log` (<store>/task/X32-review-debt/check-2026-11-13T01-13-56.088Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/bench-baseline-merge.test.js (79.535 s)`
+- `● run.mjs refuses an incomparable merge before booting › refuses a thin launch count, and lets --force past it to the device`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "No attached emulator"`
+- `Received string:    "fatal: not a git repository (or any of the parent directories): .git`
+- `Error: lease: ANDROID_SERIAL=emulator-5599 and EMULATOR_PORT=5574 disagree about which emulator this run owns. Re-source the lease file ('source <(node scripts/lease.mjs acquire ...)') rather than exporting one of them by hand.`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3296 — the rest is in the full log above)
+
+```
+PASS eslint-rules/__tests__/rules.test.js
+PASS src/__tests__/iconName.test.tsx
+  ● Console
+
+    console.warn
+      nitro-ui: Button's androidIcon "a|b" is not a valid Android resource name — lower-case letters, digits and underscores only, and not starting with a digit. Nothing will be drawn for it. See docs/components/button.md, "Android icons".
+
+      84 |   }
+      85 |   warnedNames.add(key);
+    > 86 |   console.warn(
+         |           ^
+      87 |     `nitro-ui: ${componentName}'s ${propName} "${name}" ${problem}. ` +
+      88 |       `Nothing will be drawn for it. See docs/components/button.md, "Android icons".`
+      89 |   );
+
+      at warn (src/iconName.ts:86:11)
+      at Button (src/components/Button/Button.tsx:306:24)
+      at Object.react_stack_bottom_frame (node_modules/react-reconciler/cjs/react-reconciler.development.js:19204:20)
+      at renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:5549:22)
+      at updateFunctionComponent (node_modules/react-reconciler/cjs/react-reconciler.development.js:7969:19)
+      at beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:9591:18)
+      at runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:2663:13)
+      at performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:16674:22)
+      at workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16500:41)
+      at renderRootSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16481:11)
+      at performWorkOnRoot (node_modules/react-reconciler/cjs/react-reconciler.development.js:15540:11)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-reconciler/cjs/react-reconciler.development.js:3520:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:664:34)
+      at node_modules/react/cjs/react.development.js:923:21
+
+PASS src/__tests__/segmentedControl.test.tsx
+PASS scripts/__tests__/app-launch-env.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/pod-install.test.js
+PASS src/__tests__/hostInertStyles.test.tsx
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/bench-machine.test.js
+PASS scripts/__tests__/free-lsof-stub.test.js
+PASS src/__tests__/harnessHandles.test.ts
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS src/__tests__/dialog.test.tsx
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS src/__tests__/materialTheme.test.ts
+PASS src/__tests__/hostReport.test.tsx
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS scripts/__tests__/harness-isolated.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS src/__tests__/NitroUiCore.test.ts
+PASS scripts/__tests__/native-tests-android-skip.test.js (5.456 s)
+PASS scripts/__tests__/device-ops.test.js (11.372 s)
+PASS scripts/__tests__/gate.test.js (57.638 s)
+PASS scripts/__tests__/gate-logs.test.js (67.466 s)
+PASS scripts/__tests__/ci-workflows.test.js (74.607 s)
+FAIL scripts/__tests__/bench-baseline-merge.test.js (79.535 s)
+  ● run.mjs refuses an incomparable merge before booting › refuses a thin launch count, and lets --force past it to the device
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "No attached emulator"
+    Received string:    "fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    Merge:     deferred - Android system image cannot be known before the run starts, so it is checked against the file again after it
+    Merge:     deferred - ART compile state cannot be known before the run starts, so it is checked against the file again after it
+    file://<tmp>/bench-run-H2A7lq/scripts/lease-core.mjs:629
+          throw new Error(
+                ^·
+    Error: lease: ANDROID_SERIAL=emulator-5599 and EMULATOR_PORT=5574 disagree about which emulator this run owns. Re-source the lease file (`source <(node scripts/lease.mjs acquire ...)`) rather than exporting one of them by hand.
+
+      at checkEmulatorEnv (file:<tmp>/bench-run-H2A7lq/scripts/lease-core.mjs:629:13)
+      at requireLeaseDevice (file:<tmp>/bench-run-H2A7lq/scripts/lease-core.mjs:733:27)
+      at resolveAndroidDevice (file:<tmp>/bench-run-H2A7lq/scripts/bench/devices.mjs:192:18)
+      at main (file:<tmp>/bench-run-H2A7lq/scripts/bench/run.mjs:930:47)
+      at file:<tmp>/bench-run-H2A7lq/scripts/bench/run.mjs:1294:9
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)·
+      Node.js v24.22.1
+      "
+      at Object.toContain (scripts/__tests__/bench-baseline-merge.test.js:1694:26)
+
+PASS scripts/__tests__/bench-gate.test.js (153.441 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/bench-baseline-merge.test.js (79.535 s)
+  ● run.mjs refuses an incomparable merge before booting › refuses a thin launch count, and lets --force past it to the device
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "No attached emulator"
+    Received string:    "fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    fatal: not a git repository (or any of the parent directories): .git
+    Merge:     deferred - Android system image cannot be known before the run starts, so it is checked against the file again after it
+    Merge:     deferred - ART compile state cannot be known before the run starts, so it is checked against the file again after it
+    file://<tmp>/bench-run-H2A7lq/scripts/lease-core.mjs:629
+          throw new Error(
+                ^·
+    Error: lease: ANDROID_SERIAL=emulator-5599 and EMULATOR_PORT=5574 disagree about which emulator this run owns. Re-source the lease file (`source <(node scripts/lease.mjs acquire ...)`) rather than exporting one of them by hand.
+
+      at checkEmulatorEnv (file:<tmp>/bench-run-H2A7lq/scripts/lease-core.mjs:629:13)
+      at requireLeaseDevice (file:<tmp>/bench-run-H2A7lq/scripts/lease-core.mjs:733:27)
+      at resolveAndroidDevice (file:<tmp>/bench-run-H2A7lq/scripts/bench/devices.mjs:192:18)
+      at main (file:<tmp>/bench-run-H2A7lq/scripts/bench/run.mjs:930:47)
+      at file:<tmp>/bench-run-H2A7lq/scripts/bench/run.mjs:1294:9
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)·
+      Node.js v24.22.1
+      "
+      at Object.toContain (scripts/__tests__/bench-baseline-merge.test.js:1694:26)
+
+
+Test Suites: 1 failed, 87 passed, 88 total
+Tests:       1 failed, 2092 passed, 2093 total
+Snapshots:   0 total
+Time:        154.304 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 161.8 s
+gate: recorded in .gates/task/X32-review-debt.jsonl
+
+```

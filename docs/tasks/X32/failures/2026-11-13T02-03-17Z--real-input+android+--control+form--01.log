@@ -1,0 +1,195 @@
+# Failure excerpt — real-input:android:--control:form
+
+- Ran: 2026-11-13T02:03:17.485Z on code tree `a0c67cd8c120` at HEAD `65ae9a0` (branch `task/X32-review-debt`)
+- Command: `node scripts/real-input/android.mjs --control form`
+- Result: fail, exit 1, 918822 ms
+- Load: start 8.52, end 16.99, median 8.52, max 27.71
+- Device: android / device `emulator-5574` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-03-16.872Z.log` (<store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-03-16.872Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a real tap on the row after both drags: 3 real taps left form-row-presses at "10" rather than "11" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-03-16.872Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X32-9xk2j (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 16.67 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 148 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:form
+gate: node scripts/real-input/android.mjs --control form (cwd .)
+gate: code tree a0c67cd8c120 at HEAD 65ae9a09
+gate: git tree c34dddba5df7 with a DIRTY worktree (not reusable)
+gate: log task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-03-16.872Z.log
+gate:       <store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-03-16.872Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Stepper" (tab-stepper) is 73.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "List items" (tab-listitem) is 85.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  form: real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard
+    ✓ the Form screen starts with nothing pressed ({"rows":"0","inner":"0","outside":"0","changes":"0","value":"off"}) — expected 0/0/0/0/off, saw 0/0/0/0/off
+    · "Row with onPress" occupies 32,742 → 1049,889
+    ✓ ten real taps on a row are ten presses, and nothing else fired — expected 10/0/0, saw 10/0/0
+    · "Press me inside a row" occupies 106,1068 → 586,1171
+    ✓ ten real taps inside a row are ten presses, and its row stayed put — expected 10/10, saw 10/10
+    · "Airplane mode" occupies 838,1240 → 975,1324
+    ✓ ten real taps on the Switch are ten changes and are back where they started — expected 10/off, saw 10/off
+    · "Row with no onPress" occupies 74,910 → 1007,1025
+    ✓ a row without onPress does not press — expected 10, saw 10
+    · "Outside the form" occupies 32,514 → 1049,628
+    ✓ and input is alive: a tap outside the Form is one press — expected 1, saw 1
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · flick on a pressable row: 420 px up from y 815.5 of the row at 742-889, echo "10" -> "10", row moved 98 px up
+    ✓ the flick really scrolled the list (98 px) — without this the check below could pass on a page that never moved
+    ✓ a drag that scrolls the list is not a press (10 -> 10) — a row that fires on a scroll takes the person to a screen they only meant to scroll past — expected 10, saw 10
+    · "Row with onPress" occupies 32,644 → 1049,236
+    · slide across a pressable row: 509 px right along y 440 of the row at 644-236, echo "10" -> "10"
+    ✓ a drag that slides along the row is not a press (10 -> 10) — a thumb that wanders across a row and lifts did not choose it, and no list is rescuing this gesture on Android — expected 10, saw 10
+    · a real tap on the row after both drags: tap 1/3 on "form-row-presses" left "10" - tapping again
+    · a real tap on the row after both drags: tap 2/3 on "form-row-presses" left "10" - tapping again
+    · a real tap on the row after both drags: tap 3/3 on "form-row-presses" left "10" - tapping again
+    ✗ a real tap on the row after both drags: 3 real taps left form-row-presses at "10" rather than "11" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][367,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:icon-button: IconButton a11y
+    ✓ NitroUiIconButton is named on one node a person can act on
+
+  a11y:button-group: ButtonGroup a11y
+    ✓ NitroUiButtonGroup is named on one node a person can act on
+
+  a11y:stepper: Stepper a11y
+    · known failing (G25 a11y: the Stepper's RangeInfo node is not actionable in a dump): NitroUiStepper: the node that carries "Real-input stepper" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,770][315,896]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiStepper has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2185][1038,2311]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2241][535,2367]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:search-field: SearchField a11y
+    ✓ NitroUiSearchField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+  a11y:form: Form a11y
+    ✓ NitroUiForm is named on one node a person can act on
+
+  a11y:list-item: ListItem a11y
+    ✓ NitroUiListItem is named on one node a person can act on
+
+form: FAIL (no retries)
+    failed: a real tap on the row after both drags: 3 real taps left form-row-presses at "10" rather than "11" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes.
+
+real-input (android): 0/1 controls passed · 0 input sequence(s) needed a retry · 25/25 auxiliary checks passed
+gate: real-input:android:--control:form FAIL in 918.8 s
+gate: recorded in .gates/task/X32-review-debt.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-03-16.872Z.log (5 probe(s))
+
+```
