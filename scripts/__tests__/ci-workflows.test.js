@@ -64,6 +64,8 @@ function triggers(file) {
  * commands on a macOS test host (`timeout(1)` is not installed there, and these tests
  * run the step for real). So the thing under test is this file.
  */
+const DIAGNOSTICS_SCRIPT = path.join('scripts', 'ci-emulator-diagnostics.mjs');
+
 /**
  * How long the hanging `-accel-check` stub stays alive, in seconds — which is also how many
  * `sleep 1`s that is, since sleeping is all the stub does.
@@ -73,7 +75,6 @@ function triggers(file) {
  * against the thing it is a fraction of and cannot drift out of step with the fixture.
  */
 const HANGING_ACCEL_STUB_SLEEPS = 40;
-const DIAGNOSTICS_SCRIPT = path.join('scripts', 'ci-emulator-diagnostics.mjs');
 
 function diagnosticsScript() {
   return fs.readFileSync(path.join(root, DIAGNOSTICS_SCRIPT), 'utf8');
@@ -1087,7 +1088,8 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
             '/bin/echo "SANDBOX_ACCEL_HANG ran: $*" >&2',
             // Self-limiting rather than `sleep 600`: the mutation this case exists to
             // catch leaves the step body with nothing to kill it, and a stub that outlives
-            // the test is an orphan on a machine running other tasks' emulators. Long
+            // the test is an orphan on a machine running other tasks' emulators.
+            //
             // Long enough to outlast any budget the step might honestly set, by many
             // `sleep 1`s — and the deadline case states its own allowance as a fraction of
             // this number, so the two cannot drift apart. (Not because a sleep stretches

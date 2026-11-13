@@ -156,11 +156,72 @@ unbounded body), and `gaveUpOnTheTool: false` with the command the guard names t
 - `@react-native-harness/platform-apple`: the real fix for item 3 is upstream in
   `HarnessUI.mm:277`, and this repo already patches that package — the wrapper is the indirect
   route the brief asked for.
-- `MENU_ROOM_SLOP_DP` is a false-red guard, not a graded rule: no fixture sits in the band it
-  widens (removing it keeps all 8 cases green), which is deliberate — a fixture there would grade
-  Material's exact flip decision, which is not this check's claim.
+- ~~`MENU_ROOM_SLOP_DP` is a false-red guard, not a graded rule~~ — **wrong, and fixed in fix
+  round 1.** The band it widens is where the check is genuinely uncertain, so it is graded: two
+  fixtures sit on its edges now, and removing the slop turns both red. What round 1 wrote there
+  described a rule that added the slop to the room (`roomBelow + slop >= menuHeight`), which is the
+  wrong direction: it hid the ~300 px in which Material's surface does not fit although the rows do.
+  See `MENU_ROOM_SLOP_DP` and `### Red proofs (fix round 1)`.
 - Real input on iOS is load-sensitive in two specific places, and they are worth one owner rather
   than five task rediscoveries: the a11y sweep's `tab <x> is still outside the window` wait and the
   popover's three-tap retry. Three different controls failed across tonight's two red `real-input:ios`
   runs and no control failed twice; the green third run, on the same pair with the app reinstalled,
   needed no retry at all. Neither has a line in `docs/tasks/FOLLOWUPS.md` yet.
+
+## Fix round 1
+
+**1 · The room slop ran the wrong way.** `roomBelow + roomSlopPx >= menuHeight` asked whether the
+room *plus* an allowance covered the rows, so it took the slop off what Material needs. Material
+opens below only when its whole surface fits under the anchor — the rows plus their padding,
+shadow and M3's 48 dp window margin — so there was a band about 300 px wide in which a correct
+above-placement read as `wrongSide`, and `centreOnScreen`'s give-up-after-4-scrolls anchor can sit
+in it. Three ranges now: under the menu's own height means above, the height plus the slop means
+below, and between them either side is accepted and the check says nothing. Both edges are
+fixtures, and the band's case grades *both* placements inside it, so this is not a failure moved
+somewhere else.
+
+**2 · The judge graded a box the tap did not use.** The check keeps `aimed` — the box its own
+`requireControlAt` last returned, which is the one `tapNode` pressed — and hands that to the judge
+and to the note beside it. `centreOnScreen` now returns only a box two consecutive dumps agree on,
+and an anchor that never came to the middle says how far off it was in the graded line, not in a
+note two lines above.
+
+**3 · The E1 and E4 calls are guards, and now say so** — with the distinction next to the counter
+and at each call: the churn case is the witness, `giveUpCell`'s only call site is the `else` of a
+guard on a one-case enum, and E1 removes a row, never a Section.
+
+**4 ·** The accel allowance is half the hanging stub's life and is called a fixed allowance, because
+a `sleep 1` is a timer and obeys no law the guard does; `pressAimed` passes the refusal as
+`{ cause }` when the box lookup itself throws; and `wrongSide` is one sentence naming both numbers
+it weighed.
+
+### Red proofs (fix round 1)
+
+- `real-input-menu-placement.test.js` (10 cases) -> round 1's one-line rule restored
+  (`roomBelow + slop >= menuHeight`) -> `accepts either side when the room below fits the rows but
+  not the menu's surface`: `expected false to be true` at `expect(up.ok).toBe(true)`, and `rejects a
+  menu that opened below with a pixel less room than the menu needs`: `expected true to be false` at
+  `expect(seen.ok).toBe(false)`. The other 8 stayed green, which is the difference between a band
+  and a failure moved somewhere else. Restored: 10/10.
+- `ci-workflows.test.js` "does not wait forever" -> `kill -KILL "$pid"` taken out of `bounded()` in
+  `.github/workflows/ci.yml`, so the guard prints its complaint and then waits for the tool ->
+  `expect(patienceMs).toBeLessThan(allowanceMs)` with `patience=39000ms allowance=20120ms`, while
+  `gaveUpOnTheTool`, `printedRest` and the exit status above it all held. The healthy run reads
+  `patience=992ms`, so widening the line to half the stub's life costs nothing a working guard pays.
+- `Form.harness.tsx` E1 and E4 -> `giveUps += 1` on the line every cell ask runs, not on a
+  stale-Section branch -> `harness:ios:Form.harness`: `expected 9 to be 0` at
+  `expect(num(report, 'giveUps')).toBe(0)` for **both E1 calls and for E4**, with the churn at
+  `expected 8 to be 0`. E3 also went red (its row-height wait never satisfied, `giveUps=9`), which
+  is why this grades the *wiring* of those calls and not a branch they reach — said so in the
+  comment above them.
+- `real-input:android:--control:hosted-picker` -> the check scrolls 300 px between the centre read
+  and the tap, and hands the judge the box from before the drift ->
+  `✗ the menu sits against the box the Host drew … (wrongSide: menu 1212..1517, anchor 1319..1487,
+  window 2424: a menu of 305 px opened above its anchor with 937 px of window under it … it should
+  have opened below)`, next to the runner's own `moved from 42,1319 → 777,1487 to 42,986 → 777,1154
+  - the tap is aimed at the new box`. Graded against the box the tap used those same numbers are 58
+  px, inside the 84 px band — so the red is the stale box and not the scroll. This run is also the
+  first real-device sighting of the new `wrongSide` sentence.
+- Not claimed: `pressAimed`'s `{ cause }` has no red proof. Nothing makes `queryByTestId` throw in
+  any case here — the change is that when it does, upstream's refusal survives as the cause instead
+  of becoming the whole message.
