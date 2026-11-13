@@ -93,6 +93,24 @@ export function withoutLeaseEnv(env) {
 }
 
 /**
+ * `process.env`, minus this shell's lease, plus what one test wants the child to see.
+ *
+ * The one spelling of "the environment I hand a CLI child". Suites that assembled
+ * `{ ...process.env, … }` by hand are how X32 and X33 lost their `check`: the child was a real
+ * device-aware CLI (`bench/run.mjs`), the test overrode half of the device it named
+ * (`ANDROID_SERIAL`), and `checkEmulatorEnv` refused the pair the two halves described. With one
+ * helper, the scrub and the test's own values arrive together and in the right order — `extra`
+ * always wins, so a case that *means* to hand a child a lease still can.
+ *
+ * @param {Record<string, string>} [extra] the test's own environment, spread last
+ * @param {NodeJS.ProcessEnv} [base] usually `process.env`
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function childEnv(extra = {}, base = process.env) {
+  return { ...withoutLeaseEnv(base), ...extra };
+}
+
+/**
  * The names a test can assert a child never saw, in the form a child prints them.
  *
  * Derived from the same two lists the scrub uses, so a guard that enumerates them cannot drift
