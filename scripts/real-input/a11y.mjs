@@ -477,6 +477,13 @@ export const A11Y_CONTROLS = Object.freeze([
     // cell's label and deriving it on every read give the same XCUITest tree, byte for byte.
     // That is the debt row below, and the reason this case is not deleted: the day UIKit is
     // made to answer, the row goes stale.
+    //
+    // X32 counted the same subtree on pair-a while settling what `docs/components/form.md`
+    // is allowed to say: **six elements** — the named view (trait `other`), one unnamed
+    // element over the same box, and the row's two texts, each listed twice — with no
+    // `.button` trait anywhere in it. Two independent walks (this pass and
+    // `logFormRowAccessibilityTree` in the Form's own case) print the same six, so the
+    // number is the tree and not the reader.
     label: 'Row with onPress',
     role: 'interactive',
     anchorTestId: 'form-row',
