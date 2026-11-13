@@ -40,6 +40,7 @@ import { screen, userEvent } from '@react-native-harness/ui';
 import { Form } from '../../src/components/Form/Form';
 import { useSelfSizingBaseStyle } from '../../src/core/useSelfSizing';
 import { Switch } from '../../src/components/Switch/Switch';
+import { pressAimed } from './aimedPress';
 import { forgetPromisedHandles, handleOf } from './handles';
 
 const IOS = Platform.OS === 'ios';
@@ -214,6 +215,60 @@ async function drawnOnScreen(step: string, which = 'form') {
 
 async function formRef(): Promise<FormHandle> {
   return handleOf(() => forms.form, 'the Form');
+}
+
+/**
+ * Fail if this Form's providers had to answer with something they did not have.
+ *
+ * `giveUps` counts the times a cell or a band provider was asked for an item its models had
+ * already forgotten and answered with a blank of the list's own registration — the branch
+ * that keeps the app up when the list's snapshot and the mount stream disagree
+ * (`HybridNitroUiForm.giveUpCell`, and the three sibling branches beside it). Nothing else in
+ * these cases asserts it: what they assert are the *symptoms* a give-up used to produce —
+ * the churn case is red when the answer is a view nobody dequeued, E1 and E4 when the answer
+ * is a row missing from its cells. Those are witnesses, not the count, and they go quiet as
+ * soon as the give-up is answered well enough for the layout to recover, which is exactly
+ * what the X25 and X29 rounds made it do. A Form that quietly gave up twice and redrew
+ * itself correct on the next settle is a Form with a bug nobody can see.
+ *
+ * So it is asserted on the cases that churn a Form on purpose. What each of those calls is
+ * worth is not the same, and the difference is stated where it is read rather than here:
+ *
+ * - the churn case is a *witness*. Round 1's mutation — count a give-up wherever the cell
+ *   provider is asked about a row whose Section has gone — turned it red at 8 give-ups, which
+ *   is the counter agreeing with a window that case really opens.
+ * - E1 and E4 are *guards*. Neither removes a Section, and the four branches that increment
+ *   this counter are a stale Section, two casts that cannot fail with the classes `makeList`
+ *   registers, and the `else` of a guard on an enum with one case. No branch here reaches 0 by
+ *   the case's own doing: the same mutation left them green. They are wired (the same
+ *   mutation, moved to a line every cell ask runs, turns both red at their own
+ *   `expectNoGiveUps`), and they fail if a future version of the Form starts giving up here.
+ *
+ * iOS only: Android's Form has no cells to answer with a blank and counts no give-ups.
+ *
+ * Printed before it is graded, like the press case: on red the numbers beside it say which
+ * disagreement the give-up came out of, which `1 !== 0` does not.
+ */
+function expectNoGiveUps(report: Record<string, string>, step: string): void {
+  if (!IOS) return;
+  console.log(
+    `FORM GIVE-UPS ${step}: ` +
+      [
+        'giveUps',
+        'rows',
+        'items',
+        'sections',
+        'inCells',
+        'claims',
+        'wrongCells',
+        'losses',
+        'applies',
+        'alive',
+      ]
+        .map((key) => `${key}=${report[key] ?? '-'}`)
+        .join(';')
+  );
+  expect(num(report, 'giveUps')).toBe(0);
 }
 
 /**
@@ -832,6 +887,10 @@ describe('Form (G24)', () => {
     // Every row view in a section is a row the Form was told about. The shape a phantom
     // takes - a recycled component view registered by a recovery scan - is exactly this.
     if (IOS) expect(num(report, 'stale')).toBe(0);
+    // Mounted, laid out, and nothing had to be answered with a blank on the way here. A
+    // guard rather than a witness — a clean mount never opens a stale-index window, so
+    // nothing in this case can make this counter move on its own. See `expectNoGiveUps`.
+    expectNoGiveUps(report, 'E1 at rest');
   });
 
   it('keeps the tree intact through an insert, a removal and 50 scrolls (E1)', async () => {
@@ -1008,6 +1067,16 @@ describe('Form (G24)', () => {
       );
       expect(home.where).toBe('cell');
     }
+    // The counter runs for the whole mount, so one read at the end is a claim about every
+    // insert, removal, reorder and one of the 50 scroll cycles above - each of which is a
+    // window in which the list can be holding an index path the models have let go of. It is
+    // a guard at the end of a run rather than a witness in one: this case removes a *row*,
+    // never a Section, and the give-up branches need a Section to have gone (see
+    // `expectNoGiveUps` — the churn case is the one with a red proof behind its count).
+    expectNoGiveUps(
+      parse(need(forms.form).nuiTestFormReport()),
+      'E1 after an insert, a removal, a reorder and 50 cycles'
+    );
   });
 
   it('gives a row the height its content needs, before and after it grows (E3)', async () => {
@@ -1141,12 +1210,21 @@ describe('Form (G24)', () => {
       // nothing. A hosted control takes all ten for a third reason: it is a native control, and
       // it answers for its own point without React Native in the path at all.
       for (let index = 0; index < 10; index += 1) {
-        await userEvent.press(aim.pressable);
-        await userEvent.press(aim.toggle);
+        await pressAimed(aim.pressable, 'inner-press');
+        await pressAimed(aim.toggle, 'switch-silent');
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
       expect(probe.log.pressable).toBe(10);
       expect(probe.log.switches).toBe(10);
+      // Twenty presses, each landing on whichever view UIKit says owns the point, and no
+      // cell had to be filled with a blank on the way. Read here rather than at the end of
+      // the case: the positive control below unmounts this Form. A guard, not a witness —
+      // nothing a press does reaches a give-up branch today, so what this catches is a Form
+      // that starts needing one while rows are being pressed (see `expectNoGiveUps`).
+      expectNoGiveUps(
+        parse(need(forms.form).nuiTestFormReport()),
+        'E4 after twenty presses into row content'
+      );
       // The positive control: the very same two callbacks, outside any Form, where React
       // Native's hit-test has its content where it is drawn. Both counters are the ones the
       // loop above just drove ten times, so this is graded as a delta.
@@ -1166,21 +1244,28 @@ describe('Form (G24)', () => {
       // copy that is going away — an aim whose view leaves with it is pressed at wherever its last
       // frame was, which is the pair of texts above rather than a control.
       await oneLiveViewPer(['loose-press', 'loose-switch']);
-      await userEvent.press(await boxOf('loose-press'));
-      await userEvent.press(await boxOf('loose-switch'));
+      await pressAimed(await boxOf('loose-press'), 'loose-press');
+      await pressAimed(await boxOf('loose-switch'), 'loose-switch');
       expect(probe.log.pressable - loose.pressable).toBe(1);
       expect(probe.log.switches - loose.switches).toBe(1);
       return;
     }
     for (let index = 0; index < 10; index += 1) {
-      await userEvent.press(pressable);
-      await userEvent.press(toggle);
+      await pressAimed(pressable, 'inner-press');
+      await pressAimed(toggle, 'switch-silent');
     }
     expect(probe.log.pressable).toBe(10);
     expect(probe.log.switches).toBe(10);
     expect(probe.log.silent).toBe(true);
     // The row stayed where it belongs after ten taps in its content.
     expect(parse(need(forms.form).nuiTestFormReport()).orphans).toBe('0');
+    // The same claim as the iOS branch above. `giveUps` is an iOS counter — Android's Form
+    // has no cells to answer with a blank — so this is the branch's own no-op, kept in place
+    // so the case says the same thing about both platforms in one line each.
+    expectNoGiveUps(
+      parse(need(forms.form).nuiTestFormReport()),
+      'E4 after twenty presses into row content'
+    );
   });
 
   it('mounts 20 and 50 rows in one apply and no more views than rows (E6)', async () => {
@@ -1258,6 +1343,11 @@ describe('Form (G24)', () => {
         'churn'
       );
       if (IOS) await drawnOnScreen(step, 'churn');
+      // Graded on every settle rather than once at the end, because the counter is a
+      // mount's own and the loop drops and remounts the Form four times: the report read
+      // after the remount says nothing about the give-ups the teardown before it caused.
+      // Each of these four settles is one of the shapes the case exists to visit.
+      expectNoGiveUps(report, `churn ${step}`);
       return report;
     };
 
@@ -1348,6 +1438,16 @@ describe('Form (G24)', () => {
       'the Section that took the churn seat to hold its row'
     );
     expect(Number(refilled.rows)).toBe(1);
+    // And it took the seat without the list having to answer with a blank. This Form mounts
+    // into the list the churn dropped, whose snapshot still holds the items and bands of the
+    // Form that just ended — which is the shape the band give-up branch was written for, so
+    // the seat being refilled with one row is only half of what this step can say.
+    const refilledForm = await formReport(
+      (r) => num(r, 'rows') === 1,
+      'the Form that took the churn seat to answer for its own row',
+      'one'
+    );
+    expectNoGiveUps(refilledForm, 'churn seat refilled');
     next.unmount();
   });
 
@@ -1732,6 +1832,66 @@ describe('Form (G24)', () => {
       'the app to still answer after a scrolled Form left the window'
     );
     expect(alive.where).toBeDefined();
+  });
+
+  it('names the aim when a press is refused (X31)', async () => {
+    // iOS only, because only iOS refuses one: the Android module resolves the promise with
+    // whatever it injected, so on that platform this case could only assert that nothing
+    // happened.
+    if (!IOS) return;
+    // A press the platform has to refuse, made on purpose. The view is mounted 6 000 pt down,
+    // so the native side resolves the identifier to a real box, hit-tests its centre outside
+    // the window's bounds, and gets nothing back — the branch whose text used to be two
+    // zeros whatever was aimed at. Being refused is the only way to see what `pressAimed`
+    // adds, and a case that grades a message nobody produced passes for free.
+    render(
+      <View
+        testID="aimed-off-window"
+        style={{
+          position: 'absolute',
+          left: 40,
+          top: 6000,
+          width: 120,
+          height: 60,
+        }}
+      >
+        <Text>far below the window</Text>
+      </View>
+    );
+    const target = await boxOf('aimed-off-window');
+    let message: string | null = null;
+    try {
+      await pressAimed(target, 'aimed-off-window');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    if (message == null) {
+      throw new Error(
+        'the off-window press was accepted, so there was no rejection to grade — the aim is ' +
+          'named only on the branch that refuses'
+      );
+    }
+    // Printed before graded, as everywhere else in this file.
+    console.log(`FORM AIM refusal message: ${message}`);
+    // What it was aimed at, by name and by id: the two things the upstream string cannot
+    // carry because the JS side never sends them over the bridge.
+    expect(message).toContain('aimed-off-window');
+    expect(message).toContain('nativeId=');
+    // And the point that was pressed, which is the number the old text refused to print. The
+    // fixture is `left: 40, top: 6000, 120 x 60`, so its centre is (100, 6030) give or take
+    // wherever the root view sits under the status bar — tens of points, never hundreds, and
+    // a shift of hundreds is exactly what reading the number is for. Zeros, or no centre at
+    // all, is the regression this line exists for.
+    const centre = message.match(
+      /centre is \((-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)\)/u
+    );
+    expect(centre).not.toBeNull();
+    expect(Number(centre?.[1])).toBeGreaterThanOrEqual(99);
+    expect(Number(centre?.[1])).toBeLessThanOrEqual(101);
+    expect(Number(centre?.[2])).toBeGreaterThanOrEqual(6000);
+    expect(Number(centre?.[2])).toBeLessThanOrEqual(6100);
+    // Upstream's own words survive the wrapping: the diagnosis adds, it does not replace.
+    expect(message).toContain('No view found at point');
   });
 });
 

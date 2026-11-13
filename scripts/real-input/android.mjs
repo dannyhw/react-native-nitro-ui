@@ -40,6 +40,11 @@ import {
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { judgePopupPlacement } from './popover-placement.mjs';
+import {
+  MENU_NEAR_GAP_DP,
+  MENU_ROOM_SLOP_DP,
+  judgeMenuAnchoring,
+} from './menu-placement.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -787,8 +792,21 @@ const CHECKS = {
     // match name a popup row.
     const CHOSEN = 'Beta';
     const PICK = 'Gamma';
+    const CHOICES = ['Alpha', CHOSEN, PICK];
 
-    const anchor = await t.requireControlOnScreen('Hosted picker');
+    // Pressed at the middle of the window rather than wherever the page happens to have
+    // come to rest, because the platform places this menu and places it by the room under
+    // the anchor: found on the lower fold, it opens above, and the claim below is then
+    // about the scroll position rather than about the Host. See [centreOnScreen].
+    const placed = await centreOnScreen(t, 'Hosted picker');
+    // The box the tap is actually aimed at. `requireControlAt` re-reads it on every attempt —
+    // the anchor repaints a wider title as soon as a pick lands — and `tapUntilUp` presses
+    // whatever its lookup last returned, so from the first tap onwards this is the box the
+    // Host drew under the finger, and not the one [centreOnScreen] read. The placement judge
+    // below has to be handed the same one: graded against a box the tap did not use, the check
+    // would be measuring a scroll rather than the menu, which is the thing this whole check was
+    // rewritten to stop doing.
+    let aimed = placed.node;
     t.log.checkEquals(
       'the hosted Picker shows the index JS gave it',
       t.requireEcho(ECHO.hostPickerIndex),
@@ -805,7 +823,7 @@ const CHECKS = {
     t.log.checkEquals(
       'a real tap on the hosted anchor opens the menu as a popup window',
       await t.tapUntilUp(
-        () => t.requireControlAt('Hosted picker', anchor),
+        () => (aimed = t.requireControlAt('Hosted picker', aimed)),
         'a real tap on the hosted anchor to open a popup window',
         () => t.popupWindowCount()
       ),
@@ -817,13 +835,62 @@ const CHECKS = {
         row.bounds.y1
       )} -> ${String(row.bounds.x2)},${String(
         row.bounds.y2
-      )}; hosted anchor at ${String(anchor.bounds.x1)},${String(
-        anchor.bounds.y1
-      )} -> ${String(anchor.bounds.x2)},${String(anchor.bounds.y2)}`
+      )}; hosted anchor tapped at ${String(aimed.bounds.x1)},${String(
+        aimed.bounds.y1
+      )} -> ${String(aimed.bounds.x2)},${String(aimed.bounds.y2)}`
     );
-    t.log.check(
-      'the menu opens below the top of the box the Host drew, not at the top of the screen',
-      row.bounds.y1 >= anchor.bounds.y1
+    // The menu's own extent, read from its rows. With the menu open the dump carries the
+    // popup's window and nothing else (see `uiautomator.mjs`), so every one of the fixture's
+    // three labels in it is a row of this menu, and their union box is the menu as a person
+    // sees it less the surface padding around it — which is what the room slop is for.
+    //
+    // Every row that answers is taken rather than an expectation of exactly three: a row that
+    // the tree names twice (its text node and its clickable node) must not turn a healthy menu
+    // into "the menu is not in the dump", and one row is already enough to say which side of
+    // the anchor the menu opened on. `waitForOption` above is what proves the menu is up.
+    const rows = t.dump().filter((node) => CHOICES.includes(node.text));
+    const menuBox =
+      rows.length === 0
+        ? null
+        : {
+            y1: Math.min(...rows.map((node) => node.bounds.y1)),
+            y2: Math.max(...rows.map((node) => node.bounds.y2)),
+            cy:
+              (Math.min(...rows.map((node) => node.bounds.y1)) +
+                Math.max(...rows.map((node) => node.bounds.y2))) /
+              2,
+          };
+    t.log.note(
+      `${String(rows.length)} menu row(s) in the dump, ${
+        menuBox == null
+          ? 'none — nothing to measure the placement against'
+          : `${String(menuBox.y1)}..${String(menuBox.y2)} against the anchor the tap used, ` +
+            `${String(aimed.bounds.y1)}..${String(aimed.bounds.y2)}`
+      }`
+    );
+    const placement = judgeMenuAnchoring({
+      menuBox,
+      // The box the tap was aimed at, for the reason given where `aimed` is declared: an
+      // anchor that moved between [centreOnScreen] and the press moves the room too, and the
+      // side of the window Material measured is the room under the box it was pressed in.
+      anchorBox: aimed.bounds,
+      windowHeight: t.screenSize().height,
+      nearGapMaxPx: Math.round(MENU_NEAR_GAP_DP * t.density()),
+      roomSlopPx: Math.round(MENU_ROOM_SLOP_DP * t.density()),
+    });
+    // Said here, in the graded line, and not only in a note two lines above: this check's
+    // verdict is a claim about where the anchor sat, and a placement judged on an anchor that
+    // never came to the middle has to read as such to whoever is looking at a red run.
+    const offCentre = placed.centred
+      ? ''
+      : `; NOTE the anchor would not come to rest in the middle - it was ${String(
+          placed.offCentre
+        )} px off it when this was judged`;
+    t.log.checkEquals(
+      `the menu sits against the box the Host drew, on the side that has room ` +
+        `(${placement.branch}: ${placement.detail}${offCentre})`,
+      placement.ok,
+      true
     );
     t.log.check(
       `the hosted menu marks the current choice ("${CHOSEN}") selected to TalkBack`,
@@ -851,9 +918,10 @@ const CHECKS = {
     );
 
     // 3. The way out that changes nothing. Aim again: choosing a row widens the title
-    //    the anchor paints, so the box this check has may be stale.
+    //    the anchor paints, so the box this check has may be stale — hence `aimed`, the box
+    //    the last tap really used, rather than the one [centreOnScreen] handed back.
     await t.tapUntilUp(
-      () => t.requireControlAt('Hosted picker', anchor),
+      () => (aimed = t.requireControlAt('Hosted picker', aimed)),
       'a real tap that reopens the hosted menu',
       () => t.popupWindowCount()
     );
@@ -7272,6 +7340,94 @@ async function positionWheel(t, label, echoIds) {
     );
   }
   return t.requireControl(label);
+}
+
+/**
+ * Bring a control's centre to the middle of the window, and hand back its node there.
+ *
+ * `requireControlOnScreen` stops as soon as a control's centre is *anywhere* inside the
+ * window, which is the right ask for a check whose only business is pressing it. It is the
+ * wrong ask for a check about to open a window that the platform places for itself:
+ * Material measures the room under an anchor and opens above it when there is none, so a
+ * control that was found on the lower fold decides where its menu appears, and a check that
+ * expects the menu under the anchor is at the mercy of wherever the previous check left the
+ * page. That is the shape `hosted-picker` failed twice in — the anchor at y 2242-2410 of a
+ * 2 424 px window, three option rows and no room under it.
+ *
+ * So this positions rather than finds, on the same principle as [positionWheel]: aim the
+ * band at the middle of the window, iterate because a 400 ms swipe carries momentum, and
+ * bound the loop because a control that cannot be centred is a control this page will not
+ * show, which the caller's own `requireControl` then says.
+ *
+ * Coming to rest inside the band is not the same as being at rest, and the caller is about to
+ * aim a tap and a placement judge at the box it is handed. A dump taken while the list is
+ * still coasting answers with a box that is already wrong — the page moves between this read
+ * and the tap, and `requireControlAt` then notes that the control "moved" and aims at the new
+ * box while everything else in the check still speaks of the old one. So a box inside the band
+ * is only handed back once a second read agrees with the first. The re-read is a second dump,
+ * about two seconds here, which happens to be the cheapest way to wait out a settle; if the
+ * two never agree the caller still gets a box, with `centred: false` so that its own message
+ * can say the anchor was nowhere near the middle when the side was judged.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} label the control's `accessibilityLabel`
+ * @returns {{ node: import('./uiautomator.mjs').UiautomatorNode, centred: boolean,
+ *   offCentre: number }} the control, whether it came to rest in the band, and how many px
+ *   off the middle its centre was when this gave up or settled
+ */
+async function centreOnScreen(t, label) {
+  const { height } = t.screenSize();
+  const middle = Math.round(height / 2);
+  // 12 % of the window: close enough that "is there room below?" has one clear answer for
+  // anything of a control's size, and far enough that a scroll with a little momentum left
+  // in it does not send the loop around again for nothing.
+  const slack = Math.round(height * 0.12);
+  // Both budgets are four. Scrolls because a page that will not come to the middle is a page
+  // this check has no business pressing; re-reads because a page that will not stop moving is
+  // the same story told by a box, and each re-read is another two seconds it had to settle in.
+  let scrolls = 0;
+  let rereads = 0;
+  let node = await t.requireControlOnScreen(label);
+  for (;;) {
+    const offset = node.bounds.cy - middle;
+    if (Math.abs(offset) > slack) {
+      if (scrolls >= 4) break;
+      await t.scrollPage(Math.max(-700, Math.min(700, offset)));
+      scrolls += 1;
+      node = t.requireControl(label);
+      continue;
+    }
+    const again = t.requireControl(label);
+    if (t.boundsText(again) === t.boundsText(node)) {
+      t.log.note(
+        `"${label}" centred for this check: centre ${String(
+          node.bounds.cy
+        )} of a ${String(height)} px window (within ${String(slack)} px of ${String(
+          middle
+        )}, ${String(scrolls)} scroll${scrolls === 1 ? '' : 's'}, ${String(
+          rereads
+        )} re-read${rereads === 1 ? '' : 's'} to agree on the box)`
+      );
+      return {
+        node,
+        centred: true,
+        offCentre: Math.abs(node.bounds.cy - middle),
+      };
+    }
+    // Still moving: the newer box is the one to test again, and it may well have left the
+    // band, in which case the loop scrolls rather than reading a third time.
+    node = again;
+    rereads += 1;
+    if (rereads >= 4) break;
+  }
+  const offCentre = Math.abs(node.bounds.cy - middle);
+  t.log.note(
+    `"${label}" would not come to rest in the middle - ${String(scrolls)} scrolls and ` +
+      `${String(rereads)} re-reads, and its centre is ${String(node.bounds.cy)} of a ` +
+      `${String(height)} px window, ${String(offCentre)} px off ${String(middle)}. The ` +
+      `caller is saying so in its own result.`
+  );
+  return { node, centred: false, offCentre };
 }
 
 /**

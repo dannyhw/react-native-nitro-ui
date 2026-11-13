@@ -76,6 +76,17 @@ export default defineConfig([
     },
     rules: {
       'no-undef': 'off',
+      // A string literal statement is what a broken `+` chain in a long help string
+      // looks like: `'…';` where `'… ' +` belongs ends the assignment one line early
+      // and leaves the rest of the literals as statements that parse, format and
+      // review clean. `gate.mjs`'s `USAGE` did exactly that (X30 fix round 1), so
+      // `--background`, the merge-reuse rule, `export` and `logs` lost their help
+      // without any tool complaining. Short-circuits and ternaries stay allowed —
+      // `cond && doThing()` is how these scripts end a branch.
+      'no-unused-expressions': [
+        'error',
+        { allowShortCircuit: true, allowTernary: true },
+      ],
     },
   },
   {

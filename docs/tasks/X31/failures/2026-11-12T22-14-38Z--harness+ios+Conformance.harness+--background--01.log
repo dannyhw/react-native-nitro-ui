@@ -1,0 +1,61 @@
+# Failure excerpt — harness:ios:Conformance.harness:--background
+
+- Ran: 2026-11-12T22:14:38.442Z on code tree `2501a6f37e89` at HEAD `9a2bd29` (branch `task/X31-test-flakes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance.harness --background`
+- Result: fail, exit 1, 1511 ms
+- Load: start 10.39, end 9.80, median 10.09, max 10.39
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X31-ptfed`
+- Full log: `task/X31-test-flakes/harness+ios+Conformance.harness+--background-2026-11-12T22-14-38.442Z.log` (<store>/task/X31-test-flakes/harness+ios+Conformance.harness+--background-2026-11-12T22-14-38.442Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X31-test-flakes/harness+ios+Conformance.harness+--background-2026-11-12T22-14-38.442Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X31-ptfed (still live)
+  |   X31-ptfed                X31          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.80 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 17 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance.harness --background
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 2501a6f37e89, 25 components registered)
+lease: X31-ptfed runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.80/8.41 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X31-test-flakes/harness+ios+Conformance.harness+--background-2026-11-12T22-14-38.442Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```
