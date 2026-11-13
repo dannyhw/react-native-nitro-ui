@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-13T08:01:10.827Z on code tree `6962e42f3afe` at HEAD `fd3a9d0` (branch `task/X33-slider-reader-steps`)
+- Command: `bun run check`
+- Result: fail, exit 1, 153724 ms
+- Load: start 27.50, end 11.89, median 19.79, max 27.50
+- Device: none recorded (not a device gate)
+- Full log: `task/X33-slider-reader-steps/check-2026-11-13T08-01-10.508Z.log` (<store>/task/X33-slider-reader-steps/check-2026-11-13T08-01-10.508Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/lease-queue.test.js`
+- `● the CLI keeps a queue in the lease file › hands a freed pair to the older ticket and shows the queue in 'list'`
+- `expect(received).toEqual(expected) // deep equality`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3187 — the rest is in the full log above)
+
+```
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/readme-components.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/real-input-tab-targets.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (54.116 s)
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS scripts/__tests__/ime-frame.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/gate.test.js (59.338 s)
+PASS scripts/__tests__/gate-logs.test.js (62.284 s)
+PASS scripts/__tests__/ci-workflows.test.js (74.04 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (80.353 s)
+PASS scripts/__tests__/bench-gate.test.js (147.948 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/lease-queue.test.js
+  ● the CLI keeps a queue in the lease file › hands a freed pair to the older ticket and shows the queue in `list`
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+      Array [
+        "X24",
+    +   "X25",
+      ]
+
+      494 |         ]).status
+      495 |       ).toBe(0);
+    > 496 |       expect(readState().leases.map((entry) => entry.task)).toEqual(['X24']);
+          |                                                             ^
+      497 |       // Served: out of the queue, so it is not blocking the next grant either.
+      498 |       expect(
+      499 |         (readState().waiters ?? []).some((entry) => entry.task === 'X24')
+
+      at Object.toEqual (scripts/__tests__/lease-queue.test.js:496:61)
+
+
+Test Suites: 1 failed, 87 passed, 88 total
+Tests:       1 failed, 2092 passed, 2093 total
+Snapshots:   0 total
+Time:        148.451 s, estimated 150 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 153.7 s
+gate: recorded in .gates/task/X33-slider-reader-steps.jsonl
+
+```
