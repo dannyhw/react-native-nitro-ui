@@ -59,7 +59,7 @@ cost no rows and why a React Native header node is a later decision.
 | Prop        | Type                     | Default    | Maps to                                                                 |
 | ----------- | ------------------------ | ---------- | ------------------------------------------------------------------------ |
 | `children`  | `ReactNode`              | —          | The row's content.                                                        |
-| `onPress`   | `() => void \| undefined`| —          | The cell highlight and the row's press. Android also merges the row into one a11y node; iOS's merge is recorded debt (`a11y:form`), so there the name sits on the row's own element. |
+| `onPress`   | `() => void \| undefined`| —          | The cell highlight and the row's press. Android also merges the row into one a11y node; iOS does not — measured, the row is still six elements there (`a11y:form`; Accessibility, below). |
 | `accessory` | `'none' \| 'disclosure' \| 'checkmark'` | `'none'` | `UICellAccessory.disclosureIndicator` / `.checkmark`; Material Symbols `chevron_right` / `check` (D43). |
 | `selected`  | `boolean \| undefined`   | `false`    | The cell's selected background; `secondaryContainer` on Android.          |
 | `style`     | `ViewStyle`              | —          | Laid out by Yoga inside the row box.                                      |
@@ -209,10 +209,24 @@ React Native children and so host nitro-ui controls in their rows today.
 
 ## Accessibility
 
-A row with `onPress` is **one** element: a button on iOS (`.button` trait, the cell
-itself as the element), one merged node on Android. Its content stops being read
-piece by piece, which is what a settings row should do — label the row with
-`accessibilityLabel` if its title is not the text inside it.
+A row with `onPress` is **one element on Android, and several on iOS**. The iOS half is
+recorded debt (`a11y:form`); this page previously claimed the merge there as well.
+
+Android turns the row into a single clickable node that carries the row's name. Its
+content stops being read piece by piece, which is what a settings row should do.
+
+iOS presses without merging. The measured tree — `real-input`'s accessibility pass reads
+what a screen reader is handed for this page's own pressable row (`a11y case=form`,
+iPhone 17 simulator on iOS 27, X32) and counts **six elements**, not one: the React
+Native view the row's name is written on, announced as `other` rather than a button; one
+unnamed element over the same box; and the row's two texts, each of them listed twice.
+Nothing in that subtree carries a `.button` trait, so the row is not announced as a
+button either — it is a group of parts that happens to be pressable.
+
+What does hold on both platforms: the row presses, and the `accessibilityLabel` written
+on it is what a reader says — as the name of the merged node on Android, and as the name
+of the one element that answers for the row on iOS. A row whose title is not the text
+inside it still needs that label.
 
 A row *without* `onPress` is not an element at all: its children are read
 individually, so a `Switch` in a row is a switch and nothing more.
