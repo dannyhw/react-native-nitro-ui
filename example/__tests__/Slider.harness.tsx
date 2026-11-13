@@ -2060,9 +2060,11 @@ describe('Slider', () => {
     ) => {
       const seed = seeds.get(events)!;
       const report = await accessibilityStepReport(handle, direction);
-      if (events.complete.length === 1) {
-        console.log(`a11y step: ${report}`);
-      }
+      // Every press, not just the first. When a walk goes red, the report that
+      // matters is the failing press's: it is the only record of what the a11y tree
+      // was showing at that moment (`range=…@<published>` and `<from>-><to>`), and
+      // FOLLOWUPS:56's flake has been diagnosed three times without it.
+      console.log(`a11y step ${what}: ${report}`);
       expectPerformed(report, what);
       const index = events.complete.length - 1;
       expect(events.complete).toEqual(expected.slice(0, index + 1));
@@ -2197,6 +2199,205 @@ describe('Slider', () => {
     expect(events.change).toEqual([3, 6]);
     expect(events.complete).toEqual([3, 6]);
     expect(handle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
+  it('steps up three times when a reader presses twice more before the a11y tree catches up', async () => {
+    // X21's forced race, one press longer, because the press the flake actually lost
+    // was the third one (`expected [3, 6, 3] to deeply equal [3, 6, 9]`).
+    //
+    // Two is enough to show the window and one is not: with every press posted in the
+    // same JS turn, none of them can see a semantics republish, so all three aim at the
+    // progress the node published *before* any of them ran. X21 took the direction from
+    // that published progress and this is where that rule earns its keep — a
+    // `publishedProgress` that was dropped would answer press 2 with "no direction"
+    // (target 3 against a model already at 3) and press 3 with "down".
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={0}
+          maximumValue={12}
+          step={3}
+          defaultValue={0}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="a11y-triple-press"
+          hybridRef={captureFor('a11y-triple-press')}
+        />
+      </View>
+    );
+    await waitForBox('a11y-triple-press');
+    const handle = await handleFor('a11y-triple-press');
+
+    handle.nuiTestAccessibilityStep(1);
+    handle.nuiTestAccessibilityStep(1);
+    handle.nuiTestAccessibilityStep(1);
+
+    await dragCompleted(events, 3, 5000);
+    // The last press's report is what the a11y tree was still showing when it ran:
+    // on a loaded machine it reads `range=0.0..12.0@0.0 6.0->9.0`, the third press
+    // aimed at a tree that had not moved at all, and on a quiet one a frame got in
+    // between two of them. That is the race, on purpose or by accident — and the three
+    // steps below have to be the same either way, which is why the log is a log.
+    console.log(
+      `a11y triple press (press 3): ${handle.nuiTestAccessibilityStepReport()}`
+    );
+    expect(events.start).toEqual([0, 3, 6]);
+    expect(events.change).toEqual([3, 6, 9]);
+    expect(events.complete).toEqual([3, 6, 9]);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
+  it('steps a tenths grid the way the node publishes it', async () => {
+    // The walk above is on `step 3`, whose every stop is exact in a `Float`, so it
+    // cannot see the rounding a reader's target arrives through. A tenths grid can.
+    //
+    // The semantics node carries the progress in 32 bits, and the target of the
+    // reader's action is computed from that number: 0.3 through a `Float` comes back as
+    // 0.30000001192092896 — *above* the value on screen — while 0.7 comes back as
+    // 0.699999988079071, *below* it. Compared with the `Double` the model holds, a
+    // reader asking for the value it was shown is therefore a step, up or down
+    // depending on which way the rounding fell (X32 found the same in the Stepper).
+    //
+    // This is the other half of that fix's guard rail. Refusing a target that is the
+    // published progress is one line; widening that refusal into a band - "near enough
+    // to the shown progress is not a direction" - is the tempting version, and a band
+    // wide enough to cover a tenth's float noise is wide enough to swallow a press,
+    // because a reader's own stride on this range is a twentieth of it. So the presses
+    // below have to keep arriving, one grid stop at a time, on a grid that is nowhere
+    // exact in binary.
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={0}
+          maximumValue={1}
+          step={0.1}
+          defaultValue={0.1}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="a11y-tenths"
+          hybridRef={captureFor('a11y-tenths')}
+        />
+      </View>
+    );
+    await waitForBox('a11y-tenths');
+    const handle = await handleFor('a11y-tenths');
+
+    const directions = [1, 1, 1, 1, -1];
+    const destinations = [0.2, 0.3, 0.4, 0.5, 0.4];
+    const beginnings = [0.1, 0.2, 0.3, 0.4, 0.5];
+    for (const [index, direction] of directions.entries()) {
+      const report = await accessibilityStepReport(handle, direction);
+      console.log(
+        `a11y tenths press ${String(index + 1)} (${
+          direction > 0 ? 'up' : 'down'
+        }): ${report}`
+      );
+      expectPerformed(report, `tenths press ${String(index + 1)}`);
+      await dragCompleted(events, index + 1, 5000);
+      expect(events.complete).toEqual(destinations.slice(0, index + 1));
+      expect(events.start).toEqual(beginnings.slice(0, index + 1));
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+    }
+    expect(events.change).toEqual(destinations);
+  });
+
+  it('does not step when a reader asks for the value it was shown', async () => {
+    // A Slider over a large offset with a narrow window: epoch milliseconds is the
+    // everyday shape, and it is where the reader's arithmetic runs out of bits. A
+    // `Float` at 1e9 is 64 apart, so the value the node publishes for
+    // `1000000010` is `1000000000`, and the range the reader strides is itself only
+    // 192 wide once it has been through the float - a twentieth of that is 9.6, which
+    // the float cannot even hold. So the destination the platform computes *is* the
+    // progress it was shown.
+    //
+    // On Android that used to be read as a direction: the target sits below the
+    // `Double` the model holds, so every press up answered with the value before it —
+    // the `expected [3, 6, 3]` symptom on the platform path, every time rather than
+    // under load. A target that is the published progress is not a direction
+    // (`SliderModel.asPublishedProgress`), which is what the empty arrays below say.
+    //
+    // iOS is asked the same question and answers differently on purpose: VoiceOver
+    // performs `accessibilityIncrement`, a direction, and never hands the control a
+    // number to compare, so there is no rounding in that path and the press steps.
+    // Asserting both halves here is the record of which platform needed the fix.
+    const narrow = newEvents();
+    const wide = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={1000000000}
+          maximumValue={1000000200}
+          step={10}
+          defaultValue={1000000010}
+          onValueChange={(v) => narrow.change.push(v)}
+          onSlidingStart={(v) => narrow.start.push(v)}
+          onSlidingComplete={(v) => narrow.complete.push(v)}
+          testID="a11y-offset-narrow"
+          hybridRef={captureFor('a11y-offset-narrow')}
+        />
+        <Slider
+          minimumValue={1000000000}
+          maximumValue={1000100000}
+          step={20000}
+          defaultValue={1000020000}
+          onValueChange={(v) => wide.change.push(v)}
+          onSlidingStart={(v) => wide.start.push(v)}
+          onSlidingComplete={(v) => wide.complete.push(v)}
+          testID="a11y-offset-wide"
+          hybridRef={captureFor('a11y-offset-wide')}
+        />
+      </View>
+    );
+    await waitForBox('a11y-offset-narrow');
+    const narrowHandle = await handleFor('a11y-offset-narrow');
+    const wideHandle = await handleFor('a11y-offset-wide');
+    const shown = 1000000010;
+
+    const report = await accessibilityStepReport(narrowHandle, 1);
+    console.log(`a11y offset (narrow, up): ${report}`);
+    expectPerformed(
+      report,
+      'a11y press on a narrow window over a large offset'
+    );
+
+    if (Platform.OS === 'android') {
+      // The fixture has to mean what it says: the progress the node publishes is a
+      // different number from the value the model holds, and the destination the
+      // platform computed has come back as exactly that published progress.
+      const published = /@(-?[0-9.Ee+]+)/.exec(report);
+      const target = /SetProgress\((-?[0-9.Ee+]+)\)/.exec(report);
+      expect(published).not.toBeNull();
+      expect(target).not.toBeNull();
+      const publishedValue = Number(published?.[1]);
+      const targetValue = Number(target?.[1]);
+      expect(publishedValue).toBe(1000000000);
+      expect(targetValue).toBe(publishedValue);
+      // The line the bug rode on: the target is below the Double the model holds, so
+      // comparing in that space reads it as a decrement.
+      expect(targetValue).toBeLessThan(shown);
+      expect(narrow.start).toEqual([]);
+      expect(narrow.change).toEqual([]);
+      expect(narrow.complete).toEqual([]);
+      expect(narrowHandle.nuiTestFramePumpArmed()).toBe(false);
+    } else {
+      await dragCompleted(narrow, 1, 5000);
+      expect(narrow.complete).toEqual([1000000020]);
+    }
+
+    // A refusal has to be about the target, not about the control being inert: the same
+    // magnitude with a window the float *can* stride still steps, on both platforms.
+    // Its `step` is coarse because the range is: a tenth of a unit over 100000 of them
+    // would hand Material 3 9999 tick marks to draw.
+    const wideReport = await accessibilityStepReport(wideHandle, 1);
+    console.log(`a11y offset (wide, up): ${wideReport}`);
+    expectPerformed(wideReport, 'a11y press on a window the float can stride');
+    await dragCompleted(wide, 1, 5000);
+    expect(wide.complete).toEqual([1000040000]);
+    expect(wideHandle.nuiTestFramePumpArmed()).toBe(false);
   });
 
   it('folds a screen reader step into a drag the finger has not released', async () => {

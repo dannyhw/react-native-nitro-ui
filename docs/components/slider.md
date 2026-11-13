@@ -284,11 +284,18 @@ an empty `accessibilityLabel` would silence the control's own.
   publishes `progressBarRangeInfo` (the real range and current value — M3's
   `Slider`, 1.4 and 1.5 alike, does not) and a `setProgress` action that steps by this Slider's own grid
   rather than by Compose's stride; `accessibilityLabel` becomes that node's
-  `contentDescription`.
+  `contentDescription`. The action is handed a *target*, computed by the platform
+  from the progress this node published, so the direction comes from that progress —
+  in the `Float` it is carried in, which is the number the target was made from — and
+  never from the value the model holds: a reader can act on a tree Compose has not
+  republished, and a frame behind is not a request to go back down. iOS is not asked:
+  VoiceOver performs increment/decrement, a direction rather than a number.
 
 The increment goes through the same native value rules as a drag, so an
 accessibility step on a range that is not a whole number of steps still lands on
-values the thumb can show, and still emits through the same handshake.
+values the thumb can show, and still emits through the same handshake. A target that
+*is* the published progress is no direction at all and moves nothing — see the limit
+below for when a reader's stride comes back as exactly that.
 
 ## Limits
 
@@ -296,6 +303,15 @@ values the thumb can show, and still emits through the same handshake.
   When `maximum - minimum` is not a whole number of steps, both platforms use the
   continuous control and native snaps the value. Ticks appear only on ranges that
   end on a step.
+- **A reader's stride is a `Float`, so a narrow window over a large offset cannot be
+  strided.** Android carries `progressBarRangeInfo` in 32 bits: at 1e9 a `Float` is 64
+  apart, so a Slider over, say, an epoch-milliseconds window publishes a progress that
+  is not the value it holds, and the platform's own stride (a twentieth of the range)
+  lands back on that published number. The control reads such a target as what it is —
+  the progress the reader was shown — and moves nothing rather than stepping to a value
+  nobody asked for. iOS, taking a direction rather than a target, still steps. The
+  deeper fix is to publish a normalised progress and keep the announced value separate
+  from it; it is not done, and a range this shape is better served by a coarse `step`.
 - **A touch a parent steals is still a gesture.** On Android the start comes from
   the finger going down on the control, so a press a scrolling parent takes over
   before the control's own gesture began is still closed by the watcher — the app
