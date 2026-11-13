@@ -1,0 +1,60 @@
+# Failure excerpt — real-input:ios:--control:a11y
+
+- Ran: 2026-11-13T15:12:24.239Z on code tree `ffcef98f2b93` at HEAD `9d27947` (branch `task/X34-gate-hygiene`)
+- Command: `node scripts/real-input/ios.mjs --control a11y`
+- Result: fail, exit 1, 508 ms
+- Load: start 5.63, end 5.63, median 5.63, max 5.63
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X34-vv27s`
+- Full log: `task/X34-gate-hygiene/real-input+ios+--control+a11y-2026-11-13T15-12-23.373Z.log` (<store>/task/X34-gate-hygiene/real-input+ios+--control+a11y-2026-11-13T15-12-23.373Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X34-gate-hygiene/real-input+ios+--control+a11y-2026-11-13T15-12-23.373Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X34-vv27s (still live)
+  |   X34-vv27s                X34          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.63 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: real-input:ios:--control:a11y
+gate: node scripts/real-input/ios.mjs --control a11y (cwd .)
+gate: code tree ffcef98f2b93 at HEAD 9d27947c
+gate: git tree 7bff390054e3 with a DIRTY worktree (not reusable)
+gate: log task/X34-gate-hygiene/real-input+ios+--control+a11y-2026-11-13T15-12-23.373Z.log
+gate:       <store>/task/X34-gate-hygiene/real-input+ios+--control+a11y-2026-11-13T15-12-23.373Z.log
+
+real-input (ios): Error: real-input: unknown control "a11y". Known controls: switch, slider, button, segmented-control, date-picker, picker, menu, dialog, text-field, bottom-sheet, chip, checkbox, context-menu, search-field, tooltip, icon-button, popover, form, button-group, stepper, list-item, hosted-switch, hosted-button, hosted-slider, hosted-mixed, hosted-segmented, hosted-picker, hosted-date-picker.
+gate: real-input:ios:--control:a11y FAIL in 0.5 s
+gate: recorded in .gates/task/X34-gate-hygiene.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X34-gate-hygiene/real-input+ios+--control+a11y-2026-11-13T15-12-23.373Z.log (4 probe(s))
+
+```
