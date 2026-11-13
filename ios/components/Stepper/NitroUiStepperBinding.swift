@@ -56,4 +56,29 @@ enum NitroUiStepperBinding {
       step: step
     )
   }
+
+  /// The range to hand SwiftUI's `Stepper`, tidied the way the value it displays is.
+  ///
+  /// Always a valid `ClosedRange`: `ClosedRange(a...b)` with `a > b` traps at runtime,
+  /// and a `maximumValue` below `minimumValue` is app data, not a crash.
+  ///
+  /// The tidying is the point (`NitroUiSliderValue.tidy`, the same last step
+  /// `quantize` takes). SwiftUI disables the half that cannot move by comparing its own
+  /// bound with the value it is showing, and this control shows a tidied value — so
+  /// handing it the raw prop leaves the two disagreeing by one binary hair:
+  /// `maximumValue = 0.1 + 0.2` is `0.30000000000000004`, the top of the grid is `0.3`,
+  /// and at `0.3` SwiftUI's plus half is still live. It answers with no event, because
+  /// the write quantises back to where it was, which is correct behaviour with the look
+  /// of a dead control (G25 review). A bound that is one of the grid's stops is the
+  /// only thing that makes "this half is at its end" visible.
+  static func trackBounds(minimum: Double, maximum: Double) -> ClosedRange<Double> {
+    guard minimum.isFinite, maximum.isFinite else {
+      return 0...1
+    }
+    let low = NitroUiSliderValue.tidy(Swift.min(minimum, maximum))
+    let high = NitroUiSliderValue.tidy(Swift.max(minimum, maximum))
+    // Ordered again, because a tidied pair is only as ordered as the arithmetic that
+    // produced it, and trapping here would be an app's `maximumValue` killing a view.
+    return Swift.min(low, high)...Swift.max(low, high)
+  }
 }
