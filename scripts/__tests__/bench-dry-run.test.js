@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { labelPreFlightProblem } from '../bench/baseline.mjs';
+import { childEnv } from './helpers/scrubbed-env.js';
 import {
   androidDryRunDevice,
   dryRunReport,
@@ -710,8 +711,11 @@ describe('bench --dry-run (the CLI)', () => {
         encoding: 'utf8',
         cwd: root,
         timeout: 120_000,
-        env: {
-          ...process.env,
+        // `childEnv` (X34 item 1): the blanks below are the suite's answer to "which device", and
+        // they only mean that if no lease arrives underneath them. `bench/run.mjs` reads a device
+        // identity out of the environment, so a *half*-blanked lease — the shell's
+        // `EMULATOR_PORT` under a blanked `ANDROID_SERIAL` — is the X32/X33 refusal again.
+        env: childEnv({
           // Blank every device variable: inherited from a leased shell, an
           // `IOS_SIM_UDID` here would name a real simulator, and a dry run that
           // wrongly resolved one would boot it.
@@ -721,7 +725,7 @@ describe('bench --dry-run (the CLI)', () => {
           AVD: '',
           NITRO_UI_MACHINE_LABEL: 'maintainer-mac-9',
           ...env,
-        },
+        }),
       }
     );
     return {

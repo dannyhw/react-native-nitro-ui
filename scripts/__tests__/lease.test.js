@@ -32,6 +32,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { childEnv } from './helpers/scrubbed-env.js';
 
 import { FREE_LSOF } from './helpers/free-lsof-stub.js';
 
@@ -968,8 +969,12 @@ describe('the CLI, in a real state directory', () => {
   const cli = (args, env = {}) =>
     spawnSync(process.execPath, [CLI, ...args], {
       encoding: 'utf8',
-      env: {
-        ...process.env,
+      // Never the calling shell's lease (X34 item 1). `NITRO_UI_HOME` below already points the CLI
+      // at this fixture's state directory, but the *device* names come from the same environment:
+      // a sourced lease's `EMULATOR_PORT`, `IOS_SIM_UDID` or `NITRO_UI_LEASE_BOOT` would be read as
+      // instructions about a pair these cases never mention — and `--boot` in particular would have
+      // a unit test try to boot somebody's simulator.
+      env: childEnv({
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '50',
         // Nothing is listening on any port (helper): otherwise an acquire in this file
@@ -977,7 +982,7 @@ describe('the CLI, in a real state directory', () => {
         // every case here refuse for a port the file never mentions.
         ...FREE_LSOF,
         ...env,
-      },
+      }),
     });
 
   /**
@@ -992,13 +997,12 @@ describe('the CLI, in a real state directory', () => {
   const spawnLease = (args, env = {}, onStderr) =>
     new Promise((resolve) => {
       const child = spawn(process.execPath, [CLI, ...args], {
-        env: {
-          ...process.env,
+        env: childEnv({
           NITRO_UI_HOME: home,
           NITRO_UI_LEASE_POLL_MS: '50',
           ...FREE_LSOF,
           ...env,
-        },
+        }),
       });
       let stdout = '';
       let stderr = '';
@@ -1300,11 +1304,10 @@ describe('the CLI, in a real state directory', () => {
       [CLI, 'acquire', '--task', 'G6'],
       {
         encoding: 'utf8',
-        env: {
-          ...process.env,
+        env: childEnv({
           NITRO_UI_HOME: join(home, 'missing'),
           ...FREE_LSOF,
-        },
+        }),
       }
     );
     expect(result.status).toBe(2);
@@ -1683,15 +1686,14 @@ describe('`list` names devices nobody leased', () => {
   const cliWithTools = (args, extraEnv = {}) =>
     spawnSync(process.execPath, [CLI, ...args], {
       encoding: 'utf8',
-      env: {
-        ...process.env,
+      env: childEnv({
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '50',
         NITRO_UI_SIMCTL_BIN: join(bins, 'simctl'),
         NITRO_UI_ADB_BIN: join(bins, 'adb'),
         ...FREE_LSOF,
         ...extraEnv,
-      },
+      }),
     });
 
   /** Writes the fake tools, with the listing and serials a test asks for. */
