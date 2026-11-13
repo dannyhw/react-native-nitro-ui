@@ -133,3 +133,4 @@
 | X30 | Merge bar matches device gates per platform half; ledger export merges; --background typo guard; task-ready ID from branch | Apex | Opus | done, waits to merge with X31 (fix round 1: USAGE rejoined, task-ready finds <ID>-<slug> reports and refuses two-ID branches, excerpts never overwritten, eslint.config.mjs check-only; all with reds) |
 | X31 | hosted-picker flake, Form giveUps assertion, harness tap error text, ci-workflows 2 s budget | Apex | Opus | fix round 1 done, merging with X30 (device gates on the combined tree) |
 | X32 | Form iOS row press after a scroll, form.md VoiceOver contradiction, three Stepper review items, Checkbox probes assert and localised "mixed" | Apex | Opus | in review (#71; five gates green; finished on Opus after an Apex outage) |
+| X33 | Slider screen-reader steps compare the float the reader was shown; the long-standing step-test flake fixed at its cause | Apex | Opus | running |
