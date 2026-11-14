@@ -9,15 +9,15 @@ Four `FOLLOWUPS.md` lines that have each cost another task hours, plus two regre
 
 **1. `check` from a leased shell.** Five suites in `scripts/__tests__` spawn device-aware CLIs and
 inherited this shell's lease, so `bench-baseline-merge.test.js` died on "ANDROID_SERIAL and
-EMULATOR_PORT disagree", the only shell a device task has. They spawn through
-`scripts/__tests__/helpers/scrubbed-env.js` now, and `test-env-scrub.test.js` audits every suite that spawns at all:
-unscrubbed `process.env` reaching a device-aware `spawn` fails it. The auditor masks strings and
-comments first, so a `spawn(` inside fixture source stays data.
+EMULATOR_PORT disagree" — the only shell a device task has. They spawn through
+`scripts/__tests__/helpers/scrubbed-env.js` now, and `test-env-scrub.test.js` audits every suite that
+spawns at all: unscrubbed `process.env` reaching a device-aware `spawn` fails it, with strings and
+comments masked first so a `spawn(` inside fixture source stays data.
 
 **2. A detached gate's runner outlived its gate.** A backgrounded `gate.mjs` whose parent died left
 its runner and Metro holding the lease's port with no ledger line. `scripts/gate-runner.mjs` now
 leads the group its command — and so Metro — runs in, watches its gate over the stdin pipe with a
-(pid, pgid) identity check, and sweeps that group when the gate goes. One that left no note surfaces on
+(pid, pgid) identity check, and sweeps that group when the gate goes; one that left no note surfaces on
 the *next* run as a gate that DIED without a ledger line.
 
 **3. `lease-queue.test.js` polled on a timer**, so a loaded box read the queue before its ticket
@@ -25,8 +25,8 @@ landed: red once, green twice. It waits on the ticket now.
 
 **4. Two load-sensitive iOS real-input waits** (X31) decided from one read and a fixed count. Both go
 through `GestureSettlement`: act, then decide on two consecutive *agreeing* reads under a deadline,
-re-pressing only while the state says nothing has arrived — what stops a slow popover being tapped
-shut again. Its properties are proved on the host, not on a slow device.
+re-pressing only while the state says nothing has arrived. Its properties are proved on the host, not
+on a slow device.
 
 **Two regressions, each caught by a proof rather than a run.** Adding `GestureSettlement.swift` to
 the UI-test target replaced the project lines naming `A11yFrameStability.swift`;
@@ -34,10 +34,9 @@ the UI-test target replaced the project lines naming `A11yFrameStability.swift`;
 in its folder, both ways. And when `revealTab` began answering with a settlement outcome,
 `reached=\(reached)` printed the struct: the pass passed, printed 23 well-formed-looking lines, and
 the report blamed the tab bar for a parser that had read none of them. That print site now carries an
-explicit `Bool` — the compiler holding the format, the guard asking for the annotation by name — and
-the rule reports an unreadable measurement line as a format drift, not as 23 unreachable tabs. The
-same discipline found every `stopGroup` test injects `signal`, so the sign in `process.kill(-group,
-…)` — sweeping a run's tree versus orphaning its Metro — was untested.
+explicit `Bool`, and the rule reports an unreadable measurement line as a format drift, not as 23
+unreachable tabs. The same discipline found that every `stopGroup` test injects `signal`, so the sign
+in `process.kill(-group, …)` was untested.
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
@@ -116,8 +115,9 @@ rebuild the mutated UITests source before the clean run.
 
 - Gate runner: `scripts/gate-runner.mjs` (group ownership, gate-death watch, sweep, sidecar note),
   `scripts/gate.mjs` (background runs start under it; a refused or orphaned port names the dead gate
-  and its log), `scripts/gate-core.mjs` (`deadGateBehindPort`), `scripts/lease-core.mjs` (a leased
-  Metro port belongs to the pair, not to one platform).
+  and its log), `scripts/gate-core.mjs` (`deadGateBehindPort`), `scripts/lease-core.mjs` (the Metro pre-flight
+  hands its listeners to the caller, so a busy port is explained from one `lsof` answer rather than
+  two that can disagree).
 - Suites: `scripts/__tests__/gate-runner.test.js` (new, and where the real-process cases live),
   `scripts/__tests__/gate-check.test.js`, `scripts/__tests__/test-env-scrub.test.js` (new) with
   `scripts/__tests__/helpers/scrubbed-env.js` and `scripts/__tests__/helpers/spawn-env-audit.js`,
