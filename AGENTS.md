@@ -88,6 +88,13 @@ Background (read the sections your brief points to):
   report how you proved it. Test fixtures must not coincide with the right answer (e.g. a sizing
   fallback equal to the real size makes a failed correction invisible). Fakes that change timing
   (synchronous stand-ins for async native calls) need a variant that keeps the real timing.
+- **Flakes are time-boxed.** A flake is by definition hard to reproduce, so do not engineer a
+  reproduction of it on demand. Fix it from the evidence you already have: the failure excerpts,
+  the logs and the code. Spend **at most 30 minutes and two device runs** trying to make it happen.
+  If it hasn't happened by then, stop and ship the fix with the cause you found and a cheap mutation
+  proof where one exists (break the code the fix guards and show the test goes red). In the report,
+  say plainly that the race itself was not reproduced. Never loosen an assertion to make a flake go
+  away. The full red-proof rule above still applies to tests that guard library behaviour.
 - Native C++ unit tests run under ASan in `test:native`.
 
 ## Asking for help
