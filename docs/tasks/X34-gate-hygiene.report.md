@@ -111,6 +111,19 @@ rebuild the mutated UITests source before the clean run.
 - `real-input:ios:--control:popover` -> the reveal drag goes from 70 % of the window to 1 pt -> "the example's tab \"tab-popover\" could not be scrolled wholly into the window in 28 reads and 27 drags over 60427 ms (it is at (1221.0, 68.0, 77.33…, 44.0), hittable: false)" (1389.9 s, `testRealInputA11y` failing at 149.8 s)
 - item 2 on lease, twice -> `kill <pid>` on a backgrounded `gate.mjs`, then `kill -9` hard enough to take its supervisor -> soft: ledger `exitCode: 143` and the next gate starts on the same Metro port two minutes later; hard: Metro 13452 left on 8293 with no ledger line, and the next run refused — "this port belongs to a gate that DIED without a ledger line … its supervisor left no note"
 
+**Fix round 1** (rows 17-25): host mutations of the shipped fix-round code, each run alone against a
+working-tree edit and restored before the next.
+
+- `gesture-settlement.test.swift` (case 3c) -> a press stops invalidating its aim: `comparable = !pressed` -> `comparable = true` -> "a popover that presents two reads after the tap is tapped once, not twice (got 2)", and the outcome count with it
+- `gesture-settlement.test.swift` (case 3d) -> `quietHasPassed` always answers true -> "the second tap waits out the quiet period (gap 1400 ms)" — with the guard in place the same fixture reads gap 8400 ms against an 8000 ms threshold, so the fixture is not the right answer
+- `gate-runner.test.js` -> the hold's timer stops the group without `pause()` first -> "lets its own sweep have the grace it asked for: Expected: 1 / Received: 2" — the second `stop` is the escalation itself, `termGraceMs: 0`
+- `gate-runner.test.js` -> the supervisor's leader check (`group !== ownPid`) -> `if (false)` -> "refuses to sweep a group it does not lead at all: - Expected - 1 / + Received + 3", and the real-process case that ends a run on the pipe alone lost its sweep report
+- `gate-runner.test.js` -> the same check in `holdOnSignal` -> "refuses to hold signals for a group it does not lead: Expected substring: \"not its to end\" / Received string: \"\""
+- `gate-runner.test.js` (2 cases) -> `maySweepRunnerGroup` drops the live-pid half -> "stands down when the pid has been reused: Expected: false / Received: true", "asks the live-pid question first: Expected substring \"alive again\" / Received \"…reported the sweep already…\""
+- `gate-runner.test.js` -> `maySweepRunnerGroup` stops reading the sidecar's `stopped` -> "stands down once the supervisor has reported its sweep: Expected: false / Received: true"
+- `test-env-scrub.test.js` (2 cases) -> `unresolvedScriptsTarget` answers `null` -> "counts a script joined out of `scripts/` by variable: Received: null" — the audit's blind spot, back
+- `test-env-scrub.test.js` -> `env: childEnv({` -> `env: { ...process.env,` in the bench suite -> "scripts/__tests__/bench-baseline-machine.test.js:483 hands <unresolved> (a scripts/ path this audit cannot resolve) an unscrubbed process.env"
+
 ## Files changed
 
 - Gate runner: `scripts/gate-runner.mjs` (group ownership, gate-death watch, sweep, sidecar note),
@@ -134,6 +147,48 @@ rebuild the mutated UITests source before the clean run.
 - Project file: `example/ios/NitroUiExample.xcodeproj/project.pbxproj` — `A11yFrameStability.swift`
   back in the UI-test target beside `GestureSettlement.swift`.
 
+## Fix round 1
+
+All five review asks are in, each with a red proof (rows 17-25 of `docs/tasks/X34/mutations.json`).
+
+**A press invalidates the reading it was aimed by** — `GestureSettlement.swift:176`. Keeping
+`previous = current` after a press kept the reading from *before* it, so one post-tap read agreed with
+it and a popover presenting late was tapped shut 1.4 s later: X31's flake. A press now sets
+`comparable = false`, so a decision needs two agreeing reads taken after the last one, and
+`quietAfterPressMs` (the popover's `reactTimeout`) holds off a second tap. Host cases 3c/3d, not a
+slow device.
+
+**A runner signals only the group it leads** — `scripts/gate-runner.mjs`. `superviseGateRunner` and
+`holdOnSignal` refuse a group whose number is not their own pid, and say why; the hold's timer calls
+`pause()` before `stop()`, so the term it sends itself is not taken for a second Ctrl-C and the 10 s
+grace it asked for is the grace it gets. `gate.mjs` sweeps a dead runner's group only when that pid is
+not reused and its sidecar records no `stopped`.
+
+**No blind spot in the audit**: an unresolvable `scripts/` spawn target counts as device-aware, and
+`bench-baseline-machine.test.js` passes the scrubbed env.
+
+Gates on this round's code tree (`gate.mjs table`, tree `5ddd76015e95`; `real-input:android` is owed
+to `need --for merge`, not to review):
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2209 tests / 91 suites | `5ddd76015e95` | 2 m 51 s | start 7.3 / med 12.7 / max 22.1 |
+| `harness:ios` | **PASS** | 629 tests / 32 suites + isolated 6 tests / 3 suites | `5ddd76015e95` (ios tree) | 15 m 06 s | start 6.8 / med 5.2 / max 7.8 |
+| `harness:android` | **PASS** | 685 tests / 32 suites + isolated 6 tests / 3 suites | `5ddd76015e95` (android tree) | 18 m 52 s | start 4.0 / med 4.3 / max 6.8 |
+| `real-input:ios` | **PASS** | — | `5ddd76015e95` (ios tree) | 47 m 08 s | start 4.5 / med 5.8 / max 85.0 |
+
+```
+need: review against .gates/task/X34-fix1.jsonl; code diff base df7f683 touches ios + android
+  ✓ check — green
+  ✓ harness:ios — green on the ios code tree
+  ✓ harness:android — green on the android code tree
+  note: treated as both platforms (outside the known prefixes): scripts/native-tests.sh, scripts/native-tests/gesture-settlement.test.swift, scripts/real-input/ios.mjs, scripts/real-input/tab-targets.mjs
+need: review is satisfied on this code tree.
+```
+
+The device run also says the fix in the reviewer's own words: `the real tap that opens the popover for
+open number 7: the popover’s anchor (popover-short-anchor) up=true reads=4 taps=1 elapsedMs=3191`.
+
 ## Follow-ups
 
 - `check` re-keys on the whole code tree, so a tooling-only commit costs a fresh iOS build plus
@@ -154,6 +209,14 @@ rebuild the mutated UITests source before the clean run.
 - `xcrun swiftc -typecheck` over `example/ios/NitroUiExampleUITests/*.swift` finds two pre-existing
   warnings (`RealInputTests.swift:6379` unused `refusing`, `:6462` `var eventsAtBottom` never
   mutated) and takes 11 s — a cheap pre-flight before a 45-minute gate.
+- `harness:ios` round-1-of-this-round failed once on `__tests__/FormFidelity.harness.tsx` ("lays rows
+  out at 0 pt … draws at 340 pt", `width=0.00; boxReports=8`) and passed unmodified 905 s later. The
+  same message is in `task/X32-merge`'s stored log for Nov 13, where filtered re-runs passed, so it is
+  a load-sensitive measurement in a suite this branch does not touch — the race was not reproduced
+  here either, and nothing was loosened.
+- `need --for merge` owes this tree one `real-input:android`, because `scripts/native-tests/**`
+  sits outside the path mapping; the fix round changes no Android code, so that 72-minute run buys
+  nothing except the mapping's satisfaction.
 
 ## Questions for orchestrator
 
