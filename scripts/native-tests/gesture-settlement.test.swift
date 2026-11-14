@@ -19,6 +19,13 @@ import Foundation
 ///      times on a slow content publish, and the second tap *closed* the popover the first one opened;
 ///      the run then reported "the touch was never delivered" about a delivered touch. Case 3 asserts
 ///      the press count is exactly one when a presentation is up and its content is late.
+///   2b. **re-pressing on a reading taken before the press.** Case 3's shape still flaked: the reading
+///      a tap was aimed by stayed the baseline, so a popover that presents two reads late still shows
+///      no window on the first post-tap read, that read *agrees* with the pre-tap one, and the anchor
+///      is tapped again about 1.4 s later — X31's failure again, with a smarter-looking agreement test
+///      in front of it. Case 3c is that fixture (one tap, and no quiet period, so it proves only the
+///      discard), and case 3d is the shape two agreeing post-tap reads cannot cover on their own — a
+///      presentation later than two reads, which is what `quietAfterPressMs` is for.
 ///   3. **a count where a deadline belongs.** Eight drags and three taps were both guesses at how long
 ///      a loaded machine needs. Case 5 proves gestures are not capped at a magic number; case 4 proves
 ///      the wait does end, and says which bound ended it.
@@ -36,6 +43,11 @@ import Foundation
 ///     (got 3 presses)";
 ///   - the deadline ignored → "the deadline ends a wait that never agrees (reads 400)";
 ///   - `maxPresses` ignored → "the sanity cap is a cap (got 9 presses)".
+///   - the pre-press reading kept as the baseline (`comparable = !pressed` → `comparable = true`, which
+///     is literally the line the fix round replaced) → "a popover that presents two reads after the tap
+///     is tapped once, not twice (got 2)";
+///   - the quiet period dropped (`quietHasPassed` answering true always, which is the old rule) →
+///     "the second tap waits out the quiet period (gap 1400 ms)".
 /// `@main` because `swiftc` only allows top-level statements in a file named `main.swift`.
 @main
 struct GestureSettlementTest {
@@ -185,6 +197,78 @@ struct GestureSettlementTest {
         outcome.presses == 3 && !outcome.satisfied,
         "pressing regardless of the state is the flake: 3 taps, nothing up at the end (got \(outcome.presses))"
       )
+    }
+
+    // 3c. The tap that is answered two reads later. No quiet period here, so this case is about one
+    //     thing only: the reading the tap was aimed by must not be allowed to answer for what happened
+    //     after it. Kept at two agreeing post-tap reads because that is the smallest fixture where the
+    //     stale baseline decides — and `taps == 1` is not a number the old rule ever produced here.
+    do {
+      let scripted = script([
+        Screen(presentations: 0, rows: 0), Screen(presentations: 0, rows: 0), // nothing up -> tap 1
+        Screen(presentations: 0, rows: 0), // still no window: UIKit has not presented yet
+        Screen(presentations: 1, rows: 1), Screen(presentations: 1, rows: 1), // it arrived, with content
+      ])
+      let clock = Clock()
+      var taps = 0
+      let outcome = GestureSettlement.settle(
+        deadlineMs: 24_000,
+        read: scripted.read,
+        agrees: ==,
+        satisfied: { $0.rows > 0 },
+        mayPress: { $0.presentations == 0 },
+        press: { _ in taps += 1 },
+        nowMs: clock.now,
+        pause: { _ in }
+      )
+      check(
+        taps == 1,
+        "a popover that presents two reads after the tap is tapped once, not twice (got \(taps))"
+      )
+      check(
+        outcome.presses == 1,
+        "the outcome counts the one tap it sent (got \(outcome.presses))"
+      )
+      check(
+        outcome.satisfied,
+        "and the wait settles on the content rather than running out"
+      )
+    }
+
+    // 3d. Two honest post-tap reads are not enough either, when the presentation is later than two
+    //     reads: the pair agrees on "nothing up", which is true, and the anchor is a toggle. So the
+    //     caller is allowed to say how long its app needs to react, and a re-send inside that window is
+    //     refused. The clock is charged per read (as case 6 does) so *when* the second tap happened is
+    //     a number in the assertion, and the sanity cap keeps the case finite.
+    do {
+      let clock = Clock()
+      var pressAtMs: [Int] = []
+      let outcome = GestureSettlement.settle(
+        deadlineMs: 60_000,
+        maxPresses: 2,
+        quietAfterPressMs: 8_000,
+        read: {
+          clock.spend(700)
+          return Screen(presentations: 0, rows: 0)
+        },
+        agrees: ==,
+        satisfied: { $0.rows > 0 },
+        mayPress: { $0.presentations == 0 },
+        press: { _ in pressAtMs.append(clock.ms) },
+        nowMs: clock.now,
+        pause: { _ in }
+      )
+      let gapMs = pressAtMs.count >= 2 ? pressAtMs[1] - pressAtMs[0] : -1
+      check(
+        gapMs >= 8_000,
+        "the second tap waits out the quiet period (gap \(gapMs) ms)"
+      )
+      check(
+        outcome.presses == 2,
+        "a quiet period delays a re-send, it does not cancel one (got \(outcome.presses))"
+      )
+      check(!outcome.satisfied, "an anchor that never presents still fails")
+      check(outcome.outOfBudget, "and says it ran out rather than settled")
     }
 
     // 4. A screen that never agrees (an animation that never ends) is bounded by the deadline, and

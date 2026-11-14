@@ -29,6 +29,13 @@ import Foundation
 ///      "there is nothing there yet". For the popover that is *no presentation up*: a popover that
 ///      exists but has not published its content is a reason to wait, never a reason to tap again —
 ///      the second tap is what turns a slow render into a closed popover.
+///      Two more rules make that reading honest about *when* it was taken: the reading a press was
+///      aimed by is thrown away, so a decision after a press needs two reads taken *after* it, and
+///      `quietAfterPressMs` gives the last press that long to land before another one may be sent.
+///      Without them the pair can be `before the tap` + `after the tap`, which is the same bug with
+///      the label fixed: a popover that presents two reads late is still showing no window when the
+///      first post-tap read happens, so it agrees with the pre-tap one and the anchor is tapped
+///      again ~1.4 s later — which closes it (the X31 flake, exactly).
 ///   3. **A deadline, not a count.** How many gestures a loaded machine needs is not knowable at
 ///      compile time; how long a check may take is. The count is an outcome, printed for the log.
 ///
@@ -74,6 +81,12 @@ enum GestureSettlement {
   /// - Parameter maxPresses: an optional sanity cap on gestures. `nil` means the deadline is the only
   ///   bound, which is the point of the type; a cap belongs where a repeated gesture is itself
   ///   destructive, and is not the way to express "don't take too long".
+  /// - Parameter quietAfterPressMs: how long the last press gets to land before another may be sent.
+  ///   `0` is the old behaviour and belongs to a gesture that is harmless to repeat (a drag); a
+  ///   gesture that *toggles* what it is aimed at — a `Popover` anchor — wants the time the app needs
+  ///   to react, because two agreeing reads can be two reads of a screen that simply has not caught
+  ///   up yet, and the second tap on an open anchor closes it. The deadline still ends the wait, so a
+  ///   quiet period delays a re-send; it cannot lose one.
   /// - Parameter read: one observation. Called on this thread; each call is the round trip.
   /// - Parameter agrees: do two readings describe the same screen? Exact equality on what the caller
   ///   reads — a tolerance here would let a still-moving screen look settled.
@@ -90,6 +103,7 @@ enum GestureSettlement {
     maxReads: Int = 400,
     minReads: Int = 2,
     maxPresses: Int? = nil,
+    quietAfterPressMs: Int = 0,
     read: () -> Reading,
     agrees: (Reading, Reading) -> Bool,
     satisfied: (Reading) -> Bool,
@@ -100,10 +114,25 @@ enum GestureSettlement {
   ) rethrows -> Outcome<Reading> {
     precondition(deadlineMs > 0, "a wait with no deadline is the hang this type exists to bound")
     precondition(minReads >= 2, "one read is the flake this type exists to fix")
+    precondition(quietAfterPressMs >= 0, "a quiet period that runs backwards is no quiet period")
     let startedAt = nowMs()
     var previous = read()
     var reads = 1
     var presses = 0
+    // Can `previous` be paired with the next read to decide anything? Not right after a press: that
+    // reading is the one the press was aimed by, so it describes the screen as it was *before* the
+    // gesture. Paired with the first read after the press it says "nothing changed", about a change
+    // that has not had the chance to be visible yet. Discarding it makes the rule literal — two
+    // agreeing reads, both taken after the last press.
+    var comparable = true
+    var lastPressAtMs: Int? = nil
+
+    /// Has the last press had `quietAfterPressMs` to land? A caller with no quiet period is asked
+    /// nothing and gets `true` without the clock being read.
+    func quietHasPassed(after lastPressAtMs: Int?) -> Bool {
+      guard quietAfterPressMs > 0, let pressedAt = lastPressAtMs else { return true }
+      return nowMs() - pressedAt >= quietAfterPressMs
+    }
 
     func outcome(last: Reading, satisfied: Bool, outOfBudget: Bool) -> Outcome<Reading> {
       return Outcome(
@@ -126,18 +155,25 @@ enum GestureSettlement {
       pause(pauseMs)
       let current = read()
       reads += 1
-      if agrees(previous, current) {
+      var pressed = false
+      if comparable, agrees(previous, current) {
         if satisfied(current) {
           return outcome(last: current, satisfied: true, outOfBudget: false)
         }
         // Settled, and settled *outside*: the state is asking for the gesture again. A screen that is
         // still moving is not, and gets no press — the next read is the one that decides.
-        if mayPress(current), presses < (maxPresses ?? Int.max) {
+        if mayPress(current),
+          presses < (maxPresses ?? Int.max),
+          quietHasPassed(after: lastPressAtMs)
+        {
           try press(presses + 1)
           presses += 1
+          pressed = true
+          lastPressAtMs = nowMs()
         }
       }
       previous = current
+      comparable = !pressed
     }
     return outcome(last: previous, satisfied: false, outOfBudget: true)
   }
