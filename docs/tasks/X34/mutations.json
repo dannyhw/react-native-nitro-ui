@@ -1,7 +1,7 @@
 {
   "task": "X34",
   "round": 1,
-  "how": "Rows 1-5 are host mutations: one edit applied to the working tree with python3 /tmp/x34-mut2.py, the named suite run against it (`bun run test -- --runTestsByPath \u2026`), and the file restored before the next row; `before` is the shipped source the row was run against, `after` the text that replaced it. Rows 6-8 are red proofs against the branch's own shipped state rather than synthetic edits: the drift or the missing function is the mutation, so each row names the commit it was red under. Rows 9-13 are the host Swift ones for the same wait, run through `test:native`. The last three rows are the device proofs on lease X34-vv27s: each mutated the UITests source, rebuilt, and ran a filtered gate whose name satisfies nothing but itself, with the file restored and rebuilt before the ledger's final line. Lease X34-vv27s, pair-b (nitro-ui B / iOS 27.0 and emulator-5570 / API 35, Metro 8293). Logs: `node scripts/gate.mjs logs --branch task/X34-gate-hygiene`.",
+  "how": "Rows 1-5 are host mutations: one edit applied to the working tree with python3 /tmp/x34-mut2.py, the named suite run against it (`bun run test -- --runTestsByPath \u2026`), and the file restored before the next row; `before` is the shipped source the row was run against, `after` the text that replaced it. Rows 6-8 are red proofs against the branch's own shipped state rather than synthetic edits: the drift or the missing function is the mutation, so each row names the commit it was red under. Rows 9-13 are the host Swift ones for the same wait, run through `test:native`. The last three rows are the device proofs on lease X34-vv27s: each mutated the UITests source, rebuilt, and ran a filtered gate whose name satisfies nothing but itself, with the file restored and rebuilt before the ledger's final line. Lease X34-vv27s, pair-b (nitro-ui B / iOS 27.0 and emulator-5570 / API 35, Metro 8293). Logs: `node scripts/gate.mjs logs --branch task/X34-gate-hygiene`. Rows 17-25 are fix round 1 (`\"round\": 2`): every one is a host mutation of the shipped fix-round code - the named suite or Swift case run alone against a working-tree edit, the file restored before the next row - on lease X34-vi3gh.",
   "mutations": [
     {
       "test": "scripts/__tests__/test-env-scrub.test.js \u203a dataMask \u203a does not count a call written inside generated source / does not count a call that only exists in a doc comment / no suite spawns a device-aware script from an unscrubbed environment \u203a finds the sites, and every one of them scrubs",
@@ -196,6 +196,118 @@
         "hard death (`kill -9` on gate, runner, command and `bun`): Metro pid 13452 left on 8293 and no ledger line, and the next gate refused before starting: \"gate: refused before the run - Metro port 8293 (pair leased) is served by pid 13452 (node)\" plus \"WARN this port belongs to a gate that DIED without a ledger line: real-input:ios:--control:popover started 2026-11-13T14:20:36.611Z (gate pid 13265, process group 13392, lease X34-vv27s) - its supervisor left no note, so the run was killed hard enough to take that too. its log: \u2026\""
       ],
       "note": "Both Metro leftovers were cleared with two recorded `kill <pid>` calls; nothing was signalled by name or pattern."
+    },
+    {
+      "round": 2,
+      "test": "scripts/native-tests/gesture-settlement.test.swift \u203a case 3c - a popover that presents two reads after the tap is tapped once, not twice (and the outcome counts the one tap it sent)",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "a press stops invalidating the reading it was aimed by: `comparable = !pressed` -> `comparable = true`, so a pre-press read is paired with the first read after the press and agrees with it",
+      "before": "      comparable = !pressed",
+      "after": "      comparable = true",
+      "run": "swiftc -Onone GestureSettlement.swift gesture-settlement.test.swift (the `test:native` case, run alone) - FAIL, exit 1",
+      "redTests": [
+        "a popover that presents two reads after the tap is tapped once, not twice (got 2)",
+        "the outcome counts the one tap it sent (got 2)"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/native-tests/gesture-settlement.test.swift \u203a case 3d - the second tap waits out the quiet period",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "`quietHasPassed` always answers true, so `quietAfterPressMs` is read and ignored - the shape two agreeing post-press reads cannot cover",
+      "before": "      return nowMs() - pressedAt >= quietAfterPressMs",
+      "after": "      return true",
+      "run": "swiftc -Onone GestureSettlement.swift gesture-settlement.test.swift (the `test:native` case, run alone) - FAIL, exit 1",
+      "redTests": [
+        "the second tap waits out the quiet period (gap 1400 ms) - with the guard in place the same fixture reports gap 8400 ms, so the threshold and the right answer do not coincide"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/gate-runner.test.js \u203a holdOnSignal \u203a lets its own sweep have the grace it asked for",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the hold's timer stops the group without `pause()` first, so the SIGTERM it sends itself reads as a second Ctrl-C",
+      "before": "        pause();\n        void stop(group).then(() => process.exit(128 + signum(signal)));",
+      "after": "        void stop(group).then(() => process.exit(128 + signum(signal)));",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js - FAIL, 1 of 44",
+      "redTests": [
+        "lets its own sweep have the grace it asked for: Expected: 1 / Received: 2 - a second `stop` call is the escalation itself (`termGraceMs: 0`), which kills within a second of the decision to grant ten"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/gate-runner.test.js \u203a superviseGateRunner \u203a refuses to sweep a group it does not lead at all (and the real-process case that ends the run on the pipe alone)",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the supervisor's leader check is dropped: `if (group !== ownPid)` -> `if (false)`, so a supervisor that was not started `detached` signals whatever group it happens to sit in",
+      "before": "    if (group !== ownPid) {\n      log(\n        `gate-runner: gate ${String(watch)} died (${why}), but group ${String(",
+      "after": "    if (false) {\n      log(\n        `gate-runner: gate ${String(watch)} died (${why}), but group ${String(",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js - FAIL, 2 of 44",
+      "redTests": [
+        "refuses to sweep a group it does not lead at all: - Expected - 1 / + Received + 3",
+        "a real supervisor ... ends the run when its gate is killed and pipe is the only notice: Expected substring \"the run is gone with it\" - the refusal note replaced the sweep report"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/gate-runner.test.js \u203a holdOnSignal \u203a refuses to hold signals for a group it does not lead",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the same leader check dropped from the hold, so holding a Ctrl-C ends with a signal to a group this process was never given",
+      "before": "  if (group !== ownPid) {\n    log(\n      `gate-runner: not holding signals for group ${String(",
+      "after": "  if (false) {\n    log(\n      `gate-runner: not holding signals for group ${String(",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js - FAIL, 1 of 44",
+      "redTests": [
+        "refuses to hold signals for a group it does not lead: Expected substring: \"not its to end\" / Received string: \"\" - and handlers installed on a group it does not lead"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/gate-runner.test.js \u203a maySweepRunnerGroup \u203a stands down when the pid has been reused / asks the live-pid question first, when both facts are true at once",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the first half of the sweep question goes: `if (pidAlive(pid))` -> `if (false)`, so a recycled pid is still this run's group",
+      "before": "  if (pidAlive(pid)) {",
+      "after": "  if (false) {",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js - FAIL, 2 of 44",
+      "redTests": [
+        "stands down when the pid has been reused: Expected: false / Received: true",
+        "asks the live-pid question first: Expected substring \"alive again\" / Received \"its supervisor reported the sweep already, with 0 process(es) surviving it\""
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/gate-runner.test.js \u203a maySweepRunnerGroup \u203a stands down once the supervisor has reported its sweep",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the second half goes: the sidecar's `stopped` record is not read, so a gate sweeps a group its supervisor already swept",
+      "before": "  if (record != null && record.stopped != null) {",
+      "after": "  if (false) {",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js - FAIL, 1 of 44",
+      "redTests": [
+        "stands down once the supervisor has reported its sweep: Expected: false / Received: true"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/test-env-scrub.test.js \u203a unresolvedScriptsTarget \u203a counts a script joined out of `scripts/` by variable / counts a script spelled out under `scripts/`, and passes one outside it",
+      "file": "scripts/__tests__/helpers/spawn-env-audit.js",
+      "mutation": "the auditor keeps its old blind spot: a target it cannot resolve answers `null`, which is a free pass",
+      "before": "export function unresolvedScriptsTarget(targetText) {",
+      "after": "export function unresolvedScriptsTarget(targetText) {\n  void targetText;\n  return null;",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/test-env-scrub.test.js - FAIL, 2 of 14",
+      "redTests": [
+        "counts a script joined out of `scripts/` by variable: Received: null",
+        "counts a script spelled out under `scripts/`, and passes one outside it: Received: null"
+      ]
+    },
+    {
+      "round": 2,
+      "test": "scripts/__tests__/test-env-scrub.test.js \u203a no suite spawns a device-aware script from an unscrubbed environment \u203a finds the sites, and every one of them scrubs",
+      "file": "scripts/__tests__/bench-baseline-machine.test.js",
+      "mutation": "the bench suite goes back to handing its CLI child this shell's environment, which is what the review found",
+      "before": "        env: childEnv({",
+      "after": "        env: { ...process.env,",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/test-env-scrub.test.js - FAIL, 1 of 14",
+      "redTests": [
+        "finds the sites, and every one of them scrubs: + \"scripts/__tests__/bench-baseline-machine.test.js:483 hands <unresolved> (a scripts/ path this audit cannot resolve) an unscrubbed process.env\""
+      ]
     }
   ]
 }
