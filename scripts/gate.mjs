@@ -122,6 +122,7 @@ import {
   RUNNER_LOG_RELATIVE_ENV,
   RUNNER_RECORD_SUFFIX,
   groupMembers,
+  maySweepRunnerGroup,
   stopGroup,
 } from './gate-runner.mjs';
 import { contentHash, isCodeFile } from './app-stamp-core.mjs';
@@ -2356,23 +2357,38 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // death, and this handles the supervisor's own.
   const supervisorDied = exit.signal != null || exit.code === GATE_DEATH_EXIT;
   if (supervisorDied && childPid != null) {
-    const left = await groupMembers(childPid);
-    if (left.length > 0) {
-      note(
-        `gate: this run's supervisor left (${String(
-          exit.signal ?? `exit ${String(exit.code)}`
-        )}) with ${String(left.length)} process(es) still up in group ${String(
-          childPid
-        )}: ${left.join(', ')}\n`
-      );
-      const remaining = await stopGroup(childPid, { log: note });
-      note(
-        remaining.length > 0
-          ? `gate: ${String(remaining.length)} process(es) outlived this run: ${remaining.join(
-              ', '
-            )} - the next gate on this lease will name them\n`
-          : `gate: the run’s group is gone with it\n`
-      );
+    // Two things must hold before this process may signal that group, and `maySweepRunnerGroup`
+    // asks them: the pid has still got to describe *this* run (pids are recycled, and `ps -g` about
+    // a recycled one reads a stranger's tree), and the supervisor must have left no note saying it
+    // had already swept. A run whose supervisor finished the job, or whose pid has been taken, is
+    // therefore not swept at all — and says so, because "why is my Metro still up" should be
+    // answerable from the log rather than from this file.
+    const owed = maySweepRunnerGroup({
+      runnerPid: childPid,
+      recordFile:
+        absoluteLog == null ? null : `${absoluteLog}${RUNNER_RECORD_SUFFIX}`,
+    });
+    if (!owed.sweep) {
+      note(`gate: not sweeping group ${String(childPid)} - ${owed.why}\n`);
+    } else {
+      const left = await groupMembers(childPid);
+      if (left.length > 0) {
+        note(
+          `gate: this run's supervisor left (${String(
+            exit.signal ?? `exit ${String(exit.code)}`
+          )}) with ${String(left.length)} process(es) still up in group ${String(
+            childPid
+          )}: ${left.join(', ')}\n`
+        );
+        const remaining = await stopGroup(childPid, { log: note });
+        note(
+          remaining.length > 0
+            ? `gate: ${String(remaining.length)} process(es) outlived this run: ${remaining.join(
+                ', '
+              )} - the next gate on this lease will name them\n`
+            : `gate: the run’s group is gone with it\n`
+        );
+      }
     }
   }
   const leftover = await stopOwnMetro({

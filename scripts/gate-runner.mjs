@@ -408,6 +408,74 @@ function signalGroup(group, signal) {
 }
 
 /**
+ * May the gate sweep the process group its supervisor was started in?
+ *
+ * The net under the supervisor: a run ended by a signal, or by a supervisor that died hard, can
+ * leave the command and the bundle server it spawned sitting in that group. Two facts decide it,
+ * because a group id is only as good as the pid it came from:
+ *
+ *   - **the pid must be free.** The gate watched that process exit, so a *live* process with the
+ *     same number is a different process — and if it leads a group, `ps -g` and `kill(-pid, …)`
+ *     describe *its* tree. pids get reused; a sweep aimed at a number learned seconds ago can be
+ *     aimed at a stranger's run, which is the one thing this file is not allowed to do.
+ *   - **the supervisor must not have said it was done.** Its sidecar carries a `stopped` note once a
+ *     sweep has finished, and a gate that reads one has nothing left to clean; a sidecar without one
+ *     is the X32 shape — a supervisor killed so hard that its own cleanup never ran.
+ *
+ * @param {object} options
+ * @param {number | null} options.runnerPid the group id: the pid of the supervisor the gate started
+ * @param {string | null} [options.recordFile] that supervisor's sidecar for this run
+ * @param {(file: string) => object | null} [options.readRecord] how to read it
+ * @param {(pid: number) => boolean} [options.pidAlive] is that pid there now
+ * @returns {{sweep: boolean, why: string}}
+ */
+export function maySweepRunnerGroup({
+  runnerPid,
+  recordFile = null,
+  readRecord = readRunnerRecordFile,
+  pidAlive = pidIsAlive,
+}) {
+  const pid = Number(runnerPid);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return { sweep: false, why: 'no supervisor pid to name the group by' };
+  }
+  if (pidAlive(pid)) {
+    return {
+      sweep: false,
+      why:
+        `pid ${String(pid)} is alive again after this run watched it exit, so the number is ` +
+        'another process’s now, and the group it leads is not this run’s',
+    };
+  }
+  const record = recordFile == null ? null : readRecord(recordFile);
+  if (record != null && record.stopped != null) {
+    const survivors = Number(record.stopped.left?.length ?? 0);
+    return {
+      sweep: false,
+      why:
+        `its supervisor reported the sweep already, with ${String(survivors)} ` +
+        'process(es) surviving it',
+    };
+  }
+  return {
+    sweep: true,
+    why:
+      record == null
+        ? 'there is no sidecar to read, and a supervisor taken by a signal may never have reached its cleanup'
+        : 'its sidecar has no `stopped` record, so no sweep was ever reported',
+  };
+}
+
+/** One sidecar as an object, or null when it cannot be read or parsed. */
+function readRunnerRecordFile(file) {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The sidecar naming this run's process group, written as the run starts.
  *
  * Why it has to exist before anything can go wrong: the fact it carries — "this group belongs to
@@ -616,6 +684,8 @@ function signalPid(pid, signal) {
  *   below that the group is safe to signal
  * @param {(group: number) => void} [options.beforeSweep] called immediately before the group is
  *   signalled, so the real supervisor can stop reacting to the signal it is about to send itself
+ * @param {number} [options.ownPid] this process's own pid. A supervisor may only signal a group it
+ *   leads, and the kernel marks that group by giving it the leader's pid (see `sweep`).
  * @param {(ms: number) => Promise<void>} [options.wait]
  * @param {(message: string) => void} [options.log]
  * @param {number} [options.intervalMs] how often the backstop poll asks
@@ -636,6 +706,7 @@ export async function superviseGateRunner({
   beforeSweep = () => {},
   wait = sleep,
   log = note,
+  ownPid = process.pid,
   intervalMs = WATCH_INTERVAL_MS,
 }) {
   const started = await start(argv);
@@ -686,6 +757,30 @@ export async function superviseGateRunner({
    * @param {string} why which of the two signals noticed
    */
   async function sweep(why) {
+    // The group this process leads is the only thing it may signal, and a group number that is not
+    // its own pid belongs to somebody else.
+    //
+    // `gate.mjs` starts the supervisor `detached`, so the group it leads carries its pid and the
+    // sweep below is exactly this run's tree. A supervisor started any other way — imported by a
+    // suite, run by hand, or launched by a caller that forgot the flag — sits in a group that holds
+    // processes it was never given: a test runner's, or a shell's. Signalling that group on a timer
+    // is the X4 failure with a watchdog bolted on, and the `gate.mjs` that created the group has its
+    // own number and can sweep it itself. So: say why, write no `stopped` record (nothing was
+    // swept), and let the gate do the part only it can do.
+    if (group !== ownPid) {
+      log(
+        `gate-runner: gate ${String(watch)} died (${why}), but group ${String(
+          group
+        )} is not this supervisor's own (its pid is ${String(
+          ownPid
+        )}) - refusing to signal a group it does not lead\n`
+      );
+      return {
+        code: GATE_DEATH_EXIT,
+        reason:
+          'gate died; this supervisor does not lead the group, so nothing was swept',
+      };
+    }
     // Refuse to sweep a group that contains the gate itself.
     //
     // The supervisor is started `detached` by `gate.mjs`, so it leads a group of its own and the
@@ -781,27 +876,45 @@ function startCommand(argv, group) {
  *
  * @param {number} group the run's group, this process included
  * @param {() => boolean} commandIsAlive
- * @param {(group: number) => Promise<number[]>} [stop]
+ * @param {(group: number, options?: {termGraceMs?: number, killGraceMs?: number}) => Promise<number[]>} [stop]
  * @param {(message: string) => void} [log]
+ * @param {number} [ownPid] this process's own pid; the group it may end is the one that carries it
  */
 export function holdOnSignal(
   group,
   commandIsAlive,
   {
-    stop = stopGroup,
     log = note,
+    ownPid = process.pid,
+    stop = (target, options) => stopGroup(target, { log, ...options }),
     holdMs = SIGNAL_HOLD_MS,
     signals = FORWARD_SIGNALS,
   } = {}
 ) {
+  // The same rule as the sweep's, on the other half of the job: a hold that ends in a signal to a
+  // group it does not lead is a Ctrl-C aimed at whatever else is in that group — a test runner, or
+  // the shell of someone who ran this file by hand. Holding is only safe for the leader.
+  if (group !== ownPid) {
+    log(
+      `gate-runner: not holding signals for group ${String(
+        group
+      )}: this process is pid ${String(ownPid)}, so that group is not its to end\n`
+    );
+    return { get: () => null, pause: () => {}, dispose: () => {} };
+  }
   let held = null;
   // Set once the supervisor is sweeping on its own account. The group's own SIGTERM arrives at this
   // process too — it leads the group it is signalling — and a hold that reacts to it would start a
   // second sweep and exit with a signal code, so a run ended by its gate's death would be reported
   // as a run ended by a Ctrl-C nobody sent.
   let paused = false;
+  /** Stop reacting to signals; this process is about to be the one sending them. */
+  function pause() {
+    paused = true;
+  }
+  const handlers = new Map();
   for (const signal of signals) {
-    process.on(signal, () => {
+    const handler = () => {
       if (paused) return;
       if (held != null) {
         // Second signal: the hold was the wrong call, and the person typing it is right that
@@ -809,11 +922,9 @@ export function holdOnSignal(
         // which contains this process — and the note goes out first, because this is the path
         // where the supervisor may not get to speak again.
         log(`gate-runner: second ${signal}; ending the run now\n`);
-        void stopGroup(group, {
-          log,
-          termGraceMs: 0,
-          killGraceMs: 2_000,
-        }).then(() => process.exit(128 + signum(signal)));
+        void stop(group, { termGraceMs: 0, killGraceMs: 2_000 }).then(() =>
+          process.exit(128 + signum(signal))
+        );
         return;
       }
       held = signal;
@@ -822,9 +933,18 @@ export function holdOnSignal(
         log(
           `gate-runner: ${signal} was ignored by the run; stopping group ${String(group)}\n`
         );
+        // This sweep signals the group this process leads, so it signals *itself*, and this handler
+        // is what catches that term. Pausing first is the whole point: unpaused, the SIGTERM the
+        // supervisor sends reads as a *second* signal from a hand that is not typing, the
+        // escalation branch runs with `termGraceMs: 0`, and the group is killed within a second of
+        // the decision to give it ten — a harness and a bundle server cut off in the middle of a
+        // cleanup that was working, which is what this hold exists to prevent.
+        pause();
         void stop(group).then(() => process.exit(128 + signum(signal)));
       }, holdMs).unref?.();
-    });
+    };
+    handlers.set(signal, handler);
+    process.on(signal, handler);
   }
   return {
     /** The signal this process was asked to die by, if any — the exit code it should leave with. */
@@ -832,8 +952,17 @@ export function holdOnSignal(
       return held;
     },
     /** Stop reacting to signals: the supervisor is about to be the one sending them. */
-    pause() {
-      paused = true;
+    pause,
+    /**
+     * Take the handlers back off. A real supervisor never needs to — it is leaving anyway — but a
+     * suite that installs one and walks away hands every later test a handler that signals a group
+     * from a finished fixture, which is a flake with a signal attached.
+     */
+    dispose() {
+      for (const [signal, handler] of handlers) {
+        process.removeListener(signal, handler);
+      }
+      handlers.clear();
     },
   };
 }
