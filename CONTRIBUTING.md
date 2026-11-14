@@ -99,51 +99,53 @@ docs/DECISIONS.md    the decisions, numbered (D1, D2, …)
 
 Run from the repo root.
 
-| Command                       | What it does                                                                |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| `bun run check`               | **All static gates.** Run this before pushing.                              |
-| `bun run check:serial`        | The same steps as one `&&` chain, for timing the runner against it          |
-| `bun run typecheck`           | `tsc` over the library and example                                          |
-| `bun run bench:typecheck`     | `tsc` over `bench/` for each platform                                       |
-| `bun run lint`                | ESLint, including the local perf-contract rules                             |
-| `bun run format`              | Prettier check (`format:write` to fix)                                      |
-| `bun run test`                | Jest unit tests (JS wrappers, lint rules, patch script)                     |
-| `bun run test:native`         | Host-side C++ and Swift unit tests of the core (macOS only)                 |
-| `bun run test:native:android` | JVM unit tests of the Kotlin core (needs the Android SDK; in `check`)       |
-| `bun run nitrogen`            | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`              |
-| `bun run nitrogen:check`      | Regenerate into a temp dir and fail on drift against `nitrogen/`            |
-| `bun run registry`            | Write the per-component lists from `src/components/*/component.json`        |
-| `bun run registry:check`      | Fail when those lists are not what the manifests say (see "Adding a comp…") |
-| `bun run regen`               | `nitrogen` + `registry` — what to run after a merge or a new component      |
-| `bun run autolinking:check`   | RN CLI + Expo autolinkers must both resolve `NitroUiPackage`                |
-| `bun run prepare`             | Build `lib/` with builder-bob (also runs `nitrogen`)                        |
-| `bun run api-extractor`       | Regenerate the public API report in `etc/` (`:check` compares)              |
-| `bun run publint`             | Validate `package.json` publish surface                                     |
-| `bun run manifest:check`      | Tarball contents must equal `etc/package-files.txt`                         |
-| `bun run readme:check`        | README examples must equal `example/src/readme-examples.tsx`                |
-| `bun run task-ready`          | The hand-in bar: coverage, report citations, `need --for review` (see "…")  |
-| `bun run conformance:table`   | Print the shared table the conformance harness asserts against (`--write`)  |
-| `bun run manifest:update`     | Rewrite the manifest after an **intentional** publish-surface change        |
-| `bun run harness:ios`         | On-device tests on iOS (see below)                                          |
-| `bun run harness:android`     | On-device tests on Android (see below)                                      |
-| `bun run harness:cold:ios`    | Only the `ColdSizing` suite (`:android` for Android)                        |
-| `bun run test:real-input:ios` | OS-delivered taps and drags (`:android` for Android; see below)             |
-| `bun run smoke:pack`          | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)               |
-| `bun run smoke:expo`          | Install the packed lib into a fresh Expo app, Release, on-device            |
-| `bun run smoke:rn-cli`        | Same for a fresh React Native CLI app                                       |
-| `bun bench`                   | Run the on-device benchmarks (see "Running the benchmarks")                 |
-| `bun run bench:report`        | Re-render an existing results file, no device needed                        |
-| `bun run probe:nitrogen`      | Regenerate the private `bench/modules/bench-probe` Nitro code               |
-| `bun run perf:renders`        | Reassure render-count gate for the JS wrappers                              |
-| `bun run changeset`           | Record a release entry for your change (see "Releasing")                    |
-| `bun run release:version`     | Apply pending changesets, as the Version Packages PR does (see "Releasing") |
-| `bun run build:app`           | Build + stamp the example app for one platform (see below)                  |
-| `bun run lease <command>`     | Device/port leases for this machine: `acquire`, `release`, `list`           |
-| `bun run example <script>`    | Run an `example/` script, e.g. `bun run example ios`                        |
-| `bun run storybook:ios`       | The example app in Storybook mode (`:android`; see `example/README.md`)     |
-| `bun run hooks:install`       | Install optional git hooks (see "Commit messages and git hooks")            |
-| `bun run hooks:uninstall`     | Remove them again                                                           |
-| `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                            |
+| Command                       | What it does                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `bun run check`               | **All static gates.** Run this before pushing.                                 |
+| `bun run check:serial`        | The same steps as one `&&` chain, for timing the runner against it             |
+| `bun run typecheck`           | `tsc` over the library and example                                             |
+| `bun run bench:typecheck`     | `tsc` over `bench/` for each platform                                          |
+| `bun run lint`                | ESLint, including the local perf-contract rules                                |
+| `bun run format`              | Prettier check (`format:write` to fix)                                         |
+| `bun run test`                | Jest unit tests (JS wrappers, lint rules, patch script)                        |
+| `bun run test:native`         | Host-side C++ and Swift unit tests of the core (macOS only)                    |
+| `bun run test:native:android` | JVM unit tests of the Kotlin core (needs the Android SDK; in `check`)          |
+| `bun run nitrogen`            | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`                 |
+| `bun run nitrogen:check`      | Regenerate into a temp dir and fail on drift against `nitrogen/`               |
+| `bun run registry`            | Write the per-component lists from `src/components/*/component.json`           |
+| `bun run registry:check`      | Fail when those lists are not what the manifests say (see "Adding a comp…")    |
+| `bun run regen`               | `nitrogen` + `registry` — what to run after a merge or a new component         |
+| `bun run autolinking:check`   | RN CLI + Expo autolinkers must both resolve `NitroUiPackage`                   |
+| `bun run prepare`             | Build `lib/` with builder-bob (also runs `nitrogen`)                           |
+| `bun run api-extractor`       | Regenerate the public API report in `etc/` (`:check` compares)                 |
+| `bun run publint`             | Validate `package.json` publish surface                                        |
+| `bun run manifest:check`      | Tarball contents must equal `etc/package-files.txt`                            |
+| `bun run readme:check`        | README examples must equal `example/src/readme-examples.tsx`                   |
+| `bun run task-ready`          | The hand-in bar: coverage, report citations, `need --for review` (see "…")     |
+| `bun run conformance:table`   | Print the shared table the conformance harness asserts against (`--write`)     |
+| `bun run manifest:update`     | Rewrite the manifest after an **intentional** publish-surface change           |
+| `bun run harness:ios`         | On-device tests on iOS (see below)                                             |
+| `bun run harness:android`     | On-device tests on Android (see below)                                         |
+| `bun run harness:cold:ios`    | Only the `ColdSizing` suite (`:android` for Android)                           |
+| `bun run test:real-input:ios` | OS-delivered taps and drags (`:android` for Android; see below)                |
+| `bun run smoke:pack`          | `npm pack` the library into `$SMOKE_TMP/tarballs` (see below)                  |
+| `bun run smoke:expo`          | Install the packed lib into a fresh Expo app, Release, on-device               |
+| `bun run smoke:rn-cli`        | Same for a fresh React Native CLI app                                          |
+| `bun bench`                   | Run the on-device benchmarks (see "Running the benchmarks")                    |
+| `bun run bench:report`        | Re-render an existing results file, no device needed                           |
+| `bun run probe:nitrogen`      | Regenerate the private `bench/modules/bench-probe` Nitro code                  |
+| `bun run perf:renders`        | Reassure render-count gate for the JS wrappers                                 |
+| `bun run changeset`           | Record a release entry for your change (see "Releasing")                       |
+| `bun run release:version`     | Apply pending changesets, as the Version Packages PR does (see "Releasing")    |
+| `bun run build:app`           | Build + stamp the example app for one platform (see below)                     |
+| `node scripts/worktrees.mjs`  | List this clone's worktrees and why each is kept (`--prune` removes the rest)  |
+| `node scripts/watchdog.mjs`   | Report what changed on the machine and project since the last run (`--status`) |
+| `bun run lease <command>`     | Device/port leases for this machine: `acquire`, `release`, `list`              |
+| `bun run example <script>`    | Run an `example/` script, e.g. `bun run example ios`                           |
+| `bun run storybook:ios`       | The example app in Storybook mode (`:android`; see `example/README.md`)        |
+| `bun run hooks:install`       | Install optional git hooks (see "Commit messages and git hooks")               |
+| `bun run hooks:uninstall`     | Remove them again                                                              |
+| `bun run clean`               | Delete build outputs (`lib/`, native build dirs)                               |
 
 `bun run check` is seventeen steps — typecheck, lock:check, bench:typecheck, lint,
 format, test, test:native, test:native:android, perf:renders, nitrogen:check,
@@ -881,7 +883,7 @@ row and, under it, the per-step durations of the `check` run — `check` is the 
 gate long enough that its total is not an actionable number, so the ledger keeps
 what each of the steps cost. At merge, `need` may accept a `check` from
 another branch's ledger when it passed on this exact code tree and its commit is
-merged here (see `docs/tasks/ORCHESTRATOR.md`, "The loop" step 5); `--no-reuse`
+merged here (see `docs/agents/gates.md`, "Reusing a `check` at merge"); `--no-reuse`
 asks the strict question. A task report starts from
 `docs/tasks/REPORT-TEMPLATE.md`, and `gate.mjs export --task <id>` commits the
 ledger beside it — **merging**, not rewriting (X30): lines already in
