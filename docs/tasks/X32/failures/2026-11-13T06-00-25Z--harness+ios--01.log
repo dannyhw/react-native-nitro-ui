@@ -1,0 +1,201 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-13T06:00:25.773Z on code tree `20bbddbd2c79` at HEAD `6ba02df` (branch `task/X32-review-debt`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 918962 ms
+- Load: start 10.30, end 7.62, median 8.92, max 71.10
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/harness+ios-2026-11-13T06-00-24.848Z.log` (<store>/task/X32-review-debt/harness+ios-2026-11-13T06-00-24.848Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · IconButton › leaves the engine where it started across a churn of drops`
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › gives the list the width its items need, not the trigger’s`
+- `● Menu · Split trigger (E3) › is two halves, and each one does only its own job`
+- `expected [] to deeply equal [ 'split:action' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X32-review-debt/harness+ios-2026-11-13T06-00-24.848Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X32-9xk2j (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X30-he2eg                X30          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.62 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 1083 — the rest is in the full log above)
+
+```
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: ios drawn=Grid@Tiles+,List,Rename@Edit the name,(Sort:[scrubbed]@Newest first~),(:Delete!)
+
+
+    console.log
+      e2 in place: ios drawn=Grid,List,Rename,(Sort:Name,Date~),(:Delete!)
+
+
+    console.log
+      e2 remount: ios drawn=Grid,List,Rename,(Sort:Name,Date~),(:Delete!)
+
+
+    console.log
+      split remount: split=null
+
+
+    console.log
+      split sizes (declared fallback 74.00x38.00): split-size=79.67x34.33 plain-size=79.67x34.33 corrections=2
+
+
+    console.log
+      iOS hosted box: 79.33x34.33 measured 79.33x34.33
+
+
+    console.log
+      read back: variant=outlined size=large tint=4291311531 label=Open the actions
+
+
+    console.log
+      a11y tree: named=127.00x50.33 fallback=null plain=null
+
+
+    console.log
+      menu glyph boxes: menu-plain=68.00x34.33 menu-icon=68.00x34.33 button-icon=68.00x34.33
+
+
+    console.log
+      menu missing-glyph boxes: missing-plain=68.00x34.33 missing-icon=68.00x34.33
+
+
+    console.log
+      menu split-glyph boxes: split-noicon=79.67x34.33 split-icon=79.67x34.33
+
+
+    console.log
+      menu rung boxes: rung-small=55.67x28.00 rung-medium=63.67x34.33 rung-large=79.67x50.33 rung-xlarge=79.67x50.33 rung-xxlarge=79.67x50.33
+
+  ● Menu · G7a › gives the list the width its items need, not the trigger’s
+
+    No hybrid handle for "wide-list" - it never mounted.
+
+      [0m [90m 362 |[39m   [36mconst[39m handle [33m=[39m handles[33m.[39m[36mget[39m(testId)[33m;[39m
+       [90m 363 |[39m   [36mif[39m (handle [33m==[39m [36mnull[39m) {
+      [31m[1m>[22m[39m[90m 364 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`No hybrid handle for "${testId}" - it never mounted.`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 365 |[39m   }
+       [90m 366 |[39m   [36mreturn[39m parseMenuReport(handle[33m.[39mnuiTestMenuReport())[33m;[39m
+       [90m 367 |[39m }[0m
+
+  ● Menu · Split trigger (E3) › is two halves, and each one does only its own job
+
+    expected [] to deeply equal [ 'split:action' ]
+
+      [0m [90m 2312 |[39m       [36mawait[39m settle([35m400[39m)[33m;[39m
+       [90m 2313 |[39m       [90m// One press, one action, and still no second container in the report.[39m
+      [31m[1m>[22m[39m[90m 2314 |[39m       expect(primaryLog)[33m.[39mtoEqual([[32m'split:action'[39m])[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 2315 |[39m       expect(stateLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m 2316 |[39m       expect(report([32m'split'[39m)[33m.[39msplit)[33m.[39mtoBeNull()[33m;[39m
+       [90m 2317 |[39m       console[33m.[39mlog([0m
+
+
+Summary of all failing tests
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · IconButton › leaves the engine where it started across a churn of drops
+
+    1 conformance finding(s):
+
+        - IconButton × no-leak-on-drop: 1 ledger entry(ies) survived 50 drops — each missing `NitroUiSizing::forget(sizing_.get())` pair in `onDropView` shows up here, and a handle keeps the view alive, so the leaked entry is the leak
+      [0m [90m 1439 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1440 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1441 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1442 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1443 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1444 |[39m [32m        .join('\n')}`[39m[0m
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › gives the list the width its items need, not the trigger’s
+
+    No hybrid handle for "wide-list" - it never mounted.
+
+      [0m [90m 362 |[39m   [36mconst[39m handle [33m=[39m handles[33m.[39m[36mget[39m(testId)[33m;[39m
+       [90m 363 |[39m   [36mif[39m (handle [33m==[39m [36mnull[39m) {
+      [31m[1m>[22m[39m[90m 364 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`No hybrid handle for "${testId}" - it never mounted.`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 365 |[39m   }
+       [90m 366 |[39m   [36mreturn[39m parseMenuReport(handle[33m.[39mnuiTestMenuReport())[33m;[39m
+       [90m 367 |[39m }[0m
+
+  ● Menu · Split trigger (E3) › is two halves, and each one does only its own job
+
+    expected [] to deeply equal [ 'split:action' ]
+
+      [0m [90m 2312 |[39m       [36mawait[39m settle([35m400[39m)[33m;[39m
+       [90m 2313 |[39m       [90m// One press, one action, and still no second container in the report.[39m
+      [31m[1m>[22m[39m[90m 2314 |[39m       expect(primaryLog)[33m.[39mtoEqual([[32m'split:action'[39m])[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 2315 |[39m       expect(stateLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m 2316 |[39m       expect(report([32m'split'[39m)[33m.[39msplit)[33m.[39mtoBeNull()[33m;[39m
+       [90m 2317 |[39m       console[33m.[39mlog([0m
+
+
+Test Suites: 2 failed, 1 skipped, 29 passed, 31 of 32 total
+Tests:       3 failed, 3 skipped, 622 passed, 628 total
+Snapshots:   0 total
+Time:        881.31 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 20bbddbd2c79, 25 components registered)
+lease: X32-9xk2j runs this suite on simulator 49D5024D-967B-4B93-ACF6-F73BA0A19E9F
+lease: nitroui boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.77/11.28 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X32-review-debt/harness+ios-2026-11-13T06-00-24.848Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        33.672 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 919.0 s
+gate: recorded in .gates/task/X32-review-debt.jsonl
+
+
+gate: appended the device context to task/X32-review-debt/harness+ios-2026-11-13T06-00-24.848Z.log (4 probe(s))
+
+```
