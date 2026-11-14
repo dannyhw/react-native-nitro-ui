@@ -133,5 +133,5 @@
 | X30 | Merge bar matches device gates per platform half; ledger export merges; --background typo guard; task-ready ID from branch | Apex | Opus | merged with X31 (#69, #70) |
 | X31 | hosted-picker flake, Form giveUps assertion, harness tap error text, ci-workflows 2 s budget | Apex | Opus | merged with X30 (#69, #70) |
 | X32 | Form iOS row press after a scroll, form.md VoiceOver contradiction, three Stepper review items, Checkbox probes assert and localised "mixed" | Apex | Opus | in review (#71; five gates green; finished on Opus after an Apex outage) |
-| X33 | Slider screen-reader steps compare the float the reader was shown; the long-standing step-test flake fixed at its cause | Apex | Opus | reviewed, fix round 1 (Android fix approved; show the walk race red on purpose, correct the cause claim and the flake counts) |
-| X34 | Gate hygiene: check from a leased shell, a detached gate takes its runner with it, lease-queue poll race, two iOS real-input waits settle on state | Apex | Opus | running |
+| X33 | Slider screen-reader steps compare the float the reader was shown; the long-standing step-test flake fixed at its cause | Apex | Opus | fix round 1 done (docs only: cause and counts corrected; on-demand race proof dropped under the flake time-box) |
+| X34 | Gate hygiene: check from a leased shell, a detached gate takes its runner with it, lease-queue poll race, two iOS real-input waits settle on state | Apex | Opus | in review (#73; five gates green) |
