@@ -6707,6 +6707,13 @@ final class RealInputTests: XCTestCase {
   /// a deadline rather than by three. Which failure it became is said from the last reading, so a slow
   /// publish is no longer reported as a missing finger — those are different bugs, and only one of
   /// them is `FOLLOWUPS.md:58`.
+  ///
+  /// Two of the rules are here for this anchor in particular, because a `Popover` toggles: the
+  /// reading a tap was aimed by is thrown away, so what follows a tap is decided on two reads taken
+  /// *after* it, and `quietAfterPressMs` gives a tap a full `reactTimeout` to present before another
+  /// may go. Either half alone leaves the flake room — a popover that arrives two reads late agrees
+  /// with the pre-tap reading, and one that arrives four reads late agrees with an honest post-tap
+  /// pair — and in both cases a second tap closes the popover the first one opened.
   private func tapUntilPopoverUp(
     _ identifier: String,
     as what: String,
@@ -6724,6 +6731,9 @@ final class RealInputTests: XCTestCase {
     let outcome = try GestureSettlement.settle(
       deadlineMs: Int(reactTimeout * 3 * 1_000),
       pauseMs: 200,
+      // One `reactTimeout` is already the price of "that tap did nothing", spent here waiting for the
+      // first one to present instead of on a second attempt at it.
+      quietAfterPressMs: Int(reactTimeout * 1_000),
       read: {
         Reading(
           windows: app.descendants(matching: .popover).count,
