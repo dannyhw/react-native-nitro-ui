@@ -19,6 +19,16 @@ import org.junit.Test
  *
  * The value *rule* itself is [NitroUiSliderValueTest]'s job; what matters here is
  * which values the model reports and when.
+ *
+ * The second half of this file is what a screen reader is handed. A reader's action
+ * arrives as a `Float` computed from the progress this control's semantics node
+ * publishes — also a `Float` — while the model holds a `Double`, and on any grid whose
+ * stops are not exact in binary those two numbers are not equal. Comparing the target
+ * with the `Double` therefore turns "the value you are showing" into a step, in one
+ * direction or the other depending on how the rounding fell; the tests under
+ * "The progress a reader is given is a Float" are that arithmetic, which is the same
+ * bug X32 found in the Stepper (G25 review) and which no device can be asked to produce
+ * on demand.
  */
 class SliderModelTest {
   /** A pump the test drives, with the arming the real one has. */
@@ -220,6 +230,154 @@ class SliderModelTest {
     assertEquals(6.0, still.model.displayed, 0.0)
     assertEquals(emptyList<Double>(), still.events.starts)
     assertEquals(emptyList<Double>(), still.events.completes)
+  }
+
+  // MARK: - The progress a reader is given is a Float
+
+  /**
+   * The progress the semantics node gives a reader for [displayed].
+   *
+   * `SliderTrack` publishes `ProgressBarRangeInfo(displayed.toFloat(), range, ticks)`,
+   * and the target of a reader's action is computed *from that float*, so the
+   * comparison [SliderModel.accessibilityStepToward] makes has to be against the same
+   * round-trip. This is the test's spelling of that one line; the arithmetic it
+   * reproduces is exactly what the node carries, which is why it needs no Compose tree
+   * (TalkBack does not run on the JVM).
+   */
+  private fun published(
+    displayed: Double,
+  ): Double = displayed.toFloat().toDouble()
+
+  @Test
+  fun aReaderAskingForThePublishedProgressMovesNothing() {
+    // X32's Stepper bug (G25 review) on the Slider's own path. A `0..1 step 0.1`
+    // control showing 0.3 publishes 0.3 through a Float, and that comes back as
+    // 0.30000001192092896 — *above* the 0.3 the model holds. A reader that asks for the
+    // value it can already read therefore asks for something higher, and the control
+    // steps: a whole gesture emitted and a number announced that nobody asked for.
+    val world = fixture(0.0, 1.0, 0.1, 0.3)
+    assertFalse(
+      "0.3 through a Float is the value on screen, not a step above it",
+      world.model.accessibilityStepToward(0.3f.toDouble()),
+    )
+    assertEquals(0.3, world.model.displayed, 0.0)
+    assertEquals(emptyList<Double>(), world.events.starts)
+    assertEquals(emptyList<Double>(), world.events.completes)
+    assertFalse(world.model.isFramePumpArmed)
+  }
+
+  @Test
+  fun aReaderAskingForThePublishedProgressDoesNotStepDownEither() {
+    // The side of the same round-trip that costs a person the value they were shown:
+    // 0.7 through a Float is 0.699999988079071, *below* the 0.7 the model holds, so a
+    // reader asking for what it was shown reads as a decrement and the control answers
+    // with the value before it. Weighed against the Double the two `assertFalse` tests
+    // above are one step up and one step down; weighed against the Float the node
+    // published, both are the same thing — no direction.
+    val world = fixture(0.0, 1.0, 0.1, 0.7)
+    assertFalse(
+      "0.7 through a Float is the value on screen, not a step below it",
+      world.model.accessibilityStepToward(0.7f.toDouble()),
+    )
+    assertEquals(0.7, world.model.displayed, 0.0)
+    assertEquals(emptyList<Double>(), world.events.starts)
+    assertEquals(emptyList<Double>(), world.events.completes)
+  }
+
+  @Test
+  fun theFloatRoundTripIsWhatMakesThoseFixturesMeanAnything() {
+    // If a refactor ever made a tenth exact in a Float, the two tests above would pass
+    // for free. They need these two numbers to be different, and on opposite sides —
+    // which is why both directions are asserted rather than one.
+    assertTrue("0.3 through a Float is above 0.3", 0.3f.toDouble() > 0.3)
+    assertTrue("0.7 through a Float is below 0.7", 0.7f.toDouble() < 0.7)
+    assertEquals(0.3f.toDouble(), published(0.3), 0.0)
+    assertEquals(0.7f.toDouble(), published(0.7), 0.0)
+  }
+
+  @Test
+  fun theSameTargetIsAStepWhenItIsNotTheValueOnScreen() {
+    // The fix must not blunt the action it exists to serve. The tempting wrong shape
+    // is a band: "close enough to the published progress is not a direction" — and a
+    // band wide enough to cover the float noise on a tenth's grid is wide enough to
+    // swallow the twentieth-of-the-range stride a continuous or stepped control is
+    // asked to move by. So the same number has to stay a step when it is not what the
+    // reader was shown.
+    val shown = 0.3f.toDouble()
+
+    val atThatValue = fixture(0.0, 1.0, 0.1, 0.3)
+    assertFalse("at 0.3 it is the progress the reader was shown", atThatValue.model.accessibilityStepToward(shown))
+
+    val oneStopAbove = fixture(0.0, 1.0, 0.1, 0.4)
+    assertTrue("one stop above 0.3 it is a step down", oneStopAbove.model.accessibilityStepToward(shown))
+    assertEquals(0.3, oneStopAbove.model.displayed, 0.0)
+    assertEquals(listOf(0.3), oneStopAbove.events.completes)
+
+    // The delegate's own destination for a scroll forward on `0..1` is a twentieth of
+    // the range above the published progress, and it lands on the next stop of a grid
+    // that is nowhere exact in binary.
+    val above = fixture(0.0, 1.0, 0.1, 0.3)
+    assertTrue(above.model.accessibilityStepToward(0.35f.toDouble()))
+    assertEquals(0.4, above.model.displayed, 0.0)
+    assertEquals(listOf(0.4), above.events.completes)
+  }
+
+  @Test
+  fun aReaderAskingForWhatAStaleTreeStillShowsMovesNothing() {
+    // X21's window and this comparison together, which is the case neither alone
+    // catches: the a11y tree still shows 0.3 while the model has moved to 0.4, and the
+    // reader asks for the number it is looking at — a Float, so it arrives as
+    // 0.30000001192092896. Against the Double 0.3 the node was built from that is a
+    // direction; against the Float the node *carried*, it is the progress the reader is
+    // looking at, and X21's rule stands: no direction, nothing moves.
+    val world = fixture(0.0, 1.0, 0.1, 0.4)
+    assertFalse(
+      "the stale progress the reader was shown is not a direction either",
+      world.model.accessibilityStepToward(0.3f.toDouble(), publishedProgress = 0.3),
+    )
+    assertEquals(0.4, world.model.displayed, 0.0)
+    assertEquals(emptyList<Double>(), world.events.completes)
+
+    // A stale tree still carries a real direction when the reader asks for one: this
+    // target is a whole step above the progress shown, whatever the rounding.
+    assertTrue(
+      "up from the progress that was shown",
+      world.model.accessibilityStepToward(0.4f.toDouble(), publishedProgress = 0.3),
+    )
+    assertEquals(0.5, world.model.displayed, 0.0)
+    assertEquals(listOf(0.5), world.events.completes)
+  }
+
+  @Test
+  fun aStrideTooSmallForTheFloatIsNotADirection() {
+    // A Slider over a large offset with a narrow range — an epoch-milliseconds window
+    // is the everyday shape — publishes its progress where a Float is 64 apart.
+    // `1000000010` is not one of those numbers: the node shows 1000000000, and the
+    // range the reader strides is itself only 192 wide once it has been through the
+    // float, so a twentieth of it lands back on 1000000000. That number is *below* the
+    // 1000000010 the model holds, and the comparison against the Double read it as
+    // "down" — a reader pressing up answered with the previous value, on the real
+    // platform path, every time. In float space it is the progress the reader was
+    // shown, which is the rule the four tests above pin down.
+    val world = fixture(1_000_000_000.0, 1_000_000_200.0, 10.0, 1_000_000_010.0)
+    val target = published(world.model.displayed)
+    assertTrue(
+      "the progress the node carries sits below the value it was made from",
+      target < world.model.displayed,
+    )
+    assertFalse("a target that is the shown progress is not a direction", world.model.accessibilityStepToward(target))
+    assertEquals(1_000_000_010.0, world.model.displayed, 0.0)
+    assertEquals(emptyList<Double>(), world.events.starts)
+    assertEquals(emptyList<Double>(), world.events.completes)
+
+    // Same magnitude, a range wide enough for the float to stride: the press steps, so
+    // the refusal above is about the target and not about the control being dead.
+    val wide = fixture(1_000_000_000.0, 1_000_100_000.0, 10.0, 1_000_000_010.0)
+    val publishedStride = (1_000_100_000.0f - 1_000_000_000.0f) / 20f
+    val wideTarget = (1_000_000_010.0f + publishedStride).toDouble()
+    assertTrue("the float does carry a stride here", wideTarget > published(wide.model.displayed))
+    assertTrue(wide.model.accessibilityStepToward(wideTarget))
+    assertEquals(1_000_000_020.0, wide.model.displayed, 0.0)
   }
 
   @Test
