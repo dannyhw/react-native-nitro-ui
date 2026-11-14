@@ -116,6 +116,7 @@ ios/core/NitroUiMainThread.swift
 ios/core/NitroUiModel.swift
 ios/core/NitroUiPresentation.swift
 ios/core/NitroUiPresenterChain.swift
+ios/core/NitroUiPressTravel.swift
 ios/core/UIColor+NitroUiColor.swift
 lib/module/MaterialTheme.js
 lib/module/MaterialTheme.js.map

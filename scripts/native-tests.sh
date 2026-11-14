@@ -164,6 +164,21 @@ run_case "stepper-binding.test (Swift)" \
       -o '$OUT/stepper-binding' && '$OUT/stepper-binding'
   "
 
+# How far a finger may travel over a pressable row before the row stops calling the
+# touch its own press (G30 for ListItem, X32 for the Form's cell, which had the same
+# recogniser written without the check). The device half is real-input's drag-from-a-row
+# check; what lives here is the geometry — the slop, the box, and a flick that comes back
+# — at inputs no device run can cheaply aim at, and the failure is one a screen cannot
+# show: a row that fires while the list scrolls is *also* what a green 10-tap press count
+# looks like.
+run_case "press-travel.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/core/NitroUiPressTravel.swift' \
+      '$ROOT/scripts/native-tests/press-travel.test.swift' \
+      -o '$OUT/press-travel' && '$OUT/press-travel'
+  "
+
 # The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
 # reads agree" wait that `RealInputTests.measure` runs before it prints a control's
 # boxes. It is here rather than only on a device because the three things worth
