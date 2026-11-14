@@ -6992,6 +6992,42 @@ final class RealInputTests: XCTestCase {
     )
 
     try assertRowShowsCellHighlight("form-row", echo: Echo.formRowPresses, as: "the form row with onPress")
+
+    // What a reader meets on this row, measured for `docs/components/form.md`, which said
+    // one thing about it in the API table and the opposite in its Accessibility section.
+    logFormRowAccessibilityTree()
+
+    // A drag that begins on a pressable row is the list asking for the page. The cell's
+    // press recogniser starts at touch-down and recognises alongside the list's own pan —
+    // which is what lets a `Pressable` inside the row keep the same touch — so before X32
+    // the only thing a flick had to clear was the release, and a flick releases a finger
+    // too: the list scrolled *and* the row's `onPress` fired, which is a navigation nobody
+    // asked for. G30 wrote the travel check for ListItem's own row and left this cell's
+    // recogniser as it found it. Android needs no such check (`HybridNitroUiFormRow` drops
+    // a touch past the slop in its own `dispatchTouchEvent`), which is why the same claim
+    // is a guard there and a fix here.
+    try scrollIntoView("form-row", as: "the form row with onPress")
+    try assertDragFromRowIsNotAPress(
+      "form-row",
+      echo: Echo.formRowPresses,
+      as: "the form row with onPress",
+      screen: "form"
+    )
+
+    // And a tap after that scroll still presses: the check above is worth nothing if the
+    // row it just refused had also stopped answering a finger.
+    // The count is not fresh here: the ten taps and the held press above already moved it,
+    // so the three taps are counted from where it stands, which the drag check has just
+    // proved it still holds.
+    try scrollIntoView("form-row", as: "the form row with onPress")
+    try assertOnePressPerTap(
+      "form-row",
+      echo: Echo.formRowPresses,
+      times: 3,
+      as: "the form row with onPress, after a scroll",
+      from: try pressCount(Echo.formRowPresses)
+    )
+
     try assertFormKeepsFieldAboveKeyboard()
   }
 
@@ -7169,6 +7205,40 @@ final class RealInputTests: XCTestCase {
     )
   }
 
+  /// Print the subtree a reader is handed for the Form's pressable row.
+  ///
+  /// A measurement and not an assertion, because the thing it settles is a sentence in a
+  /// document: `docs/components/form.md` carried two answers to "is a row with `onPress`
+  /// one element?" — the API table's "iOS's merge is recorded debt" and the Accessibility
+  /// section's "a row with `onPress` is **one** element: a button on iOS". The props cannot
+  /// answer that (the label is on the row either way, which is exactly why the two claims
+  /// could coexist); the XCUITest tree a11y.mjs already reads is what does.
+  ///
+  /// Printed in the same shape as the a11y pass's own `kind=node` lines, so a reader who
+  /// has one has the other. Building the merge is a different decision and X32's brief
+  /// rules it out; what this round owes is the number, in the log, on the tree the run
+  /// actually held.
+  private func logFormRowAccessibilityTree() {
+    guard let anchor = try? required("form-row", as: "the form row with onPress") else {
+      print("real-input form a11y kind=nodes skipped=no form-row element to read")
+      return
+    }
+    let nodes =
+      [A11yNode(element: anchor)]
+      + anchor.descendants(matching: .any).allElementsBoundByIndex.map(A11yNode.init(element:))
+    print("real-input form a11y kind=nodes nodes=\(nodes.count)")
+    for node in nodes {
+      print(
+        "real-input form a11y kind=node trait=\(quoted(node.traitName)) "
+          + "enabled=\(node.enabled) hittable=\(node.hittable) "
+          + "id=\(quoted(node.identifier)) label=\(quoted(node.label)) "
+          + "value=\(quoted(node.valueText)) "
+          + "x=\(node.frame.origin.x) y=\(node.frame.origin.y) "
+          + "w=\(node.frame.size.width) h=\(node.frame.size.height)"
+      )
+    }
+  }
+
   /// A drag that begins on a row belongs to the scroll view, so the row presses nobody.
   ///
   /// The row's press recogniser starts at once (`minimumPressDuration = 0`, which is what
@@ -7187,7 +7257,8 @@ final class RealInputTests: XCTestCase {
   private func assertDragFromRowIsNotAPress(
     _ identifier: String,
     echo: String,
-    as what: String
+    as what: String,
+    screen: String = "list-item"
   ) throws {
     let element = try required(identifier, as: what)
     let window = app.windows.firstMatch.frame
@@ -7204,7 +7275,7 @@ final class RealInputTests: XCTestCase {
     let after = echoText(echo)
     let direction = down ? "down" : "up"
     print(
-      "real-input list-item drag: \(what) (\(identifier)) travelled \(direction) "
+      "real-input \(screen) drag: \(what) (\(identifier)) travelled \(direction) "
         + "\(Int(travel)) pt from midY \(Int(element.frame.midY)) of a window ending at "
         + "\(Int(window.maxY)) — echo \"\(before)\" -> \"\(after)\""
     )
@@ -7218,7 +7289,18 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Tap `identifier` ten times and require the echo to read exactly 1…10.
+  /// The number an echo reads now, for a tap check that does not start from a fresh count.
+  /// A non-number fails rather than reading as 0, so a stale screen cannot pass as a fresh one.
+  private func pressCount(_ echo: String) throws -> Int {
+    let text = try read(echo)
+    guard let count = Int(text) else {
+      XCTFail("\"\(echo)\" should read a press count before the taps; it reads \"\(text)\".")
+      throw RealInputCheckAborted(identifier: echo)
+    }
+    return count
+  }
+
+  /// Tap `identifier` `times` times and require the echo to read exactly `base + 1`…`base + times`.
   ///
   /// Deliberately one tap, then one wait — not ten taps then a read. Ten taps and a
   /// final count of 10 would also be what a screen looks like after two taps landed
@@ -7227,10 +7309,11 @@ final class RealInputTests: XCTestCase {
     _ identifier: String,
     echo: String,
     times: Int,
-    as what: String
+    as what: String,
+    from base: Int = 0
   ) throws {
     for attempt in 1...times {
-      let wanted = String(attempt)
+      let wanted = String(base + attempt)
       guard pressOnce(identifier) != nil else {
         dumpHierarchy("\(what): \(identifier) is gone before tap \(attempt)")
         XCTFail(
@@ -7245,7 +7328,7 @@ final class RealInputTests: XCTestCase {
         XCTFail(
           "tap \(attempt) of \(times) on \(what) (\(identifier)) should make \"\(echo)\" read "
             + "\(wanted); it reads \"\(shown)\" after \(Int(reactTimeout))s — "
-            + ((Int(shown) ?? 0) > attempt
+            + ((Int(shown) ?? 0) > base + attempt
               ? "it is ahead, so a tap answered more than once."
               : "it is behind, so a tap was dropped before it reached the content.")
         )

@@ -1,0 +1,634 @@
+# Failure excerpt — real-input:android:--control:form
+
+- Ran: 2026-11-13T02:31:36.691Z on code tree `170cfa922853` at HEAD `65ae9a0` (branch `task/X32-review-debt`)
+- Command: `node scripts/real-input/android.mjs --control form`
+- Result: fail, exit null signal SIGTERM, 433042 ms
+- Load: start 18.57, end 6.47, median 7.27, max 18.57
+- Device: android / device `emulator-5574` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-31-36.117Z.log` (<store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-31-36.117Z.log)
+- Scrubbed: 2 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a drag that slides along the row is not a press (10 -> 11) — a thumb that wanders across a row and lifts did not choose it, and on this gesture no list is here to rescue the row — expected 10, saw 11`
+- `✗ a drag that scrolls the list is not a press (12 -> 13) — a row that fires on a scroll takes the person to a screen they only meant to scroll past — expected 12, saw 13`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-31-36.117Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X32-9xk2j (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X31-acetc                X31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.47 (the ledger line carries the samples across the whole run)
+gate: logcat (last 500 of 505 lines)
+  | 11-13 02:31:38.434 30770 30770 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.sidecar.jar
+  | 11-13 02:31:38.436 30770 30770 W ziparchive: Unable to open '/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.dm': No such file or directory
+  | 11-13 02:31:38.436 30770 30770 W ziparchive: Unable to open '/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.dm': No such file or directory
+  | 11-13 02:31:38.905 30770 30770 D nativeloader: Configuring clns-7 for other apk /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/lib/arm64:/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/nitroui.example
+  | 11-13 02:31:38.924 30770 30770 V GraphicsEnvironment: Currently set values for:
+  | 11-13 02:31:38.924 30770 30770 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+  | 11-13 02:31:38.925 30770 30770 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+  | 11-13 02:31:38.925 30770 30770 V GraphicsEnvironment: Global.Settings values are invalid: number of packages: 0, number of values: 0
+  | 11-13 02:31:38.925 30770 30770 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+  | 11-13 02:31:38.971 30770 30770 W SoLoader: Initializing SoLoader: 0
+  | 11-13 02:31:38.972 30770 30770 W SoLoader: Recording new base apk path: /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk
+  | 11-13 02:31:38.972 30770 30770 W SoLoader: Previously recorded 0 base apk paths.
+  | 11-13 02:31:38.979 30770 30770 I SoLoader: Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]
+  | 11-13 02:31:38.979 30770 30770 I SoLoader: Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]
+  | 11-13 02:31:38.979 30770 30770 I SoLoader: Preparing SO source: DirectApkSoSource[root = [/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a]]
+  | 11-13 02:31:39.081 30770 30770 I SoLoader: Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/lib/arm64 flags = 0]]
+  | 11-13 02:31:39.081 30770 30770 I SoLoader: init finish: 4 SO sources prepared
+  | 11-13 02:31:39.081 30770 30770 W SoLoader: SoLoader initialized: 8
+  | 11-13 02:31:39.123 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libc++_shared.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.126 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libjsi.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.130 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libfbjni.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.137 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libreactnative.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x71a7d891cc
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x71a7ff4cc8
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x71a800755c
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x71a80be790
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x71a83e3128
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x71a83f71b0
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x71a841c420
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x71a842848c
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x71a84abef4
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x71a85fec04
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x71a8615f64
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x71a8625ea0
+  | 11-13 02:31:39.137 30770 30770 D jni_lib_merge: About to register 12 actual methods.
+  | 11-13 02:31:39.144 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libreact_codegen_rngesturehandler_codegen.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.148 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libreact_codegen_RNCSlider.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.152 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libreact_codegen_rnsvg.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x71a7d891cc
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x71a7ff4cc8
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x71a800755c
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x71a80be790
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x71a83e3128
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x71a83f71b0
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x71a841c420
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x71a842848c
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x71a84abef4
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x71a85fec04
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x71a8615f64
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x71a8625ea0
+  | 11-13 02:31:39.152 30770 30770 D jni_lib_merge: About to register 12 actual methods.
+  | 11-13 02:31:39.157 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libreact_codegen_safeareacontext.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.159 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libappmodules.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.161 30770 30770 I NitroUiFeatureFlags: enableViewRecycling=true (forced over the RNOSS provider): null
+  | 11-13 02:31:39.243 30770 30770 D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+  | 11-13 02:31:39.328 30770 30770 I nitrouiOnLoad: Loading nitroui C++ library...
+  | 11-13 02:31:39.343 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libnitroui.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes3.dex): ok
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiCore"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiCore"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiButton"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiButton"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiProgress"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiProgress"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSlider"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSlider"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiHost"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiHost"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSwitch"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSwitch"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiDatePicker"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiDatePicker"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSegmentedControl"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSegmentedControl"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiPicker"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiPicker"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiMenu"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiMenu"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiDialog"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiDialog"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiTextField"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiTextField"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiBottomSheet"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiBottomSheet"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiChip"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiChip"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSearchField"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSearchField"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiCheckbox"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiCheckbox"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiMaterialTheme"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiMaterialTheme"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiContextMenu"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiContextMenu"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiTooltip"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiTooltip"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiForm"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiForm"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiFormSection"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiFormSection"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiFormRow"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiFormRow"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiIconButton"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiIconButton"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiPopover"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiPopover"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiStepper"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiStepper"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiButtonGroup"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiButtonGroup"!
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiListItem"...
+  | 11-13 02:31:39.345 30770 30770 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiListItem"!
+  | 11-13 02:31:39.345 30770 30770 I nitrouiOnLoad: Successfully loaded nitroui C++ library!
+  | 11-13 02:31:39.402 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libhermesvm.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.405 30770 30770 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libhermestooling.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:39.405 30770 30770 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 11-13 02:31:39.405 30770 30770 D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+  | 11-13 02:31:39.405 30770 30770 D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 0x723deea8f8
+  | 11-13 02:31:39.405 30770 30770 D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 0x723df19694
+  | 11-13 02:31:39.405 30770 30770 D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 0x723df1b70c
+  | 11-13 02:31:39.405 30770 30770 D jni_lib_merge: About to register 3 actual methods.
+  | 11-13 02:31:39.488 30770 30770 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+  | 11-13 02:31:39.488 30770 30770 W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+  | 11-13 02:31:39.490 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+  | 11-13 02:31:39.491 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Start
+  | 11-13 02:31:39.493 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getJSBundleLoader()
+  | 11-13 02:31:39.493 30770 30848 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning()
+  | 11-13 02:31:39.496 30770 30770 W nitroui.example: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+  | 11-13 02:31:39.500 30770 30850 D TrafficStats: tagSocket(96) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:39.502 30770 30849 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:39.504 30770 30770 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+  | 11-13 02:31:39.504 30770 30770 W unknown:ReactNative: Packager connection already open, nooping.
+  | 11-13 02:31:39.511 30770 30770 W HWUI    : Unknown dataspace 0
+  | 11-13 02:31:39.514 30770 30850 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning(): Async result = true
+  | 11-13 02:31:39.514 30770 30848 W unknown:BridgelessReact: ReactHost{0}.loadJSBundleFromMetro()
+  | 11-13 02:31:39.533 30770 30842 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+  | 11-13 02:31:39.533 30770 30842 I EGL_emulation: Opening libGLESv2_emulation.so
+  | 11-13 02:31:39.542 30770 30842 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+  | 11-13 02:31:39.542 30770 30842 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+  | 11-13 02:31:39.561 30770 30842 I Gralloc4: mapper 4.x is not supported
+  | 11-13 02:31:39.684 30770 30770 W unknown:BridgelessReact: ReactHost{0}.raiseSoftException(onWindowFocusChange(hasFocus = "true")): Tried to access onWindowFocusChange while context is not ready
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: Unhandled SoftException
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: com.facebook.react.bridge.ReactNoCrashSoftException: raiseSoftException(onWindowFocusChange(hasFocus = "true")): Tried to access onWindowFocusChange while context is not ready
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException(ReactHostImpl.kt:906)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException$default(ReactHostImpl.kt:897)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.onWindowFocusChange(ReactHostImpl.kt:679)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.facebook.react.ReactDelegate.onWindowFocusChanged(ReactDelegate.kt:226)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.facebook.react.ReactActivityDelegate.onWindowFocusChanged(ReactActivityDelegate.java:237)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.facebook.react.ReactActivity.onWindowFocusChanged(ReactActivity.java:161)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at androidx.appcompat.view.WindowCallbackWrapper.onWindowFocusChanged(WindowCallbackWrapper.java:124)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.android.internal.policy.DecorView.onWindowFocusChanged(DecorView.java:1772)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.View.dispatchWindowFocusChanged(View.java:16743)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.ViewGroup.dispatchWindowFocusChanged(ViewGroup.java:1505)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.ViewRootImpl.dispatchFocusEvent(ViewRootImpl.java:4697)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.ViewRootImpl.handleWindowFocusChanged(ViewRootImpl.java:4601)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.ViewRootImpl.-$$Nest$mhandleWindowFocusChanged(Unknown Source:0)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.ViewRootImpl$ViewRootHandler.handleMessageImpl(ViewRootImpl.java:6773)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.view.ViewRootImpl$ViewRootHandler.handleMessage(ViewRootImpl.java:6683)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.os.Handler.dispatchMessage(Handler.java:107)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.os.Looper.loopOnce(Looper.java:232)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.os.Looper.loop(Looper.java:317)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at java.lang.reflect.Method.invoke(Native Method)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+  | 11-13 02:31:39.687 30770 30770 E unknown:ReactHost: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)
+  | 11-13 02:31:39.893 30770 30775 I nitroui.example: Compiler allocated 5250KB to compile void android.view.ViewRootImpl.performTraversals()
+  | 11-13 02:31:40.033 30770 30775 I nitroui.example: Compiler allocated 4206KB to compile void android.widget.TextView.<init>(android.content.Context, android.util.AttributeSet, int, int)
+  | 11-13 02:31:40.323 30770 30850 W unknown:BridgelessReact: ReactHost{0}.loadJSBundleFromMetro(): Creating BundleLoader
+  | 11-13 02:31:40.324 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@10f96db
+  | 11-13 02:31:40.325 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext
+  | 11-13 02:31:40.326 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+  | 11-13 02:31:40.343 30770 30850 D TrafficStats: tagSocket(116) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:40.436 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+  | 11-13 02:31:40.440 30770 30848 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): DevSupportManager.onNewReactContextCreated()
+  | 11-13 02:31:40.444 30770 30770 W unknown:ReactNative: Packager connection already open, nooping.
+  | 11-13 02:31:40.447 30770 30770 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+  | 11-13 02:31:40.447 30770 30848 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Execute
+  | 11-13 02:31:40.447 30770 30770 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+  | 11-13 02:31:40.566 30770 30880 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libworklets.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:40.643 30770 30879 I ReactNativeJS: Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+  | 11-13 02:31:40.650 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiDatePickerManager
+  | 11-13 02:31:40.652 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+  | 11-13 02:31:40.653 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativecommunity.slider.ReactSliderManager
+  | 11-13 02:31:40.654 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiFormRowViewManager
+  | 11-13 02:31:40.656 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiMenuManager
+  | 11-13 02:31:40.656 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiIconButtonManager
+  | 11-13 02:31:40.657 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSegmentedControlManager
+  | 11-13 02:31:40.657 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiChipManager
+  | 11-13 02:31:40.657 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiButtonGroupManager
+  | 11-13 02:31:40.658 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiBottomSheetViewManager
+  | 11-13 02:31:40.658 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiFormViewManager
+  | 11-13 02:31:40.658 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiTextFieldManager
+  | 11-13 02:31:40.659 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiCheckboxManager
+  | 11-13 02:31:40.659 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+  | 11-13 02:31:40.659 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewShadowNode
+  | 11-13 02:31:40.659 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiPopoverViewManager
+  | 11-13 02:31:40.660 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.reanimated.view.REASharedTransitionBoundaryManager
+  | 11-13 02:31:40.660 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiContextMenuViewManager
+  | 11-13 02:31:40.660 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiFormSectionViewManager
+  | 11-13 02:31:40.660 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+  | 11-13 02:31:40.661 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiTooltipManager
+  | 11-13 02:31:40.661 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
+  | 11-13 02:31:40.661 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiStepperManager
+  | 11-13 02:31:40.661 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiDialogManager
+  | 11-13 02:31:40.661 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
+  | 11-13 02:31:40.662 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiHostViewManager
+  | 11-13 02:31:40.662 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiProgressManager
+  | 11-13 02:31:40.663 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiPickerManager
+  | 11-13 02:31:40.663 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiListItemManager
+  | 11-13 02:31:40.663 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSearchFieldManager
+  | 11-13 02:31:40.663 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiButtonManager
+  | 11-13 02:31:40.709 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+  | 11-13 02:31:40.710 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.VirtualViewManager$RenderableShadowNode
+  | 11-13 02:31:40.712 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+  | 11-13 02:31:40.714 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerDetectorViewManager
+  | 11-13 02:31:40.715 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+  | 11-13 02:31:40.718 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+  | 11-13 02:31:40.720 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+  | 11-13 02:31:40.722 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+  | 11-13 02:31:40.724 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+  | 11-13 02:31:40.727 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.SvgViewManager
+  | 11-13 02:31:40.729 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+  | 11-13 02:31:40.732 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+  | 11-13 02:31:40.734 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+  | 11-13 02:31:40.737 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+  | 11-13 02:31:40.739 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+  | 11-13 02:31:40.742 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+  | 11-13 02:31:40.745 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+  | 11-13 02:31:40.747 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+  | 11-13 02:31:40.749 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+  | 11-13 02:31:40.752 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+  | 11-13 02:31:40.754 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+  | 11-13 02:31:40.755 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+  | 11-13 02:31:40.757 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+  | 11-13 02:31:40.759 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+  | 11-13 02:31:40.761 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+  | 11-13 02:31:40.764 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+  | 11-13 02:31:40.768 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+  | 11-13 02:31:40.771 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+  | 11-13 02:31:40.773 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.debuggingoverlay.DebuggingOverlayManager
+  | 11-13 02:31:40.775 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+  | 11-13 02:31:40.777 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+  | 11-13 02:31:40.780 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+  | 11-13 02:31:40.782 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+  | 11-13 02:31:40.784 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+  | 11-13 02:31:40.786 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+  | 11-13 02:31:40.788 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+  | 11-13 02:31:40.790 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+  | 11-13 02:31:40.792 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+  | 11-13 02:31:40.794 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+  | 11-13 02:31:40.797 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+  | 11-13 02:31:40.799 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+  | 11-13 02:31:40.802 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+  | 11-13 02:31:40.804 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+  | 11-13 02:31:40.806 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+  | 11-13 02:31:40.809 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+  | 11-13 02:31:40.811 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+  | 11-13 02:31:40.815 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+  | 11-13 02:31:40.817 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager
+  | 11-13 02:31:40.820 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+  | 11-13 02:31:40.822 30770 30879 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager
+  | 11-13 02:31:40.918 30770 30880 I WebViewFactory: Loading com.google.android.webview version 124.0.6367.219 (code 636771932)
+  | --------- beginning of system
+  | 11-13 02:31:40.924 30770 30880 V ResourcesManager: The following library key has been added: ResourcesKey{ mHash=5781c037 mResDir=null mSplitDirs=[] mOverlayDirs=[/product/overlay/EmulationPixel9/EmulationPixel9Overlay.apk,/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk] mLibDirs=[/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk,/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v35 mCompatInfo={420dpi always-compat} mLoaders=[]}
+  | 11-13 02:31:40.927 30770 30880 W ziparchive: Unable to open '/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.dm': No such file or directory
+  | 11-13 02:31:40.927 30770 30880 W ziparchive: Unable to open '/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.dm': No such file or directory
+  | 11-13 02:31:40.928 30770 30880 W nitroui.example: Entry not found
+  | 11-13 02:31:40.931 30770 30880 D nativeloader: Configuring clns-8 for other apk /data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk. target_sdk_version=34, uses_libraries=ALL, library_path=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/lib/arm64:/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+  | 11-13 02:31:40.932 30770 30880 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+  | 11-13 02:31:40.933 30770 30880 D nativeloader: Configuring clns-9 for other apk /data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/lib/arm64:/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+  | 11-13 02:31:40.945 30770 30879 W ReactNativeJS: SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/AppAndFlow/react-native-safe-area-context
+  | 11-13 02:31:40.951 30770 30880 I cr_WVCFactoryProvider: Loaded version=124.0.6367.219 minSdkVersion=29 isBundle=false multiprocess=true packageId=2
+  | 11-13 02:31:40.958 30770 30880 D nativeloader: Load /data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a/libmonochrome_64.so using ns clns-9 from class loader (caller=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk): ok
+  | 11-13 02:31:40.959 30770 30880 D nativeloader: Load /system/lib64/libwebviewchromium_plat_support.so using ns clns-9 from class loader (caller=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk): ok
+  | 11-13 02:31:40.963 30770 30889 I chromium: [1113/023140.963206:INFO:variations_seed_loader.cc(66)] Failed to open file for reading.: No such file or directory (2)
+  | 11-13 02:31:40.963 30770 30889 I cr_VariationsUtils: Failed reading seed file "/data/user/0/nitroui.example/app_webview/variations_seed_new"
+  | 11-13 02:31:40.972 30770 30880 I cr_LibraryLoader: Successfully loaded native library
+  | 11-13 02:31:40.973 30770 30880 I cr_CachingUmaRecorder: Flushed 6 samples from 6 histograms, 0 samples were dropped.
+  | 11-13 02:31:40.984 30770 30895 D TrafficStats: tagSocket(130) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:41.040 30770 30879 I NitroModules: Loading NitroModules C++ library...
+  | 11-13 02:31:41.040 30770 30879 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libNitroModules.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes11.dex): ok
+  | 11-13 02:31:41.041 30770 30879 I NitroModules: Successfully loaded NitroModules C++ library!
+  | 11-13 02:31:41.041 30770 30879 I Nitro.Dispatcher: Installing global Dispatcher Holder into Runtime "HermesRuntime[RNBridgeless] (mqt_v_js)"...
+  | 11-13 02:31:41.041 30770 30879 I Nitro.JSICache: Creating new JSICache<T> for runtime HermesRuntime[RNBridgeless] (mqt_v_js)..
+  | 11-13 02:31:41.041 30770 30879 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroModulesProxy"...
+  | 11-13 02:31:41.041 30770 30879 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridObject"...
+  | 11-13 02:31:41.059 30770 30770 W nitroui.example: Accessing hidden field Landroid/widget/HorizontalScrollView;->mScroller:Landroid/widget/OverScroller; (unsupported, reflection, allowed)
+  | 11-13 02:31:41.078 30770 30879 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiCoreSpec"...
+  | 11-13 02:31:41.121 30770 30778 W nitroui.example: ApkAssets: Deleting an ApkAssets object '<empty> and /data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk' with 2 weak references
+  | 11-13 02:31:41.342 30770 30770 W nitroui.example: Accessing hidden field Landroid/widget/ScrollView;->mScroller:Landroid/widget/OverScroller; (unsupported, reflection, allowed)
+  | 11-13 02:31:41.423 30770 30900 D TrafficStats: tagSocket(118) with statsTag=0xffffffff, statsUid=-1
+  | 11-13 02:31:42.279 30770 30904 D nativeloader: Load /data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!/lib/arm64-v8a/libimagepipeline.so using ns clns-7 from class loader (caller=/data/app/~~eny4JQSDUNdOLHPG_vYVQQ==/nitroui.example-ekW4pVQtcBTMlGHgD5v8lw==/base.apk!classes19.dex): ok
+  | 11-13 02:31:42.760 30770 30770 W nitroui.example: Accessing hidden method Landroid/os/SystemProperties;->addChangeCallback(Ljava/lang/Runnable;)V (unsupported, reflection, allowed)
+  | 11-13 02:31:42.763 30770 30770 I Choreographer: Skipped 80 frames!  The application may be doing too much work on its main thread.
+  | 11-13 02:31:42.781 30770 30842 D EGL_emulation: app_time_stats: avg=1600.83ms min=1387.86ms max=1813.81ms count=2
+  | 11-13 02:31:42.785 30770 30780 I HWUI    : Davey! duration=1383ms; Flags=0, FrameTimelineVsyncId=143334852, IntendedVsync=850578785891853, Vsync=850578785891853, InputEventId=0, HandleInputStart=850578787737586, AnimationStart=850578787738294, PerformTraversalsStart=850579938511128, DrawStart=850580057017712, FrameDeadline=850578819225185, FrameInterval=850578787734836, FrameStartTime=16666666, SyncQueued=850580141403670, SyncStart=850580141500962, IssueDrawCommandsStart=850580142035670, SwapBuffers=850580163011337, FrameCompleted=850580169532337, DequeueBufferDuration=2250, QueueBufferDuration=125958, GpuCompleted=850580169532337, SwapBuffersCompleted=850580167129587, DisplayPresentTime=0, CommandSubmissionCompleted=850580163011337, 
+  | 11-13 02:31:42.835 30770 30780 I HWUI    : Davey! duration=1416ms; Flags=0, FrameTimelineVsyncId=143334874, IntendedVsync=850578802558519, Vsync=850580135891799, InputEventId=0, HandleInputStart=850580150013712, AnimationStart=850580150014545, PerformTraversalsStart=850580205928962, DrawStart=850580211705378, FrameDeadline=850580202558463, FrameInterval=850580149491253, FrameStartTime=16666666, SyncQueued=850580212919003, SyncStart=850580213038628, IssueDrawCommandsStart=850580213432337, SwapBuffers=850580214486045, FrameCompleted=850580219540420, DequeueBufferDuration=2667, QueueBufferDuration=253875, GpuCompleted=850580219540420, SwapBuffersCompleted=850580215850962, DisplayPresentTime=0, CommandSubmissionCompleted=850580214486045, 
+  | 11-13 02:31:44.443 30770 30920 D ProfileInstaller: Installing profile for nitroui.example
+  | 11-13 02:31:47.995 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@278ab60
+  | 11-13 02:31:50.564 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@838e0c1
+  | 11-13 02:31:53.078 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4def284
+  | 11-13 02:31:55.678 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@401364c
+  | 11-13 02:31:58.178 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a86618b
+  | 11-13 02:32:01.251 30770 30842 D EGL_emulation: app_time_stats: avg=972.10ms min=9.97ms max=17981.49ms count=19
+  | 11-13 02:32:01.265 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@22c0399
+  | 11-13 02:32:04.947 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3be114b
+  | 11-13 02:32:10.027 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@88f6c5d
+  | 11-13 02:32:12.543 30770 30842 D EGL_emulation: app_time_stats: avg=213.57ms min=1.44ms max=10474.67ms count=50
+  | 11-13 02:32:18.743 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@93c0263
+  | 11-13 02:32:26.346 30770 30842 D EGL_emulation: app_time_stats: avg=270.63ms min=12.08ms max=12975.89ms count=51
+  | 11-13 02:32:30.070 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f0c87b4
+  | 11-13 02:32:32.595 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4140213
+  | 11-13 02:32:35.127 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@aaf59dc
+  | 11-13 02:32:37.699 30770 30842 D EGL_emulation: app_time_stats: avg=222.59ms min=13.18ms max=10529.33ms count=51
+  | 11-13 02:32:49.075 30770 30842 D EGL_emulation: app_time_stats: avg=223.06ms min=7.69ms max=10554.93ms count=51
+  | 11-13 02:32:55.379 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eb33c30
+  | 11-13 02:32:57.979 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c50f0bf
+  | 11-13 02:33:00.644 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@309c666
+  | 11-13 02:33:00.658 30770 30842 D EGL_emulation: app_time_stats: avg=227.11ms min=13.09ms max=10753.64ms count=51
+  | 11-13 02:33:06.879 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@86bf14d
+  | 11-13 02:33:09.457 30770 30842 D EGL_emulation: app_time_stats: avg=419.00ms min=13.29ms max=8218.91ms count=21
+  | 11-13 02:33:10.469 30770 30842 D EGL_emulation: app_time_stats: avg=26.63ms min=13.29ms max=402.69ms count=38
+  | 11-13 02:33:12.878 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@45fe4f3
+  | 11-13 02:33:17.954 30770 30879 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiTextFieldSpec"...
+  | 11-13 02:33:17.955 30770 30879 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiFormSpec"...
+  | 11-13 02:33:18.314 30770 30842 D EGL_emulation: app_time_stats: avg=2614.50ms min=16.43ms max=7810.23ms count=3
+  | 11-13 02:33:19.552 30770 30842 D EGL_emulation: app_time_stats: avg=176.12ms min=3.06ms max=1016.23ms count=7
+  | 11-13 02:33:22.924 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7761d63
+  | 11-13 02:33:35.216 30770 30842 D EGL_emulation: app_time_stats: avg=824.38ms min=14.09ms max=15361.21ms count=19
+  | 11-13 02:33:37.579 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e3e7e86
+  | 11-13 02:33:39.558 30770 30842 D EGL_emulation: app_time_stats: avg=1085.65ms min=7.36ms max=4302.44ms count=4
+  | 11-13 02:33:43.958 30770 30842 D EGL_emulation: app_time_stats: avg=1099.97ms min=16.97ms max=4338.05ms count=4
+  | 11-13 02:33:43.990 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d6cf9cc
+  | 11-13 02:33:48.327 30770 30842 D EGL_emulation: app_time_stats: avg=1092.13ms min=14.44ms max=4306.27ms count=4
+  | 11-13 02:33:50.689 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f120dde
+  | 11-13 02:33:52.693 30770 30842 D EGL_emulation: app_time_stats: avg=1091.62ms min=14.65ms max=4305.09ms count=4
+  | 11-13 02:33:57.058 30770 30842 D EGL_emulation: app_time_stats: avg=1091.16ms min=10.59ms max=4304.29ms count=4
+  | 11-13 02:33:59.428 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eb6f8b2
+  | 11-13 02:34:01.391 30770 30842 D EGL_emulation: app_time_stats: avg=1083.32ms min=14.46ms max=4271.35ms count=4
+  | 11-13 02:34:01.426 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fc8b812
+  | 11-13 02:34:05.777 30770 30842 D EGL_emulation: app_time_stats: avg=1096.42ms min=14.41ms max=4324.12ms count=4
+  | 11-13 02:34:08.226 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c1f5b34
+  | 11-13 02:34:10.208 30770 30842 D EGL_emulation: app_time_stats: avg=1107.58ms min=13.20ms max=4371.35ms count=4
+  | 11-13 02:34:14.608 30770 30842 D EGL_emulation: app_time_stats: avg=1100.15ms min=17.13ms max=4337.45ms count=4
+  | 11-13 02:34:23.211 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@942a323
+  | 11-13 02:34:25.279 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d74c04e
+  | 11-13 02:34:29.395 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@56b74f
+  | 11-13 02:34:31.458 30770 30842 D EGL_emulation: app_time_stats: avg=4212.48ms min=14.79ms max=16788.32ms count=4
+  | 11-13 02:34:31.495 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d455d0d
+  | 11-13 02:34:33.794 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6748b40
+  | 11-13 02:34:35.773 30770 30842 D EGL_emulation: app_time_stats: avg=4314.89ms min=4314.89ms max=4314.89ms count=1
+  | 11-13 02:34:40.172 30770 30842 D EGL_emulation: app_time_stats: avg=4398.76ms min=4398.76ms max=4398.76ms count=1
+  | 11-13 02:34:44.522 30770 30842 D EGL_emulation: app_time_stats: avg=4349.74ms min=4349.74ms max=4349.74ms count=1
+  | 11-13 02:34:46.927 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9bf9366
+  | 11-13 02:34:48.957 30770 30842 D EGL_emulation: app_time_stats: avg=4434.63ms min=4434.63ms max=4434.63ms count=1
+  | 11-13 02:34:51.345 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5d14223
+  | 11-13 02:34:53.339 30770 30842 D EGL_emulation: app_time_stats: avg=4382.39ms min=4382.39ms max=4382.39ms count=1
+  | 11-13 02:34:57.723 30770 30842 D EGL_emulation: app_time_stats: avg=4384.13ms min=4384.13ms max=4384.13ms count=1
+  | 11-13 02:34:57.758 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3a121ba
+  | 11-13 02:35:00.127 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1d65bd1
+  | 11-13 02:35:02.158 30770 30842 D EGL_emulation: app_time_stats: avg=4434.51ms min=4434.51ms max=4434.51ms count=1
+  | 11-13 02:35:04.495 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e24c722
+  | 11-13 02:35:06.472 30770 30842 D EGL_emulation: app_time_stats: avg=4314.27ms min=4314.27ms max=4314.27ms count=1
+  | 11-13 02:35:06.509 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@195a915
+  | 11-13 02:35:08.826 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c17e6e8
+  | 11-13 02:35:10.874 30770 30842 D EGL_emulation: app_time_stats: avg=4401.62ms min=4401.62ms max=4401.62ms count=1
+  | 11-13 02:35:10.893 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7fd6d73
+  | 11-13 02:35:27.577 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1b7a8ac
+  | 11-13 02:35:29.562 30770 30842 D EGL_emulation: app_time_stats: avg=18687.52ms min=18687.52ms max=18687.52ms count=1
+  | 11-13 02:35:33.970 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@76ebf1e
+  | 11-13 02:35:35.945 30770 30842 D EGL_emulation: app_time_stats: avg=193.43ms min=12.36ms max=5859.48ms count=33
+  | 11-13 02:35:40.378 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@76650db
+  | 11-13 02:35:42.351 30770 30842 D EGL_emulation: app_time_stats: avg=188.40ms min=10.97ms max=5865.51ms count=34
+  | 11-13 02:35:44.763 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5118108
+  | 11-13 02:35:48.825 30770 30842 D EGL_emulation: app_time_stats: avg=181.97ms min=1.05ms max=5940.40ms count=33
+  | 11-13 02:35:53.243 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bfb6d55
+  | 11-13 02:35:55.225 30770 30842 D EGL_emulation: app_time_stats: avg=188.22ms min=12.05ms max=5856.05ms count=34
+  | 11-13 02:35:57.643 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a6ece7a
+  | 11-13 02:35:59.679 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d0eef91
+  | 11-13 02:36:01.665 30770 30842 D EGL_emulation: app_time_stats: avg=195.13ms min=12.26ms max=5911.62ms count=33
+  | 11-13 02:36:04.027 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ebab624
+  | 11-13 02:36:06.060 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3ccc343
+  | 11-13 02:36:08.045 30770 30842 D EGL_emulation: app_time_stats: avg=187.64ms min=6.01ms max=5841.35ms count=34
+  | 11-13 02:36:12.428 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c331fb2
+  | 11-13 02:36:14.409 30770 30842 D EGL_emulation: app_time_stats: avg=192.85ms min=9.65ms max=5840.17ms count=33
+  | 11-13 02:36:18.827 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4b5bf7d
+  | 11-13 02:36:20.792 30770 30842 D EGL_emulation: app_time_stats: avg=187.72ms min=13.77ms max=5839.62ms count=34
+  | 11-13 02:36:23.163 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4b3ef82
+  | 11-13 02:36:27.226 30770 30842 D EGL_emulation: app_time_stats: avg=194.95ms min=12.94ms max=5907.06ms count=33
+  | 11-13 02:36:48.862 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@beb3537
+  | 11-13 02:36:50.875 30770 30842 D EGL_emulation: app_time_stats: avg=695.53ms min=13.13ms max=23105.36ms count=34
+  | 11-13 02:36:50.893 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3d28835
+  | 11-13 02:36:55.296 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@264002a
+  | 11-13 02:37:02.861 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6584265
+  | 11-13 02:37:04.875 30770 30842 D EGL_emulation: app_time_stats: avg=14000.63ms min=14000.63ms max=14000.63ms count=1
+  | 11-13 02:37:04.947 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8af4351
+  | 11-13 02:37:10.173 30770 30842 D EGL_emulation: app_time_stats: avg=1324.27ms min=13.67ms max=4969.01ms count=4
+  | 11-13 02:37:10.227 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fc04d9b
+  | 11-13 02:37:12.542 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7e21d67
+  | 11-13 02:37:14.662 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1eacf62
+  | 11-13 02:37:19.611 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eeb4cd3
+  | 11-13 02:37:24.257 30770 30842 D EGL_emulation: app_time_stats: avg=3521.00ms min=9.63ms max=14018.87ms count=4
+  | 11-13 02:37:24.321 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e7e2ca3
+  | 11-13 02:37:25.329 30770 30842 D EGL_emulation: app_time_stats: avg=25.51ms min=12.60ms max=391.84ms count=42
+  | 11-13 02:37:29.779 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4f259df
+  | 11-13 02:37:31.959 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fbda378
+  | 11-13 02:37:36.089 30770 30770 D InsetsController: show(ime(), fromIme=false)
+  | 11-13 02:37:36.091 30770 30770 I ImeTracker: nitroui.example:355c32cf: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-13 02:37:36.106 30770 30770 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{b8fd8ea VFED..... .F....ID 0,0-870,75 aid=1073742035} flags=0 reason=SHOW_SOFT_INPUT_BY_INSETS_API
+  | 11-13 02:37:36.118 30770 30842 D EGL_emulation: app_time_stats: avg=599.38ms min=8.29ms max=10515.70ms count=18
+  | 11-13 02:37:36.132 30770 30770 I ImeTracker: nitroui.example:73711417: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT fromUser false
+  | 11-13 02:37:36.133 30770 30770 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{b8fd8ea VFED..... .F...... 0,0-870,75 aid=1073742035} flags=0 reason=SHOW_SOFT_INPUT
+  | 11-13 02:37:36.198 30770 30770 D InsetsController: show(ime(), fromIme=true)
+  | 11-13 02:37:36.215 30770 30770 W InteractionJankMonitor: Initializing without READ_DEVICE_CONFIG permission. enabled=true, interval=1, missedFrameThreshold=3, frameTimeThreshold=64, package=nitroui.example
+  | 11-13 02:37:36.220 30770 30770 D InsetsController: show(ime(), fromIme=true)
+  | 11-13 02:37:36.221 30770 30770 I ImeTracker: nitroui.example:73711417: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-13 02:37:36.222 30770 30770 I ImeTracker: nitroui.example:355c32cf: onShown
+  | 11-13 02:37:37.138 30770 30842 D EGL_emulation: app_time_stats: avg=41.93ms min=4.45ms max=350.51ms count=24
+  | 11-13 02:37:38.142 30770 30842 D EGL_emulation: app_time_stats: avg=502.16ms min=497.93ms max=506.38ms count=2
+  | 11-13 02:37:38.526 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@79d06c
+  | 11-13 02:37:39.636 30770 30842 D EGL_emulation: app_time_stats: avg=497.91ms min=493.67ms max=501.94ms count=3
+  | 11-13 02:37:40.653 30770 30842 D EGL_emulation: app_time_stats: avg=508.49ms min=508.45ms max=508.54ms count=2
+  | 11-13 02:37:40.893 30770 30770 D InsetsController: hide(ime(), fromIme=true)
+  | 11-13 02:37:40.921 30770 30770 I ImeTracker: nitroui.example:e2a27635: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_ON_ANIMATION_STATE_CHANGED fromUser false
+  | 11-13 02:37:40.921 30770 30770 I ImeTracker: com.google.android.inputmethod.latin:f9434497: onHidden
+  | 11-13 02:37:40.926 30770 30770 W FrameTracker: Missed SF frame:UNKNOWN: 80, 143494174, 0, CUJ=J<IME_INSETS_SHOW_ANIMATION::0@<email>>
+  | 11-13 02:37:41.660 30770 30842 D EGL_emulation: app_time_stats: avg=201.37ms min=9.61ms max=505.80ms count=5
+  | 11-13 02:37:43.154 30770 30842 D EGL_emulation: app_time_stats: avg=74.70ms min=8.60ms max=502.55ms count=20
+  | 11-13 02:37:44.671 30770 30842 D EGL_emulation: app_time_stats: avg=505.33ms min=497.95ms max=517.81ms count=3
+  | 11-13 02:37:45.671 30770 30842 D EGL_emulation: app_time_stats: avg=500.05ms min=494.04ms max=506.07ms count=2
+  | 11-13 02:37:46.560 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8f747e2
+  | 11-13 02:37:47.176 30770 30842 D EGL_emulation: app_time_stats: avg=501.85ms min=498.81ms max=506.54ms count=3
+  | 11-13 02:37:48.673 30770 30842 D EGL_emulation: app_time_stats: avg=498.85ms min=494.16ms max=501.90ms count=3
+  | 11-13 02:37:49.688 30770 30842 D EGL_emulation: app_time_stats: avg=507.27ms min=507.18ms max=507.36ms count=2
+  | 11-13 02:37:50.703 30770 30842 D EGL_emulation: app_time_stats: avg=253.87ms min=15.61ms max=508.92ms count=4
+  | 11-13 02:37:51.169 30770 30770 E FrameTracker: force finish cuj, time out: J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-13 02:37:52.193 30770 30842 D EGL_emulation: app_time_stats: avg=29.78ms min=12.11ms max=506.39ms count=50
+  | 11-13 02:37:53.209 30770 30842 D EGL_emulation: app_time_stats: avg=508.27ms min=498.86ms max=517.69ms count=2
+  | 11-13 02:37:53.878 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@45637fd
+  | 11-13 02:37:54.221 30770 30842 D EGL_emulation: app_time_stats: avg=45.95ms min=12.94ms max=496.76ms count=22
+  | 11-13 02:37:55.706 30770 30842 D EGL_emulation: app_time_stats: avg=47.91ms min=14.73ms max=503.25ms count=31
+  | 11-13 02:37:57.088 30770 30842 D EGL_emulation: app_time_stats: avg=460.62ms min=384.20ms max=499.12ms count=3
+  | 11-13 02:37:58.207 30770 30842 D EGL_emulation: app_time_stats: avg=21.94ms min=12.44ms max=287.77ms count=51
+  | 11-13 02:37:59.222 30770 30842 D EGL_emulation: app_time_stats: avg=507.15ms min=493.37ms max=520.93ms count=2
+  | 11-13 02:38:00.273 30770 30842 D EGL_emulation: app_time_stats: avg=350.50ms min=52.91ms max=517.22ms count=3
+  | 11-13 02:38:01.724 30770 30842 D EGL_emulation: app_time_stats: avg=27.88ms min=13.91ms max=503.31ms count=52
+  | 11-13 02:38:02.741 30770 30842 D EGL_emulation: app_time_stats: avg=508.11ms min=506.34ms max=509.89ms count=2
+  | 11-13 02:38:03.754 30770 30842 D EGL_emulation: app_time_stats: avg=50.64ms min=13.21ms max=496.00ms count=20
+  | 11-13 02:38:05.258 30770 30842 D EGL_emulation: app_time_stats: avg=44.24ms min=14.72ms max=517.69ms count=34
+  | 11-13 02:38:06.637 30770 30842 D EGL_emulation: app_time_stats: avg=459.48ms min=381.83ms max=500.79ms count=3
+  | 11-13 02:38:07.771 30770 30842 D EGL_emulation: app_time_stats: avg=37.80ms min=14.10ms max=401.64ms count=30
+  | 11-13 02:38:08.778 30770 30842 D EGL_emulation: app_time_stats: avg=503.73ms min=500.93ms max=506.53ms count=2
+  | 11-13 02:38:10.457 30770 30842 D EGL_emulation: app_time_stats: avg=559.55ms min=491.62ms max=688.48ms count=3
+  | 11-13 02:38:10.469 30770 30770 I ImeTracker: nitroui.example:7333750c: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_CLOSE_CURRENT_SESSION fromUser false
+  | 11-13 02:38:10.472 30770 30770 I ImeTracker: nitroui.example:4f884c27: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT fromUser false
+  | 11-13 02:38:10.472 30770 30770 I ImeTracker: nitroui.example:4f884c27: onFailed at PHASE_CLIENT_VIEW_SERVED
+  | 11-13 02:38:11.622 30770 30842 D EGL_emulation: app_time_stats: avg=582.14ms min=18.79ms max=1145.49ms count=2
+  | 11-13 02:38:13.176 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4373719
+  | 11-13 02:38:15.722 30770 30842 D EGL_emulation: app_time_stats: avg=241.18ms min=15.32ms max=3834.68ms count=17
+  | 11-13 02:38:16.736 30770 30842 D EGL_emulation: app_time_stats: avg=26.68ms min=12.61ms max=405.96ms count=38
+  | 11-13 02:38:21.624 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a78f69
+  | 11-13 02:38:24.142 30770 30842 D EGL_emulation: app_time_stats: avg=2468.68ms min=16.31ms max=7373.15ms count=3
+  | 11-13 02:38:25.153 30770 30842 D EGL_emulation: app_time_stats: avg=26.60ms min=12.07ms max=408.83ms count=38
+  | 11-13 02:38:29.996 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f4692e5
+  | 11-13 02:38:33.272 30770 30842 D EGL_emulation: app_time_stats: avg=4059.27ms min=15.80ms max=8102.74ms count=2
+  | 11-13 02:38:33.291 30770 30770 I Choreographer: Skipped 36 frames!  The application may be doing too much work on its main thread.
+  | 11-13 02:38:34.289 30770 30842 D EGL_emulation: app_time_stats: avg=338.95ms min=17.95ms max=974.58ms count=3
+  | 11-13 02:38:38.573 30770 30842 D EGL_emulation: app_time_stats: avg=267.74ms min=15.67ms max=4035.42ms count=16
+  | 11-13 02:38:38.612 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2f7ffa7
+  | 11-13 02:38:39.590 30770 30842 D EGL_emulation: app_time_stats: avg=26.76ms min=6.09ms max=406.45ms count=38
+  | 11-13 02:38:44.545 30770 30770 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4ee8e02
+  | 11-13 02:38:47.143 30770 30842 D EGL_emulation: app_time_stats: avg=3776.23ms min=13.12ms max=7539.34ms count=2
+  | 11-13 02:38:48.154 30770 30842 D EGL_emulation: app_time_stats: avg=26.61ms min=9.65ms max=409.53ms count=38
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: Error occurred, shutting down websocket connection: Websocket exception
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: java.io.EOFException
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.require(RealBufferedSource.kt:199)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.readByte(RealBufferedSource.kt:209)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.readHeader(WebSocketReader.kt:119)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.processNextFrame(WebSocketReader.kt:102)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket.loopReader(RealWebSocket.kt:293)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket$connect$1.onResponse(RealWebSocket.kt:195)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 11-13 02:38:48.772 30770 30849 E unknown:ReconnectingWebSocket: 	at java.lang.Thread.run(Thread.java:1012)
+  | 11-13 02:38:48.772 30770 30849 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8295/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: Cannot connect to Metro.
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: 
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: Try the following to fix the issue:
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: - Ensure that Metro is running and available on the same network
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: - Ensure that your device/emulator is connected to your machine and has USB debugging enabled - run 'adb devices' to see a list of connected devices
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: - If you're on a physical device connected to the same machine, run 'adb reverse tcp:8081 tcp:8081' to forward requests from your device
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: - If your device is on the same Wi-Fi network, set 'Debug server host & port for device' in 'Dev settings' to your machine's IP address and the port of the local dev server - e.g. 10.0.1.1:8081
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: 
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: URL: localhost:8295
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: 
+  | 11-13 02:38:48.776 30770 30879 W ReactNativeJS: Error: undefined
+gate: ---- end device context ----
+```
+
+## Last 87 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: retention removed 1 stored log file(s) (size) — 35 days, 64.0 MiB cap
+gate: real-input:android:--control:form
+gate: node scripts/real-input/android.mjs --control form (cwd .)
+gate: code tree 170cfa922853 at HEAD 65ae9a09
+gate: git tree c34dddba5df7 with a DIRTY worktree (not reusable)
+gate: log task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-31-36.117Z.log
+gate:       <store>/task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-31-36.117Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Stepper" (tab-stepper) is 73.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "List items" (tab-listitem) is 85.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  form: real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard
+    ✓ the Form screen starts with nothing pressed ({"rows":"0","inner":"0","outside":"0","changes":"0","value":"off"}) — expected 0/0/0/0/off, saw 0/0/0/0/off
+    · "Row with onPress" occupies 32,742 → 1049,889
+    ✓ ten real taps on a row are ten presses, and nothing else fired — expected 10/0/0, saw 10/0/0
+    · "Press me inside a row" occupies 106,1068 → 586,1171
+    ✓ ten real taps inside a row are ten presses, and its row stayed put — expected 10/10, saw 10/10
+    · "Airplane mode" occupies 838,1240 → 975,1324
+    ✓ ten real taps on the Switch are ten changes and are back where they started — expected 10/off, saw 10/off
+    · "Row with no onPress" occupies 74,910 → 1007,1025
+    ✓ a row without onPress does not press — expected 10, saw 10
+    · "Outside the form" occupies 32,514 → 1049,628
+    ✓ and input is alive: a tap outside the Form is one press — expected 1, saw 1
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · "Row with onPress" reads 742-889, still moving — settling before the finger goes down
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · slide across a pressable row: 509 px right along y 815.5 of the row at 742-889, echo "10" -> "11"
+    ✗ a drag that slides along the row is not a press (10 -> 11) — a thumb that wanders across a row and lifts did not choose it, and on this gesture no list is here to rescue the row — expected 10, saw 11
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · "Row with onPress" reads 742-889, still moving — settling before the finger goes down
+    · "Row with onPress" occupies 32,742 → 1049,889
+    · flick on a pressable row: 420 px up from y 815.5 of the row at 742-889, echo "12" -> "13", row left a readable box
+    ✓ the flick really scrolled the list (left a readable box) — without this the check below could pass on a page that never moved
+    ✗ a drag that scrolls the list is not a press (12 -> 13) — a row that fires on a scroll takes the person to a screen they only meant to scroll past — expected 12, saw 13
+    · show_ime_with_hard_keyboard was "0" - raised to 1 for the keyboard case so the software keyboard shows despite the AVD hardware keyboard
+    · "Note" occupies 105,2344 → 975,2407
+    ✓ the note field starts unfocused — expected no, saw no
+    ✓ a real tap focuses the field at the bottom of a long Form — expected yes, saw yes
+    ✓ the IME says its input view is on screen
+    ✓ a full software keyboard, not a toolbar: it occupies 883 px of a 2424 px window
+    · "Note" occupies 105,1445 → 975,1508
+    · field box 1445..1508 px, keyboard top 1541 px
+    ✓ the focused field is still on screen above the keyboard (field bottom 1508, keyboard top 1541)
+    · show_ime_with_hard_keyboard restored to 0
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+gate: real-input:android:--control:form FAIL in 433.0 s (signal SIGTERM)
+gate: recorded in .gates/task/X32-review-debt.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X32-review-debt/real-input+android+--control+form-2026-11-13T02-31-36.117Z.log (5 probe(s))
+gate: re-raising SIGTERM
+
+```
