@@ -33,6 +33,12 @@ import {
   isDeviceGate,
   resolveGate,
 } from '../gate-core.mjs';
+import {
+  REQUIREMENTS,
+  diskRefusal,
+  freeDiskGbFrom,
+  isCiRunner,
+} from '../doctor-core.mjs';
 import { requireLeaseDevice } from '../lease-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 import { FREE_LSOF } from './helpers/free-lsof-stub.js';
@@ -618,6 +624,163 @@ describeCli('gate.mjs refuses a device gate with no live lease', () => {
     const pack = runCli(dir, ['smoke:pack'], { NITRO_UI_HOME: home });
     expect(pack.status).toBe(0);
     expect(pack.ran).toBe(true);
+  });
+});
+
+/* ------------------------- a device gate on a full disk ---------------------- */
+
+/**
+ * The 2026-11-13 stall: 47 task worktrees nobody removed filled the disk, device runs
+ * died with ENOSPC half-way, and nothing said "disk" until a person looked. A device
+ * gate is now refused before it starts. The floor in these fixtures is the real one,
+ * and the free-space values sit on both sides of it (9 and 11 against 10) so an
+ * off-by-one or a flipped comparison cannot pass by accident.
+ */
+describe('a device gate on a full disk', () => {
+  const floor = REQUIREMENTS.deviceRunMinFreeDiskGb;
+
+  it('the decision: below the floor refuses, at the floor does not', () => {
+    expect(diskRefusal({ freeGb: floor - 1 })).toContain(
+      `${floor - 1} GB free`
+    );
+    expect(diskRefusal({ freeGb: floor - 1 })).toContain(
+      'scripts/worktrees.mjs'
+    );
+    expect(diskRefusal({ freeGb: floor })).toBeNull();
+    expect(diskRefusal({ freeGb: floor + 1 })).toBeNull();
+  });
+
+  it('an unreadable volume and an ephemeral CI runner are not refusals', () => {
+    expect(diskRefusal({ freeGb: null })).toBeNull();
+    expect(diskRefusal({ freeGb: Number.NaN })).toBeNull();
+    expect(diskRefusal({ freeGb: 0, ci: true })).toBeNull();
+  });
+
+  it('outside a test, reads the measured value and lets nothing raise it', () => {
+    expect(freeDiskGbFrom({}, 123)).toBe(123);
+    // The bypass a reviewer found in the first version: 999 over a measured 3.
+    expect(freeDiskGbFrom({ NITRO_UI_GATE_FREE_DISK_GB: '999' }, 3)).toBe(3);
+    expect(freeDiskGbFrom({}, null)).toBeNull();
+  });
+
+  it('inside a test, asks only the cases that name a value', () => {
+    const jest = { JEST_WORKER_ID: '1' };
+    expect(
+      freeDiskGbFrom({ ...jest, NITRO_UI_GATE_FREE_DISK_GB: '4' }, 123)
+    ).toBe(4);
+    // Not asked: a leased-gate case about something else must not depend on the
+    // host's disk, so the measurement is deliberately not used.
+    expect(freeDiskGbFrom(jest, 3)).toBeNull();
+    expect(
+      freeDiskGbFrom({ ...jest, NITRO_UI_GATE_FREE_DISK_GB: ' ' }, 3)
+    ).toBeNull();
+    expect(
+      freeDiskGbFrom({ ...jest, NITRO_UI_GATE_FREE_DISK_GB: 'full' }, 3)
+    ).toBeNull();
+  });
+
+  it('only a real CI runner is exempt', () => {
+    expect(isCiRunner({ CI: 'true' })).toBe(true);
+    expect(isCiRunner({ CI: '1' })).toBe(true);
+    for (const value of ['false', '0', '', 'no']) {
+      expect({ value, ci: isCiRunner({ CI: value }) }).toEqual({
+        value,
+        ci: false,
+      });
+    }
+    expect(isCiRunner({})).toBe(false);
+  });
+
+  it('refuses a leased device gate, runs nothing and records nothing', () => {
+    const dir = makeCheckout();
+    const live = leaseRecord();
+    const home = homeWith(dir, { leases: [live] });
+    const run = runCli(dir, ['harness:android'], {
+      ...leasedEnv({ pair: DEFAULT_PAIR, lease: live }),
+      NITRO_UI_HOME: home,
+      NITRO_UI_GATE_FREE_DISK_GB: String(floor - 1),
+      // A CI runner is exempt, and this suite runs on one: say plainly that this
+      // child is not on CI, or the case would pass there by never asking.
+      CI: '',
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('gate: refused before the run');
+    expect(run.stderr).toContain(`${floor - 1} GB free`);
+    expect(run.ran).toBe(false);
+    expect(ledgerLines(dir)).toEqual([]);
+  });
+
+  it('lets the same gate run with room to spare', () => {
+    const dir = makeCheckout();
+    const live = leaseRecord();
+    const home = homeWith(dir, { leases: [live] });
+    const run = runCli(dir, ['harness:android'], {
+      ...leasedEnv({ pair: DEFAULT_PAIR, lease: live }),
+      NITRO_UI_HOME: home,
+      NITRO_UI_GATE_FREE_DISK_GB: String(floor + 1),
+      CI: '',
+    });
+    expect(run.status).toBe(0);
+    expect(run.ran).toBe(true);
+  });
+
+  it('`CI=false` is a shell, not a runner: the floor still applies', () => {
+    const dir = makeCheckout();
+    const live = leaseRecord();
+    const home = homeWith(dir, { leases: [live] });
+    const env = {
+      ...leasedEnv({ pair: DEFAULT_PAIR, lease: live }),
+      NITRO_UI_HOME: home,
+      NITRO_UI_GATE_FREE_DISK_GB: String(floor - 1),
+    };
+    const shell = runCli(dir, ['harness:android'], { ...env, CI: 'false' });
+    expect(shell.status).toBe(1);
+    expect(shell.stderr).toContain(`${floor - 1} GB free`);
+    const runner = runCli(dir, ['harness:android'], { ...env, CI: 'true' });
+    expect(runner.status).toBe(0);
+    expect(runner.ran).toBe(true);
+  });
+
+  it('with no test seam at all, agrees with the disk it is really on', () => {
+    // Every case above names a value. This one removes jest's marker, so the child
+    // measures for itself, and the expectation is computed the same way here.
+    const dir = makeCheckout();
+    const live = leaseRecord();
+    const home = homeWith(dir, { leases: [live] });
+    const stats = fs.statfsSync(dir);
+    const realGb = Math.floor((stats.bavail * stats.bsize) / 2 ** 30);
+    const run = runCli(dir, ['harness:android'], {
+      ...leasedEnv({ pair: DEFAULT_PAIR, lease: live }),
+      NITRO_UI_HOME: home,
+      // A value that would refuse, to prove it is ignored outside a test.
+      NITRO_UI_GATE_FREE_DISK_GB: '0',
+      JEST_WORKER_ID: undefined,
+      CI: '',
+    });
+    expect({ realGb, ran: run.ran }).toEqual({ realGb, ran: realGb >= floor });
+    if (realGb < floor) expect(run.stderr).toContain(`${realGb} GB free`);
+    else expect(run.stderr).not.toContain('GB free');
+  });
+
+  it('says "no lease" before "disk", and never asks check about either', () => {
+    const dir = makeCheckout();
+    const home = homeWith(dir, { leases: [] });
+    const unleased = runCli(dir, ['harness:android'], {
+      NITRO_UI_HOME: home,
+      NITRO_UI_GATE_FREE_DISK_GB: '0',
+      CI: '',
+    });
+    expect(unleased.status).toBe(1);
+    expect(unleased.stderr).toContain('is a device gate');
+    expect(unleased.stderr).not.toContain('GB free');
+
+    const check = runCli(dir, ['check'], {
+      NITRO_UI_HOME: home,
+      NITRO_UI_GATE_FREE_DISK_GB: '0',
+      CI: '',
+    });
+    expect(check.status).toBe(0);
+    expect(check.ran).toBe(true);
   });
 });
 
