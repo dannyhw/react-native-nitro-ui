@@ -34,6 +34,8 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { childEnv } from './helpers/scrubbed-env.js';
+
 import {
   MACHINE_LABEL_PATTERN,
   UNLABELLED_MACHINE,
@@ -485,8 +487,11 @@ describe('the bench CLIs on a per-machine baseline', () => {
         encoding: 'utf8',
         cwd: root,
         timeout: 120_000,
-        env: {
-          ...process.env,
+        // The scrubbed child env (X34 review): `check` runs in a shell that has sourced a lease,
+        // and the blanked names below are not enough — `EMULATOR_PORT`, `METRO_PORT` and
+        // `NITRO_UI_HOME` would come through with it, and a bench child that reads a device the
+        // shell named is a test that only passes in an unleased shell.
+        env: childEnv({
           PATH: `${bin}:${process.env.PATH}`,
           NITRO_UI_MACHINE_LABEL: MINE,
           // Blank every device the caller might otherwise inherit. `check` can run
@@ -499,7 +504,7 @@ describe('the bench CLIs on a per-machine baseline', () => {
           ANDROID_AVD: '',
           AVD: '',
           ...env,
-        },
+        }),
       }
     );
     return {
