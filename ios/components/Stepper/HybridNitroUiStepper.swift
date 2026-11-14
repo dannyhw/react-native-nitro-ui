@@ -77,18 +77,11 @@ final class StepperModel: NitroUiModel {
     )
   }
 
-  /// The range to hand SwiftUI.
-  ///
-  /// Always a valid `ClosedRange`: `ClosedRange(a...b)` with `a > b` traps at
-  /// runtime, and a `maximumValue` below `minimumValue` is app data, not a crash.
+  /// The range to hand SwiftUI, with the rule in `NitroUiStepperBinding` — shared with
+  /// the host test because the case worth holding down (`maximumValue = 0.1 + 0.2`) is
+  /// a number no on-device fixture sends.
   var trackBounds: ClosedRange<Double> {
-    guard minimumValue.isFinite, maximumValue.isFinite else {
-      return 0...1
-    }
-    if maximumValue > minimumValue {
-      return minimumValue...maximumValue
-    }
-    return Swift.min(minimumValue, maximumValue)...Swift.max(minimumValue, maximumValue)
+    return NitroUiStepperBinding.trackBounds(minimum: minimumValue, maximum: maximumValue)
   }
 
   /// Whether SwiftUI's own `step:` can draw this range.

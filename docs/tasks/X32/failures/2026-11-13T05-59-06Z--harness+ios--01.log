@@ -1,0 +1,117 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-13T05:59:06.763Z on code tree `20bbddbd2c79` at HEAD `6ba02df` (branch `task/X32-review-debt`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 1294 ms
+- Load: start 7.17, end 6.83, median 7.00, max 7.17
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X32-9xk2j`
+- Full log: `task/X32-review-debt/harness+ios-2026-11-13T05-59-06.054Z.log` (<store>/task/X32-review-debt/harness+ios-2026-11-13T05-59-06.054Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X32-review-debt/harness+ios-2026-11-13T05-59-06.054Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X32-9xk2j (still live)
+  |   X32-9xk2j                X32          both              pair-a
+  |   X30-he2eg                X30          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.83 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 72 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 20bbddbd2c79 at HEAD 6ba02df3
+gate: git tree 3596a3324484 with a DIRTY worktree (not reusable)
+gate: log task/X32-review-debt/harness+ios-2026-11-13T05-59-06.054Z.log
+gate:       <store>/task/X32-review-debt/harness+ios-2026-11-13T05-59-06.054Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp b3ac9447 at da0633c47c85309069e13dc6daa32d7cda7240d3, now 20bbddbd at 6ba02df3e98cdfe6f6a7bf8a095680232c61cd90)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp b3ac9447 at da0633c47c85309069e13dc6daa32d7cda7240d3, now 20bbddbd at 6ba02df3e98cdfe6f6a7bf8a095680232c61cd90)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp b3ac9447 at da0633c47c85309069e13dc6daa32d7cda7240d3, now 20bbddbd at 6ba02df3e98cdfe6f6a7bf8a095680232c61cd90)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp b3ac9447 at da0633c47c85309069e13dc6daa32d7cda7240d3, now 20bbddbd at 6ba02df3e98cdfe6f6a7bf8a095680232c61cd90)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:ios FAIL in 1.3 s
+gate: recorded in .gates/task/X32-review-debt.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X32-review-debt/harness+ios-2026-11-13T05-59-06.054Z.log (4 probe(s))
+
+```
