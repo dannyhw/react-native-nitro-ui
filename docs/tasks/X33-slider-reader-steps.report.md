@@ -5,7 +5,7 @@
 
 ## Summary
 
-Two defects, one symptom.
+Two defects, found side by side — and only one of them is this walk's flake.
 
 **The comparison (Android).** A `setProgress` target is computed by the
 accessibility delegate from the progress this control's semantics node publishes, and that node
@@ -30,10 +30,16 @@ nothing was loosened: every step still asserts the whole array, its values and i
 to compare, and its announced value is a `String`. The harness records the difference: the same
 large-offset fixture steps on iOS and refuses on Android.
 
-Fifteen committed failure excerpts name this test, and 14 of them are an unwanted step (`[3, 6, 3]`,
-`[3, 6, 9, 6]`, `expected 3 to be +0`), not a lost event; one is a lost event. Both families are
-this round's, and every one predates X21's `71e6c615` — newest excerpt 09:11Z, the fix landed
-09:39Z — which is why two bugs read as one flake.
+Fifteen committed failure excerpts name this test. Fourteen are a wrong value (`[3, 6, 3]`,
+`[3, 6, 9, 6]`, `expected 3 to be +0`) and one is a lost event (`expected [3, 6, 9] to deeply
+equal [3, 6, 9, 10]`). Two families, two causes — and neither is the comparison above. The
+wrong-value family is X21's stale tree, and every excerpt of that shape predates X21's
+`71e6c615`, which closed it. The lost-event family is the read race below, which a loaded
+machine supplied about one run in eighteen. This walk is on `0..10 step 3`, exact in a
+`Float`, so the comparison cannot move a single one of those excerpts: it is a separate
+defect, on inexact grids and at large offsets, that X33 found next door. (Round 1 wrote
+that the comparison was one of this walk's two causes; fix round 1 corrected it here and
+in `docs/tasks/FOLLOWUPS.md:56`.)
 
 ## Gates
 
@@ -112,6 +118,12 @@ three 1-second `harness:android:Slider` failures at 08:26Z are the stamp guard r
 deliberately reverted harness file, not test results; `real-input:android` ran the whole thing
 again afterwards under a load1 peak of 127.1 and passed.
 
+**What these counts do and don't show (fix round 1).** The 11-of-11 red row is the new, deterministic
+offset case, not the walk flake. The 7 green runs used the old `walkTo`, which the comparison fix
+cannot affect. The walk flake itself was red 1 run in 18 on the old `walkTo` and 0 in 5 on the
+new one, which cannot tell the two apart. The `walkTo` fix rests on its cause (the index was read
+after the press), not on these counts.
+
 ## Files changed
 
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt`: `asPublishedProgress`,
@@ -146,3 +158,23 @@ again afterwards under a load1 peak of 127.1 and passed.
   that is a design decision rather than this task's.
 - The reader-space question applies to any control whose platform hands the model a number to
   compare. X32 covered the Stepper; nothing else in this repo does that today.
+
+## Fix round 1
+
+The review approved the Android comparison and asked for three corrections, made here:
+
+- **Cause claim:** the report summary and `FOLLOWUPS.md:56` now say the walk flake was X21's stale tree
+  (already fixed) plus the `walkTo` read race. The `Float` comparison is a separate defect on
+  inexact grids and at large offsets.
+- **Flake counts:** a note above "Files changed" says what the table does and doesn't measure.
+- **JVM red proof**, quoted from the run with the round-trip dropped (`val shown = publishedProgress`):
+  `testDebugUnitTest FAILED` with five `java.lang.AssertionError`s at `SliderModelTest.kt:259`
+  (`aReaderAskingForThePublishedProgressMovesNothing`), `:278` (`…DoesNotStepDownEither`), `:309`
+  (`theSameTargetIsAStepWhenItIsNotTheValueOnScreen`), `:334` (`aReaderAskingForWhatAStaleTreeStillShowsMovesNothing`)
+  and `:368` (`aStrideTooSmallForTheFloatIsNotADirection`).
+
+**Not done:** the review also asked for a harness variant that makes the delivery race happen on purpose. This
+round started one and then dropped it under the flake time-box rule (AGENTS.md, 2026-11-14): flakes are fixed
+from their evidence, and the race itself is not reproduced on demand. The `walkTo` change stands on its cause.
+No code changed in this round, so round 1's gates stand on the same code tree.
+
