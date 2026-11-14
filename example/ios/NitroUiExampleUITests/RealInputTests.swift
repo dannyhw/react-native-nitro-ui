@@ -206,6 +206,16 @@ final class RealInputTests: XCTestCase {
   /// How long a control gets to react to a gesture it should have answered.
   private let reactTimeout: TimeInterval = 8
 
+  /// How long a tab bar gets to bring a tab into the window (X34 item 4).
+  ///
+  /// Generous on purpose, and bounded on purpose too. A read of `XCUIElement.frame` is a round trip
+  /// into the test manager and costs seconds on a loaded box, and a drag is slower still, so the old
+  /// eight-drag loop could already spend tens of seconds here when it was healthy — the number was
+  /// never a time budget, it was a guess at a count. Sixty seconds is a bound a task can live inside
+  /// (it is less than two `reactTimeout`s of a suite that has fourteen tab navigations to make) and it
+  /// is the difference between "this case could not reach its tab" and "this run stopped waiting".
+  private static let revealTabDeadlineMs = 60_000
+
   private var app: XCUIApplication!
 
   override func setUpWithError() throws {
@@ -314,7 +324,12 @@ final class RealInputTests: XCTestCase {
     var seen = Set<String>()
     for id in ids where seen.insert(id).inserted {
       let tab = app.descendants(matching: .any)[id].firstMatch
-      let reached = revealTab(tab)
+      // The word after `reached=` is part of the log format: `tab-targets.mjs` reads
+      // `reached=true|false` and nothing else, so the annotation below is load-bearing and
+      // `scripts/__tests__/real-input-tab-targets.test.js` asks for it by name. Inferred, this line
+      // printed the whole settlement outcome, the parser read no tab at all, and a passing pass
+      // reported 23 tabs as "never measured" (the real-input:ios run of 2026-11-13).
+      let reached: Bool = revealTab(tab).satisfied
       var frame = tab.frame
       for _ in 0..<5 {
         Thread.sleep(forTimeInterval: 0.2)
@@ -4429,10 +4444,10 @@ final class RealInputTests: XCTestCase {
     let outside = app.coordinate(withNormalizedOffset: .zero)
       .withOffset(CGVector(dx: logFrame.midX, dy: logFrame.minY + 4))
     func openPopover(_ waitingFor: String) throws {
-      try tapUntilOption(
+      try tapUntilPopoverUp(
         "popover-short-anchor",
         as: "the popover's anchor",
-        option: content,
+        content: content,
         waitingFor: waitingFor
       )
     }
@@ -4515,10 +4530,10 @@ final class RealInputTests: XCTestCase {
     //    popover that has no room, so the claim asserted is the one the brief states —
     //    visible above the keyboard — and how it got there is printed rather than
     //    demanded: a popover that was already clear of the keyboard has no reason to move.
-    try tapUntilOption(
+    try tapUntilPopoverUp(
       "popover-field-anchor",
       as: "the field popover's anchor",
-      option: fieldContent,
+      content: fieldContent,
       waitingFor: "the real tap that opens the popover with a field"
     )
     let field = try required("popover-inner-field", as: "the TextInput inside the popover")
@@ -5930,11 +5945,16 @@ final class RealInputTests: XCTestCase {
       return
     }
     let tab = try required(identifier, as: "the example's tab")
-    if !revealTab(tab) {
+    let revealed = revealTab(tab)
+    if !revealed.satisfied {
       dumpHierarchy("tab \(identifier) is still outside the window")
       XCTFail(
         "the example's tab \"\(identifier)\" could not be scrolled wholly into the window "
-          + "(it is at \(tab.frame)), so it cannot be tapped reliably"
+          + "in \(revealed.reads) reads and \(revealed.presses) drags over "
+          + "\(revealed.elapsedMs) ms (it is at \(revealed.last.frame), hittable: "
+          + "\(revealed.last.hittable)), so it cannot be tapped reliably. The wait ran out on its "
+          + "deadline, not on a drag count, so this is a bar that will not bring the tab in - not a "
+          + "loaded machine that needed one more drag."
       )
       throw RealInputCheckAborted(identifier: identifier)
     }
@@ -5947,40 +5967,89 @@ final class RealInputTests: XCTestCase {
   /// The bar scrolls (X19): fifteen tabs sharing one row were each too small to tap, so
   /// every tab keeps its natural width and the ones past the window's edge are scrolled
   /// to. React Native keeps a scrolled-away tab in the accessibility tree with its real
-  /// frame, so the distance is known: each step drags the bar by what the tab overhangs
+  /// frame, so the distance is known: each drag moves the bar by what the tab overhangs
   /// plus a margin, at most most of a window, slowly and with a hold before the finger
   /// lifts, so the bar does not fling past it. The pan's own slop eats part of every
   /// drag, which is why this loops on the frame rather than trusting one step.
   ///
-  /// - Returns: whether the tab ended wholly inside the window and hittable.
-  @discardableResult
-  private func revealTab(_ tab: XCUIElement) -> Bool {
+  /// How it loops is `GestureSettlement` now, not a step count (X34 item 4). The old version dragged
+  /// eight times and asked `tab.frame` once per step — and on a loaded box the bar is *still
+  /// animating* when that read happens, so eight drags ended with "tab tab-icon-button is still
+  /// outside the window (it is at (1158.0, ...))" and the IconButton case never got to run
+  /// (FOLLOWUPS; X31). Now the frame is read until two consecutive reads agree, a drag is sent only
+  /// into a reading that has settled outside the window, and the bound is a deadline instead of a
+  /// number of drags — how many drags a loaded simulator needs is precisely what cannot be known at
+  /// compile time. The counts are printed either way, so a run says what it had to do.
+  ///
+  /// - Returns: the wait's outcome — whether the tab ended wholly inside the window and hittable,
+  ///   with the reads and drags it took to get there.
+  private func revealTab(
+    _ tab: XCUIElement
+  ) -> GestureSettlement.Outcome<TabReveal> {
+    // Asked once: the window is not going to move during a tab-bar scroll, and every read here is a
+    // round trip into the test manager, which is the cost the deadline has to cover.
     let window = app.windows.firstMatch.frame
-    let margin: CGFloat = 24
-    func inside() -> Bool {
-      let frame = tab.frame
-      return frame.minX >= window.minX && frame.maxX <= window.maxX && tab.isHittable
+    // The reading the next drag is aimed by. `settle`'s closures cannot hand each other a value, so
+    // the last read is kept here — and only ever written by `read`, so a drag is aimed at where the
+    // tab was *seen*, not at a frame read again in the middle of the drag.
+    var seen = TabReveal(frame: tab.frame, hittable: tab.isHittable, window: window)
+    let outcome = GestureSettlement.settle(
+      deadlineMs: Self.revealTabDeadlineMs,
+      pauseMs: 150,
+      read: {
+        let reading = TabReveal(
+          frame: tab.frame,
+          hittable: tab.isHittable,
+          window: window
+        )
+        seen = reading
+        return reading
+      },
+      // The frame is the question; `hittable` travels with it so a settled box that the finger still
+      // cannot reach is not mistaken for agreement about a revealed tab.
+      agrees: { $0.frame == $1.frame && $0.hittable == $1.hittable },
+      satisfied: { $0.insideWindow },
+      // Outside the window and settled is exactly when a drag is owed.
+      mayPress: { _ in true },
+      press: { _ in
+        let margin: CGFloat = 24
+        let frame = seen.frame
+        let overhang =
+          frame.maxX > window.maxX
+            ? -(frame.maxX - window.maxX + margin)
+            : window.minX - frame.minX + margin
+        let shift = max(-window.width * 0.7, min(window.width * 0.7, overhang))
+        let startX = shift < 0 ? window.width * 0.85 : window.width * 0.15
+        let from = app.coordinate(withNormalizedOffset: .zero)
+          .withOffset(CGVector(dx: startX, dy: frame.midY))
+        from.press(
+          forDuration: 0.05,
+          thenDragTo: from.withOffset(CGVector(dx: shift, dy: 0)),
+          withVelocity: .slow,
+          thenHoldForDuration: 0.2
+        )
+      }
+    )
+    print(
+      "real-input (ios): reveal tab: reads=\(outcome.reads) drags=\(outcome.presses) "
+        + "elapsedMs=\(outcome.elapsedMs) inside=\(outcome.satisfied) "
+        + "frame=\(outcome.last.frame) hittable=\(outcome.last.hittable)"
+    )
+    return outcome
+  }
+
+  /// One reading of a tab bar: where a tab is, and whether a finger could reach it.
+  ///
+  /// The window travels with the reading so `agrees` compares two samples of the same screen rather
+  /// than a box against whatever the window happens to be called now.
+  private struct TabReveal: Equatable {
+    let frame: CGRect
+    let hittable: Bool
+    let window: CGRect
+
+    var insideWindow: Bool {
+      hittable && frame.minX >= window.minX && frame.maxX <= window.maxX
     }
-    var steps = 0
-    while !inside() && steps < 8 {
-      let frame = tab.frame
-      let overhang =
-        frame.maxX > window.maxX
-        ? -(frame.maxX - window.maxX + margin)
-        : window.minX - frame.minX + margin
-      let shift = max(-window.width * 0.7, min(window.width * 0.7, overhang))
-      let startX = shift < 0 ? window.width * 0.85 : window.width * 0.15
-      let from = app.coordinate(withNormalizedOffset: .zero)
-        .withOffset(CGVector(dx: startX, dy: frame.midY))
-      from.press(
-        forDuration: 0.05,
-        thenDragTo: from.withOffset(CGVector(dx: shift, dy: 0)),
-        withVelocity: .slow,
-        thenHoldForDuration: 0.2
-      )
-      steps += 1
-    }
-    return inside()
   }
 
   /// Fail, with the hierarchy, if a control has moved out of the window since it
@@ -6622,6 +6691,73 @@ final class RealInputTests: XCTestCase {
     ) { shown in
       !shown.hasPrefix("0 ")
     }
+  }
+
+  /// Tap a `Popover` anchor until its content is on screen, and never tap one whose popover is up.
+  ///
+  /// Three taps with an eight-second window each was the rule (`tapUntilOption`, as every menu
+  /// anchor still uses it). For a menu that is nearly right; for a Popover it is the flake itself:
+  /// `Popover` toggles, so a second tap *closes* what the first one opened, and the failure text
+  /// then accused a delivered touch of never having arrived. X31 measured it on a loaded box — the
+  /// UIKit window is up, React has not published the content yet, the witness reads "0 row(s)", the
+  /// loop taps again (FOLLOWUPS: "the Popover anchor's three-tap retry").
+  ///
+  /// So the state decides (X34 item 4, `GestureSettlement`): re-send the tap only while *no* popover
+  /// window exists at all; wait while one is up and its content is late; and bound the whole thing by
+  /// a deadline rather than by three. Which failure it became is said from the last reading, so a slow
+  /// publish is no longer reported as a missing finger — those are different bugs, and only one of
+  /// them is `FOLLOWUPS.md:58`.
+  private func tapUntilPopoverUp(
+    _ identifier: String,
+    as what: String,
+    content: String,
+    waitingFor: String
+  ) throws {
+    struct Reading: Equatable {
+      /// UIKit popovers on screen. Up-but-empty is a reason to wait, not a reason to tap again.
+      let windows: Int
+      /// Rows of *this* popover's content. The witness: it cannot exist unless the touch arrived.
+      let rows: Int
+    }
+    // Three `reactTimeout`s, which is what the three taps already spent in the healthy case — the
+    // deadline is the same money, spent on the wait that is actually needed instead of on a count.
+    let outcome = try GestureSettlement.settle(
+      deadlineMs: Int(reactTimeout * 3 * 1_000),
+      pauseMs: 200,
+      read: {
+        Reading(
+          windows: app.descendants(matching: .popover).count,
+          rows: optionLabels(containing: content)
+        )
+      },
+      agrees: ==,
+      satisfied: { $0.rows > 0 },
+      mayPress: { $0.windows == 0 },
+      press: { _ in try required(identifier, as: what).fingerTap() }
+    )
+    print(
+      "real-input (ios): \(waitingFor): \(what) (\(identifier)) up=\(outcome.satisfied) "
+        + "reads=\(outcome.reads) taps=\(outcome.presses) elapsedMs=\(outcome.elapsedMs) "
+        + "windows=\(outcome.last.windows) rows=\(outcome.last.rows)"
+    )
+    guard !outcome.satisfied else { return }
+    dumpHierarchy("\(waitingFor): no popover content \"\(content)\" appeared")
+    if outcome.last.windows > 0 {
+      XCTFail(
+        "\(waitingFor): \(outcome.presses) real tap(s) on \(what) left a UIKit popover up with no "
+          + "\"\(content)\" in it after \(outcome.elapsedMs) ms — the touch arrived and the "
+          + "presentation never published its content, which is not a dropped touch and was not "
+          + "tapped over: a second tap on an open anchor closes it."
+      )
+    } else {
+      XCTFail(
+        "\(waitingFor): \(outcome.presses) real taps on \(what) left no popover up at all after "
+          + "\(outcome.elapsedMs) ms — every tap was re-sent only while the screen showed no "
+          + "presentation, so on the evidence here the touch was never delivered "
+          + "(FOLLOWUPS.md:58). The wait ran out on its deadline, not on a tap count."
+      )
+    }
+    throw RealInputCheckAborted(identifier: identifier)
   }
 
   /// Tap a menu anchor until one of its rows - named here, so it cannot be some

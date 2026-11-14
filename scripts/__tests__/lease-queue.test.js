@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import { childEnv } from './helpers/scrubbed-env.js';
 import {
   DEFAULT_MAX_DEVICE_LEASES,
   decideAcquire,
@@ -349,8 +350,11 @@ describe('the CLI keeps a queue in the lease file', () => {
   const cli = (args, env = {}) =>
     spawnSync(process.execPath, [CLI, ...args], {
       encoding: 'utf8',
-      env: {
-        ...process.env,
+      // Never the calling shell's lease (X34 item 1): `lease.mjs` reads the device it may touch,
+      // the boot switch and the Metro-port answer out of the environment, so an inherited lease is
+      // a second answer to every question these cases ask. A case that wants one of those names
+      // passes it in `env`, which lands last.
+      env: childEnv({
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '50',
         // No device is booted by a test in this file, and nothing is listening on
@@ -358,19 +362,18 @@ describe('the CLI keeps a queue in the lease file', () => {
         NITRO_UI_LEASE_BOOT: '0',
         ...FREE_LSOF,
         ...env,
-      },
+      }),
     });
 
   /** A waiting `acquire` whose process the test can also stop. */
   const spawnWaitingAcquire = (args) => {
     const child = spawn(process.execPath, [CLI, ...args], {
-      env: {
-        ...process.env,
+      env: childEnv({
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '50',
         NITRO_UI_LEASE_BOOT: '0',
         ...FREE_LSOF,
-      },
+      }),
     });
     children.push(child);
     let stderr = '';
@@ -386,11 +389,20 @@ describe('the CLI keeps a queue in the lease file', () => {
     };
   };
 
+  /**
+   * How long a spawned `lease.mjs` gets to reach a state the test can read.
+   *
+   * A ceiling on the wait, never an ingredient of the answer: the cases below say *what* they are
+   * waiting to become true, so an expiry names the missing fact instead of reporting that a
+   * number of milliseconds passed.
+   */
+  const POLL_EVIDENCE_TIMEOUT_MS = 20_000;
+
   const stateFile = () => statePaths(home).leases;
   const readState = () => JSON.parse(readFileSync(stateFile(), 'utf8'));
   const writeState = (state) =>
     writeFileSync(stateFile(), `${JSON.stringify(state, null, 2)}\n`);
-  const waitFor = async (predicate, timeoutMs = 20000) => {
+  const waitFor = async (predicate, timeoutMs = 20000, waitedFor = 'state') => {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       try {
@@ -398,7 +410,13 @@ describe('the CLI keeps a queue in the lease file', () => {
       } catch {
         // state file mid-write, or not written yet
       }
-      if (Date.now() > deadline) throw new Error('waitFor: timed out');
+      // The thing that never happened, not the number of milliseconds that did: a reader of a red
+      // run should learn which fact is missing, which is what makes a waited-for wait debuggable
+      // when a slept-for one was only re-runnable.
+      if (Date.now() > deadline)
+        throw new Error(
+          `waitFor: timed out after ${String(timeoutMs)} ms waiting for ${waitedFor}`
+        );
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   };
@@ -473,7 +491,31 @@ describe('the CLI keeps a queue in the lease file', () => {
       // G6 lets go. The pair must not go to X25, which is polling right now - it
       // belongs to X24, which is not even running.
       expect(cli(['release', 'G6']).stdout).toContain('released');
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      // Waited for, not slept for (X34 item 3). The question is what the waiter did with a free
+      // pair, and the answer is in the file: a poll touches its own ticket (`refreshedAt`), so a
+      // ticket stamped *after* the release is a waiter that has looked at a free pool. The stamp
+      // is read from after the release returned, so there is no window in which an earlier poll
+      // counts as the one being waited for. What used to be here was `sleep(600)` - a bet about
+      // how fast a process wakes from a 50 ms poll on a machine running the rest of `check` next
+      // to it, which X33 lost once and won twice.
+      const freedAt = Date.now();
+      await waitFor(
+        () => {
+          const state = readState();
+          // A wrong grant is evidence too: stop waiting and let the assertion below say what
+          // happened, rather than timing out on a state that will never arrive.
+          if ((state.leases ?? []).some((entry) => entry.task === 'X25'))
+            return true;
+          const ticket = (state.waiters ?? []).find(
+            (entry) => entry.task === 'X25'
+          );
+          return ticket != null && Number(ticket.refreshedAt) > freedAt;
+        },
+        POLL_EVIDENCE_TIMEOUT_MS,
+        'the waiting X25 to look at the freed pair (its ticket refreshed, or wrongly granted)'
+      );
+      // Only now is "it did not take the pair" worth asserting: the waiter has been seen looking
+      // at a free pool, so an empty grant list is a verdict and not a race won by a scheduler.
       expect(readState().leases.map((entry) => entry.task)).toEqual([]);
       expect(
         (readState().waiters ?? []).some((entry) => entry.task === 'X25')

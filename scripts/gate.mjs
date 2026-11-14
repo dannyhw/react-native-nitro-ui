@@ -113,6 +113,17 @@ import {
   summarizeGates,
   summarizeLoad,
 } from './gate-core.mjs';
+import {
+  GATE_DEATH_EXIT,
+  GATE_NAME_ENV,
+  GATE_PGID_ENV,
+  GATE_PID_ENV,
+  RUNNER_LOG_ENV,
+  RUNNER_LOG_RELATIVE_ENV,
+  RUNNER_RECORD_SUFFIX,
+  groupMembers,
+  stopGroup,
+} from './gate-runner.mjs';
 import { contentHash, isCodeFile } from './app-stamp-core.mjs';
 import {
   SUITE_TIMING_ENV,
@@ -136,6 +147,7 @@ import {
   writeJsonAtomic,
 } from './lease-core.mjs';
 import { currentCodeTree, repoRootOf } from './app-stamp.mjs';
+import { deadGateBehindPort } from './gate-core.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
 const USAGE =
@@ -1878,6 +1890,109 @@ function processGroupId(pid) {
 }
 
 /**
+ * The runner sidecars in the log store: which process group belongs to which gate run.
+ *
+ * Written by `gate-runner.mjs` as each run starts (see `writeRunnerRecord`). Read here only to
+ * explain a busy Metro port, which is why it is a scan of the whole store and not of one branch:
+ * a leftover server does not care which branch its dead gate was running.
+ *
+ * @param {string} logsDir the store root
+ * @returns {Array<{group?: number, gatePid?: number, logPath?: string, gate?: string, startedAt?: number}>}
+ */
+function readRunnerRecords(logsDir) {
+  const found = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      if (!entry.name.endsWith(RUNNER_RECORD_SUFFIX)) continue;
+      try {
+        const record = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+        found.push({ ...record, recordFile: absolute });
+      } catch {
+        // A torn or unparseable sidecar describes a run nobody can attribute anyway, and the
+        // pre-flight must not go red over a janitor's file.
+      }
+    }
+  };
+  walk(logsDir);
+  return found;
+}
+
+/**
+ * The extra sentence for a port served by a gate that died (X34 item 2).
+ *
+ * Returns null when the ordinary refusal is the honest answer — the server belongs to a run that
+ * is still going, or to no run this store has ever heard of. When it does answer, it answers the
+ * question the person in front of it is actually asking: not "what is on my port" but "did a run
+ * die on me, and where is its evidence".
+ *
+ * Every input is injected so the rule can be tested without a store, a port, or a corpse.
+ *
+ * @param {object} options
+ * @param {Array<{pid: number, command?: string}>} options.listeners
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {() => Array<object>} [options.records]
+ * @param {(pid: number) => number | null} [options.groupOf]
+ * @param {(pid: number) => boolean} [options.pidAlive]
+ * @param {() => Set<string>} [options.ledgerLogPaths]
+ * @returns {string | null}
+ */
+function deadGateHint({
+  listeners,
+  env = process.env,
+  records = () => readRunnerRecords(storeLogsDir()),
+  groupOf = processGroupId,
+  pidAlive = pidMayBeRunning,
+  ledgerLogPaths = () =>
+    new Set(
+      readLedger(currentBranch()).entries.map((e) => String(e.logPath ?? ''))
+    ),
+}) {
+  if ((listeners ?? []).length === 0) return null;
+  let hit = null;
+  try {
+    hit = deadGateBehindPort({
+      records: records(),
+      listeners,
+      groupOf,
+      pidAlive,
+      ledgerLogPaths: ledgerLogPaths(),
+    });
+  } catch {
+    return null;
+  }
+  if (hit == null) return null;
+  const { record } = hit;
+  const when = Number.isFinite(Number(record.startedAt))
+    ? new Date(Number(record.startedAt)).toISOString()
+    : 'unknown time';
+  const stopped =
+    record.stopped == null
+      ? // No `stopped` means the supervisor never reported a sweep — which is the worse case: a
+        // run killed so hard that even the process watching it died. Saying so is the point.
+        'its supervisor left no note, so the run was killed hard enough to take that too'
+      : `${String(record.stopped.left?.length ?? 0)} process(es) survived its sweep`;
+  return (
+    `gate: WARN this port belongs to a gate that DIED without a ledger line:\n` +
+    `        ${String(record.gate ?? 'gate')} started ${when} (gate pid ${String(
+      record.gatePid ?? '?'
+    )}, process group ${String(hit.group)}, lease ${String(record.lease ?? env.NITRO_UI_LEASE_ID ?? '?')}) — ${stopped}.\n` +
+    `        its log: ${String(record.logPath ?? '?')}\n` +
+    `        this run is not that run. Look at that log, then start this one again.`
+  );
+}
+
+/**
  * The leased Metro port, asked before the run starts (X15 item 1).
  *
  * Returns an exit code - 0 means "run it". A port someone else serves is a refusal that
@@ -1918,6 +2033,12 @@ function metroPreflight(env = process.env, run) {
       '        wait for that run, or set NITRO_UI_GATE_METRO_FORCE=1 to start on this port anyway.\n' +
       `        (checked because ${env.NITRO_UI_LEASE_ID ?? 'this shell'} exported METRO_PORT=${String(answer.port)})\n`
   );
+  // A busy port has two very different causes and the pre-flight has only ever named one of them
+  // (X34 item 2): a run still going, and a *dead* run whose server outlived it — the X32 incident,
+  // which cost a whole round because the second story looked like the first. When the server can
+  // be attributed to a gate that is gone and left no ledger line, that is what gets said.
+  const hint = deadGateHint({ listeners: answer.listeners ?? [], env });
+  if (hint != null) process.stderr.write(`${hint}\n`);
   return 1;
 }
 
@@ -2045,42 +2166,89 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   let streamsClosedCount = 0;
   let drainNow = null;
   let childStreams = null;
+  // The command runs under `gate-runner.mjs` (X34 item 2), the only process that can still see
+  // whether this gate is alive: a `gate.mjs` that is killed runs no handlers, and the X32 incident
+  // is exactly what that leaves - a run serving the lease's Metro port with no ledger line, read by
+  // the next task as a mystery busy port. The supervisor is spawned the way the command used to be
+  // (detached, so it leads a session whose id is its own pid) and starts the command *into that
+  // same group*, so every fact the code below depends on is unchanged: the signal handlers'
+  // `process.kill(-child.pid, signal)` still reaches the harness and the Metro it spawned, and
+  // `ownMetroPids` still attributes a leftover server to `child.pid`'s group - by a number this
+  // spawn produced, not a `ps` query about a supervisor that may be dead by then.
   const exit = await new Promise((resolvePromise) => {
-    const child = spawn(resolved.argv[0], resolved.argv.slice(1), {
-      cwd,
-      // Its own process group, so "what did this run leave behind?" has a kernel answer
-      // (X15 review). A gate's Metro is a descendant of this child, and a run that was
-      // killed - or a wrapper whose `stopMetro` never ran - leaves it serving the leased
-      // port, which the *next* gate's pre-flight then refuses: exactly the merge sequence
-      // (`real-input:ios` -> `real-input:android` -> `harness:ios` -> `harness:android`)
-      // on one lease. `detached` does not mean ignored; it puts the child in a new group,
-      // and the signal handlers below reach that group, so a Ctrl-C still stops the
-      // descendants a terminal Ctrl-C used to reach through the shared group.
-      detached: true,
-      // `NITRO_UI_GATE_LOG` is this runner's own instruction and must not go further:
-      // a `gate.mjs` nested inside a gate (a check that shells out to one, say) would
-      // otherwise append to *this* run's log and mark *this* run's record done with
-      // its own exit code. Deleting it here is what makes that variable mean "the log
-      // of the background run I am the launcher of", one level, not inherited.
-      env: (() => {
-        const childEnv = { ...process.env };
-        delete childEnv.NITRO_UI_GATE_LOG;
-        if (stepTimingsPath != null) {
-          childEnv.NITRO_UI_CHECK_STEPS_FILE = stepTimingsPath;
-        }
-        // Per-suite timings (X11, ledger v6): the harness's plugin writes durations
-        // into the file named from this run's log, and the ledger line below cites the
-        // parsed record. Only a harness run can produce them. The gate's own name goes
-        // with it because the file's name is a folded spelling of it (`:` -> `+`), and
-        // a header that says which gate a timing belongs to should not be approximate.
-        if (suiteTimingFile != null) {
-          childEnv[SUITE_TIMING_ENV] = suiteTimingFile;
-          childEnv[SUITE_TIMING_GATE_ENV] = name;
-        }
-        return childEnv;
-      })(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      process.execPath,
+      // Beside this file, not under `repoRoot`: the supervisor is part of the same tool as the
+      // gate, and a checkout that runs `gate.mjs` out of one directory always has it there.
+      [path.join(import.meta.dirname, 'gate-runner.mjs'), ...resolved.argv],
+      {
+        cwd,
+        // Its own process group, so "what did this run leave behind?" has a kernel answer
+        // (X15 review). A gate's Metro is a descendant of this child, and a run that was
+        // killed - or a wrapper whose `stopMetro` never ran - leaves it serving the leased
+        // port, which the *next* gate's pre-flight then refuses: exactly the merge sequence
+        // (`real-input:ios` -> `real-input:android` -> `harness:ios` -> `harness:android`)
+        // on one lease. `detached` does not mean ignored; it puts the child in a new group,
+        // and the signal handlers below reach that group, so a Ctrl-C still stops the
+        // descendants a terminal Ctrl-C used to reach through the shared group.
+        detached: true,
+        // `NITRO_UI_GATE_LOG` is this runner's own instruction and must not go further:
+        // a `gate.mjs` nested inside a gate (a check that shells out to one, say) would
+        // otherwise append to *this* run's log and mark *this* run's record done with
+        // its own exit code. Deleting it here is what makes that variable mean "the log
+        // of the background run I am the launcher of", one level, not inherited.
+        env: (() => {
+          const childEnv = { ...process.env };
+          delete childEnv.NITRO_UI_GATE_LOG;
+          if (stepTimingsPath != null) {
+            childEnv.NITRO_UI_CHECK_STEPS_FILE = stepTimingsPath;
+          }
+          // Per-suite timings (X11, ledger v6): the harness's plugin writes durations
+          // into the file named from this run's log, and the ledger line below cites the
+          // parsed record. Only a harness run can produce them. The gate's own name goes
+          // with it because the file's name is a folded spelling of it (`:` -> `+`), and
+          // a header that says which gate a timing belongs to should not be approximate.
+          if (suiteTimingFile != null) {
+            childEnv[SUITE_TIMING_ENV] = suiteTimingFile;
+            childEnv[SUITE_TIMING_GATE_ENV] = name;
+          }
+          // The supervisor's own instructions, meaningful one level (the same rule as
+          // `NITRO_UI_GATE_LOG` above): the group whose death it must notice, and the log its notes
+          // have to reach once the pipe into this process has died with it. The *group* and not only
+          // the pid because a pid is not a fact that stays true across a 50-minute run - a runner
+          // watching a reused pid would run on past its own gate's death, which is the failure this
+          // exists to prevent arriving as its opposite. See `gate-runner.mjs`'s header.
+          for (const supervisorName of [
+            GATE_PID_ENV,
+            GATE_PGID_ENV,
+            GATE_NAME_ENV,
+            RUNNER_LOG_ENV,
+            RUNNER_LOG_RELATIVE_ENV,
+          ]) {
+            delete childEnv[supervisorName];
+          }
+          childEnv[GATE_PID_ENV] = String(process.pid);
+          const gatePgid = processGroupId(process.pid);
+          if (gatePgid != null) childEnv[GATE_PGID_ENV] = String(gatePgid);
+          childEnv[GATE_NAME_ENV] = name;
+          childEnv[RUNNER_LOG_ENV] = absoluteLog;
+          // The same file in the ledger's spelling, so the supervisor's sidecar and this run's line
+          // name one run with one string (`logPathsFor` is the single namer for both).
+          childEnv[RUNNER_LOG_RELATIVE_ENV] = logPath;
+          return childEnv;
+        })(),
+        // stdin is a pipe this process holds open and never writes: its EOF is how the supervisor
+        // learns this gate died (X34 item 2, `gateStdinDeath`). A `SIGKILL`, a segfault or a closed
+        // terminal all close the kernel's end, and no pid has to be believed for the run to end.
+        // 'ignore' here would hand the supervisor /dev/null, which reports EOF immediately and would
+        // make it sweep a healthy run.
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
+    // The write end is held open for the run's whole life and closed when it exits. Never written
+    // to, and an error listener regardless: a stream that errors with nobody listening is an
+    // uncaught exception in the gate, which is precisely the sort of death whose evidence this is.
+    child.stdin?.on('error', () => {});
     // Remembered for the sweep and the release below: `child` is inside this promise's scope,
     // and both run after it settles.
     childPid = child.pid ?? null;
@@ -2139,6 +2307,10 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     child.stderr.on('close', markClosed);
     child.on('exit', (code, signal) => {
       stopListening();
+      // Drop the write end of the stdin pipe (see the spawn above). The supervisor is gone with the
+      // command it was watching, so nothing is left to notice, and a socket handle this process
+      // still holds would keep the event loop alive through the drain below and past it.
+      child.stdin?.destroy();
       resolvePromise({ code, signal, failedToStart: false, forwarded });
     });
   });
@@ -2175,6 +2347,34 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // to make the *next* gate in the sequence refuse on its own leftover. Stop exactly what
   // this run owns - the listeners in the child's process group - and say so. Never anything
   // else's Metro: that is the X4 incident, and the whole reason the group is the test.
+  // A supervisor that went down by a signal, or that reported the death of *this* process from the
+  // other side (it cannot have been by this one's hand), is a supervisor that may not have finished
+  // the job it was started for: the command it was running is in the same group and can still be up,
+  // holding the leased port. So the gate does the sweep itself, with the group id it created, and
+  // only when the group still has members - a run that came down cleanly leaves an empty group and
+  // pays nothing for the check. This is the net under the net: the supervisor handles its gate's
+  // death, and this handles the supervisor's own.
+  const supervisorDied = exit.signal != null || exit.code === GATE_DEATH_EXIT;
+  if (supervisorDied && childPid != null) {
+    const left = await groupMembers(childPid);
+    if (left.length > 0) {
+      note(
+        `gate: this run's supervisor left (${String(
+          exit.signal ?? `exit ${String(exit.code)}`
+        )}) with ${String(left.length)} process(es) still up in group ${String(
+          childPid
+        )}: ${left.join(', ')}\n`
+      );
+      const remaining = await stopGroup(childPid, { log: note });
+      note(
+        remaining.length > 0
+          ? `gate: ${String(remaining.length)} process(es) outlived this run: ${remaining.join(
+              ', '
+            )} - the next gate on this lease will name them\n`
+          : `gate: the run’s group is gone with it\n`
+      );
+    }
+  }
   const leftover = await stopOwnMetro({
     port: process.env.METRO_PORT,
     leaderPid: childPid,

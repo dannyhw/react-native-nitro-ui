@@ -30,6 +30,7 @@ import {
   fullTreesMatch,
   groupLedgerLinesByBranch,
   isToolingPath,
+  LOG_STORE_BASENAME,
   ledgerLineFromRun,
   platformsOwningFile,
   platformsTouchedByPaths,
@@ -38,6 +39,7 @@ import {
   requiredGatesFor,
   stepTimingsOf,
 } from '../gate-core.mjs';
+import { RUNNER_RECORD_SUFFIX } from '../gate-runner.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 import { FREE_LSOF } from './helpers/free-lsof-stub.js';
 import {
@@ -762,6 +764,8 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     // start, which is the same argument that put `build-slot-core.mjs` on this list.
     'scripts/check.mjs',
     'scripts/check-steps.mjs',
+    // X34: the supervisor a gate's command runs under, listed with `gate.mjs` beside it.
+    'scripts/gate-runner.mjs',
     'scripts/gen-registry.mjs',
     'scripts/registry-core.mjs',
     'scripts/build-slot-core.mjs',
@@ -833,6 +837,47 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     expect(hits.stdout).toContain('scripts/task-ready.mjs');
   });
 
+  it('gate-runner is on the list because nothing a device run touches reads it', () => {
+    // The same search as the checker's claim, because the same mistake is available here:
+    // `scripts/gate-runner.mjs` wraps every device gate's command, which *sounds* like something
+    // a device run depends on. It is not: it decides whether the run's processes come down when
+    // its gate dies, and it is in neither binary. If a runner, a harness config or an app file
+    // ever imports it, this goes red and the entry comes off — which is the right direction to
+    // fail in, because the cost of a wrong entry is a device run nobody had.
+    expect(isToolingPath('scripts/gate-runner.mjs')).toBe(true);
+    expect(platformsOwningFile('scripts/gate-runner.mjs')).toEqual([]);
+    const hits = spawnSync(
+      'git',
+      [
+        'grep',
+        '-l',
+        'gate-runner',
+        '--',
+        'scripts',
+        'example',
+        'src',
+        'ios',
+        'android',
+        'nitrogen',
+        'patches',
+        'package.json',
+      ],
+      { cwd: process.cwd(), encoding: 'utf8' }
+    );
+    expect(hits.status).toBe(0);
+    const readers = hits.stdout
+      .trim()
+      .split('\n')
+      .filter((file) => file !== '' && !isToolingPath(file));
+    // Nothing outside the tooling list names it: not `harness.mjs`, not a runner, not the app.
+    expect(readers).toEqual([]);
+    // And the search really does answer, so a `git grep` that silently matched nothing in
+    // `scripts/` cannot pass this by being empty. `gate.mjs` is the importer that must be there:
+    // the supervisor exists to be started by it, and it is tooling too, so it belongs to no half.
+    expect(hits.stdout).toContain('scripts/gate.mjs');
+    expect(hits.stdout).toContain('scripts/gate-core.mjs');
+  });
+
   it('a commit that only changes the checker re-owns check and no device run', () => {
     // The X30 consequence, stated as behaviour rather than as membership: before the
     // pair was listed this diff was *unmapped* code - the expensive answer, both
@@ -850,6 +895,57 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     expect(
       requiredGatesFor({ stage: 'review', touchedPlatforms: touched.platforms })
     ).toEqual(['check']);
+  });
+
+  it('a gate run under the supervisor lands the same evidence as one without', () => {
+    // The wiring, end to end: `gate.mjs` starts its command through `gate-runner.mjs`, so the
+    // supervisor's own exit code and the command's stdout have to arrive unchanged — a wrapper that
+    // swallowed the exit code would turn every red gate green, and a wrapper that lost the output
+    // would empty every ledger line's test counts. The two assertions below are exactly those two
+    // things, on the same fixture run the timing cases above rely on.
+    const dir = makeRepo();
+    const store = path.join(dir, 'store');
+    const run = runCli(
+      dir,
+      ['check'],
+      { NITRO_UI_GATE_LOG_STORE: store },
+      // Asked of the kernel, not reported by the wrapper: which group is the *command* in, and what
+      // did the gate tell the supervisor about itself. `$$` is this script's own pid, and its group
+      // is the answer to "who could `kill(-pgid)` reach" — the group `ownMetroPids` attributes a
+      // leftover Metro by, and the group the gate's signal handlers aim at.
+      'echo "supervisor: pgid=$(ps -o pgid= -p $$ | tr -d \" \") of=${NITRO_UI_GATE_RUNNER_OF:-none} gate=${NITRO_UI_GATE_RUNNER_GATE:-none}"'
+    );
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('fake check:');
+    expect(run.stdout).toContain('Tests: 665 passed, 665 total');
+    const [line] = ledgerIn(dir, 'task/x10-check-throughput');
+    expect(line).toBeTruthy();
+    // The command's counts still reached the ledger, through the supervisor's stdios.
+    expect(line.counts.suites).toEqual({ passed: 33, total: 33 });
+
+    const reported = /pgid=(\d+) of=(\d+) gate=(\S+)/.exec(run.stdout);
+    expect(reported).not.toBeNull();
+    const commandGroup = Number(reported[1]);
+    const gatePid = Number(reported[2]);
+    expect(reported[3]).toBe('check');
+
+    const sidecarFile = path.join(
+      store,
+      LOG_STORE_BASENAME,
+      `${line.logPath}${RUNNER_RECORD_SUFFIX}`
+    );
+    expect(fs.existsSync(sidecarFile)).toBe(true);
+    const sidecar = JSON.parse(fs.readFileSync(sidecarFile, 'utf8'));
+    // THE claim, in the fixture that runs the real `gate.mjs`: the group the command is living in is
+    // the group the supervisor wrote down — which is the number `gate.mjs` got from its own spawn,
+    // so a server the command leaves behind is attributable, and sweepable, by a gate that is still
+    // alive. Start the command in a group of its own and this is the line that goes red.
+    expect(sidecar.group).toBe(commandGroup);
+    expect(sidecar.gatePid).toBe(gatePid);
+    expect(sidecar.gate).toBe('check');
+    expect(sidecar.logPath).toBe(line.logPath);
+    // A finished run records no sweep: there was nothing to sweep.
+    expect(sidecar.stopped).toBeUndefined();
   });
 
   it('the files are real, so the list cannot guard a path that does not exist', () => {

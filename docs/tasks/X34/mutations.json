@@ -1,0 +1,201 @@
+{
+  "task": "X34",
+  "round": 1,
+  "how": "Rows 1-5 are host mutations: one edit applied to the working tree with python3 /tmp/x34-mut2.py, the named suite run against it (`bun run test -- --runTestsByPath \u2026`), and the file restored before the next row; `before` is the shipped source the row was run against, `after` the text that replaced it. Rows 6-8 are red proofs against the branch's own shipped state rather than synthetic edits: the drift or the missing function is the mutation, so each row names the commit it was red under. Rows 9-13 are the host Swift ones for the same wait, run through `test:native`. The last three rows are the device proofs on lease X34-vv27s: each mutated the UITests source, rebuilt, and ran a filtered gate whose name satisfies nothing but itself, with the file restored and rebuilt before the ledger's final line. Lease X34-vv27s, pair-b (nitro-ui B / iOS 27.0 and emulator-5570 / API 35, Metro 8293). Logs: `node scripts/gate.mjs logs --branch task/X34-gate-hygiene`.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/test-env-scrub.test.js \u203a dataMask \u203a does not count a call written inside generated source / does not count a call that only exists in a doc comment / no suite spawns a device-aware script from an unscrubbed environment \u203a finds the sites, and every one of them scrubs",
+      "file": "scripts/__tests__/helpers/spawn-env-audit.js",
+      "mutation": "the auditor stops masking string and comment bodies, so every `spawn(` in the file - including one written inside fixture source and one in a doc comment - becomes a call site",
+      "before": "  const mask = dataMask(source);",
+      "after": "  const mask = '';",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/test-env-scrub.test.js \u2014 FAIL, 3 of 11 (2.4 s)",
+      "redTests": [
+        "does not count a call written inside generated source: - Expected - 1 / + Received + 9",
+        "does not count a call that only exists in a doc comment: - Expected - 0 / + Received + 1",
+        "finds the sites, and every one of them scrubs: - Expected - 1 / + Received + 4 \u2014 the boundary the audit could widen into silence, in both directions"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/test-env-scrub.test.js \u203a a test child does not inherit this shell's lease (2 cases) / a device-aware child of a suite cannot see the shell's lease (2 cases)",
+      "file": "scripts/__tests__/helpers/scrubbed-env.js",
+      "mutation": "`withoutLeaseEnv` stops deleting anything: it returns its argument, so the deny-list is dead code",
+      "before": "export function withoutLeaseEnv(env) {\n  const out = { ...env };",
+      "after": "export function withoutLeaseEnv(env) {\n  const out = { ...env };\n  return out;",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/test-env-scrub.test.js \u2014 FAIL, 4 of 11 (2.7 s)",
+      "redTests": [
+        "drops the lease names and keeps the ones the suites need: - Expected - 1 / + Received + 17",
+        "really does hand a child a scrubbed environment (end to end): Expected: \"unset\" / Received: \"X16-poison\" \u2014 the poison value a lease would have carried into the child",
+        "scrubs the lease a suite overrides half of (the X32/X33 shape): Expected: 0 / Received: 1 \u2014 the exit code `checkEmulatorEnv` gives the half-pair, which is the failure that cost X32 and X33 their `check`",
+        "keeps a test's own lease values, which is what makes the scrub usable: - Expected - 0 / + Received + 8"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/gate-runner.test.js \u203a gateProcessIsAlive \u203a says no for a pid that has been REUSED - the number lives, in another group",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the identity check drops its second half: a live pid is the gate, whatever group it now leads",
+      "before": "  if (gatePid == null) return false;\n  if (!pidAlive(gatePid)) return false;\n  if (gatePgid == null) return true;\n  const group = groupOf(gatePid);\n  if (group == null) return true;\n  return group === gatePgid;",
+      "after": "  if (gatePid == null) return false;\n  return pidAlive(gatePid);",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js \u2014 FAIL, 1 of 35 (30.0 s)",
+      "redTests": [
+        "says no for a pid that has been REUSED - the number lives, in another group: Expected: false / Received: true \u2014 a recycled pid read as the gate is a runner that never sweeps and holds the port forever"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/gate-runner.test.js \u203a stopGroup \u203a sends the real term to the GROUP, so a run's command goes down without the escalation",
+      "file": "scripts/gate-runner.mjs",
+      "mutation": "the sweep signals the process whose number equals the group id instead of the group: `process.kill(value, \u2026)`",
+      "before": "    process.kill(-value, signal);",
+      "after": "    process.kill(value, signal);",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/gate-runner.test.js -t \"sends the real term\" \u2014 FAIL, 1 of 1 run (15.4 s)",
+      "redTests": [
+        "sends the real term to the GROUP: - Expected - 1 / + Received + 6 at scripts/__tests__/gate-runner.test.js:454 \u2014 the escalation spy recorded the by-pid SIGKILLs the term was supposed to make unnecessary, and the sweep returned the survivor"
+      ],
+      "note": "This row is a coverage gap, not a fixed bug: the same mutation passed all 35 tests that existed when it was first run (17:05), because every other `stopGroup` case injects `signal`. The sign in `process.kill(-group, \u2026)` is the difference between taking a run's tree down and orphaning its Metro, which is exactly X32's incident, and nothing in the suite could see it. The new case is the real call on a real group."
+    },
+    {
+      "test": "scripts/__tests__/lease-queue.test.js \u203a the queue (X26: first come, first served) \u203a keeps a waiting exclusive request in the queue and still drains the machine for it; the CLI keeps a queue in the lease file \u203a hands a freed pair to the older ticket and shows the queue in `list`",
+      "file": "scripts/lease-core.mjs",
+      "mutation": "the queue order inverts: newest ticket first",
+      "before": "  if (byRequested !== 0) return byRequested;",
+      "after": "  if (byRequested !== 0) return -byRequested;",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/lease-queue.test.js \u2014 FAIL, 2 of 11 (3.4 s)",
+      "redTests": [
+        "keeps a waiting exclusive request in the queue and still drains the machine for it: - Expected - 1 / + Received + 1",
+        "hands a freed pair to the older ticket and shows the queue in `list`: Expected pattern /queue\\s+1\\. X24/ \u2014 the freed pair went to the younger waiter, which is what the ticket timestamp exists to prevent"
+      ],
+      "note": "Run against the rewritten (state-waiting) suite: the case that used to poll on a timer is the one that reports the queue order, so an inversion cannot hide behind a slow box."
+    },
+    {
+      "test": "scripts/native-tests/gesture-settlement.test.swift (run by `bun run test:native`)",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "the deadline honoured before any re-read",
+      "before": "the shipped wait",
+      "after": "`minReads` \u2192 1",
+      "run": "bun run test:native \u2014 the host Swift case compiled with the shipping UI-test source, not a copy",
+      "redTests": [
+        "a read that costs the whole budget still buys the second read (got 1)"
+      ],
+      "note": "The five red proofs are recorded in the header of the test file itself, next to the bugs they hold shut."
+    },
+    {
+      "test": "scripts/native-tests/gesture-settlement.test.swift (run by `bun run test:native`)",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "the agreement test dropped",
+      "before": "the shipped wait",
+      "after": "`if agrees(\u2026)` \u2192 `if true`",
+      "run": "bun run test:native \u2014 the host Swift case compiled with the shipping UI-test source, not a copy",
+      "redTests": [
+        "a screen that is still moving gets no gesture (got 5 presses), and case 3's press count"
+      ],
+      "note": "The five red proofs are recorded in the header of the test file itself, next to the bugs they hold shut."
+    },
+    {
+      "test": "scripts/native-tests/gesture-settlement.test.swift (run by `bun run test:native`)",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "`mayPress` dropped (press whenever unsettled)",
+      "before": "the shipped wait",
+      "after": "press whenever unsettled",
+      "run": "bun run test:native \u2014 the host Swift case compiled with the shipping UI-test source, not a copy",
+      "redTests": [
+        "no gesture is sent while a presentation is up (got 3 presses)"
+      ],
+      "note": "The five red proofs are recorded in the header of the test file itself, next to the bugs they hold shut."
+    },
+    {
+      "test": "scripts/native-tests/gesture-settlement.test.swift (run by `bun run test:native`)",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "the deadline ignored",
+      "before": "the shipped wait",
+      "after": "no deadline check",
+      "run": "bun run test:native \u2014 the host Swift case compiled with the shipping UI-test source, not a copy",
+      "redTests": [
+        "the deadline ends a wait that never agrees (reads 400)"
+      ],
+      "note": "The five red proofs are recorded in the header of the test file itself, next to the bugs they hold shut."
+    },
+    {
+      "test": "scripts/native-tests/gesture-settlement.test.swift (run by `bun run test:native`)",
+      "file": "example/ios/NitroUiExampleUITests/GestureSettlement.swift",
+      "mutation": "`maxPresses` ignored",
+      "before": "the shipped wait",
+      "after": "no sanity cap",
+      "run": "bun run test:native \u2014 the host Swift case compiled with the shipping UI-test source, not a copy",
+      "redTests": [
+        "the sanity cap is a cap (got 9 presses)"
+      ],
+      "note": "The five red proofs are recorded in the header of the test file itself, next to the bugs they hold shut."
+    },
+    {
+      "test": "scripts/__tests__/real-input-tab-targets.test.js \u203a parseIosTabTargets \u203a matches the format RealInputTests.swift prints",
+      "file": "example/ios/NitroUiExampleUITests/RealInputTests.swift",
+      "mutation": "none - this is the shipped source at d9dcd3c0, where `revealTab` had begun answering with the settlement outcome and `let reached = revealTab(tab)` inferred `Outcome<TabReveal>`",
+      "before": "      let reached = revealTab(tab)",
+      "after": "      let reached: Bool = revealTab(tab).satisfied",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/real-input-tab-targets.test.js \u2014 FAIL, 1 of 15 (2.3 s), before the Swift edit",
+      "redTests": [
+        "matches the format RealInputTests.swift prints: Expected pattern: /let reached: Bool = / \u2014 the literal-string assertions in this case all passed on the drifted source, which is why the run of 16:10 read 23 printed lines as nothing"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/real-input-tab-targets.test.js \u203a says a line could not be read, rather than calling every tab unreachable / counts no stray for a pass whose lines it can read, and none for other lines",
+      "file": "scripts/real-input/tab-targets.mjs",
+      "mutation": "none - the two cases were written before `unreadTabTargetLines` existed, which is the red they were shown in",
+      "before": "(no such function)",
+      "after": "export function unreadTabTargetLines(log, examples = 3)",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/real-input-tab-targets.test.js \u2014 FAIL, 2 of 15 (2.3 s), before the parser change",
+      "redTests": [
+        "TypeError: (0 , _tabTargets.unreadTabTargetLines) is not a function in both cases",
+        "the first case's fixture is the drifted line the 16:10 run actually printed, so it also proves the rule leads with the format and still reports the tab as unmeasured"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/uitests-sources.test.js \u203a the UITests target compiles exactly the Swift files in its folder",
+      "file": "example/ios/NitroUiExample.xcodeproj/project.pbxproj",
+      "mutation": "none - this is what the branch shipped at 16d2bcef: adding `GestureSettlement.swift` replaced the four project lines naming `A11yFrameStability.swift`",
+      "before": "4 PBXBuildFile/PBXFileReference lines for A11yFrameStability.swift",
+      "after": "(absent from the UI-test target's sources phase)",
+      "run": "bun run test -- --runTestsByPath scripts/__tests__/uitests-sources.test.js \u2014 FAIL before commit d9dcd3c0",
+      "redTests": [
+        "expect(compiled).toEqual(onDisk): - \"A11yFrameStability.swift\" \u2014 a file on disk that no target compiles, which `test:native` cannot see because it parses the folder it lists"
+      ]
+    },
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift \u203a testRealInputPopover (the anchor's three-tap retry)",
+      "file": "example/ios/NitroUiExampleUITests/RealInputTests.swift",
+      "mutation": "the popover wait stops asking the screen whether anything arrived: `mayPress` answers yes always, and the read that decides reports no rows while a presentation is up - the pre-X34 shape, where a slow publish looked like an undelivered touch",
+      "before": "mayPress: { $0.windows == 0 }",
+      "after": "mayPress: { _ in true } (plus a read that ignores the presentation)",
+      "run": "real-input:ios:--control:popover \u2014 FAIL, 650.1 s \u2014 real-input+ios+--control+popover-2026-11-13T15-15-33.658Z.log",
+      "redTests": [
+        "popover: up=false reads=18 taps=9: \"9 real taps on the popover's anchor left no popover up at all after 25160 ms \u2014 every tap was re-sent only while the screen showed no presentation, so on the evidence here the touch was never delivered\" \u2014 the sentence X31 quoted, reproduced by taking the observed state away from the loop"
+      ],
+      "note": "Filtered gate name: satisfies nothing but itself. The file was restored and the app rebuilt before the clean run."
+    },
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift \u203a testRealInputTabTargets (the a11y sweep's tab scroll)",
+      "file": "example/ios/NitroUiExampleUITests/RealInputTests.swift",
+      "mutation": "the scroll is aimed but never moves: the drag distance goes from 70 % of the window to 1 pt, so the tab never comes inside the window and the wait has to run out",
+      "before": "let shift = max(-window.width * 0.7, min(window.width * 0.7, overhang))",
+      "after": "let shift = max(-CGFloat(1.0), min(CGFloat(1.0), overhang))",
+      "run": "real-input:ios:--control:popover \u2014 FAIL, 1389.9 s \u2014 real-input+ios+--control+popover-2026-11-13T15-27-48.633Z.log (the filter `a11y` is not a control: the sweep rides every run, so the reveal is proved under another control's gate name)",
+      "redTests": [
+        "testRealInputA11y failed (149.8 s): \"the example's tab \\\"tab-popover\\\" could not be scrolled wholly into the window in 28 reads and 27 drags over 60427 ms (it is at (1221.0, 68.0, 77.33\u2026, 44.0), hittable: false)\" \u2014 the same sentence X31's \"still outside the window\" failure, now bounded by a deadline and stating what it saw",
+        "the pass also printed 21 `reveal tab: \u2026 inside=false` lines, which is the difference between a wait that says it lost and a fixed count that just stops"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/gate-runner.test.js \u203a a real supervisor, and a real gate that gets killed \u203a takes the run and its server down with it",
+      "file": "scripts/gate.mjs",
+      "mutation": "none - this is the item 2 demo on the lease: `kill <pid>` on a backgrounded `gate.mjs`, its own pid recorded when it started",
+      "before": "(a gate running with its runner and Metro under it)",
+      "after": "(that gate killed by pid, twice: softly, and then hard enough to take the supervisor too)",
+      "run": "soft: real-input:ios:--control:popover \u2014 FAIL, 20.3 s, exitCode 143 \u2014 real-input+ios+--control+popover-2026-11-13T15-12-56.510Z.log (same shape at 14-19-52.961Z); hard: no ledger line at all, by design, and the refusal is in real-input+ios+--control+popover-2026-11-13T14-21-20.369Z.log",
+      "redTests": [
+        "soft death: the gate's own log ends `gate: re-raising SIGTERM` and its ledger line reads `result: fail` with `exitCode: 143`, and the next gate started on the same Metro port two minutes later (15:15:34, 650 s) - nothing was left holding it, which is the whole claim",
+        "hard death (`kill -9` on gate, runner, command and `bun`): Metro pid 13452 left on 8293 and no ledger line, and the next gate refused before starting: \"gate: refused before the run - Metro port 8293 (pair leased) is served by pid 13452 (node)\" plus \"WARN this port belongs to a gate that DIED without a ledger line: real-input:ios:--control:popover started 2026-11-13T14:20:36.611Z (gate pid 13265, process group 13392, lease X34-vv27s) - its supervisor left no note, so the run was killed hard enough to take that too. its log: \u2026\""
+      ],
+      "note": "Both Metro leftovers were cleared with two recorded `kill <pid>` calls; nothing was signalled by name or pattern."
+    }
+  ]
+}

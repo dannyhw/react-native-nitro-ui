@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-NitroUiExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-NitroUiExample.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		5E770000000000000000F1 /* GestureSettlement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E770000000000000000F0 /* GestureSettlement.swift */; };
 		604D1B03BCF670E20D71C157 /* RealInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54FBBD80A535C1716DDA821 /* RealInputTests.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
@@ -37,6 +38,7 @@
 		3B4392A12AC88292D35C810B /* Pods-NitroUiExample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NitroUiExample.debug.xcconfig"; path = "Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample.debug.xcconfig"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-NitroUiExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NitroUiExample.release.xcconfig"; path = "Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-NitroUiExample.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-NitroUiExample.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E770000000000000000F0 /* GestureSettlement.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GestureSettlement.swift; path = GestureSettlement.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = NitroUiExample/AppDelegate.swift; sourceTree = "<group>"; };
 		761780EE2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = NitroUiExample/SceneDelegate.swift; sourceTree = "<group>"; };
 		761780F12CA45674006654F1 /* NitroUiProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NitroUiProbe.swift; path = NitroUiExample/NitroUiProbe.swift; sourceTree = "<group>"; };
@@ -95,6 +97,7 @@
 		42A34C307B4C72141B94B37E /* NitroUiExampleUITests */ = {
 			isa = PBXGroup;
 			children = (
+				5E770000000000000000F0 /* GestureSettlement.swift */,
 				A11CF00000000000000000F0 /* A11yFrameStability.swift */,
 				C54FBBD80A535C1716DDA821 /* RealInputTests.swift */,
 			);
@@ -334,8 +337,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A11CF00000000000000000F1 /* A11yFrameStability.swift in Sources */,
+				5E770000000000000000F1 /* GestureSettlement.swift in Sources */,
 				604D1B03BCF670E20D71C157 /* RealInputTests.swift in Sources */,
+				A11CF00000000000000000F1 /* A11yFrameStability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

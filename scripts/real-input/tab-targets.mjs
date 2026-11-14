@@ -77,16 +77,39 @@ export function exampleTabs(appText) {
  * @param {ReadonlyArray<{ id: string, label: string }>} args.tabs from {@link exampleTabs}
  * @param {ReadonlyMap<string, TabMeasurement>} args.measured by tab id
  * @param {number} args.pixel one device pixel in the layout unit (1 / density)
+ * @param {{ count: number, examples: ReadonlyArray<string> }} [args.strays] tab-target lines the
+ *   suite printed that this rule could not read, from {@link unreadTabTargetLines}. A suite that
+ *   measures and a rule that cannot read the measurement are one broken gate, and the honest
+ *   sentence about it names the format - not 23 tabs nobody reached.
  * @returns {{ id: string, ok: boolean, line: string }[]} one verdict per tab, in bar
  *   order, plus one for a measured tab the app does not list
  */
-export function checkTabTargets({ platform, tabs, measured, pixel }) {
+export function checkTabTargets({
+  platform,
+  tabs,
+  measured,
+  pixel,
+  strays = { count: 0, examples: [] },
+}) {
   const min = TAB_TARGET_MIN[platform];
   const unit = platform === 'android' ? 'dp' : 'pt';
   const floor = min - pixel;
   const size = (m) => `${fmt(m.width)} × ${fmt(m.height)} ${unit}`;
   /** @type {{ id: string, ok: boolean, line: string }[]} */
   const verdicts = [];
+  const unread = Number(strays?.count ?? 0);
+  if (unread > 0) {
+    const first = String(strays.examples[0] ?? '').trim();
+    verdicts.push({
+      id: '(format)',
+      ok: false,
+      line:
+        `${String(unread)} "real-input tab-target" line(s) from the iOS pass could not be read ` +
+        `by this rule${first === '' ? '' : ` (first: ${first})`} — the print site in ` +
+        'RealInputTests.swift and the parser in scripts/real-input/tab-targets.mjs have ' +
+        'drifted, so every tab below is unmeasured because of the format, not the tab bar',
+    });
+  }
   if (tabs.length === 0) {
     verdicts.push({
       id: '(none)',
@@ -176,6 +199,36 @@ export function parseIosTabTargets(log) {
     });
   }
   return measured;
+}
+
+/**
+ * The tab-target lines the iOS pass printed that {@link parseIosTabTargets} reads as nothing.
+ *
+ * The parser skips what it cannot match, which is right for a log full of unrelated output and
+ * wrong for a line that is clearly a measurement. The two are told apart by the marker: a line
+ * carrying `real-input tab-target ` was written for this parser, so one it cannot read means the
+ * format moved under it. That distinction is the whole point of reading them - on 2026-11-13 the
+ * pass began interpolating a whole outcome where the parser wanted `true`, 23 well-formed-looking
+ * lines read as nothing, and the report blamed the tab bar for a print site.
+ *
+ * `parseIosA11yStability` answers the same situation by throwing; this rule reports instead, so
+ * one drifted pass still prints the tab verdicts it can and the reader sees both.
+ *
+ * @param {string} log the xcodebuild test log
+ * @param {number} [examples] how many offending lines to hand back
+ * @returns {{ count: number, examples: string[] }}
+ */
+export function unreadTabTargetLines(log, examples = 3) {
+  /** @type {string[]} */
+  const found = [];
+  let count = 0;
+  for (const line of log.split('\n')) {
+    if (!line.includes('real-input tab-target ')) continue;
+    if (IOS_LINE.test(line)) continue;
+    count += 1;
+    if (found.length < examples) found.push(line.trim());
+  }
+  return { count, examples: found };
 }
 
 /** @param {number} value */
