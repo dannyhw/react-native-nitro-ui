@@ -311,3 +311,14 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - X32 review: the press-travel rule cancels the moment the finger leaves the row's box by one point, stricter than UIKit's own slop (true of ListItem since G30 too). Leave unless someone reports a dropped tap.
 - X32 merge (2026-11-13), all green on the same tree's re-run: iOS `FormFidelity` E2 question 4 read `the Form lays rows out at 0 pt and draws them at 340 pt` (8 cell reports) at load 17–28, as S6b saw at 0 reports. Passed twice filtered and in the full re-run. Android `HostPopups` "opens two popup owners in one Host" (menu `live` 1, not 0) and isolated `BottomSheetModalHazard` (render timeout 1000 ms) failed at load peaks ~35, the same run. All load-sensitive.
 - `real-input:android` `search-field`: "timed out waiting for the prop to change (search-switching-echo="switching: number-pad")" right after the switching field opens with its text keyboard. Seen in X31 (2026-11-12 17:29) and the X32 merge (2026-11-14), unrelated to either diff; G27 hit the same step while building it. The prop change after a focused keyboard restart is slow to echo under load.
+
+## Flaky tests
+
+One line per test that went red and then green on the same tree: test name, date, failure excerpt
+path, times seen. Copied from task reports at merge. The rules are in `.claude/skills/flake/SKILL.md`.
+
+## Quarantined tests
+
+Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
+A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
+is raised with the owner once.
