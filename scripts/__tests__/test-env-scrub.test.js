@@ -57,6 +57,7 @@ import {
   deviceAwareTarget,
   envValueIdentifiers,
   spawnCalls,
+  unresolvedScriptsTarget,
 } from './helpers/spawn-env-audit.js';
 
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -415,6 +416,53 @@ describe('dataMask (which `spawn(` is a call site of this file)', () => {
 });
 
 /**
+ * The conservative half of the audit: what it does with a target it *cannot* resolve.
+ *
+ * `deviceAwareTarget` can only speak for a call whose script it can read out of the file. Suites that
+ * copy the repo's scripts into a scratch checkout and name the file by variable are outside that, and
+ * the question the guard then asks — "did that child get the shell's lease?" — is the same question.
+ * Both directions of this rule are silent, so both are asserted: too narrow and a `bench/report.mjs`
+ * inherits `EMULATOR_PORT` from a leased shell again (the real thing this caught), too wide and every
+ * `git grep … -- scripts` in the directory becomes a leak nobody will fix.
+ */
+describe('unresolvedScriptsTarget (a spawn target the audit cannot name)', () => {
+  const target = (window) => unresolvedScriptsTarget(window);
+
+  it('counts a script joined out of `scripts/` by variable', () => {
+    // The shape that hid the leak: the name is a variable, so no scan can resolve it, and the
+    // script itself is a *copy* in a scratch tree rather than the one this scan walks.
+    expect(
+      target(
+        "spawnSync(process.execPath, [path.join(root, 'scripts', 'bench', script), ...args], { env:"
+      )
+    ).not.toBeNull();
+  });
+
+  it('counts a script spelled out under `scripts/`, and passes one outside it', () => {
+    expect(
+      target(
+        "spawnSync(process.execPath, [join(repoRoot, 'scripts', 'gen-registry.mjs')], { encoding: 'utf8' }"
+      )
+    ).not.toBeNull();
+    expect(
+      target(
+        "spawnSync(process.execPath, [join(repoRoot, 'bench', 'run.mjs')], { encoding: 'utf8' }"
+      )
+    ).toBeNull();
+  });
+
+  it('does not mistake an argument for a target', () => {
+    // The false positive that would have made this rule a week-old guard: `scripts` as a *pathspec*
+    // of a `git grep`, which is neither the command nor a script anyone is spawning.
+    expect(
+      target(
+        "spawnSync('git', ['grep', '-l', 'task-ready', '--', 'scripts', 'example'], { encoding: 'utf8' }"
+      )
+    ).toBeNull();
+  });
+});
+
+/**
  * Coverage, not taste: the guard has to notice a *new* device-aware spawn site, because that is
  * how X32 and X33 got there (`bench-baseline-merge.test.js` predates the lease rules and nobody
  * thought to audit it). Both sides of the match are read from the tree.
@@ -459,7 +507,12 @@ describe('no suite spawns a device-aware script from an unscrubbed environment',
     for (const name of suites) {
       const source = readFileSync(join(__dirname, name), 'utf8');
       for (const call of spawnCalls(source)) {
-        const target = deviceAwareTarget(call.targetText, source, aware);
+        // A call this audit cannot resolve is not a free pass: a suite that spawns `scripts/` by
+        // variable is judged as though it had named a device-aware script, because the variable is
+        // exactly how one hides (X34 review: `bench/report.mjs`, in a suite that was green).
+        const target =
+          deviceAwareTarget(call.targetText, source, aware) ??
+          unresolvedScriptsTarget(call.targetText);
         if (target == null) continue;
         // An `env:` built in a helper is judged on the helper's text too: `env: env(extra)` is
         // clean exactly when the function behind it scrubs, and reading only the call site would
@@ -480,7 +533,8 @@ describe('no suite spawns a device-aware script from an unscrubbed environment',
           continue;
         offending.push(
           `${relative(REPO_ROOT, join(__dirname, name))}:${String(call.line)} hands ` +
-            `${target.script.split('/').pop()} (reads ${target.names.slice(0, 3).join(', ')}) ` +
+            `${target.script.split('/').pop()} ` +
+            `(${target.names.length > 0 ? `reads ${target.names.slice(0, 3).join(', ')}` : 'a scripts/ path this audit cannot resolve'}) ` +
             (callSetsEnv(call.window)
               ? 'an unscrubbed process.env'
               : 'no environment of its own at all')

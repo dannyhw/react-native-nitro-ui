@@ -380,6 +380,31 @@ export function definitionText(fileSource, name) {
 }
 
 /**
+ * Does this call run a script out of a `scripts/` tree that the audit cannot resolve to a name?
+ *
+ * `deviceAwareTarget` answers for the calls it can attribute to a script it has read. Suites also
+ * spawn *copies* of the repo's scripts into a throwaway checkout with the file name in a variable —
+ * `path.join(root, 'scripts', 'bench', script)` — and no textual scan can tell which script that
+ * resolves to at run time. Unknown is expensive, never free (the same rule `gate.mjs`'s path
+ * mapping runs on): a call that plainly runs something out of `scripts/`, and cannot be named, is
+ * judged as though it were device aware. That is the shape a device-aware CLI actually hides in —
+ * it is how `bench/report.mjs` sat unscrubbed in `bench-baseline-machine.test.js` in front of an
+ * audit that was otherwise green.
+ *
+ * @param {string} targetText the call's text up to its `env:` property
+ * @returns {{script: string, names: string[]} | null} a target with no names, or null
+ */
+export function unresolvedScriptsTarget(targetText) {
+  const joinedUnderScripts = /\b(?:path\.)?join\([^)\n]*['"]scripts['"]/u.test(
+    targetText
+  );
+  const spelledOutScript =
+    /['"][^'"]*[\\/]scripts[\\/][^'"]*\.(?:mjs|js|sh)['"]/u.test(targetText);
+  if (!joinedUnderScripts && !spelledOutScript) return null;
+  return { script: '<unresolved>', names: [] };
+}
+
+/**
  * Which device-aware script (if any) a spawn call runs, resolved through the file's own constants.
  *
  * Suites name their CLI once (`const CLI = join(REPO_ROOT, 'scripts', 'lease.mjs')`) and spawn
