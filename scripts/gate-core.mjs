@@ -237,6 +237,14 @@ export const TOOLING_FILES = [
   // and asked for two harness runs over a script no binary contains.
   'scripts/task-ready.mjs',
   'scripts/task-ready-core.mjs',
+  // The worktree lister and the watchdog. Both read the machine (git worktrees, the
+  // lease file, free disk, `gh`, `npm view`) and neither is imported by anything a
+  // device run starts; `worktrees.mjs --prune` removes checkouts, never a file inside
+  // the one a gate is running in. `gate-check.test.js` holds that claim as a search.
+  'scripts/worktrees.mjs',
+  'scripts/worktrees-core.mjs',
+  'scripts/watchdog.mjs',
+  'scripts/watchdog-core.mjs',
   // The README's code samples, kept in sync by `readme:check`. It sits under
   // `example/src/`, so the directory rule would call it both platforms, but no app
   // code imports it - tsc, ESLint, Prettier and `readme:check` are what prove it - so

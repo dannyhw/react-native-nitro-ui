@@ -775,6 +775,11 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     // The ESLint config, whose rules directory is already tooling: a commit turning
     // one of them on was asking for two harness runs.
     'eslint.config.mjs',
+    // The worktree lister and the watchdog: they read the machine and are proven below.
+    'scripts/worktrees.mjs',
+    'scripts/worktrees-core.mjs',
+    'scripts/watchdog.mjs',
+    'scripts/watchdog-core.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);
@@ -831,6 +836,47 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     // The widening is real: without the tooling paths, `scripts/` does answer, so a
     // search that silently matched nothing there would not look different from this.
     expect(hits.stdout).toContain('scripts/task-ready.mjs');
+  });
+
+  it('nothing a device run starts imports the worktree lister or the watchdog', () => {
+    // Same shape as the task-ready search above, for the same reason: a file on this
+    // list is trusted to need no device run, so "no runner reads it" is asked of git.
+    // `gate.mjs` names `scripts/worktrees.mjs` in a refusal message and is itself
+    // tooling, which is why the tooling paths are subtracted rather than expected empty.
+    // File names, not the bare word: `watchdog` alone also matches the native dwell
+    // probe, which has a watchdog of its own and nothing to do with this script.
+    for (const needle of [
+      'worktrees-core',
+      'worktrees.mjs',
+      'watchdog-core',
+      'watchdog.mjs',
+    ]) {
+      const hits = spawnSync(
+        'git',
+        [
+          'grep',
+          '-l',
+          needle,
+          '--',
+          'scripts',
+          'example',
+          'src',
+          'ios',
+          'android',
+          'nitrogen',
+          'patches',
+          'package.json',
+        ],
+        { cwd: process.cwd(), encoding: 'utf8' }
+      );
+      const readers = hits.stdout
+        .trim()
+        .split('\n')
+        .filter((file) => file !== '' && !isToolingPath(file));
+      expect({ needle, readers }).toEqual({ needle, readers: [] });
+      // The search does answer inside `scripts/`, so an empty result is not a typo.
+      expect(hits.stdout).toContain('scripts/');
+    }
   });
 
   it('a commit that only changes the checker re-owns check and no device run', () => {
