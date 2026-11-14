@@ -62,10 +62,12 @@ import {
   gatePollIntervalMs,
   gateProcessIsAlive,
   gateStdinDeath,
+  holdOnSignal,
   pgidIsAlive,
   pidIsAlive,
   tolerateBrokenStdio,
   markRunnerRecordStopped,
+  maySweepRunnerGroup,
   stopGroup,
   superviseGateRunner,
   writeRunnerRecord,
@@ -74,14 +76,41 @@ import { childEnv } from './helpers/scrubbed-env.js';
 
 const GATE_RUNNER = join(__dirname, '..', 'gate-runner.mjs');
 
-/** Pids this file started, so cleanup signals nothing it did not create. */
+/**
+ * The processes this file started, so cleanup signals nothing it did not create.
+ *
+ * A `ChildProcess` wherever it has one and a bare pid only for a process it never spawned (a
+ * grandchild reported by its own output): the handle refuses to signal a child it has already
+ * reaped, while a number is a fact that expires — the moment that pid exits, the kernel can hand
+ * the same number to someone else, and a suite-wide `afterAll` runs whatever it likes by then. The
+ * pid-reuse case is not hypothetical here: this file's whole subject is a pid that outlived its
+ * meaning.
+ */
 const started = [];
 const tempDirs = [];
 
 afterAll(() => {
-  for (const pid of started.splice(0)) {
+  for (const target of started.splice(0)) {
     try {
-      process.kill(pid, 'SIGKILL');
+      if (typeof target === 'number') {
+        process.kill(target, 'SIGKILL');
+        continue;
+      }
+      if (target.pid != null) {
+        // A pid learned from somebody else's output — the command a supervisor ran, or the bundle
+        // server one level below it. Killable only while it is still in the group this file's own
+        // spawn leads: a recycled pid is in another group, which is the same test the supervisor
+        // applies to its gate before it believes a number.
+        if (groupId(target.pid) === target.group) {
+          process.kill(target.pid, 'SIGKILL');
+        }
+        continue;
+      }
+      // Asked of the handle, twice over: `exitCode == null` is Node's own "I have not reaped this
+      // one yet", and `kill()` on a finished child is a no-op rather than a signal to a stranger.
+      if (target.exitCode == null && target.signalCode == null) {
+        target.kill('SIGKILL');
+      }
     } catch {
       /* already gone, which is the wanted answer */
     }
@@ -152,6 +181,8 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       start: async () => command,
       isAlive: () => true,
       members: async () => [4300, 4301],
+      // This supervisor leads the group its command runs in, which is what makes sweeping legal.
+      ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
         return [];
@@ -178,6 +209,8 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       isAlive: () => (looks += 1) <= 1,
       // The command and its server, and no trace of the gate: the group is safe to signal.
       members: async () => [4300, 4301],
+      // It leads that group, which is what makes sweeping it legal at all.
+      ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
         return [];
@@ -206,6 +239,7 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       start: async () => command,
       isAlive: () => (looks += 1) <= 1,
       members: async () => [4300, 9001],
+      ownPid: 4242,
       stop: async () => [9001],
       wait: async () => {},
       log: (message) => lines.push(message),
@@ -233,6 +267,8 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       start: async () => command,
       isAlive: () => (looks += 1) <= 1,
       members: async () => [100, 4300],
+      // It leads this group; the gate's pid inside it is what makes it unsweepable.
+      ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
         return [];
@@ -242,8 +278,47 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
     });
     expect(swept).toEqual([]);
     expect(result.code).toBe(GATE_DEATH_EXIT);
-    expect(result.reason).toContain('nothing was swept');
+    expect(result.reason).toContain('its group contains it');
     expect(lines.join('')).toContain('refusing to sweep');
+    command.finish(1);
+  });
+
+  it('refuses to sweep a group it does not lead at all', async () => {
+    // The other way this can be wrong, and the one no membership check can see: a supervisor started
+    // without `detached` — imported by a suite, run by hand, or launched by a caller that forgot the
+    // flag — sits in a group holding processes nobody handed it: a test runner's, a shell's. Its own
+    // pid is not that group's number, and that single inequality is what says "not mine to signal".
+    // It comes before the `ps` question below it, and the gate that created the group — which has a
+    // number it made — sweeps it instead.
+    const command = pendingCommand(4242);
+    const swept = [];
+    const lines = [];
+    let looks = 0;
+    const result = await superviseGateRunner({
+      argv: ['true'],
+      gatePid: 100,
+      gatePgid: 100,
+      start: async () => command,
+      isAlive: () => (looks += 1) <= 1,
+      // A group holding nothing but the run: the membership check could not object to this one.
+      members: async () => [4300, 4301],
+      // This process leads a *different* group, so 4242 is somebody else's tree.
+      ownPid: 4300,
+      stop: async (group) => {
+        swept.push(group);
+        return [];
+      },
+      wait: async () => {},
+      log: (message) => lines.push(message),
+    });
+    expect(swept).toEqual([]);
+    expect(result.code).toBe(GATE_DEATH_EXIT);
+    expect(result.reason).toContain('does not lead the group');
+    expect(lines.join('')).toContain(
+      'refusing to signal a group it does not lead'
+    );
+    // No `stopped` note for a sweep that never happened: the gate still has its own job to do.
+    expect(result.left).toBeUndefined();
     command.finish(1);
   });
 
@@ -297,6 +372,96 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
     command.finish(3);
     expect(await run).toEqual({ code: 3, reason: 'command exited' });
     expect(swept).toEqual([]);
+  });
+});
+
+/**
+ * The signal a supervisor rides out, and the two ways the end of that hold used to be wrong.
+ *
+ *   1. **the sweep must get the grace it asked for.** The supervisor leads the group it is about to
+ *      signal, so the SIGTERM it sends arrives at *its own* handler. If that handler is still
+ *      listening, the term it sent itself reads as a second signal from a hand that is not typing:
+ *      the escalation runs with `termGraceMs: 0` and the group is killed within a second of the
+ *      decision to give it ten — a harness and a bundle server cut off in the middle of a cleanup
+ *      that was working, which is the one thing this hold exists to prevent.
+ *   2. **a supervisor that does not lead the group holds nothing.** The same rule as the sweep's:
+ *      the named group is not its tree to end, and a handler left installed is a handler that
+ *      outlives the fixture.
+ *
+ * The signal is an invented name, and deliberately: `process.emit` is the only way to deliver the
+ * term a sweep sends to its own group without handing a real signal to the jest worker running this
+ * file. The handler body — which is what is under test — cannot tell the two apart.
+ */
+describe('holdOnSignal (the signal a supervisor rides out)', () => {
+  const SIGNAL = 'SIGSWEEPDONE';
+
+  it('lets its own sweep have the grace it asked for', async () => {
+    const group = 4242;
+    const lines = [];
+    const stops = [];
+    const hold = holdOnSignal(group, () => true, {
+      ownPid: group,
+      log: (message) => lines.push(message),
+      holdMs: 5,
+      signals: [SIGNAL],
+      stop: (target, options) => {
+        stops.push({ target, options: options ?? {} });
+        // The real sweep signals the group, and this process is a member of it: the term comes
+        // straight back, synchronously, as `kill(2)` does. Only the sweep that was *granted* sends
+        // it — a second call below is the escalation itself, which kills by pid and signals no
+        // group at all.
+        if (stops.length === 1) process.emit(SIGNAL);
+        // Never settles, like a sweep still running — which also keeps this fixture away from the
+        // `process.exit` at the end of the real path.
+        return new Promise(() => {});
+      },
+    });
+    try {
+      process.emit(SIGNAL);
+      await until(
+        () => stops.length > 0,
+        'the hold to expire and the sweep to begin',
+        5_000
+      );
+      // The grace it asked for is the default one: no zero-grace options on this call.
+      expect(stops[0]).toEqual({ target: group, options: {} });
+      // The heart of it: the term the supervisor sent itself was not taken for a second signal from
+      // a user, so nothing escalated and nothing was killed early.
+      expect(stops.length).toBe(1);
+      expect(lines.join('')).not.toContain('second');
+      // Still reported to the caller, which owns the exit code: the run *was* signalled.
+      expect(hold.get()).toBe(SIGNAL);
+    } finally {
+      hold.dispose();
+    }
+    expect(process.listenerCount(SIGNAL)).toBe(0);
+  });
+
+  it('refuses to hold signals for a group it does not lead', () => {
+    const lines = [];
+    expect(process.listenerCount(SIGNAL)).toBe(0);
+    const hold = holdOnSignal(4242, () => true, {
+      // A group this process is a member of but does not lead — the shape of a supervisor started
+      // without `detached`, inside the gate's group or a suite's.
+      ownPid: 4300,
+      log: (message) => lines.push(message),
+      signals: [SIGNAL],
+      stop: () => {
+        throw new Error(
+          'a supervisor that does not lead the group must never signal it'
+        );
+      },
+    });
+    try {
+      expect(lines.join('')).toContain('not its to end');
+      // Nothing installed, either: holding is the thing that ends a group, and a handler left
+      // behind would end it from the next test in the file.
+      expect(process.listenerCount(SIGNAL)).toBe(0);
+      expect(hold.get()).toBeNull();
+      expect(() => hold.pause()).not.toThrow();
+    } finally {
+      hold.dispose();
+    }
   });
 });
 
@@ -428,7 +593,7 @@ describe('stopGroup (what the sweep may touch)', () => {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     leader.unref();
-    started.push(leader.pid);
+    started.push(leader);
     let out = '';
     leader.stdout.on('data', (chunk) => {
       out += String(chunk);
@@ -439,7 +604,9 @@ describe('stopGroup (what the sweep may touch)', () => {
       15_000
     );
     const grandchild = Number(/^\d+/m.exec(out)[0]);
-    started.push(grandchild);
+    // The leader leads its own group and the grandchild is in it — asserted below, and the reason
+    // this pid is worth recording with that group rather than on its own.
+    started.push({ pid: grandchild, group: leader.pid });
 
     // `detached` means the leader leads its own group, so the group number is its pid - and the
     // grandchild is in that group, which is the whole point.
@@ -504,6 +671,95 @@ describe('writeRunnerRecord (the sidecar a later run attributes a port by)', () 
     expect(after.startedAt).toBe(first.startedAt);
     expect(after.gatePid).toBe(7);
     expect(after.group).toBe(4242);
+  });
+});
+
+/**
+ * The decision `gate.mjs` makes after its supervisor is gone: may it sweep that group?
+ *
+ * The sidecars are the real format, written by `writeRunnerRecord` /
+ * `markRunnerRecordStopped` into this file's own temp dirs, because the thing worth catching here is
+ * the two halves disagreeing about what `stopped` means. The live-pid answer is injected: this case
+ * is about a decision, and a fixture cannot make the kernel reuse a pid on demand.
+ */
+describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', () => {
+  /** A sidecar for a run that led group 4242, optionally with the sweep's note on it. */
+  const sidecar = ({ stopped = false } = {}) => {
+    const dir = workDir();
+    const logPath = join(dir, 'run.log');
+    writeFileSync(logPath, '');
+    const file = writeRunnerRecord({
+      group: 4242,
+      gatePid: 7,
+      gatePgid: 7,
+      logPath,
+      gate: 'check',
+    });
+    if (stopped)
+      markRunnerRecordStopped(file, { reason: 'gate died', left: [] });
+    return file;
+  };
+
+  it('owes the sweep while the sidecar has no `stopped` record', () => {
+    // The X32 shape: a supervisor taken so hard that its own cleanup never ran, leaving the gate as
+    // the last process that can name the run's group.
+    const owed = maySweepRunnerGroup({
+      runnerPid: 4242,
+      recordFile: sidecar(),
+      pidAlive: () => false,
+    });
+    expect(owed.sweep).toBe(true);
+    expect(owed.why).toContain('no `stopped` record');
+  });
+
+  it('stands down once the supervisor has reported its sweep', () => {
+    // Sweeping again would be a second signal at a tree that has already been told to go, and the
+    // note is the supervisor's own account of what survived it.
+    const decided = maySweepRunnerGroup({
+      runnerPid: 4242,
+      recordFile: sidecar({ stopped: true }),
+      pidAlive: () => false,
+    });
+    expect(decided.sweep).toBe(false);
+    expect(decided.why).toContain('reported the sweep already');
+  });
+
+  it('stands down when the pid has been reused', () => {
+    // The one that reaches a stranger's process tree. The gate watched its supervisor exit, so a
+    // *live* process with that number is a different process — and `ps -g` / `kill(-pid, …)` about
+    // it describes whatever group that one leads.
+    const decided = maySweepRunnerGroup({
+      runnerPid: 4242,
+      recordFile: sidecar(),
+      pidAlive: () => true,
+    });
+    expect(decided.sweep).toBe(false);
+    expect(decided.why).toContain('alive again');
+  });
+
+  it('asks the live-pid question first, when both facts are true at once', () => {
+    // A swept group *and* a recycled number: the answer is still no, and for the reason that keeps a
+    // stranger alive rather than the one about bookkeeping.
+    const decided = maySweepRunnerGroup({
+      runnerPid: 4242,
+      recordFile: sidecar({ stopped: true }),
+      pidAlive: () => true,
+    });
+    expect(decided.sweep).toBe(false);
+    expect(decided.why).toContain('alive again');
+  });
+
+  it('owes the sweep with no sidecar to read, and refuses without a pid', () => {
+    // A run whose sidecar could not be written is the worse case, not the clean one: nothing says
+    // the group came down. With no pid there is no group to name at all.
+    const missing = maySweepRunnerGroup({
+      runnerPid: 4242,
+      pidAlive: () => false,
+    });
+    expect(missing.sweep).toBe(true);
+    expect(missing.why).toContain('no sidecar');
+    expect(maySweepRunnerGroup({ runnerPid: null }).sweep).toBe(false);
+    expect(maySweepRunnerGroup({ runnerPid: 0 }).sweep).toBe(false);
   });
 });
 
@@ -672,6 +928,7 @@ describe('the supervisor\u2019s gate-death signal', () => {
         throw new Error('the pid poll should not decide this case');
       },
       members: async () => [],
+      ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
         return [];
@@ -704,6 +961,7 @@ describe('the supervisor\u2019s gate-death signal', () => {
       gateGone: gateStdinDeath({ fd: -1 }),
       start: async () => command,
       members: async () => [],
+      ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
         return [];
@@ -772,7 +1030,7 @@ describe('gateStdinDeath (the pipe, with a real file descriptor)', () => {
       stdio: [stdin, 'pipe', 'pipe'],
       env: childEnv({ X34_WATCH_MS: '4000' }),
     });
-    started.push(child.pid);
+    started.push(child);
     const output = { text: '' };
     child.stdout.on('data', (chunk) => {
       output.text += String(chunk);
@@ -887,7 +1145,7 @@ function startSupervisor({
       [GATE_NAME_ENV]: 'harness:ios',
     }),
   });
-  started.push(child.pid);
+  started.push(child);
   let stderr = '';
   child.stderr.on('data', (chunk) => {
     stderr += String(chunk);
@@ -912,7 +1170,7 @@ function startGate() {
     { stdio: 'ignore', detached: true }
   );
   gate.unref();
-  started.push(gate.pid);
+  started.push(gate);
   return gate;
 }
 
@@ -941,7 +1199,8 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       'the command to start'
     );
     const command = readJsonFile(join(dir, 'command.json'));
-    started.push(command.pid, command.helper);
+    started.push({ pid: command.pid, group: supervisor.pid });
+    started.push({ pid: command.helper, group: supervisor.pid });
     expect(command.gatePid).toBe(String(gate.pid));
     expect(command.gatePgid).toBe(String(gatePgid));
     expect(command.gate).toBe('harness:ios');
@@ -1091,7 +1350,10 @@ describe('a real supervisor, and a real gate that gets killed', () => {
         20_000
       );
       const command = readJsonFile(join(dir, 'command.json'));
-      started.push(command.pid, command.helper);
+      started.push(
+        { pid: command.pid, group: gateInfo.supervisor },
+        { pid: command.helper, group: gateInfo.supervisor }
+      );
 
       // THE shape, asserted rather than assumed: this gate is not the leader of the group it is in.
       // Every fixture that detaches its gate cannot say this, and every watchdog that asks about
@@ -1152,7 +1414,10 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       'the command to start'
     );
     const command = readJsonFile(join(dir, 'command.json'));
-    started.push(command.pid, command.helper);
+    started.push(
+      { pid: command.pid, group: supervisor.pid },
+      { pid: command.helper, group: supervisor.pid }
+    );
     expect(pidIsAlive(command.pid)).toBe(true);
     expect(pidIsAlive(command.helper)).toBe(true);
     expect(supervisor.stderr()).not.toContain('died without a ledger line');
@@ -1227,7 +1492,10 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       'the command to start'
     );
     const command = readJsonFile(join(dir, 'command.json'));
-    started.push(command.pid, command.helper);
+    started.push(
+      { pid: command.pid, group: supervisor.pid },
+      { pid: command.helper, group: supervisor.pid }
+    );
     expect(command.gatePgid).toBeNull();
 
     gate.kill('SIGKILL');
