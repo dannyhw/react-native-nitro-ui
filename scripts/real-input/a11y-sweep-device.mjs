@@ -87,7 +87,7 @@ export async function runA11ySweepOnDevice(begin, device) {
  */
 export class SweepDevice {
   /**
-   * @param {{ adbShell: (command: string) => string, tabs: ReadonlyArray<{ id: string, label: string }> }} device
+   * @param {{ adbShell: (command: string) => string, tabs: ReadonlyArray<{ id: string, label: string }>, appId: string }} device
    */
   constructor({ adbShell, tabs, appId }) {
     this.adbShell = adbShell;

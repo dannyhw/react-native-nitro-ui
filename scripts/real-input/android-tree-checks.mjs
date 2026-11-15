@@ -36,6 +36,12 @@ import {
   nativeEnabled,
   tightestFlaggedNode,
 } from './android-tree.mjs';
+import {
+  CALENDAR_WIDE_MIN_DP,
+  calendarGridProblems,
+  expectedColumnDp,
+  measureCalendarGrid,
+} from './android-calendar.mjs';
 import { SweepDevice } from './a11y-sweep-device.mjs';
 
 /** How long a press gets to show its witness, in ms. */
@@ -1925,6 +1931,7 @@ async function bottomSheetChecks(t) {
 
 /** The scroll that must not open a menu, and the hold that must. */
 async function contextMenuChecks(t) {
+  const { log } = t;
   await contextReset(t);
   const target = t.nodeByTestId('ctx-target')?.bounds;
   if (target == null) t.log.abort('no ctx-target on the ContextMenu screen');
@@ -1995,6 +2002,27 @@ async function datePickerChecks(t) {
 
 /** The hosted dialog's two dismissals: Back and Cancel. */
 async function hostedDatePickerChecks(t) {
+  // `HostScreen` seeds the popup Host's DatePicker at 2026-05-17 and echoes what JS
+  // holds. Written by hand rather than formatted, so no locale moves the assertion.
+  const SEEDED = '2026-05-17';
+  await t.tapUntilUp(
+    () => t.requireControlOnScreen('Hosted date picker'),
+    'a real tap on the hosted DatePicker field to open its dialog',
+    () => t.dump().filter(isDayCell).length,
+    { pollMs: DUMP_POLL_MS }
+  );
+  dayGrid(t, 'the hosted DatePicker');
+  await t.pressBack();
+  await waitForDialogGone(t, 'the back gesture to take the hosted dialog down');
+  t.log.checkEquals(
+    'Back closes the hosted dialog and reports no day',
+    t.requireEcho(ECHO.hostDateValue),
+    SEEDED
+  );
+  t.log.check(
+    'and the app text is readable again once the dialog is gone',
+    t.nodeByTestId(ECHO.hostDateValue) != null
+  );
   // 3b. Cancel: closes it and reports nothing. The witness is the grid leaving.
   await t.tapUntilUp(
     () => t.requireControlOnScreen('Hosted date picker'),
@@ -2025,6 +2053,10 @@ async function hostedDatePickerChecks(t) {
 
 /** A hosted Progress's width, beside the Slider in the same Host. */
 async function hostedMixedChecks(t) {
+  // All five children have to be read in one breath, so the scroll goes to the last of
+  // them first: `uiautomator dump` lists nothing off screen.
+  await t.requireControlOnScreen('Mixed button');
+  const tree = t.dump();
   const nodeNamed = (name) => tree.find((entry) => entry.contentDesc === name);
   const widthOf = (name) => {
     const node = nodeNamed(name);
