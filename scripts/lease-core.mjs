@@ -936,12 +936,18 @@ export function metroPortReason(pair, listeners) {
  *
  * @param {NodeJS.ProcessEnv} [env]
  * @param {(command: string, args: string[]) => {ok: boolean, text: string} | null} [run]
- * @returns {{ checked: boolean, port: number | null, reason: string | null, warning: string | null }}
+ * @returns {{ checked: boolean, port: number | null, reason: string | null, warning: string | null, listeners: Array<{pid: number, command?: string}> }}
  */
 export function metroPreflightFromEnv(env = process.env, run) {
   const raw = env.METRO_PORT == null ? '' : String(env.METRO_PORT);
   if (raw === '')
-    return { checked: false, port: null, reason: null, warning: null };
+    return {
+      checked: false,
+      port: null,
+      reason: null,
+      warning: null,
+      listeners: [],
+    };
   const port = Number(raw);
   if (!Number.isInteger(port) || port <= 0) {
     return {
@@ -949,6 +955,7 @@ export function metroPreflightFromEnv(env = process.env, run) {
       port: null,
       reason: `METRO_PORT="${raw}" is not a port number`,
       warning: null,
+      listeners: [],
     };
   }
   const answer = portListeners({ port, env, run });
@@ -960,13 +967,23 @@ export function metroPreflightFromEnv(env = process.env, run) {
       // Not a refusal, but the reason it could not be checked has to travel with the
       // answer, so the caller says it out loud rather than reporting a clean port.
       warning: `could not check Metro port ${String(port)} (${String(answer.error)})`,
+      listeners: [],
     };
   }
   const reason = metroPortReason(
     { id: env.NITRO_UI_LEASE_PAIR ?? 'leased', metroPort: port },
     answer.listeners
   );
-  return { checked: true, port, reason, warning: null };
+  // The listeners travel with the answer (X34 item 2): a caller that has to explain *why* the port
+  // is busy needs the pids, and asking `lsof` twice for them is a second answer to the same
+  // question — one that can disagree with the first if the server goes in between.
+  return {
+    checked: true,
+    port,
+    reason,
+    warning: null,
+    listeners: answer.listeners,
+  };
 }
 
 /**
