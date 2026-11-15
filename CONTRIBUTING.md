@@ -1079,10 +1079,9 @@ Harness assertions are **structural** — corrections, immediate pushes, flushes
 stale frames, event counts, and layout boxes in px — so they are wrong at any
 machine load and every run asserts them. A threshold on a **duration** is not:
 a loaded host turns a correct implementation red. There used to be a gate for
-those — `expectTimingBudget` (`example/__tests__/timingGate.ts`), judged only
-under `HARNESS_TIMING` (D21). X37 deleted it: the flag is unset in every gate
-run, so nothing was ever judged, while the plumbing around it turned three full
-runs red. The tests that measure a duration still print it, beside the stress
+those — `expectTimingBudget`, judged only under `HARNESS_TIMING` (D21). X37
+deleted it: the flag is unset in every gate run, so nothing was ever judged,
+while the plumbing around it turned three full runs red. The tests that measure a duration still print it, beside the stress
 timings that have always been printed; a printed number is not a verdict.
 Judgements about what this library costs belong to `bench/`, which owns a quiet
 machine for the question.
