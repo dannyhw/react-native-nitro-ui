@@ -71,12 +71,12 @@ device setup. Load median in brackets — a shared machine, so the run figure is
 | Platform | Tests before → after | Files | Wall before → after | Run before → after |
 | --- | --- | --- | --- | --- |
 | iOS | 632 → 601 | 32 → 30 | 923.9 s [8.11] → 860.7 s [6.59] | 871.0 s → 814.8 s (−6.5%) |
-| Android | 683 → 659 | 32 → 31 | 1120.4 s [7.67] → 1096.3 s [5.64] | 1113.2 s → 1057.1 s (−5.0%) |
+| Android | 688 → 659 | 32 → 31 | not comparable → 1096.3 s [5.64] | not comparable → 1057.1 s |
 
 iOS loses two files (the deleted `FormFidelity` and the now name-scoped `MountChurn`) and 31 tests;
-Android loses one file and 24 tests. iOS gains back the churn rule's ~40 s and the in-harness
-bench; Android's churn and leak suites are its own, so its saving is smaller than the test count
-suggests.
+Android loses one file and 29 tests. The Android "before" run is not a fair baseline: the code
+tree moved during it, the ledger records it as failed, and five of the removed tests were already
+missing from it, so no Android duration is compared.
 
 ## Removed test → the rule that covers it
 
@@ -186,3 +186,14 @@ Recorded as data in `docs/tasks/X37/mutations.json`; every mutated build is the 
 ## Questions for orchestrator
 
 None.
+
+## Fix round 1
+
+The review (`docs/tasks/X37.review.md`) found no code to change. Its three must-fix items were
+text: the Android before-and-after figures in this report came from a run that the ledger records
+as failed (corrected above: 688 to 659 tests, no duration comparison); `docs/components/stepper.md`
+and `docs/architecture/core.md` each still described a test this branch removed; and
+`CONTRIBUTING.md` said three full runs went red on the timing plumbing where the records show
+seven runs in three tasks. The changeset is rewritten for an app developer. New comments in this
+branch that cite the task are left for the comment sweep that follows the merge.
+
