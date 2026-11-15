@@ -61,6 +61,16 @@ const E2E_DIR = 'example/e2e';
 const TEST_SUFFIX = '.e2e.ts';
 
 /**
+ * Where an e2e run writes, relative to `example/e2e`.
+ *
+ * e2e refuses an `--output` outside its own project root, so the report and the
+ * screenshots live beside the suite rather than in the shared `.real-input/`
+ * evidence directory. The absolute path is printed before the run, so a reader
+ * of a gate log knows where to look.
+ */
+const E2E_OUTPUT = path.join('.e2e', 'android');
+
+/**
  * What one e2e run may spend, in ms.
  *
  * The gate has no timeout of its own, and a run that hangs holds its lease.
@@ -240,10 +250,9 @@ function installAndPoint({ adb, apk, metroPort }) {
  * @param {ReadonlyArray<string>} options.files Test files to run, relative to
  *   `example/e2e`. Empty runs every file.
  * @param {Record<string, string>} options.env The environment the run gets.
- * @param {string} options.out Where the run's artifacts and report go.
  * @returns {{status: number, report: any}}
  */
-function runE2E({ files, env, out }) {
+function runE2E({ files, env }) {
   const root = repoRoot();
   const binary = path.join(root, 'node_modules/.bin/e2e');
   if (!fs.existsSync(binary)) {
@@ -252,15 +261,22 @@ function runE2E({ files, env, out }) {
         `(it is a devDependency of the example app: e2e + @e2e-dev/mobile).`
     );
   }
-  const reportFile = path.join(out, 'report.json');
+  const reportFile = path.join(root, E2E_DIR, E2E_OUTPUT, 'report.json');
   fs.rmSync(reportFile, { force: true });
+  console.log(
+    `real-input: e2e artifacts in ${path.join(root, E2E_DIR, E2E_OUTPUT)}`,
+  );
   const argv = [
     binary,
     'run',
+    // Absolute: e2e resolves --config against the working directory, which is
+    // already `example/e2e`, and a path joined from the repo root would be
+    // doubled. The test arguments below stay relative, which is what the
+    // config's `tests` patterns are written against.
     '--config',
-    path.join(E2E_DIR, 'e2e.config.ts'),
+    path.join(root, E2E_DIR, 'e2e.config.ts'),
     '--output',
-    out,
+    E2E_OUTPUT,
     '--workers',
     '1',
     '--retries',
@@ -437,8 +453,13 @@ async function main() {
   // second half of that promise — to that daemon, no device but this one exists.
   const stateDir = path.join(out, 'agent-device');
   fs.mkdirSync(stateDir, { recursive: true });
+  // Screenshots from the press-feedback checks, which need a directory the
+  // run owns and can name in a failure message.
+  const pressDir = path.join(repoRoot(), E2E_DIR, E2E_OUTPUT, 'press');
+  fs.mkdirSync(pressDir, { recursive: true });
   const env = {
     ...process.env,
+    NITRO_UI_PRESS_DIR: pressDir,
     ANDROID_SERIAL: device.serial,
     AGENT_DEVICE_STATE_DIR: stateDir,
     AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST: device.serial,
@@ -454,7 +475,6 @@ async function main() {
     const { status, report } = runE2E({
       files: wanted.map((control) => `${control.id}${TEST_SUFFIX}`),
       env,
-      out,
     });
     const allPassed = recordResults(suite, wanted, report);
     if (!allPassed && status === 0) {
