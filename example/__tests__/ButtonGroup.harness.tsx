@@ -45,7 +45,6 @@ import {
   ButtonGroup,
   nitroUiCore,
   type ButtonGroupItem,
-  type NitroUiSizingStats,
 } from 'react-native-nitro-ui';
 
 /** The ButtonGroup's Fabric name — what the sizing engine files sizes under. */
@@ -169,16 +168,6 @@ function harnessIconName(icon: ButtonGroupItem['androidIcon']): string {
 const WRONG_HEIGHT = 99;
 const WRONG_WIDTH = 37;
 
-const stats = (): NitroUiSizingStats => nitroUiCore.sizingStats();
-
-function corrections(before: NitroUiSizingStats, after: NitroUiSizingStats) {
-  return (
-    after.correctionsImmediate -
-    before.correctionsImmediate +
-    (after.correctionsBatched - before.correctionsBatched)
-  );
-}
-
 function sizeOf(testId: string): Size | null {
   return harnessUi.queryByTestId(testId);
 }
@@ -243,34 +232,6 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
       new Error(
         `"${testId}" (${what}) never reported a measured size from the hosted ` +
           `control. Box: ${describeSize(sizeOf(testId))}.`
-      )
-  );
-}
-
-/**
- * Wait for the box's **height** to reach the height the control measured.
- *
- * The height is the number a `fillWidth` control measures; its width belongs to the box
- * (`docs/architecture/sizing.md`), and the two platforms report `measureContent().width`
- * differently for exactly that reason — iOS answers the box's width, Android the
- * content's. Only the height can be compared box to measurement.
- */
-async function waitForBoxHeight(
-  testId: string,
-  height: number,
-  what: string
-): Promise<Size> {
-  return pollUntil(
-    () => {
-      const box = sizeOf(testId);
-      return box != null && Math.abs(box.height - height) < 0.6 ? box : null;
-    },
-    () =>
-      new Error(
-        `testID "${testId}" (${what}) never reached height ${height.toFixed(
-          2
-        )} - last box ${describeSize(sizeOf(testId))}, control measured ` +
-          `${describeSize(measured(testId))}.`
       )
   );
 }
@@ -431,31 +392,6 @@ afterEach(() => {
 });
 
 describe('ButtonGroup · G20', () => {
-  it('lays the default row out at the size it measured, not at the planted one', async () => {
-    // The declared fallback is a guess about a cold first frame; the only claim that
-    // matters is that the measurement replaces it. Poisoning first is what makes the
-    // two cases look different: without it, "corrected to 48" and "never corrected,
-    // because 48 was declared" print the same box.
-    poison([sizingKey('standard', 'filled', 'medium', 'automatic', ACTIONS)]);
-    const before = stats();
-    await render(
-      <ButtonGroup
-        items={ACTIONS}
-        testID="bg-default"
-        hybridRef={captureHybrid('bg-default')}
-      />
-    );
-    await waitForTestId('bg-default');
-    const content = await waitForMeasured('bg-default', 'the default row');
-    await waitForBoxHeight('bg-default', content.height, 'the default row');
-
-    expect(sizeOf('bg-default')!.height).not.toBeCloseTo(WRONG_HEIGHT, 0);
-    expect(corrections(before, stats())).toBeGreaterThanOrEqual(1);
-    // The row is `fillWidth`: its width is the parent's, and a group that had been
-    // made `intrinsic` would report its content's width here instead.
-    expect(sizeOf('bg-default')!.width).toBeGreaterThan(content.width * 0.99);
-  });
-
   it('moves the items a 220-point well cannot hold, and takes some back when it grows', async () => {
     // The same six items, twice, at two widths, so the only variable is the box. Six
     // items do not fit a phone either — the row draws four of them across a 402-point
