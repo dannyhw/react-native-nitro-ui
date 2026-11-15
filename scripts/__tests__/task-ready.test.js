@@ -208,7 +208,7 @@ describe('which backtick content counts as a repo path', () => {
     for (const cited of [
       'example/src/App.tsx',
       'scripts/real-input/a11y.mjs',
-      'docs/tasks/X4/gates.jsonl',
+      'docs/tasks/X4/context.md',
       'example/__tests__/Conformance.harness.tsx',
     ]) {
       expect(isRepoPath(cited)).toBe(true);

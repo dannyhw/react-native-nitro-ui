@@ -404,7 +404,7 @@ runtime change is a comparability break and shows up as a different key.
 
 The launch-paired ratio to `rn-core` cancels drift *inside* one machine and explains nothing
 between two: simulators and emulators run on their host's CPU and GPU, so core count, GPU and
-memory pressure move the UI-CPU cells (`docs/tasks/PROCESS-review-2026-10-26.md` §5). That is
+memory pressure move the UI-CPU cells. That is
 why the base of a verdict is a run on this device in this session rather than a number from
 somewhere else, and why every run records what machine produced it — core count, CPU model
 (`os.cpus()[0].model`), load averages, RAM, Xcode version or Android image — under `machine`,
@@ -459,7 +459,7 @@ still stores `{ count, ceiling, median, p90, max, over, overFraction }` in
 0.5 x core-count ceiling is printed as `the machine was busy` instead of throwing the
 measurement away. The record is why: the run that this policy was built for reported 13
 failures on cells its branch had not touched, on a host that peaked at 27.77 against a
-ceiling of 7.0 ([`H2b` report](../tasks/H2b-host-popups.report.md)). Refusing a finished run
+ceiling of 7.0. Refusing a finished run
 for its load was a way to lose hours and still have no answer; a cell that was quiet inside
 its own run is a verdict whatever the host was doing, and one that did not bounce is not.
 

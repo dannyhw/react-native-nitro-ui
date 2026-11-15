@@ -141,6 +141,7 @@ Copy `docs/tasks/REPORT-TEMPLATE.md` to `docs/tasks/<ID>.report.md`: a summary o
 less, the generated gate table (`node scripts/gate.mjs table`), red proofs, follow-ups, questions.
 A fix round appends a `## Fix round N` section of 200 words or less. Write no gate result the table
 does not print, and no device-hygiene section: report a hygiene incident only if one happened.
-Run `bun run task-ready` before the final commit and `node scripts/gate.mjs export
---task <ID>` to commit the ledger. Your final message is a short version of the report plus the
-branch name and final commit SHA.
+Red proofs are lines in the report. Gate ledgers, mutation records and screenshots stay local and
+are never committed, so the report cites none of them. Run `bun run task-ready` before the final
+commit. Your final message is a short version of the report plus the branch name and final commit
+SHA.

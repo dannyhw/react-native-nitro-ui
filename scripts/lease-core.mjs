@@ -1,11 +1,9 @@
 /**
  * Device and port leases, apart from the CLI.
  *
- * Why (docs/tasks/PROCESS-review-2026-10-26.md §4 rank 7): several tasks work on
- * one machine at once, and every brief hand-wrote which simulator, AVD and ports
- * its task may use. That produced device-lending messages, one task booting
- * another's emulator, and Metro-port collisions. A lease file turns the rule into
- * a gate: ask, get an env file, release.
+ * Several tasks work on one machine at once, and a task that picks its own
+ * simulator, emulator or port can pick another task's. A lease file turns the
+ * rule into a gate: ask, get an env file, release.
  *
  * State lives per *machine* - `~/.nitro-ui/` (override with `NITRO_UI_HOME`, which
  * is also how the tests stay off the real file):

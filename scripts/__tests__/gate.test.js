@@ -3,9 +3,8 @@
  * still owes.
  *
  * The failure mode being tested is not a crash, it is a green that means more
- * than it should, because that is what cost 27.6 h of fix rounds re-running
- * gates that had already run (docs/tasks/PROCESS-review-2026-10-26.md §3). So the
- * cases here are the ones where a wrong answer reads like proof:
+ * than it should. So the cases here are the ones where a wrong answer reads like
+ * proof:
  *
  *   - a result keyed to the code tree, so a report commit does not invalidate a
  *     device run - and a *code* change does;
@@ -3087,21 +3086,19 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
    * `USAGE` is a chain of literals joined with `+`, and a `'…';` where a `'… ' +`
    * belongs is not a syntax error: the assignment ends at the semicolon and every
    * literal after it is a no-op expression statement that lints and formats clean.
-   * X30's `--background` edit did that four times, so the help stopped mid-sentence
-   * and the flag, `export` and `logs` had no explanation
-   * anywhere — including in the usage error about a misplaced `--background`, which
-   * prints the same truncated string. Asserting the *tail* is what catches the shape:
-   * a string that was cut short has no tail, and no amount of middle text shows it.
+   * The help then stops mid-sentence, and so does the usage error about a misplaced
+   * `--background`, which prints the same string. Asserting the *tail* is what catches
+   * the shape: a string that was cut short has no tail, and no amount of middle text
+   * shows it.
    */
   it('the help runs to the last paragraph, not the first stray semicolon', () => {
     const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
     cleanup.push(dir);
     const help = runCli(dir, ['--help']).stdout;
-    // The paragraphs that went missing, by the words only the whole string has.
+    // Paragraphs past the first, by the words only the whole string has.
     for (const section of [
       'never\n        after `--`, where the arguments belong to the gate',
       '--background starts a gate detached and returns at once',
-      'Export *merges*',
       "(`logs` lists this clone's stored gate logs",
     ]) {
       expect(help).toContain(section);

@@ -3,26 +3,25 @@
  * Lists the tasks that have records under `docs/tasks` and says which can leave git;
  * `--archive` copies those to the local archive and stages their removal.
  *
- *   node scripts/task-records.mjs             each task, its age, keep or archive, and why
+ *   node scripts/task-records.mjs             each task, keep or archive, and why
  *   node scripts/task-records.mjs --archive   archive the ones marked archive
- *   node scripts/task-records.mjs --days 30   a different window (default 14)
+ *   node scripts/task-records.mjs --days 7    keep a merged task's records 7 days
  *   node scripts/task-records.mjs --json      the same listing as data
  *
+ * A task is merged when HEAD contains every `task/<ID>-...` branch, local or
+ * remote-tracking, and its records are archived at once unless `--days` says to wait.
  * A task is kept while any worktree has an uncommitted change to its records or is on
- * one of its branches, a `task/<ID>-...` branch is not merged into `main`, it has a
- * brief and no report, or its records reached `main` less than the window ago
- * (`scripts/task-records-core.mjs` is the rule). That date is read on `main`'s own
- * line: the merge commit of a `--no-ff` merge, and for a fast-forward the moment
- * `main`'s reflog saw it, or the commit's own date where no reflog covers it. The
- * listing says which. `main` is the local branch, or `origin/main` without one.
+ * a branch of it that HEAD does not contain, while such a branch is live (its tip is
+ * younger than 14 days), and while it has a brief and no report. The branch HEAD is on
+ * is never merged into itself, so a task is never archived from its own checkout.
  *
- * `--archive` runs only where HEAD contains `main`, because an older checkout reads
- * older dates. It copies a task's tracked records to
+ * `--archive` runs only where HEAD contains `main` (the local branch, or `origin/main`
+ * without one). It copies a task's tracked records to
  * `~/.nitro-ui/task-archive/<ID>/<path below docs/tasks>`, compares every copy with
  * its source, and only then runs `git rm`. The removal is staged, never committed: it
- * rides in the caller's next commit. A task whose copy fails, or whose archive already
- * holds different bytes under the same name, is left exactly as it was, the others
- * still go, and the command exits 1.
+ * belongs in the merge commit. A task whose copy fails, or whose archive already holds
+ * different bytes under the same name, is left exactly as it was, the others still go,
+ * and the command exits 1.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -95,12 +94,12 @@ function worktreesOf(root) {
   return found;
 }
 
-/** `main`'s reflog as the rule reads it: when `main` first held one of its commits. */
-function arrivalOn(root, mainRef) {
-  const line = git(['rev-list', '--first-parent', mainRef], root) ?? '';
+/** When the branch HEAD is on first held each commit of its line, by its reflog. */
+function arrivalOn(root, current) {
+  const line = git(['rev-list', '--first-parent', 'HEAD'], root) ?? '';
+  const show = ['reflog', 'show', '--format=%H %gd', '--date=unix'];
   const reflog =
-    git(['reflog', 'show', '--format=%H %gd', '--date=unix', mainRef], root) ??
-    '';
+    (current && git([...show, `refs/heads/${current}`], root)) || '';
   const entries = fields(reflog, '\n').map((entry) => ({
     sha: entry.split(' ')[0],
     seconds: Number(/@\{(\d+)\}/.exec(entry)?.[1]),
@@ -112,22 +111,22 @@ function arrivalOn(root, mainRef) {
 }
 
 /**
- * When these records reached `main`: the newest commit on `main`'s first-parent line
- * that changed any of them, dated by the reflog where it knows better.
+ * When these records reached HEAD's own line: the newest first-parent commit that
+ * changed any of them, dated by the reflog where it knows better.
  *
  * @returns {{seconds: number, by: string} | null} when, and what said so
  */
-function reachedMain(root, mainRef, files, arrival) {
+function reachedHead(root, files, arrival) {
   if (files.length === 0) return null;
   const format = '--format=%H %ct %P';
   const found = git(
-    ['log', '-1', '--first-parent', format, mainRef, '--', ...inRepo(files)],
+    ['log', '-1', '--first-parent', format, 'HEAD', '--', ...inRepo(files)],
     root
   )?.trim();
   if (!found) return null;
   const [sha, committed, ...parents] = found.split(' ');
   const arrived = arrival(sha);
-  if (arrived != null) return { seconds: arrived, by: "main's reflog" };
+  if (arrived != null) return { seconds: arrived, by: 'reflog' };
   // A fast-forward leaves no commit of its own, and no reflog covered this one.
   const by = parents.length > 1 ? 'merge commit' : 'commit date, not a merge';
   return { seconds: Number(committed), by };
@@ -171,8 +170,8 @@ function main(argv) {
   const at = args.indexOf('--days');
   if (at !== -1) {
     const [, value] = args.splice(at, 2);
-    if (!/^[1-9]\d*$/.test(value ?? '')) {
-      return refuse('--days needs a whole number of days, 1 or more', USAGE);
+    if (!/^\d+$/.test(value ?? '')) {
+      return refuse('--days needs a whole number of days, 0 or more', USAGE);
     }
     keepDays = Number(value);
   }
@@ -193,25 +192,30 @@ function main(argv) {
       'task-records: HEAD is behind `main`, so a task may be newer than it reads here\n'
     );
   }
-  const branches = git(
-    ['branch', '-a', '--format=%(refname)', '--no-merged', mainRef],
-    root
-  );
-  if (branches == null) return refuse('could not list the branches');
-  const unmerged = fields(branches, '\n').map((ref) =>
-    ref.replace(/^refs\/(heads|remotes\/[^/]+)\//, '')
+  const now = Date.now() / 1000;
+  const format = '--format=%(committerdate:unix) %(refname)';
+  const branches = git(['branch', '-a', format, '--no-merged', 'HEAD'], root);
+  const current = git(['branch', '--show-current'], root)?.trim();
+  if (branches == null || current == null) {
+    return refuse('could not list the branches');
+  }
+  // The branch HEAD is on is the work itself, not something merged into it.
+  const open = fields(`${branches}\n${now} refs/heads/${current}`, '\n').map(
+    (line) => ({
+      branch: line.replace(/^\S+ refs\/(heads|remotes\/[^/]+)\//, ''),
+      tipDays: (now - Number(line.split(' ')[0])) / 86_400,
+    })
   );
   const worktrees = worktreesOf(root);
   const listed = git(['ls-files', '-z', '--', RECORDS_DIR], root) ?? '';
   const tracked = groupByTask(fields(listed, '\0').map(below));
   const dirty = groupByTask((worktrees ?? []).flatMap((each) => each.dirty));
-  const arrival = arrivalOn(root, mainRef);
-  const now = Date.now() / 1000;
+  const arrival = arrivalOn(root, current);
 
   const tasks = [...new Set([...tracked.keys(), ...dirty.keys()])];
   const rows = tasks.sort().map((task) => {
     const files = tracked.get(task) ?? [];
-    const reached = reachedMain(root, mainRef, files, arrival);
+    const reached = reachedHead(root, files, arrival);
     const ageDays = reached ? (now - reached.seconds) / 86_400 : null;
     const since = reached && `${dayOf(reached.seconds)} (${reached.by})`;
     const where = (file) => path.join(root, RECORDS_DIR, file);
@@ -222,7 +226,7 @@ function main(argv) {
       files,
       symlinks: files.filter(isLink).length,
       worktrees,
-      unmergedBranch: unmerged.find((b) => taskOfBranch(b) === task) ?? null,
+      openBranches: open.filter((each) => taskOfBranch(each.branch) === task),
       ageDays,
       since,
       keepDays,

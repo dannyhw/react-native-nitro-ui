@@ -1,10 +1,8 @@
 /**
  * Device leases have to be right in the ways a prose rule is not.
  *
- * The brief's ask is "unit tests for the lock and the limits", and both exist
- * because of what happened without them (docs/tasks/PROCESS-review-2026-10-26.md
- * §4 rank 7): two tasks on one simulator, and a Metro port collision. So the
- * cases are the two failure shapes:
+ * A lease prevents two things: two tasks on one simulator, and a Metro port
+ * collision. So the cases are the two failure shapes:
  *
  *   - the lock: two acquires at the same instant, a lock left behind by a killed
  *     process, and a lock that never frees;

@@ -34,9 +34,7 @@ import {
   LOG_STORE_BASENAME,
   gateLogStoreDir,
   ledgerLogCandidates,
-  ledgerPairs,
   logNameFor,
-  mergeLedgerExports,
   logRelativePath,
   planLogRetention,
   splitDeviceContext,
@@ -537,8 +535,8 @@ describe('logs survive git worktree remove', () => {
   });
 
   it('lists a removed worktree’s logs by branch, and knows they failed (M2)', () => {
-    // The orchestrator's cleanup step is `gate.mjs logs --branch <b> --failed`
-    // (ORCHESTRATOR.md), run from a *surviving* checkout after the worktree is gone.
+    // The orchestrator's cleanup step is `gate.mjs logs --branch <b> --failed`,
+    // run from a *surviving* checkout after the worktree is gone.
     // Two things had to be fixed for that to work: a nested branch name is read from
     // the whole relative path (a directory listing only saw `task`), and pass/fail
     // comes from the store's own record (the ledger went with the worktree).
@@ -1138,58 +1136,6 @@ describe('logs survive git worktree remove', () => {
     expect(ours[0].logPath.startsWith('task/x12-fixture/')).toBe(true);
   });
 });
-/* ------------------------------ the export ------------------------------ */
-
-describe('gate.mjs export copies the ledger, and only the ledger', () => {
-  it('copies a failed line as it is and writes no log beside it', () => {
-    // Logs stay in the clone's log store. The committed directory gets the ledger
-    // file and nothing else: no `failures/` directory, and no pointer on the line.
-    const dir = makeRepo();
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-    const live = fs
-      .readFileSync(
-        path.join(dir, '.gates', 'task', 'x12-fixture.jsonl'),
-        'utf8'
-      )
-      .split('\n')
-      .filter((raw) => raw.trim() !== '');
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const taskDir = path.join(dir, 'docs', 'tasks', 'X12');
-    expect(fs.readdirSync(taskDir)).toEqual(['gates.jsonl']);
-    const exported = fs
-      .readFileSync(path.join(taskDir, 'gates.jsonl'), 'utf8')
-      .split('\n')
-      .filter((raw) => raw.trim() !== '');
-    expect(exported).toEqual(live);
-    expect(JSON.parse(exported[0]).result).toBe('fail');
-    expect('failureLogPath' in JSON.parse(exported[0])).toBe(false);
-  });
-
-  it('copies the other lines byte-for-byte, corrupt ones included', () => {
-    const dir = makeRepo();
-    expect(runCli(dir, ['check']).status).toBe(0);
-    const live = path.join(dir, '.gates', 'task', 'x12-fixture.jsonl');
-    // A torn line, as a crash mid-append leaves it. Re-serialising would turn it
-    // into a plausible object and lose the fact that it was unreadable.
-    fs.appendFileSync(live, '{"gate":"check","tree":\n');
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const exported = fs
-      .readFileSync(
-        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
-        'utf8'
-      )
-      .split('\n')
-      .filter((raw) => raw.trim() !== '');
-    const original = fs
-      .readFileSync(live, 'utf8')
-      .split('\n')
-      .filter((raw) => raw.trim() !== '');
-    expect(exported).toHaveLength(2);
-    expect(exported[0]).toBe(original[0]);
-    expect(exported[1]).toBe('{"gate":"check","tree":');
-  });
-});
-
 describe('summarizeLoad carries the end sample (X12)', () => {
   it('reports the last sample it measured', () => {
     expect(summarizeLoad({ start: 1, samples: [1, 20, 30] }).end).toBe(30);
@@ -1543,153 +1489,6 @@ describe('a failed device gate records its device context', () => {
     expect(splitDeviceContext('plain\n')).toEqual({
       body: 'plain\n',
       context: null,
-    });
-  });
-});
-
-/* ------------------------ export merges, not rewrites ------------------------ */
-
-describe('gate.mjs export merges the committed ledger (X30 item 2)', () => {
-  const target = (dir, task = 'X12') =>
-    path.join(dir, 'docs', 'tasks', task, 'gates.jsonl');
-  const rawOf = (file) =>
-    fs
-      .readFileSync(file, 'utf8')
-      .split('\n')
-      .filter((raw) => raw.trim() !== '');
-
-  it("keeps the lines another branch exported and adds this branch's", () => {
-    // The shape every fix round has hit: round 1 exports from `task/X29-fix1`, the
-    // merge round checks out `task/X29-merge` — with its own branch ledger and no
-    // memory of round 1 — and exported the task's evidence from its own lines only.
-    // The committed file used to lose round 1 in that moment, and every round
-    // restored it by hand.
-    const dir = makeRepo({ branch: 'task/x12-fix1' });
-    // Two `check` runs, because the merge rule is about *lines*, and this file's
-    // fixture has no device to point a harness gate at and no scripts/smoke to run.
-    // Distinct lines because identity carries the second the run started in.
-    expect(runCli(dir, ['check']).status).toBe(0);
-    expect(runCli(dir, ['check']).status).toBe(0);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const roundOne = rawOf(target(dir));
-    expect(roundOne).toHaveLength(2);
-
-    gitInTempRepo(dir, ['checkout', '-qb', 'task/x12-merge']);
-    expect(runCli(dir, ['check']).status).toBe(0);
-    const exported = runCli(dir, ['export', '--task', 'X12']);
-    expect(exported.status).toBe(0);
-    const lines = rawOf(target(dir));
-    expect(lines).toHaveLength(3);
-    // Round 1's lines are first, byte-for-byte — not re-serialised, not reordered.
-    expect(lines.slice(0, 2)).toEqual(roundOne);
-    // And the command says which is which, so a reader of the run log can tell a
-    // merge from a rewrite.
-    expect(exported.stdout).toContain('2 kept from the file');
-    expect(exported.stdout).toContain('1 from task/x12-merge');
-  });
-
-  it('exporting the same branch again adds nothing and duplicates nothing', () => {
-    // Identity is ts + gate + code tree, so a re-export is a no-op while a *new*
-    // run a second later is genuinely new evidence and stays.
-    const dir = makeRepo({ branch: 'task/x12-fix1' });
-    expect(runCli(dir, ['check']).status).toBe(0);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const first = fs.readFileSync(target(dir), 'utf8');
-    const again = runCli(dir, ['export', '--task', 'X12']);
-    expect(again.status).toBe(0);
-    expect(fs.readFileSync(target(dir), 'utf8')).toBe(first);
-    expect(again.stdout).toContain('1 already there');
-
-    // A second run of the same gate is a different line, and it lands.
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    expect(rawOf(target(dir))).toHaveLength(2);
-  });
-
-  it('keeps a corrupt line it cannot parse, and does not write it twice', () => {
-    // A half-written line is evidence of an interrupted run. The merge cannot read
-    // its ts/gate/tree, so it dedupes it against nothing but its own bytes — which
-    // is the conservative answer, not the tidy one.
-    const dir = makeRepo({ branch: 'task/x12-fix1' });
-    expect(runCli(dir, ['check']).status).toBe(0);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const half = '{"ts":"2026-10-27T00:00:00.000Z","gate":"check","tree":"aa';
-    fs.appendFileSync(target(dir), `${half}\n`);
-
-    const branch = runCli(dir, ['export', '--task', 'X12']);
-    expect(branch.status).toBe(0);
-    const lines = rawOf(target(dir));
-    expect(lines.filter((raw) => raw === half)).toHaveLength(1);
-    expect(lines[1]).toBe(half);
-    // Both surviving lines came from the file (the real run and the half-line); the
-    // branch's own line was already there, so it is not written a second time.
-    expect(branch.stdout).toContain('2 kept from the file');
-    expect(branch.stdout).toContain('1 already there');
-  });
-
-  it('keeps an older line that still carries failureLogPath, byte-for-byte', () => {
-    // Exports used to add `failureLogPath` to a failed line. Those lines are in
-    // committed ledgers, so a later export into the same file has to leave them as
-    // they are.
-    const dir = makeRepo({ branch: 'task/x12-merge' });
-    const older =
-      '{"v":5,"ts":"2026-10-27T00:00:00.000Z","gate":"check","tree":"aa",' +
-      '"branch":"task/x12-fix1","result":"fail","logPath":"task/x12-fix1/check-1.log",' +
-      '"failureLogPath":"docs/tasks/X12/failures/2026-10-27T00-00-00Z--check--01.log"}';
-    fs.mkdirSync(path.dirname(target(dir)), { recursive: true });
-    fs.writeFileSync(target(dir), `${older}\n`);
-
-    expect(runCli(dir, ['check']).status).toBe(0);
-    const exported = runCli(dir, ['export', '--task', 'X12']);
-    expect(exported.status).toBe(0);
-    const after = rawOf(target(dir));
-    expect(after).toHaveLength(2);
-    expect(after[0]).toBe(older);
-    expect(exported.stdout).toContain('1 kept from the file');
-    expect(fs.readdirSync(path.dirname(target(dir)))).toEqual(['gates.jsonl']);
-  });
-
-  it('merges on ts + gate + tree, and treats an unreadable line as its own bytes', () => {
-    // The pure rule, so the soundness of the identity does not depend on the CLI.
-    const pair = (raw) => ({ raw, entry: JSON.parse(raw) });
-    const a = pair('{"ts":"T1","gate":"check","tree":"A"}');
-    const later = pair('{"ts":"T2","gate":"check","tree":"A"}');
-    const other = pair('{"ts":"T1","gate":"check","tree":"B"}');
-    const otherGate = pair('{"ts":"T1","gate":"harness:ios","tree":"A"}');
-    const corrupt = {
-      raw: 'not json',
-      entry: { corrupt: true, raw: 'not json' },
-    };
-
-    const merged = mergeLedgerExports({
-      existing: [a, corrupt],
-      incoming: [a, later, other, otherGate, corrupt],
-    });
-    expect(merged.lines).toEqual([
-      a.raw,
-      corrupt.raw,
-      later.raw,
-      other.raw,
-      otherGate.raw,
-    ]);
-    expect(merged).toMatchObject({ kept: 2, added: 3, duplicates: 2 });
-    // The provenance each caller needs: `from` says whose line it is, in order.
-    expect(merged.merged.map((row) => row.from)).toEqual([
-      'existing',
-      'existing',
-      'incoming',
-      'incoming',
-      'incoming',
-    ]);
-
-    // `ledgerPairs` keeps the raw bytes beside the parse, which is the only reason
-    // the verbatim promise above can be kept.
-    const pairs = ledgerPairs(`${a.raw}\n\n  \nnot json\n`);
-    expect(pairs).toHaveLength(2);
-    expect(pairs[0].raw).toBe(a.raw);
-    expect(pairs[1]).toMatchObject({
-      raw: 'not json',
-      entry: { corrupt: true },
     });
   });
 });

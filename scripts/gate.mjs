@@ -12,7 +12,6 @@
  *   node scripts/gate.mjs need --for review
  *   node scripts/gate.mjs need --for merge
  *   node scripts/gate.mjs table
- *   node scripts/gate.mjs export --task X2
  *   node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]
  *
  * Every run appends one JSON line to `.gates/<branch>.jsonl` (gitignored) keyed
@@ -79,13 +78,11 @@ import {
   ledgerFileName,
   ledgerLineFromRun,
   ledgerLogCandidates,
-  ledgerPairs,
   ledgerRelativePath,
   logNameFor,
   logRelativePath,
   LOG_RETENTION_DAYS,
   LOG_RETENTION_MAX_BYTES,
-  mergeLedgerExports,
   ownBackgroundRecords,
   ownMetroPids,
   parseLedger,
@@ -150,7 +147,6 @@ const USAGE =
   '       node scripts/gate.mjs status [--for review|merge]\n' +
   '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
   '       node scripts/gate.mjs table [--for review|merge] [--full]\n' +
-  '       node scripts/gate.mjs export --task <ID>\n' +
   '       node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]\n' +
   '\n' +
   'gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |\n' +
@@ -173,11 +169,6 @@ const USAGE =
   '        died without recording a result. The ledger line is written by the same\n' +
   '        code either way, so a backgrounded gate is evidence exactly as a\n' +
   '        foreground one is)\n' +
-  '\n' +
-  '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl. Export *merges*:\n' +
-  '        lines already in the committed file stay, so a fix round adds its runs\n' +
-  "        instead of erasing round 1's. A line is the same line as another by ts +\n" +
-  '        gate + code tree. Logs are not exported: they stay in the log store)\n' +
   '\n' +
   "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
   '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
@@ -2438,41 +2429,6 @@ function otherBranchLedgers(exceptBranch) {
   return found;
 }
 
-/**
- * The ledgers committed beside task reports: `docs/tasks/<ID>/gates.jsonl`, for
- * `logs --failed`.
- *
- * A committed ledger travels; a live one does not. `.gates/` is gitignored, so in
- * another checkout no branch's `.gates/` lines exist; the export from
- * `gate.mjs export --task <ID>` is the copy that does.
- *
- * @returns {Array<{entries: object[], source: string}>}
- */
-function committedTaskLedgers() {
-  const found = [];
-  const tasksDir = path.join(repoRoot, 'docs', 'tasks');
-  let names;
-  try {
-    names = fs.readdirSync(tasksDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  for (const entry of names) {
-    if (!entry.isDirectory()) continue;
-    const file = path.join(tasksDir, entry.name, 'gates.jsonl');
-    let text;
-    try {
-      text = fs.readFileSync(file, 'utf8');
-    } catch {
-      continue;
-    }
-    const entries = parseLedger(text).filter((line) => !line.corrupt);
-    if (entries.length === 0) continue;
-    found.push({ entries, source: path.relative(repoRoot, file) });
-  }
-  return found;
-}
-
 function commandNeed({ stage, base }) {
   const branch = currentBranch();
   const read = readTrees();
@@ -2567,60 +2523,6 @@ function commandTable({ stage, full }) {
   return 0;
 }
 
-function commandExport({ task }) {
-  const branch = currentBranch();
-  // `file`, not `entries`: the export copies raw lines, so nothing here re-reads
-  // them through the parser (a corrupt line has to leave as corrupt as it arrived).
-  const { file, exists } = readLedger(branch);
-  if (!exists) {
-    process.stderr.write('export: nothing recorded yet - run a gate first.\n');
-    return 1;
-  }
-  if (task == null) {
-    process.stderr.write(`export: name the task (--task X2).\n${USAGE}`);
-    return 1;
-  }
-  const absolute = path.join(repoRoot, 'docs', 'tasks', task, 'gates.jsonl');
-  fs.mkdirSync(path.dirname(absolute), { recursive: true });
-
-  // The evidence has to survive its author: each line is copied **verbatim** rather
-  // than re-serialised, so a committed ledger is byte-identical to what ran - a
-  // corrupt line in particular stays exactly as corrupt as it was, rather than
-  // becoming a plausible-looking object.
-  const rawText = fs.readFileSync(file, 'utf8');
-
-  // The committed file is a **union**, not a re-write (X30 item 2). This command used
-  // to write this branch's lines over `docs/tasks/<ID>/gates.jsonl`, so a fix round
-  // or a merge round republishing the file dropped every line an earlier round on a
-  // different branch had committed there - rounds then restored them by hand, which
-  // is a manual step over the one file that holds a task's evidence. Whatever is
-  // already in the target stays, byte-verbatim and in its existing order; this
-  // branch's lines are appended; a line that is already there by
-  // `ledgerLineIdentity` (ts + gate + code tree) is not written twice.
-  const existingText = fs.existsSync(absolute)
-    ? fs.readFileSync(absolute, 'utf8')
-    : '';
-  const targetHadLines = existingText.trim() !== '';
-  const { merged, kept, added, duplicates } = mergeLedgerExports({
-    existing: ledgerPairs(existingText),
-    incoming: ledgerPairs(rawText),
-  });
-  // Only the ledger is committed. A run's log stays in the clone's log store
-  // (`gate.mjs logs --failed` lists the failed ones), so a failed line is copied
-  // like any other and nothing is written beside the file.
-  const lines = merged.map((row) => row.raw);
-  fs.writeFileSync(absolute, `${lines.join('\n')}\n`);
-  const real = merged.filter((row) => row.entry?.corrupt !== true).length;
-  process.stdout.write(
-    `export: ${String(real)} gate line(s) -> ${path.relative(repoRoot, absolute)} ` +
-      `(${targetHadLines ? `${String(kept)} kept from the file, ` : ''}` +
-      `${String(added)} from ${branch}${
-        duplicates > 0 ? `, ${String(duplicates)} already there` : ''
-      })\n`
-  );
-  return 0;
-}
-
 /**
  * `gate.mjs logs` — what is in this clone's log store, newest first.
  *
@@ -2712,9 +2614,8 @@ function commandLogs({ branch, failedOnly, all }) {
  * anything about.
  *
  * The record written when the run finished is the primary source and survives
- * `git worktree remove`; the ledger lines in this checkout (and any committed task
- * ledger) are consulted for logs whose record predates the `result` field or is
- * missing. `null` for a log neither can judge, which is why the map's values are
+ * `git worktree remove`; the ledger lines in this checkout are consulted for logs
+ * whose record has no `result` field or is missing. `null` for a log neither can judge, which is why the map's values are
  * `true | false | null` rather than a plain failed-only set.
  */
 function outcomeOfStoredLogs(storeDir) {
@@ -2737,14 +2638,11 @@ function outcomeOfStoredLogs(storeDir) {
     const verdict = storedLogFailed(record, null);
     put(record.logPath, verdict, null);
   }
-  // A ledger line is evidence about a run even when its record is gone (a run from
-  // before this task wrote a record for every gate), so the lines fill the gaps -
-  // including the committed task ledgers, which is how an exported branch's logs
-  // can still be judged from the main checkout.
+  // A ledger line is evidence about a run even when its record is gone, so the
+  // lines fill the gaps.
   const entriesByLogPath = new Map();
   for (const ledger of [
     ...otherBranchLedgers(null),
-    ...committedTaskLedgers(),
     { entries: readLedger(currentBranch()).entries },
   ]) {
     for (const entry of ledger.entries ?? []) {
@@ -2924,21 +2822,6 @@ async function main(argv) {
     }
     return await commandWait({ gate, timeoutMinutes });
   }
-  if (command === 'export') {
-    let task = null;
-    for (let index = 0; index < rest.length; index += 1) {
-      const argument = rest[index];
-      if (argument === '--task') {
-        task = rest[index + 1] ?? null;
-        index += 1;
-      } else {
-        process.stderr.write(`export: unknown argument ${argument}\n${USAGE}`);
-        return 2;
-      }
-    }
-    return commandExport({ task });
-  }
-
   if (command === 'logs') {
     let branch = null;
     let failedOnly = false;

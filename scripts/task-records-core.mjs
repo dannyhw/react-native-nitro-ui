@@ -1,20 +1,15 @@
 /**
  * Which task records under `docs/tasks` stay in git, decided from facts handed in.
  *
- * A task leaves a brief, a report, reviews and a folder of evidence. They are read
- * while the task is in flight and for a short while after it merges; after that they
- * are history, and in three weeks that history was 2,300 files and 40 MB in a public
- * repository. So a task's records stay in git for a window after they reached `main`
- * and are then copied to a local archive and removed.
+ * A task's brief, report and reviews are read while the task is in flight. Once it is
+ * merged they are copied to a local archive and removed, so `docs/tasks` holds only
+ * what somebody is still working from.
  *
- * The rule is "it is done and nobody is still working from it": no uncommitted change
- * in any worktree, no worktree on its branch, no branch waiting to merge, a report
- * beside its brief, and on `main` for longer than the window. Anything that cannot be
- * read is a reason to keep. Anything that does not start with a task ID (`STATUS.md`,
- * `FOLLOWUPS.md`, the report template) is not a task record and is never listed.
+ * Unknown is keep: a worktree list that cannot be read, a symbolic link, a brief with
+ * no report. Anything that does not start with a task ID (`STATUS.md`, `FOLLOWUPS.md`,
+ * the report template) is not a task record and is never listed.
  *
- * No process or filesystem access here: `scripts/task-records.mjs` gathers the facts
- * and `scripts/__tests__/task-records.test.js` proves the rule.
+ * No process or filesystem access here: `scripts/task-records.mjs` gathers the facts.
  */
 
 import { taskOfBranch } from './worktrees-core.mjs';
@@ -22,12 +17,15 @@ import { taskOfBranch } from './worktrees-core.mjs';
 /** Where task records live, relative to the repository root. */
 export const RECORDS_DIR = 'docs/tasks';
 
-/** Days a task's records stay in git after they reached `main`. */
-export const DEFAULT_KEEP_DAYS = 14;
+/** Days a merged task's records stay in git. Zero: they leave with the merge. */
+export const DEFAULT_KEEP_DAYS = 0;
+
+/** An unmerged branch whose tip is older than this no longer keeps its task. */
+export const BRANCH_LIVE_DAYS = 14;
 
 /**
  * The task a record belongs to, from its path below `docs/tasks`: `G24-form.report.md`,
- * `G24.review.md` and `G24/gates.jsonl` are all `G24`. A task ID is what a task branch
+ * `G24.review.md` and `G24/context.md` are all `G24`. A task ID is what a task branch
  * carries, so the branch rule decides and a name it rejects is not a task record.
  *
  * @param {string} relativePath
@@ -72,16 +70,14 @@ export function isUnfinished(files) {
 }
 
 /**
- * When `main` first held a commit of its own line, as its reflog recorded it.
+ * When a branch first held a commit of its own line, as its reflog recorded it.
  *
- * A `--no-ff` merge is dated by its merge commit. A fast-forward leaves no commit of
- * its own, so the branch's commits sit on `main`'s line with the dates they were made,
- * which can be weeks before they arrived. Only the reflog knows when `main` moved onto
- * them, and only in the clone that did the merge and for as long as the reflog lasts.
- * A commit that was already there when the reflog began has no recorded arrival.
+ * A fast-forward leaves no merge commit, so the commits it brought carry the dates
+ * they were made. Only the reflog knows when the branch moved onto them, and a commit
+ * that was already there when the reflog began has no recorded arrival.
  *
- * @param {string[]} line `main`'s first-parent commits, newest first
- * @param {{sha: string, seconds: number}[]} reflog `main`'s reflog, newest first
+ * @param {string[]} line the branch's first-parent commits, newest first
+ * @param {{sha: string, seconds: number}[]} reflog its reflog, newest first
  * @returns {(sha: string) => number | null} seconds since the epoch, or `null`
  */
 export function arrivalByReflog(line, reflog) {
@@ -100,7 +96,7 @@ export function arrivalByReflog(line, reflog) {
 
 /**
  * Keep or archive one task's records. The first reason to keep wins, ordered from
- * "this cannot be read" through "someone is working on it" to "not old enough yet".
+ * "this cannot be read" through "someone is working on it" to "not merged yet".
  *
  * @param {object} facts
  * @param {string} facts.task
@@ -110,17 +106,17 @@ export function arrivalByReflog(line, reflog) {
  *   worktree of the clone with the records it has uncommitted changes to (untracked
  *   ones included, a deletion that is already staged excluded); `null` when the
  *   worktrees could not be read
- * @param {string | null} facts.unmergedBranch a local or remote-tracking `task/<ID>-...`
- *   branch that is not merged into `main`
- * @param {number | null} facts.ageDays since its records reached `main`; `null` when
- *   they are not there
- * @param {string | null} facts.since that date and what it was read from, as the
- *   listing says it
- * @param {number} facts.keepDays the window
+ * @param {{branch: string, tipDays: number}[]} facts.openBranches its `task/<ID>-...`
+ *   branches, local or remote-tracking, that HEAD does not contain, each with the age
+ *   of its tip commit; the branch HEAD is on counts as one
+ * @param {number | null} facts.ageDays since its records reached HEAD's own line;
+ *   `null` when no commit holds them
+ * @param {string | null} facts.since that date and what it was read from
+ * @param {number} facts.keepDays the window after the merge
  * @returns {{verdict: 'keep' | 'archive', reason: string}}
  */
 export function classifyTask(facts) {
-  const { task, worktrees, unmergedBranch, ageDays, keepDays } = facts;
+  const { task, worktrees, openBranches, ageDays, keepDays } = facts;
   const keep = (reason) => ({ verdict: 'keep', reason });
   if (facts.symlinks > 0) return keep('a record is a symbolic link');
   if (worktrees == null) return keep('could not read the worktrees');
@@ -129,14 +125,18 @@ export function classifyTask(facts) {
     const where = `the worktree on ${branch ?? 'a detached head'}`;
     if (count > 0) return keep(`${count} uncommitted path(s) in ${where}`);
   }
-  const on = worktrees.find(({ branch }) => taskOfBranch(branch) === task);
+  const isOpen = (branch) =>
+    openBranches.some((open) => open.branch === branch);
+  const on = worktrees.find(({ branch }) => isOpen(branch));
   if (on != null) return keep(`a worktree is on ${on.branch}`);
-  if (unmergedBranch != null) return keep(`${unmergedBranch} is not merged`);
+  const live = openBranches.find((open) => open.tipDays < BRANCH_LIVE_DAYS);
+  if (live != null) return keep(`${live.branch} is not merged into HEAD`);
   if (isUnfinished(facts.files)) return keep('a brief and no report: not done');
-  if (ageDays == null) return keep('its records are not on main');
-  const dated = `on main since ${facts.since}`;
+  if (ageDays == null) return keep('its records are not committed');
+  const stale = openBranches[0];
+  const dated = `${stale ? `${stale.branch} is stale` : 'merged'}, in HEAD since ${facts.since}`;
   if (ageDays < keepDays) return keep(`${dated}, kept ${keepDays} days`);
-  return { verdict: 'archive', reason: `${dated}, no open branch` };
+  return { verdict: 'archive', reason: dated };
 }
 
 /**

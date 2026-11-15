@@ -2,13 +2,10 @@
  * The pure half of the gate ledger (`scripts/gate.mjs` is the half that spawns
  * processes and reads git).
  *
- * Why (docs/tasks/PROCESS-review-2026-10-26.md §3 and §4 rank 4): gates were
- * re-run because a *commit* happened, not because the *code* moved. 104 of 337
- * branch commits were docs-only, and every one of them invalidated every green
- * result, so "re-ran the gates on the final tree" appears in 11 reports. The
- * ledger fixes that by keying a result to the code tree the gate actually ran
- * on - `app.stamp`'s digest (scripts/app-stamp-core.mjs), which already excludes
- * `docs/`, Markdown and build output. A docs commit leaves that digest alone, so
+ * A result is keyed to the code tree the gate ran on - `app.stamp`'s digest
+ * (scripts/app-stamp-core.mjs), which excludes `docs/`, Markdown and build output -
+ * because a gate needs re-running when the *code* moved, not when a *commit*
+ * happened. A docs commit leaves that digest alone, so
  * a green gate stays green, and the report's gate table is generated from the
  * same lines instead of typed by hand.
  *
@@ -30,7 +27,7 @@
 import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
 import { ACQUIRE_HINT, emulatorSerial, leaseIsLive } from './lease-core.mjs';
 
-/** Where a machine's ledgers live. Gitignored: the committed copy is exported. */
+/** Where a machine's ledgers live. Gitignored: a ledger is local evidence. */
 export const LEDGER_DIR = '.gates';
 
 /**
@@ -595,100 +592,6 @@ export function parseLedger(text) {
     }
   }
   return entries;
-}
-
-/**
- * Ledger text -> `[{raw, entry}]`, in append order and index-aligned.
- *
- * `parseLedger` alone loses the original bytes, and an exported ledger has to keep
- * them (a corrupt line stays exactly as corrupt as it was, rather than becoming a
- * plausible-looking re-serialisation). Pairing them here means the pairing cannot
- * drift between the two callers of the merge below.
- *
- * @param {string} text
- * @returns {Array<{raw: string, entry: object}>}
- */
-export function ledgerPairs(text) {
-  const pairs = [];
-  for (const line of String(text ?? '').split('\n')) {
-    if (line.trim() === '') continue;
-    const [entry] = parseLedger(line);
-    pairs.push({ raw: line, entry: entry ?? { corrupt: true, raw: line } });
-  }
-  return pairs;
-}
-
-/**
- * What makes two ledger lines the same run (X30 item 2).
- *
- * Timestamp + gate + code tree: the clock second a run started, which gate ran,
- * and the code it ran against. Two runs of one gate on one tree in the same second
- * are the same evidence twice, which is the case the export must not multiply; a
- * re-run a second later is a different run and stays.
- *
- * A line that cannot be parsed has no fields to read, so its identity is its own
- * text - it is then only ever deduplicated against a byte-identical line, which is
- * the conservative answer for something whose meaning is unknown.
- *
- * @param {{raw: string, entry: object}} pair
- * @returns {string}
- */
-export function ledgerLineIdentity({ raw, entry }) {
-  if (entry == null || entry.corrupt === true) return `raw:${raw}`;
-  const ts = entry.ts == null ? '' : String(entry.ts);
-  const gate = entry.gate == null ? '' : String(entry.gate);
-  const tree = entry.tree == null ? '' : String(entry.tree);
-  if (ts === '' && gate === '' && tree === '') return `raw:${raw}`;
-  return `${ts}|${gate}|${tree}`;
-}
-
-/**
- * Union of an existing exported ledger and the branch ledger being exported now.
- *
- * `export --task <ID>` used to write *this branch's lines* over
- * `docs/tasks/<ID>/gates.jsonl`, so every fix round and merge round republished the
- * file from its own branch and quietly dropped the earlier rounds' lines - and
- * every round then restored them by hand, which is a manual step over the file that
- * holds the evidence. The committed file is the union: existing lines are kept
- * **byte-verbatim and in their existing order**, this branch's new lines are
- * appended in append order, and a line already in the file is not written twice
- * (`ledgerLineIdentity` says what "already" means).
- *
- * Nothing here re-orders, rewrites or drops an existing line, including a corrupt
- * one: the merge is additive, and a line nobody can parse is evidence of *something*
- * until a person says otherwise.
- *
- * @param {{existing?: Array<{raw: string, entry: object}>,
- *   incoming?: Array<{raw: string, entry: object}>}} options
- * @returns {{merged: Array<{raw: string, entry: object, from: 'existing'|'incoming'}>,
- *   lines: string[], kept: number, added: number, duplicates: number}}
- */
-export function mergeLedgerExports({ existing = [], incoming = [] } = {}) {
-  const seen = new Set();
-  const merged = [];
-  let kept = 0;
-  let added = 0;
-  let duplicates = 0;
-  const take = (pair, from) => {
-    const identity = ledgerLineIdentity(pair);
-    if (seen.has(identity)) {
-      duplicates += 1;
-      return;
-    }
-    seen.add(identity);
-    merged.push({ ...pair, from });
-    if (from === 'existing') kept += 1;
-    else added += 1;
-  };
-  for (const pair of existing) take(pair, 'existing');
-  for (const pair of incoming) take(pair, 'incoming');
-  return {
-    merged,
-    lines: merged.map((row) => row.raw),
-    kept,
-    added,
-    duplicates,
-  };
 }
 
 /**

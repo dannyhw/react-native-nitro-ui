@@ -135,7 +135,7 @@ Run from the repo root.
 | `bun run build:app`             | Build + stamp the example app for one platform (see below)                     |
 | `node scripts/worktrees.mjs`    | List this clone's worktrees and why each is kept (`--prune` removes the rest)  |
 | `node scripts/watchdog.mjs`     | Report what changed on the machine and project since the last run (`--status`) |
-| `node scripts/task-records.mjs` | `--archive`: old records to `~/.nitro-ui`, outside git; staged, not committed  |
+| `node scripts/task-records.mjs` | `--archive`: a merged task's records to `~/.nitro-ui`; staged, not committed   |
 | `bun run lease <command>`       | Device/port leases for this machine: `acquire`, `release`, `list`              |
 | `bun run example <script>`      | Run an `example/` script, e.g. `bun run example ios`                           |
 | `bun run storybook:ios`         | The example app in Storybook mode (`:android`; see `example/README.md`)        |
@@ -823,13 +823,9 @@ expensive, never free. `table --full` adds the log path to every
 row and, under it, the per-step durations of the `check` run — `check` is the one
 gate long enough that its total is not an actionable number, so the ledger keeps
 what each of the steps cost. A task report starts from
-`docs/tasks/REPORT-TEMPLATE.md`, and `gate.mjs export --task <id>` commits the
-ledger beside it — **merging**, not rewriting (X30): lines already in
-`docs/tasks/<id>/gates.jsonl` are kept byte-for-byte and this branch's lines are
-appended, and a line already there is not written twice (identity: ts + gate + code
-tree). A fix round
-therefore adds its runs instead of erasing round 1's. The rules are in the header of `scripts/gate.mjs` and in
-`scripts/gate-core.mjs`.
+`docs/tasks/REPORT-TEMPLATE.md` and carries that table; the ledger itself stays
+local and is never committed. The rules are in the header of `scripts/gate.mjs` and
+in `scripts/gate-core.mjs`.
 
 A run's **log** is not in the worktree: it goes to the clone's gate log store,
 `<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, which every
@@ -837,8 +833,8 @@ worktree of the clone shares and `git worktree remove` leaves alone, so removing
 merged worktree cannot lose the evidence (`gate.mjs logs [--branch b] [--failed]
 [--all]` lists it; 35 days, then 64 MiB, oldest first). Each run's record also names
 the worktree that started it, so `wait` and `status` follow _your_ background gate
-when several worktrees are running one at the same time. Logs are not committed:
-`export --task <id>` writes the ledger only. A failed device gate appends to its
+when several worktrees are running one at the same time. Logs are not committed.
+A failed device gate appends to its
 log the booted simulators, the leased emulator's `adb get-state`, the lease list,
 load1 and the app's last `logcat` lines. Any device identifier in that block that is
 not this run's own lease becomes `<other device>`.
