@@ -136,7 +136,6 @@ function compare({ head, base }) {
   return comparisonSections({
     run: head,
     base,
-    mode: 'compare',
     label: 'v0.9.0 (measured in this session)',
   });
 }
