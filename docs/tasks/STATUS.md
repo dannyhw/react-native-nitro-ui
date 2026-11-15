@@ -6,14 +6,14 @@ the task merges. Open follow-ups are in `FOLLOWUPS.md`.
 
 ## In flight
 
-Name · ID · branch · last SHA · next action.
+Name · ID · branch · pull request · next action.
 
 - A workflow that runs unattended (short rules, skills, worktree lister, watchdog) · W1 ·
-  `task/W1-workflow` · `cf0fb713` · merge; W2 and W3 are based on it.
-- Task records leave git after 14 days, failure logs are never committed, one status file · W2 ·
-  `task/W2-records` · `cf0fb713` plus one uncommitted round · commit, run `check`, merge after W1.
-- Tooling removal, the failure-excerpt export included · W3 · `task/W3-tooling-removal` ·
-  `cf0fb713`, no commit of its own yet · finish its round, then review.
+  `task/W1-workflow` · #75 · owner review, then the merge gates. #76 and #77 are stacked on it.
+- One design document, task records kept 14 days, failure logs never committed, one status file ·
+  W2 · `task/W2-records` · #76 · owner review; merge after #75.
+- Tooling and tests that nothing uses, removed · W3 · `task/W3-tooling-removal` · #77 · owner
+  review; `harness:ios` and `harness:android` before review is satisfied; merge after #75.
 
 ## Recently merged
 

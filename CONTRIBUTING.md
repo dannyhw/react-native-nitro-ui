@@ -139,7 +139,7 @@ Run from the repo root.
 | `bun run build:app`             | Build + stamp the example app for one platform (see below)                     |
 | `node scripts/worktrees.mjs`    | List this clone's worktrees and why each is kept (`--prune` removes the rest)  |
 | `node scripts/watchdog.mjs`     | Report what changed on the machine and project since the last run (`--status`) |
-| `node scripts/task-records.mjs` | List the tasks with records in `docs/tasks` and why each is kept (`--archive`) |
+| `node scripts/task-records.mjs` | `--archive`: old records to `~/.nitro-ui`, outside git; staged, not committed  |
 | `bun run lease <command>`       | Device/port leases for this machine: `acquire`, `release`, `list`              |
 | `bun run example <script>`      | Run an `example/` script, e.g. `bun run example ios`                           |
 | `bun run storybook:ios`         | The example app in Storybook mode (`:android`; see `example/README.md`)        |

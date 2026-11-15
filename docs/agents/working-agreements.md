@@ -65,10 +65,13 @@ quoting anyone.
 - A task's worktrees are removed when it merges (`node scripts/worktrees.mjs --prune`).
   (2026-11-14)
 - Task records (brief, report, reviews, the task's folder) stay in git for 14 days after the task
-  merges and are then archived locally by `node scripts/task-records.mjs --archive`. Failure logs
-  are never committed. The removal is staged into the next merge commit, never a commit of its
-  own. A `docs/tasks/` path cited in a comment or a document may therefore name a record that is
-  now only in git history. (2026-11-15)
+  merges and are then archived locally by `node scripts/task-records.mjs --archive`. The 14 days
+  run from the day the records reached `main`: the merge commit, or for a fast-forward the day
+  `main` moved, which only the merging clone's reflog records. A task with a brief and no report,
+  an unmerged branch, or an uncommitted record in any worktree is kept whatever its age. Failure
+  logs are never committed. The removal is staged into the next merge commit, never a commit of
+  its own. A `docs/tasks/` path cited in a comment or a document may therefore name a record that
+  is now only in git history. (2026-11-15)
 - A document that stays (`docs/DESIGN.md`, a component page, `docs/upstream.md`) does not link to a
   task record. A fact worth keeping is written into the document. (2026-11-15)
 - CI is checked after every push to `main`. (2026-10-31)
