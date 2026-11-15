@@ -6,13 +6,13 @@ what the screen reader is told. Run it with:
 
 ```sh
 node scripts/gate.mjs real-input:android         # every control
-node scripts/gate.mjs real-input:android --control slider
+node scripts/gate.mjs real-input:android -- --control slider
 ```
 
 `scripts/real-input/android.mjs` owns the device, the stamped APK, Metro and the
-private agent-device daemon; this directory owns the checks. Nothing here drives a
-device outside the driver to _drive_ it — no `adb input`, no `am` — and nothing
-here asks a model what to do next: `agent.act` and `agent.assert` are not used,
+private agent-device daemon; this directory owns the checks. The suite asks the
+driver for every touch — nothing in `example/e2e` runs `adb input` or `am` — and
+nothing here asks a model what to do next: `agent.act` and `agent.assert` are not used,
 because a gate that depends on a model is not a gate. `retries` is 0 — a flaky check
 is fixed or reported, never retried green.
 
@@ -56,8 +56,26 @@ which no harness test in `example/__tests__` covers:
 Everything else the old driver asserted — refused changes snap back, disabled
 controls take nothing, one event per tap over N taps, event order, `maxLength`,
 the controlled echo — is asserted by the harness suites, at a tenth of the cost
-and with an event handshake instead of a screenshot. `docs/tasks/X35-real-input-e2e.report.md`
-lists each dropped assertion against the harness test that covers it.
+and with an event handshake instead of a screenshot.
+`docs/tasks/X44-real-input-hybrid.report.md` lists each assertion of the old
+driver this gate no longer makes against the harness test of the same observable.
+
+## After the suite
+
+Two passes run once the last test has reported, with the daemon stopped:
+`uiautomator dump` dies while the driver's session holds the device's one
+accessibility connection, so anything read from a dump has to wait for it to let go.
+
+`scripts/real-input/a11y-sweep.mjs` walks every control and grades the tree a
+reader sees. `scripts/real-input/android-tree-checks.mjs` then makes the checks the
+driver cannot express: its node map carries no `clickable`, `checkable` or
+`scrollable`, so a control's state has to be read off the node a finger actually
+lands on, and it refuses a swipe whose path leaves the view it began inside — which
+is exactly what a page scroll starting on a control, or a drag across a time drum,
+has to do. Those checks drive the device itself (`input tap`, `input motionevent`,
+`am start`) at the leased serial only, and each one is the check this gate made
+before the suite existed, moved rather than rewritten. A failure there lands on the
+same summary line, named `<control> (tree)`.
 
 ## Layout
 
