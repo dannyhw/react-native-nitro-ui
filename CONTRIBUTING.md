@@ -489,7 +489,7 @@ already read, so a task stops naming devices and starts by leasing them.
 Six rules are enforced rather than written down:
 
 - at most **2 device leases** at a time (a third is refused: two device tasks is
-  what one machine does without load turning duration gates red, D21);
+  what one machine does without load turning a correct run red);
 - **the queue is first come, first served** (X26). Every `acquire` that is willing
   to wait records a ticket with the time it started waiting and refreshes it on
   every poll, so a freed pair goes to whoever has waited longest rather than to
@@ -1006,16 +1006,15 @@ everything from the environment, and its defaults are neutral, so several
 checkouts can run concurrently on one machine, each with its own simulator/AVD
 and its own Metro port.
 
-| Variable            | Default     | Meaning                                                         |
-| ------------------- | ----------- | --------------------------------------------------------------- |
-| `IOS_SIM_UDID`      | unset       | Simulator **UDID** — wins over `IOS_SIM`/`IOS_VERSION`          |
-| `IOS_SIM`           | `iPhone 17` | Simulator name (used when no UDID is given)                     |
-| `IOS_VERSION`       | `27.0`      | Simulator runtime the name is looked up in                      |
-| `ANDROID_AVD`       | `nitroui`   | Emulator name (the harness creates it if missing)               |
-| `ANDROID_API_LEVEL` | `35`        | AVD system image                                                |
-| `AVD_PROFILE`       | `pixel_9`   | AVD device profile                                              |
-| `METRO_PORT`        | `8291`      | Metro port                                                      |
-| `HARNESS_TIMING`    | unset       | Judge the wall-clock gates instead of only reporting them (D21) |
+| Variable            | Default     | Meaning                                                |
+| ------------------- | ----------- | ------------------------------------------------------ |
+| `IOS_SIM_UDID`      | unset       | Simulator **UDID** — wins over `IOS_SIM`/`IOS_VERSION` |
+| `IOS_SIM`           | `iPhone 17` | Simulator name (used when no UDID is given)            |
+| `IOS_VERSION`       | `27.0`      | Simulator runtime the name is looked up in             |
+| `ANDROID_AVD`       | `nitroui`   | Emulator name (the harness creates it if missing)      |
+| `ANDROID_API_LEVEL` | `35`        | AVD system image                                       |
+| `AVD_PROFILE`       | `pixel_9`   | AVD device profile                                     |
+| `METRO_PORT`        | `8291`      | Metro port                                             |
 
 `ANDROID_AVD` is the name to set; `AVD` is still accepted as a legacy alias.
 
@@ -1074,37 +1073,33 @@ how the suite measures rather than what an app gets:
   being fixed - and a fixed control has to delete its row. Each row's `followups`
   field says what it is for.
 
-### Wall-clock gates (`HARNESS_TIMING`)
+### What a run publishes about itself
 
-Harness assertions split in two (D21). **Structural** ones — corrections,
-immediate pushes, flushes, stale frames, event counts, and layout boxes in px —
-are wrong at any machine load, so every run asserts them. A threshold on a
-**duration** is not: a loaded host turns a correct implementation red. Those go through `expectTimingBudget`
-(`example/__tests__/timingGate.ts`), which:
+Harness assertions are **structural** — corrections, immediate pushes, flushes,
+stale frames, event counts, and layout boxes in px — so they are wrong at any
+machine load and every run asserts them. A threshold on a **duration** is not:
+a loaded host turns a correct implementation red. There used to be a gate for
+those — `expectTimingBudget` (`example/__tests__/timingGate.ts`), judged only
+under `HARNESS_TIMING` (D21). X37 deleted it: the flag is unset in every gate
+run, so nothing was ever judged, while the plumbing around it turned three full
+runs red. The tests that measure a duration still print it, beside the stress
+timings that have always been printed; a printed number is not a verdict.
+Judgements about what this library costs belong to `bench/`, which owns a quiet
+machine for the question.
 
-- **`HARNESS_TIMING` unset** (the default, and what every gate run uses): logs
-  the measurement from inside the app and skips the threshold — the same way the
-  stress tests beside it have always logged their timings, so the number is
-  there for whoever reads a failing suite's output. It is not a verdict.
-- **`HARNESS_TIMING=1`, quiet machine**: asserts the threshold and fails on the
-  miss.
-- **`HARNESS_TIMING=1`, busy machine**: refuses. When the published 1-minute load
-  average is at or above `busyLoad1` (10), the gate throws rather than judge,
-  because a gate that cannot tell a slow build from a slow host is not evidence.
-
-The assertions run inside the app, which cannot see the host's load average,
-so the runner publishes it for the duration of the run: `rn-harness.config.mjs`
-writes `example/harness-timing/state.json` (gitignored, refreshed every 2s) and
+Assertions run inside the app, which cannot see the runner's environment, so the
+runner still publishes the one thing an assertion depends on that is a premise of
+the _run_ rather than of the app — today the locale opt-out
+(`NITRO_UI_ALLOW_LOCALE_MISMATCH`, read by the conformance rule that compares a
+locale-dependent box). `rn-harness.config.mjs` writes
+`example/harness-run/state.json` (gitignored, refreshed every 2s) and
 `example/metro.config.js` declares the one Metro route that serves it, per
 request — so an assertion reads a current value, not one frozen at bundle time.
 It has to be the Metro port: an emulator reaches the host only through the
 `adb reverse` the harness sets up for Metro. A reader checks the file's
 `metroPort` and age before trusting it, so a leftover from a dead run cannot be
-mistaken for this one's. `scripts/harness-timing-gate.js` is the publishing and
+mistaken for this one's. `scripts/harness-run-state.js` is the publishing and
 serving half, required by both config files.
-
-The harness prints one line at startup saying which mode it is in and what the
-load average was; a timing run started on a loaded host is announced there too.
 
 ## Running the real-input tests
 
