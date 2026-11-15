@@ -1,0 +1,30 @@
+{
+  "task": "X38",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention). X38 adds no test, so these are the three cases it had to rewrite to keep their teeth once the between-task reset was gone: each row breaks the behaviour the rewritten assertion still guards. scripts/__tests__/lease-pool-cli.test.js runs entirely against fake `adb`/`simctl` stubs in a temporary NITRO_UI_HOME, so no lease was taken and no device was touched. Run on maintainer-mac-1, 2026-11-15, against HEAD f0eecd2a.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/lease-pool-cli.test.js",
+      "file": "scripts/device-pool.mjs",
+      "mutation": "put hand-off device traffic back: the warm-reuse probe addresses the serial with `pm clear` as well as the readiness check",
+      "before": "      ? !!w.serial &&\n          this.ops.attachedSerials(w.adbPort).includes(w.serial) &&\n          this.ops.bootComplete(w.serial, w.adbPort)",
+      "after": "      ? !!w.serial &&\n          (this.ops.adb(\n            ['-s', w.serial, 'shell', 'pm', 'clear', 'nitroui.example'],\n            w.adbPort\n          ),\n          true) &&\n          this.ops.bootComplete(w.serial, w.adbPort)",
+      "redTests": [
+        "boots the pair it hands out when told to, from the shared launch config"
+      ],
+      "note": "Seven more tests in the same file go red under this mutation; the one listed is the case rewritten for it."
+    },
+    {
+      "test": "scripts/__tests__/lease-pool-cli.test.js",
+      "file": "scripts/lease.mjs",
+      "mutation": "the hand-off stops narrowing to the half the lease was taken for",
+      "before": "  const held = leased ?? 'both';\n  if (held === 'both') return asked;\n  return held;",
+      "after": "  return 'both';",
+      "redTests": [
+        "touches only the simulator for an iOS-only lease",
+        "touches only the emulator for an Android-only lease",
+        "keeps a re-acquired iOS lease on iOS when the second acquire names no platform",
+        "boots only the platform an exclusive lease was taken for"
+      ]
+    }
+  ]
+}

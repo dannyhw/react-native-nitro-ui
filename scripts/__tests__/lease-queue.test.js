@@ -274,17 +274,6 @@ describe('the queue (X26: first come, first served)', () => {
     expect(
       pairSatisfiesWaiter(pairB, { platform: 'both', exclusive: true })
     ).toBe(true);
-    // A look-check simulator is its own resource: it reserves no other pair, and no
-    // ordinary pair is reserved for it.
-    expect(
-      pairSatisfiesWaiter(pairA, { platform: 'ios', iosRuntime: '26.5' })
-    ).toBe(false);
-    expect(
-      pairSatisfiesWaiter(
-        { id: 'rt', ios: { udid: 'R' }, iosRuntime: '26.5', metroPort: 8299 },
-        { platform: 'ios', iosRuntime: '26.5' }
-      )
-    ).toBe(true);
     expect(pairSatisfiesWaiter(null, { platform: 'both' })).toBe(false);
   });
 

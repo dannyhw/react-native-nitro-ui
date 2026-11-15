@@ -4,7 +4,6 @@
  *
  *   node scripts/lease.mjs acquire --task G6                        # env file on stdout
  *   node scripts/lease.mjs acquire --task B1 --exclusive --out /tmp/b1.env
- *   node scripts/lease.mjs acquire --task G20 --ios-runtime 26.5 --boot  # an older iOS, for a look
  *   node scripts/lease.mjs list
  *   node scripts/lease.mjs release G6                               # by task or id
  *
@@ -22,11 +21,6 @@
  * (default 2) device tasks at a time; `--exclusive` (a bench or baseline mint,
  * which needs a quiet machine) waits until every other lease has ended; and
  * `emulator-5560` can never be leased, whoever is asking.
- *
- * `--ios-runtime <v>` (X20 item 3) leases one simulator from `devices.json` `iosRuntimes`, on an
- * iOS runtime the pairs do not run, for a screenshot or a probe: iOS only, never exclusive, never
- * handed to an ordinary acquire, and refused by every device gate (`gate.mjs`). It is otherwise a
- * device lease like any other - the limit, the boot, the reset, and `reap` as the only power-off.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -44,7 +38,6 @@ import {
   portListeners,
   pruneExpired,
   decideAcquire,
-  iosRuntimeKey,
   newLeaseId,
   normalizeDevices,
   readJson,
@@ -63,10 +56,7 @@ const USAGE =
   'usage: node scripts/lease.mjs acquire --task <id> [--platform ios|android|both]\n' +
   '                                          [--exclusive] [--wait-minutes N]\n' +
   '                                          [--ttl-minutes N] [--out <file>] [--config <file>]\n' +
-  '                                          [--boot] [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
-  '                                          [--ios-runtime <major.minor>]\n' +
-  '         (--ios-runtime hands out one simulator on that older iOS runtime, for a look check:\n' +
-  '          iOS only, never --exclusive, and gate.mjs refuses a device gate on it)\n' +
+  '                                          [--boot] [--no-boot] [--boot-timeout-minutes N]\n' +
   '         (--exclusive --boot needs --platform ios|android|both: an exclusive lease boots only\n' +
   '          the half it names, and never for NITRO_UI_LEASE_BOOT alone)\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
@@ -139,11 +129,7 @@ function parseArgs(argv) {
     // `NITRO_UI_LEASE_BOOT=0` forces the whole device lifecycle off, reap included.
     reap: !BOOT_FORCED_OFF,
     bootTimeoutMinutes: null,
-    reset: true,
     idleMinutes: null,
-    // `--ios-runtime 26.5`: one simulator on that runtime from `devices.json` `iosRuntimes`, for a
-    // look check (X20 item 3). Normalized to `major.minor`; null is a default pair.
-    iosRuntime: null,
   };
   const take = (name, value) => {
     if (value == null) throw new Error(`${name} needs a value\n${USAGE}`);
@@ -175,7 +161,7 @@ function parseArgs(argv) {
         options.config = take('--config', argv[++index]);
         break;
       case '--boot':
-        // Boot the pair, reset its app data, and reap idle devices. Without it a lease only
+        // Boot the pair and reap idle devices. Without it a lease only
         // reserves names, which is what a test, a CI runner or a bench host wants.
         options.boot = true;
         options.bootFlag = true;
@@ -185,9 +171,6 @@ function parseArgs(argv) {
         // the variable set in its profile can still ask for a naming-only lease.
         options.boot = false;
         options.bootFlag = false;
-        break;
-      case '--no-reset':
-        options.reset = false;
         break;
       case '--boot-timeout-minutes':
         options.bootTimeoutMinutes = Number(
@@ -200,16 +183,6 @@ function parseArgs(argv) {
       case '--json':
         options.json = true;
         break;
-      case '--ios-runtime': {
-        const value = take('--ios-runtime', argv[++index]);
-        options.iosRuntime = iosRuntimeKey(value);
-        if (options.iosRuntime == null) {
-          throw new Error(
-            `--ios-runtime needs an iOS version such as 26.5 (got ${value})\n${USAGE}`
-          );
-        }
-        break;
-      }
       default: {
         if (argument.startsWith('-')) {
           throw new Error(`unknown flag ${argument}\n${USAGE}`);
@@ -224,22 +197,6 @@ function parseArgs(argv) {
   }
   if (!['ios', 'android', 'both'].includes(options.platform)) {
     throw new Error(`--platform must be ios, android or both\n${USAGE}`);
-  }
-  if (options.iosRuntime != null) {
-    // A look-check simulator is one iOS device: there is no Android half to lease with it, and a
-    // bench or baseline never measures on an older runtime, so neither flag means anything here.
-    if (options.platformGiven && options.platform !== 'ios') {
-      throw new Error(
-        `--ios-runtime leases an iOS simulator only; drop --platform ${options.platform}\n${USAGE}`
-      );
-    }
-    if (options.exclusive) {
-      throw new Error(
-        '--ios-runtime is for a short look check, and --exclusive is for a bench on the default ' +
-          `pairs: the two do not go together\n${USAGE}`
-      );
-    }
-    options.platform = 'ios';
   }
   if (Number.isNaN(options.waitMinutes) || Number.isNaN(options.ttlMinutes)) {
     throw new Error(`--wait-minutes and --ttl-minutes need numbers\n${USAGE}`);
@@ -383,27 +340,6 @@ function acquire({ devices, paths, options, log }) {
           const sameTask = state.leases.find(
             (lease) => lease.task === options.task
           );
-          if (
-            sameTask != null &&
-            (sameTask.iosRuntime ?? null) !== options.iosRuntime
-          ) {
-            // Idempotent only for the same request. A task that holds a default pair and asks for
-            // an iOS 26.5 simulator (or the other way round) would otherwise be handed back the
-            // device it already has, under an env file that answers a question it did not ask.
-            const held =
-              sameTask.iosRuntime == null
-                ? `a default pair (${sameTask.holds.join(', ')})`
-                : `an iOS ${sameTask.iosRuntime} simulator (${sameTask.holds.join(', ')})`;
-            dropMyTicket();
-            return {
-              kind: 'refuse',
-              reason:
-                `${options.task} already holds ${held} under ${sameTask.id}. Release it first ` +
-                `(node scripts/lease.mjs release ${sameTask.id}), or lease the ` +
-                `${options.iosRuntime == null ? 'pair' : `iOS ${options.iosRuntime} simulator`} ` +
-                `under another --task name, e.g. --task ${options.task}-${options.iosRuntime ?? 'pair'}`,
-            };
-          }
           if (sameTask != null) {
             // Idempotent: a task that asks twice keeps what it already has, so a
             // retried command cannot consume a second pair. No Metro check either:
@@ -426,7 +362,6 @@ function acquire({ devices, paths, options, log }) {
             task: options.task,
             pending: others,
             portBlocked,
-            iosRuntime: options.iosRuntime,
             waiters: waitQueue(state, now).filter(
               (waiter) => waiter.task !== options.task
             ),
@@ -470,9 +405,6 @@ function acquire({ devices, paths, options, log }) {
                   id: leaseId,
                   platform: options.platform,
                   exclusive: false,
-                  ...(options.iosRuntime == null
-                    ? {}
-                    : { iosRuntime: options.iosRuntime }),
                   requestedAt: waitedSince,
                   refreshedAt: now,
                 },
@@ -501,11 +433,6 @@ function acquire({ devices, paths, options, log }) {
             task: options.task,
             platform: options.platform,
             exclusive: options.exclusive,
-            // Only on a look-check lease, so every lease file written before X20 still reads as
-            // what it was: a default pair.
-            ...(options.iosRuntime == null
-              ? {}
-              : { iosRuntime: options.iosRuntime }),
             // An exclusive lease holds every pair: it needs a quiet machine, not a
             // free simulator.
             holds: options.exclusive
@@ -614,10 +541,7 @@ function main(argv) {
       const row = [
         lease.id.padEnd(24),
         lease.task.padEnd(12),
-        (lease.iosRuntime == null
-          ? lease.platform
-          : `ios ${lease.iosRuntime}`
-        ).padEnd(8),
+        String(lease.platform).padEnd(8),
         (lease.exclusive ? 'exclusive' : '').padEnd(10),
         lease.holds.join(',').padEnd(24),
         formatAge(lease, Date.now()),
@@ -628,13 +552,9 @@ function main(argv) {
     // the reason a new acquire is being held back and used to be the only kind shown.
     for (const waiter of queue) {
       const since = waiterRequestedAtMs(waiter);
-      const platform =
-        waiter.iosRuntime == null
-          ? String(waiter.platform ?? 'both')
-          : `ios ${waiter.iosRuntime}`;
       process.stdout.write(
         `queue${String(waiter.position).padStart(4)}. ${String(waiter.task).padEnd(12)}` +
-          `${platform.padEnd(10)}` +
+          `${String(waiter.platform ?? 'both').padEnd(10)}` +
           `${(waiter.exclusive ? 'exclusive' : 'waiting').padEnd(10)}` +
           `${String(waiter.id ?? '').padEnd(18)}` +
           `${waiter.exclusive ? 'wants an exclusive lease' : 'waiting for a pair'}, ` +
@@ -872,14 +792,11 @@ function metroPortBlockers({ devices, log = () => {} }) {
 }
 
 /**
- * The device work an `acquire` does once the lease exists: boot the pair it names and clear the
- * last task's app data.
+ * The device work an `acquire` does once the lease exists: boot the pair it names.
  *
- * Order matters twice over. For an exclusive lease the power-off happens *before* this function is
- * called, so a device about to be reused is never powered off underneath the new lease (and the new
- * lease's id is live by now, which is what protects it from any later reap). And the boot happens
- * before the reset: `pm clear` on a device that is still booting fails, and a failed reset is a
- * warning rather than a lost lease - the next run's harness reinstalls the app anyway.
+ * For an exclusive lease the power-off happens *before* this function is called, so a device about
+ * to be reused is never powered off underneath the new lease (and the new lease's id is live by
+ * now, which is what protects it from any later reap).
  *
  * An exclusive lease used to be excluded from this function entirely (`if (!lease.exclusive)`), on
  * the reasoning that a bench host boots its own device slowly and on purpose. That made
@@ -887,8 +804,7 @@ function metroPortBlockers({ devices, log = () => {} }) {
  * `acquire --task <ID> --exclusive --boot`, and the simulators it names stayed powered off, so the
  * bench host booted its leased device by hand (X16 item 2, FOLLOWUPS 89). What the flag has to mean
  * here is "power the pool off, *then* bring up what you handed me", which is the same hand-off every
- * other `--boot` gets - including its reset, because the machine the bench inherits has just been
- * somebody else's.
+ * other `--boot` gets.
  */
 function poolHandoff({ pool, result, options, log }) {
   const { lease, pair } = result;
@@ -901,8 +817,8 @@ function poolHandoff({ pool, result, options, log }) {
   // The half this hand-off may touch: what the lease is for, narrowed by what this command asked
   // for. Equal on a new lease. On a re-acquire they can differ, and the lease's answer is the one
   // the env file prints, so a task that leased iOS and re-runs `acquire --boot` without
-  // `--platform` (which defaults to `both`) is still not handed - or booted, or reset - the
-  // emulator it never leased (X20 item 2).
+  // `--platform` (which defaults to `both`) is still not handed or booted - the emulator it
+  // never leased (X20 item 2).
   const platform = handoffPlatform(lease.platform, options.platform);
   const booted = pool.ensureBooted(pair, lease, {
     platform,
@@ -927,41 +843,6 @@ function poolHandoff({ pool, result, options, log }) {
     log(
       `lease: WARN ${key} did not come up - the harness will boot it, slowly`
     );
-  }
-  // The reset is what stops a task inheriting the *previous* task's storage. When this task already
-  // held the lease and nothing had to be booted, there is no previous task: the storage on those
-  // devices is this task's own, and wiping it is the bug (X11 re-review M2). Re-running
-  // `acquire --boot` in a second shell to regenerate the env file is the documented way to get an
-  // env file, and it used to `pm clear` and `simctl uninstall` under the task's own running suite.
-  //
-  // Deliberately narrower than "skip whenever `already`": a re-acquire that *did* have to boot the
-  // pair is looking at devices that came up from a snapshot, which can be another task's data, and
-  // skipping there would reintroduce the inheritance the reset exists to prevent. So the skip is
-  // `already` *and* warm - exactly the case that made the probe's output. Anything that reaches the
-  // device anyway is stopped by `resetPair`'s own claim check (below), which is the part that
-  // protects a live run whatever the lease history.
-  const warmReacquire = result.already === true && booted.booted.length === 0;
-  if (options.reset && warmReacquire) {
-    log(
-      'lease: not resetting the pair - this task already held the lease and nothing was booted, ' +
-        'so the storage there is its own'
-    );
-  } else if (options.reset) {
-    // Only the half this lease is for (X20 item 2): an iOS-only lease used to `pm clear` the pair's
-    // emulator too, which is a device it never asked for and another task may be using.
-    for (const row of pool.resetPair(pair, { platform })) {
-      // The device's own answer, and how many tries it took: a reset that failed after four
-      // attempts is a different problem from one that failed once and settled, and the reader
-      // cannot tell the two apart without it.
-      const detail = row.skipped
-        ? ` SKIPPED (${row.skipped})`
-        : row.ok
-          ? row.attempts > 1
-            ? ` (${row.attempts} tries)`
-            : ''
-          : ` FAILED (${row.answer}) - the next run inherits its data`;
-      log(`lease: reset ${row.key}: ${row.action}${detail}`);
-    }
   }
 }
 

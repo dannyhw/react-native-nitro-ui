@@ -45,13 +45,10 @@ bun install
 To check a machine against all of the above (plus `gh` push access, disk and
 load), run the doctor. `--setup` also creates two simulator/AVD
 pairs (`nitro-ui A`/`B`, `nitroui_a`/`b`) and writes the `~/.nitro-ui/devices.json`
-the lease script reads (see "Leasing a device or port"). It also creates one
-simulator per _other_ installed iOS runtime (`nitro-ui iOS 26.5`, …) for look
-checks, and lists it under `iosRuntimes` in `devices.json` - on a machine whose
-file already exists too, which is the one edit it makes to that file (see "Older
-iOS runtimes, for look checks"). It only adds: it never touches an existing
-device, never changes an entry already in `devices.json`, never installs SDK
-packages or accepts licenses (it prints the command), and never boots anything.
+the lease script reads (see "Leasing a device or port"). It only adds: it never
+touches an existing device, never changes an entry already in `devices.json`, never
+installs SDK packages or accepts licenses (it prints the command), and never boots
+anything.
 
 What that file can say is in `scripts/devices.example.json`, so copy it rather than
 typing it. Besides the pool it carries the machine's two limits: `maxDeviceLeases`
@@ -612,57 +609,12 @@ real one.
 task means one task's `adb` never queues behind another's, and it is what makes
 `adb kill-server` on the default port somebody else's problem - so don't.
 
-A lease is for the platform it names. `--platform ios` boots and resets only the
-pair's simulator, and `--platform android` only its emulator: the hand-off used to
-reset the whole pair, so an iOS-only lease ran `pm clear` on an emulator another
-task may have been using (X20 item 2). A re-acquire narrows to what the lease was
-taken for, so re-running `acquire --boot` without `--platform` does not widen an
-iOS lease to the emulator either.
-
-### Older iOS runtimes, for look checks
-
-The pairs run the gates on one iOS runtime. A design question is sometimes about
-another one - how a SwiftUI control looks on 26.5, or whether 27.1 changed it - so
-the pool also holds **one simulator per other installed runtime** (D42 item 1):
-
-```sh
-node scripts/doctor.mjs --setup                                  # creates them, adds them to devices.json
-node scripts/lease.mjs acquire --task G20 --ios-runtime 26.5 --boot
-node scripts/lease.mjs release G20                               # it stays booted, like a pair
-```
-
-```json
-"iosRuntimes": [
-  {
-    "id": "ios-26.5",
-    "ios": { "name": "nitro-ui iOS 26.5", "udid": "<simulator udid>", "system": "26.5" },
-    "metroPort": 8297
-  }
-]
-```
-
-- **For screenshots and probes only.** The env file exports
-  `NITRO_UI_LEASE_IOS_RUNTIME`, and `gate.mjs` refuses every gate that drives a
-  device under it (harness, real-input, smoke installs, bench): merge evidence is
-  measured on the pairs' runtime, so a row recorded on 26.5 would answer the wrong
-  question. `check` still runs. Install and launch by hand, as in "README
-  screenshots".
-- **iOS only, and never exclusive.** `--ios-runtime` implies `--platform ios` and
-  refuses `--platform android|both` and `--exclusive`.
-- **Kept apart from the pairs.** An acquire without `--ios-runtime` never gets one
-  of these, and `--ios-runtime` never gets a pair. A task holds one lease, so a
-  task that holds a pair and wants a look check leases it under a second name
-  (`--task G20-26.5`); the refusal names the command.
-- **The same rules as any device lease.** It counts against `maxDeviceLeases` (a
-  simulator boot is the load D13 limits, whatever the runtime), `--boot` boots
-  and resets it, `release` leaves it booted, only `lease.mjs reap` or an
-  `--exclusive` acquire powers it off, and an exclusive lease holds it with the
-  pairs.
-- **What `--setup` picks.** Every available iOS runtime the pairs do not use, on
-  an iPhone 17 where the runtime has one and otherwise the first iPhone it lists
-  (27.1 shipped with a single device type). Remove a runtime with Xcode and its
-  entry stays in `devices.json` until you delete it; `doctor` then reports the
-  missing simulator.
+A lease is for the platform it names. `--platform ios` boots only the pair's
+simulator, and `--platform android` only its emulator: the emulator may be another
+task's Android device at that moment, and an iOS-only lease has no business asking
+anything of it (X20 item 2). A re-acquire narrows to what the lease was taken for,
+so re-running `acquire --boot` without `--platform` does not widen an iOS lease to
+the emulator either.
 
 ### The lease owns device lifecycle (X11)
 
@@ -689,12 +641,11 @@ What that means in practice:
 - **Booting is opt-in.** `--boot` (or `NITRO_UI_LEASE_BOOT=1`, which is what an
   agent's shell should set) boots what is down, waits for `adb devices` /
   `simctl list` rather than for the boot process, waits for the load average to
-  fall under the bench's settle ceiling, and resets the example app. Without it
-  a lease only reserves names - which is what a test, a CI runner or a bench
+  fall under the bench's settle ceiling. Without it a lease only reserves names - which is what a test, a CI runner or a bench
   host wants. An `--exclusive` lease ignores that variable and boots only for a
   typed `--boot`: a bench host is the host most likely to have it set.
 - **Nothing reaps passively.** `acquire`, `release` and `list` never power a
-  device off and never reset one, not even one that is idle past
+  device off, not even one that is idle past
   `idleShutdownMinutes` (`devices.json`, default 30). Devices are powered off in
   exactly two places: when you type `node scripts/lease.mjs reap`, and when an
   `--exclusive` acquire promises its bench a quiet machine. There is no daemon,
@@ -716,16 +667,14 @@ What that means in practice:
   trace - and 31 idle minutes is ordinary work. The way to get a leased device
   powered off is to release its lease, not to pass a flag in your own shell;
   `list` names whose it is.
-- **What a reset does not cover.** The between-task reset clears the example
-  app's data (`pm clear`; `simctl uninstall` plus a check that the data container
-  is gone). It does not clear the iOS **keychain** or the **privacy-consent
-  (TCC) grants** - `simctl uninstall` leaves both. `simctl privacy` can reset the
-  second, but only per service: you have to know which ones a run touched, which
-  is not something the pool can know, so it is not run per hand-off. A warm
-  pooled device can therefore inherit a permission prompt somebody already
-  answered. The reset is storage-complete, not state-complete; a test that
-  asserts a permission prompt appears needs a freshly created device, not a
-  pooled one.
+- **A warm device keeps app state.** The pool powers devices on and off and
+  touches nothing inside them, so the example app's data, the iOS **keychain**
+  and the **privacy-consent (TCC) grants** all carry over from whoever used the
+  pair last. `simctl privacy` can clear the grants, but only per service: you
+  have to know which ones a run touched, which is not something the pool can
+  know. A run that needs clean app state therefore clears or reinstalls the app
+  itself, and a test that asserts a permission prompt appears needs a freshly
+  created device, not a pooled one.
 - **A device is only ever powered off if `devices.json` names it**, and never
   on a reserved serial. The pool shuts down what the machine _declared_, never
   something it merely observed booted. And it never acts on the serial a state
@@ -738,10 +687,7 @@ What that means in practice:
   reap cannot power off an emulator mid-suite, and a second gate aimed at the
   same device is refused before it starts. Every kill re-checks that claim at the
   moment it acts, so a lease and claim taken _while a reap is running_ are seen:
-  the decision is not allowed to be minutes old. The between-task reset does the
-  same and skips a device with a live claim, which is what stops a task
-  re-running `acquire --boot` in a second shell - the documented way to
-  regenerate its env file - from wiping its own running suite.
+  the decision is not allowed to be minutes old.
   `NITRO_UI_GATE_DEVICE_FORCE=1` runs anyway; a bench that wants the machine to
   itself uses `--exclusive`, which powers off every pool device no _other_ lease
   holds. That power-off happens with or without `--boot`; the boot does not.
