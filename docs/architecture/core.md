@@ -515,7 +515,7 @@ measurable while being much harder to prove correct (`cpp/core/NitroUiPerf.hpp`)
   vectors, in one commit.
 - **On-device harness** (`bun run harness:ios` / `harness:android`; needs a built app, and installs it — see H1 in
   §10). Cover what the Switch suite covers: controlled both ways, rejected revert via the tap-twice oracle, a value
-  written from JS, uncontrolled independence, disabled, mount/unmount cycles, many instances, reported content size,
+  written from JS, uncontrolled independence, disabled, mount/unmount cycles, reported content size,
   colour round-trip, perf marks for one instance. Use real taps (`userEvent.press`), never prop writes.
 - **Wait for testIDs.** `screen.findByTestId` has no timeout and throws on its first empty pass (upstream H3), so poll the
   non-throwing `queryByTestId` first, then take the harness reference (`example/__tests__/Switch.harness.tsx`);

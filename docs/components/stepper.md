@@ -102,9 +102,8 @@ else (`docs/architecture/sizing.md` §5 says where those tables live):
 Because the fallback *is* the default box on both platforms, the conformance rule
 compares the whole box (`both`), and a warm mount needs no correction. The
 poisoned run replaces those numbers with a size no stepper has before a cold
-mount, so "the guess was never corrected" still goes red — `Stepper.harness.tsx`
-and [conformance](../../example/__tests__/Conformance.harness.tsx) each hold a
-line to it.
+mount, so "the guess was never corrected" still goes red in
+[conformance](../../example/__tests__/Conformance.harness.tsx).
 
 `Stepper.harness.tsx` measures the claim that the box does not depend on the
 range: a `0…2`, a `-500…2000`, a `0…10`-by-`0.5` and a disabled stepper all
