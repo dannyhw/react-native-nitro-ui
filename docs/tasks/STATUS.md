@@ -1,137 +1,84 @@
-# Task status
+# Status
 
-| ID | Task | Implementer | Reviewer | State |
-|---|---|---|---|---|
-| T01 | Repo scaffold, toolchain, static guardrails | Apex | Opus | merged (2 rounds) |
-| T02 | Bench app + BenchProbe + runner/report | Apex | Opus | merged (4 rounds) |
-| T03 | Consumer smoke scripts (Expo + RN CLI) | Apex | Opus | merged (2 rounds) |
-| T10 | Core hosting runtime + Switch tracer bullet | Apex | Opus | merged (3 rounds) |
-| T11 | Intrinsic sizing shadow node (P0/P1) | Apex | Opus | merged (4 rounds) |
-| T12 | Android Compose host performance | Apex | Opus | merged (3 rounds; D15 Android miss on UI CPU/memory, see §P2f) |
-| T13 | Shared Compose owner services (`ComposeViewContext`) spike | Apex | — | done — not shipped: services are already shared per window; report only merged, code kept on branch `task/T13-compose-view-context` (0a7e8a2) |
-| G1 | Slider | Apex | Opus | merged (1 impl + 2 fix rounds) |
-| T14 | Register declared fallbacks before first measure (cold fillWidth height-0 frame) | Apex | Opus | merged (1 impl + 1 fix round) |
-| FIX1 | iOS Slider disabled a11y probe (main iOS harness red since 381b1f2) | Apex | — | merged |
-| G3 | Progress | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE) |
-| G2 | Button (owns R3 sizing test) | Apex | Opus | merged (1 impl + 1 fix round) |
-| T15 | Real-input verification (OS taps/drags on Switch, Slider; Button added after G2 merges) | Apex | — | merged (runner) |
-| FIX2 | Stale Yoga measurement after a correction (iOS Switch at 0 width after `value` update, found by T15) | Apex | Opus | merged (1 impl + 1 fix round; iOS+Android Sizing 24/24, real input 3/3 both) |
-| G4 | SegmentedControl (Picker → 0.2, D19) | Apex | Opus | merged (1 impl + 1 fix round; fix round comment-only in native) |
-| T15b | Add Button to the real-input runner + fix the Android Slider drag/JS-write test (red on main) | Apex | — | merged (real input 3/3 both platforms) |
-| G5 | DatePicker | Apex | Opus | merged (1 impl + 2 fix rounds; final re-review MERGE) |
-| R1 | Release readiness: gate hygiene (D21 timing tag, real-input Metro bug, Node 26 check) | Apex | Opus (orchestrator) | merged |
-| R2 | Release readiness 2: README + component docs, smoke with all 5 components, pack check, D18 baselines | Apex | orchestrator | merged (1 round; baselines measured but not minted — runner needs a full plan) |
-| S1 | React Native Storybook in the example app (showcase/tester) | Apex | orchestrator | merged (1 round; disabled bundle byte-identical, harness 99/99 + real-input 4/4 both) |
-| T16 | Spike: shared `<Host>` on Android, Switch only, bench vs expo shared host | Apex | orchestrator | done — Host beats expo shared host on Android mount memory (2.75x→0.87x) and UI CPU (1.50x→0.80x, noise-flagged), JS CPU 1.10x; report merged, code on branch `task/T16-host-spike` (b93b41b) |
-| A2 | Phase A: deferred small fixes (useSizingId leak, smoke per-control check, pack count, Storybook dark panel, progress docs) | Apex | orchestrator | merged (1 round) |
-| A1 | Phase A: committed bench baselines (full plan, 8 launches, both platforms, quiet machine) | Apex | orchestrator | done — not minted: iOS refused (busy, load 10.5); Android blocked by OOM at N=200 → B1 |
-| B1 | Android OutOfMemoryError mounting 200 controls repeatedly (found by A1) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE) — 0.1 Android host leaked every mounted control until Activity destroy; fixed |
-| P1 | iOS mount-cost profiling (0.2 wave 1) | Apex | orchestrator | done — iOS mount cost is the synchronous T11 first measure (UI thread), not hosting-controller creation or JS; H3 iOS Host no-go |
-| A1b | Overnight baselines retry | Apex | orchestrator | merged — **Android baseline minted** (load 2.39, 1120/1120); iOS refused 7.60 vs 7.0 at run end → R4 then one more overnight attempt |
-| R4 | Bench load guard samples the whole run (median/≥10 % rule) | Apex | orchestrator | merged (1 round) |
-| C1 | Android intrinsic content wider than its box fits instead of clipping (0.2 wave 1) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE-AFTER-SMALL-FIXES, report corrected by orchestrator) |
-| G6 | Picker (0.2 wave 2) | Apex | Opus | merged (1 impl + 2 fix rounds + merge-main pass; harness iOS 140/141 (1 skip), Android 142, real-input 6/6 both) |
-| H1 | Android `<Host>` for Switch (0.2 wave 3) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS; Host vs shared host: memory 0.86x, mount UI CPU 0.87x, JS CPU ~1.2x) |
-| R5 | Publish prep 0.1.0 | Apex | orchestrator | merged (1 round; smoke Expo 58 + RN 0.88 both platforms, RN 0.86 Android; RN 0.86 iOS n/a on iOS 27) — **published 2026-10-26** (`v0.1.0`) |
-| R6 | Changesets + staged npm trusted publishing | Apex | Opus | merged (1 impl + 1 fix round); first automated release 0.1.1 shipped 2026-10-26 |
-| X1 | Dev tooling: CI checks, fresh-build stamp, device leases | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FOLLOW-UPS) |
-| H2a | Android `<Host>` for Slider, Progress, Button (+ N4) | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; bench indicative, busy machine) |
-| H2b | Android `<Host>` for SegmentedControl, Picker, DatePicker (popups/dialogs) | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; check 460, harness iOS 165 / Android 214, real-input 13/13 both) |
-| X2 | Gate ledger (`scripts/gate.mjs`, per-platform code trees) + short report template | Apex | Opus | merged (1 impl + 1 fix round; review FIX ROUND, M1-M4 fixed; check 415 tests, Android harness 187/187) |
-| X6 | Build speed: stamp-fresh skip (ABI-aware), arm64-only local Android, Gradle build + configuration cache, ccache (own iOS module cache) | Apex | Opus | merged (1 impl + 2 fix rounds; 2nd-worktree Android 180→17 s, iOS 540→138 s; no-change rebuild <1 s; check 451, harness iOS 159 / Android 187, real-input 10/10 both) |
-| X7 | Machine doctor (`scripts/doctor.mjs`, `--setup`) + orchestrator playbook (`ORCHESTRATOR.md`) | orchestrator | — | merged (14 unit tests; setup proven against a scratch state dir) |
-| D2 | Docs pass for 0.3.0 (README, component/architecture docs, CONTRIBUTING, AGENTS, plans) | Opus | orchestrator | merged (patch changeset → 0.3.1) |
-| T17 | iOS `<Host>` spike | Apex | — | report merged; not better (D23) — iOS `<Host>` is a passthrough |
-| X8 | Bench baselines per machine (`bench/baselines/<label>/<deviceKey>.json`, label refusals, iOS key from the simulator's device type) | Apex (xhigh; low/medium arms in `EFFORT-eval-2026-10-27.md`) | Opus | merged (1 impl + 1 fix round; review MERGE; tooling-only, check 496) |
-| X3 | Component registry + codegen (`component.json` per control, `bun run registry`/`regen`, `registry:check`, `merge=union` on nitrogen output) | Apex | Opus | merged (1 impl + 1 fix round; re-review MERGE WITH FIXES, text fixes by orchestrator; all five merge gates green; merge test: 19 conflicted files vs 22, 0/104 entries lost after the recipe) |
-| A3 | Second machine's bench baselines (`--exclusive`) | Apex | orchestrator | merged: **Android minted** (1848/1848, load median 1.47, 0 over; `--check` green, doctored copy red); **iOS refused** on completeness (two `@expo/ui` DatePicker N=200 `presentedNs` cells, 55/160 and 87/160; load quiet) |
-| X9 | Tooling: `bench --dry-run`, lockfile follows releases (macOS `version` job), `doctor --prime`, one build at a time, `gate.mjs --background`/`wait`, unowned-device warnings | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; tooling-only merge exception, round-1 harnesses green) |
-| Q1–Q4, F0 | Read-only research during the mint: Menu design, TextField pre-spike, flaky-test diagnosis, FOLLOWUPS triage; F0 pruned FOLLOWUPS (Apex medium) | Apex | orchestrator | merged |
-| X10 | Parallel `check` runner (`scripts/check.mjs`, `check:serial`), per-step timings in the ledger, exact-full-tree merge reuse, dev-only scripts on the tooling list | Apex | Opus | merged (1 impl + 2 fix rounds; review and re-review FIX ROUND, the docs-read analyser was replaced by exact-tree reuse; 1.13× faster, `test` alone is 140 s; tooling-only merge exception) |
-| X12 | Failure logs outlive the worktree (shared store under the git common dir, retention), failure excerpts exported with the ledger (scrubbed, redacted for a public repo), device context on failed gates | Apex | Opus | merged (1 impl + 2 fix rounds; review FIX ROUND, re-review MERGE WITH FIXES; orchestrator privacy scan clean; tooling-only) |
-| F3 | Fixes visible to 0.3.x (Android `fillWidth` under an unbounded parent, iOS DatePicker `builtBounds`, iOS SegmentedControl tint) — maintainer-mac-1 | Apex | Opus | merged (review MERGE WITH FIXES, M1 fixed; M2/N1 in FOLLOWUPS; all five merge gates green on mac-1) |
-| T18 | TextField spike — maintainer-mac-1 | Apex | Opus | done, branch only (`246495c`); review ACCEPT WITH CORRECTIONS (its no-go reasons were measurement errors) |
-| T18b | TextField follow-up spike — maintainer-mac-1 (Codex Apex) | Apex | Opus | done, branch only (`052b377`); review ACCEPT WITH CORRECTIONS; go bar not reached, no no-go trigger; TextField → 0.5 (D30) |
-| X11 | Device throughput: one emulator launch config with `-gpu host` (Android harness load median 6.97 → 3.42), warm device pool with explicit-only reaping and live identity checks, real app resets, per-suite harness timing (ledger v6) | Apex | Opus | merged (1 impl + 2 fix rounds + merge-main pass; review and re-review FIX ROUND on device safety; harness both green; real-input owed to F1) |
-| A4 | Why the iOS mint lost frames (2 s JS wait and 2 s native backstop vs ~3 s first frames for 200 `@expo/ui` DatePickers), iOS-only 8 s wait, comparison-arm rule (owner), per-iteration missing-sample reasons; **iOS baseline minted** for maintainer-mac-2 | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; Android unchanged by design) |
-| X13 | Release lock refresh churned every pod on CI: json 2.7 vs ≥2.8 `pretty_generate` empty-array bytes changed 87/96 path-pod checksums; release job pins json 2.18.0 (asserts what loads), podspec-serialisation probe refuses an unknown format | Apex | Opus | merged (1 impl + 1 fix round; review MERGE WITH FIXES; harness:ios red only on the Picker flake F1 fixes — merge exception) |
-| F2 | Follow-ups sweep: comments, docs, three tooling fixes (lease-TTL assertion, harness platform labels, `--clean` removes pod inputs) — maintainer-mac-1 PR #6 | Apex | Opus | merged `d80bbc1` (review MERGE WITH FIXES, fix round 1; mac-2 merge gates green except `real-input:ios` Switch, F1's) |
-| F1 | Determinism: native-state tap witness before any retry (iOS, Android), retry counts in every gate log, dwell probe, four flaky tests fixed | Apex | Opus | merged `2d58ca6` (review FIX ROUND; fix round 1; re-review MERGE WITH FIXES, wording applied; all five merge gates green on mac-2) |
-| G7a | Menu: button-anchored native menu (iOS SwiftUI `Menu`, Android `DropdownMenu` via `menuAnchor`), sections and one submenu level, iOS-only `primaryAction` — maintainer-mac-1 PR #7, fix round 2 on mac-2 | Apex | Opus | merged `41e30c5` (review FIX ROUND, re-review MERGE WITH FIXES; D32 rulings; all five merge gates green on mac-2) |
-| F7 | Quick taps on a busy screen: measured (no-lookup presses, no-RN UISwitch/Toggle arms, Android), not the library's; busy-screen 12/12 guard with no retry | Apex | Opus | merged (review MERGE WITH FIXES, fix round 1; all five merge gates green on mac-2) |
-| G7b | Menu finish: bench arm (all arms, no mint), real-input both platforms (whole Android open/select/close echo, iOS trigger label), `menuAnchor` gap bound proven by a window-moving mutant, stories and smoke; iOS open/close spike measured, not shipped | Apex | Opus | merged `268859b` (review FIX ROUND, fix round 1; re-review MERGE WITH FIXES, applied; all five merge gates green on mac-2) |
-| X4 | Conformance suite (a11y, recycle-reset, sizing fallback and coverage tables read from every manifest; Menu covered) and `task-ready.mjs` | Apex | Opus | merged `a31ad90` (review FIX ROUND, two fix rounds; re-review 2 MERGE WITH FIXES, docs applied; all five merge gates green on mac-2) |
-| D3 | Docs pass for 0.4.0: README gains Menu (table, import list, Usage + checked example, Host, limitations), the workflow claims match `gh workflow list`, stale control counts and header comments | Apex | Opus | merged `8c42ce8` (1 round; review MERGE WITH FIXES, wording applied by the orchestrator; all five merge gates green on mac-2) |
-| A5 | Quiet bench window on maintainer-mac-2: full `--check` both platforms, quiet numbers into the H2a/H2b/G5/G6/G7b reports and README | Apex | orchestrator | merged `4f67da0` (1 round + fix round 1; re-review MERGE WITH FIXES, applied; docs-only, check green) |
-| X14 | Bench: add one component's cells to a machine's baseline (merge mint with comparability guards), so a new component costs ~40 min a platform, not a full window | Apex | Opus | merged `386a511` (review FIX ROUND, 2 fix rounds; re-review MERGE WITH FIXES, applied in round 2). Merge gates green except one `harness:ios` Menu flake, pushed before it was read; it then passed 3/3 plus a full run on `main` |
-| X15 | Tooling and test hygiene: lease/Metro port pre-flight, `test:native:android` runs automatically, Menu iOS read-back race, bench ledger platform, render label, readme-examples mapping, CONTRIBUTING CI runner | Apex | Opus | merged (`5bc783b`) |
-| F6 | Recycling and drop-path gates: `enableViewRecycling` exercised and leak-gated, B1 drop-path items, X4 recycle blind spots (SegmentedControl, Picker, Menu) | Apex | Opus | merged (`611fd66`) |
-| A6 | maintainer-mac-1's Menu baseline cells by merge mint, both platforms; first task delegated to a linked machine (INV-0391) | Apex (on mac-1) | Opus | merged: Android (`b86faaa`), iOS by A6b (`fa99b05`, PR #13) |
-| F4 | CI green on every trigger: no cancelled `main` runs, dispatched harness jobs fixed, release-pipeline nits, X1 leftovers, iOS < 26 fallback row | Apex | Opus | merged (`072ed4c`) |
-| F8 | The two harness jobs green on GitHub's hosted runners: the 8 iOS failures classified and fixed, the Android emulator boot | Apex | Opus | merged (`e011d8e`, PR #12) |
-| F8b | F8's sizing-engine fix finished: no in-window eviction from the held set, one false red proof moved, flush prunes, changeset trimmed | Apex | Opus | merged with F8 (`e011d8e`) |
-| G8 | Android visual fixes from the README screenshots: inline DatePicker clipped, Menu dropdown truncating labels | Apex | Opus | merged (`b52435e`, PR #18) |
-| G9 | iOS Menu drops an untitled destructive group (run on maintainer-mac-1 via the T3 link) | Apex (on mac-1) | Opus | merged (`baf9811`, PR #17) |
-| X16 | Tooling sweep 2: lease-env leak in check's tests, --exclusive --boot, bench --help ledger row, a11y:switch stable read | Apex | Opus | merged (`f2a6f2c`, PR #20) |
-| G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | merged (M2, PR #23; gates on maintainer-mac-1) |
-| X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | merged (M2, PR #22) |
-| D4 | Every component in the README with iOS/Android screenshots (dialog shots, a check-time readme guard, the written convention) | Apex | Opus | merged (PR #29; 1 impl + 1 fix round; all five merge gates green on mac-2; the guard caught TextField missing from the README imports at merge) |
-| D5 | README for end users: internal setup, machine labels, task links and bench mechanics move out to docs/performance.md and CONTRIBUTING | Opus | Opus | merged (README 1064 -> 827 lines; benchmarks to docs/performance.md, smoke results to CONTRIBUTING; patch changeset) |
-| T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | done: build TextField on `UITextField` (D34); report on main, prototype branch kept |
-| Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
-| G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged (`74efeb6`, PR #24) |
-| G12 | Chip (filter + assist; M3 chips on Android, button-style Toggle / capsule Button on iOS), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged with G14 (PR #27; 1 impl + 1 fix round, re-review MERGE; landed through G14's merge of `239c370`, gated on the combined tree; mac-1's own merge gates also green, `b5cfb7c`) |
-| G13 | TextField (Q2 + T19 + D34; `UITextField` on iOS, `BasicTextField` on Android) | Opus | Opus | merged (PR #26; 1 impl + 2 fix rounds, merge fixes applied by the orchestrator; device gates on maintainer-mac-1, check on mac-2) |
-| G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | merged (PR #28; 1 impl + 2 fix rounds, re-review MERGE; all five merge gates green on mac-2 on the main + D4 + Chip + BottomSheet tree `87d4b2ab0814`) |
-| G15 | Checkbox (M3 `Checkbox`/`TriStateCheckbox` on Android, `Toggle` on iOS; Q5 Appendix D) | Apex | Opus | merged (PR #31; 1 impl + 1 fix round, re-review MERGE WITH FIXES applied at merge; all five merge gates green on mac-2). Incident: `pkill -P 1` powered off every device on mac-2 (AGENTS rule tightened) |
-| Q6 | ContextMenu design (Q1 depth; children in place, gesture arbitration, spike questions) | Opus (on mac-1) | Opus | done (report merged; D36 adopts its recommendations; spike S3 next) |
-| S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
-| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
-| Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
-| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | merged (PR #37; merge gates green on code tree `ce2f7aab` with E2 and G18 in) |
-| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | merged (PR #36; merge gates green on code tree `d651692a` with E2 and X19 in; recycle and Back red proofs; display-link rate item left in FOLLOWUPS) |
-| X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
-| Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
-| X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merged (`a87271c`, PR #35) |
-| E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | merged (PR #39; 2 fix rounds; merge gates green on code tree `3bb39629`; Menu re-measured, fallback 75.1 × 52) |
-| E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merged `9044521` (PR #38; merge gates green on code tree `5c6f2b0b`; the iOS 15 subtitle guard stays at 16: `UIAction.subtitle` is iOS 16+) |
-| S5 | Popover spike (React Native content; Q7 Appendix F, D38; GO = questions 1, 2, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO both platforms (D44; report merged, prototype on `task/S5-popover-spike` `ac11788e`) |
-| E3 | Material 3 Expressive pass 2: SplitButton (Menu's `primaryAction` on Android) (D40) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5, one known iOS real-input flake re-run) |
-| Q9 | ButtonGroup and IconButton (`androidIcon`) design, with the iOS ControlGroup check (D40) | Opus | orchestrator | done (report merged; D42 adopts it, owner decided C and D) |
-| G19 | `androidIcon` + IconButton, Expo config plugin for drawables, size ladder `xlarge`/`xxlarge` (Q9 Appendix C, D42) | Apex | Opus | merged (1 impl + 2 fix rounds, re-review MERGE WITH FIXES applied; merge gates 5/5 on code tree `d0d432cd` with X21 in). IconButton itself is the next task |
-| X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | merged (1 impl + 1 fix round; merge gates 5/5 first run) |
-| S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
-| FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | cancelled: superseded by D43 (real Material Symbols files replace hand-drawn glyphs) |
-| E4 | Material 3 Expressive pass 2: Progress `variant="loading"` (+ `contained`) and `appearance="wavy"` (Q8 C10, D40) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5, Android real-input needed 3 runs for the Slider drag flake E5 is fixing) |
-| E5 | Slider: a real drag start on Android (Q8 C9), and the real-input `hosted-slider` drag flake | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on code tree `459e2c83`, `real-input:ios` green on a re-run after the TextField flake X21 fixes) |
-| FIX4 | The library's own Android icons from official Material Symbols files (D43 item 1; fixes the SearchField search glyph) | Opus (on mac-1) | Opus | merged (1 impl + 1 fix round; merge gates 5/5, one known iOS real-input flake re-run) |
-| X21 | The four recurring device-gate flakes (iOS "edits refused", BottomSheet 50 cycles, `goToScreen`, Slider screen-reader step): cause and fix | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on code tree `057b9313`, 0 retries in both real-input runs; E5 merged first on its own re-run). Incidents: an unrequested comment on PR #46; killed its own running gate's Metro; two harness attempts ran on CI-default devices before the lease env was exported |
-| Q10 | Form, List and Section: how @expo/ui and other libraries do it, and a design (Form/Section and a virtualized List separately) | Opus | orchestrator | done (report merged, PR #48): Form/Section GO after a one-round spike (UIKit inset-grouped list on iOS, M3 segmented rows on Android, any RN row with no wrapper); virtualized List with React rows NO-GO; questions A–C to the owner |
-| S6 | Form and Section spike: React Native rows in native grouped lists (Q10 Appendix C1, E) | Apex | Opus | NO-GO on evidence, not behaviour (report merged, prototype on `task/S6-form-spike` `a8a8da22`): reparenting, fidelity, sizing and Android press pass; iOS taps and the keyboard unmeasured, iOS `measure` returns the Form's box. Round 2 is S6b |
-| G22 | Popover with React Native content (S5, D44) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on code tree `0226a5ab`; pair fixtures shown red on teardown; the iOS real-input keystroke check now reads while the popover is up) |
-| G23 | IconButton (Q9 C4 on G19's icon path, D43) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on the tree with Popover in; iOS hit box floored at 44 × 44 pt) |
-| S6b | Form spike round 2: real iOS taps in reparented cells, the keyboard, iOS `measure`, the 52 pt row and the Android header layer | Apex | Opus | done: GO with the Android keyboard as the build's first item (D45; report merged as round 2 of S6's, prototype on `task/S6b-form-spike` `e47f30fc`) |
-| G24 | Form and Section (Q10 C1, S6/S6b, D45) | Apex | Opus | merged (PR #52; fix round 2 fixed the re-review items, red proofs recorded; two mutations stayed green and are reported; one iOS tap-ordering flake in FOLLOWUPS) |
-| G20 | ButtonGroup (Q9 Appendix B, D42; the four early checks first) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on code tree `8fb41da6` with G21 in; iOS 26.5, 27.0 and 27.1 checked) |
-| G21 | `androidIcon` on Menu/ContextMenu rows, SplitButton and Chip (Q9 C2 item 3, D43) | Apex | Opus | merged (1 impl + device round; review MERGE WITH FIXES applied in the merge round; merge gates 5/5 on code tree `14ecf523`) |
-| G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | merged (PR #55; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| G26 | Picker `variant="radio"` (Q7 Appendix D, D38 item 4) | Apex | Opus | merged (PR #56; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| X22 | iOS ContextMenu a11y stops read 4 instead of 2 on unrelated branches (blocks G25 and G26 merges) | Apex | Opus | merged (PR #57, #59; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | merged (PR #58; 1 impl + 1 fix round; merge gates 5/5 on code tree `89018eda`) |
-| X23 | Android: a recycled Form keeps its scroll offset after other suites run (G24 test, order-dependent) | Apex | Opus | merged (PR #60; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | merged (PR #61; 1 impl + 1 fix round; merge gates 5/5 on code tree `fe9f3b10`) |
-| G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | merged (PR #62; combined merge with X27, gates 5/5 on code tree `b9700c15`; CodeRabbit locale fix applied at merge) |
-| G30 | ListItem: the row-content leaf (D46, Q10 question C) | Apex | Opus | merged (PR #64; combined merge with X24 and X28, gates 5/5 on code tree `cd6b3aa2`; CodeRabbit items applied at merge) |
-| G31 | Checkbox on iOS: SF Symbol checkmark styles, `iosStyle` (D47) | Apex | Opus | merged (PR #63; 1 impl + 1 fix round; merge gates 5/5 on code tree `3db596b4`) |
-| X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | merged (combined merge of X24, G30 and X28, gates 5/5 on code tree `cd6b3aa2`; real-input:android re-run once for the hosted-picker flake) |
-| X25 | iOS Form crashes the bench app in readoptRowlessCells (found by X24) | Apex | Opus | merged (PR #67; 1 impl + 2 device rounds + merge-round fix: a recycled Form keeps its retired models until the replacing apply and answers stale cell asks with the named row; gates 5/5 on code tree `53659955`) |
-| X26 | Device leases first come, first served (X24 and X25 starved for hours) | Apex | Opus | merged (PR #65; its device gates ran on the X24/G30/X28 merge tree, 5/5 green) |
-| X27 | Examples: caption above the control in every story, all affected README screenshots retaken (owner) | Apex | Opus | merged (PR #66; combined merge with G29, gates 5/5 on code tree `b9700c15`; Stepper story on the shared Row, Stepper and Android Picker shots retaken) |
-| X28 | Device gates refuse to run without a live lease (G30 drove a stray emulator without one) | Apex | Opus | merged (combined merge with X24 and G30, gates 5/5 on code tree `cd6b3aa2`) |
-| X29 | Form E4 harness case red on pair-a's iOS simulator only (found by X25) | Apex | Opus | merged (PR #68; with X25's recycle fix combined and R09's notes; gates 5/5 on code tree `3cd5ec72`, Form suite green on both simulators) |
-| R09 | 0.9.0 release notes rewritten for app developers (3,690 to 1,220 words) | Opus | orchestrator | merged with X29 |
-| X30 | Merge bar matches device gates per platform half; ledger export merges; --background typo guard; task-ready ID from branch | Apex | Opus | merged with X31 (#69, #70) |
-| X31 | hosted-picker flake, Form giveUps assertion, harness tap error text, ci-workflows 2 s budget | Apex | Opus | merged with X30 (#69, #70) |
-| X32 | Form iOS row press after a scroll, form.md VoiceOver contradiction, three Stepper review items, Checkbox probes assert and localised "mixed" | Apex | Opus | merged (#71) |
-| X33 | Slider screen-reader steps compare the float the reader was shown; the long-standing step-test flake fixed at its cause | Apex | Opus | merged with X34 (#72, #73) |
-| X34 | Gate hygiene: check from a leased shell, a detached gate takes its runner with it, lease-queue poll race, two iOS real-input waits settle on state | Apex | Opus | merged with X33 (#72, #73) |
+What is open now and what merged in the last 14 days. Everything older is in `git log`. A line
+under "In flight" is all that is needed to resume its task after a restart, and it is deleted when
+the task merges. Open follow-ups are in `FOLLOWUPS.md`.
+
+## In flight
+
+Name · ID · branch · pull request · next action.
+
+- A workflow that runs unattended (short rules, skills, worktree lister, watchdog) · W1 ·
+  `task/W1-workflow` · #75 · owner review, then the merge gates. #76 and #77 are stacked on it.
+- One design document, task records kept 14 days, failure logs never committed, one status file ·
+  W2 · `task/W2-records` · #76 · owner review; merge after #75.
+- Tooling and tests that nothing uses, removed · W3 · `task/W3-tooling-removal` · #77 · owner
+  review; `harness:ios` and `harness:android` before review is satisfied; merge after #75.
+
+## Recently merged
+
+Newest first: what changed for people using the library, then the task and its pull request. A
+pull request number is left out where the records do not carry one.
+
+- 11-15 Slider: Android screen-reader steps land on the value that was read out (X33, #72).
+- 11-15 Nothing user-visible: gate runner and iOS real-input hygiene (X34, #73).
+- 11-14 Form: a flick no longer presses an iOS row; Stepper screen-reader and default-value
+  fixes; Checkbox reads a localised "mixed" (X32, #71).
+- 11-13 Nothing user-visible: device gates matched per platform, four flaky checks (X30, X31,
+  #69, #70).
+- 11-12 0.9.0 released (#51), with release notes written for app developers (R09).
+- 11-12 Form: iOS rows are laid out at their own cell's width (X29, #68).
+- 11-12 Form: no crash when an iOS Form is recycled mid-update (X25, #67).
+- 11-12 Picker `wheel` and the DatePicker time wheel are real wheels on Android (G29, #62).
+- 11-12 Examples and README screenshots: the caption sits above each control (X27, #66).
+- 11-11 ListItem, new (G30, #64). Stepper and Form examples lay out properly (X24).
+- 11-11 Checkbox: SF Symbol checkmark styles on iOS, `iosStyle` (G31, #63).
+- 11-11 Nothing user-visible: device leases first come, first served, and a device gate needs a
+  live lease (X26, #65; X28).
+- 11-10 ConfirmationDialog: Material 3 Expressive rows on Android (G28, #61).
+- 11-10 SearchField: keyboard props (G27, #58).
+- 11-10 Stepper, new (G25, #55). Picker `variant="radio"` (G26, #56).
+- 11-10 A recycled Android Form starts at the top (X23, #60). iOS accessibility sweep settled
+  (X22, #57, #59).
+- 11-09 Form and Section, new (G24, #52). ButtonGroup, new (G20).
+- 11-09 `androidIcon` on Menu and ContextMenu rows, the split button and Chip (G21).
+- 11-08 IconButton, new (G23). Popover with React Native content, new (G22).
+- 11-07 0.8.0 released (#40).
+- 11-07 `androidIcon` from Metro assets or drawables, an Expo config plugin for drawables, and
+  the `xlarge` and `xxlarge` sizes (G19).
+- 11-07 Slider: a real drag start on Android (E5, #46). Progress: `variant="loading"` and
+  `appearance="wavy"` (E4).
+- 11-07 Android icons come from official Material Symbols files, which fixes the SearchField
+  glyph (FIX4).
+- 11-07 Nothing user-visible: four recurring device-gate flakes (X21); Form, List and Section
+  research (Q10, #48).
+- 11-06 0.7.0 released (#32).
+- 11-06 SplitButton: Menu's `primaryAction` on Android (E3).
+- 11-06 Expressive shapes and sizes for Button, SegmentedControl and Chip (E1, #39).
+- 11-06 Menu, ContextMenu and Picker rows: grouped sections, `subtitle`, `checked` (E2, #38).
+- 11-06 SearchField, new (G17, #37). Tooltip, new (G18, #36).
+- 11-06 Nothing user-visible: a real-input false green and two lease fixes (X20).
+- 11-05 React Native 0.88 is the floor; Material 3 Expressive is the default Android theme
+  (X18, #34).
+- 11-05 Example app only: a scrolling tab bar with full-size touch targets (X19, #35).
+- 11-03 0.6.0 released (#30). ContextMenu, new (G16, #33). Checkbox, new (G15, #31).
+- 11-03 BottomSheet, new (G14, #28). Chip, new (G12, #27). TextField, new (G13, #26).
+- 11-03 README rewritten for people who use the library (D5); every component has iOS and
+  Android screenshots, checked (D4, #29).
+- 11-02 0.4.3 and 0.5.0 released (#19, #25). AlertDialog and ConfirmationDialog, new (G11, #24).
+- 11-02 Android Menu dropdown sizes to its items; the inline DatePicker fits 320 dp (G8, #18).
+- 11-02 Slider, Button, Progress and SegmentedControl follow-up fixes (G10, #23). Tooling
+  sweeps (X16, #20; X17, #22).
+- 11-01 0.4.2 released (#14). iOS Menu draws an untitled section's rows (G9, #17).
+- 11-01 DatePicker's iOS fallback is measured at `en_US`; two sizing-engine leaks fixed (F8,
+  F8b, #12).
+- Research and spikes in the window, nothing user-visible: Q5 to Q9, S2, S3, S5, S6, S6b, T19.
+
+## Blocked or waiting
+
+- Release: two patch changesets are on `main` since 0.9.0 (`x32-review-debt`,
+  `slider-reader-steps-float`). Next is the Version Packages pull request, then the npm approval
+  (D28). Check `npm view` before saying anything about it.
+- Records: `node scripts/task-records.mjs` keeps 12 old tasks only because a `task/<ID>-...`
+  branch of theirs was never merged (prototype and fix branches: G12, S2, S3, S5, S6, S6b, T16,
+  T17, T18, T19, X25, X29). Deleting a branch lets its task's records be archived.

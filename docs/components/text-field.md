@@ -17,7 +17,7 @@ first. Like `TextInput` it is **undecorated**: the text, the caret and the
 placeholder in the platform's body font, with no border, background or label. A
 border or a background is the container you put it in.
 
-Why UIKit on iOS rather than SwiftUI's `TextField` (DECISIONS D34): only UIKit
+Why UIKit on iOS rather than SwiftUI's `TextField` (DESIGN.md D34): only UIKit
 exposes `markedTextRange`, and the controlled value needs to know when an IME
 composition is open (below). SwiftUI's field cannot tell anybody, so it cannot
 implement that rule at all (T19).

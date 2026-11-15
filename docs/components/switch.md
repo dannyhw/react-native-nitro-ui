@@ -38,7 +38,7 @@ controls it wraps (UIKit `UISwitch`, Compose `Switch`, React Native's own
 Uncontrolled Switches cost no React render per toggle: native owns the
 displayed value and JS is only told about it (see `useControlled`).
 
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14). The package publishes no
+`hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14). The package publishes no
 Hybrid View types and no way to write a prop from outside React: the handle is
 read-only (plus `measureContent()`, which is a cached value and thread-safe), it
 is invoked once when the view mounts, and a new function does not re-run it.
@@ -74,7 +74,7 @@ the numbers above, and the control is centred inside the space
 asserts exactly that, because at the default box the two platforms' answers are
 indistinguishable.
 
-The iOS default follows the running OS (DECISIONS D14): the switch changed size
+The iOS default follows the running OS (DESIGN.md D14): the switch changed size
 with iOS 26, so one constant cannot be right on both. The first version of this
 file shipped 51×31 everywhere, measured on a pre-26 SDK, and on a 26 device that
 was a bug rather than a trade-off - SwiftUI lays the Toggle out at 61×28 and

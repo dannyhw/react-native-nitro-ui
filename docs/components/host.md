@@ -9,7 +9,7 @@ It is **opt-in**, and Android-only: on iOS `<Host>` is a documented passthrough 
 so the same JSX renders normally there and an app gets one tree to reason about, not
 two (D23). That is settled, not provisional — an iOS Host was built and measured: it
 won on memory (0.92× the unhosted Switch) but lost on mount UI CPU (1.40×) and unmount
-UI CPU (6.27×), so it was not shipped (`docs/DECISIONS.md`, D23 and its outcome). The
+UI CPU (6.27×), so it was not shipped (`docs/DESIGN.md`, D23 and its outcome). The
 passthrough is the design.
 
 ```tsx
@@ -64,7 +64,7 @@ H2a re-ran the same plan with them in the host arm, so the four were priced firs
 quiet — 37 % of its load samples sat over the ceiling**, so the run was indicative and a
 quiet re-run was pending. A5 has since run the plan quiet on `maintainer-mac-2`
 (`abe68a1`, 8 launches, 0.04 % of samples over the ceiling); its numbers are in
-[`A5-quiet-bench-mac2.report.md`](../tasks/A5-quiet-bench-mac2.report.md) and in [`docs/performance.md`](../performance.md), and
+[`docs/performance.md`](../performance.md), and
 they reproduce this table's shape — `Switch` 0.91x memory / 0.84x UI CPU, `Progress` 0.45x
 (`n/v`) and `Button` 0.80x, `Slider` level at 1.02x — and five of the ᴺ flags in the table below
 clear (unhosted `Switch` and `Button` UI CPU, unhosted `Button` JS, hosted `Button` JS 0.69x,
@@ -286,7 +286,7 @@ teardown dismissals above are measured for a hosted Menu too
 Host moves", "comes down when its hosted child leaves the Host", "takes its window down
 when its button moves inside the Host"). What differs from `Picker` is that a Menu has no
 value, so the controlled handshake is not in play: a pick reports `onSelect` and then
-`onClose` (DECISIONS D32). On iOS a Host is a passthrough and SwiftUI keeps the
+`onClose` (DESIGN.md D32). On iOS a Host is a passthrough and SwiftUI keeps the
 presentation to itself, so that witness answers `-1` for every field but its row count.
 
 What is still refused is a **React Native** `Modal` child, or any other RN view that owns

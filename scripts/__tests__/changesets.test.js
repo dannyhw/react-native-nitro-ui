@@ -1,4 +1,4 @@
-// Releases are cut by Changesets (DECISIONS D27) and staged on npm (D28). These
+// Releases are cut by Changesets (DESIGN.md D27) and staged on npm (D28). These
 // assertions keep that setup honest: the workspaces that must never be versioned
 // or published stay excluded, the release-it scaffold is really gone, the
 // changelog stays in the shape the release notes are read out of, and the

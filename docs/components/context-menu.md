@@ -1,6 +1,6 @@
 # ContextMenu
 
-A `View` that opens a menu on a long press (G16, DECISIONS D36 and D37; design
+A `View` that opens a menu on a long press (G16, DESIGN.md D36 and D37; design
 `docs/tasks/Q6-contextmenu-design.report.md`, measured by the S3 spike).
 
 | Platform | Native                                                                                           |

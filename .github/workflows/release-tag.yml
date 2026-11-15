@@ -1,6 +1,6 @@
 name: Release tag
 
-# Tags and GitHub releases, once a version is really on npm (DECISIONS D28).
+# Tags and GitHub releases, once a version is really on npm (DESIGN.md D28).
 #
 # Nothing creates them at publish time: publishing is not automated, because the
 # package's Trusted Publisher allows staged publishing only. When the release
