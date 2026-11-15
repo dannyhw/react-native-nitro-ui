@@ -11,11 +11,6 @@ import { NativeNitroUiPicker } from './NativeNitroUiPicker';
 /**
  * What {@link PickerProps.onChange} reports: the index that was selected, plus
  * the option's text.
- *
- * Both are included because callers want both — `index` to address the model,
- * `value` to show or store the label — and the wrapper can supply `value` for
- * free from the `options` it is already rendering. Same shape as
- * `SegmentedControlChange`, which this control shares its data model with.
  */
 export interface PickerChange {
   /** Position of the chosen option in `options`. */
@@ -27,36 +22,22 @@ export interface PickerChange {
 /**
  * How the control presents its options.
  *
- * `'radio'` is Android's radio-group column and iOS's menu: SwiftUI has no
- * radio-group picker style to ask for (`RadioGroupPickerStyle` is
- * `@available(iOS, unavailable)`), so DECISIONS D38 item 4 rules that the
- * variant falls back to the menu there rather than being imitated.
+ * `'radio'` is a radio-group column on Android. iOS has no radio-group picker
+ * style, so `'radio'` shows the menu there.
  */
 export type PickerVariant = 'menu' | 'wheel' | 'radio';
 
-/**
- * Props of {@link Picker}.
- *
- * `selectedIndex`/`defaultSelectedIndex`/`onChange`/`disabled`/`tintColor`
- * follow the library's other controls (`Switch`, `Slider`,
- * `SegmentedControl`); everything else comes from `ViewProps`.
- */
+/** Props of {@link Picker}. */
 export interface PickerProps extends ViewProps {
   /**
-   * The choices, in order. A menu picker's button is as wide as the title it
-   * shows, so this is the prop that decides its size.
-   *
-   * Two options may share a label; the value of the control is always the
-   * *index*, never the text.
+   * The choices, in order. Two options may share a label; the value of the
+   * control is always the index, never the text.
    */
   options: string[];
   /**
    * Selected index. Pass it to control the picker; leave it `undefined` for an
-   * uncontrolled one (native then owns the displayed selection, and a choice
-   * costs no React render).
-   *
-   * A value outside the current `options` is clamped into range (see
-   * `docs/components/picker.md`), on both platforms and in JS.
+   * uncontrolled one. A value outside the current `options` is clamped into
+   * range.
    */
   selectedIndex?: number | undefined;
   /**
@@ -75,16 +56,14 @@ export interface PickerProps extends ViewProps {
    * `'menu'` (default), `'wheel'` or `'radio'`.
    *
    * A menu is a button that opens a list, sized by the title it shows. A wheel
-   * fills its box's width and measures its own height on both platforms:
-   * SwiftUI's `.wheel` there, and Material 3 1.5's `ScrollField` on Android — a
-   * drum of the options whose choice is a roll that comes to rest, so one
-   * settled value is one `onChange` whatever rows it passed.
+   * fills its box's width and measures its own height: SwiftUI's `.wheel` on
+   * iOS, Material 3's `ScrollField` on Android. One settled value is one
+   * `onChange`, whatever rows the roll passed.
    *
-   * A radio group shows every option at once: one `RadioButton` row per
-   * option, 48 dp tall, sized by its widest label — **on Android only**. iOS
-   * has no radio-group picker style, so `'radio'` renders the menu there
-   * (DECISIONS D38 item 4); an iOS layout that needs every choice visible uses
-   * `SegmentedControl` for up to about five options.
+   * A radio group shows every option at once, one `RadioButton` row per option,
+   * **on Android only**. iOS has no radio-group picker style, so `'radio'`
+   * renders the menu there; an iOS layout that needs every choice visible can
+   * use `SegmentedControl` for up to about five options.
    */
   variant?: PickerVariant | undefined;
   /**
@@ -98,17 +77,14 @@ export interface PickerProps extends ViewProps {
   /**
    * Accent colour of the control. Default: the platform's own.
    *
-   * What it paints differs. **Android** takes four roles of the outlined field:
-   * the focused outline, the focused label, the focused trailing icon and the
-   * unfocused label — every other role keeps the scheme's colours. **iOS** tints
-   * the menu picker's title and chevron (a SwiftUI menu `Picker` does take
-   * `.tint()`, unlike a segmented one); a wheel does not take it at all.
-   * Measured on both platforms in `docs/components/picker.md`.
+   * **Android** colours the outlined field's focused outline, focused label,
+   * focused trailing icon and unfocused label. **iOS** tints the menu picker's
+   * title and chevron; a wheel does not take it at all.
    */
   tintColor?: ColorValue | undefined;
   /**
-   * Identifier for tests. iOS: RN's own `accessibilityIdentifier`. Android: the
-   * host `View.tag`, which is what the harness and `findNodeByName` read.
+   * Identifier for tests: the accessibility identifier on iOS, the view tag on
+   * Android.
    */
   testID?: string | undefined;
   /**
@@ -117,17 +93,11 @@ export interface PickerProps extends ViewProps {
    */
   accessibilityLabel?: string | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for this library's own tests and
+   * benchmarks.
    *
-   * @internal Not app API (DECISIONS D14): props must flow through React, so a
-   * direct write here runs the native setter off the UI thread and never commits.
-   * Reading props and calling `measureContent()` is all it is for, and the
-   * callback runs once, when the view mounts - a new function does not re-run it.
-   *
-   * The shape is written inline rather than named: it is the same read-only
-   * handle as `NitroUiPickerHandle` in `NativeNitroUiPicker.ts`, and naming it
-   * here would make api-extractor demand that a v0.1-hidden native type be
-   * exported from the entry point.
+   * @internal Not app API. A write through this handle bypasses React and never
+   * commits. The callback runs once, when the view mounts.
    */
   hybridRef?:
     | ((view: {
@@ -142,17 +112,15 @@ export interface PickerProps extends ViewProps {
         measureContent(): { width: number; height: number };
         nuiTestSelect(index: number): void;
         /**
-         * Test-only popup witness (H2b): `expanded=...;live=...;anchor=...;` +
-         * `menu=...;rows=...`. Android measures it; iOS answers `-1` in every field,
-         * because a SwiftUI `Picker` keeps its menu in the system's own presentation.
-         * `@internal` (D14) - see `NitroUiPickerHandle`.
+         * Test-only: the open menu's state and geometry. Android measures it; iOS
+         * answers `-1` in every field, because a SwiftUI `Picker` keeps its menu in
+         * the system's own presentation.
          */
         nuiTestMenuReport(): string;
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`). Benchmark
-   * only; `null` turns marks off for this view.
+   * Instance id for native performance marks; `null` turns them off for this view.
    *
    * @internal Benchmark and diagnostics only - not app API.
    */
@@ -160,12 +128,8 @@ export interface PickerProps extends ViewProps {
 }
 
 /**
- * The separator between parts of `nuiSizingKey`.
- *
- * A label may contain it, so labels are escaped on the way in (`\` -> `\\`,
- * `|` -> `\|`) and only the unescaped ones separate. Without the escape,
- * `['a|b']` and `['a', 'b']` would build the same key and share one cached
- * size - one of which is wrong, for the whole life of the process.
+ * Separates the parts of `nuiSizingKey`. Labels are escaped, so `['a|b']` and
+ * `['a', 'b']` cannot build the same key and share one cached size.
  */
 const OPTION_SEPARATOR = '|';
 
@@ -175,35 +139,13 @@ function escapeOption(label: string): string {
 }
 
 /**
- * The size configuration of one Picker, as the sizing engine sees it.
+ * The key two Pickers share when they are the same size: the variant, the option
+ * count and labels, the selected label (a menu button is as wide as the title it
+ * shows) and the `label` (part of the field's box on Android).
  *
- * Four things decide a picker's box, and all four are in the key:
- * - the **variant**, which is a different control with a different sizing policy
- *   (a menu is as wide as its title; a wheel is as wide as its box);
- * - the **option count and labels**, which a wheel renders and a menu's popup
- *   lists, and which decide the widest title the control may ever have to show;
- * - the **selected label**, because a menu button shows one title and a longer
- *   selection makes it wider (SegmentedControl deliberately leaves the selection
- *   out of *its* key: a segment row is the same width whichever segment is
- *   chosen. Copying that here would cache a narrow button against a wide one);
- * - the **label**, which on Android is part of the field's box - of the *field's*:
- *   it names the box a menu draws and never appears in a radio group's box.
- *
- * A `radio` group is the exception to the last two bullets, and drops out of both
- * of their fields: it paints every label at once, so its box is as wide as the
- * widest option and as tall as the option count, and *which* row is selected moves
- * nothing (Q7 Appendix D: `radio|count|labels…`). Nor does it draw `label` at all -
- * on Android that prop is the group's accessibility name - so a field that cannot
- * move the box does not belong in its key either: keeping it would split the cache
- * and make a rename cost a fallback frame and a correction. That is what makes a
- * pick in a radio group not a cold configuration. Both fields stay in every other
- * key — including the one a `radio` builds on iOS, where `resolveVariant` resolves
- * it to `menu` and a menu is as wide as the one title it shows.
- *
- * `disabled` and `tintColor` repaint, they do not resize, and the text size /
- * density / OS control size are *not* here: native folds the environment in
- * through the epoch, and repeating it would fragment the cache
- * (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
+ * A radio group leaves the last two out: it shows every option and draws no
+ * `label`, so neither changes its box. `disabled` and `tintColor` only repaint,
+ * and text size and density are tracked natively.
  */
 function sizingVariantFor(
   options: readonly string[],
@@ -212,8 +154,7 @@ function sizingVariantFor(
   variant: ResolvedPickerVariant
 ): string {
   const selected = options[selectedIndex] ?? '';
-  // A radio group is neither its selection nor its `label`: it shows every option
-  // and draws no field, so both fields leave its key - see the doc comment.
+  // A radio group shows every option and draws no field, so neither is in its key.
   const drawnFromKey = variant !== 'radio';
   return [
     variant,
@@ -224,35 +165,14 @@ function sizingVariantFor(
   ].join(OPTION_SEPARATOR);
 }
 
-/**
- * The variant the native view is asked for: `'menu'`, `'wheel'`, or `'radio'`
- * on the one platform that has a radio group. See {@link resolveVariant}.
- *
- * Not exported: it is this wrapper's own resolution of `PickerVariant`, and the
- * native `variant` prop is a plain `string` on the Hybrid View.
- */
+/** The variant native is asked for: `'radio'` only where there is a radio group. */
 type ResolvedPickerVariant = 'menu' | 'wheel' | 'radio';
 
 /**
- * Whether this platform draws `radio` as a radio group rather than a menu.
- *
- * iOS's `RadioGroupPickerStyle` is `@available(iOS, unavailable)`, so there is
- * no control to host there and DECISIONS D38 item 4 rules that `radio` renders
- * the menu - the same "build it from the platform's real controls, never imitate
- * one" rule (`wheel` needs no such rule: both platforms have a wheel).
- * The resolution happens here,
- * in the one place that decides all three of the things a variant picks: the
- * native `variant` prop, the sizing policy behind it (`useSelfSizingBaseStyle`
- * versus `FILL_WIDTH_BASE_STYLE`) and the `nuiSizingKey`. Resolving it only
- * inside SwiftUI would leave the key naming a `radio` configuration whose width
- * follows a title, and the menu's title-dependent width would be filed against a
- * key with no selection in it - the poisoned-cache bug (G6 review M1) with the
- * variant spelled differently. Same shape as Chip's `SELECTION_RESIZES`: a
- * measured platform fact that the *key* has to know.
- *
- * iOS's own setter still guards (`PickerModel.isWheel` answers "menu" for
- * anything that is not a wheel), so a `radio` that ever reached it by another
- * road would draw a menu rather than nothing.
+ * Whether this platform draws `radio` as a radio group rather than a menu. iOS
+ * has no radio-group picker style. Resolved in JS, not natively, because the
+ * native `variant`, the layout style and the sizing key must all agree: a
+ * `radio` key has no selection in it, while a menu's width follows its title.
  */
 function radioIsRadioGroup(): boolean {
   return Platform.OS === 'android';
@@ -267,9 +187,8 @@ function resolveVariant(variant: PickerVariant): ResolvedPickerVariant {
 }
 
 /**
- * What a `wheel` picker is laid out with: `alignSelf: 'stretch'`, because the
- * wheel's width *is* the box's width and `alignSelf` is the only thing that
- * decides the cross axis (the trap `docs/architecture/sizing.md` §6 records).
+ * A wheel is as wide as its box, and `alignSelf` is the only thing that decides
+ * the cross-axis size.
  */
 const FILL_WIDTH_BASE_STYLE = { alignSelf: 'stretch' } as const;
 
@@ -291,8 +210,7 @@ function clampToOptions(index: number, optionCount: number): number {
 /**
  * The platform picker: SwiftUI `Picker` with `.pickerStyle(.menu)` or `.wheel`
  * on iOS; on Android Material 3's `ExposedDropdownMenuBox` for `menu`, a
- * `ScrollField` drum for `wheel` and a radio group for `radio` - every variant
- * the platform's own control, on both platforms.
+ * `ScrollField` drum for `wheel` and a radio group for `radio`.
  *
  * ```tsx
  * const [index, setIndex] = useState(0)
@@ -303,9 +221,8 @@ function clampToOptions(index: number, optionCount: number): number {
  * />
  * ```
  *
- * The selection is a number, so it goes through the event-count handshake
- * (`docs/architecture/core.md` §4): native paints a choice at once and reverts
- * it if the parent does not move `selectedIndex`.
+ * A controlled picker shows a choice at once and reverts it if the parent does
+ * not move `selectedIndex`.
  */
 export function Picker({
   options,
@@ -328,51 +245,21 @@ export function Picker({
   // options rather than throwing inside a render.
   const safeOptions = options ?? [];
   const optionCount = safeOptions.length;
-  // `'radio'` is a radio group on Android and the menu on iOS, and this is the one
-  // place that resolves it: the prop, the sizing policy below and `nuiSizingKey`
-  // all have to answer the same variant (see `resolveVariant`).
+  // Resolved once: the native prop, the layout style and the sizing key must all
+  // use the same variant.
   const nativeVariant = resolveVariant(variant);
-  // The handshake works on the index. The public `onChange` also carries the
-  // label, looked up from the `options` of *this* render: `useControlled` keeps
-  // one native callback identity forever and swaps only the closure it reads, so
-  // an event reports the labels that were on screen when the choice happened. If
-  // `options` shrank between the choice and the event, the label is `''` - the
-  // index is what the app gets, and it is the one that cannot be stale.
-  // `key`, the `variant` prop and the sizing configuration are one value, computed
-  // once: the native view is replaced exactly when the variant changes and never
-  // otherwise. Android needs it - its measured root decides between the `intrinsic`
-  // and the `fillWidth` question when the composition is built and never re-asks, so
-  // a menu that became a wheel at runtime would go on answering the unbounded
-  // question for the life of the mount (G6 review M2) - and `useSizingId` takes it
-  // for the reason on that hook: the dropped view's `onDropView` must not end the
-  // ledger entry the new mount just filed. Same rule as `Progress.tsx`, which this
-  // control's policy switch was copied from. iOS reads the policy live, so the key
-  // costs it nothing it did not already do.
-  //
-  // Computed before the choice below, because the choice is stamped with the id: the
-  // id is what makes "which mount made this choice" answerable.
+  // The view's `key`, the `variant` prop and the sizing id are one value, so the
+  // native view is replaced exactly when the variant changes. Android fixes its
+  // sizing policy (self-sized or fill-width) when the composition is built, so a
+  // menu cannot become a wheel in place. Computed before `lastChoice`, which is
+  // stamped with the id.
   const variantKey = nativeVariant;
   const sizingId = useSizingId(variantKey);
-  // What an uncontrolled control showed its user last.
-  //
-  // Native owns the displayed index (core.md section 4) and an uncontrolled choice
-  // deliberately costs no React render - but this control's sizing key *names the
-  // title*, so a key that never moved files every width the instance goes on
-  // reporting against the configuration the choice replaced, and the cache entry of
-  // the title that is no longer drawn ends up holding the new one's width (G6 review
-  // M1). Tracking what native reported costs one render per choice, which is what a
-  // discrete control costs everywhere else, and it is what lets the host answer the
-  // new title's size under the new title's key.
-  //
-  // It is stored with the id of the mount that made it, because a variant change
-  // remounts the native view and the fresh mount re-seeds from
-  // `defaultSelectedIndex`: a choice from the old mount no longer names anything.
-  // The id, and not the variant, is the thing to compare: a variant change that
-  // comes back round re-creates a view whose variant *matches* while its content is
-  // the seed again (G6 round-2 review N1), so a remembered choice then names a title
-  // native is not painting, and the fresh mount's first width lands in the cache
-  // entry of the title it replaced. `useSizingId` never reuses an id, so matching on
-  // it can only ever match the mount that made the choice.
+  // An uncontrolled picker's last choice. The sizing key names the shown title,
+  // so without a render per choice the new title's width would be cached under
+  // the old title's key. Stamped with the sizing id, not the variant: a variant
+  // change remounts the view and re-seeds it from `defaultSelectedIndex`, and
+  // ids are never reused.
   const [lastChoice, setLastChoice] = useState<{
     readonly sizingId: number;
     readonly index: number;
@@ -393,9 +280,8 @@ export function Picker({
     lastChoice !== null && lastChoice.sizingId === sizingId
       ? lastChoice.index
       : null;
-  // The index the control will actually show, resolved once: native clamps the
-  // same way in `afterUpdate()`, and the sizing key has to name the title the
-  // control is about to paint, not a number out of range.
+  // Clamped as native clamps it, so the sizing key names the title the control
+  // will actually paint.
   const shownIndex = clampToOptions(
     controlled.value === null
       ? (chosenIndex ?? clampToOptions(defaultSelectedIndex, optionCount))
@@ -406,9 +292,8 @@ export function Picker({
   return (
     <NativeNitroUiPicker
       {...restProps}
-      // A variant change is a different control, not a repaint - see `variantKey`.
-      // It also means an uncontrolled picker starts its new mount again from
-      // `defaultSelectedIndex`, which `docs/components/picker.md` says.
+      // A variant change is a different control: an uncontrolled picker starts
+      // its new mount again from `defaultSelectedIndex`.
       key={variantKey}
       options={safeOptions}
       selectedIndex={

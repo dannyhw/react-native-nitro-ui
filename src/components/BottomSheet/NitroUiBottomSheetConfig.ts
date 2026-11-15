@@ -3,11 +3,8 @@ import type { ViewConfig } from 'react-native-nitro-modules';
 import type { NativeNitroUiBottomSheetProps } from './NativeNitroUiBottomSheet';
 
 /**
- * The Fabric view config of the `NitroUiBottomSheet` Hybrid View.
- *
- * A copy of `nitrogen/generated/shared/json/NitroUiBottomSheetConfig.json`, kept
- * inline for the reason `NitroUiMenuConfig.ts` gives. `src/__tests__/
- * viewConfigs.test.ts` fails when the copy and nitrogen's output disagree.
+ * The Fabric view config of the `NitroUiBottomSheet` Hybrid View. A hand-kept copy of
+ * the JSON config nitrogen generates; a unit test fails when the two disagree.
  */
 export const NitroUiBottomSheetConfig: ViewConfig<NativeNitroUiBottomSheetProps> =
   {

@@ -51,39 +51,17 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicInteger
 
-/*
- * Tooltip (G18, DECISIONS D38, Q7 Appendix C3): Material 3's `TooltipBox`, with a
- * `PlainTooltip` for a message alone and a `RichTooltip` once there is a title or an
- * action.
- *
- * The view React Native lays out is the **anchor**: the JS wrapper fills its own box
- * with it, behind the app's children, so `TooltipBox`'s content is an empty box the size
- * of this view, and Material positions the popup against that box. It takes no touch -
- * the composition has no pointer input, and React Native's own touch search skips it
- * (`ReactPointerEventsView`, `PointerEvents.NONE`) - so a tap lands on the app's children.
- *
- * The popup is a window composed by this host's composition, the machinery Picker and
- * Menu proved (`docs/components/host.md`, "Popups and dialogs"): disposing the
- * composition in `drop()` takes the window down with the mount. A closed tooltip
- * composes nothing at all - `composing` is false until the first present.
- */
+// Tooltip: Material 3's `TooltipBox`. The view React Native lays out is the anchor: an
+// empty box behind the app's children that takes no touch.
 
-/** State of one tooltip. See [NitroUiModel] for the shape this has to have. */
 internal class TooltipModel : NitroUiModel() {
-  /** Whether the tooltip is presented: the handshake's `displayed`, as snapshot state. */
   var presented by mutableStateOf(false)
     private set
 
-  /**
-   * Whether the tooltip is composed: from a present until its exit transition has
-   * finished, so the hide still animates (Q7 C3 "A closed tooltip composes nothing").
-   */
+  /** Composed from a present until the exit transition finishes, so the hide animates. */
   var composing by mutableStateOf(false)
 
-  /**
-   * Bumped on every presentation, so a tooltip presented again (a refused close) is a
-   * fresh `TooltipState` that animates in again, not the one still on its way out.
-   */
+  /** Bumped per presentation, so presenting again gets a new `TooltipState` that animates in. */
   var generation by mutableIntStateOf(0)
     private set
 
@@ -97,7 +75,6 @@ internal class TooltipModel : NitroUiModel() {
   var anchorWidthPx by mutableIntStateOf(0)
   var anchorHeightPx by mutableIntStateOf(0)
 
-  /** `presented` behind the event-count handshake (`core.md` section 4). */
   val state = NitroUiControlledValue(false)
 
   var onPresentedChange: ((Boolean, Double) -> Unit)? = null
@@ -110,27 +87,19 @@ internal class TooltipModel : NitroUiModel() {
   val hasActions: Boolean
     get() = actions.isNotEmpty()
 
-  /**
-   * How many times this mount's popup went up: counted where Material composes the
-   * popup (`state.isVisible`), not in the tooltip content, which material3 1.5 composes
-   * again inside the same popup once it knows the anchor's position
-   * (`TooltipHost.TooltipPresentation`).
-   */
+  // Counted where Material composes the popup, not in the tooltip content, which
+  // material3 1.5 can compose again inside the same popup.
   private val composedPresentations = AtomicInteger(0)
 
-  /** What the composed tooltip showed, for [readReport]. Written on the UI thread. */
+  // Test read-outs. Written on the UI thread, read from the JS thread.
   @Volatile private var composedFacts = "kind=none"
 
-  /** Where Material placed the popup against which anchor box, in px, for [readReport]. */
   @Volatile private var geometry = "popupRect=-;anchorRect=-;hostRect=-"
 
-  /** How many times Material placed this popup, for [readReport]: a move places it again. */
   @Volatile private var placements = 0
 
-  /** How many closes this mount reported, by reason, for [readReport]. */
   @Volatile private var closeReasons = ""
 
-  /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
     val next = state.displayed
     if (next == presented) {
@@ -144,7 +113,7 @@ internal class TooltipModel : NitroUiModel() {
     return true
   }
 
-  /** An action was tapped: report it, then the close (D32's order), then close. */
+  /** Reports the action first, then the close. */
   fun performAction(id: String) {
     if (!presented || actions.none { it.id == id }) {
       return
@@ -178,16 +147,10 @@ internal class TooltipModel : NitroUiModel() {
     onPresentedChange?.invoke(false, count.toDouble())
   }
 
-  /** Recorded by the composed tooltip content. */
   fun noteComposed(facts: String) {
     composedFacts = facts
   }
 
-  /**
-   * Material placed the popup: [anchor] is the box it was given (window coordinates),
-   * [size] the popup's, [position] where it put it, and [host] this view's own box in the
-   * same window - which [anchor] has to be, or the popup points at something else.
-   */
   fun notePlaced(
     anchor: IntRect,
     size: IntSize,
@@ -202,23 +165,17 @@ internal class TooltipModel : NitroUiModel() {
       ";hostRect=$host;density=$density;placements=$placements"
   }
 
-  /** The popup went up: see [composedPresentations]. */
   fun notePopupShown() {
     composedPresentations.incrementAndGet()
   }
 
-  /** The popup came down, so nothing it showed or where it sat is on screen any more. */
   fun notePopupGone() {
     composedFacts = "kind=none"
     geometry = "popupRect=-;anchorRect=-;hostRect=-"
     placements = 0
   }
 
-  /**
-   * What this tooltip shows, as `key=value` pairs. Every field is a volatile written on
-   * the UI thread or an atomic, so this is safe from the JS thread without waiting for
-   * the UI thread (`core.md` section 5).
-   */
+  // Every field is volatile or atomic, so this is safe to call from the JS thread.
   fun readReport(lifetime: String): String =
     "presented=${if (state.displayed) 1 else 0};js=${if (state.js == true) 1 else 0}" +
       ";live=${livePresentations.get()};presentCount=${composedPresentations.get()}" +
@@ -248,13 +205,8 @@ internal class TooltipModel : NitroUiModel() {
   }
 
   companion object {
-    /**
-     * How many tooltip popups this process has composed right now: one per popup,
-     * counted by a `DisposableEffect` inside the popup's own content, so it returns to
-     * zero exactly when nothing of a presentation is left - closed, dropped or recycled.
-     * Process-wide, because a dropped mount has nothing left to report; a harness reads
-     * it through a fresh mount.
-     */
+    // Tooltip popups composed right now, process-wide, so a test can read it through a
+    // fresh mount after the one that presented is gone.
     val livePresentations = AtomicInteger(0)
   }
 }
@@ -270,24 +222,18 @@ private class TooltipHost(
   model: TooltipModel,
 ) : NitroComposeHost<TooltipModel>(context, activity, model),
   ReactPointerEventsView {
-  /** Where a detach's deferred check runs. */
   private val mainHandler = Handler(Looper.getMainLooper())
 
   /** Bumped per mount, so a deferred check from a dropped mount stands down. */
   var mountGeneration = 0
 
   init {
-    // The anchor is not an accessibility element: the app's children are, and the
-    // popup announces itself (Q7 C5).
+    // The anchor is not an accessibility element: the app's children are.
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
   }
 
-  /**
-   * React Native's own touch search skips this view: the anchor is behind the app's
-   * children and never the target of a touch, which is what `pointerEvents="none"`
-   * asks and what only a [ReactPointerEventsView] can answer on Android (any other
-   * view reads as `auto`).
-   */
+  // Makes React Native's touch search skip this view. Only a `ReactPointerEventsView`
+  // can answer `none` on Android; any other view reads as `auto`.
   override val pointerEvents: PointerEvents
     get() = PointerEvents.NONE
 
@@ -298,8 +244,7 @@ private class TooltipHost(
     oldh: Int,
   ) {
     super.onSizeChanged(w, h, oldw, oldh)
-    // The anchor's box, for the composition: the root offers its content an unbounded
-    // height, so `fillMaxSize()` would give Material a zero-height anchor.
+    // The root offers its content unbounded height, so `fillMaxSize()` would be zero high.
     model.anchorWidthPx = w
     model.anchorHeightPx = h
     applyModelWrites()
@@ -317,8 +262,7 @@ private class TooltipHost(
   @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   private fun TooltipPresentation(model: TooltipModel) {
-    // Persistent, so neither kind hides itself on Material's timer: a tooltip stays up
-    // until the user or the app closes it, on both platforms (Q7 C1).
+    // Persistent: Material's timer never hides it; the user or the app does.
     val tooltipState = remember { TooltipState(initialIsVisible = false, isPersistent = true) }
     val presented = model.presented
     LaunchedEffect(presented) {
@@ -335,13 +279,9 @@ private class TooltipHost(
     if (!presented && transition.isIdle && !transition.currentState) {
       SideEffect { model.composing = false }
     }
-    // The popup's own lifetime, on the condition Material composes the popup on
-    // (`BasicTooltipBox`: `if (state.isVisible) TooltipPopup(...)`). Not inside the
-    // tooltip content: material3 1.5's `TooltipBox` wraps that content in a `key` of the
-    // anchor's position against the popup's, which changes once the first layout has
-    // both, so the content is disposed and composed again inside a popup that stayed up
-    // and was not placed again. Counted there, one presentation read as two and its
-    // placement was wiped (measured on 1.5.0-beta02, G18 merge).
+    // Tracked on the condition Material composes the popup on, not inside the tooltip
+    // content: material3 1.5 keys that content on the anchor's position, so it is disposed
+    // and composed again inside a popup that stayed up.
     if (tooltipState.isVisible) {
       DisposableEffect(Unit) {
         model.notePopupShown()
@@ -363,11 +303,11 @@ private class TooltipHost(
       // Back and TalkBack reach an actionable tooltip's buttons; a plain one leaves
       // focus where it was (an open keyboard keeps its field).
       focusable = hasActions,
-      // No trigger in v1: the app opens it (Q7 C1).
+      // The app opens it; there is no built-in trigger.
       enableUserInput = false,
       hasAction = hasActions,
     ) {
-      // The anchor: this view's own box, which is the wrapper's.
+      // The anchor: this view's own box.
       with(density) {
         Box(Modifier.size(model.anchorWidthPx.toDp(), model.anchorHeightPx.toDp()))
       }
@@ -392,8 +332,7 @@ private class TooltipHost(
     val modifier =
       Modifier
         .tooltipTestTag(model.testID)
-        // TalkBack announces the tooltip when it shows: the app opened it, so nothing
-        // else would tell a screen-reader user it is there (Q7 C5).
+        // TalkBack announces the tooltip when it shows; nothing else would tell the user.
         .semantics { liveRegion = LiveRegionMode.Polite }
     if (rich) {
       RichTooltip(
@@ -426,13 +365,8 @@ private class TooltipHost(
     }
   }
 
-  /**
-   * Count this popup for as long as its content is composed - the Dialog witness
-   * (`HybridNitroUiDialog.kt`, `DialogWitness`), placed inside the popup so it counts
-   * the window, not the presentation's intent. Material may compose the content again
-   * inside the same popup (see [TooltipPresentation]); the count stays balanced through
-   * that, which is all `live` claims. The per-mount readings are the popup's own.
-   */
+  // Counts this popup while its content is composed. Balanced even when Material
+  // composes the content again.
   @Composable
   private fun TooltipWitness() {
     DisposableEffect(Unit) {
@@ -443,13 +377,8 @@ private class TooltipHost(
     }
   }
 
-  /**
-   * Losing the window while presented closes the tooltip and reports it, as a dialog
-   * does: a Compose popup survives its host's detach (a screen push, say) and would
-   * otherwise stay up over a screen it does not belong to. One turn later, so an
-   * unmount's `onDropView`, which runs in the same mount batch, and a reparent that puts
-   * the view straight back both get there first.
-   */
+  // A Compose popup survives its host's detach (a screen push), so close it. One turn
+  // later, so an unmount's `onDropView` or an immediate re-attach gets there first.
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
     if (!model.presented && !model.composing) {
@@ -469,11 +398,8 @@ private class TooltipHost(
 }
 
 /**
- * Material's position provider, plus a record of what it was asked and answered: the
- * anchor box it placed the popup against (window coordinates), the popup's size, and
- * the offset it chose: the popup window's position against the anchor, for the report.
- * Material asks again whenever the anchor moves, so the popup follows a layout move
- * or a scroll rather than staying over the place the anchor left (measured, G18).
+ * Material's position provider, recording what it was asked and answered for the test
+ * report. Material asks again whenever the anchor moves.
  */
 private class RecordingPositionProvider(
   private val material: PopupPositionProvider,
@@ -501,10 +427,7 @@ private class RecordingPositionProvider(
   }
 }
 
-/**
- * `<testID>-tooltip` on the popup's content, as a resource id uiautomator can find.
- * Nothing is tagged when the app gave no `testID`.
- */
+/** Tags the popup `<testID>-tooltip`, as a resource id that uiautomator can find. */
 @OptIn(ExperimentalComposeUiApi::class)
 private fun Modifier.tooltipTestTag(testID: String?): Modifier =
   if (testID == null) {
@@ -518,11 +441,9 @@ class HybridNitroUiTooltip(
 ) : HybridNitroUiTooltipSpec(), RecyclableView {
   private val model = TooltipModel()
 
-  /** Where [runOnUi] sends work that is not already on the UI thread. */
   private val mainHandler = Handler(Looper.getMainLooper())
   private val host = TooltipHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
@@ -615,8 +536,7 @@ class HybridNitroUiTooltip(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The handshake decides whether React's `presented` wins - including a close JS
-    // refused, which presents the tooltip again (D33).
+    // A close that JS refused presents the tooltip again.
     model.state.reconcile()
     if (model.applyDisplayed()) {
       host.markDirty()
@@ -626,8 +546,6 @@ class HybridNitroUiTooltip(
 
   override fun prepareForRecycle() {
     host.mountGeneration += 1
-    // `host.prepareForRecycle()` resets the model, which stops composing the popup -
-    // and `onDropView` already disposed the composition that held it.
     host.prepareForRecycle()
   }
 
@@ -635,8 +553,7 @@ class HybridNitroUiTooltip(
     host.mountGeneration += 1
     model.onPresentedChange = null
     model.onAction = null
-    // The composition disposal in `drop()` takes the popup down with the mount; the
-    // flags follow so the state is honest as well as the screen.
+    // Disposing the composition takes the popup down; make the state agree.
     model.state.displayed = false
     model.applyDisplayed()
     model.composing = false
@@ -661,7 +578,6 @@ class HybridNitroUiTooltip(
     }
   }
 
-  /** Run [action] on the UI thread, now if already there, queued otherwise. */
   private inline fun runOnUi(crossinline action: () -> Unit) {
     if (Looper.myLooper() == Looper.getMainLooper()) {
       action()

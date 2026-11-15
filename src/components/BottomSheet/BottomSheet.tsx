@@ -12,20 +12,16 @@ import type { NitroUiSheetDetent } from './BottomSheet.nitro';
 import { NativeNitroUiBottomSheet } from './NativeNitroUiBottomSheet';
 
 /**
- * A height the sheet can rest at. The names are SwiftUI's
- * (`PresentationDetent`), because the platform's names win where the two differ
- * (PLAN principle 1).
+ * A height the sheet can rest at, named as SwiftUI's `PresentationDetent` is.
  *
- * - `'fit'`: as tall as the content. The content's own layout decides, and the
- *   sheet follows it while it is up.
+ * - `'fit'`: as tall as the content, following it while the sheet is up.
  * - `'medium'`: about half the screen. `'large'`: the full sheet height.
  * - `{ height }`: that many points (clamped to the largest the sheet can be).
  * - `{ fraction }`: that share of the largest height, in `(0, 1]`.
  *
  * Android's Material 3 sheet has two rest positions only: `'medium'` is its
- * half-expanded one, and the largest other detent is its expanded one
- * (`docs/components/bottom-sheet.md`). iOS 15 has only `'medium'` and `'large'`,
- * and shows every other kind as `'large'`.
+ * half-expanded one, and the largest other detent is its expanded one. iOS 15
+ * has only `'medium'` and `'large'`, and shows every other kind as `'large'`.
  */
 export type BottomSheetDetent =
   'fit' | 'medium' | 'large' | { height: number } | { fraction: number };
@@ -54,9 +50,9 @@ export interface BottomSheetProps {
    */
   children?: ReactNode;
   /**
-   * Where the sheet can rest, smallest first (UIKit's rule; the sheet opens at the
-   * first). Default: `['fit']`. A dev build throws for an empty list, a repeat or
-   * an invalid size.
+   * Where the sheet can rest, smallest first; the sheet opens at the first.
+   * Default: `['fit']`. A dev build throws for an empty list, a repeat or an
+   * invalid size.
    */
   detents?: readonly BottomSheetDetent[] | undefined;
   /**
@@ -90,10 +86,10 @@ export interface BottomSheetProps {
    */
   testID?: string | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for this library's own tests and
+   * benchmarks.
    *
-   * @internal Not app API (DECISIONS D14). The shape is written inline for the
-   * reason `DatePickerProps.hybridRef` gives.
+   * @internal Not app API.
    */
   hybridRef?:
     | ((view: {
@@ -113,7 +109,6 @@ export interface BottomSheetProps {
   nuiPerfId?: number | null | undefined;
 }
 
-/** The detent a sheet gets when the app names none. */
 const DEFAULT_DETENTS: readonly NitroUiSheetDetent[] = Object.freeze([
   Object.freeze({ kind: 'fit', value: 0 }),
 ]);
@@ -126,9 +121,7 @@ function describeDetent(detent: unknown): string {
   }
 }
 
-/**
- * One public detent as native wants it, or `null` when it is not a detent.
- */
+/** One public detent in native's form, or `null` when it is not a valid detent. */
 function toNativeDetent(detent: BottomSheetDetent): NitroUiSheetDetent | null {
   if (detent === 'fit' || detent === 'medium' || detent === 'large') {
     return { kind: detent, value: 0 };
@@ -154,14 +147,9 @@ function toNativeDetent(detent: BottomSheetDetent): NitroUiSheetDetent | null {
 }
 
 /**
- * The detents as native wants them, in the app's order.
- *
- * A dev build throws for what native would otherwise have to guess at: no
- * detents (a sheet with nowhere to rest), a detent that is not one, and a repeat
- * (`onDetentChange` could not say which of two equal detents was chosen). A
- * release build drops those and falls back to `['fit']` when nothing is left.
- * The order is kept rather than sorted, so `onDetentChange`'s index is the app's
- * own index; a list a dev build can tell is out of order warns.
+ * The detents in native's form, in the app's order so `onDetentChange`'s index
+ * is the app's own. A dev build throws for an empty list, an invalid detent or
+ * a repeat; a release build drops those and falls back to `['fit']`.
  */
 export function toNativeDetents(
   detents: readonly BottomSheetDetent[] | undefined
@@ -201,10 +189,9 @@ export function toNativeDetents(
 }
 
 /**
- * The detents' rank where it can be known without the screen: `medium` below
- * `large`, and a fraction against both. A `fit` or a fixed height cannot be placed
- * against them without knowing the content or the screen, so it is never
- * reported as out of order.
+ * A detent's share of the full height, where it is known without the screen.
+ * `fit` and a fixed height depend on the content or the screen, so they are
+ * `null` and never reported as out of order.
  */
 function shareOf(detent: NitroUiSheetDetent): number | null {
   switch (detent.kind) {
@@ -252,10 +239,9 @@ function detentsSignature(detents: readonly NitroUiSheetDetent[]): string {
 }
 
 /**
- * The native detents, with a stable identity: an inline `detents={[...]}` makes a
- * new array every render, and props diff by identity, so without this an unrelated
- * parent re-render would re-send the struct array (the reason `Dialog`'s
- * `useNativeActions` exists).
+ * The native detents with a stable identity. An inline `detents={[...]}` is a
+ * new array every render and props diff by identity, so without this any parent
+ * re-render would re-send the array.
  */
 function useNativeDetents(
   detents: readonly BottomSheetDetent[] | undefined
@@ -282,18 +268,16 @@ function useNativeDetents(
 type ContentBox = { width: number; height: number };
 
 /**
- * The width a sheet's content will have before native has said: the window's on
- * iOS (a phone's page sheet is as wide as the screen) and Material's cap of 640 dp
- * on Android (`BottomSheetDefaults.SheetMaxWidth`). Laying the content out at this
- * width in the same commit that presents is what lets a `fit` sheet open at its
- * real height; native's own report corrects it where the guess is wrong (an iPad,
- * a landscape safe area).
+ * The content's width before native has reported it: the window's on iOS, and
+ * Material's 640 dp sheet cap on Android. Laying out at this width in the commit
+ * that presents lets a `fit` sheet open at its real height; native's report
+ * corrects a wrong guess (an iPad, a landscape safe area).
  */
 function estimatedWidth(windowWidth: number): number {
   return Platform.OS === 'android' ? Math.min(windowWidth, 640) : windowWidth;
 }
 
-/** A module-level no-op, so an absent handler is always sent with one identity (D7b). */
+/** A module-level no-op, so an absent handler is always sent with one identity. */
 function notProvided(): void {
   // Intentionally empty: the caller asked for nothing.
 }
@@ -316,7 +300,7 @@ function notProvided(): void {
  *
  * The content is laid out at the sheet's width: a `fit` sheet is as tall as its
  * content and follows it, and a sheet without `fit` gives its content the
- * sheet's height. The component has no box in the screen that renders it.
+ * sheet's height. The component takes no space in the screen that renders it.
  */
 export function BottomSheet({
   isPresented,
@@ -345,9 +329,8 @@ export function BottomSheet({
   const processedColor = useProcessedColor(containerColor);
   const { width: windowWidth } = useWindowDimensions();
 
-  // The content is mounted from the render that asks for the sheet until native
-  // says the sheet has gone (Expo's `isMounted` pattern; D33): it has to survive
-  // the exit animation, and a closed sheet costs nothing but its empty node.
+  // The content stays mounted until native says the sheet has gone, so it
+  // survives the exit animation.
   const [mounted, setMounted] = useState(presented);
   if (presented && !mounted) {
     setMounted(true);
@@ -364,11 +347,9 @@ export function BottomSheet({
       );
     }
   ) as NitroCallbackProp<(width: number, height: number) => void>;
-  // The content goes with the sheet. While the app still says `isPresented` - a
-  // refused dismissal, or a close and an open inside one exit - the render this
-  // causes mounts it straight back (`presented && !mounted` above) before anything
-  // commits, so the next sheet keeps the same content; and a parent that follows a
-  // dismissal late gets one more call, when its `false` finds nothing on screen.
+  // If the app still says `isPresented` (a refused dismissal, or a close and an
+  // open inside one exit), `presented && !mounted` above remounts the content in
+  // the render this causes, before anything commits.
   const dismissedCallback = useStableCallback((ended: boolean) => {
     setMounted(false);
     if (ended) onDismiss?.();
@@ -378,8 +359,8 @@ export function BottomSheet({
   ) as NitroCallbackProp<(index: number) => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
 
-  // A dismissal the app refused (DECISIONS D33), exactly as the dialogs do it: only
-  // the commit whose echoed count moved counts.
+  // Warns once about a dismissal the app refused. Only a commit whose echoed
+  // event count moved is checked.
   const warnedRefusal = useRef(false);
   const echoedAtLastCheck = useRef(0);
   const echoed = controlled.mostRecentEventCount;
@@ -398,10 +379,9 @@ export function BottomSheet({
   }, [echoed, presented]);
 
   const fits = nativeDetents.some((detent) => detent.kind === 'fit');
-  // The node *is* the content's box: absolute at the origin, as wide as the sheet,
-  // and - unless `fit` lets Yoga size it from the children - as tall. Nothing of it
-  // is in the app's window while the sheet is up (native moves the view into the
-  // sheet), and a closed sheet is `0 x 0`.
+  // The node is the content's box: absolute at the origin, as wide as the sheet
+  // and, unless `fit` lets Yoga size it from the children, as tall. Native moves
+  // the view into the sheet, so none of it is in the app's window.
   const contentStyle = mounted
     ? {
         position: 'absolute' as const,
@@ -434,8 +414,8 @@ export function BottomSheet({
       pointerEvents="box-none"
       style={contentStyle}
     >
-      {/* The content is presented in the sheet, not in the box it was written in, so a
-       * `Form.Row` above lays none of it out: see `src/core/useSelfSizing.ts`. */}
+      {/* The content is presented in the sheet, so an enclosing `Form.Row`
+       * does not lay it out. */}
       <InsideRowContext.Provider value={false}>
         {mounted ? children : null}
       </InsideRowContext.Provider>
@@ -443,7 +423,6 @@ export function BottomSheet({
   );
 }
 
-/** A closed sheet's node: no box at all. */
 const CLOSED_STYLE = {
   position: 'absolute',
   left: 0,

@@ -66,41 +66,17 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/*
- * AlertDialog and ConfirmationDialog (G11, DECISIONS D33): one native view behind both
- * exports. The `alert` variant composes Material 3's `AlertDialog`; the `confirmation`
- * variant composes a Material 3 `ModalBottomSheet` with one row per action - Material's
- * action-sheet idiom, and the library's first `ModalBottomSheet` (Q5 B3).
- *
- * Both are windows composed by the host's own composition, which is the machinery
- * DatePicker's dialog proved (H2b): the composition that composes the window is the one
- * that closes it, so `NitroComposeHost.drop()` disposing the composition takes the window
- * down with the mount, and a `<Host>` that composes the dialog takes it down with the
- * Host. The view React Native lays out is a `0 x 0` anchor with nothing of its own to
- * draw (`sizing: null`).
- */
+// AlertDialog and ConfirmationDialog: one native view behind both. `alert` composes
+// Material 3's `AlertDialog`; `confirmation` a `ModalBottomSheet` with one row per action.
 
-/** State of one dialog. See [NitroUiModel] for the shape this has to have. */
 internal class DialogModel : NitroUiModel() {
-  /**
-   * Whether the dialog is presented: the handshake's `displayed`, mirrored into
-   * snapshot state because composing the window is what presenting it *is* here.
-   */
   var presented by mutableStateOf(false)
     private set
 
-  /**
-   * Whether a closed sheet is still animating out. A programmatic close runs
-   * `sheetState.hide()` before the subtree stops composing (Q5 B3), so the window
-   * leaves with its animation instead of vanishing; the witness counts until then.
-   */
+  /** Whether a closed sheet is still animating out; it stays composed until then. */
   var closing by mutableStateOf(false)
 
-  /**
-   * Bumped on every presentation, so a dialog presented again (a refused dismissal)
-   * is a fresh window - a fresh `AlertDialog`, a sheet that animates in again -
-   * rather than the one still on its way out.
-   */
+  /** Bumped per presentation, so presenting again makes a new window that animates in. */
   var generation by mutableIntStateOf(0)
     private set
 
@@ -113,7 +89,6 @@ internal class DialogModel : NitroUiModel() {
   var tintColor by mutableStateOf<Int?>(null)
   var testID by mutableStateOf<String?>(null)
 
-  /** `presented` behind the event-count handshake (`core.md` section 4). */
   val state = NitroUiControlledValue(false)
 
   var onPresentedChange: ((Boolean, Double) -> Unit)? = null
@@ -122,20 +97,13 @@ internal class DialogModel : NitroUiModel() {
   /** Whether the anchor is inside a `<Host>`, for the report. */
   @Volatile var hosted = false
 
-  /**
-   * How many windows this mount has composed - counted where the window enters the
-   * composition, so a presentation that never got a window (no attach yet) is not one.
-   */
+  /** Windows this mount has composed, counted where the window enters the composition. */
   private val composedPresentations = AtomicInteger(0)
 
-  /**
-   * Bumped to arm one row probe, and read by [RowProbeWitness], which answers it.
-   * Snapshot state because arming has to reach the composition that draws the rows.
-   */
+  /** Bumped to arm one row probe. Snapshot state, so arming reaches the composition. */
   var probeToken by mutableIntStateOf(0)
     private set
 
-  /** Whether the one armed probe is still unanswered, so a re-arm cannot pile up. */
   @Volatile var probePending = false
     private set
 
@@ -143,20 +111,14 @@ internal class DialogModel : NitroUiModel() {
 
   @Volatile private var probeLine = ""
 
-  /** What the composition last composed, for [readReport]. Written on the UI thread. */
+  // Test read-outs. Written on the UI thread, read from the JS thread.
   @Volatile private var composedFacts = "kind=none"
 
-  /** The ids the window composed, in the app's order, for [readReport]'s `drawn`. */
   @Volatile private var composedIds: List<String> = emptyList()
 
-  /**
-   * Whether each action's label is *drawn* enabled, by id - read from the colour the
-   * composed label received, not from the action's `disabled` flag, so a row that
-   * takes no tap but is painted like one that does reads as the bug it is.
-   */
+  // Whether each action's label is drawn enabled, read from the colour it actually received.
   private val drawnEnabled = ConcurrentHashMap<String, Boolean>()
 
-  /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
     val next = state.displayed
     if (next == presented) {
@@ -174,7 +136,7 @@ internal class DialogModel : NitroUiModel() {
     return true
   }
 
-  /** An action was tapped: report it, then the close (D32's order), then close. */
+  /** Reports the action first, then the close. */
   fun performAction(id: String) {
     if (!presented) {
       return
@@ -212,7 +174,6 @@ internal class DialogModel : NitroUiModel() {
     onPresentedChange?.invoke(false, count.toDouble())
   }
 
-  /** Recorded by the composed window. */
   fun noteComposed(
     facts: String,
     ids: List<String>,
@@ -221,7 +182,6 @@ internal class DialogModel : NitroUiModel() {
     composedIds = ids
   }
 
-  /** Recorded by each composed action label. */
   fun noteDrawn(
     id: String,
     enabled: Boolean,
@@ -230,10 +190,8 @@ internal class DialogModel : NitroUiModel() {
   }
 
   /**
-   * Ask for one read of the sheet's rows, through [RowProbeWitness]. Only a confirmation
-   * sheet answers, and only one read is ever in flight: the answer costs a window-sized
-   * bitmap draw, so it happens because a harness asked for it by name
-   * ([PROBE_ROWS_ID]) and not on every read of the report.
+   * Arms one read of the sheet's rows. One at a time, and only on request: the answer
+   * costs a window-sized bitmap draw.
    */
   fun armRowProbe() {
     if (probePending || !presented || variant != "confirmation") {
@@ -243,16 +201,12 @@ internal class DialogModel : NitroUiModel() {
     probeToken += 1
   }
 
-  /** What a row probe measured. The count is how a test picks its own answer out. */
   fun publishRowProbe(line: String) {
     probePending = false
     probeLine = "n=${probeCount.incrementAndGet()} $line"
   }
 
-  /**
-   * The sheet left composition with a probe armed, so nothing will ever answer it.
-   * Without this the flag stays set and no later probe can be armed at all.
-   */
+  /** The sheet left composition with a probe armed; clear it so a later one can be armed. */
   fun abandonRowProbe() {
     probePending = false
   }
@@ -267,11 +221,7 @@ internal class DialogModel : NitroUiModel() {
     drawnEnabled.clear()
   }
 
-  /**
-   * What this dialog shows, as `key=value` pairs. Every field is either a volatile
-   * written on the UI thread or an atomic, so this is safe from the JS thread without
-   * waiting for the UI thread (`core.md` section 5).
-   */
+  // Every field is volatile or atomic, so this is safe to call from the JS thread.
   fun readReport(lifetime: String): String =
     "presented=${if (state.displayed) 1 else 0};js=${if (state.js == true) 1 else 0}" +
       ";live=${livePresentations.get()};presentCount=${composedPresentations.get()}" +
@@ -317,13 +267,8 @@ internal class DialogModel : NitroUiModel() {
   }
 
   companion object {
-    /**
-     * How many dialog windows this process has composed right now: one per window,
-     * counted by a `DisposableEffect` in the subtree that composes it, so it returns to
-     * zero exactly when nothing of a presentation is left - closed, dropped, recycled or
-     * taken down with its Host. Process-wide, because a dropped mount has nothing left
-     * to report; a harness reads it through a fresh mount.
-     */
+    // Dialog windows composed right now, process-wide, so a test can read it through a
+    // fresh mount after the one that presented is gone.
     val livePresentations = AtomicInteger(0)
   }
 }
@@ -339,9 +284,8 @@ private const val DISABLED_ALPHA_CEILING = 0.5f
 private val CONFIRMATION_SHEET_VALUES = setOf(SheetValue.Hidden, SheetValue.Expanded)
 
 /**
- * The button colours a dialog needs, shared across instances (`core.md` section 3,
- * "Shared objects"): `ButtonDefaults.textButtonColors(contentColor = ...)` builds a
- * fresh object per call, so it is built once per (scheme, colour) for the process.
+ * Text-button colours per (scheme, colour), shared across instances:
+ * `ButtonDefaults.textButtonColors(contentColor = ...)` builds a new object per call.
  */
 private object DialogButtonColorsCache {
   private const val MAX_ENTRIES = 8
@@ -378,7 +322,6 @@ private object DialogButtonColorsCache {
   }
 }
 
-/** The text-button colours for one action, from [DialogButtonColorsCache]. */
 @Composable
 private fun dialogButtonColors(
   role: String,
@@ -403,22 +346,16 @@ private class DialogHost(
   activity: Activity?,
   model: DialogModel,
 ) : NitroComposeHost<DialogModel>(context, activity, model) {
-  /** Where a detach's deferred check runs. */
   private val mainHandler = Handler(Looper.getMainLooper())
 
   /** Bumped per mount, so a deferred check from a dropped mount stands down. */
   var mountGeneration = 0
 
   init {
-    // The anchor is not an accessibility element: the window is (Q5 B5).
+    // The anchor is not an accessibility element: the window is.
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
   }
 
-  /**
-   * A `<Host>` composes this dialog, window and all: a Compose dialog opened from the
-   * Host's composition is proven for DatePicker (H2b), and a window with no anchor does
-   * not follow a layout move the way an anchored popup must.
-   */
   override val isHostable: Boolean
     get() = true
 
@@ -437,12 +374,7 @@ private class DialogHost(
     }
   }
 
-  /**
-   * Count this presentation for as long as the composition that opened it lives - the
-   * DatePicker witness (`HybridNitroUiDatePicker.kt`, `Presentation`), for the same
-   * reasons: closing, dropping the view and disposing the composition each take their
-   * own path, and a leak on any of them leaves the count above zero.
-   */
+  // Counts this presentation for as long as the composition that opened it lives.
   @Composable
   private fun DialogWitness(model: DialogModel) {
     DisposableEffect(Unit) {
@@ -502,11 +434,7 @@ private class DialogHost(
     }
   }
 
-  /**
-   * An action's text, in the colour its button or row provides - and that colour,
-   * recorded for the report: Material draws a disabled label at 38 % alpha, every
-   * enabled one opaque.
-   */
+  // Records the colour the label received: Material draws a disabled label at 38% alpha.
   @Composable
   private fun ActionLabel(
     model: DialogModel,
@@ -522,8 +450,6 @@ private class DialogHost(
   @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
   @Composable
   private fun ConfirmationSheet(model: DialogModel) {
-    // material3 1.5's sheet state, with the two values the old
-    // `rememberModalBottomSheetState(skipPartiallyExpanded = true)` allowed.
     val sheetState =
       rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
@@ -574,10 +500,8 @@ private class DialogHost(
             modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
           )
         }
-        // The group carries its own 16 dp inset, which is the radius of its outer corners:
-        // flush to the sheet the corners cut grey wedges against the sheet's edge, and
-        // segments that touch are not segments, so they keep material3's own gap. The title
-        // and message above keep the sheet's 24 dp padding.
+        // 16 dp inset, the radius of the group's outer corners: flush to the sheet they would
+        // cut wedges against its edge.
         Column(
           modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
           verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
@@ -585,16 +509,9 @@ private class DialogHost(
           val tint = model.tintColor
           val rowColors = ListItemDefaults.segmentedColors()
           ordered.forEachIndexed { index, action ->
-            // The interactive segmented row, and the row's own `enabled`: a disabled
-            // action takes no press, says so in the accessibility tree, and is painted
-            // with the component's own disabled colour rather than one picked here.
-            // (Written when M3 1.4's `ListItem` had no `enabled`; 1.5's interactive row
-            // has one, and this is the Dialog's Expressive pass - D40 pass 3 B.)
-            //
-            // `tintColor` and `role: 'destructive'` replace only the *enabled* content
-            // colour, so a disabled destructive row is still drawn disabled. The colour
-            // set is remembered, not rebuilt: `ListItemColors` has twenty-four fields and
-            // a prop update must not allocate one per row (`core.md` section 3).
+            // `tintColor` and the destructive role replace only the enabled content colour, so
+            // a disabled row is still drawn disabled. Remembered: a props update must not
+            // allocate a `ListItemColors` per row.
             val content =
               when {
                 action.role == "destructive" -> MaterialTheme.colorScheme.error
@@ -624,24 +541,14 @@ private class DialogHost(
     }
   }
 
-  /**
-   * Answers one armed row probe: what the sheet's rows *are*, by their own accessibility
-   * state and the container they actually draw.
-   *
-   * Composed inside the sheet because that is where `LocalView` is the sheet's own
-   * window, and harness-only because the harness can neither tap another window (that is
-   * `real-input:android`'s job) nor read it any other way. The answer needs a bitmap
-   * draw of that window, so it runs on the UI thread and costs a frame or two - a price
-   * no app ever pays, since nothing arms a probe outside the harness.
-   */
+  // Test-only. Composed inside the sheet because that is where `LocalView` is the
+  // sheet's own window. The answer needs a bitmap draw of that window.
   @Composable
   private fun RowProbeWitness(model: DialogModel) {
     val view = LocalView.current
     val density = LocalDensity.current.density
     val token = model.probeToken
     DisposableEffect(Unit) {
-      // A sheet that goes away mid-answer would otherwise leave the probe armed
-      // forever: [DialogModel.abandonRowProbe] is what lets a later one be asked.
       onDispose { model.abandonRowProbe() }
     }
     LaunchedEffect(token) {
@@ -651,10 +558,6 @@ private class DialogHost(
     }
   }
 
-  /**
-   * Record what this window composed, for the report, and count the window when it
-   * enters the composition.
-   */
   @Composable
   private fun WindowFacts(
     model: DialogModel,
@@ -678,13 +581,8 @@ private class DialogHost(
     }
   }
 
-  /**
-   * Losing the window while presented closes the dialog and reports it, as iOS does
-   * (Q5 B3: a Compose dialog window survives its host's detach - a screen push, say -
-   * and would otherwise stay up over a screen it does not belong to). One turn later,
-   * so an unmount's `onDropView`, which runs in the same mount batch, and a reparent
-   * that puts the view straight back both get there first.
-   */
+  // A Compose dialog window survives its host's detach (a screen push), so close it. One
+  // turn later, so an unmount's `onDropView` or an immediate re-attach gets there first.
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
     if (!model.presented) {
@@ -702,10 +600,7 @@ private class DialogHost(
   }
 }
 
-/**
- * `<testID>-dialog` on the presented window, as a resource id uiautomator can find
- * (Q5 B5). Nothing is tagged when the app gave no `testID`.
- */
+/** Tags the window `<testID>-dialog`, as a resource id that uiautomator can find. */
 @OptIn(ExperimentalComposeUiApi::class)
 private fun Modifier.dialogTestTag(testID: String?): Modifier =
   if (testID == null) {
@@ -719,11 +614,9 @@ class HybridNitroUiDialog(
 ) : HybridNitroUiDialogSpec(), RecyclableView {
   private val model = DialogModel()
 
-  /** Where [runOnUi] sends work that is not already on the UI thread. */
   private val mainHandler = Handler(Looper.getMainLooper())
   private val host = DialogHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
@@ -803,7 +696,7 @@ class HybridNitroUiDialog(
       model.tintColor?.let { Variant_NullType_Double.Second(it.toDouble()) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // `processColor` is signed on Android (D10): keep the bit pattern.
+      // `processColor` passes the ARGB int as a double; `toLong()` keeps the bit pattern.
       val value = next.asSecondOrNull()?.toLong()?.toInt()
       if (value != model.tintColor) {
         model.tintColor = value
@@ -848,8 +741,7 @@ class HybridNitroUiDialog(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The handshake decides whether React's `presented` wins - including a dismissal JS
-    // refused, which presents the dialog again (D33).
+    // A dismissal that JS refused presents the dialog again.
     model.state.reconcile()
     if (model.applyDisplayed()) {
       host.markDirty()
@@ -860,8 +752,6 @@ class HybridNitroUiDialog(
   override fun prepareForRecycle() {
     host.tag = null
     host.mountGeneration += 1
-    // `host.prepareForRecycle()` resets the model, which stops composing the window -
-    // and `onDropView` already disposed the composition that held it.
     host.prepareForRecycle()
   }
 
@@ -869,8 +759,7 @@ class HybridNitroUiDialog(
     host.mountGeneration += 1
     model.onPresentedChange = null
     model.onAction = null
-    // The composition disposal in `drop()` takes the window down with the mount; the
-    // flags follow so the state is honest as well as the screen.
+    // Disposing the composition takes the window down; make the state agree.
     model.state.displayed = false
     model.applyDisplayed()
     model.closing = false
@@ -879,19 +768,10 @@ class HybridNitroUiDialog(
 
   // MARK: - Methods
 
-  /**
-   * What the dialog shows. Still a pure read - a lock-free snap of volatiles that never
-   * waits for the UI thread (`core.md` section 5) - and still draws nothing: the row
-   * probe, which costs a bitmap draw of the window, is armed by name through
-   * [nuiTestPerformAction] rather than by the act of asking.
-   */
+  // A lock-free read of volatiles: never waits for the UI thread.
   override fun nuiTestStateReport(): String = model.readReport(host.lifetimeReport().replace(' ', ';'))
 
-  /**
-   * Press one action, as a person would. [PROBE_ROWS_ID] is not an action: it is the
-   * reserved id by which a harness asks for one read of the confirmation sheet's rows,
-   * the only way it can reach a window it can neither tap nor otherwise read.
-   */
+  // [PROBE_ROWS_ID] is not an action: it asks for one read of the confirmation sheet's rows.
   override fun nuiTestPerformAction(id: String) {
     if (id == PROBE_ROWS_ID) {
       runOnUi {
@@ -913,7 +793,6 @@ class HybridNitroUiDialog(
     }
   }
 
-  /** Run [action] on the UI thread, now if already there, queued otherwise. */
   private inline fun runOnUi(crossinline action: () -> Unit) {
     if (Looper.myLooper() == Looper.getMainLooper()) {
       action()
@@ -923,37 +802,24 @@ class HybridNitroUiDialog(
   }
 }
 
-/**
- * The id [HybridNitroUiDialog.nuiTestPerformAction] reads as "answer one row probe"
- * rather than as an action. Underscores first so no app's action id can collide, and
- * private to this file because nothing outside it may name it.
- */
+/** A reserved id that asks for a row probe. The underscores keep it clear of app ids. */
 private const val PROBE_ROWS_ID = "__nui_probe_rows"
 
 /**
- * Marks each confirmation row in the sheet's semantics tree, so [describeConfirmationRows]
- * reports the rows and not the sheet's title, message or drag handle. A property of our
- * own rather than a `testTag`, because with `testTagsAsResourceId` on the window a tag
- * would also become a resource id in every app's accessibility tree.
+ * Marks each confirmation row in the semantics tree. Not a `testTag`: with
+ * `testTagsAsResourceId` on the window, a tag would become a resource id in every app.
  */
 internal val ROW_MARK = SemanticsPropertyKey<Unit>("NitroUiDialogRow")
 
 /**
- * How close a pixel has to be to a row's container colour to *be* it - far tighter than
- * the 30 [nitroUiSamplePixels] allows, because the two colours this probe tells apart
- * (`surface` and the sheet's `surfaceContainerLow`) are ~20 apart to begin with. Both
- * sides are flat fills, so exactness costs nothing.
+ * Per-pixel tolerance for a row's container colour. Tight, because the row's `surface`
+ * and the sheet's container colour are only about 20 apart.
  */
 private const val ROW_PIXEL_TOLERANCE = 6
 
-/**
- * How far inside a row's edge the corner is read from. One pixel is still inside the
- * corner's own anti-aliasing; three is a flat line, and the inversion above works from
- * any depth.
- */
+/** How far inside a row's edge the corner is read: clear of the corner's anti-aliasing. */
 private const val CORNER_PROBE_DEPTH_PX = 3
 
-/** One row [describeConfirmationRows] found: what it says, and where it is drawn. */
 private class SheetRow(
   val title: String,
   val enabled: Boolean,
@@ -964,14 +830,8 @@ private class SheetRow(
 )
 
 /**
- * What the open sheet's rows are, as one line for a harness: `rows=` each row as the
- * screen reader finds it (a disabled one carries `~`, the same mark `Menu`'s probe
- * writes), and `radii=` the corner radius in dp that each row's own container is drawn
- * with, `top/bottom` down its leading edge.
- *
- * Both halves are read from the component, never from the props that produced it: the
- * first is the row's merged semantics node, the second is its pixels. A row that stopped
- * honouring `enabled`, or stopped being a segmented row, moves the line.
+ * Describes the open sheet's rows on one line: `rows=` from each row's merged semantics
+ * node (`~` marks a disabled one) and `radii=` from its pixels, in dp, as `top/bottom`.
  */
 private fun describeConfirmationRows(
   view: View,
@@ -1001,7 +861,6 @@ private fun describeConfirmationRows(
   }
 }
 
-/** Every [ROW_MARK]ed node at or under [node], in the order the sheet draws them. */
 private fun collectSheetRows(node: SemanticsNode, into: MutableList<SheetRow>) {
   val bounds = if (node.config.contains(ROW_MARK)) node.boundsInRoot else null
   if (bounds != null) {
@@ -1026,26 +885,15 @@ private fun collectSheetRows(node: SemanticsNode, into: MutableList<SheetRow>) {
 }
 
 /**
- * The corner radius material3 draws a row's container with, in dp, as `"<top>/<bottom>"`
- * down its leading edge - reconstructed from where the container begins on a line [CORNER_PROBE_DEPTH_PX]
- * pixels inside the edge. A rounded corner meets that line at `dx = r - sqrt(2rd - d^2)`,
- * which inverts to `r = dx + d + sqrt(2dxd)`, so the number is the radius itself rather
- * than a proxy for it: `16` is `CornerLarge`, where a segmented group's outer corners are,
- * and `4` is `CornerExtraSmall`, where its rows meet.
- *
- * `?` when the row cannot be read at all - too small, outside the capture, or a container
- * colour that is not to be found anywhere on the edge, which is also what a row that draws
- * no container reads as. A test that expects radii goes red on those, rather than shrug.
+ * The corner radius a row's container is drawn with, in dp, as `"<top>/<bottom>"`. A
+ * rounded corner meets the line `d` px inside the edge at `dx = r - sqrt(2rd - d^2)`,
+ * so `r = dx + d + sqrt(2 dx d)`. `?` when the row cannot be read.
  */
 private fun SheetRow.drawnCorners(bitmap: Bitmap, density: Float): Pair<String, String> {
   if (right - left < 8 || bottom - top < 8) {
     return "?-small" to "-"
   }
-  // Every pixel this reads has to be inside the capture. A sheet that is still on its
-  // way up measures *below* the window, and a row the probe could not reach is reported
-  // as that - not as a row that draws no container, which is the difference the harness
-  // waits on. (A row flush with the sheet's edge has left = 0, which reads fine: the
-  // scans start at left and look rightwards.)
+  // A sheet still animating up measures below the window; report that as unreachable.
   if (top + CORNER_PROBE_DEPTH_PX >= bottom || bottom - CORNER_PROBE_DEPTH_PX <= top) {
     return "?-small" to "-"
   }
@@ -1064,10 +912,7 @@ private fun SheetRow.drawnCorners(bitmap: Bitmap, density: Float): Pair<String, 
     ComposeColor(container).toRgbHex()
 }
 
-/**
- * How far from the row's leading edge its container colour begins on the line at [y],
- * in px, or -1 when it never begins (a row with no container to find).
- */
+/** How far from the leading edge the container colour begins on line [y], in px, or -1. */
 private fun leadingRadius(bitmap: Bitmap, left: Int, y: Int, container: Int): Int {
   for (x in left until bitmap.width) {
     if (isSameColour(bitmap.getPixel(x, y), container)) {
@@ -1077,7 +922,6 @@ private fun leadingRadius(bitmap: Bitmap, left: Int, y: Int, container: Int): In
   return -1
 }
 
-/** The measured start of the arc back to the radius it was drawn with. */
 private fun cornerRadiusPx(dx: Int): Double {
   val d = CORNER_PROBE_DEPTH_PX.toDouble()
   val gap = dx.toDouble()

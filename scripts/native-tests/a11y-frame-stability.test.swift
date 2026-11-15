@@ -1,55 +1,8 @@
-// CoreGraphics for `CGRect`, on the host as well as inside the UI-test target.
 import CoreGraphics
 import Foundation
 
-/// The bounded re-read the iOS accessibility pass runs before it compares a box (X16 item 4).
-///
-/// Run on the host by `bun run test:native`, compiled with the shipping UI-test file
-/// `example/ios/NitroUiExampleUITests/A11yFrameStability.swift` — the same source the UI-test
-/// target builds, not a copy.
-///
-/// ## The bugs these cases hold shut
-///
-/// `a11y:switch` failed twice on maintainer-mac-1 with the React Native wrapper's box at exactly ⅓
-/// of the switch's — every component divided by the screen scale — and passed on a re-run of the
-/// same tree. The pass decided on one read of `XCUIElement.frame`. The fix reads until two
-/// consecutive reads agree, and the properties that make that fix safe are asserted hardest below:
-///
-///   1. it settles on *two reads agreeing with each other*, never on the answer it wants — a wait
-///      that retried until the wrapper's box matched the control's would retry until the rule
-///      passed, and the bug the rule exists for would return as a green with a longer runtime;
-///   2. a tree that will not hold still ends the wait at a cap and is reported unsettled, rather
-///      than hanging the suite or counting as a pass;
-///   3. a stably-wrong tree settles immediately and is still handed to the rule, so the fix cannot
-///      become a way of retrying a real defect away;
-///   4. the **second read always happens**. This one was earned on a device, not invented: the
-///      first version checked its wall-clock budget before every read, and a read costs seconds
-///      here, so all fourteen cases stopped at one read — the bug, still happening, with a note
-///      attached. It passed every unit test until it ran on a simulator, because the fake clock
-///      advanced only between reads and so made a read free. `slowScript` charges the clock for
-///      each read, which is what makes branch 4 testable at all.
-///
-/// Red proofs, each mutation made in the shipping file, run, then reverted (check names
-/// abbreviated; the binary is deleted before each build, because a stale one reports failures for a
-/// mutation that never compiled):
-///
-///   - budget checked before *every* read, as it was originally → "a budget smaller than one read's
-///     cost still buys the second read (got 1)" + 2 more;
-///   - the loop never re-reading → "a stable tree costs two reads, not six (got 1)" + 22 more;
-///   - `Outcome.first` set to the previous read → "`first` is the stale read, not the agreeing read
-///     that preceded the settle";
-///   - `moved` measured last-vs-previous instead of first-vs-snapshot → "moved counts
-///     first-vs-last frames (got 0)";
-///   - agreement loosened to the rule's own half-point tolerance → "half a point is a move";
-///   - agreement widened to also accept the wrapper's box matching the control's (i.e. waiting for
-///     the answer) → "the disagreeing pair is not accepted (got 2)" + 4 more;
-///   - the budget checked after paying for each read instead of before starting one → "a budget
-///     smaller than one read's cost still buys the second read (reads=3)" + 1 more: the pair is
-///     bought, then a read the budget had already refused is paid for anyway.
-///
-/// One assertion has no mutation of its own: "never more than the budget plus one read's cost" also
-/// holds under the post-read mutant above, because it bounds the worst case rather than the order.
-/// It is a bound on the loop as written, not a red proof, and is labelled as such where it is.
+/// Host test for the bounded "read until two reads agree" wait of the iOS accessibility pass,
+/// compiled together with the shipping `A11yFrameStability.swift` from the UI-test target.
 ///
 /// `@main` because `swiftc` only allows top-level statements in a file named `main.swift`.
 @main
@@ -65,30 +18,22 @@ struct A11yFrameStabilityTest {
     }
   }
 
-  /// One snapshot of a control's tree: the anchor's box plus every node's box, in the order the
-  /// pass prints them — the shape `measure` hands to `settle`.
+  /// One snapshot of a control's tree: the anchor's box plus every node's box.
   private struct Snapshot {
     let anchor: CGRect
     let nodes: [CGRect]
-    /// What the tree holds, one string per element — the channel `measure` supplies as
-    /// `A11ySnapshot.identities`. Empty means "this fixture asks the frame question only".
+    /// One string per element; empty means the fixture asks the frame question only.
     var identities: [String] = []
 
     var frames: [CGRect] { [anchor] + nodes }
   }
 
-  /// The accessible `ContextMenu`'s wrapper and its first line, as the sweep measured them on
-  /// pair-a (`ctx-accessible`, iOS 27): `(12, 446.667, 378×68)` with `Grace Hopper` at
-  /// `(25, 459.667, 352×17)`, published twice.
   private static let contextBox = CGRect(x: 12, y: 446.666_671_752_929_7, width: 378, height: 68)
   private static let textRow = CGRect(x: 25, y: 459.666_671_752_929_7, width: 352, height: 17)
 
-  /// The measured pair-a Switch: wrapper and hosted element at the same box.
   private static let switchBox = CGRect(x: 325, y: 217.3333282470703, width: 61, height: 28)
 
-  /// The same box read at the screen's ⅓ scale — the exact shape of the two failures on
-  /// maintainer-mac-1 (V3's report has `(108.33, 72.44, 20.33, 9.33)` beside
-  /// `(325, 217.33, 61, 28)`).
+  /// The same box at the screen's ⅓ scale, which is what a stale read returns.
   private static let scaledBox = CGRect(
     x: 325 / 3,
     y: 217.3333282470703 / 3,
@@ -129,12 +74,7 @@ struct A11yFrameStabilityTest {
     var now: () -> Int { { self.ms } }
   }
 
-  /// A scripted `read` that also **costs** `costMs`, by advancing the clock the wait reads.
-  ///
-  /// This is the part the first version of this file got wrong, and the reason a real bug reached a
-  /// device: the clock advanced only on `pause`, which made a read free, so a budget small enough to
-  /// stop at one read looked fine in a unit test and stopped at one read on a simulator. A read is
-  /// the round trip; its cost belongs on the clock.
+  /// A scripted `read` that also costs `costMs` on the clock the wait reads, as a real read does.
   private static func slowScript(
     _ snapshots: [Snapshot],
     costMs: Int,
@@ -157,9 +97,7 @@ struct A11yFrameStabilityTest {
 
     let stable = Snapshot(anchor: switchBox, nodes: [switchBox, switchBox])
 
-    // The ordinary case: a tree that is already laid out costs exactly two reads. That number is
-    // the cost of this fix, so it is asserted, not hoped for: fourteen cases times one extra read
-    // of a whole subtree is the price added to every `real-input:ios` run.
+    // A tree that is already laid out costs exactly two reads.
     do {
       let scripted = script([stable, stable])
       let clock = fakeClock()
@@ -176,9 +114,7 @@ struct A11yFrameStabilityTest {
       check(outcome.moved == 0, "nothing moved between the two reads")
     }
 
-    // The failure this exists for: the first read is the ⅓-scale snapshot, the second is the real
-    // one. Two consecutive reads have to agree before the pass prints, so the first pair is
-    // rejected and the snapshot that reaches the log is the stable one.
+    // A stale ⅓-scale first read: the first pair is rejected and the stable snapshot is reported.
     do {
       let scaled = Snapshot(anchor: scaledBox, nodes: [scaledBox, switchBox])
       let scripted = script([scaled, stable, stable])
@@ -195,10 +131,6 @@ struct A11yFrameStabilityTest {
         outcome.snapshot.anchor == switchBox,
         "the snapshot handed back is the agreeing one, not the ⅓-scale one"
       )
-      // The diagnostic the whole thing is for: `first` is the box the old single-read pass would
-      // have decided on, so it must still be the ⅓-scale one even though a *third* read settled the
-      // tree. An outcome that carried "the read before this one" would report the agreeing box here
-      // and lose the stale read — the finding, gone.
       check(
         outcome.first?.anchor == scaledBox,
         "`first` is the stale read, not the agreeing read that preceded the settle"
@@ -207,17 +139,11 @@ struct A11yFrameStabilityTest {
         outcome.moved == 2,
         "moved counts first-vs-last frames, i.e. what one sample got wrong (got \(outcome.moved))"
       )
-      // The wait is a wait: without a pause between them the test manager answers from the same
-      // snapshot twice, and a re-read that cannot change anything is a waste of the whole budget.
       check(clock.state() > 0, "the reads are separated in time (\(clock.state()) ms)")
     }
 
-    // The property the fix must NOT have: waiting for the answer it wants. Here the wrapper is at
-    // ⅓ scale and stays there, forever, while the hosted element is at the real box — the control
-    // is genuinely broken, on every read. It has to settle on the second read and be handed to the
-    // rule, not retry until the two boxes agree. A `settle` that compared the anchor against the
-    // nodes (or against any expected frame) would burn the cap here and report a defect it had
-    // actually excused.
+    // A stably wrong tree settles on the second read: the wait never waits for the answer it
+    // wants.
     do {
       let wrong = Snapshot(anchor: scaledBox, nodes: [scaledBox, switchBox])
       let scripted = script([wrong, wrong, wrong, wrong, wrong, wrong])
@@ -238,8 +164,7 @@ struct A11yFrameStabilityTest {
       )
     }
 
-    // A tree that never holds still (an indeterminate indicator, a picker mid-spin, a list still
-    // recycling): bounded, and reported unsettled. Neither a hang nor a pass.
+    // A tree that never holds still is bounded and reported unsettled: neither a hang nor a pass.
     do {
       let moving = (0..<12).map {
         Snapshot(
@@ -267,10 +192,7 @@ struct A11yFrameStabilityTest {
       )
     }
 
-    // The wall-clock budget, and why the cap alone is not enough. Each read is a round trip to the
-    // test manager and its cost is not ours, so a run whose reads take seconds apiece has to stop on
-    // the clock, not after the cap. `slowScript` puts the read's cost on the clock, which is the
-    // only way this branch can be tested at all: a free `read` makes every budget look generous.
+    // The wall-clock budget: reads that cost time stop on the clock, not at the read cap.
     do {
       let moving = (0..<12).map {
         Snapshot(
@@ -278,10 +200,8 @@ struct A11yFrameStabilityTest {
           nodes: [CGRect(x: Double($0) * 13, y: 40, width: 61, height: 28)]
         )
       }
-      // 400 ms per read, 1 500 ms budget, cap six. The pair is paid for unconditionally (800 ms), a
-      // third and fourth still fit under the budget (1 200, 1 600 ms - each is *started* before the
-      // clock passes 1 500), and the fifth is refused at 1 600. Worst case is therefore
-      // budget + one read's cost, which is what the last check below pins.
+      // 400 ms per read, 1 500 ms budget, cap six: the pair costs 800 ms, the third and fourth
+      // start under the budget, and the fifth is refused at 1 600 ms.
       let clock = Clock()
       let scripted = slowScript(moving, costMs: 400, clock: clock)
       let outcome = A11yFrameStability.settle(
@@ -300,23 +220,15 @@ struct A11yFrameStabilityTest {
       )
       check(outcome.elapsedMs >= 1_200, "and says how long it spent (\(outcome.elapsedMs) ms)")
       check(clock.ms == scripted.calls() * 400, "the clock only ever pays for reads")
-      // The budget must be checked *before* paying for a read, or the worst case is
-      // cap x read-cost rather than the budget plus one read.
+      // Worst case is the budget plus one read, because the budget is checked before a read starts.
       check(
         outcome.elapsedMs <= 1_500 + 400,
         "never more than the budget plus one read's cost (\(outcome.elapsedMs) ms)"
       )
     }
 
-    // THE CASE THIS REWRITE IS FOR, and it was earned on a device rather than invented. The first
-    // version of `settle` checked the budget before *every* read, and one read here is a round trip
-    // to the test manager for a whole subtree: measured on pair-a (`real-input:ios`, 2026-11-02) it
-    // costs 2.0 s to 7.9 s. The 1 500 ms default budget therefore stopped after the *first* read on
-    // all fourteen cases, and the run's own log said `reads=1 settled=false` fourteen times - the
-    // single-sample behaviour this type exists to remove, still happening, with a note attached to
-    // it. So the pair is paid for whatever the clock says, and the budget only refuses reads after
-    // it. A budget of 1 ms with a read that costs three seconds is the worst case, and read two
-    // still happens: this is the case that was red on the device and green in a unit test.
+    // The second read always happens, however small the budget: a 1 ms budget with a
+    // three-second read still buys the pair.
     do {
       let scaled = Snapshot(anchor: scaledBox, nodes: [scaledBox, switchBox])
       let clock = Clock()
@@ -337,8 +249,7 @@ struct A11yFrameStabilityTest {
         !outcome.settled,
         "the ⅓-scale pair did not agree, so it is not a settle - it reads the next one"
       )
-      // Past the pair the budget gets its veto, or a `read` that never returns would hold the suite
-      // open: the same tree, still moving, stops at the two reads it was obliged to pay for.
+      // Past the pair the budget gets its veto: a tree still moving stops at two reads.
       let moving = (0..<12).map {
         Snapshot(
           anchor: CGRect(x: 325 + Double($0) * 7, y: 217, width: 61, height: 28),
@@ -362,8 +273,7 @@ struct A11yFrameStabilityTest {
       check(capped.snapshot.anchor != moving[0].anchor, "and prints the later read")
     }
 
-    // A read that costs seconds still settles a stale first read, with the real-world timing of the
-    // bug: two seconds per read, the default budget and cap, and a ⅓-scale snapshot first.
+    // A read that costs seconds still settles a stale first read under the default budget and cap.
     do {
       let scaled = Snapshot(anchor: scaledBox, nodes: [scaledBox, switchBox])
       let clock = Clock()
@@ -378,9 +288,7 @@ struct A11yFrameStabilityTest {
       check(outcome.first?.anchor == scaledBox, "and reported as the first read")
     }
 
-    // Two reads of different element counts are not agreement: a subtree that gained a row between
-    // reads is a tree still being built, and the pass would compare a name against a box from a
-    // tree that no longer has that name.
+    // Reads with different element counts do not agree: the tree is still being built.
     do {
       let before = Snapshot(anchor: switchBox, nodes: [switchBox])
       let after = Snapshot(anchor: switchBox, nodes: [switchBox, switchBox])
@@ -397,9 +305,7 @@ struct A11yFrameStabilityTest {
       check(outcome.reads == 4, "and it spends the same bounded wait (got \(outcome.reads))")
     }
 
-    // Agreement is exact. A half-point shift is noise for the *rule* (IOS_FRAME_TOLERANCE_PT), but
-    // here it is a layout that moved, and loosening the settle is how a slowly-moving tree starts
-    // looking settled — the one way this guard could hide the bug it guards.
+    // Agreement is exact: a half-point shift is a layout that moved.
     do {
       check(
         !A11yFrameStability.framesAgree(
@@ -442,17 +348,8 @@ struct A11yFrameStabilityTest {
       )
     }
 
-    // Item 4b: membership is part of agreement (X22).
-    //
-    // Two trees, one set of boxes. React Native publishes a child accessibility element and
-    // withdraws it without moving anything: here the subtree under an `accessible` wrapper holds
-    // `Grace Hopper` twice, and holds `Grace Hopper` plus the second `Text` once each, at the same
-    // two boxes. Frames alone call those two reads the same tree, which is how one `ContextMenu`
-    // came to be graded as 2 stops on one run and 4 on the next with nothing in the component
-    // different. The 5-vs-3 pair the branches actually hit is already refused by the count rule;
-    // this channel is what the count rule cannot see, and it is what makes the confirmation read
-    // below worth taking — a confirmation that only compares boxes could agree while the elements
-    // underneath it swapped.
+    // Membership is part of agreement: two reads with the same boxes but different elements
+    // are not the same tree.
     do {
       let merged = Snapshot(
         anchor: contextBox,
@@ -503,8 +400,7 @@ struct A11yFrameStabilityTest {
         "the wait settles on the tree that repeated itself"
       )
 
-      // …and the same shape costs the ordinary two reads when nothing swaps, so the channel is not
-      // a cost the healthy cases pay.
+      // The same shape costs the ordinary two reads when nothing swaps.
       let quiet = script([merged, merged])
       let quietOutcome = A11yFrameStability.settle(
         framesOf: { $0.frames },
@@ -519,11 +415,8 @@ struct A11yFrameStabilityTest {
       )
     }
 
-    // Item 4c: the confirmation read. Two reads are ~3 s apart, which is a snapshot-rebuild window
-    // and not a JS-thread window: on a loaded machine React Native can still be publishing an
-    // element's merged children seconds later, and both reads then agree on the pre-merge tree.
-    // For the shape where the merge is what the finding turns on, the pair has to be confirmed by
-    // a third read taken after a real window.
+    // The confirmation read: where a late merge of an element's children decides the result,
+    // an agreeing pair is confirmed by a third read taken after a real window.
     do {
       let disputed = Snapshot(
         anchor: contextBox,
@@ -551,7 +444,7 @@ struct A11yFrameStabilityTest {
         "the confirmation is a window (\(clock.state()) ms), not the 120 ms snapshot pause"
       )
 
-      // The cost guard: every other control in the pass is not this shape and does not pay.
+      // Every other shape does not pay for a confirmation.
       let notInQuestion = A11yFrameStability.settle(
         framesOf: { $0.frames },
         identitiesOf: { $0.identities },
@@ -564,8 +457,7 @@ struct A11yFrameStabilityTest {
         "a shape that does not ask is not confirmed (got \(notInQuestion.reads) reads)"
       )
 
-      // A confirmation that disagrees is the reason for taking one: the tree changed under the
-      // pair, so the wait keeps going on the new baseline instead of printing the first shape.
+      // A confirmation that disagrees restarts the wait on the new baseline.
       let lateMerge = Snapshot(
         anchor: contextBox,
         nodes: [textRow, textRow],
@@ -604,12 +496,8 @@ struct A11yFrameStabilityTest {
       )
     }
 
-    // Item 5: the print decision. The ordinary wait is two reads that agree, and it prints nothing -
-    // fourteen healthy cases stay quiet and a printed line means something. The hole this closes is
-    // the tree that flaps and lands back where it started: reads A, B, A, A settle on the fourth
-    // read holding the *same* box as the first, so `moved` is 0 and a `moved`-only rule reports
-    // nothing at all. Three wasted round trips, no trace, and the control whose boxes cannot be
-    // trusted is exactly the one a reader needs to be told about.
+    // The print decision: two agreeing reads print nothing, but a tree that flaps and lands
+    // back where it started (A, B, A, A) is reported even though `moved` is 0.
     do {
       let other = Snapshot(
         anchor: CGRect(x: 325, y: 217, width: 61, height: 30),
@@ -624,7 +512,6 @@ struct A11yFrameStabilityTest {
         nowMs: clock.now,
         pause: { _ in }
       )
-      // The premise, stated so the assertion below cannot be satisfied by an accident of the fixture.
       check(outcome.settled, "a tree that flaps and holds still does settle")
       check(outcome.reads == 4, "on the fourth read (got \(outcome.reads))")
       check(
@@ -664,8 +551,7 @@ struct A11yFrameStabilityTest {
         snapshot: switchBox, first: switchBox, reads: 2, settled: false, moved: 0,
         elapsedMs: 1_500, confirmed: false
       )
-      // The designed third read. `context-menu` is confirmed on every healthy run, and a note that
-      // fires on every healthy run is a note nobody reads; a fourth read is still news.
+      // The designed third read is not news; a fourth read is.
       let confirmedQuiet = A11yFrameStability.Outcome(
         snapshot: switchBox, first: switchBox, reads: 3, settled: true, moved: 0,
         elapsedMs: 6_000, confirmed: true

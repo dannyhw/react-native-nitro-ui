@@ -1,42 +1,27 @@
-//
-//  HybridNitroUiChip.swift
-//  react-native-nitro-ui
-//
-//  The Chip component. iOS has no chip, so the two jobs go to the two real
-//  controls that do them: a filter chip is `Toggle(isOn:) { Label }` with
-//  `.toggleStyle(.button)`, and an assist chip is a `Button`. Both are bordered,
-//  capsule-shaped and `.small`, which is what makes them read as chips.
-//
-//  The structure is Switch's for the value (`HybridNitroUiSwitch.swift`: the
-//  event-count handshake) and Button's for the size (`HybridNitroUiButton.swift`:
-//  a label-sized control whose size-affecting setters ask for a new measure).
-//
+// The Chip component. iOS has no chip: a filter chip is a `Toggle` with `.toggleStyle(.button)`
+// and an assist chip is a `Button`, both bordered, capsule-shaped and `.small`.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// What the chip is for. Anything unrecognised is `filter` (Button's rule).
+/// Anything unrecognised is `filter`.
 enum ChipVariant: String {
   case filter
   case assist
 }
 
-/// State of one Chip. See ``NitroUiModel`` for why this is not `@Published`.
 final class ChipModel: NitroUiModel {
   var label: String = ""
   var variant: ChipVariant = .filter
-  /// A filter chip's selection, behind the event-count handshake (§4). An assist
-  /// chip never reads it.
+  /// A filter chip's selection. An assist chip never reads it.
   var state = NitroUiControlledValue<Bool>(displayed: false)
   var defaultSelected: Bool?
   var didApplyDefault = false
   var disabled = false
-  /// A symbol name that resolved to an actual SF Symbol (see Button's model: the
-  /// content never renders the "missing symbol" placeholder).
+  /// Only ever a name that resolves to an SF Symbol; the setter drops the rest.
   var systemImage: String?
-  /// The Android glyph name. Stored so the getter answers; iOS draws `systemImage`
-  /// and never reads this (Button's `androidIcon` says why a prop is stored at all).
+  /// The Android glyph name. Stored so the getter answers; never drawn on iOS.
   var androidIcon: String?
   var testID: String?
   var accessibilityLabel: String?
@@ -46,9 +31,8 @@ final class ChipModel: NitroUiModel {
   var onSelectedChange: ((_ selected: Bool, _ eventCount: Double) -> Void)?
   var onPress: (() -> Void)?
 
-  /// Test-only read-outs (`nuiTestStateReport`). Plain storage behind a lock,
-  /// never `@Published`: the body writes `drawn`, and publishing from the body
-  /// would ask for the update that has just happened.
+  /// Test-only read-outs. Plain storage behind a lock rather than published: the body writes
+  /// `drawn`, and publishing from the body would request another update.
   private let reportLock = NSLock()
   private var drawn = "none"
   private var probes = 0
@@ -58,18 +42,14 @@ final class ChipModel: NitroUiModel {
     super.init()
   }
 
-  /// The user toggled a filter chip - from the Toggle's binding, or from
-  /// ``press()``. Native is optimistic: show the new value now, before React has
-  /// seen the event, so there is no visual latency (§4).
+  /// Optimistic: the new value shows now, before React has seen the event.
   func userToggle(to requested: Bool) {
     let eventCount = state.user(requested)
     objectWillChange.send()
     onSelectedChange?(requested, Double(eventCount))
   }
 
-  /// One press, through the path a tap takes: the filter chip's toggle or the
-  /// assist chip's action. Refused while disabled, as `.disabled(true)` refuses
-  /// a tap.
+  /// One press, through the path a tap takes. Refused while disabled, as a tap is.
   func press() {
     guard !disabled else { return }
     switch variant {
@@ -88,7 +68,6 @@ final class ChipModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// Store a probe's answer and count it, so a test can tell it from the last one.
   func recordAccessibility(_ report: String) {
     reportLock.lock()
     probes += 1
@@ -97,19 +76,14 @@ final class ChipModel: NitroUiModel {
   }
 
   /// `displayed=<0|1|none>;probes=<n>;a11y=<...>;iconTint=-`. Safe from any thread.
-  ///
-  /// The trailing field is Android's: it records the colour a chip tinted its
-  /// `androidIcon` with, and iOS has no such glyph to tint, so it answers `-` - the
-  /// same `-` an Android chip with no icon answers. Both platforms therefore return
-  /// one shape, which is what lets one harness test read both.
+  /// `iconTint` is Android's field; iOS always answers `-`, so both platforms return one shape.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
     return "displayed=\(drawn);probes=\(probes);a11y=\(accessibilityReport);iconTint=-"
   }
 
-  /// Back to "nothing yet", for recycling: a reused view whose report still
-  /// described the previous owner's chip would let a test read that owner's state.
+  /// For recycling, so a reused view does not report the previous chip's state.
   func clearReports() {
     reportLock.lock()
     drawn = "none"
@@ -119,9 +93,7 @@ final class ChipModel: NitroUiModel {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct ChipContent: NitroUIContent {
-  /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: ChipModel
 
   init(model: ChipModel) {
@@ -131,12 +103,10 @@ struct ChipContent: NitroUIContent {
   // `@ViewBuilder` so the read-out below can be a statement: without it a `Void`
   // statement would be the body's value.
   @ViewBuilder var body: some View {
-    // The reading `nuiTestStateReport()` answers with: taken where the control is
-    // drawn, so it is what the Toggle is handed rather than what React sent.
+    // Recorded where the control is drawn, so it is what the Toggle is handed rather than
+    // what React sent.
     let drawn = model.variant == .filter ? (model.state.displayed ? "1" : "0") : "none"
     let _ = model.recordDrawn(drawn)
-    // Everything that applies to both variants stays outside the switch, so a
-    // variant change swaps one control and not a set of modifiers.
     control
       .buttonStyle(.bordered)
       .buttonBorderShape(.capsule)
@@ -148,9 +118,7 @@ struct ChipContent: NitroUIContent {
   @ViewBuilder private var control: some View {
     switch model.variant {
     case .filter:
-      // `ButtonToggleStyle` (iOS 15): a button that is filled while on. It keeps the
-      // capsule's size in both states - the harness measures that, and it is why the
-      // selection is not in this platform's sizing key (`Chip.tsx`).
+      // A button that is filled while on, and the same size in both states.
       Toggle(
         isOn: Binding(
           get: { model.state.displayed },
@@ -165,9 +133,8 @@ struct ChipContent: NitroUIContent {
     }
   }
 
-  /// The label. One line, tail-truncated: the control's intrinsic width is the
-  /// label's, and a caller who wants a narrower box gives it a `width` - then the
-  /// label truncates instead of painting outside its box.
+  /// One line, tail-truncated: in a box narrower than the label, the text truncates instead
+  /// of painting outside it.
   @ViewBuilder private var label: some View {
     if let systemImage = model.systemImage {
       Label {
@@ -183,9 +150,9 @@ struct ChipContent: NitroUIContent {
   }
 }
 
-/// An empty `accessibilityLabel(_:)` would silence the control's own label - which
-/// is its text - so it is applied only when set. `testID` deliberately does *not*
-/// go in here: RN already puts it on the component view.
+/// An empty `accessibilityLabel(_:)` would silence the control's own label (its text), so it
+/// is applied only when set. `testID` is not applied here: React Native already puts it on
+/// the component view.
 private struct ChipOptionalAccessibility: ViewModifier {
   let label: String?
 
@@ -198,22 +165,13 @@ private struct ChipOptionalAccessibility: ViewModifier {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiChip`.
 final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ChipContent>
 
-  /// This component's name in the sizing engine: `HybridNitroUiChipComponentName`
-  /// in the generated C++, and `getName()` in the generated Kotlin.
+  /// Must match the component name in the generated C++ and Kotlin.
   private static let sizingComponentName = "NitroUiChip"
 
-  /// The size to lay a Chip out with before anything has been measured, in points.
-  ///
-  /// One number for every configuration, for the reason Button's is (the engine
-  /// keys fallbacks by component alone): inside the measured table in
-  /// `docs/components/chip.md` rather than any one chip. Measured on iOS 27
-  /// (iPhone 17 simulator): "Sized" is 58 x 28 pt, "Re-keyed" 85.33 x 28 and
-  /// "Measured" 88 x 28. The height is the part that matters, and `.small` is
-  /// 28 pt at every label measured.
+  /// In points. One fallback for every configuration; `.small` is 28 pt tall at any label.
   private static let fallbackSize = (width: 80.0, height: 28.0)
 
   private static let declaresFallback: Bool = {
@@ -221,13 +179,11 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process.
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup; `init` is the backstop.
+  /// Registers the fallback once per process: at startup, with `init` as the backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
 
-  /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: ChipModel())
     super.init()
@@ -255,8 +211,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
       guard newValue != model.label else { return }
       model.label = newValue
       host.markDirty()
-      // A different string is a different width, and no bounds or trait change is
-      // coming to say so (Button's `title` setter).
+      // A different string is a different width, and no bounds or trait change follows to
+      // trigger a new measure.
       host.noteContentSizeMayHaveChanged()
     }
   }
@@ -278,8 +234,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
       return .first(js)
     }
     set {
-      // Not visual on its own: `displayed` only follows once the event count says
-      // JS has caught up. See `afterUpdate()`.
+      // Not visual on its own: `displayed` follows in `afterUpdate()`, once the event count
+      // says JS has caught up.
       model.state.js = newValue.asType(Bool.self)
     }
   }
@@ -319,7 +275,7 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   var systemImage: Variant_NullType_String {
     get { model.systemImage.map { .second($0) } ?? .first(.null) }
     set {
-      // Only a name that resolves to a symbol reaches the content (Button's rule).
+      // Only a name that resolves to a symbol reaches the content.
       let next = newValue.asType(String.self).flatMap { UIImage(systemName: $0) == nil ? nil : $0 }
       guard next != model.systemImage else { return }
       model.systemImage = next
@@ -328,10 +284,7 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     }
   }
 
-  /// Accepted and ignored: `androidIcon` names an Android drawable, and iOS draws
-  /// `systemImage` instead. Stored, not dropped - `hybridRef` reads it back, and a
-  /// prop that vanishes between commits is the nitro#1184 crash. No `markDirty()`:
-  /// nothing observes it, so a write must not cost a render.
+  /// Android only. Stored so the getter answers, without `markDirty()`: nothing draws it.
   var androidIcon: Variant_NullType_String {
     get { model.androidIcon.map { .second($0) } ?? .first(.null) }
     set { model.androidIcon = newValue.asType(String.self) }
@@ -340,8 +293,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: RN's component view already carries `testID` as its
-      // `accessibilityIdentifier`. It stays in the spec because Android needs it.
+      // Nothing to apply: React Native already puts `testID` on the component view as
+      // `accessibilityIdentifier`.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -352,7 +305,7 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
       let next = newValue.asType(String.self)
       guard next != model.accessibilityLabel else { return }
       model.accessibilityLabel = next
-      // Rendered: the label is on the SwiftUI element.
+      // The label is on the SwiftUI element, so it needs a commit to reach VoiceOver.
       host.markDirty()
     }
   }
@@ -370,8 +323,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     set {
       guard newValue != model.sizingKey else { return }
       model.sizingKey = newValue
-      // A new configuration may measure what the old one did; the host must not
-      // swallow that report against its dedupe (Button's `nuiSizingKey` setter).
+      // A new key may measure exactly what the old one did, and the host would drop that
+      // report as a duplicate.
       host.noteSizingKeyChanged()
     }
   }
@@ -394,9 +347,7 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // The handshake decides whether React's `selected` wins over what the user just
-    // did - including a toggle JS refused (§4). An assist chip's state is never
-    // touched by a user, so this is a no-op there.
+    // The event counts decide whether React's `selected` wins over what the user just did.
     if model.state.reconcile() {
       host.markDirty()
     }
@@ -429,8 +380,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
 
   // MARK: - Methods
 
-  /// The size SwiftUI wants for this chip, from the host's cache. Never touches
-  /// the main thread (core-architecture §1.4).
+  /// Reads the host's cache: this can be called from JS, and SwiftUI may only be measured
+  /// on main.
   func measureContent() throws -> NitroUiChipSize {
     guard let size = host.contentSize else {
       return NitroUiChipSize(width: 0, height: 0)
@@ -438,7 +389,7 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     return NitroUiChipSize(width: Double(size.width), height: Double(size.height))
   }
 
-  /// Press through the tap's path, on main (see the spec). Returns at once.
+  /// Presses through the tap's path, on main. Returns at once.
   func nuiTestPress() throws {
     let model = host.model
     if Thread.isMainThread {
@@ -448,11 +399,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     }
   }
 
-  /// iOS has no node to read in-process: the SwiftUI hosting view answers
-  /// `accessibilityElements == []` to anything that is not an accessibility client
-  /// (measured in `HybridNitroUiSlider.swift`). Saying so is the answer; the role
-  /// and the selected state are XCUITest's to read, in `real-input:ios`. No UI is
-  /// touched, so there is nothing to hop for.
+  /// Not readable in-process: a SwiftUI hosting view reports no accessibility elements
+  /// unless an accessibility client is attached.
   func nuiTestProbeAccessibility() throws {
     host.model.recordAccessibility("unavailable")
   }
@@ -464,14 +412,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   private let pixelProbesLock = NSLock()
   private var pixelProbes = 0
 
-  /// Records that a probe was asked for, and answers nothing.
-  ///
-  /// iOS has no glyph to sample: `androidIcon` is Android's prop and iOS draws
-  /// `systemImage` instead, so an iOS probe of an Android icon is a test that should
-  /// not be running there. The report says `no pixels`, which the harness's probe
-  /// helper treats as a hard failure rather than an answer - the honest outcome is a
-  /// red test, not a green one about nothing. Button's pair, copied for the same
-  /// reason (G19).
+  /// iOS has no Android icon glyph to sample, so the report says `no pixels`, which the
+  /// tests treat as a failure.
   func nuiTestPixelProbe(color: Double) throws {
     pixelProbesLock.lock()
     pixelProbes += 1

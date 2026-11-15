@@ -1,29 +1,3 @@
-/**
- * Does `README.md` show *every* component, with both platform screenshots?
- *
- * The first eight components each got an iOS/Android pair (`docs/images/
- * components/*.png`, PR #11). `AlertDialog` and `ConfirmationDialog` shipped
- * with a README section and no pictures, and nothing noticed, so the next
- * component would have done the same. The convention (CONTRIBUTING's "README
- * screenshots") therefore becomes a rule here, at `check` time, with no new
- * dependencies.
- *
- * For every component exported as a value from `src/index.ts` out of
- * `./components/*` it requires:
- *
- *   - a row in the README's Components table;
- *   - its name in the README's import block;
- *   - `<img src="docs/images/components/<kebab>-{ios,android}.png" ...>` in the
- *     README, rendered at the width the Usage tables use, with alt text;
- *   - that file on disk, a PNG of the documented width (804 px for iOS, 720 for
- *     Android), read from the IHDR chunk rather than from the filename.
- *
- * Two things keep the check honest: it fails when it finds nothing to compare
- * (an export regex that stopped matching would pass every later assertion
- * vacuously), and problems are collected and reported together, each naming the
- * component and what is missing, so one run lists a whole README round's work.
- */
-
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,29 +7,19 @@ import { describe, expect, it } from '@jest/globals';
 const root = process.cwd();
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
-/** The directory the README's pictures live in. */
 const IMAGE_DIR = 'docs/images/components';
 
-/**
- * Components with no screenshots, and why.
- *
- * `Host` is a container with no look of its own: on iOS it is a plain `View`
- * (D23), on Android one shared Compose composition for its children. A
- * screenshot of it is a screenshot of a control that already has its own pair.
- */
 const SCREENSHOT_EXEMPTIONS = {
   Host: 'a container with no look of its own (iOS: a plain View; Android: one shared composition)',
 };
 
-/** The documented screenshot width(s), by file-name platform suffix. */
 const WIDTHS = {
-  // 804 px is two thirds of a 3x iPhone screenshot. 803 is accepted because the
-  // first committed pair (`button-ios.png`) is 803 wide, one pixel short.
+  // 804 px is two thirds of a 3x iPhone screenshot. 803 is accepted because
+  // `button-ios.png` is one pixel short.
   ios: [804, 803],
   android: [720],
 };
 
-/** The width the README's Usage tables render every screenshot at. */
 const README_IMG_WIDTH = '300';
 
 /** The value exports from `./components/*` in `src/index.ts`, in source order. */
@@ -67,8 +31,7 @@ function exportedComponents(indexSource) {
   for (const block of blocks) {
     for (const entry of block[1].split(',')) {
       const name = entry.trim();
-      // `type SwitchProps` is a type export: a component is something you can
-      // render, which is what needs a picture.
+      // `type SwitchProps` is a type export, not a component.
       if (name === '' || name.startsWith('type ') || name === 'type') continue;
       names.add(name);
     }
@@ -82,12 +45,8 @@ function kebab(name) {
 }
 
 /**
- * The component names with a row in the README's Components table.
- *
- * Scoped to that section on purpose: the Performance table has rows that start
- * the same way (`| \`Switch\` | 1.00× |`), and reading the whole file would let a
- * component disappear from the list of what the library ships as long as it is
- * still benched.
+ * The component names with a row in the README's Components table. Scoped to
+ * that section: rows of the Performance table start the same way.
  */
 function componentTableNames(readme) {
   const heading = /^## Components$/m.exec(readme);
@@ -136,9 +95,6 @@ function imgTagFor(readme, file) {
 /**
  * The size a PNG declares in its IHDR chunk, or a `problem` string when it is
  * not a readable PNG.
- *
- * Read from the chunk rather than a tool: the rule is about the bytes that
- * shipped, IHDR is fixed-offset, and that leaves the test dependency-free.
  */
 function pngSize(file) {
   const handle = fs.openSync(file, 'r');
@@ -164,8 +120,8 @@ describe('the README shows every component with both screenshots', () => {
   const components = exportedComponents(read('src/index.ts'));
 
   it('finds both sides of the comparison, so it cannot pass by finding nothing', () => {
-    // Eight controls plus two dialogs plus Host as of G11. The floor is low on
-    // purpose: it catches a regex that stopped matching, not the size of the list.
+    // The floor is low on purpose: it catches a regex that stopped matching, not
+    // the size of the list.
     expect(components.length).toBeGreaterThanOrEqual(8);
     expect(componentTableNames(readme).size).toBeGreaterThanOrEqual(8);
     expect(importedNames(readme).size).toBeGreaterThanOrEqual(8);

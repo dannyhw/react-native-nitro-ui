@@ -1,15 +1,6 @@
 /**
- * Jest's `globalSetup`: this shell's lease is removed from the environment once, before any
- * test file runs.
- *
- * `check` is routinely run from a shell that has sourced a lease, and a lease's variables are
- * instructions to the CLIs the suites spawn (`scrubbed-env.js` has the incident). Jest runs this
- * in its own process before it starts a worker, so the workers inherit an environment with no
- * lease in it - and so does every child a test spawns, whether it builds the child's `env` from
- * `process.env` or passes none at all. A test that means to set one of these names still does:
- * it sets it on the child it spawns.
- *
- * @file Not a test. Named in `package.json`'s `jest.globalSetup`.
+ * Jest's `globalSetup` (named in `package.json`): removes this shell's device lease from the
+ * environment before any test file runs, so no worker or spawned child inherits it.
  */
 
 import process from 'node:process';

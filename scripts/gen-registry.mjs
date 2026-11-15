@@ -1,22 +1,10 @@
 #!/usr/bin/env node
-//
-// gen-registry.mjs
-//
 // Writes the repo's per-component lists from the manifests in
 // `src/components/<Name>/component.json`.
 //
 //   bun run registry          write them
 //   bun run registry:check    fail if they are not what the manifests say
 //   bun run regen             nitrogen + this
-//
-// `bun run check` runs the check where `nitrogen:check` sits: a generated list edited
-// by hand, or a manifest changed without regenerating, fails the gate and names the
-// file. The rules - the manifest schema, which lists are generated, which are
-// cross-checked, and why - are in scripts/registry-core.mjs, which is pure so it can
-// be unit-tested (scripts/__tests__/registry.test.js).
-//
-// This file is only the filesystem and the CLI: read the tree, hand it to the core,
-// write or diff what comes back.
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

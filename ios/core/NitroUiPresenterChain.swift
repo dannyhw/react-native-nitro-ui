@@ -1,22 +1,9 @@
-//
-//  NitroUiPresenterChain.swift
-//  react-native-nitro-ui
-//
-//  Where a presentation that belongs to the screen's own chain presents from, and
-//  when it must not (DECISIONS D35). BottomSheet (G14) was the first component to
-//  apply D35's rule; Tooltip (G18) is the second, so the rule's questions moved here
-//  from `HybridNitroUiBottomSheet` unchanged.
-//
-//  D35, in one line: present in the app's chain - from its top-most presented
-//  controller - unless that controller is an RN `Modal` host; then from a window of
-//  one's own (`NitroUiPresentation.presentInOwnWindow`), because RN closes a `Modal`
-//  by dismissing its controller, and a presentation on top of it is what UIKit would
-//  take down instead, stranding the Modal (G11, S2).
-//
-
 import UIKit
 
-/// The questions D35's rule asks of the app's presentation chain. Main thread only.
+/// Presentations go on the app's top-most presented controller, unless that is a React Native
+/// `Modal` host: RN closes a `Modal` by dismissing its controller, and UIKit would take down the
+/// presentation on top of it instead, stranding the Modal. Those present from a window of their
+/// own. Main thread only.
 enum NitroUiPresenterChain {
   /// The top-most controller in `window`: the last one presented there, or its root.
   static func appTopController(in window: UIWindow?) -> UIViewController? {
@@ -42,8 +29,8 @@ enum NitroUiPresenterChain {
     String(describing: type(of: controller)).contains("ModalHostViewController")
   }
 
-  /// How many RN `Modal` hosts are presented in `window`: one left after its `Modal`
-  /// closed is the strand D35's rule exists to prevent.
+  /// How many RN `Modal` hosts are presented in `window`. One left after its `Modal` closed has
+  /// been stranded.
   static func modalHostCount(near window: UIWindow?) -> Int {
     var count = 0
     var current = window?.rootViewController
@@ -54,9 +41,8 @@ enum NitroUiPresenterChain {
     return count
   }
 
-  /// Whether UIKit would drop a presentation asked of `controller` right now: it
-  /// refuses one from a chain that is mid-transition, silently - no error and no
-  /// completion (S2's `presentQueued`).
+  /// Whether UIKit would drop a presentation asked of `controller` right now: it refuses one from a
+  /// chain that is mid-transition silently, with no error and no completion.
   static func isBusy(_ controller: UIViewController) -> Bool {
     controller.isBeingDismissed || controller.isBeingPresented
       || controller.presentingViewController?.isBeingDismissed == true

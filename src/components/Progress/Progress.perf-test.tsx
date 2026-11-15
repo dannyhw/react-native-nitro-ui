@@ -7,30 +7,8 @@ import { Pressable, Text } from 'react-native';
 import { nitroUiHybridObjects } from '../../../__mocks__/react-native-nitro-modules';
 import { Progress } from './Progress';
 
-/**
- * The render contract of the `Progress` wrapper, measured by Reassure inside
- * `bun run check` (docs/architecture/benchmarks.md, "Render counts").
- *
- * The two directions Switch and Slider measure, with the one thing this
- * component adds:
- * - **flip** changes `value`, which is what a 60 Hz download callback does, so
- *   the wrapper must re-render - and must re-render *nothing else*, which is why
- *   there is no `useControlled` layer and no callback prop here at all;
- * - **bump** renders the parent without touching the Progress's inputs, so the
- *   wrapper must not churn. The bumped counter is drawn (rather than kept in
- *   state alone) because Reassure's redundancy check compares whole rendered
- *   trees: a parent commit that changed nothing visible would itself be flagged
- *   as a redundant update, which is true of the harness, not of the wrapper;
- * - **shape** switches `variant`, the only prop that is also the sizing key. It
- *   has to reach native (a different shape is a different box), so a wrapper that
- *   memoised the key on the first render would freeze here.
- *
- * The count is the number of commits the root Profiler sees, and it is the
- * baseline: an extra commit (a mount effect's `setState`, a churned prop) moves
- * it. What a commit *costs* on a device - no hosting recreation, no re-measure -
- * is the bench's `update.progress` scenario plus
- * `example/__tests__/Progress.harness.tsx`.
- */
+// The bump counter is drawn because Reassure's redundancy check compares
+// rendered trees: a parent commit that changed nothing visible is flagged.
 function Harness() {
   const [value, setValue] = useState(0);
   const [bumps, setBumps] = useState(0);
@@ -58,10 +36,7 @@ function Harness() {
   );
 }
 
-// A self-sizing wrapper asks native for its sizing id (`useSizingId`), so
-// rendering one needs a core to exist. It is asked exactly once per mounted
-// instance - the hook keeps the answer in a ref, so no render is spent on it -
-// which is why this mock cannot move the count the baseline records.
+// `useSizingId` asks the native core for an instance id.
 beforeAll(() => {
   let issued = 0;
   nitroUiHybridObjects.NitroUiCore = () => ({

@@ -1,23 +1,7 @@
 #!/usr/bin/env node
 /**
- * The entry point behind `bun run harness:android` and friends.
- *
- * It exists for one reason: `react-native-harness` is a third-party CLI, so the
- * one gate that touches a device was the one gate nothing could pin. The report
- * for round 1 claimed the harness "refuses a different Node version and re-runs
- * itself under .nvmrc's", and that was not true (review S9) - `build-app.mjs`
- * and the real-input gates call the guard, the harness did not, and a suite run
- * on a stray Node 22 was a suite run on a runtime nothing else in this repo
- * promises.
- *
- * So: check the runtime first, then hand over. The hand-over is a `spawn` of the
- * real CLI's own `bin.js` rather than an `import` of it, because the CLI parses
- * `process.argv` and installs its own signal handlers; the exact command is
- * printed first so a run can be reproduced without this file.
- *
- * When the runtime is wrong and `fnm` can provide the right one,
- * `assertSupportedNodeOrReexec` replaces this process - including this file, so
- * the check happens once and the CLI still sees the original arguments.
+ * Entry point behind the `harness:*` scripts: checks the Node version, then spawns the
+ * `react-native-harness` CLI, which parses `process.argv` and installs its own signal handlers.
  */
 
 import { spawn } from 'node:child_process';
@@ -38,11 +22,6 @@ import { assertSupportedNodeOrReexec } from './node-version.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 
-/**
- * Where the hoisted install puts the CLI. The root first: `example/` does not
- * carry its own copy today, and looking there anyway means this keeps working
- * if the hoist ever changes.
- */
 const CANDIDATES = [
   join(repoRoot, 'node_modules', 'react-native-harness', 'bin.js'),
   join(repoRoot, 'example', 'node_modules', 'react-native-harness', 'bin.js'),
@@ -61,11 +40,7 @@ if (cli == null) {
 const args = process.argv.slice(2);
 
 /**
- * The `bun run` name these arguments came from, so the refusal names the gate it
- * is refusing. This file is the entry point behind `harness:ios`,
- * `harness:android` and the two cold variants (see `example/package.json`), and
- * the label used to be hardcoded to Android - so an iOS run told the reader to
- * re-run the other platform (X1 re-review F5).
+ * The `bun run` script name these arguments came from, so a refusal names its own gate.
  *
  * @param {string[]} argv Arguments after the script name.
  * @returns {string}
@@ -85,9 +60,8 @@ assertSupportedNodeOrReexec({
 const command = [process.execPath, cli, ...args];
 
 /**
- * One `react-native-harness` run - one app launch. Resolves with its exit code; a
- * signal is passed on rather than masked with exit 1: Ctrl-C has to look like Ctrl-C
- * to whatever is driving a suite.
+ * One `react-native-harness` run. Resolves with its exit code; a signal is passed on rather
+ * than turned into exit 1, so Ctrl-C still looks like Ctrl-C to the caller.
  *
  * @param {Record<string, string | undefined>} env
  * @returns {Promise<number>}
@@ -114,12 +88,9 @@ function runHarness(env) {
 
 const sharedCode = await runHarness(process.env);
 
-// The isolated suites (`scripts/harness-isolated.mjs`): a second app instance, after
-// the shared run, for a full platform run only. Its Jest summary lands in the same log,
-// which is how the gate's ledger line records it beside the shared run's.
+// The isolated suites run in a second app instance after the shared run, on a full run only.
 const isolatedDir = join(repoRoot, 'example', ISOLATED_DIR);
-// Recursive, as `testMatch` is (`__tests__/isolated/**`): a file in a subdirectory
-// there runs in the isolated run, so it has to count towards having one.
+// Recursive, to match the isolated run's `testMatch`.
 const isolatedFiles = existsSync(isolatedDir)
   ? readdirSync(isolatedDir, { recursive: true })
       .map(String)

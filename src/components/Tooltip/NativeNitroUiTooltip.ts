@@ -19,44 +19,40 @@ type HybridRefHandler = (view: NitroUiTooltipHandle) => void;
 /**
  * The read side of the native tooltip - what a `hybridRef` callback gets.
  *
- * Read-only for the reason every handle here is (DECISIONS D14): a prop written from
- * JS runs the native setter off the UI thread and never commits. The three methods
- * are the test seams, and each hops to the main thread itself.
+ * Read-only: a prop written from JS runs the native setter off the UI thread and
+ * never commits. The three methods are test seams, and each hops to the main
+ * thread itself.
  *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
+ * @internal Hybrid View types are not published; this alias exists so
  * `hybridRef` can be typed for this repo's harness and benchmarks.
  */
 export interface NitroUiTooltipHandle {
-  /** What React last asked for. */
   readonly presented: boolean;
-  /** The event count JS has echoed. */
   readonly mostRecentEventCount: number;
   readonly message: string;
   readonly title: string | null;
   readonly placement: string;
   /**
-   * Test-only readback - see `NitroUiTooltipMethods.nuiTestStateReport`.
+   * Test-only state readback.
    * @internal
    */
   nuiTestStateReport(): string;
   /**
-   * Test-only action seam - see `NitroUiTooltipMethods.nuiTestPerformAction`.
+   * Test-only action seam.
    * @internal
    */
   nuiTestPerformAction(id: string): void;
   /**
-   * Test-only dismissal seam - see `NitroUiTooltipMethods.nuiTestDismiss`.
+   * Test-only dismissal seam.
    * @internal
    */
   nuiTestDismiss(): void;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with callbacks
- * in Nitro's `{ f: … }` wrapper (DECISIONS D7, D7b). `Tooltip.tsx` is the friendly
- * API.
- *
- * No `NitroUiIntrinsicProps`: a tooltip is not self-sizing (`sizing: null`).
+ * Props of the raw host component: every spec prop, always sent, with callbacks
+ * in Nitro's `{ f: … }` wrapper. A tooltip is not self-sizing, so there are no
+ * sizing props.
  */
 export interface NativeNitroUiTooltipProps extends HybridViewProps {
   presented: boolean;
@@ -73,8 +69,8 @@ export interface NativeNitroUiTooltipProps extends HybridViewProps {
 }
 
 /**
- * The host component for the `NitroUiTooltip` Hybrid View. Only the props type is
- * corrected here, as for every other control (`NativeNitroUiDialog.ts`).
+ * The host component for the `NitroUiTooltip` Hybrid View. The cast corrects only
+ * the props type, which `getHostComponent` intersects with `ViewProps`.
  */
 export const NativeNitroUiTooltip = getHostComponent<
   NativeNitroUiTooltipProps,

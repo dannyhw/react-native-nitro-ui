@@ -17,41 +17,29 @@ type ChangeHandler = (millis: number, eventCount: number) => void;
 type HybridRefHandler = (view: NitroUiDatePickerHandle) => void;
 
 /**
- * The read side of the native DatePicker - what a `hybridRef` callback gets.
+ * What a `hybridRef` callback receives. Read-only: a write from JS would run
+ * the native setter off the UI thread and never commit.
  *
- * Deliberately read-only (DECISIONS D14): writing `view.valueMillis = …` from JS
- * runs the native setter on the JS thread, mutates model state the UI thread
- * owns, and never commits, so the write would silently do nothing (and, for a
- * prop that decides the size, desync the size Yoga was told). Every prop goes
- * through React. Methods that only read a cache (`measureContent()`) are safe on
- * any thread, which is why those are here.
- *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
- * `hybridRef` can be typed for this repo's harness and benchmarks.
+ * @internal
  */
 export interface NitroUiDatePickerHandle {
   /** The instant React last sent, clamped to the bounds React sent, or `null`. */
   readonly valueMillis: number | null;
-  /** The event count JS has echoed. */
+  /** How many native changes JS has confirmed. */
   readonly mostRecentEventCount: number;
-  /** The mode as React sent it (`'date'`, `'time'`, `'datetime'`). */
+  /** `'date'`, `'time'` or `'datetime'`. */
   readonly mode: string;
-  /** The variant as React sent it. */
   readonly variant: string;
-  /** The lower bound React sent, or `null`. */
   readonly minimumMillis: number | null;
-  /** The upper bound React sent, or `null`. */
   readonly maximumMillis: number | null;
-  /** Whether interaction is disabled. */
   readonly disabled: boolean;
   /** The tint as this platform's `processColor` produces it, or `null`. */
   readonly tintColor: number | null;
-  /** The control's accessibility label, or `null`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiDatePickerSize;
   /**
-   * Test-only selection seam - see `NitroUiDatePickerMethods.nuiTestSelect`.
+   * Test-only: selects a date and time.
    * @internal
    */
   nuiTestSelect(
@@ -62,30 +50,20 @@ export interface NitroUiDatePickerHandle {
     minute: number
   ): void;
   /**
-   * Test-only presentation seam - see `NitroUiDatePickerMethods.nuiTestPresent`.
+   * Test-only: presents the picker.
    * @internal
    */
   nuiTestPresent(): void;
   /**
-   * Test-only readback - see `NitroUiDatePickerMethods.nuiTestStateReport`.
+   * Test-only: reads back the picker's state.
    * @internal
    */
   nuiTestStateReport(): string;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with
- * callbacks in Nitro's `{ f: … }` wrapper.
- *
- * Nothing here is optional on purpose (DECISIONS D7) - `DatePicker.tsx` is the
- * friendly API, and it converts `undefined` into `null` so a prop can never
- * disappear between two commits (nitro#1184). The callback is the D7b exception,
- * and `DatePicker.tsx` always sends one.
- *
- * The two sizing props (`nuiSizingKey`, `nuiSizingId`) come from
- * [NitroUiIntrinsicProps](../../core/NitroUiIntrinsicProps.ts). For a
- * DatePicker the key is `variant|mode` and *not* the rendered date, which is the
- * decision `DatePicker.tsx`'s `sizingVariantFor` documents.
+ * No spec prop is optional: Fabric sends `null` for a removed prop, which
+ * crashes an optional one (nitro#1184).
  */
 export interface NativeNitroUiDatePickerProps
   extends HybridViewProps, NitroUiIntrinsicProps {
@@ -106,13 +84,9 @@ export interface NativeNitroUiDatePickerProps
 }
 
 /**
- * The host component for the `NitroUiDatePicker` Hybrid View.
- *
- * `getHostComponent`'s return type intersects the props with `ViewProps`, which
- * would make `testID`/`accessibilityLabel` optional again and type Nitro's
- * nullable callback props as raw functions. The runtime object is exactly what
- * `getHostComponent` returns; only the props type is corrected here (a
- * `ComponentType`, so `style` and the other base props still apply).
+ * The cast corrects only the props type: `getHostComponent` intersects the
+ * props with `ViewProps`, which would make `testID` and `accessibilityLabel`
+ * optional again.
  */
 export const NativeNitroUiDatePicker = getHostComponent<
   NativeNitroUiDatePickerProps,

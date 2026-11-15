@@ -8,12 +8,6 @@ import {
   type TextFieldHandle,
 } from '../components/TextField/TextField';
 
-/**
- * Wrapper-level tests for the TextField (G13): what the wrapper hands the native
- * view, the sizing key's text, and how `ref` and the focus callbacks are wired.
- * The device suite (`example/__tests__/TextField.harness.tsx`) owns typing, the
- * handshake, sizing and recycling.
- */
 let mockIds = 0;
 function nextMockId(): number {
   return ++mockIds;
@@ -57,8 +51,6 @@ describe('TextField · props', () => {
       accessibilityLabel: null,
       nuiPerfId: null,
     });
-    // Callbacks are always sent (D7b): a callback prop that goes missing between
-    // commits never reaches native, and a recycled view would keep the old one.
     for (const name of [
       'onValueChange',
       'onFocusChange',
@@ -139,8 +131,6 @@ describe('TextField · sizing key', () => {
   });
 
   it('gives each multi-line field a configuration of its own', async () => {
-    // Two multi-line fields at one width can hold different numbers of lines, and
-    // the engine corrects every instance under a key to the size one of them reports.
     const view = await render(
       <>
         <TextField testID="a" multiline />
@@ -204,8 +194,7 @@ describe('TextField · callbacks and ref', () => {
       fire(nativeProps(view, 'field'), 'onValueChange', 'a', 1)
     );
     expect(changes).toEqual(['a']);
-    // The edit was refused (the value stayed ''), and the echo moved anyway: that
-    // commit is what makes native put '' back.
+    // The edit is refused (the value stays `''`), but the event count still moves.
     expect(nativeProps(view, 'field')).toMatchObject({
       value: '',
       mostRecentEventCount: 1,
@@ -232,13 +221,11 @@ describe('TextField · callbacks and ref', () => {
     ref.current?.blur();
     expect(focus).toHaveBeenCalledTimes(1);
     expect(blur).toHaveBeenCalledTimes(1);
-    // And the harness's own `hybridRef` still gets the same view.
     expect(internal).toEqual([native]);
   });
 
   it('keeps a focus() asked for before the native view arrived, and runs it then', async () => {
-    // The order a parent's mount effect gives: `ref` is attached and the effect runs
-    // in the commit that mounts the field; `hybridRef` reaches JS later.
+    // `ref` is attached at mount; `hybridRef` reaches JS later.
     const ref = createRef<TextFieldHandle>();
     const focus = jest.fn();
     const blur = jest.fn();
@@ -267,9 +254,7 @@ describe('TextField · callbacks and ref', () => {
   });
 
   it('drops a queued focus() when the field unmounted before its view arrived', async () => {
-    // Nitro can hand the `hybridRef` over after the field is gone: React has run the
-    // unmount cleanup by then, and the native view it names may already be recycled into
-    // another field. A `focus()` queued on mount must not travel that far.
+    // Nitro can deliver `hybridRef` after the field has unmounted.
     const ref = createRef<TextFieldHandle>();
     const focus = jest.fn();
     const blur = jest.fn();
@@ -288,9 +273,8 @@ describe('TextField · callbacks and ref', () => {
     expect(blur).not.toHaveBeenCalled();
   });
   it('still focuses after <Activity> hid and showed it again', async () => {
-    // Hiding runs the field's effect cleanups and showing runs the effects again, but
-    // the native view stays - and Nitro hands `hybridRef` over once per native view,
-    // so the wrapper must not forget the view it already has.
+    // Hiding runs effect cleanups and showing runs the effects again, but the
+    // native view stays, and Nitro delivers `hybridRef` once per native view.
     const ref = createRef<TextFieldHandle>();
     const focus = jest.fn();
     const blur = jest.fn();

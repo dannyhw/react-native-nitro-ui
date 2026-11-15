@@ -2,39 +2,17 @@
 /**
  * Keeps `example/ios/Podfile.lock` in step with `package.json`'s version.
  *
- * After the 0.3.x releases the lock still said `NitroUi (0.2.0)`, so every iOS build
- * rewrote it, dirtied the tree, and invalidated the `app.stamp` a device gate had
- * just recorded. The guard has to be cheap enough to sit inside `bun run check` (it
- * reads two files and compares strings), and the repair has to be something a CI
- * runner can actually do - which rules out reproducing the lock by hand: CocoaPods
- * stores a path-pod's `SPEC CHECKSUMS` entry as the sha1 of *its own* evaluation of
- * the podspec (`Pods/Local Podspecs/NitroUi.podspec.json`, gitignored), so the only
- * way to produce a correct post-bump lock is to run CocoaPods. See
- * `scripts/example-lock-core.mjs` for what that means for the guard.
- *
  * Usage:
  *
  *   node scripts/sync-example-lock.mjs          # check only (what `check` runs)
  *   node scripts/sync-example-lock.mjs --preflight   # is CocoaPods usable here?
  *   node scripts/sync-example-lock.mjs --fix    # run pod install, keep the lock only
  *
- * `release:version` is `--preflight && changeset version && --fix`, and the first
- * stage is the whole reason `--preflight` is separate. `changeset version` rewrites
- * `package.json`, `CHANGELOG.md` and `.changeset/`, so a refusal *after* it - even a
- * correct one that says `git checkout -- .` - leaves a half-versioned tree on a machine
- * that only wanted to preview a release. Asking the tool question before anything is
- * touched is the only exit that leaves a tree a person can keep. `--fix` asks again
- * anyway, because it can also be called on its own.
- *
- * The refresh itself runs on the job in `.github/workflows/release.yml` that is on a
- * macOS runner, because it runs real CocoaPods. It treats the lock as the only output
- * that matters: whatever else `pod install` regenerates - the app project, a
- * developer's breakpoint list - is put back, because the changesets action commits every
- * changed and untracked non-ignored file in the tree, and a release commit is not where
- * a pod user's local Xcode state belongs. It keeps the lock's own `COCOAPODS:` trailer,
- * and refuses a lock whose diff is bigger than this pod's version and checksum lines, so
- * a runner that resolved something other than the release fails the job instead of
- * committing churn the next `pod install` quietly reverts.
+ * `--preflight` runs before `changeset version` rewrites anything, so a machine
+ * without a usable CocoaPods is refused while the tree is still clean. `--fix`
+ * puts back everything `pod install` changed except the lock, keeps the lock's
+ * `COCOAPODS:` trailer, and refuses a lock whose diff is bigger than this pod's
+ * version and checksum lines.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -62,14 +40,8 @@ const IOS_SCOPE = 'example/ios';
 const LOCK_REL = `${IOS_SCOPE}/Podfile.lock`;
 
 /**
- * The checkout to work on.
- *
- * `NITRO_UI_LOCK_SYNC_ROOT` exists for one reason: the `--fix` glue (the restore,
- * the trailer-keep, the churn guard) is otherwise provable only by running a real
- * `pod install` on a Mac, and the bug that started this lived in exactly that glue -
- * a `git` flag that does not exist, which every test stayed green through. With a
- * root override plus `COCOAPODS_BIN`, a test can drive the whole thing in a throwaway
- * git repo. Nothing in the release path sets it.
+ * The checkout to work on. `NITRO_UI_LOCK_SYNC_ROOT` lets a test drive `--fix`
+ * in a throwaway git repo; nothing in the release path sets it.
  *
  * @param {Record<string, string | undefined>} env
  */
@@ -82,11 +54,6 @@ function rootFrom(env = process.env) {
 
 /**
  * The directory holding the Podfile, in the checkout `env` points at.
- *
- * Separate from `rootFrom` because `--preflight` needs it and does not want to
- * recompute the path from a repo root it has already resolved elsewhere; the
- * one expression appearing twice is how a preflight and a fix end up asking
- * about different checkouts.
  *
  * @param {Record<string, string | undefined>} env
  */
@@ -102,11 +69,6 @@ function makeSay(log) {
 /**
  * A git runner for one checkout: returns stdout, or null when git failed.
  *
- * Failures come back null rather than throwing: `--fix` can be asked for in a tree
- * where git is unhappy, and the *point* of these calls is hygiene. A hygiene step that
- * cannot see the tree says so and leaves the files alone rather than pretending it
- * cleaned them.
- *
  * @param {string} cwd
  */
 function gitRunner(cwd) {
@@ -117,11 +79,7 @@ function gitRunner(cwd) {
 }
 
 /**
- * Asks the tool, not the tree: is CocoaPods usable here?
- *
- * One implementation, two callers - `--preflight` (before `changeset version` touches
- * anything) and `--fix` (which can also be called on its own). Both have to give the
- * same answer, or the stage that asks and the stage that acts disagree.
+ * Whether CocoaPods is usable here, asked by running the tool.
  *
  * @param {Record<string, string | undefined>} env
  * @returns {{ok: boolean, why: string}}
@@ -138,20 +96,13 @@ function cocoaPodsHere(env) {
 }
 
 /**
- * `--preflight`: the release path's first stage, and the only one that runs before
- * `changeset version` has written anything.
+ * `--preflight`: the release path's first stage, run before `changeset version`
+ * has written anything.
  *
- * Two questions, and they are genuinely different. *Is CocoaPods here* - a
- * Linux contributor previewing a release has no `pod` at all. And *would the
- * CocoaPods that is here write the lock we have*: X13's release runner had
- * CocoaPods 1.17.0, the exact pin, and still rewrote 87 of 96 checksums, because
- * the `json` gem under its Ruby serialises an empty array two bytes differently
- * (`pod-install-lib.mjs` has the mechanism). A machine can pass the first
- * question and fail the second, and the one that matters is the second.
- *
- * Deliberately blind to whether the two files agree: asking that would make this stage
- * refuse for a reason unrelated to the question, at a point where the tree it would be
- * complaining about is the one at HEAD.
+ * Asks whether CocoaPods is here, and whether the one that is here would write
+ * the lock we have: the same CocoaPods version can serialise a lock differently
+ * under a different `json` gem. It does not ask whether the lock and the
+ * manifest agree.
  *
  * @param {{env?: Record<string, string | undefined>, log?: (message: string) => void, error?: (message: string) => void}} [options]
  * @returns {number} process exit code
@@ -179,9 +130,6 @@ export function preflight({
   if (!pods.ok) return refusal(pods.why);
   makeSay(log)(`CocoaPods is here - ${pods.why}.`);
 
-  // The X13 question: same CocoaPods version, different `json`, different lock.
-  // Asked here because by `--fix` the version has already been bumped, and a
-  // refusal there is the half-versioned tree this stage exists to prevent.
   const serialisation = podSerialisationCheck({ dir: iosDirFrom(env), env });
   if (serialisation.problem != null) {
     return refusal(serialisation.problem);
@@ -230,17 +178,12 @@ export function run({
 
   log(problem);
   if (!fix) {
-    // Deliberately no CocoaPods detail in the default mode's output: the CLI test
-    // below asserts the check mode never reaches for the tool, and a line naming
-    // `pod` is exactly what would make that assertion vacuous.
     say('checking only; pass --fix to refresh the lock.');
     return 1;
   }
 
-  // Refuse before touching a thing. `changeset version` has already run by the time
-  // the release path calls this, so anything this script changes is on top of an
-  // already-versioned tree - and on a machine with no CocoaPods, letting `pod install`
-  // discover that leaves the contributor with a half-applied version and no lock.
+  // Refuse before touching anything: `changeset version` has already run by the
+  // time the release path calls this.
   const pods = cocoaPodsAvailability((cmd) => {
     const result = spawnSync(cmd[0], cmd.slice(1), {
       encoding: 'utf8',
@@ -263,11 +206,8 @@ export function run({
     return 1;
   }
 
-  // The same second question `--preflight` asks, because `--fix` is also callable on
-  // its own and has to give the same answer as the stage that asked for it. Here it
-  // is worth refusing over: the tree is already bumped, but a refresh that rewrites
-  // 87 checksums is worse than a refusal - the changesets action commits whatever is
-  // in the tree, and that lock would be reverted by the next maintainer's install.
+  // `--fix` is also callable on its own, so it asks the serialisation question
+  // itself. The release action commits whatever is in the tree.
   const serialisation = podSerialisationCheck({ dir: iosDir, env });
   if (serialisation.problem != null) {
     error(
@@ -285,10 +225,7 @@ export function run({
     dir: iosDir,
     log,
     strict: true,
-    // The answer measured just above, not a second measurement of the same
-    // question (N6). They are the same call with the same arguments, so asking
-    // twice only spends the time twice - and if the two answers ever disagreed,
-    // this function would have refused on one and installed on the other.
+    // The answer measured just above, so the install cannot act on a different one.
     serialStyle: serialisation.style,
     env,
   }).status;
@@ -347,9 +284,7 @@ export function run({
     }
   }
 
-  // The refresh is only allowed to move this pod's version and checksum. Anything
-  // else in the diff means the runner resolved something other than the release, and
-  // committing it green is how item 2's own bug comes back.
+  // The refresh is only allowed to move this pod's version and checksum.
   const churn = lockChurnProblem({
     beforeText: lockText,
     afterText: fs.readFileSync(lockPath, 'utf8'),

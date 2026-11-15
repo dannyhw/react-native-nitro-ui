@@ -8,35 +8,13 @@ import org.junit.Test
 import java.lang.ref.WeakReference
 import java.lang.reflect.Modifier
 
-/**
- * JVM unit test for the key of the process-wide colour-scheme cache
- * (`docs/architecture/core.md` §3, "Shared objects"), run by
- * `bun run test:native:android`.
- *
- * `NitroUiColorSchemes` is a process-wide `object`, and its key is the `Context`
- * the colours were read from - RN's `ThemedReactContext`, whose base context is
- * the `Activity`. Keyed strongly, that static is a path to a destroyed Activity
- * and its whole view hierarchy, held until some later control happens to compose
- * against a different context. [WeakKey] is the seam that makes the retention
- * rule testable off-device: it stands in for the context with an ordinary object,
- * so the JVM can check what the cache keeps alive without an Android framework.
- * The `ColorScheme` itself needs no such care - it holds colour longs only - which
- * is why the value side of the entry stays strong.
- */
 class NitroUiWeakKeyTest {
-  /**
-   * The structural half: the entry may not hold the key at all except through a
-   * `WeakReference`. Reflection rather than a GC loop, because it cannot be flaky
-   * and it fails for the right reason - a field of the referent's type is the
-   * leak, whatever the collector happens to do on this JVM today.
-   */
+  /** Reflection rather than a GC loop, because it cannot be flaky. */
   @Test
   fun keyHoldsNothingButAWeakReference() {
     val fields =
       WeakKey::class.java.declaredFields.filter {
-        // The Compose compiler instruments the class with a static `$stable`
-        // int; neither is a reference the cache holds. Only instance state
-        // counts as retention.
+        // The Compose compiler adds a static `$stable` field; only instance state counts.
         !Modifier.isStatic(it.modifiers) && !it.name.startsWith("$")
       }
     assertTrue("the key holds a reference", fields.isNotEmpty())
@@ -71,12 +49,7 @@ class NitroUiWeakKeyTest {
     )
   }
 
-  /**
-   * The behavioural half: once nothing else points at the key, the entry does
-   * not, so a destroyed activity becomes collectable. Bounded retry because
-   * `System.gc()` is only a hint; a strong field in [WeakKey] makes every
-   * iteration keep finding a referent and the test goes red.
-   */
+  /** Retries a bounded number of times because `System.gc()` is only a hint. */
   @Test
   fun droppedContextBecomesCollectable() {
     var context: Any? = Any()

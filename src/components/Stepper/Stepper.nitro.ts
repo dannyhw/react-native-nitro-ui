@@ -9,51 +9,35 @@ import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 /**
  * Native props of the `NitroUiStepper` Hybrid View.
  *
- * Same rules as every other component (DECISIONS D7/D7b): value props are
- * `T | null` and the JS wrapper (`Stepper.tsx`) always sends all of them, so a
- * prop can never disappear between two commits (nitro#1184); callbacks are
- * `fn?`, because Nitro only unwraps its `{ f: … }` wrapper for a prop whose type
- * *is* a function.
+ * No prop is optional except the callback: a removed prop arrives as `null`,
+ * which crashes an optional one (nitro#1184), and Nitro only unwraps a callback
+ * prop whose type is a plain function. The wrapper always sends every prop.
  *
- * The value rides the event-count handshake (`docs/architecture/core.md` §4),
- * exactly as Slider's does: native displays a step at once, emits
- * `(value, eventCount)`, and only accepts a `value` write once it has seen that
- * many of its own events — which is what lets a tap win while JS lags and a
- * refused change still snap back.
+ * The value uses the event-count handshake: native displays a step at once,
+ * emits `(value, eventCount)`, and accepts a `value` write only once it has seen
+ * that many of its own events.
  */
 export interface NitroUiStepperProps
   extends HybridViewProps, NitroUiIntrinsicProps {
-  /**
-   * Controlled value, or `null` for an uncontrolled Stepper - in which case
-   * native keeps the displayed value and `defaultValue` seeded it.
-   */
+  /** Controlled value, or `null` for an uncontrolled Stepper. */
   value: number | null;
   /** Initial value of an uncontrolled Stepper; ignored while `value` is set. */
   defaultValue: number | null;
   /**
-   * The last event count JS has fully processed. Native only accepts a `value`
-   * write once it has seen at least that many of its own events (§4).
+   * The last event count JS has fully processed. Native accepts a `value` write
+   * only once it has seen this many of its own events.
    */
   mostRecentEventCount: number;
-  /** Lower bound of the range. Default `0`. */
   minimumValue: number;
-  /** Upper bound of the range. Default `100`. */
   maximumValue: number;
   /**
-   * Increment the value snaps to, in the Stepper's own units. The wrapper
-   * requires it to be greater than `0` (a dev throw otherwise), so native never
-   * sees `0` from this library's own JS - `0` still means *continuous* to
-   * `NitroUiSliderValue.quantize`, which is the rule this control shares.
+   * Increment the value snaps to. The wrapper requires it to be greater than
+   * `0`; to the quantiser shared with Slider, `0` would mean continuous.
    */
   step: number;
-  /** Disable interaction (and show the disabled style). No event fires. */
   disabled: boolean;
-  /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
-  /**
-   * Names the control. The *value* is announced by the control itself, so this
-   * is the one half a caller has to provide (`docs/components/stepper.md`).
-   */
+  /** Names the control. The control announces its value itself. */
   accessibilityLabel: string | null;
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
@@ -63,109 +47,90 @@ export interface NitroUiStepperProps
 
 export interface NitroUiStepperMethods extends HybridViewMethods {
   /**
-   * The size of the hosted control, as measured on the UI thread during the last
-   * layout/commit. Never calls into SwiftUI/Compose: JS reads a cached value, so
-   * this is safe to call from the JS thread (core-architecture §1.4).
+   * The size of the hosted control as of the last layout. It returns a cached
+   * value, so it is safe to call from the JS thread.
    */
   measureContent(): NitroUiStepperSize;
 
   /**
-   * TEMPORARY, test-only: take one step through the path a tap takes, `+1` up or
-   * `-1` down. Returns at once, because a Nitro method may not block for the UI
-   * thread; observe the step through `onValueChange` and
-   * {@link nuiTestStateReport}.
+   * Test-only: take one step through the path a tap takes, `+1` up or `-1` down.
+   * Returns at once; observe the step through `onValueChange` and
+   * `nuiTestStateReport`. A step past either end reports nothing, as a tap on
+   * the disabled half does.
    *
-   * It goes in through the control's own step entry point rather than writing the
-   * value, so the bound rules apply: a step past either end is the end, and the
-   * end is where the half that would take it is disabled - so it reports nothing,
-   * exactly as the tap it stands in for does.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestStep(direction: number): void;
 
   /**
-   * TEMPORARY, test-only: perform the *reader's* adjust action - iOS's
-   * `accessibilityIncrement`/`accessibilityDecrement` on the element UIKit vends, and
-   * Android's real `SetProgress` action on the merged Compose semantics node - and
-   * keep the answer for {@link nuiTestAccessibilityStepReport}. Returns at once.
+   * Test-only: perform the screen reader's adjust action (iOS
+   * `accessibilityIncrement`/`accessibilityDecrement`, Android's `SetProgress`
+   * on the merged semantics node) and keep the answer for
+   * `nuiTestAccessibilityStepReport`. Returns at once. Unlike `nuiTestStep`, it
+   * goes through the accessibility tree and never falls back to the control.
    *
-   * It is not ``nuiTestStep``: that asks the control to step, this asks the
-   * accessibility tree to. A control whose own step works while its published action
-   * does nothing is exactly the bug only this seam can see, and it is why neither
-   * platform falls back to the model when it finds nothing to act on.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestAccessibilityStep(direction: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last {@link nuiTestAccessibilityStep} did, as one
-   * line — the element or node it found, the value before and after, and whether the
-   * reader is being told the control is disabled. Same shape on both platforms.
+   * Test-only: what the last `nuiTestAccessibilityStep` did, as one line: the
+   * element or node it found, the value before and after, and whether the reader
+   * is told the control is disabled. Same shape on both platforms.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestAccessibilityStepReport(): string;
 
   /**
-   * TEMPORARY, test-only: read the control's accessibility node on the UI thread
-   * and keep the answer for {@link nuiTestStateReport}. Returns at once.
+   * Test-only: read the control's accessibility node on the UI thread and keep
+   * the answer for `nuiTestStateReport`. Returns at once.
    *
-   * iOS reports the element this view vends to UIKit (its traits, label and value).
-   * Android reads the merged Compose semantics node a reader is handed — whether it
-   * carries a `ProgressBarRangeInfo`, how many nodes publish one, and whether the
-   * two buttons are still in the tree beside it.
+   * iOS reports the element this view vends to UIKit (traits, label and value).
+   * Android reads the merged Compose semantics node: whether it carries a
+   * `ProgressBarRangeInfo`, how many nodes publish one, and whether the two
+   * buttons are still in the tree beside it.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestProbeAccessibility(): void;
 
   /**
-   * TEMPORARY, test-only: ask whether `color` (an ARGB `processColor` int) is among
-   * the pixels this control is drawing. Answer stored for {@link nuiTestPixelReport}.
+   * Test-only: ask whether `color` (an ARGB `processColor` int) is among the
+   * pixels this control is drawing, and keep the answer for `nuiTestPixelReport`.
+   * iOS answers `no pixels`: SwiftUI draws its own stepper, with no Android glyph
+   * to sample.
    *
-   * It exists because "the minus and plus glyphs are drawn" is a *drawing* contract
-   * no prop echo answers, and IconButton's probe (`NitroUiPixelProbe.kt`) is the
-   * sampler for it. **iOS answers `no pixels`**, having no Android glyph to sample —
-   * there SwiftUI draws its own stepper.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   * @internal Not app API. Remove once the test harness can read pixels.
    */
   nuiTestPixelProbe(color: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last {@link nuiTestPixelProbe} found, as one line —
-   * the same shape Button and IconButton answer with, so the harness reads one format
-   * from any control.
+   * Test-only: what the last `nuiTestPixelProbe` found, as one line in the shape
+   * Button and IconButton answer with.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestPixelReport(): string;
 
   /**
-   * TEMPORARY, test-only: what the control is showing, as one line —
+   * Test-only: what the control is showing, as one line:
    * `displayed=<number|none>;probes=<n>;merged=<n>;a11y=<...>`.
    *
-   * `displayed` is written where the control is drawn, so it is a reading of the
-   * hosted control rather than an echo of a prop (`hybridRef`'s `value` answers what
-   * React sent). `probes` counts the accessibility answers, so a test can tell its
-   * own from the previous control's. `merged` counts the nodes a reader is offered.
-   * Shape shared with IconButton's report.
+   * `displayed` is read where the control is drawn, not an echo of the prop.
+   * `probes` counts the accessibility answers, so a test can tell a fresh one
+   * from a stale one. `merged` counts the nodes a reader is offered.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestStateReport(): string;
 }
 
 /**
  * A size in platform units (iOS points / Android density-independent pixels).
+ * Per-component because nitrogen generates one struct per name.
  *
- * @internal Only reachable through a Hybrid View, which is not exposed publicly
- * (DECISIONS D14).
- *
- * Per-component on purpose, like `NitroUiButtonSize` and `NitroUiIconButtonSize`:
- * nitrogen generates one struct per name.
+ * @internal Only reachable through a Hybrid View, which is not public.
  */
 export interface NitroUiStepperSize {
   width: number;
@@ -175,9 +140,8 @@ export interface NitroUiStepperSize {
 /**
  * The Hybrid View React renders as `NitroUiStepper`.
  *
- * @internal Hybrid Views and their settable props are not public (DECISIONS D14):
- * exported for this repo's example, harness, bench and smoke apps, and for the
- * typed `hybridRef` handle; not semver surface.
+ * @internal Not public and not semver surface: exported for this repo's example,
+ * tests and benchmarks, and for the typed `hybridRef` handle.
  */
 export type NitroUiStepper = HybridView<
   NitroUiStepperProps,

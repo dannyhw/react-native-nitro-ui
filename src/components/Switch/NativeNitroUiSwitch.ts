@@ -14,55 +14,34 @@ type ValueChangeHandler = (value: boolean, eventCount: number) => void;
 type HybridRefHandler = (view: NitroUiSwitchHandle) => void;
 
 /**
- * The read side of the native Switch - what a `hybridRef` callback gets.
+ * What a `hybridRef` callback receives. Read-only: a write from JS would run
+ * the native setter off the UI thread and never commit.
  *
- * Deliberately read-only (DECISIONS D14): writing `view.value = …` from JS would
- * run the native setter on the JS thread, mutate model state the UI thread owns,
- * and never commit, so the write would silently do nothing. Every prop goes
- * through React. Methods that only read a cache (`measureContent()`) are safe
- * from any thread, which is why they are here.
- *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
- * `hybridRef` can be typed for this repo's harness and benchmarks.
+ * @internal
  */
 export interface NitroUiSwitchHandle {
-  /** The last `value` React sent, or `null` while uncontrolled. */
+  /** `null` while uncontrolled. */
   readonly value: boolean | null;
   /** How many native changes JS has confirmed. */
   readonly mostRecentEventCount: number;
-  /** Whether interaction is disabled. */
   readonly disabled: boolean;
   /** The tint as this platform's `processColor` produces it, or `null`. */
   readonly tintColor: number | null;
-  /** The control's accessibility label, or `null`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiSize;
-  /**
-   * Which composition guards this control's own view has armed - see
-   * `NitroUiSwitchMethods.nuiTestArmedGuards`.
-   */
+  /** Test-only: which composition guards this control's view has armed. */
   nuiTestArmedGuards(): string;
   /**
-   * What this native object has been through - see
-   * `NitroUiSwitchMethods.nuiTestLifetimeReport`.
+   * Test-only: what this native object has been through.
    * @internal
    */
   nuiTestLifetimeReport(): string;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with
- * callbacks in Nitro's `{ f: … }` wrapper.
- *
- * Nothing here is optional on purpose (DECISIONS D7) - `Switch.tsx` is the
- * friendly API, and it converts `undefined` into `null` so a prop can never
- * disappear between two commits (nitro#1184).
- */
-/**
- * The two sizing props (`nuiSizingKey`, `nuiSizingId`) come from
- * [NitroUiIntrinsicProps](../../core/NitroUiIntrinsicProps.ts), like every other
- * self-sizing component's native props.
+ * No spec prop is optional: Fabric sends `null` for a removed prop, which
+ * crashes an optional one (nitro#1184).
  */
 export interface NativeNitroUiSwitchProps
   extends HybridViewProps, NitroUiIntrinsicProps {
@@ -74,20 +53,16 @@ export interface NativeNitroUiSwitchProps
   testID: string | null;
   accessibilityLabel: string | null;
   nuiPerfId: number | null;
-  /** TEMPORARY, test-only size-affecting prop - see `SwitchProps.nuiTestWidth`. */
+  /** Test-only: the control's width in platform units. */
   nuiTestWidth: number | null;
   onValueChange: NitroCallbackProp<ValueChangeHandler>;
   hybridRef?: NitroCallbackProp<HybridRefHandler>;
 }
 
 /**
- * The host component for the `NitroUiSwitch` Hybrid View.
- *
- * `getHostComponent`'s return type intersects the props with `ViewProps`, which
- * would make `testID`/`accessibilityLabel` optional again and type Nitro's
- * nullable callback props as raw functions. The runtime object is exactly what
- * `getHostComponent` returns; only the props type is corrected here (a
- * `ComponentType`, so `style` and the other base props still apply).
+ * The cast corrects only the props type: `getHostComponent` intersects the
+ * props with `ViewProps`, which would make `testID` and `accessibilityLabel`
+ * optional again.
  */
 export const NativeNitroUiSwitch = getHostComponent<
   NativeNitroUiSwitchProps,

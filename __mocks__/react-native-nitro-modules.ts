@@ -1,15 +1,6 @@
 /**
- * Jest manual mock for `react-native-nitro-modules`.
- *
- * The real package reads its TurboModule while its index is loading, so any unit
- * test that imports this library would otherwise die on "NitroModules could not
- * be found". Mocking it at the root makes importing this package work in a plain
- * Node environment.
- *
- * `callback` mirrors the four-line upstream implementation in
- * `react-native-nitro-modules/src/views/callback.ts`: React Native turns raw
- * functions in props into `true`, so Nitro sends them inside an object with the
- * function under `f`. Keep it in sync if upstream ever changes it.
+ * Jest manual mock for `react-native-nitro-modules`, whose index reads a TurboModule
+ * while loading and so cannot be imported in plain Node.
  */
 
 type HybridObjectFactory = () => unknown;
@@ -52,6 +43,8 @@ export const NitroModules = {
   },
 };
 
+// Mirrors upstream: React Native turns raw functions in props into `true`, so Nitro
+// sends them inside an object with the function under `f`.
 export function callback(func: unknown) {
   return typeof func === 'function' ? { f: func } : func;
 }

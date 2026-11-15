@@ -21,40 +21,31 @@ type HybridRefHandler = (view: NitroUiSearchFieldHandle) => void;
 /**
  * The native SearchField - what a `hybridRef` callback gets.
  *
- * Read-only for props, like `NitroUiTextFieldHandle` (DECISIONS D14): a prop write
- * here would run the native setter on the JS thread and never commit. `focus()` and
- * `blur()` are the component's two imperative methods (the wrapper's `ref` calls
- * them); they hop to the UI thread themselves. The `nuiTest…` members are test seams.
+ * Read-only for props: a prop written from JS runs the native setter on the JS
+ * thread and never commits. `focus()` and `blur()` are the component's two
+ * imperative methods (the wrapper's `ref` calls them); they hop to the UI thread
+ * themselves. The `nuiTest…` members are test seams.
  *
  * @internal Not semver surface; typed for this repo's harness and benchmarks.
  */
 export interface NitroUiSearchFieldHandle {
   /** The last `value` React sent, or `null` while uncontrolled. */
   readonly value: string | null;
-  /** How many native changes JS has confirmed. */
   readonly mostRecentEventCount: number;
-  /** The control's accessibility label, or `null`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): { width: number; height: number };
-  /** Focus the field; see `NitroUiSearchFieldMethods.focus`. */
   focus(): void;
-  /** Blur the field; see `NitroUiSearchFieldMethods.blur`. */
   blur(): void;
-  /** See `NitroUiSearchFieldMethods.nuiTestState`. */
   nuiTestState(): NitroUiSearchFieldTestState;
-  /** See `NitroUiSearchFieldMethods.nuiTestClear`. */
   nuiTestClear(): void;
-  /** See `NitroUiSearchFieldMethods.nuiTestSubmit`. */
   nuiTestSubmit(): void;
-  /** See `NitroUiSearchFieldMethods.nuiTestLifetimeReport`. */
   nuiTestLifetimeReport(): string;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with callbacks
- * in Nitro's `{ f: … }` wrapper (DECISIONS D7). The two sizing props come from
- * `NitroUiIntrinsicProps`.
+ * Props of the raw host component: every spec prop, always sent, with callbacks
+ * in Nitro's `{ f: … }` wrapper.
  */
 export interface NativeNitroUiSearchFieldProps
   extends HybridViewProps, NitroUiIntrinsicProps {
@@ -77,9 +68,10 @@ export interface NativeNitroUiSearchFieldProps
 }
 
 /**
- * The host component for the `NitroUiSearchField` Hybrid View. The props type is
- * corrected the same way `NativeNitroUiTextField` does it; `onFocus`/`onBlur` are
- * dropped from the base `ViewProps` because the wrapper owns those names.
+ * The host component for the `NitroUiSearchField` Hybrid View. The cast corrects
+ * only the props type, which `getHostComponent` intersects with `ViewProps`.
+ * `onFocus`/`onBlur` are dropped from `ViewProps` because the wrapper owns those
+ * names.
  */
 export const NativeNitroUiSearchField = getHostComponent<
   NativeNitroUiSearchFieldProps,

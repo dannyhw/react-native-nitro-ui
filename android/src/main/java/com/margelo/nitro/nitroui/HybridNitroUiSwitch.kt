@@ -27,44 +27,22 @@ import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
-/*
- * The Switch component: Material 3 `Switch` on the core runtime. It is the
- * reference for every later component, so it stays short.
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * `HybridNitroUiSwitchManager` resolves `HybridNitroUiSwitch` through a wildcard
- * import of exactly that package. Core helpers live in `...nitroui.core`.
- */
+// The Switch component: Material 3 `Switch`. Must stay in this package, which the
+// generated view manager imports with a wildcard.
 
-/** State of one Switch. See [NitroUiModel] for the shape this has to have. */
 internal class SwitchModel : NitroUiModel() {
-  /** What the Switch shows. Snapshot-observed, so writing it recomposes. */
   var displayed by mutableStateOf(false)
 
-  /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
   /** ARGB `processColor` int of the checked track, or `null` for the scheme's. */
   var checkedTrackColor by mutableStateOf<Int?>(null)
 
-  /**
-   * `accessibilityLabel`, read by the composable so it can put the label on the
-   * Switch itself. Not the container's `contentDescription` - see the a11y rule
-   * in `docs/architecture/core.md`.
-   */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /**
-   * The size configuration React sent (empty for a Switch today). Stored for
-   * symmetry with the other props; the sizing engine reads the key out of Fabric
-   * state itself, so nothing native looks at this.
-   */
   var sizingKey = ""
 
-  /**
-   * Test-only control width, in dp: see `nuiTestWidth`. Observed, because a
-   * change to it has to recompose the control for its size to move.
-   */
+  /** Test-only control width in dp. Observed, so a change recomposes. */
   var testWidth by mutableStateOf<Double?>(null)
 
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
@@ -72,10 +50,6 @@ internal class SwitchModel : NitroUiModel() {
 
   var defaultValue: Boolean? = null
   var didApplyDefault = false
-  /**
-   * `onValueChange`, as Nitro delivered it. The generated spec types the prop as
-   * a plain Kotlin function, which `Func_void_bool_double` implements.
-   */
   var onChange: ((Boolean, Double) -> Unit)? = null
 
   override fun reset() {
@@ -91,62 +65,24 @@ internal class SwitchModel : NitroUiModel() {
     defaultValue = null
     didApplyDefault = false
     onChange = null
-    // iOS clears this in `prepareForRecycle` (`HybridNitroUiSwitch.swift:309`), and a
-    // test-only prop surviving a recycle would make the next mount of this host
-    // render at the previous test's width while JS believes it sent nothing.
     testWidth = null
   }
 }
 
 /**
- * The library's `SwitchColors`, so that the *tinted* Switch costs one
- * `SwitchColors` per (colour scheme, tint) instead of one per recomposition.
- *
- * What Material 3 1.4 already does: `SwitchDefaults.colors()` with no arguments
- * returns `colorScheme`'s own memoised default set (a `defaultSwitchColorsCached`
- * field), so an untinted Switch pays a field read per recomposition, not an
- * allocation. What it does not do: `SwitchDefaults.colors(checkedTrackColor = …)`
- * - the tinted path, and the one an app using `tintColor` is on - builds a fresh
- * 18-`Color` object from the scheme on every call, which at one call per
- * recomposition per mounted Switch is per-frame garbage on the UI thread, on the
- * exact path the `update` bench scenario exercises.
- *
- * It cannot be a `remember`: `remember`'s calculation lambda is
- * `@DisallowComposableCalls` and building the colours needs a composable read of
- * the scheme. So a cache with the miss in the composable - and it only pays
- * across instances while the *scheme identity* is shared, which is what
- * `NitroUiTheme`'s process-wide scheme is for (see `NitroComposeHost.kt`). A
- * per-host `remember` is not impossible (read `SwitchDefaults.colors()` in the
- * composable, then `remember(base, tint) { base.copy(checkedTrackColor = …) }`,
- * since `SwitchColors.copy` is public and not composable), but it is one object
- * per mounted control, which is the shape this cache exists to remove.
- *
- * Bounded and self-clearing: one scheme at a time (identity is the key because
- * identity is what the memo and `SwitchDefaults` both read), at most
- * [MAX_TINTED_ENTRIES] tints, and a scheme change drops everything.
+ * Switch colours per (colour scheme, tint). Process-wide because every hosted control is
+ * its own composition, and `SwitchDefaults.colors(checkedTrackColor = …)` builds a new
+ * object per call. The caller fills a miss, because building colours is a composable call.
  */
 private object SwitchColorsCache {
-  /**
-   * Tints to remember before starting over. An app tints a few Switches at most;
-   * the cap is what stops a component that derives a colour per list row from
-   * growing this for the life of the process.
-   */
+  // A cap, so an app that derives a colour per list row cannot grow this without bound.
   private const val MAX_TINTED_ENTRIES = 8
 
   private var scheme: ColorScheme? = null
   private var untinted: SwitchColors? = null
   private var tinted: HashMap<Int, SwitchColors>? = null
 
-  /**
-   * The cached colours for this scheme and tint, or `null` on a miss - which the
-   * caller fills by *calling the composable*, because building them is a
-   * `@ReadOnlyComposable` and cannot be handed to this object as a lambda.
-   *
-   * Composition happens on the UI thread today, but a second window can compose
-   * against another `Choreographer`, and a half-written entry here would show one
-   * Switch wearing a stale theme; the guard is one uncontended monitor per
-   * recomposition, paid for by the allocation and 18 colour reads it avoids.
-   */
+  // Synchronized because a second window can compose against another `Choreographer`.
   @Synchronized
   fun get(
     scheme: ColorScheme,
@@ -156,7 +92,6 @@ private object SwitchColorsCache {
     return if (tint == null) untinted else tinted?.get(tint)
   }
 
-  /** Record a colour set the caller just built. */
   @Synchronized
   fun put(
     scheme: ColorScheme,
@@ -175,7 +110,7 @@ private object SwitchColorsCache {
     entries[tint] = colors
   }
 
-  /** Drop what a different scheme invalidates. Called with the lock held. */
+  // Call with the lock held.
   private fun adopt(scheme: ColorScheme) {
     if (this.scheme === scheme) {
       return
@@ -186,18 +121,6 @@ private object SwitchColorsCache {
   }
 }
 
-/**
- * The Switch's colours for [tint] (an ARGB int, or `null` for the scheme's own),
- * served by [SwitchColorsCache].
- *
- * A hit is a lookup. The composable call is on the miss only - once per
- * (scheme, tint) for the process rather than once per recomposition - and it has
- * to sit here rather than inside the cache, because a building lambda would be a
- * composable in disguise (and `remember`'s calculation lambda is explicitly not
- * one). Plain `@Composable` rather than `@ReadOnlyComposable` for the same reason:
- * Material 3 1.4's `colors()` is not read-only, so a read-only context cannot
- * call it - the group that costs is around the miss, which runs once.
- */
 @Composable
 private fun switchColors(tint: Int?): SwitchColors {
   val scheme = MaterialTheme.colorScheme
@@ -213,29 +136,11 @@ private fun switchColors(tint: Int?): SwitchColors {
   return built
 }
 
-/**
- * The Switch's host: [NitroComposeHost] plus this component's composable.
- *
- * [Content] is fixed for the lifetime of the view, which is why it lives in a
- * subclass rather than being handed in as a lambda - there is no `setContent`
- * anywhere in this library after construction.
- */
 private class SwitchHost(
   context: ThemedReactContext,
   activity: Activity?,
   model: SwitchModel,
 ) : NitroComposeHost<SwitchModel>(context, activity, model) {
-  /**
-   * The one control a `<Host>` composes today.
-   *
-   * This line is the whole native allowlist (review M2). The JS table in
-   * `src/components/Host/HostChildren.ts` and this override are the same decision seen
-   * from the two sides that have to agree, because React flattens components away: JS
-   * cannot see a `Picker` behind a `memo`, and this side cannot see that the app
-   * thought it was a `<Row>`. Hosting `Switch` is H1's condition (one component per
-   * arm, measured for it), so every other control answers the base class's `false`
-   * until someone measures it inside a Host and gives it a bench arm.
-   */
   override val isHostable: Boolean
     get() = true
 
@@ -243,22 +148,18 @@ private class SwitchHost(
   override fun Component(model: SwitchModel) {
     val tint = model.checkedTrackColor
     val label = model.accessibilityLabel
-    // The label goes on the control, which is the node TalkBack focuses (it
-    // carries M3's `Role.Switch`). Setting `contentDescription` on the host View
-    // instead would put a second, focusable empty box around it.
+    // The label goes on the control, the node TalkBack focuses. On the host view it
+    // would add a second, empty focus stop.
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
-    // Test-only: give the control a wider *intrinsic* size so a test can watch a
-    // sizing-key change re-measure (see `nuiTestWidth`). Nothing in a real
-    // app sets it, and `null` - the default - adds no modifier at all.
+    // Test-only: a wider intrinsic size, so a test can watch a re-measure.
     val widthModifier =
       model.testWidth?.let { Modifier.width(it.dp) } ?: Modifier
     Switch(
       modifier = labelModifier.then(widthModifier),
       checked = model.displayed,
       onCheckedChange = { requested ->
-        // Native is optimistic: show the new value now, before React has seen the
-        // event, so there is no visual latency (§4).
+        // Optimistic: show the new value before React has seen the event.
         val eventCount = model.state.user(requested)
         model.displayed = requested
         model.onChange?.invoke(requested, eventCount.toDouble())
@@ -269,7 +170,6 @@ private class SwitchHost(
   }
 }
 
-/** The Hybrid View React renders as `NitroUiSwitch`. */
 class HybridNitroUiSwitch(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiSwitchSpec(), RecyclableView {
@@ -277,48 +177,29 @@ class HybridNitroUiSwitch(
   private val model = SwitchModel()
   private val host = SwitchHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
   init {
-    // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
     host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
-    // The backstop: `NitroUiDeclaredFallbacks` registers this at startup, which
-    // is the point that matters (see its doc comment).
+    // A backstop: the fallback is normally declared at startup, before any view exists.
     declareFallback()
   }
 
   companion object {
-    /**
-     * This component's name in the sizing engine: `HybridNitroUiSwitchComponentName`
-     * in the generated C++, and `getName()` in the generated Kotlin manager.
-     */
+    // Must match the component name in the generated C++ and view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiSwitch"
 
-    /**
-     * The size to lay a Switch out with before anything has been measured, in dp:
-     * the first Switch of an app's first launch. Material 3's Switch is 51x31 dp
-     * of control inside a 48 dp minimum interactive size, which measures 52x48. A
-     * measurement replaces it on the first report, and a Switch has one
-     * configuration, so this is a one-frame thing - it still has to be close,
-     * because Compose clips a control to a box that is too small.
-     */
+    // The size before anything is measured, in dp: Material's 51 x 31 Switch inside a
+    // 48 dp minimum interactive size measures 52 x 48.
     private const val FALLBACK_WIDTH_DP = 52.0
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 
-    /**
-     * One `JNI` call per process, before the first Switch can be measured.
-     *
-     * Called from `NitroUiDeclaredFallbacks.registerAll()` at package init - a
-     * Fabric measure can happen before this class has ever been instantiated, so
-     * a fallback declared from `init` is one measure too late for the first
-     * instance (T14) - and from `init` as the backstop. The two calls land on
-     * different threads, hence the atomic.
-     */
+    // Called at package init, because Fabric can measure before this class is first
+    // instantiated, and again from `init`. The two calls can be on different threads.
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
         return
@@ -340,8 +221,7 @@ class HybridNitroUiSwitch(
       model.state.js?.let { Variant_Boolean_NullType.First(it) }
         ?: Variant_Boolean_NullType.Second(NullType.NULL)
     set(next) {
-      // Not visual on its own: `displayed` only follows once the event count says
-      // JS has caught up. See `afterUpdate()`.
+      // Not visual by itself: `displayed` follows in `afterUpdate()`, once JS has caught up.
       model.state.js = next.asFirstOrNull()
     }
 
@@ -386,9 +266,8 @@ class HybridNitroUiSwitch(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double. Going via
-      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an
-      // opaque colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      // `processColor` passes the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, turning an opaque colour into `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.checkedTrackColor) {
         return
@@ -435,8 +314,7 @@ class HybridNitroUiSwitch(
   override var nuiSizingKey: String
     get() = model.sizingKey
     set(next) {
-      // Store only: the engine reads the key out of Fabric state, and a Switch has
-      // one configuration, so a change here cannot even dirty its measurement.
+      // Stored only: a Switch has one size configuration.
       model.sizingKey = next
     }
 
@@ -445,17 +323,6 @@ class HybridNitroUiSwitch(
       model.testWidth?.let { Variant_NullType_Double.Second(it) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // A real size change: the composable recomposes (the model field is observed)
-      // and Compose's own measure pass reports the new intrinsic size, which the
-      // host hands to the sizing engine. No `invalidateContentSize` here - Compose
-      // is the one that measures.
-      //
-      // `markDirty` is still required, as it is for every prop that renders: it is
-      // what makes the batch's `commit()` apply the write in this turn rather than
-      // at some later global apply, and `NitroComposeHost` counts that apply as the
-      // moment its rendered content changed (a content it measured at its box's
-      // width would otherwise never be measured honestly again). iOS does the same
-      // here with `markDirty()` plus `noteContentSizeMayHaveChanged()`.
       model.testWidth = next.asSecondOrNull()
       host.markDirty()
     }
@@ -475,8 +342,6 @@ class HybridNitroUiSwitch(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The event-count handshake decides whether React's `value` wins over what
-    // the user just did - including a change JS rejected (§4).
     if (model.state.reconcile()) {
       model.displayed = model.state.displayed
       host.markDirty()
@@ -486,15 +351,7 @@ class HybridNitroUiSwitch(
 
   override fun prepareForRecycle() {
     host.tag = null
-    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
-    // marked the recycle: clearing it here would hide that mark.
-    // Not cleared here: `host.prepareForRecycle()` releases the sizing instance
-    // (which needs the id to tell the engine), and `onDropView` has already run.
-    // Resets the model. The composition does not survive a recycle: Nitro's
-    // generated manager calls `onDropView()` (-> [onDropView] below, which
-    // disposes it) before `prepareToRecycleView`, and `AbstractComposeView`
-    // rebuilds it on the next attach. What recycling still saves is this object
-    // graph: View, Hybrid, model and host allocations plus the owner wiring.
+    // The perf and sizing ids are cleared by the host, which needs them first.
     host.prepareForRecycle()
   }
 
@@ -505,29 +362,13 @@ class HybridNitroUiSwitch(
 
   // MARK: - Methods
 
-  /**
-   * The size Compose measured for this Switch, from the host's cache. Never calls
-   * into Compose, so it is safe on the JS thread (§1.4).
-   */
+  // Reads the host's cached size and never calls into Compose, so it is safe on the JS thread.
   override fun measureContent(): NitroUiSize {
     val size = host.contentSize ?: return NitroUiSize(0.0, 0.0)
     return NitroUiSize(size.width, size.height)
   }
 
-  /**
-   * What the Switch's own view has armed, for a composition of its own (see the spec).
-   *
-   * `Switch` is the control that carries this probe because it is the one a Host has
-   * composed since H1, so it is the one a test can put in both states in one render.
-   * The mechanism is `NitroComposeHost`'s, so every control shares the answer.
-   */
   override fun nuiTestArmedGuards(): String = host.armedGuardsReport()
 
-  /**
-   * What this object has been through, since it was allocated (see the spec).
-   *
-   * The same host object answers for every control, so this is the Switch's share of
-   * a mechanism `NitroComposeHost` owns.
-   */
   override fun nuiTestLifetimeReport(): String = host.lifetimeReport()
 }

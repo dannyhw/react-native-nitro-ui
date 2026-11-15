@@ -1,20 +1,3 @@
-/**
- * The build-speed decisions (X6) - measured in docs/tasks/X6-build-speed.report.md,
- * decided here.
- *
- * Each of these guards exists because the opposite choice is a real failure
- * someone would have to find the hard way:
- *
- *   - a build that silently takes four times longer because it produced three
- *     ABIs no emulator on this machine can run;
- *   - a `--force`/`--clean` that a "it looks fresh" shortcut overrode, so the
- *     thing the user asked to be rebuilt is the one thing that stayed;
- *   - a ccache keyed on the worktree path, which would make every agent worktree
- *     start from nothing (and a ccache that a machine without it has to notice);
- *   - a gradle.properties edit that `expo prebuild --clean` throws away, which
- *     would make the bench app's speed settings last exactly one prebuild.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import fs from 'node:fs';
@@ -88,8 +71,6 @@ describe('gradleArchArgs', () => {
 
 describe('ccache', () => {
   it('says nothing when the machine has no ccache', () => {
-    // The no-op CI and other contributors get: no env, no init script, the same
-    // build command as before this existed.
     expect(ccacheEnv({ enabled: false, repoRoot: '/r' })).toEqual({});
     expect(
       gradleCcacheArgs({ enabled: false, initScript: '/i.gradle' })
@@ -102,8 +83,7 @@ describe('ccache', () => {
   it('makes the cache belong to the source, not to the worktree', () => {
     expect(ccacheEnv({ enabled: true, repoRoot: '/w/X6' })).toEqual({
       CCACHE_BASEDIR: '/w/X6',
-      // No underscore: CCACHE_HASH_DIR is not a variable ccache reads, and the
-      // mistake is invisible in the timings it causes.
+      // No underscore: CCACHE_HASH_DIR is not a variable ccache reads.
       CCACHE_NOHASHDIR: '1',
     });
     // iOS: React Native's wrapper execs `$CCACHE_BINARY clang`, and Xcode does
@@ -134,7 +114,7 @@ describe('ccache', () => {
         ].join('\n')
       )
     ).toBe(true);
-    // What the build looked like while CCACHE_HASH_DIR was spelled wrong.
+    // The misspelled variable has no effect.
     expect(
       ccacheEffectiveForWorktrees(
         ['(default) base_dir = ', '(default) hash_dir = true'].join('\n')
@@ -158,22 +138,18 @@ describe('iosModuleCacheDir', () => {
   it('gives the two kinds of build different module caches', () => {
     const plain = iosModuleCacheDir({ derivedData: derived, ccache: false });
     const cached = iosModuleCacheDir({ derivedData: derived, ccache: true });
-    // The whole point: one derived data path, two module caches. A `.pcm`
-    // written under CCACHE_BASEDIR holds worktree-relative paths, and a plain
-    // xcodebuild that then reads it fails with "module 'Foundation' is defined
-    // in both ..." - an error no amount of cleaning the derived data fixes.
+    // A `.pcm` written under CCACHE_BASEDIR holds worktree-relative paths, and a
+    // plain xcodebuild that reads it fails with "module 'Foundation' is defined
+    // in both ...". So the two kinds of build get separate module caches.
     expect(cached).not.toBe(plain);
-    // Each build still keeps its own directory: the fix is not one shared cache
-    // under a new name, which would clash all over again.
     expect(plain).toBe(path.join(derived, PLAIN_MODULE_CACHE_NAME));
     expect(cached).toBe(path.join(derived, CCACHE_MODULE_CACHE_NAME));
     expect(PLAIN_MODULE_CACHE_NAME).toBe('ModuleCache.noindex');
   });
 
   it('passes the plain build the name Xcode would have used anyway', () => {
-    // The plain consumers (real-input, smoke, Xcode itself) are the ones that
-    // must not move: they keep the default, so a build by hand in the same
-    // derived data reads the same cache this suite writes.
+    // Plain builds keep Xcode's default name, so a build by hand in the same
+    // derived data reads the same cache.
     expect(iosModuleCacheArgs({ derivedData: derived, ccache: false })).toEqual(
       [`MODULE_CACHE_DIR=${derived}/ModuleCache.noindex`]
     );
@@ -183,11 +159,8 @@ describe('iosModuleCacheDir', () => {
   });
 
   it('is decided by whether the build set the ccache env, at each call site', () => {
-    // A builder that forgot the argument would compile into the default cache
-    // with CCACHE_BASEDIR set, and the failure would surface in someone else's
-    // build. So the call sites are checked, not just the helper.
-    // Same repo-root convention the other source-reading tests use: jest runs
-    // from the checkout, and these are the checked-in scripts, not fixtures.
+    // The call sites are checked too: a builder that forgot the argument would
+    // compile into the default cache with CCACHE_BASEDIR set.
     const read = (file) =>
       fs.readFileSync(path.resolve(process.cwd(), 'scripts', file), 'utf8');
     const ccacheBuilders = ['build-app.mjs', 'bench/build.mjs'];
@@ -195,8 +168,7 @@ describe('iosModuleCacheDir', () => {
       expect(read(file)).toContain('iosModuleCacheArgs(');
       expect(read(file)).toContain('ccache: ccache.enabled');
     }
-    // Every one of these compiles without ccache, so each keeps the default
-    // name - naming the ccache directory here would only move the clash.
+    // These compile without ccache, so each keeps the default name.
     for (const file of ['real-input/ios.mjs', 'smoke/common.sh']) {
       const text = read(file);
       expect(text).not.toContain(CCACHE_MODULE_CACHE_NAME);
@@ -209,14 +181,8 @@ describe('iosModuleCacheDir', () => {
 });
 
 describe('iosCleanTargets', () => {
-  /**
-   * `--clean` is what someone types when an iOS build is wrong in a way they
-   * cannot name, and the most common wrong is a Pods project that never saw a
-   * new source file (X1 review S6). `build-app` notices that through the record
-   * of what the last `pod install` was shown, so a clean that leaves the record
-   * behind cleans the DerivedData and keeps the very staleness it was asked to
-   * remove - the build reinstalls nothing.
-   */
+  // `build-app` detects a stale Pods project through the record of what the last
+  // `pod install` was shown, so `--clean` has to remove that record too.
   const targets = iosCleanTargets({ iosDir: '/repo/example/ios' });
 
   it('deletes the DerivedData this build owns', () => {
@@ -232,8 +198,7 @@ describe('iosCleanTargets', () => {
 
 describe('decideSkipBuild', () => {
   // A stamp that answers every question the skip asks, including which ABIs are
-  // in the artifact. The shape is deliberate: the Android case has to state the
-  // ABIs, because that is the one place a tree match alone can lie (review M1).
+  // in the artifact.
   const fresh = {
     force: false,
     clean: false,
@@ -290,11 +255,8 @@ describe('decideSkipBuild', () => {
     ).toBe('no matching app.stamp');
   });
 
-  // The artifact path is fixed per worktree, so an arm64-v8a APK and an x86_64
-  // one are the same file, and the code tree does not move when only `--arch`
-  // does. Without this check the run that asks for an x86_64 emulator build is
-  // told "fresh, not rebuilt" over an arm64-only APK, and the AVD answers with
-  // INSTALL_FAILED_NO_MATCHING_ABIS (or a two-ABI request gets a one-ABI app).
+  // The artifact path is fixed per worktree and the code tree does not move when
+  // only `--arch` does, so the stamp's ABIs are compared as well.
   it('will not serve an artifact built for different ABIs', () => {
     const asksFor = (abis, stampedAbis) =>
       decideSkipBuild({ ...fresh, abis, stampedAbis });
@@ -304,15 +266,13 @@ describe('decideSkipBuild', () => {
     expect(wrong.reason).toContain('built for arm64-v8a');
     expect(wrong.reason).toContain('asks for x86_64');
 
-    // Asking for more than the stamp has is the same mistake, in the other
-    // direction: a partial artifact is not a full one.
+    // Asking for more than the stamp has: a partial artifact is not a full one.
     expect(asksFor('arm64-v8a,x86_64', 'arm64-v8a').skip).toBe(false);
   });
 
   it('builds rather than guess at a stamp that does not record its ABIs', () => {
-    // Stamps written before the ABI was recorded still match the tree and the
-    // binary. Saying "fresh" about one would be exactly the M1 bug, so an
-    // unknown is a build, and the reason names the unknown.
+    // A stamp written before the ABI was recorded still matches the tree and
+    // the binary.
     for (const stampedAbis of [null, undefined, '']) {
       const decision = decideSkipBuild({
         ...fresh,

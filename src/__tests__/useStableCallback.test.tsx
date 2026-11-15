@@ -19,8 +19,6 @@ describe('useStableCallback', () => {
   });
 
   it('keeps one identity across renders', () => {
-    // The render body below creates a brand new function object every time, and
-    // the native prop still does not change.
     const hook = renderHook(() => useStableCallback<Handler>(() => {}));
     const identity = hook.result.current as NitroCallbackProp<Handler>;
     expect(identity).not.toBeNull();
@@ -42,7 +40,6 @@ describe('useStableCallback', () => {
     run(() => wrapper?.(true));
     expect(seen).toEqual(['first']);
 
-    // A re-render with a different closure must not need a new native prop.
     handler = () => {
       seen.push('second');
     };

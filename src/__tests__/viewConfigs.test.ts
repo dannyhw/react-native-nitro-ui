@@ -29,9 +29,7 @@ import { NitroUiButtonGroupConfig } from '../components/ButtonGroup/NitroUiButto
 import { NitroUiStepperConfig } from '../components/Stepper/NitroUiStepperConfig';
 import { NitroUiListItemConfig } from '../components/ListItem/NitroUiListItemConfig';
 // @end-generated
-// `<Host>` is a container rather than a control, so it has no manifest and the
-// registry writes no row for it. The "covers every generated config" test below is
-// what fails if a Hybrid View arrives without a manifest, or without its row here.
+// `<Host>` has no manifest, so the registry generates no row for it.
 import { NitroUiHostConfig } from '../components/Host/NitroUiHostConfig';
 
 const generatedDir = join(
@@ -75,7 +73,7 @@ const copies: Record<string, unknown> = {
   'NitroUiStepperConfig.json': NitroUiStepperConfig,
   'NitroUiListItemConfig.json': NitroUiListItemConfig,
   // @end-generated
-  // `<Host>` again: no manifest, so no generated row.
+  // `<Host>` has no generated row.
   'NitroUiHostConfig.json': NitroUiHostConfig,
 };
 

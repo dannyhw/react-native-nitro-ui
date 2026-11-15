@@ -45,29 +45,10 @@ import { Stepper } from '../Stepper/Stepper';
 import { ListItem } from '../ListItem/ListItem';
 
 /**
- * The controls a Host can compose, keyed by the component itself.
- *
- * Keyed by identity, not by name: `<Switch>` from this library is what a Host
- * composes, and a component called `Switch` that is not ours (RN's own, or an
- * app's) hands the composition a view it has never seen. A `Map` so the name in
- * the error comes from the same table as the permission - hosting one more
- * control means adding one row here, and nothing else decides.
- *
- * Eight rows: `Switch` from H1, `Slider`, `Progress`, `Button` from H2a,
- * `SegmentedControl`, `Picker`, `DatePicker` from H2b and `Menu` from G7a/G7b - each
- * with a bench arm and a device suite behind it (T16's condition 1 - "one arm per
- * component before it is claimed"). A row here is one half of the rule; the other is
- * the `isHostable` override on the control's own Android host, and the two are the same
- * decision seen from the two sides that have to agree.
- *
- * The H2b three are the ones a `<Host>` was said not to be able to hold, because two of
- * them (`Picker`, `DatePicker`) present a popup or a dialog: a window of its own. The answer H2b
- * measured is that a Compose popup or dialog opened from inside the Host's
- * composition is *that composition's* window - which is what closes it when the Host
- * goes away, and what anchors it to the box the Host drew
- * (`docs/components/host.md`, "Popups and dialogs"). A control is refused only if
- * hosting it is shown to be broken, and none of these is: `Menu`'s list is a third
- * such window, gated the same way for a hosted trigger (`example/__tests__/Menu.harness.tsx`).
+ * The controls a Host can compose. Keyed by the component itself, not by name:
+ * a component called `Switch` from another package is a view the Host cannot
+ * compose. Each row needs a matching `isHostable` override on the control's
+ * Android host.
  */
 export const HOSTABLE_CONTROLS = new Map<unknown, string>([
   [Button, 'Button'],
@@ -83,42 +64,10 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
 ]);
 
 /**
- * This library's controls that a Host refuses, by the same identity rule.
- *
- * It names them rather than leaving them to fall through because of what an
- * unhostable nitro-ui child does on Android: the Host skips it and it draws nothing.
- * `src/__tests__/host.test.tsx` walks `src/components` and fails if a control is
- * added without a row in one of the two tables, so this list cannot quietly fall
- * behind the library.
- *
- * Empty from H2b until G12 and G13 added controls without a round inside a Host. Two
- * kinds of control are refused now:
- *
- * - **refused until a round measures it** - the TextField (G13): a field inside a shared
- *   composition means IME sessions and focus owned by the Host, and no round has measured
- *   that yet (G13 report, follow-ups); the Chip (G12), built without that round
- *   (`docs/components/chip.md`, "Limits"); and the SearchField (G17), which inherits
- *   TextField's editing model and so inherits that same unmeasured question. The next
- *   unmeasured control starts here too.
- * - **refused by design** - the BottomSheet (G14): its content is React Native views, and a
- *   Host has no place for an RN view (`docs/components/host.md`, "What a Host cannot hold").
- *   The ContextMenu (G16) is refused for the same reason: it *is* a `View` around React
- *   Native children (Q6 Appendix A, "Manifest"); and so is the Tooltip (G18), whose anchor
- *   is the app's own React Native views, wrapped in a React Native `View`.
- *   The Popover (G22) is refused for both reasons at once: its content *and* its anchor are
- *   React Native views, presented in a window of their own.
- * - **refused until a round measures it** again - the ButtonGroup (G20): its own
- *   Compose `ButtonGroup` opens its overflow menu in a popup of its own, and no round
- *   has measured a second popup inside the Host's shared composition (G20 report,
- *   check 3). The ListItem (G30) is refused for the same reason and with the same
- *   standing: its row content is a `UIViewRepresentable` / Composable inside the host's
- *   own, and no round has measured that inside a *shared* composition. It is the leaf an
- *   app puts in a `Form.Row` or its own list row, where the row already owns the box, so
- *   nothing in the library needed the answer to get here.
- *
- * The rows are hand-written rather than generated: the registry writes the imports and
- * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
- * and asks the refusal sentence of each row.
+ * This library's controls that a Host refuses. They are named because an
+ * unhostable child is skipped on Android and draws nothing. Some are refused by
+ * design: their content or anchor is React Native views, which a Host cannot
+ * hold. The others have not been measured inside a shared composition.
  */
 export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [TextField, 'TextField'],
@@ -137,19 +86,11 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
 ]);
 
 /**
- * The RN views an app reaches for, so that "no RN views in a Host" is checked
- * rather than hoped.
- *
- * A direct RN child is what the spike found to be silently wrong: the Host skips
- * it, and no composition is asked to draw it. RN hands JS a `forwardRef` object
- * for these, not the native name, so the only honest check is identity against the
- * components themselves - `displayName` would also reject an app's own `View`, and
- * would miss RN's own `Switch` being passed for ours. Not exhaustive by nature
- * (`Animated.*`, and any third-party native view); what JS cannot see, the native
- * Host says out loud in dev when it is handed a child it cannot compose.
- * `ImageBackground` and `SafeAreaView` are left to the native check on purpose:
- * reading either export makes React Native log a deprecation warning, and this
- * table is built when the module loads, i.e. in every app that imports `Host`.
+ * The React Native views a Host refuses, matched by identity: `displayName`
+ * would also reject an app's own `View`. Not exhaustive; in development the
+ * native Host reports any other child it cannot compose. `ImageBackground` and
+ * `SafeAreaView` are left out because reading either export logs a deprecation
+ * warning, and this table is built at module load.
  */
 const UNHOSTABLE_RN_VIEWS = new Map<unknown, string>([
   [ActivityIndicator, 'ActivityIndicator'],
@@ -171,32 +112,23 @@ const UNHOSTABLE_RN_VIEWS = new Map<unknown, string>([
   [View, 'View'],
 ]);
 
-/** The names in {@link HOSTABLE_CONTROLS}, for the error and the docs. */
+/** The names in {@link HOSTABLE_CONTROLS}, for the error message. */
 export const HOSTABLE_NAMES: readonly string[] = [
   ...HOSTABLE_CONTROLS.values(),
 ];
 
 /**
  * The event a debuggable Android build emits for a child it will not compose.
- *
- * The other half of it is `HOST_UNHOSTABLE_CHILD_EVENT` in
- * `android/.../core/NitroUiHost.kt`; the name is the wire format between the two, so
- * it is written twice on purpose, in the two places a person editing either can see
- * the other.
+ * The name must match `HOST_UNHOSTABLE_CHILD_EVENT` in `NitroUiHost.kt`.
  */
 const UNHOSTABLE_CHILD_EVENT = 'NitroUiHostUnhostableChild';
 
 let listeningForUnhostableChildren = false;
 
 /**
- * Turn the native Host's report into a JS error, in development.
- *
- * The native side *sees* what React flattened JS could not (a `Picker` behind a
- * `memo`, an RN view behind a `<Row>`, another `<Host>`) and used to say so in logcat
- * only - which no app author reads (review S5). A device event reaches Metro and
- * LogBox, where a dev-time problem actually lives. It cannot throw: the tree is
- * already mounting on the UI thread, and a library that crashes an app from inside
- * `addView` has chosen the worse of two dev-time outcomes.
+ * Logs the native Host's report as a JS error, in development. Native sees
+ * children JS cannot (a control behind a `memo`, an RN view behind a wrapper
+ * component). It logs rather than throws because the tree is already mounting.
  */
 function listenForUnhostableChildren(): void {
   if (listeningForUnhostableChildren || Platform.OS !== 'android') {
@@ -216,38 +148,17 @@ function listenForUnhostableChildren(): void {
 }
 
 /**
- * Fail loudly, in dev, when a Host holds something it cannot compose.
+ * Throws, in development, when a Host holds something it cannot compose. An
+ * unsupported child draws nothing on Android, and only JS can name it. The check
+ * runs on iOS too, where a Host is a passthrough, so both platforms accept the
+ * same children.
  *
- * @param hostComponent the `Host` component itself, passed by the component so a
- *   nested `<Host>` can be recognised without `HostChildren.ts` importing `Host.tsx`
- *   (which would be a cycle, and a `Map` built against a component that has not been
- *   defined yet). Nesting is refused rather than composed: the inner Host would become
- *   a child of the outer one's `Column`, where it measures nothing, draws a nested
- *   composition, and answers to no box (review M2).
+ * It walks arrays and fragments, which do not exist in the native tree. It
+ * cannot see through a component, so an unknown component passes and the native
+ * Host judges what it renders.
  *
- * **Why a check at all.** A Host composes its direct nitro-ui children and skips
- * everything else, so an RN view inside one draws nothing on Android: the only
- * thing that could have drawn it is the composition it was never invited into.
- * That is silently wrong, and JS is the only place that can name the child - the
- * native Host sees a `View`, never a `<ScrollView>`.
- *
- * **Why it throws on iOS too**, where `<Host>` is a passthrough and a plain RN
- * child would render fine. Not to be correct there, but to be *one* contract: a
- * Host's children are its content, not RN's, on both platforms (D23), and an app
- * must not learn that on the platform it did not test.
- *
- * **What it walks:** arrays and fragments, because neither exists in the native
- * tree - a child under one *is* a direct child of the Host.
- *
- * **What it cannot see, and does not pretend to:** another component. React
- * flattens components out of the native tree, so whatever a child component
- * renders *becomes* a direct child of the Host - a `<Row>` that returns a
- * `<Switch>` is hosted, and nothing here could have told the two shapes apart.
- * That is the same limit the native direct-parent rule has, so an unknown
- * component passes and the view it returns decides; the native Host reports a child
- * it cannot compose in dev. What is refused is what JS can *prove*: a text node, a
- * host component, one of RN's own views, or one of our controls that is not hosted
- * yet.
+ * @param hostComponent the `Host` component, passed in so a nested `<Host>` can
+ *   be refused without this module importing `Host.tsx`, which would be a cycle.
  */
 export function assertHostChildren(
   children: ReactNode,
@@ -263,7 +174,7 @@ export function assertHostChildren(
 /**
  * @param position where the child sits, for the error: `2`, or `1/0` under a
  *   fragment. Positions count per list, which is what a person can find in the
- *   JSX; a flattened index would name nothing.
+ *   JSX.
  */
 function visit(
   children: ReactNode,
@@ -274,9 +185,8 @@ function visit(
     children == null ||
     children === '' ||
     typeof children === 'boolean' ||
-    // An empty string is how `{label && <Switch/>}` arrives when `label` is `''`,
-    // and React draws nothing for it - `View` does not complain about that shape
-    // either, so neither may a Host.
+    // `{label && <Switch/>}` gives the string `''` when `label` is empty, and
+    // React draws nothing for it.
     (typeof children === 'string' && children.length === 0)
   ) {
     return;
@@ -308,12 +218,10 @@ function visit(
     (UNHOSTABLE_CONTROLS.get(children.type) ?? null) !== null
       ? `react-native-nitro-ui's <${UNHOSTABLE_CONTROLS.get(children.type)}>`
       : (UNHOSTABLE_RN_VIEWS.get(children.type) ?? null) !== null
-        ? // "react-native's `<Switch>`" rather than a bare `<Switch>`: the message
-          // must survive an app that imports both Switches and wrote the wrong one.
+        ? // Names the package: an app may import both Switches.
           `react-native's <${UNHOSTABLE_RN_VIEWS.get(children.type)}>`
-        : // A string tag is a host component whatever it is called, and none of them
-          // is a nitro-ui control. RN's own are in the table above by identity; this
-          // catches a raw tag and a third-party native component.
+        : // A string tag is a host component, and none of those is a nitro-ui
+          // control. This catches a raw tag and a third-party native component.
           typeof children.type === 'string'
           ? `<${String(children.type)}>`
           : null;

@@ -19,7 +19,7 @@ import {
   type NitroUiSearchFieldHandle,
 } from './NativeNitroUiSearchField';
 
-/** What a `ref` to a {@link SearchField} can do - the two calls TextField's can too. */
+/** What a `ref` to a {@link SearchField} can do. */
 export interface SearchFieldHandle {
   /**
    * Give the field focus, which brings up the keyboard. Returns at once; the
@@ -35,12 +35,9 @@ export interface SearchFieldHandle {
  * Props of {@link SearchField}.
  *
  * The names are TextField's, which are React Native `TextInput`'s. There is no
- * `multiline` and no `secureTextEntry`: a search field is one line with no
- * password in it, and its Return key is always the Search key (D38 item 2).
- * `keyboardType`, `autoCapitalize` and `autoCorrect` are there and are
- * TextField's, with the same values and the same mapping; their defaults are what
- * a search field has always been fixed to, so an app that passes nothing sees no
- * change.
+ * `multiline` and no `secureTextEntry`: a search field is one line, and its
+ * Return key is always the Search key. `keyboardType`, `autoCapitalize` and
+ * `autoCorrect` take the same values as TextField's.
  */
 export interface SearchFieldProps extends Omit<
   ViewProps,
@@ -48,8 +45,7 @@ export interface SearchFieldProps extends Omit<
 > {
   /**
    * The query. Pass it to control the field; leave it `undefined` for an
-   * uncontrolled one (native owns the text then, and typing costs no React
-   * render).
+   * uncontrolled one, where typing causes no React render.
    */
   value?: string | undefined;
   /** Initial text of an uncontrolled field. Default: `''`. */
@@ -65,12 +61,9 @@ export interface SearchFieldProps extends Omit<
    * "Search".
    */
   placeholder?: string | undefined;
-  /** The keyboard to show. Default: `'default'`, as TextField's. */
+  /** The keyboard to show. Default: `'default'`. */
   keyboardType?: TextFieldKeyboardType | undefined;
-  /**
-   * What the keyboard capitalises. Default: `'none'` — a query is not a sentence,
-   * so a search field does not start one.
-   */
+  /** What the keyboard capitalises. Default: `'none'`. */
   autoCapitalize?: TextFieldAutoCapitalize | undefined;
   /** Whether the keyboard may autocorrect. Default: `true`. */
   autoCorrect?: boolean | undefined;
@@ -99,12 +92,9 @@ export interface SearchFieldProps extends Omit<
   /** `focus()` and `blur()`; see {@link SearchFieldHandle}. */
   ref?: Ref<SearchFieldHandle> | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Access to the native view, for tests and benchmarks.
    *
-   * @internal Not app API (DECISIONS D14). The shape is the handle
-   * `NitroUiSearchFieldHandle` in `NativeNitroUiSearchField.ts`, written inline (as
-   * `TextField.tsx` does) so api-extractor does not demand that an internal native
-   * type be exported.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -138,40 +128,30 @@ export interface SearchFieldProps extends Omit<
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`).
+   * Instance id for native performance marks, for benchmarks.
    *
-   * @internal Benchmark and diagnostics only - not app API.
+   * @internal
    */
   nuiPerfId?: number | null | undefined;
 }
 
-/**
- * What a `fillWidth` control is laid out with before any `style`: the cross axis is
- * the one it wants filled (`Slider.tsx`'s `FILL_WIDTH_BASE_STYLE`).
- */
+/** The field takes its width from its box, so it is stretched by default. */
 const FILL_WIDTH_BASE_STYLE = { alignSelf: 'stretch' } as const;
 
 /**
- * The size configuration of a search field, as the sizing engine sees it
- * (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
- *
- * Always `""`: the default configuration, the one `prewarm(['NitroUiSearchField'])`
- * warms. Nothing an app sets changes the height - the field is always one line, with
- * no label and no multiline mode - so the text, the placeholder and `maxLength` are
- * all size-irrelevant and can share one entry. Text size and font scale reach the
- * height through the environment epoch, which is not part of a key by design.
+ * Every prop that can change the control's size must appear in the sizing
+ * key. A search field has none: it is always one line.
  */
 const SIZING_KEY = '';
 
-/** The handler a field installs for a callback the app did not pass (D7b). */
+/** A module-level no-op, so `onSubmitEditing` is always sent. */
 function onSubmitNotProvided(_text: string): void {
   // Intentionally empty: the caller asked for nothing.
 }
 
 /**
- * A search field: UIKit's `UISearchTextField` on iOS, and Material 3's search-bar
- * input field - `DockedSearchBar` around `SearchBarDefaults.InputField`, held
- * collapsed - on Android.
+ * A search field: the system search text field on iOS, and Material 3's
+ * search-bar input field on Android.
  *
  * ```tsx
  * const [query, setQuery] = useState('')
@@ -183,13 +163,9 @@ function onSubmitNotProvided(_text: string): void {
  * />
  * ```
  *
- * It is one line, with a search glyph at the start and a clear button that appears
- * with the text, and it takes TextField's three keyboard props (`keyboardType`,
- * `autoCapitalize`, `autoCorrect`) - the keyboard it opens is the one you ask for,
- * and the key that submits it stays Search either way. The Search key calls `onSubmitEditing` and dismisses the
- * keyboard; an empty field never submits. The query is controlled through the same
- * event-count handshake as `TextField`, whose `maxLength`, IME guard and focus rules
- * it shares.
+ * It is one line, with a search glyph at the start and a clear button that
+ * appears with the text. The Search key calls `onSubmitEditing` and dismisses
+ * the keyboard; an empty field never submits.
  */
 export function SearchField({
   value,
@@ -215,15 +191,9 @@ export function SearchField({
   const controlled = useControlled(value, defaultValue, onChangeText);
   const sizingId = useSizingId();
 
-  // The native view, for `focus()`/`blur()`. Nitro calls `hybridRef` once per mount
-  // with that mount's view, so the ref always holds the live one. The callback is
-  // always sent: the `ref` needs it whether or not the app (well, this repo's
-  // harness) passed a `hybridRef` of its own.
-  //
-  // The view arrives *after* the parent's effects have run, so a `focus()` asked for
-  // in a mount effect is held here - the newest ask winning - and run as soon as the
-  // view is handed over. `TextField.tsx` documents the same dance, including why
-  // `mounted` has to gate a late `hybridRef`.
+  // Nitro hands over the native view after the parent's effects have run, so a
+  // `focus()` or `blur()` asked for in a mount effect is held (the newest ask
+  // wins) and run when the view arrives.
   const nativeView = useRef<NitroUiSearchFieldHandle | null>(null);
   const pendingFocus = useRef<'focus' | 'blur' | null>(null);
   const mounted = useRef(true);
@@ -256,9 +226,8 @@ export function SearchField({
     []
   );
 
-  // A layout effect, so a parent's layout effect that focuses the field finds it
-  // mounted - also when StrictMode runs the cleanups and then the effects again
-  // (`TextField.tsx` has the longer note).
+  // A layout effect, so a parent's layout effect that focuses the field finds
+  // it mounted - also when StrictMode runs the cleanups and the effects again.
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -267,19 +236,15 @@ export function SearchField({
     };
   }, []);
 
-  // One native callback for both focus edges, split here, and always sent (D7b).
   const focusChange = useStableCallback((focused: boolean) => {
     if (focused) onFocus?.();
     else onBlur?.();
   }) as NitroCallbackProp<(focused: boolean) => void>;
-  // Always sent, so one identity per mount: a fresh closure per render is a fresh
-  // native callback, which native would take as a re-registration mid-typing.
   const submitCallback = useStableCallback(
     onSubmitEditing ?? onSubmitNotProvided
   ) as NitroCallbackProp<(text: string) => void>;
 
-  // `maxLength` as native receives it: a whole number of code units, or `null`. A
-  // negative or non-finite limit is no limit, as it is for `TextInput`.
+  // A negative or non-finite limit is no limit, as it is for `TextInput`.
   const limit =
     maxLength == null || !Number.isFinite(maxLength) || maxLength < 0
       ? null

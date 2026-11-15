@@ -10,29 +10,17 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiBottomSheetStateUpdater
 import com.margelo.nitro.views.RecyclableView
 
 /**
- * The Fabric view manager of `NitroUiBottomSheet` - hand-written, and registered instead
- * of the generated `HybridNitroUiBottomSheetManager` (`component.json`'s
- * `androidViewManager`; the registry checks `NitroUiPackage` registers this one).
- *
- * **Why hand-written:** a Nitro Hybrid View is a leaf - nitrogen emits a
- * `SimpleViewManager`, which implements no `IViewGroupManager` - and a BottomSheet's
- * whole content is React Native children. The `<Host>` has the same reason
- * (`NitroUiHostViewManager`). This class is the generated manager's body (one Hybrid
- * Object per view, props applied through the generated state updater in one batch,
- * recycling set up because the Hybrid is a [RecyclableView]) on a [ViewGroupManager]
- * base, plus the redirect S2 measured: [addView] and [removeViewAt] speak to the
- * children's *logical* parent - the host, whose list Fabric's indices index into - while
- * the children physically live in the sheet's window for as long as it is up.
+ * Registered in place of the generated manager, which is a leaf `SimpleViewManager`: a
+ * BottomSheet holds React Native children. [addView] and [removeViewAt] address the host,
+ * whose list Fabric's indices refer to, while the children live in the sheet's window.
  */
 internal class NitroUiBottomSheetViewManager : ViewGroupManager<BottomSheetHost>() {
-  /** The View and its last state snapshot, as the generated managers keep them. */
   private class HybridViewHolder(
     val hybridView: HybridNitroUiBottomSheet,
     var lastState: StateWrapper? = null,
   )
 
   init {
-    // The generated manager's rule: recycling is on when the Hybrid can reset itself.
     super.setupViewRecycling()
   }
 
@@ -114,11 +102,7 @@ internal class NitroUiBottomSheetViewManager : ViewGroupManager<BottomSheetHost>
 
   override fun getChildCount(parent: BottomSheetHost): Int = parent.childCountReported()
 
-  /**
-   * `false`: Yoga keeps the layout, and RN 0.88's `SurfaceMountingManager` sets each
-   * child's frame itself - inside whatever view the child is in, which is the point of
-   * the redirect.
-   */
+  /** Yoga keeps the layout: React Native sets each child's frame in whatever view holds it. */
   override fun needsCustomLayoutForChildren(): Boolean = false
 
   private fun getHybridViewHolder(view: View): HybridViewHolder? =

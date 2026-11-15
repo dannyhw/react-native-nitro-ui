@@ -1,23 +1,12 @@
-//
-//  NitroUiTextLimit.swift
-//  react-native-nitro-ui
-//
-//  The TextField's text rules that need no UIKit: how two strings compare, how
-//  `maxLength` cuts an edit, and which part of a field's text the user just typed.
-//  Foundation only, so the host-side test
-//  (`scripts/native-tests/text-limit.test.swift`) compiles this file unchanged.
-//
+// The TextField's text rules that need no UIKit: how two strings compare, how `maxLength` cuts an
+// edit, and which part of a field's text the user just typed. Foundation only, so host-side tests
+// can compile it.
 
 import Foundation
 
-/// A string compared the way JavaScript compares one: UTF-16 code unit by code
-/// unit.
-///
-/// Swift's `String ==` is canonical equivalence, so `"é"` precomposed equals `e` +
-/// U+0301 there and differs in JavaScript and Kotlin. The handshake compares the
-/// text React sent with the text native shows, and a field whose two platforms
-/// answered that question differently would apply a write on one and drop it on
-/// the other. One rule for both platforms: Android's `==` is already this one.
+/// A string compared the way JavaScript and Kotlin compare one: UTF-16 code unit by code unit.
+/// Swift's `String ==` is canonical equivalence, so precomposed `é` equals `e` + U+0301 there, and
+/// the two platforms would disagree about whether React's text matches the field's.
 struct NitroUiText: Equatable {
   var string: String
 
@@ -56,9 +45,8 @@ enum NitroUiTextLimit {
     return allowed <= 0 ? nil : incoming.substring(to: allowed)
   }
 
-  /// `text` cut to `limit` code units at a composed-character boundary - for the one
-  /// case the insertion rule above cannot see: a composition that was let through
-  /// open and committed past the limit.
+  /// `text` cut to `limit` code units at a composed-character boundary, for a composition that was
+  /// committed past the limit.
   static func truncate(_ text: String, to limit: Int) -> String {
     let string = text as NSString
     guard string.length > limit else { return text }
@@ -72,20 +60,11 @@ enum NitroUiTextLimit {
   }
 }
 
-/// The edit a text field actually received, recovered from the text before it and after it.
-///
-/// UIKit does not always say what the user typed: the commit of a marked-text run reports the
-/// whole field, and a `UITextField.insertText` says nothing at all. The typed part is what sits
-/// between the prefix and the suffix those two strings share, so it can be recovered - and only
-/// that part is the user's edit. Everything else in the field is text they did not touch, and a
-/// `maxLength` has no claim on it: cutting the whole field instead of the edit takes the end of
-/// what the user already wrote, which reads as the field eating their words (G13 review, fix
-/// round 2 - `abcd` with `かき` committed after the `a` is `aかきbcd`, and the first five code
-/// units of that is not what anyone typed).
-///
-/// Walking grapheme clusters (`Character`) rather than code units is what keeps a family or a
-/// flag whole: where two strings from one field agree up to a cluster, they agree up to a
-/// cluster boundary.
+/// The edit a text field received, recovered from the text before and after it. UIKit does not
+/// always say what the user typed (a marked-text commit reports the whole field, `insertText`
+/// nothing), so the edit is what sits between the shared prefix and suffix. `maxLength` trims only
+/// that part, never text the user did not touch. Walks grapheme clusters, so an emoji sequence
+/// stays whole.
 enum NitroUiCommitDelta {
   struct Edit: Equatable {
     /// UTF-16 offsets - the units JavaScript, and UIKit's `NSRange`, count in.
@@ -100,8 +79,7 @@ enum NitroUiCommitDelta {
   }
 
   /// The one edit that turns `displayed` into `incoming`, or `nil` when they are the same text.
-  /// Text that differs in two separate places has no single such edit, and `clamped` says what
-  /// to do with that rather than pretending.
+  /// Text that differs in two separate places has no single such edit; `clamped` handles that.
   static func edit(displayed: String, incoming: String) -> Edit? {
     if displayed == incoming {
       return nil
@@ -126,13 +104,9 @@ enum NitroUiCommitDelta {
     )
   }
 
-  /// The text a field may keep when it ended up past `limit` without the delegate's cut: the
-  /// commit of a composition, or an `insertText` straight into the control.
-  ///
-  /// The answer is `incoming` with the *edit* trimmed to what `fitting` allows, so text outside
-  /// the edit keeps its place. An edit that cannot fit at all is refused, which is also what
-  /// keeps text a JS write put past the limit from being trimmed down to it - the write is not
-  /// the user's edit, and never gets trimmed here.
+  /// The text a field may keep when it ended up past `limit` without the delegate's cut. It is
+  /// `incoming` with the edit trimmed to what `fitting` allows, so text outside the edit keeps its
+  /// place. An edit that cannot fit at all is refused.
   static func clamped(displayed: String, incoming: String, limit: Int) -> String {
     guard (incoming as NSString).length > limit else {
       return incoming
@@ -140,9 +114,8 @@ enum NitroUiCommitDelta {
     guard let change = edit(displayed: displayed, incoming: incoming) else {
       return displayed
     }
-    // A deletion, or a replacement with nothing typed: nothing new is being added, so there is
-    // nothing to cap. Text past the limit that the user shrank stays as they left it, exactly
-    // as the delegate leaves it.
+    // A deletion adds nothing, so there is nothing to cap: text already past the limit stays as the
+    // user left it.
     if change.insertion.isEmpty {
       return incoming
     }
