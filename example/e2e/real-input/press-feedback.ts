@@ -44,6 +44,9 @@ const INSET_PX = 12;
 /** How far apart the sample points are, in device px. */
 const STEP_PX = 8;
 
+/** How far the sample window reaches around the finger, in device px. */
+const REACH_PX = 150;
+
 interface Image {
   path: string;
   png: DecodedPng;
@@ -53,11 +56,9 @@ async function capture(device: Device, label: string): Promise<Image> {
   // An absolute path of our own: a relative one lands wherever the daemon happens
   // to be standing, and a failure that names no file the reader can open is a
   // failure nobody can diagnose.
-  const file = path.join(
-    tmpdir(),
-    'nitro-ui-x35-press',
-    `${label}-${String(process.pid)}.png`,
-  );
+  const dir =
+    process.env.NITRO_UI_PRESS_DIR ?? path.join(tmpdir(), 'nitro-ui-x35-press');
+  const file = path.join(dir, `${label}.png`);
   const result = await device.unstable_raw.client.capture.screenshot({ path: file });
   return {
     path: result.path,
@@ -65,8 +66,16 @@ async function capture(device: Device, label: string): Promise<Image> {
   };
 }
 
+/** A box: position and size, in device px. */
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** Mean relative luminance of a grid inside a box, clamped to the image. */
-function meanLuma(image: DecodedPng, box: { x: number; y: number; width: number; height: number }): number {
+function meanLuma(image: DecodedPng, box: Box): number {
   const x1 = Math.max(0, Math.round(box.x) + INSET_PX);
   const x2 = Math.min(image.width - 1, Math.round(box.x + box.width) - INSET_PX);
   const y1 = Math.max(0, Math.round(box.y) + INSET_PX);
@@ -89,6 +98,24 @@ function meanLuma(image: DecodedPng, box: { x: number; y: number; width: number;
     );
   }
   return total / samples;
+}
+
+/** The part of a control's box around the finger, where its ink appears. */
+function inkWindow(box: Box, point: { x: number; y: number }): Box {
+  const x = Math.min(
+    Math.max(box.x, point.x - REACH_PX),
+    box.x + box.width - REACH_PX * 2,
+  );
+  const y = Math.min(
+    Math.max(box.y, point.y - REACH_PX),
+    box.y + box.height - REACH_PX * 2,
+  );
+  return {
+    x: Math.max(0, x),
+    y: Math.max(0, y),
+    width: Math.min(box.width, REACH_PX * 2),
+    height: Math.min(box.height, REACH_PX * 2),
+  };
 }
 
 /**
@@ -125,8 +152,9 @@ export async function pressPaintsFeedback(
   const during = await capture(device, 'press-during-hold');
   await held;
 
-  const before = meanLuma(atRest.png, box);
-  const duringMean = meanLuma(during.png, box);
+  const sample = inkWindow(box, point);
+  const before = meanLuma(atRest.png, sample);
+  const duringMean = meanLuma(during.png, sample);
   expect(
     before - duringMean,
     `holding the control left its own box at mean luminance ` +
