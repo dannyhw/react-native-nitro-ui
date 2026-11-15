@@ -26,7 +26,7 @@ There is no Android `Form` composable to host and no SwiftUI `Form` to bridge: o
 iOS the container is UIKit's list, and on Android the scroller is React Native's
 own `ScrollView` with one Compose layer per section behind its rows. That is what
 keeps rows live — a row is a React Native subtree, so it keeps its own state, its
-own gestures and its own controls (`docs/DECISIONS.md` D45).
+own gestures and its own controls (`docs/DESIGN.md` D45).
 
 ## API
 

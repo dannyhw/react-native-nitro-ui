@@ -1,6 +1,6 @@
 # BottomSheet
 
-A modal sheet whose content is React Native (G14, DECISIONS D33 and D35).
+A modal sheet whose content is React Native (G14, DESIGN.md D33 and D35).
 
 | Platform | Native                                                                                     |
 | -------- | ------------------------------------------------------------------------------------------ |

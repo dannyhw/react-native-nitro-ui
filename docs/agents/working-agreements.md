@@ -1,7 +1,7 @@
 # Working agreements
 
 How work on this repository is run: the standing answers to questions an orchestrator would
-otherwise have to ask. Design and API rulings are in `docs/DECISIONS.md` and are cited here by
+otherwise have to ask. Design and API rulings are in `docs/DESIGN.md` and are cited here by
 number rather than restated.
 
 This file is public, like the rest of the repository (D25). It holds project policy only. Anything

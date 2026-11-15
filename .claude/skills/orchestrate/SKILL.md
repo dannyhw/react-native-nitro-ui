@@ -13,9 +13,10 @@ a session, together with your own private notes for anything about this machine.
 
 ## Yours to decide, and the owner's
 
-Decide it yourself, act, and record it in `docs/DECISIONS.md`: ordering, scope cuts,
-which worker, retries, merge order, design questions with a platform precedent, and any
-recommendation you were about to ask permission for.
+Decide it yourself and act: ordering, scope cuts, which worker, retries, merge order,
+design questions with a platform precedent, and any recommendation you were about to
+ask permission for. A design decision is written into `docs/DESIGN.md` in the pull
+request that makes it; anything else is said in the merge commit.
 
 Take to the owner, once, with your pick: publishing, a product or API choice no
 experiment can settle, anything that trades what users see for less setup or fewer

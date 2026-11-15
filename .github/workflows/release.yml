@@ -1,6 +1,6 @@
 name: Release
 
-# Releases are cut by Changesets (DECISIONS D27) and *staged* on npm (D28).
+# Releases are cut by Changesets (DESIGN.md D27) and *staged* on npm (D28).
 #
 # Nothing in this workflow can put a version on the registry. The package's npm
 # Trusted Publisher allows staged publishing only, so the last step is a person:

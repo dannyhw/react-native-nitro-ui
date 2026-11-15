@@ -33,8 +33,8 @@ import { Menu } from 'react-native-nitro-ui';
 `Menu` is `Button`'s sibling, not `Picker`'s: a menu has **no value**, so there is no
 controlled prop and no event-count handshake (`docs/architecture/core.md` §12). Open
 state is native-owned and observed through `onOpen`/`onClose` — on Android; iOS never
-fires either one (DECISIONS D32) — and there is no imperative `open()`/`close()`
-(DECISIONS D29). The trigger is a Button — same `variant`s, same `size`s, same box — and
+fires either one (DESIGN.md D32) — and there is no imperative `open()`/`close()`
+(DESIGN.md D29). The trigger is a Button — same `variant`s, same `size`s, same box — and
 the items are data, never child views.
 
 ## API
@@ -102,7 +102,7 @@ The wrapper flattens the nested `group` into one ordered array of typed structs
 (`NitroUiMenuRow`, with `parentId` naming the parent row) and hands native an **array
 identity that only changes when the menu it describes changes** — a caller who writes
 `group={{ actions: [...] }}` inline pays one string build per render instead of a
-re-conversion of the struct array (`docs/research/nitro-patterns.md`).
+re-conversion of the struct array (`docs/DESIGN.md` 3.3).
 
 ## Platform mapping
 
@@ -146,12 +146,12 @@ expansion binding — `isExpanded:` exists on `Section`, `DisclosureGroup` and t
 not on `Menu`. Our `UIHostingController` therefore never learns that the system presented
 the menu, which is the same thing `Picker` already reports (`docs/components/picker.md`:
 `-1` for every popup field, never a `0` that reads as "checked"). iOS never fires either
-one (DECISIONS D32). The Android popup is our own window, so it can be witnessed:
+one (DESIGN.md D32). The Android popup is our own window, so it can be witnessed:
 `onOpen` and `onClose` fire once each per open, including dismissal by outside tap, back
 gesture, a pick, or `disabled` arriving while open. **A pick fires `onSelect` first and
 `onClose` after it** — the choice is reported, then the window comes down — so a listener
 that acts on the pick never does so while the menu is still up, and never sees an open
-that was never closed (DECISIONS D32). `docs/tasks/Q1-menu-design.md` §5 worded the pair
+that was never closed (DESIGN.md D32). `docs/tasks/Q1-menu-design.md` §5 worded the pair
 as "never for a pick"; D32 supersedes that, and the pair plus its order is asserted
 on-device (`Menu.harness.tsx`, "opens once, closes once, and pairs every open with a
 close") and off-device (`android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt`).
@@ -166,14 +166,14 @@ close it and report it. **On iOS this is neither enforced nor observable** — S
 owns the presentation, `.disabled(true)` on a `Menu` is not documented to dismiss one
 that is open, and we get no signal that one is open to act on. Nothing checks that an
 iOS menu goes away when it is disabled while open, and nothing would notice if it did
-not. DECISIONS D32 accepts that as a platform limit, so read DECISIONS D29's rule as
+not. DESIGN.md D32 accepts that as a platform limit, so read DESIGN.md D29's rule as
 Android-side.
 
 ## Primary action
 
 A control with both a default action and a list is a real thing in both toolkits, and
 neither copies the other. `primaryAction` asks for it; each platform answers in its own
-idiom (DECISIONS D29, which shipped this iOS-only, and E3, which added Android):
+idiom (DESIGN.md D29, which shipped this iOS-only, and E3, which added Android):
 
 |                       | iOS                                                                       | Android                                                                                     |
 | --------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -506,7 +506,7 @@ that list with VoiceOver and TalkBack remains a human pass.
 ## Limits
 
 - **`onOpen`/`onClose` are Android-only** — iOS never fires either one, for the SDK
-  reason above (DECISIONS D32). Do not build app state on them if iOS has to agree; use
+  reason above (DESIGN.md D32). Do not build app state on them if iOS has to agree; use
   `onSelect`.
 - **A `disabled` that arrives while the menu is open closes it on Android only.** On
   iOS it is neither enforced nor observable, for the same SDK reason — so an iOS menu

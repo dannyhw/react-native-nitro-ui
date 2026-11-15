@@ -91,8 +91,7 @@ scripts/perf/        Reassure render-count gate
 docs/components/     one page per component (props, platform mapping, limits)
 docs/architecture/   core runtime, sizing engine, benchmarks
 docs/performance.md  every benchmark cell behind the README's Performance summary
-docs/research/       the research notes behind the design
-docs/DECISIONS.md    the decisions, numbered (D1, D2, …)
+docs/DESIGN.md       the design and the decisions in force (D1, D2, …), edited as it changes
 ```
 
 ## Scripts
@@ -1296,7 +1295,7 @@ run has printed a `menu=WxH`, `text-field=WxH` or `chip=WxH` box:
 | Expo SDK 58 (RN 0.88) | ✅  | ✅      |
 | RN CLI 0.88.0         | ✅  | ✅      |
 
-RN 0.88 and Expo SDK 58 are the supported floor (DECISIONS D39): the floor
+RN 0.88 and Expo SDK 58 are the supported floor (DESIGN.md D39): the floor
 moves up with the next minor once the gates pass on a newer release, and no
 older consumer row is kept. Both cells above predate the Compose 1.12 /
 Material 3 1.5 bump, which needs the consumer to compile with SDK 37 and AGP
@@ -1475,7 +1474,7 @@ stable. Known gap: a callback hoisted into a variable in a render body
 tracked — keep such values at module scope or inside a stable hook.
 
 The rest of the contract is review-checked (see `docs/architecture/core.md`
-and `docs/research/nitro-patterns.md`): prop setters only store and mark dirty, one
+and `docs/DESIGN.md` 3.3): prop setters only store and mark dirty, one
 `afterUpdate()` applies, hosting views are created once at init, `RecyclableView`
 resets everything, no JS↔main thread blocking hops, and controlled values use the
 event-count handshake.
@@ -1504,7 +1503,7 @@ and fail loudly instead of downloading a look-alike `tsc`/`eslint` package.
 ## Releasing
 
 Releases are cut by [Changesets](https://changesets.dev) from GitHub Actions and
-**staged** on npm (DECISIONS D27, D28). There is no npm token in this repo, in the
+**staged** on npm (DESIGN.md D27, D28). There is no npm token in this repo, in the
 workflows, or on any laptop — and no automated run can publish. The package's npm
 Trusted Publisher is configured for **staged publishing only**, so the last step of
 every release is a person approving it on npmjs.com. 0.1.0 was published by hand

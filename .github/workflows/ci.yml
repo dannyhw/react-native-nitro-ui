@@ -18,7 +18,7 @@ permissions:
 # Everything that needs a simulator or an emulator stays `workflow_dispatch`
 # only: the two Harness jobs below, the Android release build, and the on-device
 # jobs in `bench.yml` and `smoke.yml`. Hosted runners make those slow and noisy,
-# and the device gates that decide a task run locally (docs/DECISIONS.md D22,
+# and the device gates that decide a task run locally (docs/DESIGN.md D22,
 # D25). The steps stay here so a maintainer can still start them on demand.
 #
 # `.github/actions/setup` is the shared install: Node from `.nvmrc`, bun from

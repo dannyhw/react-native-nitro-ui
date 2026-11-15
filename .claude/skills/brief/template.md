@@ -41,7 +41,7 @@
 
 ## Context
 
-<`docs/tasks/<ID>/context.md` if a code map exists; the sections of `docs/research/*` worth reading.>
+<`docs/tasks/<ID>/context.md` if a code map exists; the sections of `docs/DESIGN.md` worth reading.>
 
 <!-- Component tasks also owe: the README Components row, the import line, a Usage section and
      both screenshots (CONTRIBUTING "README screenshots"). `check` fails without them. -->

@@ -9,7 +9,7 @@ It is **opt-in**, and Android-only: on iOS `<Host>` is a documented passthrough 
 so the same JSX renders normally there and an app gets one tree to reason about, not
 two (D23). That is settled, not provisional — an iOS Host was built and measured: it
 won on memory (0.92× the unhosted Switch) but lost on mount UI CPU (1.40×) and unmount
-UI CPU (6.27×), so it was not shipped (`docs/DECISIONS.md`, D23 and its outcome). The
+UI CPU (6.27×), so it was not shipped (`docs/DESIGN.md`, D23 and its outcome). The
 passthrough is the design.
 
 ```tsx
@@ -286,7 +286,7 @@ teardown dismissals above are measured for a hosted Menu too
 Host moves", "comes down when its hosted child leaves the Host", "takes its window down
 when its button moves inside the Host"). What differs from `Picker` is that a Menu has no
 value, so the controlled handshake is not in play: a pick reports `onSelect` and then
-`onClose` (DECISIONS D32). On iOS a Host is a passthrough and SwiftUI keeps the
+`onClose` (DESIGN.md D32). On iOS a Host is a passthrough and SwiftUI keeps the
 presentation to itself, so that witness answers `-1` for every field but its row count.
 
 What is still refused is a **React Native** `Modal` child, or any other RN view that owns

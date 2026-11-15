@@ -23,7 +23,7 @@ than faking a wave.
 
 It is the library's first **non-interactive** component: nothing on a Progress
 can be changed by the user, so there are no callbacks, no `onValueChange`, and no
-event-count handshake (DECISIONS D7b, `docs/architecture/core.md` §12). React
+event-count handshake (DESIGN.md D7b, `docs/architecture/core.md` §12). React
 always owns `value`, which is what makes writing it at 60 Hz cheap — one `number`
 prop and one commit per frame, with no round trip to wait for.
 
@@ -52,7 +52,7 @@ second component to add:
 
 `Progress` is a `View`, so any other `ViewProps` work as usual.
 
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): the package publishes no
+`hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14): the package publishes no
 Hybrid View types and no way to write a prop from outside React. The handle is
 read-only (plus `measureContent()`, and the test-only `nuiTestDisplayedValue` /
 `nuiTestIsAnimating`), it is invoked once when the view mounts, and a new function
@@ -290,7 +290,7 @@ the point of drawing the platform's own control rather than a copy.
     own determinate ring) was built and measured here, and rejected on the numbers:
     it lays out a **58 pt** circle where this control's rings are 20 pt on iOS and
     40 dp on Android, so a ring would resize the moment a value arrived — the exact
-    box-moving behaviour `docs/architecture/sizing.md` §5 and DECISIONS D20 exist to
+    box-moving behaviour `docs/architecture/sizing.md` §5 and DESIGN.md D20 exist to
     prevent — and it needs iOS 16 while this library builds for 15.1. Forcing it back
     to 20 pt costs the `frame()`/`controlSize` tricks the "No size or thickness
     control" bullet below rules out.
