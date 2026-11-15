@@ -45,6 +45,8 @@ import {
 } from '../example-lock-core.mjs';
 import { CHECK_STEPS } from '../check-steps.mjs';
 
+import { childEnv } from './helpers/scrubbed-env.js';
+
 const root = resolve(process.cwd());
 
 /** The CLI under test, shared by the scratch-repo cases and the real-tree ones. */
@@ -554,12 +556,11 @@ exit 0
             cwd: dir,
             encoding: 'utf8',
             timeout: 120_000,
-            env: {
-              ...process.env,
+            env: childEnv({
               NITRO_UI_LOCK_SYNC_ROOT: dir,
               COCOAPODS_BIN: fakePod,
               ...env,
-            },
+            }),
           }
         ),
       /**

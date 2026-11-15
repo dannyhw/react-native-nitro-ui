@@ -44,6 +44,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { openBaselineForMerge } from '../bench/baseline.mjs';
+import { childEnv } from './helpers/scrubbed-env.js';
 import {
   BASELINE_SCHEMA_VERSION,
   SCHEMA_VERSION,
@@ -1599,8 +1600,12 @@ describe('run.mjs refuses an incomparable merge before booting', () => {
         encoding: 'utf8',
         cwd: root,
         timeout: 120_000,
-        env: {
-          ...process.env,
+        // `childEnv`, not `process.env` (X34 item 1). The child is a real `bench/run.mjs`, and the
+        // pair below is the fixture's own; a sourced lease's `EMULATOR_PORT` arriving underneath
+        // `ANDROID_SERIAL` was read as "serial and port disagree about which emulator this run
+        // owns" and took out this suite from a leased shell (the X32/X33 reports). Scrubbing is
+        // what makes the fixture's declaration of a device *complete* rather than half-overridden.
+        env: childEnv({
           PATH: `${bin}:${process.env.PATH}`,
           NITRO_UI_MACHINE_LABEL: MINE,
           // An SDK whose only adb reports zero attached devices: the pre-flight's
@@ -1610,11 +1615,16 @@ describe('run.mjs refuses an incomparable merge before booting', () => {
           ANDROID_HOME: path.join(root, 'no-sdk'),
           ANDROID_AVD_HOME: avdHome,
           ANDROID_AVD: 'nitroui_x',
-          ANDROID_SERIAL: 'emulator-5599',
+          ANDROID_SERIAL: 'emulator-5598',
+          // Stated, not inherited: with the lease scrubbed the fixture has to name the whole pair,
+          // and naming it is the difference between a fixture and an accident. An even port,
+          // because `checkEmulatorEnv` refuses an odd one as a console port the emulator cannot
+          // take — the same rule that made the shell's own lease fatal here.
+          EMULATOR_PORT: '5598',
           IOS_SIM_UDID: '',
           AVD: '',
           ...env,
-        },
+        }),
       }
     );
     return {
@@ -1834,8 +1844,10 @@ describe('report.mjs merges one component', () => {
         cwd: root,
         timeout: 120_000,
         stdio: ['ignore', fd, fd],
-        env: {
-          ...process.env,
+        // The same rule for the report CLI: it resolves a device key out of the environment, and
+        // these four blanks are the fixture's answer to "which device" — which only means
+        // something if no lease arrives underneath them.
+        env: childEnv({
           PATH: `${bin}:${process.env.PATH}`,
           NITRO_UI_MACHINE_LABEL: MINE,
           IOS_SIM_UDID: '',
@@ -1843,7 +1855,7 @@ describe('report.mjs merges one component', () => {
           ANDROID_AVD: '',
           AVD: '',
           ...env,
-        },
+        }),
       }
     );
     closeSync(fd);

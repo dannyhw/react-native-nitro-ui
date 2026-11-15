@@ -45,6 +45,7 @@ import { delimiter, join } from 'node:path';
 
 import { LOG_STORE_BASENAME } from '../gate-core.mjs';
 import { leaseRecord, writeLeaseStore } from './helpers/lease-store.js';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 import {
   decideAcquire,
   lsofListenArgs,
@@ -263,11 +264,15 @@ describe("metroPreflightFromEnv (the gate's pre-flight)", () => {
 
   it('is nothing to check when no lease exported a port', () => {
     // CI, and every plain `bun run check`: no METRO_PORT means no port was handed out.
+    // `listeners` is part of the answer even here (X34 item 2): a caller that explains a busy port
+    // reads it, and an absent field there would be a `TypeError` on the refusal path — the one
+    // path where this script has to be right first time.
     expect(metroPreflightFromEnv({}, run(''))).toEqual({
       checked: false,
       port: null,
       reason: null,
       warning: null,
+      listeners: [],
     });
   });
 
@@ -279,12 +284,21 @@ describe("metroPreflightFromEnv (the gate's pre-flight)", () => {
     expect(answer.checked).toBe(true);
     expect(answer.reason).toContain(`Metro port ${PORT_A}`);
     expect(answer.reason).toContain('pid 4242 (node)');
+    // The pids travel with the refusal so the caller can ask whose group they belong to without a
+    // second `lsof` that could disagree with the first.
+    expect(answer.listeners).toEqual([{ pid: 4242, command: 'node' }]);
   });
 
   it('passes a port nobody is listening on', () => {
     expect(
       metroPreflightFromEnv({ METRO_PORT: String(PORT_A) }, run('', false))
-    ).toEqual({ checked: true, port: PORT_A, reason: null, warning: null });
+    ).toEqual({
+      checked: true,
+      port: PORT_A,
+      reason: null,
+      warning: null,
+      listeners: [],
+    });
   });
 
   it('warns instead of refusing when the machine cannot answer', () => {
@@ -407,7 +421,11 @@ describeCli('a stale Metro server on a leased pair', () => {
   };
 
   const env = (extra = {}) => ({
-    ...process.env,
+    // The one environment builder in this suite, and the reason both CLI helpers below are clean:
+    // `lease.mjs` and `gate.mjs` read the pair, the boot switch and the Metro answer out of the
+    // environment they are handed, and every one of those is what a *fixture* decides here (X34
+    // item 1 — X32/X33 lost `check` from a leased shell through exactly this shape).
+    ...withoutLeaseEnv(process.env),
     NITRO_UI_HOME: home,
     NITRO_UI_LEASE_POLL_MS: '20',
     NITRO_UI_LSOF_BIN: join(bins, 'lsof'),

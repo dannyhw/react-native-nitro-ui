@@ -34,6 +34,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { childEnv } from './helpers/scrubbed-env.js';
 import {
   BUILD_SLOT_TTL_MINUTES,
   DEFAULT_BUILD_WAIT_MINUTES,
@@ -661,7 +662,11 @@ describe('the CLI that uses it', () => {
           String(holdMs),
           String(startMs),
         ],
-        { stdio: ['ignore', 'pipe', 'pipe'] }
+        // A named environment (X34 item 1): `build-slot-core.mjs` signs a holder with
+        // `NITRO_UI_LEASE_TASK`, so a child of a leased shell would sign itself as that task
+        // rather than as the `task` these cases pass. The scrubbed machine environment is the same
+        // one a slot-holder gets in a run; only the lease's identity is missing, which is the point.
+        { stdio: ['ignore', 'pipe', 'pipe'], env: childEnv() }
       );
 
     const collect = (proc) =>
