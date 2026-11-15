@@ -1,0 +1,97 @@
+{
+  "task": "X36",
+  "how": "One source mutation applied to the working tree, the named jest suite run against it (`fnm exec --using 24 -- bun run test -- <suite>`), then the file restored from the string in memory before the next row. `before` is the shipped source verbatim, `after` the text that replaced it, so every row is replayable with a plain string replace; each anchor was asserted to occur exactly once before the run. No device was involved: the brief forbids one, so these eight rows are the whole proof for the comparison rule, the tag choice and the side interleaving, and they were run on 2026-11-15 in the worktree at `126c818c`. Every row left the file byte-for-byte as it found it and `git status` was clean after the last one, so the tree these rows ran against is the tree `node scripts/gate.mjs check` passed on (1953 tests / 86 suites, code tree `185a3bcc63a7`).",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · fails, and names the cell, when one is over 1.20x slower than the release",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the ratio bound is moved out, so a cell 40 % slower than the release is inside tolerance",
+      "before": "export const RATIO_FAIL_THRESHOLD = 1.2;",
+      "after": "export const RATIO_FAIL_THRESHOLD = 1.4;",
+      "run": "bun run test -- bench-compare — FAIL, 3 of 18",
+      "redTests": [
+        "fails, and names the cell, when one is over 1.20x slower than the release: expect(section.exitCode).toBe(1) — Expected 1, received 0 (bench-compare.test.js:176)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · will not call a slow cell slower when its own interval includes 1.05",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the confidence-interval half of the rule is dropped: a ratio alone is conclusive",
+      "before": "        ci.low > RATIO_CI_EXCLUDES;",
+      "after": "        true;",
+      "run": "bun run test -- bench-compare — FAIL, 1 of 18",
+      "redTests": [
+        "will not call a slow cell slower when its own interval includes 1.05: expect(failure.conclusive).toBe(false) — Expected false, received true (bench-compare.test.js:204)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · will not call a cell slower when the cell was bouncing inside its own run",
+      "file": "scripts/bench/lib.mjs",
+      "mutation": "the within-run quiet rule is dropped: a noisy cell can be called slower",
+      "before": "        overThreshold &&\n        !noisy &&",
+      "after": "        overThreshold &&",
+      "run": "bun run test -- bench-compare — FAIL, 1 of 18",
+      "redTests": [
+        "will not call a cell slower when the cell was bouncing inside its own run: expect(failure.conclusive).toBe(false) — Expected false, received true (bench-compare.test.js:223)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · picks the tag that shipped last, not the one a sort of the names gives",
+      "file": "scripts/bench/compare.mjs",
+      "mutation": "the tag list is sorted lexically instead of trusting git's --sort=-creatordate order",
+      "before": "  const candidates = tags.filter((tag) => RELEASE_TAG_PATTERN.test(tag));",
+      "after": "  const candidates = tags\n    .filter((tag) => RELEASE_TAG_PATTERN.test(tag))\n    .sort()\n    .reverse();",
+      "run": "bun run test -- bench-compare — FAIL, 3 of 18",
+      "redTests": [
+        "picks the tag that shipped last, not the one a sort of the names gives: expect(answer.ref).toBe('v0.10.0') — received 'v0.9.11' (bench-compare.test.js:413)",
+        "skips a tag that is the commit under review: expect(answer.skipped).toEqual(['v0.10.0']) (bench-compare.test.js:432)",
+        "takes a tag whose commit it cannot resolve: expect(answer.ref).toBe('v0.10.0') (bench-compare.test.js:454)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · picks a hotfix that shipped after a bigger version was cut",
+      "file": "scripts/bench/compare.mjs",
+      "mutation": "the tag list is sorted by version number descending, the sort the rule exists to refuse",
+      "before": "  const candidates = tags.filter((tag) => RELEASE_TAG_PATTERN.test(tag));",
+      "after": "  const candidates = tags\n    .filter((tag) => RELEASE_TAG_PATTERN.test(tag))\n    .sort((a, b) => {\n      const [xa, ya, za] = a.slice(1).split(\".\").map(Number);\n      const [xb, yb, zb] = b.slice(1).split(\".\").map(Number);\n      return xb - xa || yb - ya || zb - za;\n    });",
+      "run": "bun run test -- bench-compare — FAIL, 1 of 18",
+      "redTests": [
+        "picks a hotfix that shipped after a bigger version was cut: expect(answer.ref).toBe('v0.9.2') — received 'v0.10.1' (bench-compare.test.js:421)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · measures each side first the same number of times",
+      "file": "scripts/bench/compare.mjs",
+      "mutation": "every launch round runs base first and head second, so the ABBA interleaving is gone",
+      "before": "  return pattern[launch % pattern.length];",
+      "after": "  return pattern[0];",
+      "run": "bun run test -- bench-compare — FAIL, 2 of 18",
+      "redTests": [
+        "measures each side first the same number of times: expect(order).toEqual(['base/head', 'head/base', 'head/base', 'base/head']) — all four rounds became 'base/head' (bench-compare.test.js:273)",
+        "pays one install per side switch, not one per launch: expect(four.installs).toBe(6) — received 8 (bench-compare.test.js:293)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-compare.test.js · skips a tag that is the commit under review",
+      "file": "scripts/bench/compare.mjs",
+      "mutation": "the newest tag is used even when it points at the commit under review, so a comparison can measure a tree against itself",
+      "before": "    if (sha != null && headSha != null && sha === headSha) {",
+      "after": "    if (false && sha != null && headSha != null && sha === headSha) {",
+      "run": "bun run test -- bench-compare — FAIL, 1 of 18",
+      "redTests": [
+        "skips a tag that is the commit under review: expect(answer.skipped).toEqual(['v0.10.0']) — received [] and ref 'v0.10.0' (bench-compare.test.js:432)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/bench-dry-run.test.js · refuses a flag the bench no longer has, and names its replacement",
+      "file": "scripts/bench/run.mjs",
+      "mutation": "the removed-flag guard is disabled, so `--check` is parsed as an ordinary run",
+      "before": "export function removedFlagProblem(argv) {",
+      "after": "export function removedFlagProblem(argv) {\n  return null;",
+      "run": "bun run test -- bench-dry-run — FAIL, 1 of 22",
+      "redTests": [
+        "refuses a flag the bench no longer has, and names its replacement: expect(out.all).toContain('--check no longer exists') — the run printed a plan instead of a refusal (bench-dry-run.test.js:617)"
+      ]
+    }
+  ]
+}
