@@ -134,6 +134,7 @@ import {
   suiteTimingPath,
 } from './harness-suite-timing.mjs';
 import { claimDevicesFromEnv } from './device-pool.mjs';
+import { diskRefusal, freeDiskGbFrom, isCiRunner } from './doctor-core.mjs';
 import {
   emulatorSerial,
   isReservedSerial,
@@ -1302,6 +1303,31 @@ function deviceGateLeaseBlock(resolved, env = process.env) {
     resolved,
     now: Date.now(),
     ...leaseStoreForGate(env),
+  });
+}
+
+/**
+ * A device gate does not start on a disk too full to finish it.
+ *
+ * Read from the worktree the gate runs in, because that is the volume its build,
+ * its Metro cache and its log are written to.
+ *
+ * @param {object} resolved `resolveGate`'s answer
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | null} the message to print, when the gate must not start
+ */
+function deviceGateDiskBlock(resolved, env = process.env) {
+  if (!isDeviceGate(resolved)) return null;
+  let measuredGb = null;
+  try {
+    const stats = fs.statfsSync(process.cwd());
+    measuredGb = Math.floor((stats.bavail * stats.bsize) / 2 ** 30);
+  } catch {
+    // Best effort: an unreadable volume is not a refusal (see `diskRefusal`).
+  }
+  return diskRefusal({
+    freeGb: freeDiskGbFrom(env, measuredGb),
+    ci: isCiRunner(env),
   });
 }
 
@@ -3735,9 +3761,12 @@ async function main(argv) {
   // The look-check refusal first: it is the more specific answer (this lease may
   // never run a device gate, whatever else is right about it), and the store check
   // would otherwise report a lease that *is* live as merely unverifiable.
+  // The disk is asked last: a run with no lease is the more useful thing to be told,
+  // and a full disk is true for every task on the machine rather than this one.
   const leaseBlock =
     lookLeaseRefusal(process.env, resolved) ??
-    deviceGateLeaseBlock(resolved, process.env);
+    deviceGateLeaseBlock(resolved, process.env) ??
+    deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {
     process.stderr.write(`gate: refused before the run - ${leaseBlock}\n`);
     return 1;
