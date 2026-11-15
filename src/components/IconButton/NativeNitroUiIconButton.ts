@@ -18,61 +18,46 @@ type CheckedChangeHandler = (checked: boolean, eventCount: number) => void;
 type HybridRefHandler = (view: NitroUiIconButtonHandle) => void;
 
 /**
- * The read side of the native IconButton — what a `hybridRef` callback gets.
+ * What a `hybridRef` callback receives. Read-only: a write from JS would run
+ * the native setter off the UI thread and never commit.
  *
- * Deliberately read-only (DECISIONS D14), for Button's reason: a direct write
- * runs the native setter on the JS thread, mutates model state the UI thread
- * owns, and never commits. Reading props and calling `measureContent()` is all
- * it is for.
- *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
- * `hybridRef` can be typed for this repo's harness and benchmarks.
+ * @internal
  */
 export interface NitroUiIconButtonHandle {
-  /** The control's accessibility label — its only name. */
   readonly accessibilityLabel: string;
   /** The SF Symbol name, or `null`. */
   readonly systemImage: string | null;
-  /** The resolved Android icon string, or `null`. */
   readonly androidIcon: string | null;
-  /** The resolved variant (`'standard'` for anything unrecognised). */
+  /** `'standard'` for anything unrecognised. */
   readonly variant: string;
-  /** The resolved size. */
   readonly size: string;
-  /** The resolved width option. */
   readonly width: string;
-  /** The resolved corner shape (`'round'` for anything unrecognised). */
+  /** `'round'` for anything unrecognised. */
   readonly shape: string;
-  /** Whether interaction is disabled. */
   readonly disabled: boolean;
   /** The tint as this platform's `processColor` produces it, or `null`. */
   readonly tintColor: number | null;
   /** What React last sent as `checked`, or `null` for the press form. */
   readonly checked: boolean | null;
-  /** The handshake count JS has echoed back. */
+  /** How many native changes JS has confirmed. */
   readonly mostRecentEventCount: number;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiIconButtonSize;
-  /** Test-only: press through the tap's path (see the spec). */
+  /** Test-only: presses through the tap's path. */
   nuiTestPress(): void;
-  /** Test-only: read the accessibility node on the UI thread (see the spec). */
+  /** Test-only: reads the accessibility node on the UI thread. */
   nuiTestProbeAccessibility(): void;
-  /** Test-only: `displayed=…;probes=…;a11y=…` (see the spec). */
+  /** Test-only: `displayed=…;probes=…;a11y=…`. */
   nuiTestStateReport(): string;
-  /** Test-only: ask whether `color` is among the pixels this control drew. */
+  /** Test-only: asks whether `color` is among the pixels this control drew. */
   nuiTestPixelProbe(color: number): void;
-  /** Test-only: the last probe's line (see the spec). */
+  /** Test-only: the last pixel probe's line. */
   nuiTestPixelReport(): string;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with
- * callbacks in Nitro's `{ f: … }` wrapper.
- *
- * Nothing here is optional on purpose (DECISIONS D7) — `IconButton.tsx` is the
- * friendly API, and it converts `undefined` into `null` so a prop can never
- * disappear between two commits (nitro#1184). The two callbacks are the D7b
- * exception, and the wrapper always sends both, whichever form is showing.
+ * No spec prop is optional: Fabric sends `null` for a removed prop, which
+ * crashes an optional one (nitro#1184).
  */
 export interface NativeNitroUiIconButtonProps
   extends HybridViewProps, NitroUiIntrinsicProps {
@@ -96,14 +81,9 @@ export interface NativeNitroUiIconButtonProps
 }
 
 /**
- * The host component for the `NitroUiIconButton` Hybrid View.
- *
- * `getHostComponent`'s return type intersects the props with `ViewProps`, which
- * would make `testID`/`accessibilityLabel` optional again and type Nitro's
- * nullable callback props as raw functions; the runtime object is exactly what
- * `getHostComponent` returns, and only the props type is corrected here. Unlike
- * `Button`, `accessibilityLabel` stays **required** through the cast: it is the
- * control's only name, and a missing one is the bug this type exists to prevent.
+ * The cast corrects only the props type: `getHostComponent` intersects the
+ * props with `ViewProps`, which would make `testID` and `accessibilityLabel`
+ * (the control's only name) optional again.
  */
 export const NativeNitroUiIconButton = getHostComponent<
   NativeNitroUiIconButtonProps,

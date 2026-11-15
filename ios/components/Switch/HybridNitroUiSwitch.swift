@@ -1,16 +1,9 @@
-//
-//  HybridNitroUiSwitch.swift
-//  react-native-nitro-ui
-//
-//  The Switch component: SwiftUI `Toggle` with `.switch` style, on the core
-//  runtime. It is the reference for every later component, so it stays short.
-//
+// The Switch component: a SwiftUI `Toggle` with the `.switch` style.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// State of one Switch. See ``NitroUiModel`` for why this is not `@Published`.
 final class SwitchModel: NitroUiModel {
   var state = NitroUiControlledValue<Bool>(displayed: false)
   var defaultValue: Bool?
@@ -19,13 +12,11 @@ final class SwitchModel: NitroUiModel {
   var tint: UIColor?
   var testID: String?
   var accessibilityLabel: String?
-  /// The size configuration React sent (empty for a Switch today). Stored for
-  /// symmetry with the other props; the sizing engine reads the key out of Fabric
-  /// state itself, so nothing native looks at this.
+  /// The size configuration React sent. Nothing native reads it: the sizing engine takes the key
+  /// from Fabric state.
   var sizingKey = ""
   /// Test-only control width, in points: see `nuiTestWidth`.
   var testWidth: Double?
-  /// `onValueChange`, wired through a stable JS callback.
   var onChange: ((_ value: Bool, _ eventCount: Double) -> Void)?
 
   override init() {
@@ -33,9 +24,7 @@ final class SwitchModel: NitroUiModel {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct SwitchContent: NitroUIContent {
-  /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: SwitchModel
 
   init(model: SwitchModel) {
@@ -48,8 +37,8 @@ struct SwitchContent: NitroUIContent {
       isOn: Binding(
         get: { model.state.displayed },
         set: { requested in
-          // Native is optimistic: show the new value now, before React has seen
-          // the event, so there is no visual latency (§4).
+          // Optimistic: show the new value now, before React has seen the event, so there is no
+          // visual latency.
           let eventCount = model.state.user(requested)
           model.objectWillChange.send()
           model.onChange?(requested, Double(eventCount))
@@ -57,9 +46,7 @@ struct SwitchContent: NitroUIContent {
       )
     )
 
-    // Test-only: fix the control's *fitting* width, so a test can watch a
-    // sizing-key change re-measure (see `nuiTestWidth`). Nothing in a real app
-    // sets it, and `nil` - the default - adds no modifier at all.
+    // Test-only: fixes the control's fitting width. `nil`, the default, adds no modifier.
     .modifier(OptionalTestWidth(points: model.testWidth))
     .labelsHidden()
     .toggleStyle(.switch)
@@ -97,10 +84,9 @@ private struct OptionalTint: ViewModifier {
   }
 }
 
-/// An empty `accessibilityLabel(_:)` would silence the Toggle's own label, so it
-/// is applied only when set. `testID` deliberately does *not* go in here: RN
-/// already puts it on the component view, and putting it on the SwiftUI element
-/// too would make the view match a testID query twice.
+/// An empty `accessibilityLabel(_:)` would silence the Toggle's own label, so it is applied only
+/// when set. `testID` is not applied here: RN already puts it on the component view, and a second
+/// copy would match a testID query twice.
 private struct OptionalAccessibility: ViewModifier {
   let label: String?
 
@@ -113,21 +99,16 @@ private struct OptionalAccessibility: ViewModifier {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiSwitch`.
 final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
   private let host: NitroSwiftUIHost<SwitchContent>
 
-  /// This component's name in the sizing engine: `HybridNitroUiSwitchComponentName`
-  /// in the generated C++, and `getName()` in the generated Kotlin.
+  /// This component's name in the sizing engine. Must match `HybridNitroUiSwitchComponentName` in
+  /// the generated C++ and `getName()` in the generated Kotlin.
   private static let sizingComponentName = "NitroUiSwitch"
 
-  /// The size to lay a Switch out with before anything has been measured, in
-  /// points - the first Switch of an app's first launch. A measurement replaces
-  /// it on the first report, and a Switch has one configuration, so this is a
-  /// one-frame thing; it still has to be close, because SwiftUI paints outside a
-  /// box that is too small and leaves dead touch zones (docs/components/switch.md).
-  /// A `.switch` Toggle is 61x28 pt from iOS 26 and 51x31 pt before it - the same
-  /// OS check the JS wrapper carried until sizing became native.
+  /// The size to lay a Switch out with before anything has been measured, in points. It has to be
+  /// close: SwiftUI paints outside a box that is too small and leaves dead touch zones. A `.switch`
+  /// Toggle is 61x28 pt from iOS 26 and 51x31 pt before it.
   private static let declaresFallback: Bool = {
     let modern = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
     let size = modern ? (width: 61.0, height: 28.0) : (width: 51.0, height: 31.0)
@@ -135,32 +116,21 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process
-  /// (the static above is lazy and thread-safe, so repeat calls cost nothing).
-  ///
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
-  /// matters: Fabric measures a Switch's shadow node before it creates any Switch
-  /// view, so a fallback declared from `init` is one measure too late for the
-  /// first instance (T14). `init` still calls it, as the backstop.
+  /// Hand this control's declared size to the sizing engine, once per process. Called at startup,
+  /// because Fabric measures a shadow node before it creates the view; `init` calls it again as a
+  /// backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
 
-  /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: SwitchModel())
     super.init()
-    // Containment is for controls that present UI (menus, pickers); a Toggle
-    // never does, so it stays a plain view (core-architecture §2).
+    // Containment is only for controls that present UI.
     host.needsContainment = false
-    // T11 and `measureContent()` want the fitting size. Cost is one
-    // `sizeThatFits` per bounds or trait change, not per commit, and nothing for
-    // components that opt out.
     host.wantsContentSize = true
     host.sizingPolicy = .intrinsic
-    // The backstop: startup normally registers this through
-    // ``NitroUiDeclaredFallbacks`` long before a Switch can be measured, and a
-    // host built without that table still gets its fallback here.
+    // Backstop: startup normally registers this before a Switch can be measured.
     Self.declareFallback()
   }
 
@@ -177,8 +147,8 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
       return .first(js)
     }
     set {
-      // Not visual on its own: `displayed` only follows once the event count says
-      // JS has caught up. See `afterUpdate()`.
+      // Not visual on its own: `displayed` follows only once the event count says JS has caught up
+      // (see `afterUpdate()`).
       model.state.js = newValue.asType(Bool.self)
     }
   }
@@ -230,11 +200,8 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: `testID` is an RN base prop too, and
-      // `RCTViewComponentView` already puts it on the component view as
-      // `accessibilityIdentifier`. Setting it again here would make the Switch
-      // match a testID query twice and need clearing on recycle. It stays in the
-      // spec because Android needs it as a `tag`.
+      // Nothing to apply: `RCTViewComponentView` already sets `testID` as the component view's
+      // `accessibilityIdentifier`. It is in the spec because Android needs it.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -245,9 +212,7 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
       return .second(label)
     }
     set {
-      // Rendered, not bookkeeping: the label is on the SwiftUI element, so it
-      // needs a commit or a late-set label never reaches VoiceOver. Same rule as
-      // `disabled` above - only the handshake props may skip `markDirty()`.
+      // Rendered, so it needs a commit: the label is on the SwiftUI element.
       let next = newValue.asType(String.self)
       guard next != model.accessibilityLabel else { return }
       model.accessibilityLabel = next
@@ -280,10 +245,8 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
       }
       model.testWidth = next
       host.markDirty()
-      // This is the one prop a Switch has that changes its *size*, so the fitting
-      // size has to be taken again after the commit - with a new width the
-      // reported size is what corrects the box. A text-sized component's real
-      // props do the same thing (a shorter label, a new selection).
+      // This prop changes the control's size, so the fitting size must be measured again after the
+      // commit.
       host.noteContentSizeMayHaveChanged()
     }
   }
@@ -301,8 +264,8 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // The event-count handshake decides whether React's `value` wins over what
-    // the user just did - including a change JS rejected (§4).
+    // The event-count handshake decides whether React's `value` wins over what the user just did,
+    // including a change JS rejected.
     if model.state.reconcile() {
       host.markDirty()
     }
@@ -330,10 +293,8 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
 
   // MARK: - Methods
 
-  /// The size SwiftUI wants for this Toggle, from the host's cache.
-  ///
-  /// Never touches the main thread: this can be called from JS, and SwiftUI may
-  /// only be measured on main (core-architecture §1.4).
+  /// The size SwiftUI wants for this Toggle, from the host's cache. Can be called from the JS
+  /// thread, so it must not measure SwiftUI, which is main-thread only.
   func measureContent() throws -> NitroUiSize {
     guard let size = host.contentSize else {
       return NitroUiSize(width: 0, height: 0)
@@ -341,26 +302,12 @@ final class HybridNitroUiSwitch: HybridNitroUiSwitchSpec, RecyclableView {
     return NitroUiSize(width: Double(size.width), height: Double(size.height))
   }
 
-  /// Always empty on iOS, honestly: there is nothing here to arm.
-  ///
-  /// The Android host registers two things for a composition of its own - a
-  /// `ViewCompositionStrategy` (an observer on the activity's `LifecycleRegistry`) and a
-  /// first-frame pre-draw listener - and a control inside a `<Host>` must not register
-  /// either, which is what the probe lets a test see (H1 follow-up N4). iOS has neither
-  /// mechanism: a `UIHostingController` is torn down with its host and there is no
-  /// pre-draw registrar to leak through. The answer keeps Android's shape - nothing ever
-  /// armed, nothing installed - rather than inventing a third one. The test that reads
-  /// this is gated to Android, so it states a fact rather than a measurement.
+  /// Always empty on iOS: the lifecycle observer and pre-draw listener this reports on exist only
+  /// on Android.
   func nuiTestArmedGuards() throws -> String {
     return "|live:"
   }
 
-  /// What this host object has been through since it was allocated (see the spec).
-  ///
-  /// The counters are the host's, so the answer is real here in the same way it is on
-  /// Android - iOS has always recycled, which is exactly what makes this control's
-  /// second mount the interesting one: only a pooled instance can report a drop it
-  /// survived.
   func nuiTestLifetimeReport() throws -> String {
     return host.lifetimeReport()
   }

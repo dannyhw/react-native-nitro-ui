@@ -66,24 +66,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/*
- * BottomSheet (G14, DECISIONS D33/D35): Material 3's `ModalBottomSheet` whose content is
- * React Native views.
- *
- * The sheet is a window composed by the host's own composition - the machinery the
- * dialogs proved (G11): disposing the composition takes the window down with the mount.
- * What is new is the content. Fabric mounts the BottomSheet's children through
- * [NitroUiBottomSheetViewManager], whose `addView` redirects them into a
- * [NitroUiSheetRootView] - a copy of React Native's own `Modal` root
- * (`ReactModalHostView.DialogRootViewGroup`): a `RootView` with a touch dispatcher of its
- * own, because no `ReactRootView` is above it in the sheet's window. The root sits in the
- * sheet as an `AndroidView` (S2, `docs/tasks/S2-bottomsheet-spike.report.md`).
- *
- * Material's sheet has two rest positions, so the detents map as DECISIONS D33 settled:
- * `medium` is `PartiallyExpanded`, and the largest other detent is `Expanded`.
- */
+// Material 3's `ModalBottomSheet` with React Native views as its content. Material has two
+// rest positions: `medium` is `PartiallyExpanded`, the largest other detent is `Expanded`.
 
-/** State of one sheet. See [NitroUiModel] for the shape this has to have. */
 internal class BottomSheetModel : NitroUiModel() {
   /** Whether the sheet is composed: the handshake's `displayed`, mirrored into snapshot state. */
   var presented by mutableStateOf(false)
@@ -107,10 +92,10 @@ internal class BottomSheetModel : NitroUiModel() {
   var label by mutableStateOf<String?>(null)
   var testID by mutableStateOf<String?>(null)
 
-  /** The content's height for `fit`, in px: the BottomSheet node's own height, which Yoga took from the children. */
+  /** The `fit` height in px: this node's own height, which Yoga took from the children. */
   var fitHeightPx by mutableIntStateOf(0)
 
-  /** `presented` behind the event-count handshake (`core.md` section 4). */
+  /** `presented` behind the event-count handshake. */
   val state = NitroUiControlledValue(false)
 
   var onPresentedChange: ((Boolean, Double) -> Unit)? = null
@@ -145,9 +130,8 @@ internal class BottomSheetModel : NitroUiModel() {
       closing = false
       generation += 1
     } else {
-      // Keep the sheet composed while it animates out; the sheet clears this when its
-      // `hide()` returns. A sheet that never got a window (asked for while its view had
-      // none) has nothing to animate.
+      // Stay composed while animating out; the sheet clears this when `hide()` returns.
+      // A sheet that never got a window has nothing to animate.
       closing = composed
     }
     presented = next
@@ -188,7 +172,7 @@ internal class BottomSheetModel : NitroUiModel() {
     onDismissed?.invoke(true)
   }
 
-  /** React withdrew a sheet with nothing on screen (see the spec's `onDismissed`). */
+  /** React withdrew a sheet that has nothing on screen. */
   fun withdrawnWithNothingUp() {
     if (!owesDismissal || presented || closing) return
     owesDismissal = false
@@ -227,10 +211,7 @@ internal class BottomSheetModel : NitroUiModel() {
   }
 
   companion object {
-    /**
-     * How many sheet windows this process has composed right now, counted by a
-     * `DisposableEffect` in the subtree that composes the window - the dialogs' witness.
-     */
+    /** Sheet windows composed in this process right now, counted where one is composed. */
     val livePresentations = AtomicInteger(0)
 
     /** How many [NitroUiSheetRootView]s are alive in a sheet right now. */
@@ -239,14 +220,9 @@ internal class BottomSheetModel : NitroUiModel() {
 }
 
 /**
- * The view the React Native children live in, inside the sheet's window: React Native's
- * `DialogRootViewGroup` with the state push taken out (the box goes to JS instead) and
- * its size driven by Compose.
- *
- * Popover reuses it (G22): a popup's window needs the same thing - a root with its own
- * `JSTouchDispatcher`, because no `ReactRootView` is above it there either. Both live in
- * this package, and one root class means the touch, layout and exception paths are tested
- * once. Precedent: iOS's `NitroUiTouchRoot`, which ContextMenu uses as well.
+ * Holds the React Native children inside the sheet's window. It has its own touch
+ * dispatcher, as React Native's `Modal` root does, because no `ReactRootView` is above it
+ * there. Popover uses it for the same reason.
  */
 internal class NitroUiSheetRootView(
   context: Context,
@@ -275,10 +251,7 @@ internal class NitroUiSheetRootView(
     if (w != oldw || h != oldh) onSizeReport?.invoke(w, h)
   }
 
-  /**
-   * Compose's `AndroidView` measures this with the constraints the sheet gave it; the
-   * children's frames are Fabric's, so nothing here measures them.
-   */
+  /** Sized by Compose's `AndroidView`; the children's frames are Fabric's. */
   override fun onMeasure(
     widthMeasureSpec: Int,
     heightMeasureSpec: Int,
@@ -296,7 +269,7 @@ internal class NitroUiSheetRootView(
     right: Int,
     bottom: Int,
   ) {
-    // Fabric lays the children out (`needsCustomLayoutForChildren() == false`).
+    // Fabric lays the children out.
   }
 
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
@@ -313,18 +286,14 @@ internal class NitroUiSheetRootView(
       jsPointerDispatcher?.handleMotionEvent(event, dispatcher, false)
     }
     super.onTouchEvent(event)
-    // Keep the stream, the way RN's modal root does: without this a root with no
-    // gesture-hungry child stops receiving the MOVEs a `Pressable` still needs.
+    // Keep the stream, as React Native's modal root does: otherwise a root with no
+    // gesture-handling child stops receiving the MOVEs a `Pressable` needs.
     return true
   }
 
   /**
-   * React Native's `ReactRootView`: a child that disallows interception (a horizontal
-   * `ScrollView`, a scrolling multiline `TextInput`) must not stop this root's
-   * [onInterceptTouchEvent], which is where JS gets the gesture's MOVE and UP - without
-   * them a `Pressable` can stay pressed. So the flag is not set here; it is passed up,
-   * so the sheet's own drag (Compose's interop filter above the `AndroidView`) still
-   * stands down for that gesture.
+   * Passed up but not set here, as in `ReactRootView`: a child that disallows interception
+   * must not stop [onInterceptTouchEvent], which is where JS gets the gesture's MOVE and UP.
    */
   override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
     parent?.requestDisallowInterceptTouchEvent(disallowIntercept)
@@ -366,10 +335,9 @@ internal class NitroUiSheetRootView(
 }
 
 /**
- * The BottomSheet's Fabric view: a `0 x 0`-drawing host whose composition composes the
- * sheet, and the *logical* parent of the React Native children - the list Fabric's
- * indices refer to. Physically the children are in [NitroUiSheetRootView] while the
- * sheet is up, and in no view at all otherwise (they are only mounted while it is up).
+ * Draws nothing itself: its composition composes the sheet. It is the logical parent of
+ * the React Native children, which are physically in [NitroUiSheetRootView] while the
+ * sheet is up.
  */
 internal class BottomSheetHost(
   private val reactContext: ThemedReactContext,
@@ -391,11 +359,11 @@ internal class BottomSheetHost(
   private var lastBoxHeightPx = -1
 
   init {
-    // Nothing of the sheet is drawn here, and this box is the content's, not a target.
+    // Nothing is drawn here, so this box is not an accessibility target.
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
   }
 
-  /** Never composed by a `<Host>`: its content is React Native views (`docs/components/host.md`). */
+  /** Never composed by a `<Host>`: its content is React Native views. */
   override val isHostable: Boolean
     get() = false
 
@@ -428,7 +396,7 @@ internal class BottomSheetHost(
 
   // MARK: - The sheet's root
 
-  /** The `AndroidView` factory's call: the root the children live in, with them moved into it. */
+  /** Called by the `AndroidView` factory: creates the root and moves the children into it. */
   fun obtainSheetRoot(): NitroUiSheetRootView {
     sheetRoot?.let { return it }
     val root =
@@ -519,9 +487,8 @@ internal class BottomSheetHost(
         BottomSheetModel.livePresentations.decrementAndGet()
         model.sheetValue = "none"
         model.composed = false
-        // Posted: a callback from inside a composition's disposal must not re-enter it.
-        // Keyed to the mount, so a drop's disposal can never report into the mount a
-        // recycled host serves next.
+        // Posted, because a callback during disposal must not re-enter the composition, and
+        // keyed to the mount so it cannot report into the next owner of a recycled host.
         val generation = mountGeneration
         mainHandler.post {
           if (generation == mountGeneration) model.presentationEnded()
@@ -537,26 +504,17 @@ internal class BottomSheetHost(
     val hasMedium = detents.any { it.kind == "medium" }
     val expanded = expandedDetent(detents, model.fitHeightPx)
     val dismissible = model.dismissible
-    // One instance for the whole presentation: `rememberBottomSheetState` keys its
-    // saved state on this lambda, so a fresh one per recomposition - the content's box
-    // arriving, a `fit` height moving - built a new, hidden `SheetState` and the sheet
-    // took itself down. It reads the model when Material asks, not when it was made.
+    // One instance per presentation: `rememberBottomSheetState` keys its saved state on
+    // this lambda, so a new one per recomposition would build a new, hidden `SheetState`.
     val confirmValueChange =
       remember(model) {
         { value: SheetValue -> value != SheetValue.Hidden || model.dismissible || !model.presented }
       }
-    // Decided once per presentation (this is inside `key(model.generation)`):
-    // `rememberBottomSheetState` keys its saved state on it, so a detent list that
-    // gained or lost `medium` while the sheet was up built a new, hidden `SheetState`
-    // under it. Such a change applies at the next presentation; every other detent
-    // change (the expanded height) applies at once.
+    // Decided once per presentation for the same reason, so a detent list that gains or
+    // loses `medium` while the sheet is up applies at the next presentation.
     val skipPartiallyExpanded = remember(model) { !hasMedium || expanded == null }
-    // material3 1.5's sheet state (`rememberModalBottomSheetState` is deprecated). One
-    // thing differs from the old call: a sheet no taller than half the screen keeps its
-    // `PartiallyExpanded` anchor, at its own height and on top of `Expanded`, where the
-    // old state dropped it. The sheet rests in the same place either way; what moved is
-    // which value it rests *as*, and [detentIndexOf] reads that converged anchor as the
-    // expanded detent, so the detent a caller is told is what it was before.
+    // A sheet no taller than half the screen keeps a `PartiallyExpanded` anchor on top of
+    // `Expanded`; [detentIndexOf] reads that converged anchor as the expanded detent.
     val enabledValues =
       remember(skipPartiallyExpanded) {
         if (skipPartiallyExpanded) {
@@ -612,8 +570,7 @@ internal class BottomSheetHost(
       val density = LocalDensity.current
       val sizing =
         when {
-          // Only `medium`: half the sheet, expanded - Material has no other way to rest
-          // there without a taller detent above it.
+          // Only `medium`: a half-height sheet, expanded, is Material's one way to rest there.
           expanded == null -> Modifier.fillMaxHeight(0.5f)
           expanded.kind == "fit" -> Modifier.height(with(density) { model.fitHeightPx.toDp() })
           expanded.kind == "height" -> Modifier.height(expanded.value.dp)
@@ -628,10 +585,7 @@ internal class BottomSheetHost(
     }
   }
 
-  /**
-   * Report a drag to another detent: `PartiallyExpanded` is `medium`, `Expanded` the
-   * expanded detent. The value the sheet first settles at is not a change.
-   */
+  /** Reports a drag to another detent. The value the sheet first settles at is not a change. */
   @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   private fun DetentReporter(
@@ -641,15 +595,12 @@ internal class BottomSheetHost(
     expanded: NitroUiSheetDetent?,
     geometry: SheetGeometry,
   ) {
-    // The lists as they are now, not as they were when the effects started: a detent
-    // change while the sheet is up does not restart them (one state per presentation).
+    // The effects are not restarted by a detent change, so they read the current lists.
     val currentDetents by rememberUpdatedState(detents)
     val currentExpanded by rememberUpdatedState(expanded)
-    // Distinct on the *detent*, not on Material's value: a converged sheet that grows
-    // past half the screen is promoted from `PartiallyExpanded` to `Expanded` without
-    // moving off its detent, and that is not a change to report.
-    // Read together with the sheet's measured geometry, which can move without the
-    // value moving (a `fit` sheet growing past half the container).
+    // Distinct on the detent, not on Material's value: a converged sheet that grows past
+    // half the screen becomes `Expanded` without changing detent. The geometry is read too
+    // because it can move without the value moving.
     LaunchedEffect(sheetState) {
       snapshotFlow { Triple(sheetState.currentValue, geometry.known, geometry.converged) }
         .filter { (value, known, _) -> value != SheetValue.Hidden && known }
@@ -671,7 +622,7 @@ internal class BottomSheetHost(
     }
   }
 
-  /** Where `nuiTestSelectDetent` reaches the sheet: the same state calls a drag ends in. */
+  /** Lets the test seam move the sheet through the same state calls a drag ends in. */
   @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   private fun TestSeam(
@@ -703,10 +654,8 @@ internal class BottomSheetHost(
   var selectDetent: ((Int) -> Unit)? = null
 
   /**
-   * The detent a resting sheet stands for. `PartiallyExpanded` is `medium` - unless
-   * Material has put it on top of `Expanded` ([SheetGeometry.converged]), where the sheet
-   * rests at the expanded detent's height, and that detent is the honest answer (it is
-   * also what the old sheet state, which had no such anchor, reported).
+   * `PartiallyExpanded` is `medium`, unless Material has put it on top of `Expanded`
+   * ([SheetGeometry.converged]): then the sheet rests at the expanded detent's height.
    */
   @OptIn(ExperimentalMaterial3Api::class)
   private fun detentIndexOf(
@@ -736,11 +685,7 @@ internal class BottomSheetHost(
     }
   }
 
-  /**
-   * The detent Material's `Expanded` stands for: the largest that is not `medium`, or
-   * `null` when `medium` is all there is (DECISIONS D33). Ranked by the height each
-   * would ask for, against the screen - `large` always wins.
-   */
+  /** The detent Material's `Expanded` stands for: the tallest that is not `medium`, or `null`. */
   private fun expandedDetent(
     detents: List<NitroUiSheetDetent>,
     fitHeightPx: Int,
@@ -750,9 +695,8 @@ internal class BottomSheetHost(
       .maxByOrNull { detent -> detentHeightPx(detent, fitHeightPx) }
 
   /**
-   * Losing the window while presented closes the sheet and reports it, as iOS does and
-   * as the dialogs do: one turn later, so an unmount's `onDropView` and a reparent that
-   * puts the view straight back both get there first.
+   * Losing the window while presented closes the sheet and reports it. One turn later, so an
+   * unmount's `onDropView` or a reparent that reattaches the view gets there first.
    */
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
@@ -796,7 +740,6 @@ class HybridNitroUiBottomSheet(
   private val mainHandler = Handler(Looper.getMainLooper())
   internal val host = BottomSheetHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
@@ -858,7 +801,7 @@ class HybridNitroUiBottomSheet(
       model.containerColor?.let { Variant_NullType_Double.Second(it.toDouble()) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // `processColor` is signed on Android (D10): keep the bit pattern.
+      // `toLong()` keeps the ARGB bit pattern; `Double.toInt()` would saturate.
       val value = next.asSecondOrNull()?.toLong()?.toInt()
       if (value != model.containerColor) {
         model.containerColor = value
@@ -924,8 +867,8 @@ class HybridNitroUiBottomSheet(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The handshake decides whether React's `presented` wins - including a dismissal JS
-    // refused, which presents the sheet again (D33).
+    // The handshake decides whether React's `presented` wins. A dismissal JS refused
+    // presents the sheet again.
     model.state.reconcile()
     if (model.applyDisplayed()) {
       host.markDirty()
@@ -939,8 +882,7 @@ class HybridNitroUiBottomSheet(
   override fun prepareForRecycle() {
     host.mountGeneration += 1
     host.resetMount()
-    // `host.prepareForRecycle()` resets the model, which stops composing the window -
-    // and `onDropView` already disposed the composition that held it.
+    // Resets the model, which stops composing the window.
     host.prepareForRecycle()
   }
 
@@ -950,8 +892,7 @@ class HybridNitroUiBottomSheet(
     model.onDetentChange = null
     model.onDismissed = null
     model.onContentBox = null
-    // The composition disposal in `drop()` takes the window down with the mount; the
-    // flags follow so the state is honest as well as the screen.
+    // `drop()` disposes the composition and with it the window; the flags follow.
     model.state.displayed = false
     model.applyDisplayed()
     model.closing = false
@@ -996,17 +937,9 @@ class HybridNitroUiBottomSheet(
 }
 
 /**
- * The two numbers Material builds a sheet's anchors from - material3 1.5.0-beta02's
- * `BottomSheetImpl`, in `draggableAnchors { sheetSize, constraints -> }`: the sheet
- * surface's measured height, and the height it was allowed (`constraints.maxHeight`,
- * Material's `fullHeight`).
- *
- * Material keeps `PartiallyExpanded` at `fullHeight - min(fullHeight / 2, sheetHeight)`
- * and `Expanded` at `fullHeight - sheetHeight`. The two coincide exactly when the sheet is
- * no taller than half of what it was allowed - [converged]. The sheet's height is the
- * whole surface: drag handle, content, and the insets padding inside it. A guess from the
- * detent and the screen gets that wrong just under half (review of X18 round 1:
- * `['medium', {fraction: 0.47}]` with the handle has two anchors, not one).
+ * The two numbers Material builds a sheet's anchors from: the sheet surface's measured
+ * height (handle, content and insets) and the height it was allowed. `PartiallyExpanded`
+ * and `Expanded` coincide when the sheet is no taller than half of what it was allowed.
  */
 @Stable
 private class SheetGeometry {
@@ -1023,11 +956,8 @@ private class SheetGeometry {
 }
 
 /**
- * Record [SheetGeometry] where Material reads it. The `modifier` given to
- * `ModalBottomSheet` is the outer end of the sheet surface's chain, and what lies between
- * it and Material's `draggableAnchors` (`align`, `consumeWindowInsets`, `widthIn`,
- * `fillMaxWidth`, `nestedScroll`) changes only the width. So the height measured here and
- * the height constraint seen here are the two Material used.
+ * Records [SheetGeometry]. The modifier given to `ModalBottomSheet` is the outer end of the
+ * sheet surface's chain, and nothing between it and Material's anchors changes the height.
  */
 private fun Modifier.measureSheet(
   geometry: SheetGeometry,

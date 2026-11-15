@@ -5,12 +5,8 @@ import com.facebook.proguard.annotations.DoNotStrip
 import com.margelo.nitro.nitroui.core.NitroUiMaterialTheme
 
 /**
- * JS's handle on the process-wide Material theme setting (`setMaterialTheme`).
- *
- * Holds nothing of its own: every instance reads and writes [NitroUiMaterialTheme],
- * which is what each composition's root reads, so two instances (two JS runtimes, a
- * reload) cannot disagree. Called on the JS thread; the write is snapshot state and
- * needs no hop to the UI thread (see [NitroUiMaterialTheme]).
+ * Stateless: every instance reads and writes the process-wide [NitroUiMaterialTheme].
+ * Called on the JS thread; the write is snapshot state and needs no hop to the UI thread.
  */
 @DoNotStrip
 @Keep

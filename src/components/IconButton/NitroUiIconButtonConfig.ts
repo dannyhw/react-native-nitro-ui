@@ -3,13 +3,8 @@ import type { ViewConfig } from 'react-native-nitro-modules';
 import type { NativeNitroUiIconButtonProps } from './NativeNitroUiIconButton';
 
 /**
- * The Fabric view config of the `NitroUiIconButton` Hybrid View.
- *
- * A copy of `nitrogen/generated/shared/json/NitroUiIconButtonConfig.json`, kept
- * inline for Button's and Chip's reason: a published `src/` module must not
- * import outside the package source, and the copy is reviewable in a diff.
- * `src/__tests__/viewConfigs.test.ts` fails when the copy and nitrogen's output
- * disagree, so it cannot drift silently.
+ * Fabric view config of `NitroUiIconButton`: a copy of nitrogen's generated
+ * JSON, which `src/` cannot import. A unit test fails when the two differ.
  */
 export const NitroUiIconButtonConfig: ViewConfig<NativeNitroUiIconButtonProps> =
   {

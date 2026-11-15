@@ -1,13 +1,7 @@
 /**
- * The decisions behind the faster local/agent build (X6), kept free of I/O so
- * they are testable: which Android ABI to build, what ccache needs in the
- * environment, when a build can be skipped, and what a generated Gradle
- * properties file must contain.
- *
- * Nothing here is allowed to change what a *library user* sees. These decisions
- * live in `scripts/`, the example app and the bench app - never in
- * `android/build.gradle`, `NitroUi.podspec`, `src/`, `ios/`, `cpp/` or
- * `nitrogen/`, all of which ship in the npm package.
+ * Build-speed decisions, kept free of I/O: which Android ABI to build, what
+ * ccache needs in the environment, when a build can be skipped, and what a
+ * generated Gradle properties file must contain.
  */
 
 import path from 'node:path';
@@ -67,10 +61,8 @@ export function resolveAndroidAbis({
 
 /**
  * The gradle argument that narrows a build to those ABIs.
- *
- * `example/android/gradle.properties` keeps the four-ABI default on purpose: it
- * is what a hand-run gradle command and the release build produce. Every script
- * build passes this argument, so the narrowed build is the one agents get.
+ * `example/android/gradle.properties` keeps the four-ABI default, which is what
+ * a hand-run gradle command and the release build produce.
  *
  * @param {string} abis
  * @returns {string[]}
@@ -96,29 +88,15 @@ export function ccacheRequested(env = {}) {
  * What ccache needs to be useful across several worktrees of one repo.
  *
  * - `CCACHE_BASEDIR` makes ccache record paths relative to this worktree, so the
- *   same file in `X6/` and in a fresh worktree hashes the same;
- * - `CCACHE_NOHASHDIR=1` stops the compile-time working directory entering the
- *   hash, which is the other half of that cross-worktree hit. It has no
- *   underscore: `CCACHE_HASH_DIR` is not an environment variable ccache reads,
- *   so writing that leaves `hash_dir` on and every second-worktree compile a
- *   silent miss. `ccacheEffectiveForWorktrees()` is how the build notices.
+ *   same file in two worktrees hashes the same.
+ * - `CCACHE_NOHASHDIR=1` keeps the compile-time working directory out of the
+ *   hash. No underscore: `CCACHE_HASH_DIR` is not a variable ccache reads.
+ * - `CCACHE_BINARY` is what React Native's `ccache-clang.sh` execs for iOS
+ *   compiles. Xcode does not pass that build setting to the compiler's
+ *   environment, and with it unset the wrapper runs plain clang with no error.
  *
- * Both are environment variables rather than a config file on purpose. On macOS
- * ccache reads `~/Library/Preferences/ccache/ccache.conf`, and only falls back to
- * `$XDG_CONFIG_HOME/ccache/ccache.conf` when that variable is set - so a file at
- * `~/.config/ccache/ccache.conf` is read for *no* build here, iOS or Android.
- * React Native's `ccache-clang.sh` then points `CCACHE_CONFIGPATH` at *its* own
- * file for the iOS compiles, which replaces the user config entirely. Neither
- * file is something a repo could write anyway without carrying a machine path,
- * and an exported variable outranks whatever is in them.
- *
- * `CCACHE_BINARY` is here for a subtler reason. iOS compiles go through React
- * Native's `ccache-clang.sh`, whose last line is `exec $CCACHE_BINARY clang`,
- * and React Native supplies that path as an Xcode *build setting* - which Xcode
- * does not put in the environment of the compiler it launches. An empty
- * variable there means the wrapper runs plain clang: no error, no cache, no
- * hint. A build that says it uses ccache should have set the variable it is
- * read from, so it is exported here too.
+ * Environment variables, not a config file: React Native's wrapper points
+ * `CCACHE_CONFIGPATH` at its own file, and an exported variable outranks both.
  *
  * @param {object} options
  * @param {boolean} options.enabled ccache was found on this machine
@@ -136,12 +114,9 @@ export function ccacheEnv({ enabled, repoRoot, binary }) {
 }
 
 /**
- * Did ccache really take both of those settings?
- *
- * `ccache --show-config` prints the effective value of every setting next to
- * where it came from, which is the only way to tell a variable ccache reads from
- * one it quietly ignores. A build with `hash_dir` still on is not broken - it is
- * just slow in a way nobody sees, so this is a warning and never a failure.
+ * Did ccache really take both of those settings? `ccache --show-config` prints
+ * the effective value of every setting, which is the only way to tell a variable
+ * ccache reads from one it ignores.
  *
  * @param {string} showConfigOutput stdout of `ccache --show-config`
  * @returns {boolean}
@@ -158,8 +133,7 @@ export function ccacheEffectiveForWorktrees(showConfigOutput) {
 
 /**
  * gradle arguments that hand the C/C++ launcher to the native builds gradle
- * configures (the library's CMake and nitro-modules' - both outside the files
- * this repo may edit for packaging reasons).
+ * configures.
  *
  * @param {object} options
  * @param {boolean} options.enabled
@@ -178,23 +152,11 @@ export const PLAIN_MODULE_CACHE_NAME = 'ModuleCache.noindex';
 export const CCACHE_MODULE_CACHE_NAME = 'ModuleCache-ccache.noindex';
 
 /**
- * Where an iOS build's compiled modules go, and why a ccache build needs its
- * own copy of that directory.
- *
- * `CCACHE_BASEDIR` does not only shorten what ccache hashes: clang writes the
- * paths it recorded into the `.pcm` files it produces, so a ccache build puts
- * module paths relative to the worktree into the module cache. Xcode's default
- * is one directory per derived data path, and every build that shares that
- * derived data shares it - including a plain `xcodebuild` with no ccache in its
- * environment, which reads those same `.pcm` files and finds `Foundation`
- * defined in both spellings of one path. That is not a cache miss; the compile
- * stops with a fatal error, in a directory the next `pod install` does not
- * clear.
- *
- * So the rule is: whoever sets `CCACHE_BASEDIR` also names its module cache.
- * A plain build is passed the default explicitly rather than inheriting it, so
- * the two are compared as two values instead of one value and an assumption
- * about what Xcode would have chosen.
+ * Where an iOS build's compiled modules go. A ccache build needs its own
+ * directory: with `CCACHE_BASEDIR` set, clang writes worktree-relative paths
+ * into the `.pcm` files, and a plain `xcodebuild` that reads them finds
+ * `Foundation` defined under both spellings of one path and stops with a fatal
+ * error. A plain build is passed the default name explicitly.
  *
  * @param {object} options
  * @param {string} options.derivedData the `-derivedDataPath` of that build
@@ -222,25 +184,15 @@ export function iosModuleCacheArgs({ derivedData, ccache }) {
 export const IOS_BUILD_DIR = 'build';
 
 /**
- * The name of the record of what the last `pod install` was shown. Lives inside
- * `Pods/` because that is the thing being kept in step, and gitignored because
- * it is build state (`scripts/build-app.mjs`).
+ * The name of the record of what the last `pod install` was shown. It lives
+ * inside `Pods/` and is gitignored, because it is build state.
  */
 export const POD_INPUTS_RECORD = '.nitro-ui-pod-inputs';
 
 /**
- * What `--clean` deletes before an iOS build.
- *
- * The DerivedData is the half everyone thinks of. The record of what the last
- * `pod install` was shown has to go with it: that record is how a build notices
- * that this library's sources grew a file the Pods project was never shown
- * (`build-app.mjs`, X1 review S6), so a clean that leaves it behind reports "no
- * inputs changed" and recompiles the same Pods project that was already wrong -
- * which is the exact state the flag was typed to escape.
- *
- * `Pods/` itself is *not* in the list: reinstalling it costs minutes, and the
- * `COCOAPODS:` trailer in a tracked `Podfile.lock` makes an unnecessary install
- * show up as a diff in a source file.
+ * What `--clean` deletes before an iOS build: the DerivedData, and the record of
+ * what the last `pod install` was shown, which is how a build notices a stale
+ * Pods project. `Pods/` itself stays, because reinstalling it costs minutes.
  *
  * @param {object} options
  * @param {string} options.iosDir the example app's `ios` directory
@@ -254,13 +206,8 @@ export function iosCleanTargets({ iosDir }) {
 }
 
 /**
- * Do two ABI lists mean the same build?
- *
- * Compared as sets: `arm64-v8a,x86_64` and `x86_64,arm64-v8a` are one build, so
- * the order gradle was handed them in changes nothing about the APK. A missing
- * or empty list never matches: `null` is a stamp written before ABIs were
- * recorded, which says nothing about what is in the artifact, and "nothing
- * known" is not an agreement with what the caller just asked for.
+ * Do two ABI lists mean the same build? Compared as sets. A missing or empty
+ * list never matches: it says nothing about what is in the artifact.
  *
  * @param {string | null | undefined} stampedAbis what the stamp recorded
  * @param {string | null | undefined} requestedAbis what this run asks for
@@ -281,21 +228,10 @@ export function abisMatch(stampedAbis, requestedAbis) {
 }
 
 /**
- * Should `build-app.mjs` skip a build?
- *
- * Only when the caller asked for nothing specific: no `--force`, no `--clean`,
- * no `--no-stamp`, and the stamp already proves the artifact at the fixed path
- * was built from this exact code tree. Anything else builds. A build is the safe
- * answer; a skip is the earned one.
- *
- * For Android, "the same code tree" is not the whole question. The artifact path
- * is fixed per worktree, so an `arm64-v8a` APK and an `x86_64` one are the same
- * file, and the code tree is the same whether gradle was asked for one ABI or
- * four. A stamp that did not record the ABIs cannot tell them apart, and
- * guessing serves an `arm64-v8a` APK to a run that asked for `x86_64`: the
- * install then fails with `INSTALL_FAILED_NO_MATCHING_ABIS`, or a multi-ABI
- * request quietly gets a one-ABI artifact. So an Android skip needs the ABIs to
- * match exactly, and a stamp without them means build.
+ * Should `build-app.mjs` skip a build? Only with no `--force`, `--clean` or
+ * `--no-stamp`, and a stamp that proves the artifact was built from this code
+ * tree. On Android the stamp's ABIs must match as well: the artifact path is the
+ * same file whichever ABIs gradle was asked for.
  *
  * @param {object} options
  * @param {boolean} options.force
@@ -336,9 +272,8 @@ export function decideSkipBuild({
     };
   }
   if (platform === 'android' && !abisMatch(stampedAbis, abis)) {
-    // Two different sentences: "the stamp says something else" is worth reading,
-    // "the stamp says nothing" is worth *fixing*, and they look the same in the
-    // log if the empty one is printed as a blank ABI list.
+    // "The stamp says something else" and "the stamp says nothing" get
+    // different sentences in the log.
     const saidNothing =
       stampedAbis == null || String(stampedAbis).trim() === '';
     return {

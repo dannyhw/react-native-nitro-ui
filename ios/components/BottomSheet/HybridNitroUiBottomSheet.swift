@@ -1,56 +1,22 @@
-//
-//  HybridNitroUiBottomSheet.swift
-//  react-native-nitro-ui
-//
-//  BottomSheet (G14, DECISIONS D33/D35): a UIKit sheet presentation
-//  (`UISheetPresentationController`) whose content is React Native views.
-//
-//  Three moves (S2, `docs/tasks/S2-bottomsheet-spike.report.md`, corrected by G14):
-//
-//  1. **Mount.** Nitro's generated component sets this view as its `contentView`
-//     (`[self setContentView:view]`), but `RCTViewComponentView` mounts children into
-//     `currentContainerView` - the component view itself - *beside* it, where they
-//     would stay in the app's window. So the generated `.mm` is patched
-//     (`scripts/patch-nitrogen.mjs`, `CONTENT_CHILDREN_VIEWS`) to mount the
-//     BottomSheet's React Native children *into this view*, and the sheet's controller
-//     adopts the view while it is up and hands it back after. S2 said no patch was
-//     needed; its witnesses read this view, not the children.
-//  2. **Layout.** Yoga lays the children out at this node's size, so the node has to
-//     be the sheet's content box: native reports it (`onContentBox`) and the wrapper
-//     writes it into the node's `style`. A `fit` sheet leaves the height to Yoga and
-//     reads it back here as its detent.
-//  3. **Touch.** The sheet is outside the surface view's touch handler, so its
-//     controller owns an `RCTSurfaceTouchHandler`, as RN's own
-//     `RCTFabricModalHostViewController` does, and detaches it when the sheet goes.
-//
-//  Where it presents from is D35's rule: the app's presentation chain, unless the top
-//  presented controller is an RN `Modal` host - then a window of its own
-//  (`NitroUiPresentation.presentInOwnWindow`), because RN closes a `Modal` by
-//  dismissing its controller, and a sheet in that chain is what it would take instead.
-//
+// BottomSheet: a UIKit sheet presentation (`UISheetPresentationController`) whose content is React
+// Native views.
 
 import NitroModules
 import UIKit
 
-// Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
 private typealias NitroUiBottomSheetPerf = margelo.nitro.nitroui.NitroUiPerf
 
 // MARK: - The touch root
 
-/// React Native's `RCTSurfaceTouchHandler`, made and attached without importing React
-/// into Swift.
-///
-/// RN's `Modal` does exactly this for the same reason
-/// (`RCTFabricModalHostViewController.mm`): a view outside the surface's own view is
-/// outside its touch handler, so nothing would turn a touch inside the sheet into a JS
-/// touch. The class is looked up by name and driven through its two public selectors,
-/// which have not changed since Fabric's first release; a missing class is a sheet
-/// whose content takes no touches, which `real-input:*` would catch.
+/// React Native's `RCTSurfaceTouchHandler`, made and attached without importing React into Swift. A
+/// view outside the surface's own view is outside its touch handler, so without this nothing inside
+/// the sheet would become a JS touch (RN's `Modal` does the same). The class is looked up by name
+/// and driven through its two public selectors.
 enum NitroUiTouchRoot {
   private static let lock = NSLock()
   private static var attachedCount = 0
 
-  /// How many touch roots are attached right now, process-wide - a leak witness.
+  /// How many touch roots are attached right now, process-wide (leak check).
   static var attached: Int {
     lock.lock()
     defer { lock.unlock() }
@@ -78,8 +44,8 @@ enum NitroUiTouchRoot {
   }
 }
 
-/// A process-wide count read from any thread: written on main, read by a test
-/// report from the JS thread, which must never wait for main (`core.md` §1.4).
+/// A process-wide count: written on main, read by a test report from the JS thread, which must
+/// never wait for main.
 final class NitroUiSheetCount {
   private let lock = NSLock()
   private var count = 0
@@ -99,12 +65,10 @@ final class NitroUiSheetCount {
 
 // MARK: - Views
 
-/// The Hybrid View's own view: the React Native children's parent, which the sheet
-/// adopts while it is up.
-///
-/// Hidden whenever it is *not* in a sheet: Fabric still lays it out at the content's
-/// box in the app's tree before the present and after the dismissal, and the children
-/// must draw nowhere but in the sheet.
+/// The Hybrid View's own view: the React Native children's parent, which the sheet adopts while it
+/// is up. The generated component view is patched to mount the children into this view rather than
+/// beside it. Hidden whenever it is not in a sheet: Fabric still lays it out in the app's tree, and
+/// the children must draw nowhere but in the sheet.
 final class NitroUiSheetContentView: UIView {
   /// The content's size changed (a Fabric layout). Main thread.
   var onSizeChange: ((CGSize) -> Void)?
@@ -151,12 +115,9 @@ final class NitroUiSheetContentView: UIView {
   }
 }
 
-/// A `0 x 0` view left in the app's own tree - in the Fabric component view the
-/// content view came from - while the content is in the sheet.
-///
-/// It says when the BottomSheet's place in the app gains or loses a window (a screen
-/// popped or pushed over), which the content view cannot say once it has moved, and it
-/// is where the presenter is looked up from. No drawing, no touches, no accessibility.
+/// A `0 x 0` view left in the Fabric component view while the content is in the sheet. It says when
+/// the BottomSheet's place in the app gains or loses a window, which the content view cannot say
+/// once it has moved, and it is where the presenter is looked up from.
 final class NitroUiSheetAnchorView: UIView {
   var onWindowChange: ((_ hasWindow: Bool) -> Void)?
 
@@ -208,13 +169,11 @@ struct NitroUiSheetConfig: Equatable {
   }
 }
 
-/// The sheet: a plain controller whose view holds the React Native content view.
-///
-/// Nothing stored on it captures it strongly - S2's leak was a per-sheet closure that
-/// held its own sheet - so every callback here goes to its owner weakly, and the owner
-/// reads the sheet through `weak` captures too.
+/// The sheet: a plain controller whose view holds the React Native content view. Nothing stored on
+/// it may capture it strongly: every callback goes to its owner weakly, and the owner captures the
+/// sheet weakly too.
 final class NitroUiSheetController: UIViewController, UISheetPresentationControllerDelegate {
-  /// How many of these are alive, process-wide: the leak witness of the cycle tests.
+  /// How many of these are alive, process-wide (leak check).
   static let alive = NitroUiSheetCount()
 
   /// Where the content view sits: the sheet's safe area. Fabric owns the content
@@ -222,7 +181,6 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
   /// this host instead.
   let contentHost = UIView()
   private(set) var config: NitroUiSheetConfig
-  /// The content box last reported, in points.
   private(set) var reportedBox = CGSize.zero
   private(set) var boxReports = 0
   private var touchHandler: UIGestureRecognizer?
@@ -236,7 +194,8 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
   /// `presentationControllerDidDismiss`, so the latter is too late to say who closed it.
   private(set) var dismissedByUser = false
 
-  /// The content box changed: `(width, height)`.
+  /// The content box changed: `(width, height)`. The JS wrapper writes it into the node's style, so
+  /// Yoga lays the children out at the sheet's size.
   var onBox: ((CGSize) -> Void)?
   /// The sheet left the screen, whoever took it (a request, a swipe, a parent's
   /// dismissal). Once.
@@ -283,17 +242,16 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     if let label = config.label {
-      // The sheet is modal to VoiceOver (`accessibilityViewIsModal`); its name is
-      // spoken as the screen changes to it (Q5 C7).
+      // The sheet is modal to VoiceOver (`accessibilityViewIsModal`); its name is spoken as the
+      // screen changes to it.
       UIAccessibility.post(notification: .screenChanged, argument: label)
     }
   }
 
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
-    // Gone, rather than covered: D35 item 2. A view that merely left the screen (a
-    // full-screen presentation over it) is not an exit, and treating it as one let S2
-    // release a window under a live sheet.
+    // Gone, not merely covered: a full-screen presentation over the sheet also makes its view
+    // disappear, and that is not an exit.
     if isBeingDismissed || presentingViewController == nil {
       noteGone()
     }
@@ -302,9 +260,9 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let insets = view.safeAreaInsets
-    // The window's bottom inset rather than only the view's own: mid-entry, a sheet's
-    // view reaches below the window and its safe area is not yet the one it keeps
-    // (S2), and a box reported from that would move once more at rest.
+    // The window's bottom inset as well as the view's own: mid-entry, a sheet's view reaches below
+    // the window and its safe area is not yet final, so a box reported from it would change again
+    // at rest.
     let bottom = max(insets.bottom, view.window?.safeAreaInsets.bottom ?? 0)
     let frame = CGRect(
       x: insets.left,
@@ -324,7 +282,6 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
     }
   }
 
-  /// Adopt the React Native content view.
   func adopt(_ content: UIView) {
     loadViewIfNeeded()
     if content.superview !== contentHost {
@@ -333,10 +290,9 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
     content.isHidden = false
   }
 
-  /// Re-apply what can change while the sheet is up. Detents are re-applied only when
-  /// they changed, and never on the way out: React writes every prop on every render,
-  /// so a close arrives with a config write, and a sheet layout pass in the same turn
-  /// as its dismissal is a dismissal UIKit drops (S2, C3).
+  /// Re-apply what can change while the sheet is up. Detents are re-applied only when they changed,
+  /// and never on the way out: React writes every prop on every render, so a close arrives with a
+  /// config write, and UIKit drops a dismissal that shares a turn with a sheet layout pass.
   func update(_ next: NitroUiSheetConfig) {
     let previous = config
     config = next
@@ -358,8 +314,8 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
     guard let sheet = sheetPresentationController else { return }
     sheet.delegate = self
     applySheet(sheet, detentsChanged: true)
-    // Opens at the first detent - the smallest, in the order the docs ask for. Named
-    // rather than left to UIKit, which would pick the smallest it can resolve.
+    // Open at the first detent. Set explicitly: UIKit would otherwise pick the smallest it can
+    // resolve.
     sheet.selectedDetentIdentifier = Self.identifiers(for: config.detents).first
   }
 
@@ -412,7 +368,6 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
     return Self.identifiers(for: config.detents).firstIndex(of: identifier) ?? 0
   }
 
-  /// The sheet's own height right now, in points.
   var sheetHeight: CGFloat {
     isViewLoaded ? view.bounds.height : 0
   }
@@ -451,9 +406,9 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
         self.maximumDetentValue = context.maximumDetentValue
         switch kind {
         case "fit":
-          // Read live: the content's height is Yoga's answer and may arrive after
-          // the sheet is up. Only the content's height - UIKit adds its own chrome
-          // (the home-indicator inset) to a custom detent (S2).
+          // Read live: the content's height is Yoga's answer and may arrive after the sheet is up.
+          // Only the content's height: UIKit adds its own chrome (the home-indicator inset) to a
+          // custom detent.
           let height = self.fitHeight?() ?? 0
           return min(max(height, 1), context.maximumDetentValue)
         case "height":
@@ -495,8 +450,7 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
     guard !gone else { return }
     gone = true
     if let touchHandler {
-      // Appendix C6's drop rule, as S2 measured it: a touch root left on the view
-      // outlives the sheet.
+      // A touch root left attached would outlive the sheet.
       NitroUiTouchRoot.detach(touchHandler, from: view)
       self.touchHandler = nil
     }
@@ -520,7 +474,7 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
   }
 
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-    // The belt to `viewDidDisappear`: the same exit, reported once (`noteGone`).
+    // The same exit `viewDidDisappear` reports; `noteGone` runs once.
     dismissedByUser = true
     noteGone()
   }
@@ -541,9 +495,7 @@ final class NitroUiSheetController: UIViewController, UISheetPresentationControl
 
 // MARK: - The Hybrid View
 
-/// The Hybrid View React renders as `NitroUiBottomSheet`.
 final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableView {
-  /// How many sheets this process has on screen. See ``NitroUiPresentationCounter``.
   static let live = NitroUiPresentationCounter()
 
   private let container = NitroUiSheetContentView()
@@ -562,7 +514,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   private var dismissed: ((_ ended: Bool) -> Void)?
   private var contentBox: ((_ width: Double, _ height: Double) -> Void)?
 
-  /// Whether the sheet is up, behind the handshake (core.md §4).
+  /// Whether the sheet is up, behind the event-count handshake.
   private var state = NitroUiControlledValue<Bool>(displayed: false)
 
   // MARK: What is on screen
@@ -577,9 +529,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   /// React asked for the sheet since the wrapper was last told its content can go
   /// (``reportDismissed(ended:)``).
   private var owesDismissal = false
-  /// How often the present now being asked for has waited on a busy chain. Reset per
-  /// request: the budget is one request's, not one mount's, or a mount that met a busy
-  /// chain often enough would stop presenting at all, with `presented=1` and nothing up.
+  /// How often the present now being asked for has waited on a busy chain. Reset per request, not
+  /// per mount: otherwise a mount that met a busy chain often enough would stop presenting.
   private var presentWaits = 0
   /// How often this mount's presents waited on a busy chain, in all - diagnostics only.
   private var presentWaitsTotal = 0
@@ -587,11 +538,11 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   private var dropped = false
   /// Bumped per mount, so a deferred step from a dropped mount stands down.
   private var mountGeneration = 0
-  /// How many times this mount presented, for the harness.
+  /// How many times this mount presented (test read-out).
   private var presentCount = 0
   /// What the app had presented on top when the sheet last presented.
   private var appTopClass = "-"
-  /// Whether the last presentation went to a window of its own (D35).
+  /// Whether the last presentation went to a window of its own.
   private var lastOwnWindow = false
   private var lastSelected = 0
   private var userDismissals = 0
@@ -601,9 +552,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
 
   private let reportLock = NSLock()
   private var report = ""
-  /// How many reports this instance has built. A read returns the last one built and
-  /// asks main for the next, so it is one behind: a test that needs state from after a
-  /// moment reads `seq` once after it, then waits for a larger one (G14 review).
+  /// How many reports this instance has built. A read returns the last one built and asks main for
+  /// the next, so it is one behind: a test that needs fresh state reads `seq`, then waits for a
+  /// larger one.
   private var reportSeq = 0
 
   override init() {
@@ -700,8 +651,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
 
   func afterUpdate() {
     mark(.propsApplied)
-    // The handshake decides whether React's `presented` wins - including a dismissal JS
-    // refused, which is how a refused dismissal presents again (D33).
+    // The handshake decides whether React's `presented` wins, including a dismissal JS refused,
+    // which presents again.
     _ = state.reconcile()
     if let sheet, sheetIsUp(sheet), state.displayed {
       sheet.update(config)
@@ -768,7 +719,6 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     restoreContent()
   }
 
-  /// Stop `sheet` from reporting into this mount.
   private func detach(_ sheet: NitroUiSheetController) {
     sheet.onBox = nil
     sheet.onGone = nil
@@ -790,14 +740,12 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     }
   }
 
-  /// Put the content view back in its Fabric component view, hidden.
   private func restoreContent() {
     container.isHidden = true
     guard let home, container.superview !== home else { return }
     home.insertSubview(container, at: 0)
   }
 
-  /// Fabric laid the content out at a new size.
   private func contentResized() {
     guard let sheet, config.fits else { return }
     sheet.invalidateFit()
@@ -827,7 +775,6 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
           return
         }
         if !awaitingPresent {
-          // A new request, with a budget of its own.
           awaitingPresent = true
           presentWaits = 0
         }
@@ -848,13 +795,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     }
   }
 
-  /// Present at the end of this turn.
-  ///
-  /// Not a redundant hop: `afterUpdate` runs inside Fabric's mount transaction, before
-  /// that transaction has applied the layout of the content mounted in the same commit.
-  /// One turn later the content view has its real size, so a `fit` sheet's first
-  /// resolve is its real height rather than nothing - C5's "wait for the first content
-  /// layout", without waiting on JS.
+  /// Present at the end of this turn. `afterUpdate` runs inside Fabric's mount transaction, before
+  /// the layout of the content mounted in the same commit is applied. One turn later the content
+  /// view has its real size, so a `fit` sheet's first resolve is its real height.
   private func schedulePresent() {
     guard !presentScheduled else { return }
     presentScheduled = true
@@ -878,9 +821,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     }
     let top = NitroUiPresenterChain.appTopController(in: window)
     if let top, NitroUiPresenterChain.isBusy(top) {
-      // UIKit refuses a presentation from a chain that is mid-transition, silently: no
-      // error and no completion (S2's `presentQueued`). Bounded, so a stuck chain ends
-      // as a sheet that never came rather than a retry loop.
+      // UIKit silently refuses a presentation from a chain that is mid-transition: no error and no
+      // completion. The wait is bounded, so a stuck chain ends as a sheet that never came rather
+      // than a retry loop.
       presentWaits += 1
       presentWaitsTotal += 1
       guard presentWaits <= Self.presentWaitBudget else { return }
@@ -900,9 +843,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     sheet = controller
     presentCount += 1
     appTopClass = NitroUiPresenterChain.topPresentedClass(in: window)
-    // D35: the app's chain, unless an RN `Modal` is on top - RN closes a `Modal` by
-    // dismissing its controller, which with a sheet on it would take the sheet and
-    // strand the Modal (G11, S2).
+    // Present in the app's chain, unless an RN `Modal` is on top: RN closes a `Modal` by dismissing
+    // its controller, which with a sheet on it would take the sheet and strand the Modal. Then use
+    // a window of its own.
     let onShown: () -> Void = { [weak self, weak controller] in
       guard let self, let controller, controller === self.sheet else { return }
       controller.invalidateFit()
@@ -974,8 +917,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       if controller.dismissedByUser {
         userDismissals += 1
       } else {
-        // Gone while nobody asked - not the app, not a swipe: a controller under it was
-        // dismissed with the sheet on it. The exit D35 item 2 is about.
+        // Nobody asked, neither the app nor a swipe: a controller under the sheet was dismissed
+        // with the sheet on it.
         unaskedExits += 1
       }
       if state.displayed {
@@ -991,22 +934,17 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     publishReport()
   }
 
-  /// Tell the wrapper its content can go: `ended` when a presentation really ended.
-  ///
-  /// The debt is what makes the second kind exact: it is taken on whenever React asks
-  /// for the sheet, settled by a presentation ending while React no longer wants it,
-  /// and otherwise by the first `false` that finds nothing on screen (see the spec).
+  /// Tell the wrapper its content can go; `ended` when a presentation really ended. The debt is
+  /// taken on whenever React asks for the sheet, and settled by a presentation ending or by the
+  /// first `false` that finds nothing on screen.
   private func reportDismissed(ended: Bool) {
     owesDismissal = state.displayed
     dismissed?(ended)
   }
 
-  /// The anchor gained or lost its window.
-  ///
-  /// Gained: a sheet React wants up and that is not up yet is presented now. Lost while
-  /// up: one turn later - after an unmount's `onDropView` and after a reparent that puts
-  /// the view straight back - the sheet is closed without animation and the close is
-  /// reported, as a dialog's is.
+  /// The anchor gained or lost its window. Gained: a sheet React wants up is presented now. Lost
+  /// while up: one turn later (after an unmount's `onDropView`, or a reparent that puts the view
+  /// straight back) the sheet is closed without animation and the close is reported.
   private func windowChanged(_ hasWindow: Bool) {
     if hasWindow {
       sync()
@@ -1019,8 +957,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       guard let self, self.mountGeneration == generation, !self.dropped,
         self.anchor.window == nil
       else { return }
-      // The close first, then the teardown: a non-animated dismissal can finish inside
-      // `dismissForTeardown`, and the presentation's end should follow its reason.
+      // Report the close first, then tear down: a non-animated dismissal can finish inside
+      // `dismissForTeardown`.
       if self.state.displayed {
         let count = self.state.user(false)
         self.presentedChange?(false, Double(count))
@@ -1038,9 +976,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   // MARK: - Methods
 
   func nuiTestStateReport() throws -> String {
-    // From the first read on, every state change keeps the report fresh; until then
-    // nothing builds it (`reportsWanted`). Refresh on main for the next read - never
-    // wait for it (`NitroUiMainThread`).
+    // Reports are built only once a test has asked for one. Refresh on main for the next read,
+    // never wait for it.
     Self.reportsWanted.add(Self.reportsWanted.value == 0 ? 1 : 0)
     DispatchQueue.main.async { [weak self] in self?.publishReport() }
     reportLock.lock()
@@ -1053,8 +990,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       guard let self, let sheet = self.sheet, self.sheetIsUp(sheet), self.config.dismissible else {
         return
       }
-      // What a swipe does: the sheet takes itself down - a dismissal the helper did
-      // not ask for - claimed as the user's, as UIKit's announcement claims a swipe.
+      // What a swipe does: the sheet dismisses itself, marked as the user's dismissal.
       sheet.dismissAsUser()
     }
   }
@@ -1076,9 +1012,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
 
   // MARK: - Report
 
-  /// Whether anything in this process has asked for a report: a test harness. An app
-  /// never calls ``nuiTestStateReport()``, so its sheets never pay for one - the walk of
-  /// the app's window and controllers below runs on every state change otherwise.
+  /// Whether a test has asked for a report. An app never does, so its sheets never pay for the walk
+  /// of the app's windows and controllers below.
   static let reportsWanted = NitroUiSheetCount()
 
   /// How many 50 ms waits one present request may spend on a busy chain (3 s).
@@ -1138,9 +1073,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     reportLock.unlock()
   }
 
-  /// Whether a touch at the centre of the content would be routed into it: UIKit's
-  /// own `hitTest`, asked of the window the content is in - the structural half of "a
-  /// finger reaches it" (the real finger is `real-input:ios`).
+  /// Whether a touch at the centre of the content would be routed into it, by UIKit's own `hitTest`
+  /// on the content's window.
   static func contentTakesHit(_ content: UIView) -> Bool {
     guard let window = content.window, !content.isHidden, content.bounds.height > 0 else {
       return false

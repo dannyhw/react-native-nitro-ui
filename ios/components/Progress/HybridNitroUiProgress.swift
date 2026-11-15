@@ -1,97 +1,55 @@
-//
-//  HybridNitroUiProgress.swift
-//  react-native-nitro-ui
-//
-//  The Progress component: SwiftUI `ProgressView` in its `.linear` and
-//  `.circular` styles, on the core runtime.
-//
-//  It is the library's first **non-interactive** component, so it is the one
-//  place that shows what a control without a handshake looks like
-//  (`docs/architecture/core.md` §12): no `NitroUiControlledValue`, no
-//  `mostRecentEventCount`, no callback props. `afterUpdate()` is `host.commit()`
-//  and nothing else, which is exactly why a `value` written at 60 Hz costs one
-//  props commit and no round trip.
-//
+// The Progress component: SwiftUI's `ProgressView` in its `.linear` and `.circular` styles.
+// Not interactive, so it has no controlled value and no callbacks.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// State of one Progress. See ``NitroUiModel`` for why this is not `@Published`.
 final class ProgressModel: NitroUiModel {
-  /// `'linear'`, `'circular'` or `'loading'`. Rendered (it picks the style), so the
-  /// body reads it.
-  ///
-  /// `'loading'` has no SwiftUI counterpart: iOS draws it as a circular
-  /// `ProgressView`, the closest native control
-  /// (`docs/components/progress.md`), which is also why it is `intrinsic` like the
-  /// ring rather than a third size.
+  /// `'linear'`, `'circular'` or `'loading'`. SwiftUI has no loading indicator, so
+  /// `'loading'` is drawn as a circular `ProgressView`.
   var variant = "linear"
-  /// `'flat'` or `'wavy'`.
-  ///
-  /// Stored and **not painted**: SwiftUI has no wavy progress indicator and this
-  /// library does not fake one, so iOS draws the flat bar/ring whatever this says
-  /// (`docs/components/progress.md`). It is a prop on both platforms anyway so the
-  /// JS API means one thing, and the value round-trips through the handle - the
-  /// same treatment `track` gets, and for the same reason.
+  /// `'flat'` or `'wavy'`. Stored and not painted: SwiftUI has no wavy progress indicator.
   var appearance = "flat"
-  /// Whether a `'loading'` indicator was asked to have Material's tonal container.
-  ///
-  /// Stored and not painted, for the same reason: no iOS control has that form.
+  /// Material's tonal container for `'loading'`. Stored and not painted: no iOS control has
+  /// that form.
   var contained = false
-  /// The fraction React sent, unclamped, or `nil` for an indeterminate indicator.
-  /// Clamping happens where it is drawn (``drawnValue``), because the drawing code
-  /// is what has to stay in range while the prop getter has to answer what was
-  /// sent.
+  /// The fraction React sent, unclamped, or `nil` for an indeterminate indicator. Clamped
+  /// where it is drawn (`drawnValue`), so the getter answers what was sent.
   var value: Double?
   var tint: UIColor?
-  /// Stored and *not painted*: SwiftUI's `ProgressView` has no API that addresses
-  /// its track (`docs/components/progress.md`). It is a prop anyway so that the JS
-  /// API means one thing, and the value round-trips.
+  /// Stored and not painted: SwiftUI's `ProgressView` has no API for its track.
   var track: UIColor?
   var testID: String?
   var accessibilityLabel: String?
-  /// The size configuration React sent (`''` / `'circular'`). Stored for
-  /// symmetry; the sizing engine reads the key out of Fabric state itself.
+  /// `''` or `'circular'`. The sizing engine reads the key from Fabric state itself.
   var sizingKey = ""
-  /// Whether the hosted view is in a window. Rendered: an indeterminate indicator
-  /// is the only thing in this library that draws itself forever, and off-window
-  /// nobody is watching it (see ``drawnValue``).
-  ///
-  /// Written on the main thread by ``NitroUiProgressWindowObserver`` and by the
-  /// recycle/drop path; read on the main thread by the body, and from any thread
-  /// through ``isAnimating``.
+  /// Whether the hosted view is in a window. An indeterminate indicator animates forever, so
+  /// it is only drawn as one while in a window. Main thread only; other threads read
+  /// `isAnimating`.
   var inWindow = false {
     didSet {
       if inWindow != oldValue {
-        // The flag is rendered, so a window change is an invalidation - and it
-        // arrives outside a props commit, the only other place `objectWillChange`
-        // is sent (`NitroSwiftUIHost.commit()`).
+        // A window change arrives outside a props commit, so it has to invalidate the view
+        // itself.
         objectWillChange.send()
       }
     }
   }
-  /// Guards the two mirrors below: they are written on the main thread and read on
-  /// the JS thread. One lock, because the invariant the harness asserts spans both
-  /// ("indeterminate *and* on screen"). Same pattern as
-  /// `NitroUiFramePump.isArmed` (`HybridNitroUiSlider.swift:56`).
+  /// Guards the two values below, which are written on the main thread and read on the JS
+  /// thread.
   private let mirrorLock = NSLock()
-  /// What the drawing code was last handed, as one line - written by the body.
+  /// What the drawing code was last handed, as one line. Written by the body.
   private var drawnReport = "displayed=none"
-  /// Whether this control is allowed to be animating right now. Written where both
-  /// halves are known (the body, and the window observer). Never derived on the JS
-  /// thread: reading `UIView.window` there would be off-main.
+  /// Whether the control may be animating right now. Never derived on the JS thread:
+  /// reading `UIView.window` there would be off-main.
   private var animating = false
 
-  /// The fraction to hand the drawing code, clamped into range, or `nil` for the
-  /// indeterminate indicator.
+  /// The fraction to draw, clamped into range, or `nil` for the indeterminate indicator.
   ///
-  /// The off-window rule: an indeterminate `ProgressView` runs an animation of its
-  /// own, so a control nobody can see would keep asking for frames. Away from a
-  /// window it is drawn as an **empty determinate** indicator in the same style -
-  /// same style, so the measured size does not move, and empty because that is the
-  /// one determinate state that needs no motion. Re-entering a window restores it.
-  /// Android applies the same rule, and the harness asserts the shared invariant.
+  /// An indeterminate `ProgressView` runs its own animation, so off-window it would keep
+  /// asking for frames. There it is drawn as an empty determinate indicator in the same
+  /// style, which needs no motion and measures the same. Android applies the same rule.
   var drawnValue: Double? {
     if let value {
       return value.isFinite ? min(max(value, 0), 1) : 0
@@ -99,7 +57,6 @@ final class ProgressModel: NitroUiModel {
     return inWindow ? nil : 0
   }
 
-  /// Record what the drawing code was handed, from the body.
   func recordDrawn(_ drawn: Double?) {
     mirrorLock.lock()
     drawnReport = drawn.map { "displayed=\($0)" } ?? "displayed=indeterminate"
@@ -107,8 +64,7 @@ final class ProgressModel: NitroUiModel {
     mirrorLock.unlock()
   }
 
-  /// Say so from somewhere that is not the body (the window observer, a recycle),
-  /// keeping the one-line report in step with the flag.
+  /// For callers outside the body (the window observer, a recycle).
   func refreshAnimationReport() {
     recordDrawn(drawnValue)
   }
@@ -132,11 +88,8 @@ final class ProgressModel: NitroUiModel {
     "\(Int((min(max(value, 0), 1) * 100).rounded()))%"
   }
 
-  /// Whether the shape measures its own square: a ring, or the loading indicator
-  /// that iOS draws as one.
-  ///
-  /// `appearance` and `contained` deliberately do not appear here - neither moves
-  /// a box on this platform, which is the difference between them and `variant`.
+  /// Whether the shape measures its own square: a ring, or the loading indicator drawn as
+  /// one.
   var isIntrinsicShape: Bool {
     variant == "circular" || variant == "loading"
   }
@@ -146,18 +99,9 @@ final class ProgressModel: NitroUiModel {
   }
 }
 
-/// A zero-size UIKit sibling of the hosted SwiftUI view whose only job is to
-/// report window membership.
-///
-/// Why it exists: `NitroSwiftUIHost` is `final`, so a component cannot override its
-/// `didMoveToWindow`, and "the indeterminate animation stops when nobody can see
-/// the control" needs to know exactly that. One non-interactive, zero-frame
-/// subview per control is cheaper than widening the core host for every component
-/// that might want this, and a `UIViewRepresentable` in the SwiftUI body would put
-/// a representable in every control's mount path.
-///
-/// It is deliberately not part of the layout: `measureFittingSize()` asks the
-/// *hosting controller* for a size, so a sibling cannot move a measured number.
+/// A zero-size sibling of the hosted SwiftUI view that reports window membership. The host
+/// class is `final`, so a component cannot override its `didMoveToWindow`. It does not
+/// affect the measured size, which comes from the hosting controller.
 private final class NitroUiProgressWindowObserver: UIView {
   var onChange: ((_ inWindow: Bool) -> Void)?
 
@@ -167,22 +111,15 @@ private final class NitroUiProgressWindowObserver: UIView {
   }
 }
 
-/// Picks the indicator style.
-///
-/// A ternary cannot: `.linear` and `.circular` are two different opaque
-/// `ProgressViewStyle` types, so the choice is a conditional in a modifier - which
-/// also means the two shapes are two different view trees, as they should be for
-/// two different controls.
+/// `.linear` and `.circular` are two different `ProgressViewStyle` types, so the choice is a
+/// conditional rather than a ternary.
 private struct ProgressVariantStyle: ViewModifier {
   let variant: String
 
   @ViewBuilder
   func body(content: Content) -> some View {
-    // `loading` joins the ring here because SwiftUI has no morphing loading
-    // indicator: a circular `ProgressView` is the closest native control, and
-    // drawing something else (a `TimelineView` of our own arc, say) would stop
-    // being "the platform's drawing", which is what this library trades in
-    // (`docs/components/progress.md`, Platform mapping).
+    // SwiftUI has no loading indicator; a circular `ProgressView` is the closest native
+    // control.
     if variant == "circular" || variant == "loading" {
       content.progressViewStyle(.circular)
     } else {
@@ -191,9 +128,7 @@ private struct ProgressVariantStyle: ViewModifier {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct ProgressContent: NitroUIContent {
-  /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: ProgressModel
 
   init(model: ProgressModel) {
@@ -201,10 +136,8 @@ struct ProgressContent: NitroUIContent {
   }
 
   var body: some View {
-    // Recording here - rather than in a prop setter - is what makes
-    // `nuiTestDisplayedValue()` a reading of the hosted control instead of an echo
-    // of the prop: a commit that stored the number without the body ever being
-    // handed it fails the test.
+    // Recorded here, not in a prop setter, so the test read-out is what the control was
+    // actually handed.
     let drawn = model.drawnValue
     model.recordDrawn(drawn)
 
@@ -221,13 +154,12 @@ struct ProgressContent: NitroUIContent {
   }
 }
 
-/// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
+/// `.tint()` has no "unset" form, so it is applied only when a colour is set.
 private struct OptionalTint: ViewModifier {
   let color: UIColor?
 
   func body(content: Content) -> some View {
     if let color {
-      // `tint(_:)` takes a `ShapeStyle`, and `UIColor` is not one.
       content.tint(Color(color))
     } else {
       content
@@ -235,15 +167,10 @@ private struct OptionalTint: ViewModifier {
   }
 }
 
-/// The label and the value belong on the control, and an empty
-/// `accessibilityLabel(_:)` would silence the element, so each is applied only when
-/// there is something to say. `testID` deliberately does not appear here: RN
-/// already puts it on the component view (core.md §3).
-///
-/// What iOS cannot say is the *role*: SwiftUI exposes a `ProgressView` with its own
-/// element traits, and there is no public progressbar/busy trait to add, so the
-/// number travels as an `accessibilityValue` percentage and the platform's own
-/// element carries the rest (`docs/components/progress.md`).
+/// An empty `accessibilityLabel(_:)` would silence the element, so the label and the value
+/// are each applied only when present. `testID` is not applied here: React Native already
+/// puts it on the component view. There is no public progress-bar trait to add, so the
+/// number travels as an `accessibilityValue` percentage.
 private struct OptionalAccessibility: ViewModifier {
   let label: String?
   let drawn: Double?
@@ -261,75 +188,41 @@ private struct OptionalAccessibility: ViewModifier {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiProgress`.
 final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ProgressContent>
   private let windowObserver = NitroUiProgressWindowObserver()
 
-  /// This component's name in the sizing engine:
-  /// `HybridNitroUiProgressComponentName` in the generated C++, and `getName()` in
-  /// the generated Kotlin.
+  /// Must match the component name in the generated C++ and Kotlin.
   private static let sizingComponentName = "NitroUiProgress"
 
-  /// The size to lay a Progress out with before anything has been measured, in
-  /// points - the first Progress of an app's first launch.
-  ///
-  /// **The linear variant's numbers**: the engine's declared-fallback map is keyed
-  /// by *component*, not by configuration (`docs/architecture/sizing.md` §2), so
-  /// one pair has to serve both shapes and the default variant is the one to
-  /// serve. A cold first *circular* mount is therefore laid out at the linear box
-  /// for one frame before its own measurement corrects it - D17's one-frame
-  /// budget, not a bug, and the harness test that names it.
-  ///
-  /// Both halves matter, for different parents (sizing.md §5). Under a finite
-  /// parent the box owns the width, so the **height** is the number that has to be
-  /// right: on the iPhone 17 / iOS 27 this task measured on, a `.linear`
-  /// `ProgressView` is **4 pt** tall (`measureContent()` and the Yoga box agreed),
-  /// and a `.circular` one is a **20 pt** square - the pair, with Android's, is the
-  /// table in `docs/components/progress.md`.
-  ///
-  /// Under a parent that gives no finite width - a bar in a horizontal `ScrollView` -
-  /// there is no box width to substitute, and since F3 nothing files a measured width
-  /// into a `fillWidth` entry either, so the **declared width is what draws**, on
-  /// every frame and not just the first. The 320 below is therefore a choice about
-  /// how long an unbounded bar looks, not a placeholder; F3's own change is what made
-  /// it so (before, such a bar drew at whichever width some other Progress had last
-  /// been measured at).
+  /// The linear variant's size, in points: one fallback has to serve both shapes. Under a
+  /// finite parent only the height matters. Under a parent that gives no finite width (a
+  /// horizontal `ScrollView`), the declared width is what the bar draws at.
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, 320.0, 4.0, NitroUiSizingPolicy.fillWidth.rawValue)
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process (the
-  /// static above is lazy and thread-safe, so repeat calls cost nothing).
-  ///
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
-  /// matters: Fabric measures a shadow node before it creates a view (T14). `init`
-  /// still calls it, as the backstop.
+  /// Registers the fallback once per process. Called at startup, because Fabric measures a
+  /// shadow node before it creates any view; `init` calls it as a backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
 
-  /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: ProgressModel())
     super.init()
     // Containment is for controls that present UI (menus, pickers); an indicator
     // never does.
     host.needsContainment = false
-    // Both variants are self-sized: a linear bar measures its height, a circular
-    // one its square. `wantsContentSize` costs one `sizeThatFits` per bounds or
-    // trait change, not per commit.
+    // Both variants are self-sized: a linear bar measures its height, a circular one its
+    // square.
     host.wantsContentSize = true
-    // The default variant is linear, so the default policy is `fillWidth`; the
-    // `variant` setter moves it along with the rest of the variant change.
+    // The default variant is linear, hence `fillWidth`; the `variant` setter changes the
+    // policy with the variant.
     host.sizingPolicy = .fillWidth
-    // The backstop: startup normally registers this through
-    // ``NitroUiDeclaredFallbacks`` long before a Progress can be measured.
     Self.declareFallback()
-    // Window membership, for the animation gate. Set up in `init` only: this view
-    // is a sibling of the hosted content for the life of the host, so it survives a
-    // recycle and never needs removing.
+    // A sibling of the hosted content for the life of the host, so it survives a recycle.
     windowObserver.frame = .zero
     windowObserver.isUserInteractionEnabled = false
     windowObserver.isAccessibilityElement = false
@@ -350,8 +243,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   var variant: String {
     get { model.variant }
     set {
-      // The wrapper is the only writer and sends one of three names; anything else
-      // behaves as `'linear'`, which is what the spec documents.
+      // Anything unrecognised is `'linear'`.
       let next: String
       if newValue == "circular" || newValue == "loading" {
         next = newValue
@@ -360,11 +252,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
       }
       guard next != model.variant else { return }
       model.variant = next
-      // The one prop that changes the control's *size* - and the question the
-      // toolkit is asked (an `intrinsic` square vs a bar at the box's width), so
-      // the policy has to move with it and the fitting size has to be taken again
-      // (`docs/architecture/sizing.md` §5 point 5).
-      // A loading indicator is drawn as a ring here, so it asks the ring's question.
+      // The variant changes the sizing policy as well as the size.
       host.sizingPolicy = model.isIntrinsicShape ? .intrinsic : .fillWidth
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
@@ -374,15 +262,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   var appearance: String {
     get { model.appearance }
     set {
-      // Stored, not rendered: SwiftUI has nothing wavy to draw, so this does not
-      // repaint anything and does not even mark the host dirty - the same treatment
-      // `trackColor` gets, and round-tripping the prop is what makes the documented
-      // platform difference observable rather than mysterious.
-      //
-      // What *does* move on a change is the sizing key, and that arrives in the
-      // same props batch as its own write (`nuiSizingKey` below). On Android
-      // `'wavy'` is a different composable with a bigger box; here the box is the
-      // flat one, and the engine learns that by measuring this configuration once.
+      // Stored, not drawn, so the host is not marked dirty.
       model.appearance = newValue == "wavy" ? "wavy" : "flat"
     }
   }
@@ -390,8 +270,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   var contained: Bool {
     get { model.contained }
     set {
-      // Stored, not rendered - no iOS control has a contained loading form. See
-      // `appearance` for why that still costs the caller a re-measure.
+      // Stored, not drawn: no iOS control has a contained loading form.
       model.contained = newValue
     }
   }
@@ -403,8 +282,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
       guard next != model.value else { return }
       model.value = next
       host.markDirty()
-      // Not size-affecting: a bar at 0.2 and a bar at 0.9 are the same box on both
-      // toolkits, so no `noteContentSizeMayHaveChanged()`.
+      // Not size-affecting: the box is the same at any value.
     }
   }
 
@@ -429,9 +307,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
     set {
       let next = newValue.asType(Double.self).flatMap(UIColor.init(nitroUiARGB:))
       guard next != model.track else { return }
-      // Stored, not rendered - SwiftUI has nothing to put it on - so this does not
-      // even mark the host dirty. Round-tripping the prop is what makes the
-      // documented iOS limitation observable rather than mysterious.
+      // Stored, not drawn, so the host is not marked dirty.
       model.track = next
     }
   }
@@ -439,10 +315,8 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: `testID` is an RN base prop too, and
-      // `RCTViewComponentView` already puts it on the component view as
-      // `accessibilityIdentifier`. Setting it again would make the view match a
-      // testID query twice. It stays in the spec because Android needs it as a tag.
+      // Nothing to apply: React Native already puts `testID` on the component view as
+      // `accessibilityIdentifier`.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -453,8 +327,7 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
       return .second(label)
     }
     set {
-      // Rendered: the label is on the SwiftUI element, so a late-set label needs a
-      // commit to reach VoiceOver.
+      // The label is on the SwiftUI element, so it needs a commit to reach VoiceOver.
       let next = newValue.asType(String.self)
       guard next != model.accessibilityLabel else { return }
       model.accessibilityLabel = next
@@ -475,12 +348,8 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
     set {
       guard newValue != model.sizingKey else { return }
       model.sizingKey = newValue
-      // `appearance` and `contained` change the configuration without a remount
-      // (the shape, and with it the sizing policy, is unchanged), and the engine has
-      // no answer for a key it has not seen. iOS reads the key live, so this is the
-      // one thing that has to happen; Button's `nuiSizingKey` documents why it has
-      // to be *asked for* rather than waited for (review F1), and the guard is for
-      // the same reason - React re-sends an unchanged key on every render.
+      // A new key may measure exactly what the old one did, and the host would drop that
+      // report as a duplicate. Guarded, because React re-sends an unchanged key every render.
       host.noteSizingKeyChanged()
     }
   }
@@ -493,8 +362,6 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // Nothing to reconcile (`docs/architecture/core.md` §12): React's `value` is
-    // the whole story, so one commit per turn is the entire update path.
     host.commit()
   }
 
@@ -508,21 +375,16 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
     model.testID = nil
     model.accessibilityLabel = nil
     model.sizingKey = ""
-    // Back to the default policy, matching the reset variant - a host that kept
-    // `intrinsic` would ask the next owner's linear bar the wrong question.
+    // Back to the default policy, matching the reset variant.
     host.sizingPolicy = .fillWidth
-    // A recycled host is not in a window, and the reset above leaves the model
-    // *indeterminate* - so without this the next owner's indicator would count as
-    // animating between the recycle and the next attach. The observer sets `true`
-    // on the way back in; saying it here closes the gap between the two.
+    // A recycled host is not in a window, and the reset leaves the model indeterminate:
+    // without this the indicator would count as animating until the next attach.
     model.inWindow = false
     model.refreshAnimationReport()
     host.prepareForRecycle()
   }
 
   func onDropView() {
-    // No callbacks to release (there are none), but the window flag and the
-    // animation mirror still belong to the mount that is ending.
     model.inWindow = false
     model.refreshAnimationReport()
     host.drop()
@@ -530,10 +392,8 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
 
   // MARK: - Methods
 
-  /// The size SwiftUI wants for this indicator, from the host's cache.
-  ///
-  /// Never touches the main thread: this can be called from JS, and SwiftUI may
-  /// only be measured on main (core-architecture §1.4).
+  /// Reads the host's cache: this can be called from JS, and SwiftUI may only be measured
+  /// on main.
   func measureContent() throws -> NitroUiSize {
     guard let size = host.contentSize else {
       return NitroUiSize(width: 0, height: 0)
@@ -541,15 +401,11 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
     return NitroUiSize(width: Double(size.width), height: Double(size.height))
   }
 
-  /// What the control is displaying - see `NitroUiProgressMethods.nuiTestDisplayedValue`.
   func nuiTestDisplayedValue() throws -> String {
     return model.displayedReport
   }
 
-  /// Whether the control is allowed to be animating - see
-  /// `NitroUiProgressMethods.nuiTestIsAnimating`. On iOS that is "indeterminate,
-  /// and its view is in a window", which is the rule ``ProgressModel/drawnValue``
-  /// actually draws under.
+  /// True when the indicator is indeterminate and its view is in a window.
   func nuiTestIsAnimating() throws -> Bool {
     return model.isAnimating
   }

@@ -6,30 +6,14 @@ import { useStableCallback } from '../../core/useStableCallback';
 import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiStepper } from './NativeNitroUiStepper';
 
-/**
- * The size configuration of a Stepper, as the sizing engine sees it.
- *
- * Every prop that can change a control's size has to appear in this variant
- * (`docs/architecture/sizing.md` §5). A Stepper has none: `minimumValue`,
- * `maximumValue` and `step` decide *which numbers* the control steps through,
- * never how wide its two buttons are, and `disabled` only changes what they look
- * like. So the variant is empty — one configuration, one cached size for the
- * whole app, and the one `prewarm(['NitroUiStepper'])` can pre-warm.
- */
+/** No Stepper prop changes its size, so every Stepper shares one sizing key. */
 const SIZING_VARIANT = '';
 
-/**
- * Props of {@link Stepper}.
- *
- * The value names follow our own `Slider`, which follows
- * `@react-native-community/slider`; `disabled` and `accessibilityLabel` are
- * every other control's.
- */
+/** Props of {@link Stepper}. */
 export interface StepperProps extends ViewProps {
   /**
    * The value. Pass it to control the Stepper; leave it `undefined` for an
-   * uncontrolled one (native then owns the displayed value, and a step costs no
-   * React render).
+   * uncontrolled one, which keeps its own value.
    */
   value?: number | undefined;
   /**
@@ -42,12 +26,11 @@ export interface StepperProps extends ViewProps {
   /** Upper bound of the range. Default: `100`. */
   maximumValue?: number | undefined;
   /**
-   * Increment one step moves by. Default: `1`; it must be greater than `0`, and
-   * a value that is not throws in development.
+   * Increment one step moves by. Default: `1`. It must be greater than `0`;
+   * anything else throws in development.
    *
    * The value snaps to multiples of `step` measured from `minimumValue`, with
-   * `maximumValue` always reachable — Slider's rule, run natively before any
-   * event is emitted, which is what keeps a `0.1` step from arriving as `0.3000…4`.
+   * `maximumValue` always reachable, so a `0.1` step never arrives as `0.3000…4`.
    */
   step?: number | undefined;
   /**
@@ -56,10 +39,10 @@ export interface StepperProps extends ViewProps {
    */
   disabled?: boolean | undefined;
   /**
-   * Once per step, with the value native now displays.
+   * Called once per step, with the value now displayed.
    *
-   * On iOS, holding a half repeats: every repeat is a step and so its own event.
-   * On Android there is no hold-to-repeat — see `docs/components/stepper.md`.
+   * On iOS, holding a half repeats, and every repeat is its own event. Android
+   * has no hold-to-repeat.
    */
   onValueChange?: ((value: number) => void) | undefined;
   /**
@@ -68,11 +51,11 @@ export interface StepperProps extends ViewProps {
    */
   accessibilityLabel?: string | undefined;
   /**
-   * Access to the native Hybrid View, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for this library's own tests and
+   * benchmarks.
    *
-   * @internal Not app API (DECISIONS D14): props must flow through React. Reading
-   * props and calling `measureContent()` is all it is for (plus the test-only
-   * probes), and the callback runs once, when the view mounts.
+   * @internal Not app API: props must flow through React. The callback runs
+   * once, when the view mounts.
    */
   hybridRef?:
     | ((view: {
@@ -94,8 +77,7 @@ export interface StepperProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`). Benchmark
-   * only; `null` turns marks off for this view.
+   * Instance id for native performance marks; `null` turns them off for this view.
    *
    * @internal Benchmark and diagnostics only — not app API.
    */
@@ -115,10 +97,10 @@ export interface StepperProps extends ViewProps {
  * />
  * ```
  *
- * SwiftUI's `Stepper` on iOS — hold-to-repeat and the disabled half at a bound
- * included. Material has no stepper, so on Android it is two Material 3 tonal
- * icon buttons (`docs/components/stepper.md` says so plainly, and says which
- * half Android leaves out). It shows no number: the value goes to your own text.
+ * SwiftUI's `Stepper` on iOS, with hold-to-repeat and the disabled half at a
+ * bound. Material has no stepper, so on Android it is two Material 3 tonal icon
+ * buttons, without hold-to-repeat. It shows no number: the value goes to your
+ * own text.
  */
 export function Stepper({
   value,
@@ -136,21 +118,16 @@ export function Stepper({
   ...restProps
 }: StepperProps) {
   const selfSizingBaseStyle = useSelfSizingBaseStyle();
-  // A step of 0 or less is not a small step, it is no step: the control would sit
-  // at one value and report nothing while looking like it worked. Throwing in
-  // development is the only honest answer, and it is the same call Slider makes
-  // about a range nobody can drag along.
+  // A step of 0 or less would leave the control stuck at one value while looking
+  // like it works.
   if (__DEV__ && !(step > 0)) {
     throw new Error(
       `nitro-ui: <Stepper step> must be greater than 0; received ${String(step)}.`
     );
   }
-  // An uncontrolled Stepper with no `defaultValue` starts at the bottom of its own
-  // range, not at a literal 0 — `<Stepper minimumValue={20} />` starting at 0 would
-  // display a value outside its range.
-  // `useControlled` wires `onValueChange` whether or not the app passed one (its
-  // own echo is what lets native accept the next `value` write), so the prop always
-  // has one stable identity and never becomes `null` mid-mount (D7b).
+  // Without a `defaultValue`, start at `minimumValue` rather than 0, which may be
+  // outside the range. `useControlled` always wires `onValueChange`, so the
+  // callback prop keeps one identity and is never `null`.
   const controlled = useControlled(
     value,
     defaultValue ?? minimumValue,

@@ -2,11 +2,8 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 /**
- * Minimal `renderHook` for the library's own unit tests.
- *
- * A full testing library would give more, but the hooks under test only need a
- * component to run in, a way to re-run them with new arguments, and a render
- * count (an uncontrolled control must not re-render at all).
+ * Minimal `renderHook` for unit tests: runs a hook in a component, re-runs
+ * it on demand, and counts renders.
  */
 export interface HookResult<Result> {
   result: { current: Result };

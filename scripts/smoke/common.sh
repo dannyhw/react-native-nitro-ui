@@ -6,11 +6,8 @@ set -euo pipefail
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# Base temp dir for consumer apps. Outside the repo, and it must contain no
-# spaces/#/%/non-ASCII (CocoaPods, nitrogen and Gradle all choke on those).
-# Every run creates its own unique sub directory under it (mk_run_dir), so
-# concurrent runs - another worktree, or ios + android in parallel - can never
-# delete or read each other's app or tarball.
+# Base temp dir for consumer apps. It must contain no spaces, #, % or non-ASCII characters
+# (CocoaPods, nitrogen and Gradle all fail on those). Each run gets its own sub directory.
 SMOKE_TMP="${SMOKE_TMP:-/tmp/nitro-ui-smoke}"
 case "$SMOKE_TMP" in
   *[[:space:]'#%']* | *[![:print:]]*)
@@ -32,16 +29,15 @@ READY_TIMEOUT="${READY_TIMEOUT:-180}"   # seconds to wait for the ready log line
 PENDING_PATTERN="${PENDING_PATTERN:-NITRO_UI_SMOKE_PENDING}"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-300}"     # seconds to wait for the emulator to boot
 SKIP_PACK="${SKIP_PACK:-0}"             # 1 = reuse a tarball instead of packing
-# Shut down devices this run booted when it finishes (AGENTS.md). Set 0 to keep
-# a warm device while iterating.
+# 1 = shut down the devices this run booted when it finishes; 0 keeps them warm.
 SHUTDOWN_DEVICES="${SHUTDOWN_DEVICES:-1}"
 
-# Devices (see docs/DECISIONS.md): every caller/brief sets these.
+# Devices: every caller sets these.
 IOS_SIM_UDID="${IOS_SIM_UDID:-}"
 ANDROID_AVD="${ANDROID_AVD:-${AVD:-}}"
 EMULATOR_PORT="${EMULATOR_PORT:-5554}"
 EMULATOR_SERIAL="emulator-$EMULATOR_PORT"
-# Never steal the human's emulator, no matter what env says.
+# emulator-5560 is reserved and never used, whatever the environment says.
 if [ "$EMULATOR_SERIAL" = "emulator-5560" ]; then
   echo "smoke: refusing to use emulator-5560 (reserved on the maintainer machine)" >&2
   exit 1
@@ -126,14 +122,8 @@ trap 'code=$?; cleanup_all; [ $code -ne 0 ] && [ -n "${SCRIPT_NAME:-}" ] && echo
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"; }
 
-# The readiness assertion, shared by BOTH platform paths (never grep the ready
-# pattern inline - that is how the gate ended up asserting nothing about
-# layout). `scripts/smoke/lib.mjs` owns the contract: the ready line must carry
-# one `name=WxH` box per control, each greater than zero, and
-# `scripts/__tests__/smoke-ready-line.test.js` proves that assertion can fail.
-# Called once the app has printed either signal, so it runs in both the pass
-# case and the fast-fail case; it exits non-zero - one line per problem, plus
-# the app's own PENDING line - when a control has no box.
+# The readiness assertion shared by both platform paths; never grep the ready pattern
+# inline. Exits non-zero, with one line per problem, when a control has no box.
 verify_ready_line() { # <logfile> <platform-label>
   local log=$1 platform=$2 out
   require_cmd node
@@ -275,7 +265,7 @@ build_android_release() { # build_android_release <app-dir>
   local app=$1
   GRADLE_DIRS+=("$app/android")
   # --no-daemon + in-process Kotlin compilation keeps Gradle/Kotlin JVMs from
-  # outliving the run (as in ci.yml); ./gradlew --stop stays as the backstop.
+  # outliving the run; ./gradlew --stop stays as the backstop.
   ( cd "$app/android" &&
     ./gradlew :app:assembleRelease \
       "-PreactNativeArchitectures=$ABI" --console=plain \
@@ -375,12 +365,9 @@ install_start_verify_ios() { # <app.app-path> <screenshot-name>
   bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Info.plist")
   local runtime_log="$ARTIFACTS/ios-runtime.log"
 
-  # RN installs `nativeLoggingHook` in every build configuration and routes it
-  # to os_log (subsystem com.facebook.react.log, category javascript);
-  # console.log maps to INFO, so `log stream` needs --level info to show it.
-  # The stream is started BEFORE launch so no early lines are lost, and it
-  # also gives deterministic fail-fast on JS fatals (category native logs
-  # "Unhandled JS Exception"), which a screenshot-only check would miss.
+  # React Native routes console.log to os_log at INFO (subsystem com.facebook.react.log), so
+  # `log stream` needs --level info. Started before launch so no early line is lost; it also
+  # shows JS fatals ("Unhandled JS Exception"), which a screenshot alone would miss.
   xcrun simctl install "$IOS_SIM_UDID" "$app_path"
   xcrun simctl terminate "$IOS_SIM_UDID" "$bundle_id" >/dev/null 2>&1 || true
   : > "$runtime_log"
@@ -395,7 +382,6 @@ install_start_verify_ios() { # <app.app-path> <screenshot-name>
   start=$(date +%s); ready=0; fatal=0
   while [ $(( $(date +%s) - start )) -lt "$READY_TIMEOUT" ]; do
     if grep -qE "$READY_PATTERN|$PENDING_PATTERN" "$runtime_log"; then
-      # The same assertion as Android - see verify_ready_line.
       verify_ready_line "$runtime_log" iOS
       ready=1
       break

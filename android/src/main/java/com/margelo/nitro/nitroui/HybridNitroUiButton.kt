@@ -39,20 +39,9 @@ import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
-/*
- * The Button component: the five Material 3 button components on the core
- * runtime. Structure is the Switch's (`HybridNitroUiSwitch.kt`); what is new
- * here is that the control's *size* comes from its props, which is the one thing
- * the core runtime has to be told about. Compose observes the model, recomposes,
- * and its own measure pass reports the new size, so unlike iOS no extra
- * "the size may have moved" call is needed (`docs/architecture/sizing.md` §5).
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * manager resolves the implementation through a wildcard import of exactly that
- * package. Core helpers live in `...nitroui.core`.
- */
+// The Button component: the five Material 3 buttons. Must stay in this package, which the
+// generated view manager imports with a wildcard.
 
-/** The five roles, named after the Material 3 components they are. */
 internal enum class ButtonVariant(val wireName: String) {
   Filled("filled"),
   Tonal("tonal"),
@@ -61,27 +50,13 @@ internal enum class ButtonVariant(val wireName: String) {
   Elevated("elevated");
 
   companion object {
-    /** The role for a wire string; anything unrecognised is `filled`. */
     fun from(value: String): ButtonVariant = entries.firstOrNull { it.wireName == value } ?: Filled
   }
 }
 
 /**
- * The five rungs, and which Material 3 container height the control's padding,
- * label style and corner are read from.
- *
- * The names are the library's, the numbers are Material's (D42 item 4): the
- * Expressive ladder is indexed by a container height, and Material publishes five
- * of them, so the ladder has five rungs. `small` / `medium` / `large` keep the
- * heights they had; `xlarge` and `xxlarge` are the two taller tokens, which is how
- * Material names its own XS–XL button row lines up with this one:
- *
- * | Material | XS | S | M | L | XL |
- * | -------- | -- | - | - | - | -- |
- * | nitro-ui | `small` | `medium` | `large` | `xlarge` | `xxlarge` |
- *
- * IconButton (G19) is documented in Material's names because its tokens are
- * Material's own, and this table is the bridge between the two spellings.
+ * The library's size names against Material's container heights: `small` is XS, `medium`
+ * S, `large` M, `xlarge` L and `xxlarge` XL.
  */
 internal enum class ButtonScale(val wireName: String) {
   Small("small"),
@@ -91,27 +66,12 @@ internal enum class ButtonScale(val wireName: String) {
   XXLarge("xxlarge");
 
   companion object {
-    /** The scale for a wire string; anything unrecognised is `medium`. */
     fun from(value: String): ButtonScale = entries.firstOrNull { it.wireName == value } ?: Medium
   }
 
   /**
-   * The control's height: Material 3's own XS / S / M container-height tokens.
-   *
-   * The three public names stay `small` / `medium` / `large` and now *mean* M3's
-   * three smallest button heights (32 / 40 / 56 dp) rather than three sets of
-   * hand-rolled padding. Every other number in this file hangs off this one -
-   * `ButtonDefaults.contentPaddingFor`, `textStyleFor`, `shapesFor` and the
-   * connected button group all take a height, which is why the ladder is
-   * expressible at all (Q8 Appendix A row 2).
-   *
-   * This is the height the *tokens* are indexed by, not the height the box is
-   * given: nothing here sets a height on the composable, because Material 3 lays
-   * a button out at [MinTouchTargetHeight] or taller whatever its container token
-   * says. Requesting `height(32.dp)` instead would measure what Q8 predicted
-   * (57.9x32.0 for `small`) and take the touch target down with it, so the
-   * Expressive ladder is what moves here and the 48 dp target is what stays
-   * (`docs/components/button.md`, "Sizing").
+   * The Material container height that padding, label style and corner are read from. Not
+   * set on the composable: Material lays a button out at [MinTouchTargetHeight] or taller.
    */
   val height: Dp
     get() =
@@ -124,57 +84,37 @@ internal enum class ButtonScale(val wireName: String) {
       }
 
   /**
-   * The height the box is actually laid out at: the container token, never below
-   * the touch target. Measured on the API 35 emulator: 48.0 / 48.0 / 56.0 dp.
-   *
-   * The corner is read from *this*, not from [height] - a radius belongs to the
-   * box that is drawn, and a 48 dp pill with a 32 dp corner is two designs.
+   * The height the box is laid out at: the container token, never below the touch target.
+   * The corner radius is read from this, because it belongs to the box that is drawn.
    */
   val layoutHeight: Dp
     get() = if (height > MinTouchTargetHeight) height else MinTouchTargetHeight
 }
 
-/**
- * Material 3's own minimum interactive component size, in dp.
- *
- * Material applies it inside `Button`, which is why no height on our side is
- * needed to keep a `small` Button hittable at 48 dp; it is named here so the
- * corner and the JVM test can say the same number as the framework does.
- */
+/** Material 3's minimum interactive component size, which `Button` applies itself. */
 internal val MinTouchTargetHeight = 48.dp
 
 /**
- * The `shape` prop: which pair of corners the button draws, and which pair it
- * morphs *from* while pressed.
- *
- * Material 3 Expressive morphs a button's shape as it is pressed, so the prop
- * picks the resting shape and Material supplies the other end of the morph:
- * `round` rests on the height's own shape and presses toward
- * [ButtonDefaults.squareShape], `square` rests square and presses toward the
- * rounded one. iOS has no cornerless button, so there the same value maps to
- * `.roundedRectangle(radius: 8)` and does not morph
- * (`docs/components/button.md`).
+ * The resting corner. Material 3 Expressive morphs a pressed button toward the other
+ * shape: `round` presses toward square, `square` toward round.
  */
 internal enum class ButtonShape(val wireName: String) {
   Round("round"),
   Square("square");
 
   companion object {
-    /** The shape for a wire string; anything unrecognised is `round`. */
     fun from(value: String): ButtonShape = entries.firstOrNull { it.wireName == value } ?: Round
   }
 }
 
-/** Which colour `tintColor` recolors for a variant, and why (`docs/components/button.md`). */
+/** Which colour `tintColor` replaces for a variant. */
 internal enum class TintRole {
-  /** The filled container - the analogue of iOS `.tint()` on a prominent button. */
   Container,
 
   /** The label (and, for `outlined`, the border that follows it). */
   Content,
 }
 
-/** What each variant's `tintColor` acts on. */
 internal val ButtonVariant.tintRole: TintRole
   get() =
     when (this) {
@@ -184,107 +124,52 @@ internal val ButtonVariant.tintRole: TintRole
       else -> TintRole.Container
     }
 
-/** State of one Button. See [NitroUiModel] for the shape this has to have. */
 internal class ButtonModel : NitroUiModel() {
-  /** The label text. Observed: it is both what renders and what decides the width. */
   var title by mutableStateOf("")
 
-  /** Which of the five M3 button composables to render, and with which colours. */
   var variant by mutableStateOf(ButtonVariant.Filled)
 
-  /** Padding / typography scale. */
   var scale by mutableStateOf(ButtonScale.Medium)
 
-  /** The resting corner, and therefore the direction of the press morph. */
   var shape by mutableStateOf(ButtonShape.Round)
 
-  /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
   /** ARGB `processColor` int, or `null` for the scheme's own colours. */
   var tintColor by mutableStateOf<Int?>(null)
 
-  /**
-   * `accessibilityLabel`, read by the composable so the label can go on the
-   * Button itself - the container is never the labelled node
-   * (`docs/architecture/core.md` §3).
-   */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /**
-   * The SF Symbol name. v0.1 ignores it on Android - there is no SF Symbols on
-   * the platform, and inventing a drawable lookup here would be a different
-   * feature (documented on `docs/components/button.md`). Stored, not observed:
-   * nothing reads it in a composable.
-   */
+  /** The SF Symbol name. Ignored on Android; stored only so the getter can return it. */
   var systemImage: String? = null
 
-  /**
-   * The icon React asked for, verbatim: a resource name, or a `url:` string for a
-   * file to read (`NitroUiIconSource`).
-   *
-   * The wire form is kept rather than the parsed source because it is what
-   * `hybridRef` reports back and what a test compares against the string the
-   * wrapper built; [iconSlot] holds the parsed half.
-   */
+  /** The icon string exactly as React sent it; [iconSlot] holds what it resolved to. */
   var androidIcon: String? = null
 
-  /**
-   * Everything derived from [androidIcon], shared with `Menu`'s trigger.
-   *
-   * The rules live in [NitroUiIconSlot]: resolve once per change from
-   * `afterUpdate()`, reserve a file's slot before the bytes arrive, retire an answer
-   * whose generation has moved, and treat unresolvable artwork as no icon at all.
-   * Read it here as a property because the composition reads *this* model, and the
-   * state behind it is observed — so a glyph arriving is a recomposition of this
-   * control and nothing else.
-   */
   val iconSlot = NitroUiIconSlot()
 
-  /** What the composition lays the label next to. Observed, through [iconSlot]. */
   val androidIconContent: NitroUiIconContent
     get() = iconSlot.content
 
-  /** Apply [androidIcon] if it is not what [androidIconContent] already is. */
   fun resolveAndroidIcon(
     artwork: NitroUiIconArtwork,
   ) {
     iconSlot.resolve(androidIcon, artwork)
   }
 
-  /**
-   * The size configuration React sent. The sizing engine reads the key out of Fabric
-   * state itself; the host only needs to hear that it changed (see
-   * [NitroComposeHost.noteSizingKeyChanged]).
-   */
   var sizingKey = ""
 
-  /**
-   * `onPress`, as Nitro delivered it. The generated spec types the prop as a
-   * plain Kotlin function, which `Func_void` implements.
-   */
   var onPress: (() -> Unit)? = null
 
-  /**
-   * What the last `nuiTestPixelProbe` saw, as one line, or empty before the first.
-   *
-   * Plain rather than observed - nothing may recompose because a test reading moved -
-   * and stored behind a lock because the probe is posted to the main thread while
-   * `nuiTestPixelReport` answers from whichever thread Nitro called it on. The `n=`
-   * prefix counts probes, which is the only way a harness can tell its own answer
-   * from the previous control's. Cleared with everything else: a recycled Button that
-   * still reported another owner's pixels would let a test credit a hit that is not
-   * its control's.
-   */
+  // The last pixel probe's answer. Not observed, and behind a lock: the probe runs on the
+  // main thread and the report is read from whichever thread Nitro calls on.
   var pixelReport = ""
     private set
 
   private val pixelReportLock = Any()
 
-  /** How many probes have reported, under [pixelReportLock]. */
   private var pixelProbes = 0
 
-  /** Store what a probe found, numbered. Safe from any thread. */
   fun publishPixelReport(report: String) {
     synchronized(pixelReportLock) {
       pixelProbes += 1
@@ -292,7 +177,6 @@ internal class ButtonModel : NitroUiModel() {
     }
   }
 
-  /** The last published probe, or empty before the first one. */
   fun readPixelReport(): String {
     synchronized(pixelReportLock) { return pixelReport }
   }
@@ -316,41 +200,18 @@ internal class ButtonModel : NitroUiModel() {
 }
 
 /**
- * The library's `ButtonColors`, so that a *tinted* Button costs one colour set per
- * (colour scheme, variant, tint) instead of one per recomposition.
- *
- * The rule this follows is in `docs/architecture/core.md` ("Shared objects"): a
- * hosted control is its own composition, so `remember` cannot share anything
- * between controls, and anything built from the theme or a defaults factory has to
- * be a process-wide keyed cache or hoisted out. Material 3 1.4 already memoises
- * the *untinted* path per `ColorScheme` (`ButtonDefaults.buttonColors()` with no
- * arguments reads a cached field), so the only allocation left is ours: the tinted
- * set, which without this cache is one `ButtonColors` per recomposition per
- * mounted Button - on the exact path the `update` bench scenario exercises.
- *
- * It cannot be a `remember`: building the colours is a composable read of the
- * scheme, and `remember`'s calculation lambda is `@DisallowComposableCalls`. So a
- * cache with the miss in the composable, and it only pays across instances while
- * the scheme *identity* is shared, which is what [NitroUiColorSchemes] is for.
- *
- * Bounded and self-clearing: one scheme at a time (identity is the key because
- * identity is what Material's own memo reads), at most [MAX_TINTED_ENTRIES] tinted
- * sets, and a scheme change drops everything.
+ * Button colours per (colour scheme, variant, tint). Process-wide because every hosted
+ * control is its own composition, so `remember` shares nothing between controls. The
+ * caller fills a miss, because building the colours is a composable call.
  */
 private object ButtonColorsCache {
-  /**
-   * Tinted sets to remember before starting over. An app tints a handful of
-   * buttons; the cap is what stops a component that derives a colour per list row
-   * from growing this for the life of the process.
-   */
+  // A cap, so an app that derives a colour per list row cannot grow this without bound.
   private const val MAX_TINTED_ENTRIES = 24
 
   private var scheme: ColorScheme? = null
 
-  /** The untinted set per variant - five slots, filled once per scheme. */
   private val untinted = arrayOfNulls<ButtonColors>(ButtonVariant.entries.size)
 
-  /** Tinted sets, keyed by (variant ordinal, ARGB int). */
   private var tinted: HashMap<Long, ButtonColors>? = null
 
   private fun key(
@@ -358,16 +219,7 @@ private object ButtonColorsCache {
     tint: Int,
   ): Long = (variant.ordinal.toLong() shl 32) or (tint.toLong() and 0xFFFF_FFFFL)
 
-  /**
-   * The cached colours for this scheme, variant and tint, or `null` on a miss -
-   * which the caller fills by *calling the composable*, because building them is a
-   * composable read of the scheme and cannot be handed here as a lambda.
-   *
-   * Synchronised for the same reason [SwitchColorsCache] is: a second window can
-   * compose against another `Choreographer`, and a half-written entry would show
-   * one Button wearing a stale theme. One uncontended monitor per recomposition,
-   * paid for by the object it avoids.
-   */
+  // Synchronized because a second window can compose against another `Choreographer`.
   @Synchronized
   fun get(
     scheme: ColorScheme,
@@ -378,7 +230,6 @@ private object ButtonColorsCache {
     return if (tint == null) untinted[variant.ordinal] else tinted?.get(key(variant, tint))
   }
 
-  /** Record a colour set the caller just built. */
   @Synchronized
   fun put(
     scheme: ColorScheme,
@@ -398,7 +249,7 @@ private object ButtonColorsCache {
     entries[key(variant, tint)] = colors
   }
 
-  /** Drop what a different scheme invalidates. Called with the lock held. */
+  // Call with the lock held.
   private fun adopt(scheme: ColorScheme) {
     if (this.scheme === scheme) {
       return
@@ -412,18 +263,8 @@ private object ButtonColorsCache {
 }
 
 /**
- * The Button's colours for [tint] (an ARGB int, or `null` for the scheme's own),
- * served by [ButtonColorsCache].
- *
- * `internal`, not `private`, because `HybridNitroUiMenu.kt` builds its trigger from
- * the same three helpers ([buttonColors], [ButtonLabelStyles], [contentPaddingFor]):
- * a Menu's box is documented to *be* a Button's box, and a second copy of these
- * numbers is how that sentence stops being true.
- *
- * The tint replaces only what [tintRole] says: the container for the three filled
- * variants, the label (and the border that follows it) for `outlined` and `text`,
- * whose container is transparent by design. Everything else keeps the M3 role
- * colours, which is the same trade the Switch's `tintColor` makes.
+ * The colours for [variant], with [tint] (an ARGB int) replacing only what [tintRole]
+ * names. Shared with the Menu trigger, whose box must match a Button's.
  */
 @Composable
 internal fun buttonColors(
@@ -453,24 +294,7 @@ internal fun buttonColors(
   return built
 }
 
-/**
- * The label style of one scale, served per `Typography` identity.
- *
- * `small` and `medium` are the theme's own `labelMedium` / `labelLarge`, so they
- * cost a field read. Only `large` derives anything (`labelLarge` at 18 sp), and
- * that copy happens once per theme rather than per recomposition - the same rule
- * as [ButtonColorsCache]: an object derived from the theme is shared, not built
- * inline in the composable.
- */
-/**
- * The label style of one scale, served per `Typography` identity.
- *
- * The style is Material 3's own for the scale's height - `textStyleFor` is a
- * composable read of the theme, so the *miss* has to be computed in the
- * composable and stored here, exactly as [ButtonColorsCache] does for colours.
- * Building it inline instead would be one `TextStyle` per recomposition per
- * mounted Button, on the path the `update` bench scenario exercises.
- */
+/** Material's label style per scale, cached per `Typography` like [ButtonColorsCache]. */
 internal object ButtonLabelStyles {
   private var typography: Typography? = null
   private val styles = arrayOfNulls<TextStyle>(ButtonScale.entries.size)
@@ -500,13 +324,6 @@ internal object ButtonLabelStyles {
   }
 }
 
-/**
- * The label style for [scale]: Material's `textStyleFor` for that height,
- * cached per [Typography] by [ButtonLabelStyles].
- *
- * `internal` for the same reason as the three other shared helpers: a Menu's
- * trigger is this Button's box.
- */
 @Composable
 internal fun buttonLabelStyle(scale: ButtonScale): TextStyle {
   val typography = MaterialTheme.typography
@@ -517,15 +334,8 @@ internal fun buttonLabelStyle(scale: ButtonScale): TextStyle {
 }
 
 /**
- * The label's own padding for a variant at [scale].
- *
- * The four contained variants take Material's padding for the scale's height, so
- * padding follows the box instead of being a second, hand-rolled table of the
- * same numbers. `text` does not: material3 1.5.0-beta02 has no height ladder for
- * text buttons (there is no `TextButtonDefaults` in it), and its
- * `TextButtonContentPadding` is 12 dp against the ladder's 24, which is the
- * difference between a text button and a filled one. So `text` keeps Material's
- * own padding at every scale, and its measured width keeps its own shape.
+ * Material's padding for the scale's height. `text` keeps `TextButtonContentPadding` at
+ * every scale: material3 1.5 has no height ladder for text buttons.
  */
 internal fun contentPaddingFor(
   variant: ButtonVariant,
@@ -537,28 +347,7 @@ internal fun contentPaddingFor(
     ButtonDefaults.contentPaddingFor(scale.height)
   }
 
-/**
- * The resting + pressed shapes for a corner at [scale].
- *
- * [cornerFor] decides the corner before this is called: a caller with a variant
- * resolves it first, so `text` reaches here with [ButtonShape.Round] whatever its
- * prop says and there is no second copy of that rule to forget.
- *
- * [ButtonShape.Round] is Material's own answer for the height - which is already
- * a pair: Expressive morphs it toward [ButtonDefaults.squareShape] while the
- * button is held. [ButtonShape.Square] rests on `squareShape` and morphs the
- * other way, onto the rounded shape, because a press that does not change
- * anything is not the morph the design language asks for.
- *
- * The result is cached per (motion scheme, scale, corner): `shapesFor` is a
- * composable read of the theme, and a hosted control is its own composition, so
- * without a cache every recomposition of every Button builds two `Shape` objects
- * to draw the same corner ([ButtonColorsCache] is the same rule for colours).
- *
- * The cache is keyed by [ButtonScale], not by the height it reads: two rungs share
- * a layout height once the touch target floors them (`small` and `medium` are both
- * 48 dp of box), and a height-keyed slot would put them in the same entry.
- */
+/** The resting and pressed shapes for [corner] at [scale], cached per motion scheme. */
 @Composable
 internal fun buttonShapes(
   corner: ButtonShape,
@@ -578,25 +367,14 @@ internal fun buttonShapes(
 }
 
 /**
- * The corner a [variant] actually draws for a requested [shape].
- *
- * `text` has no container: there is no surface to give a corner, so the prop has
- * nothing to act on and the variant rests on Material's own rounded answer - which
- * is also what it drew before the prop existed. It still gets the morph that comes
- * with the round corner, because that belongs to the height, not to the choice.
- * Every other variant draws what it is sent.
- *
- * `internal` and separate from [buttonShapes] so the JVM test can read the table:
- * the corner is the one Button rule here that a device cannot see - a `text`
- * variant paints no container, so a clipped ripple is the only difference, and no
- * screenshot at rest or in the harness can tell one from the other.
+ * The corner a variant draws. `text` has no container to give a corner, so it always
+ * rests on Material's rounded shape.
  */
 internal fun cornerFor(
   variant: ButtonVariant,
   shape: ButtonShape,
 ): ButtonShape = if (variant == ButtonVariant.Text) ButtonShape.Round else shape
 
-/** The [buttonShapes] store: one motion scheme at a time, [ButtonScale] x [ButtonShape] entries. */
 private object ButtonShapesCache {
   private var motion: MotionScheme? = null
   private val entries = arrayOfNulls<ButtonShapes>(ButtonScale.entries.size * ButtonShape.entries.size)
@@ -622,36 +400,20 @@ private object ButtonShapesCache {
     entries[index(scale, shape)] = shapes
   }
 
-  /** The slot for a corner at a rung of the ladder - both are fixed-size enums. */
   private fun index(
     scale: ButtonScale,
     shape: ButtonShape,
   ): Int = scale.ordinal * ButtonShape.entries.size + shape.ordinal
 }
 
-/**
- * The Button's host: [NitroComposeHost] plus this component's composable.
- *
- * [Content] is fixed for the lifetime of the view, which is why it lives in a
- * subclass rather than being handed in as a lambda - there is no `setContent`
- * anywhere in this library after construction.
- */
 private class ButtonHost(
   context: ThemedReactContext,
   activity: Activity?,
   model: ButtonModel,
 ) : NitroComposeHost<ButtonModel>(context, activity, model) {
 
-  /**
-   * A `<Host>` composes this control (H2a). Same line as the Switch's, same JS row.
-   *
-   * The press is the thing to check here, and it checks out for a reason worth
-   * naming: the tap is taken by the *Host's* `AndroidComposeView`, which routes it to
-   * the node under the finger - this Button's M3 `clickable` - so `onClick`, the
-   * ripple and `model.onPress` all run in the shared composition. What a hosted
-   * Button does *not* get is RN's own press handling, because RN never sees the touch
-   * (D24: the child's view is laid out at nothing).
-   */
+  // A `<Host>` may compose this control. The tap then reaches the Material `clickable`
+  // through the Host's composition; RN never sees the touch.
   override val isHostable: Boolean
     get() = true
 
@@ -659,9 +421,8 @@ private class ButtonHost(
   override fun Component(model: ButtonModel) {
     val label = model.accessibilityLabel
     val press = model.onPress
-    // The label goes on the control, which is the node TalkBack focuses (M3 gives
-    // it `Role.Button`). On the container instead, the empty box becomes a second
-    // focus stop and the button announces itself nameless.
+    // The label goes on the control, the node TalkBack focuses. On the container it
+    // would add a second, nameless focus stop.
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
     NitroUiM3Button(
@@ -678,19 +439,7 @@ private class ButtonHost(
   }
 }
 
-/**
- * The five Material 3 button components, drawn from one set of trigger fields.
- *
- * `internal`, not `private`, because `HybridNitroUiMenu.kt` draws its trigger with
- * this: `docs/components/menu.md` says a Menu's box *is* a Button's box, and one
- * composition is what keeps that sentence true as the numbers move. The helpers it
- * is built from ([buttonColors], [buttonLabelStyle], [contentPaddingFor],
- * [buttonShapes]) are `internal` for the same reason.
- *
- * `shape` defaults to [ButtonShape.Round] because a Menu's trigger has no corner of
- * its own to ask for in this pass: it inherits the button's resting shape, and gets
- * the same press morph for free.
- */
+/** The five Material 3 buttons. Shared with the Menu trigger and `ButtonGroup` items. */
 @Composable
 internal fun NitroUiM3Button(
   title: String,
@@ -705,35 +454,21 @@ internal fun NitroUiM3Button(
   shapes: ButtonShapes? = null,
   glyph: ButtonGlyph = ButtonGlyph.Both,
 ) {
-  // No height is set: the scale picks Material's padding, label style and corner,
-  // and Material itself lays the box out at no less than MinTouchTargetHeight, so
-  // the ladder reaches down to the XS token (32 dp of padding and type) without
-  // shipping a control a thumb cannot hit. Measured box: 48 / 48 / 56 dp.
+  // No height is set: Material lays the box out at no less than the 48 dp touch target,
+  // so the smallest scale changes padding and type without shrinking the target.
   val colors = buttonColors(variant, tint)
-  // `hasStartIcon` is Material's own input to the padding, and it is the difference
-  // between a row of two things and a row of one: the ladder widens the leading
-  // edge so the glyph does not sit where the label's own inset used to be. Passing
-  // it unconditionally is how an icon and a no-icon Button end up the same width
-  // when the name resolves to nothing.
-  // `Pending` takes the slot too. That is the point of it: the box the ladder
-  // describes is the box the first frame draws, and the glyph arriving later
-  // changes what is in the slot and not the size of it.
+  // A pending icon takes the slot too, so the box does not change when the file arrives.
   val showsGlyph = glyph != ButtonGlyph.TitleOnly && icon != NitroUiIconContent.Absent
-  // An `iconOnly` item whose glyph never arrives draws its title instead, so the box it
-  // is padded for has to be the title's box: see [buttonGlyphDrawsTitle].
+  // An `iconOnly` item with no glyph draws its title, so it is padded for the title.
   val drawsTitle = buttonGlyphDrawsTitle(glyph, icon)
   val padding =
     if (!showsGlyph || !drawsTitle) {
-      // Symmetric either way: the plain padding - or the padding of a button whose only
-      // content is a glyph, where the leading inset for a label that is not there would
-      // lean the glyph against the trailing edge.
+      // Title alone or glyph alone: symmetric padding.
       contentPaddingFor(variant, scale)
     } else {
       ButtonDefaults.contentPaddingFor(scale.height, hasStartIcon = true)
     }
-  // The caller's corner wins when it has one: a `ButtonGroup` item is sent the
-  // connected leading/middle/trailing shape, which is the group's whole look, and
-  // `null` keeps the variant's own (Button's and Menu's trigger's) answer.
+  // A `ButtonGroup` item passes its connected shape; `null` keeps the variant's own.
   val resting = shapes ?: buttonShapes(cornerFor(variant, shape), scale)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
     NitroUiButtonLabel(title = title, scale = scale, icon = icon, glyph = glyph)
@@ -793,13 +528,6 @@ internal fun NitroUiM3Button(
     }
 }
 
-/**
- * Which half of an item's label to draw: the glyph, the text, or both.
- *
- * The three answers a `ButtonGroup`'s `labelStyle` reduces to on this platform.
- * `ButtonGlyph.Both` is what a `Button` and a Menu's trigger have always drawn, so
- * they pass nothing and see nothing change.
- */
 internal enum class ButtonGlyph {
   Both,
   TitleOnly,
@@ -807,16 +535,8 @@ internal enum class ButtonGlyph {
 }
 
 /**
- * Whether the label draws a *title*.
- *
- * `labelStyle='iconOnly'` means "prefer the glyph", not "draw nothing": an item with no
- * `androidIcon` - none named, or one that does not resolve - falls back to the title
- * rather than shipping an empty button, which is a control with no pixels and nothing for
- * a thumb to hit. Measured before the fix: an `iconOnly` item with no glyph drew a box
- * with nothing in it, and the harness's a11y probe read `text=` empty for it.
- *
- * The label and both item composables ask the same question - what does this box hold -
- * so it is answered here rather than three times.
+ * Whether the label draws a title. `iconOnly` falls back to the title when there is no
+ * icon, so the button is never empty.
  */
 internal fun buttonGlyphDrawsTitle(
   glyph: ButtonGlyph,
@@ -824,21 +544,8 @@ internal fun buttonGlyphDrawsTitle(
 ): Boolean = glyph != ButtonGlyph.IconOnly || icon == NitroUiIconContent.Absent
 
 /**
- * The label of a Material 3 button: the icon slot, then the title.
- *
- * Extracted from [NitroUiM3Button] so a `ButtonGroup`'s toggle items - which are
- * `ToggleButton`s and cannot go through [NitroUiM3Button] at all - draw the *same*
- * label as its action items. Two copies of this composition is how a group's
- * buttons and its toggles stop lining up.
- *
- * The glyph goes in the slot Material's `Button` would use, in the one helper
- * Menu's split trigger uses too - [NitroUiIconSlotContent]. It draws the artwork
- * tinted with `LocalContentColor` (not [buttonColors]' resting `contentColor`,
- * which ignores `enabled` and would leave a disabled control's glyph at full
- * strength - the harness's disabled probe catches that), and it paints an empty
- * slot for `Pending`, which is the whole of D43's sizing rule: the box comes from
- * `iconSizeFor(scale)`, the same rung that sets the control's height, so the frame
- * before a dev-server file and the frame after it are one box.
+ * The icon slot, then the title. Shared with `ButtonGroup` toggle items, which are
+ * `ToggleButton`s and cannot use [NitroUiM3Button].
  */
 @Composable
 internal fun NitroUiButtonLabel(
@@ -852,9 +559,7 @@ internal fun NitroUiButtonLabel(
     NitroUiIconSlotContent(
       icon = icon,
       size = ButtonDefaults.iconSizeFor(scale.height),
-      // The gap is the space *between* a glyph and a title. When the glyph is the whole
-      // content it is a trailing inset on one side of a box with none on the other, so
-      // the glyph sits off centre by exactly the icon gap.
+      // No gap when the glyph is the whole content, or it would sit off centre.
       spacing =
         if (drawsTitle) {
           ButtonDefaults.iconSpacingFor(scale.height)
@@ -864,10 +569,7 @@ internal fun NitroUiButtonLabel(
     )
   }
   if (drawsTitle) {
-    // One line, tail-truncated: the control's intrinsic width is the title's
-    // width, and a caller who wants a narrower box gives it a `width` - then the
-    // label truncates instead of painting outside its box (the iOS content does
-    // the same).
+    // One line, tail-truncated: a narrower box truncates the label, not overflows it.
     Text(
       text = title,
       style = buttonLabelStyle(scale),
@@ -877,7 +579,6 @@ internal fun NitroUiButtonLabel(
   }
 }
 
-/** The Hybrid View React renders as `NitroUiButton`. */
 class HybridNitroUiButton(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiButtonSpec(), RecyclableView {
@@ -885,68 +586,31 @@ class HybridNitroUiButton(
   private val model = ButtonModel()
   private val host = ButtonHost(reactContext, reactContext.currentActivity, model)
 
-  /**
-   * The control's half of icon resolution: the app's resources and the shared
-   * file cache, bound to this control's `Context` ([NitroUiIconArtwork]).
-   *
-   * Held rather than built per commit — a prop commit is not a place to allocate,
-   * and the `Context` it captures is the one [host] already holds.
-   */
   private val iconArtwork = NitroUiAppIconArtwork(reactContext)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
   init {
-    // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
     host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
-    // The backstop: `NitroUiDeclaredFallbacks` registers this at startup, which
-    // is the point that matters (see its doc comment).
+    // A backstop: the fallback is normally declared at startup, before any view exists.
     declareFallback()
   }
 
   companion object {
-    /**
-     * This component's name in the sizing engine: `HybridNitroUiButtonComponentName`
-     * in the generated C++, and `getName()` in the generated manager.
-     */
+    // Must match the component name in the generated C++ and view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiButton"
 
-    /**
-     * The size to lay a Button out with before anything has been measured, in dp.
-     *
-     * A Button has *many* configurations (title, variant, size, symbol) while the
-     * engine's fallback is keyed by component alone, so this can only be one
-     * number: this platform's medium filled button with a five-letter title.
-     * Every other configuration is a first instance of its own configuration and
-     * gets corrected the turn it measures (`docs/sizing.md` §9).
-     *
-     * Measured on the AVD this library's tests run on (the lease's `nitroui_a`,
-     * pixel_9 profile at 420 dpi, API 35), rounded up to the point: with E1's
-     * ladder, medium + filled + "Cancel" is 75.05 x 48.0 dp. Sixteen dp of that
-     * width is Material's own `contentPaddingFor(40.dp)` replacing this file's
-     * older, wider hand-rolled padding; the height stays 48 because Material lays
-     * a button out no shorter than its 48 dp minimum interactive component at every
-     * size but `large` (56). Guessing 40 wide here would make the first frame of
-     * every Button too short and shift the row it sits in.
-     * `docs/components/button.md` has the whole table.
-     */
+    // The size before anything is measured, in dp: a medium filled button with a
+    // five-letter title. The engine keeps one fallback per component.
     private const val FALLBACK_WIDTH_DP = 75.1
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 
-    /**
-     * One `JNI` call per process, before the first Button can be measured.
-     *
-     * Called from `NitroUiDeclaredFallbacks.registerAll()` at package init - a
-     * Fabric measure can happen before this class has ever been instantiated, so
-     * a fallback declared from `init` is one measure too late for the first
-     * instance (T14) - and from `init` as the backstop. The two calls land on
-     * different threads, hence the atomic.
-     */
+    // Called at package init, because Fabric can measure before this class is first
+    // instantiated, and again from `init`. The two calls can be on different threads.
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
         return
@@ -969,8 +633,6 @@ class HybridNitroUiButton(
         return
       }
       model.title = next
-      // The composable recomposes and Compose's own measure pass reports the new
-      // width - Android needs no explicit "the size may have moved" call (§5).
       host.markDirty()
     }
 
@@ -1004,9 +666,7 @@ class HybridNitroUiButton(
         return
       }
       model.shape = resolved
-      // A corner is not a layout input, so this repaints without asking for a new
-      // measure - the same call `disabled` makes, and the reason `shape` is not in
-      // `nuiSizingKey`.
+      // A corner is not a layout input, which is why `shape` is not in the sizing key.
       host.markDirty()
     }
 
@@ -1018,7 +678,6 @@ class HybridNitroUiButton(
         return
       }
       model.enabled = enabled
-      // Repaints only: a disabled control is the same size.
       host.markDirty()
     }
 
@@ -1028,9 +687,8 @@ class HybridNitroUiButton(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double. Going via
-      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an
-      // opaque colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      // `processColor` passes the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, turning an opaque colour into `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.tintColor) {
         return
@@ -1044,26 +702,12 @@ class HybridNitroUiButton(
       model.systemImage?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
     set(next) {
-      // Stored, never rendered: v0.1 ignores the SF Symbol on Android
-      // (`docs/components/button.md`). No `markDirty()` - nothing observes it.
+      // Stored, never rendered, so nothing is marked dirty.
       model.systemImage = next.asSecondOrNull()
     }
 
-  /**
-   * `androidIcon`: the icon to draw before the label - an app drawable's resource
-   * name, or a `url:` string naming a file to read (G19 fix round 1, D43).
-   *
-   * Stores and marks dirty, nothing else. Resolving is the expensive half - a
-   * resource lookup takes a lock on a shared table, and the file form starts a
-   * network read - so it happens once per commit in [afterUpdate], behind
-   * [ButtonModel.resolveAndroidIcon]'s comparison, and never in composition, which
-   * runs again for reasons that have nothing to do with icons.
-   *
-   * The string is stored as React sent it. The wrapper has already normalised a
-   * name and marked a URL ([NitroUiIconSource] reads the marker), and the getter is
-   * what `hybridRef` reports back - a harness comparing it against the string it
-   * built wants the answer verbatim, not a third spelling of it.
-   */
+  // Stores and marks dirty only. Resolving takes a lock or starts a network read, so it
+  // happens once per commit in [afterUpdate].
   override var androidIcon: Variant_NullType_String
     get() =
       model.androidIcon?.let { Variant_NullType_String.Second(it) }
@@ -1120,12 +764,8 @@ class HybridNitroUiButton(
         return
       }
       model.sizingKey = next
-      // The engine has no answer for a key it has not seen, so it lays this out at
-      // the declared fallback. A `systemImage` change measures what the old
-      // configuration measured, and that is the size the host's dedupe would swallow
-      // the correcting report against; Compose also never re-measures a mounted
-      // control whose box merely moved, so the host has to be asked for both (F1).
-      // Guarded, because React re-sends an unchanged key on every render.
+      // A new key may measure the same size as the old one, which the host's dedupe would
+      // drop. Guarded, because React re-sends an unchanged key on every render.
       host.noteSizingKeyChanged()
     }
 
@@ -1145,24 +785,13 @@ class HybridNitroUiButton(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The icon first, if it changed: a resource resolved here is drawn in this
-    // commit, and a file that has to be read reserves its slot in this commit and
-    // fills it later. Both are cheaper here than in the setter, which may run for
-    // every prop of the commit (AGENTS' perf contract).
     model.resolveAndroidIcon(iconArtwork)
-    // No controlled value, so nothing to reconcile: one commit per React commit
-    // (`docs/architecture/core.md` §12).
     host.commit()
   }
 
   override fun prepareForRecycle() {
     host.tag = null
-    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
-    // marked the recycle: clearing it here would hide that mark.
-    // Not cleared here: `host.prepareForRecycle()` releases the sizing instance
-    // (which needs the id to tell the engine), and `onDropView` has already run.
-    // The composition does not survive a recycle (core.md §6); what recycling saves
-    // is this object graph.
+    // The perf and sizing ids are cleared by the host, which needs them first.
     host.prepareForRecycle()
   }
 
@@ -1173,23 +802,13 @@ class HybridNitroUiButton(
 
   // MARK: - Methods
 
-  /**
-   * The size Compose measured for this Button, from the host's cache. Never calls
-   * into Compose, so it is safe on the JS thread (§1.4).
-   */
+  // Reads the host's cached size and never calls into Compose, so it is safe on the JS thread.
   override fun measureContent(): NitroUiButtonSize {
     val size = host.contentSize ?: return NitroUiButtonSize(0.0, 0.0)
     return NitroUiButtonSize(size.width, size.height)
   }
 
-  /**
-   * Sample what this Button is drawing for [color], and store the answer.
-   *
-   * Posted rather than run inline: reading pixels needs the view drawn, and a Nitro
-   * method may not block for the UI thread. Same shape as SegmentedControl's pair and
-   * the same sampler (`nitroUiSamplePixels`), so the harness reads one report format
-   * from either control.
-   */
+  // Posted: reading pixels needs the UI thread, and a Nitro method may not block for it.
   override fun nuiTestPixelProbe(color: Double) {
     val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
     if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -1199,6 +818,5 @@ class HybridNitroUiButton(
     }
   }
 
-  /** The last probe's line - see [ButtonModel.pixelReport]. */
   override fun nuiTestPixelReport(): String = model.readPixelReport()
 }

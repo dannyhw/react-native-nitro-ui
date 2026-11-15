@@ -1,8 +1,3 @@
-// Gate for scripts/release-catch-up.mjs, which makes the `vX.Y.Z` tag and the
-// GitHub release once a version has been approved and is live on npm (DECISIONS
-// D28). npm, GitHub and git are mocked here, so the whole decision tree runs in
-// process — including the property the hourly schedule depends on: running the
-// job again, or after it already worked, changes nothing.
 import { describe, expect, it } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -213,9 +208,7 @@ describe('release catch-up', () => {
 
 describe('changelog lookup', () => {
   it('takes one version section, tolerating the date on hand-written entries', () => {
-    // The body is trimmed, so the heading sits directly above the section it
-    // starts — markdown renders that the same, and it keeps the blank lines a
-    // changelog accumulates at the end of a section out of the release notes.
+    // The body is trimmed, so the heading sits directly above its section.
     expect(changelogEntry(FILES['CHANGELOG.md'], '0.1.1')).toBe(
       '## 0.1.1\n### Patch Changes\n\n- a8b0702: Fix the sizing flush request.'
     );

@@ -10,26 +10,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * JVM unit tests for the two halves of `androidIcon` that a device cannot show
- * honestly, plus the two rungs G19 added to the ladder.
- *
- * The name rules are here because their failure mode is invisible. A name that
- * cannot be a resource name and a name whose file was not shipped both reach
- * `ResourceDrawableIdHelper` as "no id", and both then draw nothing — which is the
- * right behaviour for the missing file and a silent typo for the other. The only
- * thing that separates them is the string itself, so the string is what gets
- * tested, and the console warning that JS raises from the same rule is covered by
- * `src/__tests__/iconName.test.ts`.
- *
- * The once-per-name warning is here because a warning that fires per recomposition
- * is a logcat flood in a list, and one that never fires is not evidence of
- * anything. Both are invisible to a screenshot.
- *
- * The cache is here for the claim the prop is sold on: an app that puts the same
- * icon on forty rows pays for it once. On a device that is a memory number nobody
- * reads; on the JVM it is an identity assertion.
- */
 class NitroUiIconTest {
   @Before
   fun forgetPreviousWarnings() {
@@ -44,12 +24,7 @@ class NitroUiIconTest {
     assertEquals("share_24px", NitroUiIconNames.normalize("Share-24px"))
   }
 
-  /**
-   * The names `aapt` would have rejected, caught before the lookup pretends it
-   * looked. `share-24px` is in here too, not because the resource table would
-   * accept it but because [NitroUiIconNames.normalize] turns it into a valid name
-   * before anyone asks - which is the whole point of normalising.
-   */
+  /** `share-24px` counts as valid: [NitroUiIconNames.normalize] makes it a legal name first. */
   @Test
   fun aNameThatCannotBeAResourceNameIsSaidSo() {
     assertTrue(NitroUiIconNames.isValid("share"))
@@ -72,14 +47,7 @@ class NitroUiIconTest {
     assertTrue("a different bad name still speaks", NitroUiIconNames.shouldWarn("also_bad!"))
   }
 
-  /**
-   * The store's contract, on `String` artwork: `android.graphics.Bitmap` cannot be
-   * built in a plain JVM test, so the type is whatever the policy needs and the
-   * policy is the thing with a bug in it. [NitroUiIconBitmaps] is this class with the
-   * one artwork type the library draws, so covering it here covers the loading
-   * claim the prop is sold on: an app that puts the same icon on forty rows pays
-   * for it once.
-   */
+  /** `String` artwork, because `android.graphics.Bitmap` cannot be built in a JVM test. */
   @Test
   fun theStoreHandsBackWhatWasLoadedForThatId() {
     val store = NitroUiIconStore<Int, String>(4) { resId -> resId == 0 }
@@ -92,11 +60,6 @@ class NitroUiIconTest {
     assertNull(store.get(0))
   }
 
-  /**
-   * The bound, because an icon name is app data and a list can hold more of them
-   * than the process should remember. Eviction is least-recently-used rather than
-   * insertion order, so reading an icon keeps it and one that scrolled away goes.
-   */
   @Test
   fun theStoreStopsGrowingAtItsBoundAndDropsTheLeastRecentlyUsedFirst() {
     val store = NitroUiIconStore<Int, String>(3)
@@ -105,8 +68,7 @@ class NitroUiIconTest {
     store.put(3, "c")
     assertEquals(3, store.size())
 
-    // Touching `a` makes `b` the stalest, which is the whole difference between an
-    // LRU bound and a queue - and the difference that keeps the icons on screen.
+    // Reading `a` makes `b` the least recently used.
     store.get(1)
     store.put(4, "d")
 
@@ -126,13 +88,7 @@ class NitroUiIconTest {
     assertNull(store.get(7))
   }
 
-  /**
-   * The two rungs G19 added, written out as Material's numbers rather than derived
-   * from the same expression the code uses - the reason E1 wrote the first three
-   * this way. `ButtonDefaults.LargeContainerHeight` and `ExtraLargeContainerHeight`
-   * are 96 and 136 dp; a rung that silently followed the previous doubling would
-   * still render a plausible button, and only this line says it is wrong.
-   */
+  /** Material's own numbers, written out rather than derived from the expression under test. */
   @Test
   fun theTwoNewRungsAreMaterialsLargeAndExtraLargeContainerHeights() {
     assertEquals(96f, ButtonScale.XLarge.height.value)
@@ -149,12 +105,6 @@ class NitroUiIconTest {
     assertEquals(ButtonScale.Medium, ButtonScale.from(""))
   }
 
-  /**
-   * The ladder is monotonic in both directions. Not a rule anyone would write
-   * down twice, and the one a token rename can break: if Material renumbers a
-   * token, `medium` and `xlarge` can end up on the same height and every control
-   * between them silently changes size.
-   */
   @Test
   fun everyRungIsTallerThanTheOneBelowIt() {
     val rungs = ButtonScale.entries.sortedBy { it.ordinal }

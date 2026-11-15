@@ -1,20 +1,3 @@
-//
-// sizing.test.cpp
-//
-// Host unit test for the intrinsic-sizing engine (docs/architecture/sizing.md).
-// Compiled and run by `bun run test:native`, with the shipping
-// cpp/NitroUiSizingEngine.cpp linked in - the engine has no React Native or
-// SwiftUI/Compose dependency by design (core-architecture §1.4), which is what
-// makes this possible. `scripts/native-tests.sh` also runs this whole file a
-// second time under ASan + UBSan.
-//
-// A Fabric `State` is only ever held and handed back here, so a plain struct
-// stands in for it; `fakePush` records what the engine would have committed,
-// which is exactly the thing the on-device gate counts (extra commits). It can
-// also defer a push, which is what React Native really does with an
-// asynchronous state update (see `testDeferredPushesReadSizesAfterFlush`).
-//
-
 #include "NitroUiSizingEngine.hpp"
 #include "core/NitroUiSizing.hpp"
 
@@ -72,27 +55,18 @@ namespace {
 
   std::vector<Push> pushes{};
 
-  /// The test holds states alive the way the shadow tree does, so a case can
-  /// control exactly when one dies. Up here because `fakePush` re-enters with it
-  /// (see `reentrantMeasure`).
+  /// Holds states alive the way the shadow tree does, so a case controls when one dies.
   std::unordered_map<int64_t, NitroUiStateRef> kept_{};
 
   NitroUiSizingEngine& engine();
 
-  /**
-   * When on, a push does not happen during `flush()` - it is stored and run by
-   * the test afterwards, like RN's `EventQueue::enqueueStateUpdate` does for an
-   * `Asynchronous` update. Anything the engine hands a push must therefore
-   * outlive the call, which is the contract review B1 found broken in the host.
-   */
+  /// When on, a push is stored and run by the test after `flush()`, the way React
+  /// Native runs an asynchronous state update.
   bool deferPushes = false;
   std::vector<std::function<void()>> deferred{};
 
-  /**
-   * When on, a push also does what a real immediate commit does synchronously:
-   * re-layout (`measure`) and rebind the instance with the new state. Used to
-   * prove the engine never holds its lock across a push.
-   */
+  /// When on, a push re-lays out and rebinds the instance synchronously, as an
+  /// immediate commit does.
   bool reentrantMeasure = false;
   bool reentrantSawSize = false;
 
@@ -101,8 +75,6 @@ namespace {
     if (!deferPushes) {
       pushes.push_back(Push{raw->tag, measured.width, measured.height, immediate});
       if (reentrantMeasure && immediate) {
-        // `applyReports` has dropped the lock by now, so this may come back in:
-        // the commit re-layouts, and the new `State` re-registers the instance.
         const int64_t id = raw->tag;
         const NitroUiMeasuredSize seen = engine().measure("NitroUiSwitch", id, "", NitroUiMeasuredSize{});
         reentrantSawSize = std::fabs(seen.width - measured.width) < 0.001f && std::fabs(seen.height - measured.height) < 0.001f;
@@ -113,8 +85,7 @@ namespace {
       }
       return;
     }
-    // Copy, exactly as `pushMeasuredSize` in cpp/NitroUiIntrinsic.hpp must: the
-    // size lives in a vector the engine frees when `applyReports` returns.
+    // Copied: the size lives in a vector the engine frees when `applyReports` returns.
     const NitroUiMeasuredSize copy = measured;
     deferred.emplace_back([raw, copy, immediate] {
       pushes.push_back(Push{raw->tag, copy.width, copy.height, immediate});
@@ -147,14 +118,8 @@ namespace {
   /// Every id this file used, so a case can start from a genuinely empty engine.
   std::vector<int64_t> usedIds{};
 
-  /**
-   * A fresh engine: no cache, no ledger, no registry.
-   *
-   * `invalidateEnvironment` alone is no longer enough - since review S2 an
-   * environment change *keeps* mounted instances so it can correct them, which
-   * is the opposite of what a test reset wants. So every id the file handed out
-   * is forgotten first, the way a host forgets a view it drops.
-   */
+  /// A fresh engine. Every id is forgotten first, because `invalidateEnvironment`
+  /// keeps mounted instances.
   void resetEngine() {
     for (const int64_t id: usedIds) {
       engine().forget(id);
@@ -189,16 +154,6 @@ namespace {
     return count;
   }
 
-  /**
-   * The reclaim runs with nothing else happening.
-   *
-   * `Conformance`'s leak rule renders, unmounts fifty times, and *then* reads the ledger
-   * after it has settled. If reclaiming an abandoned row needed another view to lay out,
-   * the rule would be measuring a state the engine had already given up on, and the
-   * finding would be correct and unfixable from the engine's side. So `flush` runs the
-   * walk even when it has no report to apply — on iOS that is every run-loop turn, idle
-   * included.
-   */
   void testAFlushWithNothingToApplyStillClosesExpiredMountWindows() {
     using namespace std::chrono_literals;
     resetEngine();
@@ -215,23 +170,11 @@ namespace {
     checkEquals(engine().stats().ledgerEntries, int64_t{10}, "ten layouts, no mounts");
 
     std::this_thread::sleep_for(kWaitAfterWindow);
-    // Nothing is pending, and nothing else lays out: this is the quiet the device rule
-    // measures in. It still has to be enough.
     check(!engine().flush(), "there is genuinely no report to apply");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and the expired rows are gone anyway");
     checkEquals(engine().unboundFilingCount(), size_t{0}, "with nothing left waiting for a bind");
 
-    /**
-     * And the walk has to run the whole way down without a layout to start it.
-     *
-     * A reclaim is a *demotion*, which restarts the clock on the held table's own
-     * window: the ten rows are off the ledger and now wait a second there. So the
-     * state a leak rule reads one turn after a churn is "empty ledger, ten holds", and
-     * the only thing that turns that into nothing is `flush` pruning the held set too.
-     * Without it the row is eventually reclaimed — by the next `measure`, whenever the
-     * app next lays anything out — which is correct but leaves the engine looking leaked
-     * to exactly the reading that F8 was chasing.
-     */
+    // A reclaimed row moves to the held table, which has a window of its own.
     std::this_thread::sleep_for(kWaitAfterWindow);
     check(!engine().flush(), "still nothing to apply");
     checkEquals(engine().lateFilingCount(), size_t{0}, "and the demoted rows are reclaimed by a flush alone");
@@ -240,36 +183,8 @@ namespace {
 
   // MARK: - Cases
 
-  // MARK: - F8: the late-layout orphan
+  // MARK: - The late-layout orphan
 
-  /**
-   * F8: a layout that arrives after the instance was forgotten must file nothing.
-   *
-   * This is `Menu × no-leak-on-drop: 1 ledger entry(ies) survived 50 drops` from
-   * CI run 41256853746, where the registry read `0→0` across the same window.
-   * Those two halves together say what survived: a ledger entry with no registry
-   * row. And the registry sweep — the only thing in the engine that reclaims an
-   * instance whose `State` died without a `forget` — walks `registry_`, so an
-   * entry that lives only in `ledger_` is invisible to it for the life of the
-   * process. One per occurrence, in an app that scrolls a list.
-   *
-   * How one gets made: a correction is an `Asynchronous` state update, and RN runs
-   * its callback later, scheduling a layout pass over the tree revision that
-   * carried it. Drop the view in between — which is what a churn of 50
-   * mount/unmount pairs is, and what an iOS `Menu` costs extra because its popup
-   * makes the drop land a transaction later — and that pass re-enters
-   * `measureContent` for an id whose `onDropView` has already run. `measure`
-   * records what it laid out in `ledger_[instanceId]` without asking whether the
-   * instance is still bound.
-   *
-   * It cannot simply refuse an unbound id: `measure` legitimately runs *before*
-   * `registerInstance` on a real mount (layout is on the shadow thread, the bind
-   * is on the mount transaction), which is the same ordering `applyReports`'s
-   * "not bound yet — put it back rather than lose the correction" branch exists
-   * for. The rule that holds is narrower — an id this engine has already
-   * *forgotten* is finished, and ids are never reused — so that is what the fix
-   * enforces, and the case after this one is the guard on it.
-   */
   void testALateLayoutAfterForgetFilesNothing() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -282,15 +197,10 @@ namespace {
     kept_.erase(4100);
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "a dropped instance leaves no ledger entry");
 
-    // The late layout, from the commit this instance caused before it died.
     measure(4100, "");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "a layout arriving after `forget` files nothing");
     checkEquals(engine().stats().registryEntries, int64_t{0}, "and there is no registry row that would let it be reclaimed later");
 
-    // The same churn the device rule runs, so a fix that only handles one
-    // occurrence cannot pass: 50 drops, and nothing left afterwards. Note the
-    // registry never rises here — the CI failure's other half, and the reason the
-    // sweep was never going to see the survivor.
     for (int64_t cycle = 0; cycle < 50; cycle++) {
       const int64_t id = 4300 + cycle;
       bind(id, static_cast<int>(id));
@@ -299,16 +209,13 @@ namespace {
       engine().flush();
       engine().forget(id);
       kept_.erase(id);
-      // The orphaning measure, one cycle late, as an async commit is.
       measure(id, "");
     }
     const NitroUiSizingCounters after = engine().stats();
     checkEquals(after.ledgerEntries, int64_t{0}, "50 drops with a late layout each leave no ledger entry");
     checkEquals(after.registryEntries, int64_t{0}, "and no registry entry");
 
-    // A mounted instance is still correctable afterwards: the guard is about
-    // finished ids, not about unbound ones. Its own key, because the churn above
-    // warmed `""` and a warm mount has nothing left to be corrected for.
+    // Its own key: the churn above warmed `""`, and a warm mount has nothing to correct.
     bind(4500, 4500);
     measure(4500, "late-live");
     engine().report(4500, 61, 28, 0);
@@ -316,23 +223,12 @@ namespace {
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "with exactly its own entry");
   }
 
-  /**
-   * The guard on the guard: `measure` before `registerInstance` is the normal
-   * ordering for a mount in flight, and an entry filed in that window must
-   * survive and still be owed its correction. Dropping entries merely because
-   * nothing is bound yet would silently swallow corrections — the failure mode S7
-   * was written against — which is worse than the leak it would fix.
-   */
   void testALayoutBeforeItsBindStillGetsCorrected() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
-    // Laid out first, bound after: what the shadow thread and the mount
-    // transaction really do.
     measure(4600, "");
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "a mount files its entry before it binds");
-    // Lost in between, and laid out again after — the shape from the case above,
-    // so the two rules have to hold at the same time.
     bind(4601, 4601);
     measure(4601, "");
     engine().forget(4601);
@@ -348,18 +244,6 @@ namespace {
     checkEquals(stats.registryEntries, int64_t{1}, "and only the live instance is bound");
   }
 
-  /**
-   * An id that binds again is alive, whatever the engine was told about it before.
-   *
-   * `registerInstance` is the engine's only evidence that an id has a `State` in
-   * the shadow tree, and `updateState:oldState:` calls it on mount as well as on
-   * every later state change — so it is also the seam that would otherwise make the
-   * forgotten-id rule permanent for an id the platform decided to use again. Without
-   * that line, a re-bound instance answers layouts with a size and files nothing:
-   * it is never corrected, never traced, and reports itself as never measured — a
-   * silent, per-instance regression that no device rule would attribute to this
-   * commit.
-   */
   void testAnIdThatBindsAgainIsNotTreatedAsFinished() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -372,16 +256,13 @@ namespace {
     kept_.erase(4700);
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "the instance is finished");
 
-    // Refused while finished, so the case below cannot pass by accident.
     measure(4700, "rebound");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "a finished id files nothing before it rebinds");
 
-    // The rebind: the same id, a fresh `State`, as a mount hands one out.
     bind(4700, 4700);
     measure(4700, "rebound");
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "rebinding clears the mark, so the layout is filed again");
 
-    // And it is correctable again: the entry the engine filed is one it will use.
     // `pushes` still holds the first mount's correction, so count from here.
     pushes.clear();
     engine().report(4700, 61, 28, 0);
@@ -390,34 +271,12 @@ namespace {
     checkEquals(pushes[0].tag, 4700, "and it went to the re-bound instance");
   }
 
-  /**
-   * F8 round 2: a *re-shown* view must keep the correction it is owed.
-   *
-   * Round 1's guard assumed an id that mounts again is a new id. It is not.
-   * `useSizingId` mints one id per React mount, and iOS Fabric creates no native
-   * view for a `display: none` node — so hiding a control deletes its view
-   * (`drop()` -> `forget(X)`), and showing it again creates a *new native view
-   * under the same id X*. The order on re-show is layout first, mount second:
-   *
-   *   measure(X)      <- guard refuses: no ledger entry
-   *   registerInstance(X) <- clears the mark: the id is live again
-   *   report(X)       <- `report` finds no ledger entry and returns (line ~576)
-   *
-   * so the control sits at its fallback with nothing left to correct it, and
-   * `invalidateEnvironment` cannot help either: it re-keys `ledger_`, and this
-   * instance is not in it. One lost correction per hide/show, forever, for a
-   * control behind a `display: none` toggle.
-   *
-   * The shape of these cases is the order that actually happens, and the order
-   * round 1's test hid: forget -> measure -> bind -> report. The test that
-   * existed measured a second time *after* the rebind, which files an entry by
-   * the normal path and makes the case pass whatever the guard does in between.
-   */
   void testAReshownViewIsStillCorrectedAfterItsLateLayout() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
-    // First mount, corrected, then hidden: `display: none` deletes the native view.
+    // `display: none` deletes the native view. Showing it again lays out before it
+    // mounts, under the same id.
     bind(4800, 4800);
     measure(4800, "");
     engine().report(4800, 61, 28, 0);
@@ -426,18 +285,11 @@ namespace {
     kept_.erase(4800);
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "hiding it leaves nothing behind");
 
-    // Shown again: the layout pass runs before the mount transaction, so this is
-    // the layout of the new native view arriving while the id still reads as
-    // finished. Same id, because the React mount never ended.
     measure(4800, "reshown");
 
-    // The mount transaction. `registerInstance` is the proof of life.
     bind(4800, 4800);
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "a re-shown view has a ledger entry — the layout that arrived first is not thrown away");
 
-    // And the correction reaches it. This is the assertion the whole case exists
-    // for: `report` reads the ledger, so an entry filed by nothing is a control
-    // that stays at 52x48 for the rest of its life.
     pushes.clear();
     engine().report(4800, 61, 28, 0);
     check(engine().flush(), "and its first measurement is still a correction it can receive");
@@ -446,14 +298,6 @@ namespace {
     checkEquals(pushes[0].width, 61.0f, "with the size the control measured");
   }
 
-  /**
-   * The same hole on the other side: an environment change (font scale, density,
-   * a fold) re-keys every entry in `ledger_` and marks it inexact, so the next
-   * report is a correction. A re-shown view with no entry is not in that walk, so
-   * it is not in the correction either — it keeps the size the *old* environment
-   * produced, which is the exact failure S2 was written against, arriving through
-   * round 1's guard instead of through a missing re-key.
-   */
   void testAReshownViewIsStillCorrectedByAnEnvironmentChange() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -468,7 +312,6 @@ namespace {
     measure(4900, "");
     bind(4900, 4900);
 
-    // The environment moves while the view is mounted and laid out.
     engine().invalidateEnvironment();
     pushes.clear();
     engine().report(4900, 74, 33, 0);
@@ -477,20 +320,6 @@ namespace {
     checkEquals(pushes[0].width, 74.0f, "at the new environment's size, not the old one");
   }
 
-  /**
-   * The hold is a bounded table, not the leak wearing a hat.
-   *
-   * Round 1 fixed this leak by refusing to file; round 2 files and holds, which is
-   * only an improvement if what it holds stays small. `ledgerEntries` cannot answer
-   * that — a hold is deliberately outside the ledger, which is the whole trick — so
-   * `lateFilingCount()` exists to be assertable, and this is the case that reads it:
-   * a thousand drops with a late layout each, which is a scrolling list, and a
-   * bound that must never be exceeded however the app churns.
-   *
-   * The fixture deliberately uses ids *below* the ring's width and a single burst,
-   * so this cannot pass because of id arithmetic: the only thing reclaiming here is
-   * the capacity in `stageLateFilingLocked`.
-   */
   void testAHeldLateFilingIsBoundedUnderABurstOfDrops() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -502,7 +331,6 @@ namespace {
       measure(id, "");
       engine().forget(id);
       kept_.erase(id);
-      // The orphaning layout, one cycle late, exactly as an async commit is.
       measure(id, "");
       const int64_t held = static_cast<int64_t>(engine().lateFilingCount());
       peak = held > peak ? held : peak;
@@ -514,39 +342,18 @@ namespace {
     checkEquals(engine().stats().registryEntries, int64_t{0}, "nor the registry");
   }
 
-  /**
-   * The hold's window is real in both directions.
-   *
-   * `lateFilings_` gives an entry up three ways: a bind claims it, capacity evicts
-   * the oldest (proved by the case above), and age. Age is the one with a bug on
-   * each side, so this proves both halves:
-   *
-   *  - a window too short, and a bind that is merely late loses its held layout —
-   *    the re-show bug back again, arriving only under load, i.e. exactly when
-   *    nobody can reproduce it;
-   *  - no window at all, and an orphan's row is held for the life of the process,
-   *    which is the thing this table exists to avoid.
-   *
-   * The waits come from the engine's own constant rather than a repeated literal,
-   * so the case cannot drift from the window, and the long one is clamped: a window
-   * that grew past the clamp makes the release go *red* instead of hanging the
-   * suite. Ids are unrelated to the ring's width, and one hold cannot reach a
-   * capacity of 256, so nothing here can be reclaimed for any other reason than age.
-   */
   void testAHeldLateFilingIsReleasedWhenItsBindMissesTheWindow() {
     using namespace std::chrono_literals;
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
     constexpr auto kGrace = std::chrono::nanoseconds(NitroUiSizingEngine::kLateFilingGraceNs);
-    // Long enough to be inside the window, far short of it.
     constexpr auto kWaitInsideWindow = std::chrono::milliseconds(60);
-    // Past it, but never long enough to hang the suite if the window is wrong.
+    // Past the window, clamped so a wrong window fails the test instead of hanging it.
     constexpr auto kWaitAfterWindow = kGrace + std::chrono::milliseconds(300) > std::chrono::seconds(5)
                                           ? std::chrono::seconds(5)
                                           : kGrace + std::chrono::milliseconds(300);
 
-    // Mount, drop, and let one layout arrive late: a hold.
     bind(36000, 36000);
     measure(36000, "");
     engine().forget(36000);
@@ -555,13 +362,7 @@ namespace {
     checkEquals(engine().lateFilingCount(), size_t{1}, "the late layout is on hold");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and it is not in the ledger while it is");
 
-    /**
-     * Still inside the window, and the re-shown control is then bound. The
-     * neighbour's layout in between is not decoration: a re-show is never alone in
-     * a commit — the row it belongs to is laid out with the rest of the list, and
-     * every one of those layouts runs the reclaim. So this is the order that could
-     * take the hold away early, and the assertion is that it does not.
-     */
+    // The neighbour's layout runs the reclaim, which must not take the hold away early.
     std::this_thread::sleep_for(kWaitInsideWindow);
     bind(36001, 36001);
     measure(36001, "");
@@ -570,7 +371,6 @@ namespace {
     checkEquals(engine().lateFilingCount(), size_t{0}, "binding claims it");
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "as that instance's own row, beside its neighbour's");
 
-    // Past the window, with no bind ever arriving.
     engine().forget(36000);
     kept_.erase(36000);
     measure(36000, "orphaned");
@@ -583,64 +383,30 @@ namespace {
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "and only that hold — the two live instances are untouched");
   }
 
-  /**
-   * CI 41269235234: `Picker × no-leak-on-drop: 1 ledger entry(ies) survived 50
-   * drops`, on a tree that already had the forgotten-id guard and the held-filing
-   * table. Its registry half is the clue: the run reported no registry growth, so
-   * what survived was a ledger row with no registry row beside it — the same shape
-   * `testALateLayoutAfterForgetFilesNothing` was written for, made by a route that
-   * guard cannot see.
-   *
-   * The route is a layout for an id that never binds at all. `measure` is the only
-   * place a `ledger_` row is created, and it creates one for any id, bound or not,
-   * because layout legitimately runs before the mount transaction binds — that
-   * ordering is `testALayoutBeforeItsBindStillGetsCorrected`'s whole subject, and it
-   * cannot be refused. So a row can be filed by an instance that never arrives: the
-   * commit that laid the node out is dropped, the view is never created, and neither
-   * of the engine's two reclaimers is ever told. `forget` is called by `onDropView`,
-   * and a view that was never created has no drop; the registry sweep walks
-   * `registry_`, and an unbound id has no row there — worse, the sweep's *gate* is
-   * `registry_` having grown by a stride, and a row that never binds is precisely a
-   * row that does not move that counter. That is why the leak is permanent, and why
-   * one occurrence per occurrence is what the rule counts.
-   *
-   * So the case is the file-then-never-bind shape itself, read as a leak: 50 layouts,
-   * no binds, and the ledger must end where it began. The middle assertions are the
-   * reason it is not simply "delete rows with no registry row": an in-flight mount is
-   * in exactly that state and must keep its entry and its correction.
-   */
   void testALayoutThatNeverBindsIsReclaimedWhenItsMountWindowCloses() {
     using namespace std::chrono_literals;
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
     constexpr auto kWindow = std::chrono::nanoseconds(NitroUiSizingEngine::kLateFilingGraceNs);
-    // Past the window, but never long enough to hang the suite if the window is wrong.
+    // Past the window, clamped so a wrong window fails the test instead of hanging it.
     constexpr auto kWaitAfterWindow = kWindow + std::chrono::milliseconds(300) > std::chrono::seconds(5)
                                           ? std::chrono::seconds(5)
                                           : kWindow + std::chrono::milliseconds(300);
 
-    // 50 layouts whose mounts never arrive. Nothing else happens in between, so this
-    // is the leak on its own rather than mixed with a churn.
     for (int64_t cycle = 0; cycle < 50; cycle++) {
       measure(37000 + cycle, "");
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{50},
                 "a layout for an id that has not bound yet files its entry — the mount may still be on its way");
 
-    // A row is only *owed* the window, not deleted at the next sweep: an in-flight
-    // mount is unbound for as long as its commit takes, and the row is what its
-    // correction will be measured against. This instance binds after the others were
-    // filed, and must not have been reclaimed with them.
     bind(37100, 37100);
     measure(37100, "in-flight");
     engine().report(37100, 61, 28, 0);
     check(engine().flush(), "the mount that did arrive is still corrected after the ones that did not were filed");
     checkEquals(pushes.size(), size_t{1}, "exactly one push, and it is the live one's");
 
-    // And now the window closes on the fifty that never bound. The reclaim runs from
-    // `measure`, so these layouts are what drive it — like an app, which keeps laying
-    // out other things while a leak sits there.
+    // The reclaim runs from `measure`, so these layouts drive it.
     std::this_thread::sleep_for(kWaitAfterWindow);
     for (int64_t cycle = 0; cycle < 60; cycle++) {
       bind(37200 + cycle, static_cast<int>(37200 + cycle));
@@ -650,31 +416,14 @@ namespace {
                 "the fifty layouts that never bound are gone, and only the sixty live ones and the in-flight mount remain");
     checkEquals(engine().stats().registryEntries, int64_t{61}, "and the registry agrees");
 
-    // A reclaimed id is a *finished* id: a further layout for it must not file a row
-    // again, which is the same rule the forgotten-id guard enforces for a dropped view.
     measure(37000, "after");
     checkEquals(engine().stats().ledgerEntries, int64_t{61}, "a layout after the reclaim files nothing");
   }
 
-  /**
-   * The reclaim's own cost, on the commit shape that is most likely to trigger it.
-   *
-   * A commit that mounts N views lays all N out before its mount transaction binds any
-   * of them, so a long list's first frame is legitimately N rows in "filed, not bound
-   * yet" — the exact state the window is for. The test therefore lays out a commit
-   * *larger* than {@link kUnboundFilingCapacity}, and then binds all of it, in order,
-   * and asserts that every instance is still corrected.
-   *
-   * This is the case that keeps the capacity honest. Getting it too small does not show
-   * up as a leak — it shows up as a list whose first frame is one second late to be
-   * corrected, on the longest list in the app, which is the kind of bug that gets
-   * attributed to the layout system and never to a constant in an engine header.
-   */
   void testABigFirstCommitKeepsEveryCorrection() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
-    // Comfortably past the capacity, so the valve definitely opens.
     const int64_t count = static_cast<int64_t>(NitroUiSizingEngine::kUnboundFilingCapacity) + 200;
     for (int64_t cycle = 0; cycle < count; cycle++) {
       measure(20000 + cycle, "");
@@ -682,7 +431,6 @@ namespace {
     checkEquals(engine().unboundFilingCount(), NitroUiSizingEngine::kUnboundFilingCapacity,
                 "the overflow really was reclaimed, rather than the table growing without bound");
 
-    // The mount transaction, arriving normally: every layout above gets its instance.
     for (int64_t cycle = 0; cycle < count; cycle++) {
       bind(20000 + cycle, static_cast<int>(20000 + cycle));
     }
@@ -698,16 +446,6 @@ namespace {
     checkEquals(pushes.size(), size_t{count}, "one push per instance, none swallowed by the reclaim");
   }
 
-  /**
-   * A bind that arrives after its row was reclaimed is the reclaim's other half, and the
-   * reason it is a demotion rather than a deletion.
-   *
-   * A runner that is saturated past the window is not a broken host: F8 measured load1
-   * 380 on 3 cores on this repo's own CI. The row has to stop counting as a live instance
-   * — that is the leak — but the control must still get its entry and its correction when
-   * its mount finally lands, which is what the held table is for. So this walks one id all
-   * the way: filed unbound, window closed on it, then bound late.
-   */
   void testABindThatArrivesAfterItsWindowStillClaimsItsRowBack() {
     using namespace std::chrono_literals;
     resetEngine();
@@ -730,28 +468,12 @@ namespace {
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "and the late bind claims it back");
     checkEquals(engine().lateFilingCount(), size_t{0}, "from the hold");
 
-    // The control is still owed its correction, which is the whole reason for the hold.
     engine().report(38000, 61, 28, 0);
     check(engine().flush(), "a control whose mount was a second late is still corrected");
     checkEquals(pushes.size(), size_t{1}, "exactly one push, for the slow instance");
     checkEquals(pushes[0].width, 61.0f, "at the size it reported");
   }
 
-  /**
-   * The fix's own worst case, and the ordinary mount ordering: a row is filed while the
-   * instance is unbound, the bind then arrives, and the window closes anyway.
-   *
-   * `measure` before `registerInstance` is what a real mount looks like — the shadow
-   * thread lays the node out, the mount transaction binds it a moment later — so every
-   * mounted control in the app passes through the state this reclaimer watches. What
-   * makes it safe is that binding removes the row from the waiting set; get that wrong
-   * and the engine takes the row away from a control that is on screen, which does not
-   * look like a leak at all. It looks like a control that stopped accepting corrections:
-   * `report` returns at its first line without a row, `invalidateEnvironment` cannot see
-   * it, and its box is frozen at whatever it was first laid out at, for the life of the
-   * mount. That is the most expensive mistake available here, so it gets its own case
-   * rather than being the incidental consequence of another one.
-   */
   void testAMountThatFilesBeforeItBindsSurvivesItsOwnWindow() {
     using namespace std::chrono_literals;
     resetEngine();
@@ -762,26 +484,16 @@ namespace {
                                           ? std::chrono::seconds(5)
                                           : kWindow + std::chrono::milliseconds(300);
 
-    // Layout first, as the shadow thread does; bind a moment later, as the mount
-    // transaction does. At this instant the row is indistinguishable from an abandoned
-    // mount, and the binding is the only thing that says otherwise.
-    //
-    // These ids are 35900/35910 rather than the 5900/5910 this case was written with,
-    // and that is load-bearing: `forgotten_` is a 512-slot ring, and the burst case
-    // above forgets 5100-6099, which leaves 5588-6099 marked finished. A measure for an
-    // id in that window takes the *held* path and never reaches the unbound row this
-    // case is about, so the case would test the hold and pass while claiming to test the
-    // window - and deleting `waitingForBind_.erase` in `registerInstance` stayed green
-    // with it. The assertion below is the durable half: it names the path, so a future
-    // id collision cannot hide again.
+    // The ids must stay clear of 5588-6099, which the burst case above leaves marked
+    // finished in the 512-slot `forgotten_` ring: a finished id takes the held path
+    // and never reaches the unbound row.
     measure(35900, "mounted-in-order");
     checkEquals(engine().unboundFilingCount(), size_t{1},
                 "the row was filed on the *unbound* path — if this is 0 the id collided with an earlier forget and this case tests the hold instead");
     bind(35900, 35900);
     checkEquals(engine().unboundFilingCount(), size_t{0}, "binding takes the row out of the waiting set");
 
-    // Now the window closes on everything, and other views keep laying out, which is
-    // what drives the walk.
+    // Other views keep laying out, which drives the walk.
     std::this_thread::sleep_for(kWaitAfterWindow);
     for (int64_t cycle = 0; cycle < 10; cycle++) {
       bind(35910 + cycle, static_cast<int>(35910 + cycle));
@@ -789,33 +501,12 @@ namespace {
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{11}, "the bound instance kept its row through its own window");
 
-    // And it is still a correctable instance, which is the only way to observe the row
-    // from the outside.
     engine().report(35900, 61, 28, 0);
     check(engine().flush(), "and it is still corrected");
     checkEquals(pushes.size(), size_t{1}, "exactly one push, for the mounted instance");
     checkEquals(pushes[0].width, 61.0f, "at the size it reported");
   }
 
-  /**
-   * The churn in the shape `Picker` actually costs, which is not the shape the burst
-   * above uses, and not the shape `testAHeldLateFilingIsBoundedUnderABurstOfDrops`
-   * uses either (CI asked for this case by name).
-   *
-   * What `Conformance`'s churn does to a `Picker`: 50 fresh React mounts, so 50 fresh
-   * ids, alternating between the fixture's two owners — and Picker is the one control
-   * whose two owners differ in *measured width*, because its `nuiSizingKey` names the
-   * selected title (`sizingVariantFor` puts `sel:` in it) and the second owner selects
-   * option 2. `Switch`'s two owners are the same box. So Picker is the fixture whose
-   * churn files a fresh sizing key per cycle, which is what makes the rows it leaks rows
-   * the cache cannot absorb: an inexact row on a cold key is exactly the row that stays
-   * in `ledger_` waiting for a correction nobody will send.
-   *
-   * Half of the cycles are the never-bound shape and half are the late-layout-after-
-   * forget shape, because the device rule cannot say which one it caught — it sees only
-   * that a row survived — and a fix that handles one of the two passes the rule and
-   * leaves the leak.
-   */
   void testAPickerShapedChurnOfDroppedAndUnboundMountsLeavesNothingBehind() {
     using namespace std::chrono_literals;
     resetEngine();
@@ -827,10 +518,7 @@ namespace {
                                           : kWindow + std::chrono::milliseconds(300);
 
     const int64_t baseline = engine().stats().ledgerEntries;
-    // The keys the fixture's two owners really file: `sizingVariantFor`'s shape, with
-    // only `sel:` differing, which is the whole difference between a 40-wide `One` and a
-    // 40-wide `Three`. Same component name as every other case here, because `bind`/
-    // `measure` are the file's shared helpers — it is the *shape* that is Picker's.
+    // The shape of the keys a Picker's two owners file, differing only in `sel:`.
     const char* const firstOwnersKey = "menu|3|One|Two|Three|sel:One|lbl:";
     const char* const secondOwnersKey = "menu|3|One|Two|Three|sel:Three|lbl:";
     for (int64_t cycle = 0; cycle < 50; cycle++) {
@@ -852,7 +540,7 @@ namespace {
           "the churn really did leave rows behind to reclaim — otherwise this case proves nothing");
 
     std::this_thread::sleep_for(kWaitAfterWindow);
-    // Something keeps laying out, as it would in an app, and drives the reclaim.
+    // Other views keep laying out, which drives the reclaim.
     for (int64_t cycle = 0; cycle < 20; cycle++) {
       bind(39200 + cycle, static_cast<int>(39200 + cycle));
       measure(39200 + cycle, "menu|3|One|Two|Three|sel:Two|lbl:");
@@ -862,16 +550,8 @@ namespace {
                 "fifty Picker cycles — dropped views with a late layout, and mounts that never arrived — leave nothing but the live instances");
     checkEquals(after.registryEntries, int64_t{20}, "and the registry holds only those");
 
-    /**
-     * …and the *held* table too, because that is the number a leak rule cannot see and
-     * F8b's capacity fix depends on.
-     *
-     * The reclaim is a demotion, so half of what the churn abandoned is sitting in
-     * `lateFilings_` at this point with a clock that restarted when it got there — off
-     * the ledger, which is the point, and invisible to `ledgerEntries`, which is why
-     * `lateFilingCount()` is assertable. The Picker churn has stopped laying out by now,
-     * exactly as CI's rule has, so the only thing left that can empty it is `flush`.
-     */
+    // The reclaimed rows moved to the held table, and with nothing laying out only
+    // `flush` can empty it.
     std::this_thread::sleep_for(kWaitAfterWindow);
     check(!engine().flush(), "the churn has settled, so there is nothing left to apply");
     checkEquals(engine().lateFilingCount(), size_t{0}, "and a flush with no layouts left clears the holds");
@@ -879,37 +559,16 @@ namespace {
     checkEquals(engine().stats().ledgerEntries - baseline, int64_t{20}, "with only the twenty live instances still on the ledger");
   }
 
-  /**
-   * F8b: the held table's capacity must not cost a control its correction.
-   *
-   * F8 round 2 bounded {@link lateFilings_} at 256 entries and closed any overflow by
-   * evicting the oldest hold — which is a cliff disguised as a budget. A commit that
-   * re-shows three hundred hidden controls lays all three hundred out before its mount
-   * transaction binds any of them, so three hundred holds are staged in the same
-   * millisecond, every one of them inside its window, and the oldest forty-four gave up
-   * their slots for being numerous. Each of those is a control that keeps the size a
-   * *guess* laid it out at, for the rest of its mount: the exact failure the held table
-   * was written to prevent, reintroduced by its own capacity. The same shape reaches the
-   * unbound rows' overflow, which is demoted into this table.
-   *
-   * The fix is the order in `stageLateFilingLocked`: close the window first, take a slot
-   * only if that did not free one. So this lays out a re-show larger than the old cap,
-   * asserts the holds are all still there, and then asserts the thing that matters —
-   * every one of the three hundred is corrected.
-   */
   void testAReshowOfMoreControlsThanTheOldCapacityLosesNoCorrection() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
-    // Comfortably past the 256 this table used to hold, and below the backstop, so the
-    // only thing that can lose a control here is a capacity that is too small.
     const int64_t count = 300;
     for (int64_t cycle = 0; cycle < count; cycle++) {
       const int64_t id = 41000 + cycle;
       bind(id, static_cast<int>(id));
-      // Cold key per control, as 300 rows of a list are: distinct titles. Deliberately
-      // no report here — warming the key would make the re-show `exact` and leave this
-      // case with no correction to lose.
+      // A cold key per control, and no report: warming the key would make the re-show
+      // exact and leave no correction to lose.
       measure(id, "row-" + std::to_string(cycle));
       // Hidden: iOS deletes the native view, which finishes the id.
       engine().forget(id);
@@ -917,7 +576,6 @@ namespace {
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "hiding them all leaves the ledger empty");
 
-    // Shown again in one commit: three hundred layouts, then three hundred mounts.
     for (int64_t cycle = 0; cycle < count; cycle++) {
       measure(41000 + cycle, "row-" + std::to_string(cycle));
     }
@@ -937,20 +595,6 @@ namespace {
     checkEquals(pushes.size(), static_cast<size_t>(count), "one push per re-shown control, none lost to capacity");
   }
 
-  /**
-   * The backstop is still a backstop: the table cannot grow without bound.
-   *
-   * F8b moved the working bound from the capacity to the window, which is only safe if
-   * the ceiling behind it still holds under a burst that genuinely outpaces a second —
-   * more orphans than the ceiling, with no sleep for age to do any work. That is the one
-   * case where an in-window hold is dropped, and the cost is stated in
-   * {@link kLateFilingCapacity}: that control keeps the size it was laid out at. What
-   * must not happen, either way, is state that outlives the burst.
-   *
-   * The burst is expressed in multiples of the ceiling rather than a fixed number so the
-   * case stays honest if the constant moves again: it proves the ceiling was *reached*,
-   * which is the thing that makes "and it stayed bounded" mean anything.
-   */
   void testTheHeldTableStillCannotGrowWithoutBound() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -964,7 +608,6 @@ namespace {
       measure(id, "burst-" + std::to_string(cycle % 7));
       engine().forget(id);
       kept_.erase(id);
-      // The orphaning layout, one step late, as an async commit is.
       measure(id, "burst-" + std::to_string(cycle % 7));
       const int64_t held = static_cast<int64_t>(engine().lateFilingCount());
       peak = held > peak ? held : peak;
@@ -974,23 +617,6 @@ namespace {
     checkEquals(engine().stats().registryEntries, int64_t{0}, "nor the registry");
   }
 
-  /**
-   * F8b: a bind later than *both* windows is not allowed to be forgotten about.
-   *
-   * An unbound row gets a second; when that closes it is demoted to the held table,
-   * which gets another. So the engine gives up on an entry two seconds after its first
-   * layout, and on a runner saturated enough to take longer than that (F8 measured load1
-   * 380 on 3 cores) the mount eventually does arrive — to nothing. `report` then finds
-   * no row and returns at its first line, and the control is frozen at the size it was
-   * first laid out at for the life of its mount. That is the same failure every other
-   * case here is about, arriving through the reclaim instead of through a missing entry.
-   *
-   * The engine cannot resurrect an entry it threw away — inventing a row would be
-   * filing a size for a configuration `report` never named — but it can stop pretending
-   * nothing happened: the id is remembered as one it abandoned, and a bind that turns up
-   * with nothing to claim is charged a fresh-measure debt, the FIX2 channel. The next
-   * layout files the row, and the report that follows is an ordinary correction.
-   */
   void testABindLaterThanBothWindowsIsChargedAFreshMeasure() {
     using namespace std::chrono_literals;
     resetEngine();
@@ -1001,7 +627,6 @@ namespace {
                                           ? std::chrono::seconds(5)
                                           : kWindow + std::chrono::milliseconds(300);
 
-    // A layout with no mount behind it, which is the shape that leaks.
     measure(43000, "very-late-mount");
     checkEquals(engine().unboundFilingCount(), size_t{1}, "filed, and owed a mount window");
 
@@ -1017,14 +642,12 @@ namespace {
     measure(43002, "neighbour");
     checkEquals(engine().lateFilingCount(), size_t{0}, "the hold is released");
 
-    // And the mount finally arrives, two seconds after the layout that needed it.
     bind(43000, 43000);
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "it binds with no row of its own");
     check(engine().requiresFreshMeasure(43000),
           "and is told it owes itself a measure — the entry it was owed is gone");
 
-    // The re-ask, which is what the shadow node's `shouldNewRevisionDirtyMeasurement`
-    // causes. That layout files the row `report` needs.
+    // The re-measure the shadow node asks for, which files the row `report` needs.
     measure(43000, "very-late-mount");
     checkEquals(engine().stats().ledgerEntries, int64_t{3}, "the debt is paid by the layout it asked for");
     check(!engine().requiresFreshMeasure(43000), "and it is not asked for twice");
@@ -1036,27 +659,10 @@ namespace {
     checkEquals(pushes[0].width, 61.0f, "at the size it reported");
   }
 
-  /**
-   * The debt is only charged to an instance this engine actually owes.
-   *
-   * Two innocent mounts must not pay for it. A first mount that has never been laid out
-   * had no entry thrown away, so charging it would put every control in the app on the
-   * re-measure path — the fast path review S1 exists to protect, and the reason the
-   * answer is "was this id's filing abandoned?" rather than "did this id bind with no
-   * row?". Second, an id that merely shares a ring slot with an abandoned id: the mark
-   * is direct-mapped, and the exactness argument for {@link forgotten_} says a slot
-   * answers for its own id only. Getting that wrong charges a control a measure for an
-   * abandonment that happened to someone else five hundred ids earlier.
-   *
-   * The abandonment here is made by the capacity backstop, not by a timer, so the case
-   * costs no sleeps and cannot drift with the window.
-   */
   void testTheFreshMeasureDebtIsNotChargedToAnInnocentMount() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
-    // A plain mount, never measured: binds with nothing to its name, exactly like the
-    // very late one above did, and owes nothing because nothing was taken from it.
     bind(44000, 44000);
     check(!engine().requiresFreshMeasure(44000), "an instance that was never measured asks for nothing");
 
@@ -1082,63 +688,20 @@ namespace {
     bind(aliased, static_cast<int>(aliased));
     check(!engine().requiresFreshMeasure(aliased), "and a slot collision charges nobody");
 
-    /**
-     * …and the *positive* half, which is what makes the two above mean anything: the
-     * first id of the burst is the one the ceiling evicted, so a debt has to be waiting
-     * for it. Without that, "an innocent mount is not charged" would only be the
-     * evidence that nothing is ever charged — a ring nobody ever fills also passes.
-     *
-     * The eviction here is the ceiling's, not the window's: no sleep drives this case,
-     * so the marking on that path is covered as well as the one on expiry.
-     */
+    // The first id of the burst is the one the ceiling evicted, so it does owe a
+    // fresh measure.
     bind(45000, 45000);
     check(engine().requiresFreshMeasure(45000),
           "the control the ceiling evicted is charged the second look it is owed");
     engine().forget(45000);
 
-    // Both were bound without ever being measured, so they are not in `usedIds` and
-    // `resetEngine` would not find them; drop them here rather than let them show up in
-    // a later case's registry count.
+    // Bound but never measured, so not in `usedIds`: `resetEngine` would not forget them.
     engine().forget(44000);
     engine().forget(aliased);
     kept_.erase(44000);
     kept_.erase(aliased);
   }
 
-  /**
-   * `reportsConfirmed` counts reports, not instances — the fact behind the device
-   * rule that reads it as "a free report per control".
-   *
-   * CI went red on `confirmed=74` for a batch of 50 Switches, which reads like the
-   * engine confirming controls twice and charging for it. It is not: an instance that
-   * measures again and reports the same size confirms again, and every one of those
-   * reports cost nothing, which is exactly what the counter is for. A Compose host
-   * legitimately measures more than once per mount, and a `fillWidth` control reports on
-   * every box it is laid out at. So the instance count is a *floor* on confirmations,
-   * never a ceiling, and a device assertion that treated it as one was bound to go red
-   * on the next runner that laid a control out an extra time.
-   *
-   * Zero corrections across all of it is the half that must stay exact: the day a
-   * re-report of a size the engine already believes costs a state update, that is the
-   * regression, and it is what this case goes red on.
-   */
-  /**
-   * F8b: the *other* overflow, on the first frame of a long list.
-   *
-   * A commit that mounts N views lays all N out before its mount transaction binds any
-   * of them, so N rows are legitimately "filed, unbound" at the same moment. Past
-   * {@link kUnboundFilingCapacity} the excess is demoted into the held table — into the
-   * same 256-slot ceiling this round removed, which is why the two caps compounded: a
-   * first commit of 1,324 views overflowed by 300, the held table took 256 of them, and
-   * 44 controls were left at whatever size a guess had laid them out at. Their commit
-   * was not wrong, their binds were not late, and no counter showed it.
-   *
-   * The case above this one covers 1,224 layouts, which is *below* that cliff: 200
-   * overflow rows fit inside a table of 256, so it stayed green through the whole bug.
-   * This one is the size that was not, expressed as an overflow of 300 rather than a
-   * total — the number that matters is how many arrive at the table at once, and an
-   * overflow that large is what the table now has to be able to hold.
-   */
   void testAFirstCommitWhoseOverflowExceedsTheOldHeldCapKeepsEveryCorrection() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1150,7 +713,6 @@ namespace {
     checkEquals(engine().unboundFilingCount(), NitroUiSizingEngine::kUnboundFilingCapacity,
                 "the valve opened, as it must — this is about where the overflow went, not whether");
 
-    // The mount transaction, in order: every layout above gets its instance.
     for (int64_t cycle = 0; cycle < count; cycle++) {
       bind(47000 + cycle, static_cast<int>(47000 + cycle));
     }
@@ -1169,8 +731,7 @@ namespace {
 
   void testAConfirmationCountsReportsAndNeverCostsACommit() {
     resetEngine();
-    // Provisional and equal to what the control will report: the answer is already
-    // the control's own, so a report about it is a confirmation and nothing more.
+    // Seeded with the size the control will report, so each report is a confirmation.
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
     engine().seedSize("NitroUiSwitch", "", 61, 28, 0);
     bind(46000, 46000);
@@ -1191,18 +752,8 @@ namespace {
                 "and not one of them cost a state update, which is the promise");
     checkEquals(pushes.size(), size_t{0}, "literally nothing was pushed to the control");
 
-    /**
-     * The same fact on the path the device rule takes, which is a different line of
-     * the engine: a batch of instances of one configuration, all reporting into one
-     * flush. `applyReports` walks the whole configuration and confirms each instance
-     * already on screen at the reported size — 50 Switches of one key, which is
-     * exactly the `provisional n=50` batch whose counter CI read as 74.
-     *
-     * Its own key, deliberately: the instance above already promoted its
-     * configuration to authoritative, and a batch measured against an authoritative
-     * entry takes the per-report free path instead. Provisional is the state a real
-     * batch mounts from, and the only one that reaches the walk.
-     */
+    // Its own key: the instance above made its configuration authoritative, and only
+    // a provisional entry reaches the batch walk in `applyReports`.
     engine().seedSize("NitroUiSwitch", "batch", 61, 28, 0);
     for (int64_t cycle = 0; cycle < 5; cycle++) {
       bind(46010 + cycle, static_cast<int>(46010 + cycle));
@@ -1232,13 +783,11 @@ namespace {
     checkSize(first, 52, 48, "cold mount uses the component fallback");
     check(!first.valid(), "the fallback is a guess, not an answer for this key");
 
-    // The control measured a different size: one correction, one commit.
     engine().report(1, 61, 28, 0);
     check(engine().flush(), "flush reports a change");
     checkEquals(pushes.size(), size_t{1}, "a cold mount costs exactly one push");
     check(pushes[0].immediate, "the first correction goes out immediately");
 
-    // Now the cache knows: the same configuration is exact on its first layout.
     pushes.clear();
     auto second = measure(1, "Switch|");
     checkSize(second, 61, 28, "the measured size is cached");
@@ -1259,8 +808,6 @@ namespace {
     check(!engine().flush(), "a pre-warmed instance never pushes");
     checkEquals(pushes.size(), size_t{0}, "pre-warmed means zero extra commits");
 
-    // Confirming it must have made the entry authoritative, so the *next*
-    // instance is answered from an answer rather than from another guess.
     pushes.clear();
     bind(8, 8);
     auto next = measure(8, "Switch|");
@@ -1270,13 +817,6 @@ namespace {
     checkEquals(pushes.size(), size_t{0}, "no commits for the second instance");
   }
 
-  /**
-   * Review B2, the case that made `prewarm` dangerous: the library guesses a
-   * size, the control is a different size, and the guess is on screen. iOS 26
-   * apps running with `UIDesignRequiresCompatibility` are exactly this - the
-   * declared 61x28 laid over a 51x31 control, leaving every Switch in a box
-   * that was 3 pt too short for the whole session.
-   */
   void testPrewarmCannotPoisonTheCache() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 61, 28, 0);
@@ -1287,13 +827,11 @@ namespace {
     checkSize(laid, 61, 28, "the first layout uses the pre-warmed guess");
     check(laid.valid(), "it is laid out from the cache entry");
 
-    // The real control is 51x31 (compat mode). The guess must not survive it.
     engine().report(91, 51, 31, 0);
     check(engine().flush(), "the real size corrects the guess");
     checkEquals(pushes.size(), size_t{1}, "one correction, like any cold mount");
     checkSize(NitroUiMeasuredSize{pushes[0].width, pushes[0].height, {}, 0}, 51, 31, "corrected to the real size");
 
-    // The whole point: the poison is gone, so the *next* instance is right.
     pushes.clear();
     bind(92, 92);
     auto second = measure(92, "");
@@ -1303,14 +841,6 @@ namespace {
     checkEquals(pushes.size(), size_t{0}, "zero commits for the second mount");
   }
 
-  /**
-   * Review B2, pinned (review O1): a pre-warmed entry is a *guess*, so every
-   * instance laid out from it stays inexact. Two instances take the pre-warm, only
-   * one of them measures, and the answer has to reach both. Making the pre-warm
-   * authoritative answers the second one "exact" out of the guess and it never
-   * hears that the first control measured something else - one push instead of
-   * two, and a Switch that stays in a box 10 pt too short for its whole life.
-   */
   void testAPrewarmLeavesEveryInstanceInexact() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 61, 28, 0);
@@ -1321,7 +851,6 @@ namespace {
     measure(94, "");
     checkEquals(pushes.size(), size_t{0}, "two pre-warmed mounts cost nothing");
 
-    // The real control is 51x31 (compat mode), and only one of them measured it.
     engine().report(93, 51, 31, 0);
     engine().flush();
     checkEquals(pushes.size(), size_t{2}, "both instances are corrected, not just the reporter");
@@ -1341,7 +870,6 @@ namespace {
     checkEquals(pushes[2].immediate, false, "past the budget, corrections are asynchronous");
     checkEquals(pushes[9].immediate, false, "and the rest stay asynchronous");
 
-    // Every one of them is exact now, so a second round of reports is free.
     pushes.clear();
     for (int64_t id = 10; id < 20; id++) {
       engine().report(id, 61, 28, 0);
@@ -1366,7 +894,6 @@ namespace {
     checkEquals(pushes.size(), size_t{1}, "only the instance with that key is corrected");
     checkEquals(pushes[0].tag, 22, "and it is the right instance");
 
-    // The two keys must not share a cache slot.
     check(engine().cachedSizeCount() == 2, "both configurations are cached");
     check(!(NitroUiSizingEngine::keyFor("NitroUiSwitch", "a", 1) == NitroUiSizingEngine::keyFor("NitroUiSwitch", "", 1)),
           "different keys hash differently");
@@ -1376,12 +903,6 @@ namespace {
           "the environment epoch changes the key");
   }
 
-  /**
-   * The environment moving (text size, density, OS control size) must drop every
-   * *answer* but keep a *guess*: a component declares its fallback once per
-   * process, so clearing it would leave the first instance of the new epoch laid
-   * out at 0x0 - invisible for a frame - instead of at roughly the right size.
-   */
   void testEnvironmentChangeDropsAnswersAndKeepsTheGuess() {
     resetEngine();
     engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
@@ -1400,12 +921,6 @@ namespace {
     checkEquals(pushes.size(), size_t{1}, "and the control corrects it in the new epoch");
   }
 
-  /**
-   * Review S2: an environment change has to be able to correct a control that is
-   * *already mounted*, which means the bump must keep its ledger entry (so the
-   * report is not answered "nothing ever laid out") and must not push a control
-   * whose size did not actually move.
-   */
   void testEnvironmentChangeCorrectsAMountedInstance() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1419,14 +934,11 @@ namespace {
     engine().invalidateEnvironment();
     checkEquals(pushes.size(), size_t{0}, "the bump itself commits nothing");
 
-    // Same environment result after all: the host re-measures, gets the old size
-    // back, and that must not cost a commit.
     measure(35, "");
     engine().report(35, 60, 40, 0);
     check(!engine().flush(), "an environment change that does not move the control costs nothing");
     checkEquals(pushes.size(), size_t{0}, "no commit for a size it already had");
 
-    // Now it really does move (a larger Dynamic Type on a text-sized control).
     engine().invalidateEnvironment();
     measure(35, "");
     engine().report(35, 66, 44, 0);
@@ -1435,20 +947,6 @@ namespace {
     checkSize(NitroUiMeasuredSize{pushes[0].width, pushes[0].height, {}, 0}, 66, 44, "to the new size");
   }
 
-  /**
-   * Review F2: the S2 correction with no `measure` between the bump and the
-   * report, which is what a real host does.
-   *
-   * A trait change re-lays out the hosted control from the platform side, and the
-   * control reports its new size from that layout. Yoga is only asked again if a
-   * layout pass needs a number, and a mounted control whose size was believed
-   * exact does not need one - so there is no re-measure coming to rescue the
-   * report. Round 1 cleared the ledger on every bump, so this report was answered
-   * "nothing ever laid out for this instance" and dropped: the control stayed at
-   * the old size until something else happened to lay it out again. The case above
-   * could not see that because it measured after each bump, which rebuilds the
-   * entry by itself.
-   */
   void testEnvironmentChangeCorrectsAReportWithNoMeasure() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1459,8 +957,6 @@ namespace {
     checkEquals(pushes.size(), size_t{1}, "mounted, corrected, and exact at 60x40");
 
     pushes.clear();
-    // Dynamic Type grows. The host re-lays out and reports the bigger size; no
-    // layout pass asked Yoga for a number in between.
     engine().invalidateEnvironment();
     checkEquals(pushes.size(), size_t{0}, "the bump itself commits nothing");
     engine().report(36, 72, 48, 0);
@@ -1468,8 +964,6 @@ namespace {
     checkEquals(pushes.size(), size_t{1}, "one commit, for the control whose size moved");
     checkSize(NitroUiMeasuredSize{pushes[0].width, pushes[0].height, {}, 0}, 72, 48, "to the size it measured");
 
-    // The other half of S2, again with no re-measure: an epoch bump that did not
-    // move this control must not push it a byte-identical second size.
     pushes.clear();
     engine().invalidateEnvironment();
     engine().report(36, 72, 48, 0);
@@ -1477,11 +971,6 @@ namespace {
     checkEquals(pushes.size(), size_t{0}, "and costs no commit");
   }
 
-  /**
-   * `invalidateEnvironmentIfChanged` turns N per-view callbacks into one bump:
-   * the first view with a new signature bumps, the rest of them - and a rotation
-   * - do not.
-   */
   void testEnvironmentSignatureCoalescesCallbacks() {
     resetEngine();
     engine().invalidateEnvironmentIfChanged("fontScale=1.0");
@@ -1495,12 +984,6 @@ namespace {
     check(engine().environmentEpoch() > epoch + 1, "an unknown signature always bumps");
   }
 
-  /**
-   * `prewarm`: adopt the declared size as this environment's provisional answer
-   * for the default configuration (the empty variant), so the first instance
-   * costs no correction when the guess is right - and say `false` for a
-   * component that declared nothing.
-   */
   void testPrewarmMakesTheFirstMountExact() {
     resetEngine();
     check(engine().cachedSizeCount() == 0, "a new epoch starts with no answers");
@@ -1521,10 +1004,6 @@ namespace {
     check(confirmed.reportsConfirmed > 0, "and it is counted as a confirmation, not a correction");
   }
 
-  /**
-   * The counters an on-device test asserts on: one correction for a cold
-   * instance, none for a warm one, and a flush that changed a size.
-   */
   void testStatsCountCorrectionsAndDroppedReports() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1541,7 +1020,6 @@ namespace {
     check(cold.measurements > before.measurements, "measurements are counted");
     check(cold.lastFlushNs >= 0, "flush time is recorded");
 
-    // A second instance of the same configuration: the cache has the answer now.
     const NitroUiSizingCounters warmBefore = cold;
     bind(82, 82);
     auto second = measure(82, "");
@@ -1554,11 +1032,6 @@ namespace {
     check(warm.reportsConfirmed > warmBefore.reportsConfirmed, "and as the confirmation it is");
   }
 
-  /**
-   * Review S3: mounting and unmounting must not grow the engine. A virtualised
-   * list of switches recycles views for the life of a session; the ledger and
-   * the registry have to follow the view, not the process.
-   */
   void testMountUnmountCyclesKeepTheEngineFlat() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1586,31 +1059,15 @@ namespace {
     const NitroUiSizingCounters after = engine().stats();
     checkEquals(after.ledgerEntries - warm.ledgerEntries, int64_t{0}, "2000 more cycles still leave the ledger flat");
     checkEquals(after.registryEntries - warm.registryEntries, int64_t{0}, "and the registry flat");
-    // One configuration, one cached size, however many instances saw it.
     checkEquals(engine().cachedSizeCount(), size_t{1}, "one configuration is still one cache entry");
   }
 
-  /**
-   * The registry sweep's gate re-anchors when the registry *shrinks*, which is what
-   * closing a screen does.
-   *
-   * Found while writing the unbound-filing reclaim, and it is the same shape as
-   * `testExpiredStatesAreSweptWithoutForget` above: the gate is "walk the registry once it has grown
-   * by a stride since the last walk", and the stride is compared against a number the
-   * last walk wrote. A host that mounts a few thousand views and then drops them all —
-   * dismissing a modal, replacing a list's data, navigating back — leaves the gate up
-   * where the old registry was, so the walk waits for another full stride *on top of
-   * nothing*. For a while, nothing reclaims a `State` that died without a `forget`,
-   * which is the only reclaimer that shape has.
-   *
-   * It is written as the leak it is: fill, drop it all, and then let instances die
-   * unpaired and show the sweep still answers.
-   */
   void testTheSweepStillRunsAfterTheRegistryHasShrunk() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
 
-    // A screen full of views, mounted and then dropped, which is what puts the gate high.
+    // A screen of views mounted and dropped. The sweep walks only once the registry
+    // has grown by a stride since its last walk.
     for (int64_t id = 8000; id < 8000 + 1200; id++) {
       bind(id, static_cast<int>(id));
       measure(id, "screen");
@@ -1620,10 +1077,8 @@ namespace {
       kept_.erase(id);
     }
 
-    // And now the shape the sweep exists for: instances whose `State` dies with no
-    // `forget` ever called. Their keys are one the reporter below never reports, so
-    // `applyReports` cannot clean them up as a side effect (see
-    // `testExpiredStatesAreSweptWithoutForget` for why that matters).
+    // Instances whose `State` dies with no `forget`, under a key nobody reports, so
+    // only the sweep can reclaim them.
     for (int64_t id = 9000; id < 9000 + 600; id++) {
       auto scoped = std::make_shared<FakeState>(FakeState{static_cast<int>(id)});
       engine().registerInstance(id, NitroUiSizingEngine::componentHash("NitroUiSwitch"), &fakePush, NitroUiStateRef(scoped));
@@ -1639,22 +1094,6 @@ namespace {
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "and their ledger entries went with them");
   }
 
-  /**
-   * A host that dies without calling `forget` (a crash in a new platform glue, a
-   * view torn down off the recycle path) must not leak either: the sweep in
-   * `flush` catches states the shadow tree released.
-   *
-   * The expired instances are measured under a *different* sizing key from the
-   * instance that reports. Under the same key they sit in the reported
-   * configuration's needs-correction set, `applyReports` finds their states dead
-   * and forgets them right there, and the sweep then walks an already-clean
-   * registry - the case passes without ever running the sweep (review F1, which
-   * is where the sweep's own use-after-free had been hiding). On their own key
-   * nothing else reaches them, so the sweep is the only thing that can clean up.
-   *
-   * The registry is only walked once it has grown by a sweep stride since the
-   * last walk, which is why there are 600 of them.
-   */
   void testExpiredStatesAreSweptWithoutForget() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1670,17 +1109,10 @@ namespace {
     measure(1200, "");
     engine().report(1200, 70, 30, 0);
     engine().flush();
-    // Exactly one entry survives, and it is the live one: the sweep, not
-    // `applyReports`, removed the other 600.
     checkEquals(engine().stats().registryEntries, int64_t{1}, "the sweep dropped the states that died without a forget");
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "and their ledger entries with them");
   }
 
-  /**
-   * Review S4: ids are issued by the engine, because it is process-global and a
-   * JS runtime is not. Uniqueness is what stops two components (or two runs)
-   * sharing one ledger entry.
-   */
   void testInstanceIdsAreMonotonic() {
     const int64_t first = NitroUiSizingEngine::nextInstanceId();
     const int64_t second = NitroUiSizingEngine::nextInstanceId();
@@ -1696,11 +1128,6 @@ namespace {
     check(unique, "1000 ids in a row are all different");
   }
 
-  /**
-   * The per-turn budget (R2/R4): the first corrections of a flush go out as
-   * `unstable_Immediate` state updates, the rest are batched, so 200 cold
-   * instances cannot each force a synchronous commit.
-   */
   void testImmediateBudgetCapsOneFlush() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1720,13 +1147,6 @@ namespace {
     checkEquals(pushes.size(), size_t{6}, "one state update per instance");
     checkEquals(countPushes(true), size_t{NitroUiSizingEngine::kImmediateBudgetPerTurn}, "and the flags on the pushes agree");
 
-    /**
-     * The budget is the platform's, not the engine's (T12 phase 2). Android
-     * flushes inside the pre-draw pass it then cancels, so it spends one
-     * synchronous push; iOS spends the default two because its pushes join a
-     * commit that has not happened yet. The engine only has to honour whatever
-     * number it is handed, including none.
-     */
     pushes.clear();
     for (int64_t id = 191; id < 191 + 6; id++) {
       bind(id, static_cast<int>(id));
@@ -1749,12 +1169,6 @@ namespace {
     checkEquals(countPushes(true), size_t{0}, "and none of its pushes claims a synchronous commit");
     checkEquals(pushes.size(), size_t{3}, "all three went out asynchronously");
     // A negative budget is a caller bug, and it must still not skip corrections.
-    // What this pins is that the corrections go out anyway; it is documentation
-    // rather than a gate for the clamping arithmetic itself, because a negative
-    // `remaining` is already not greater than zero, so removing the clamp in
-    // `applyReports` would change nothing observable here. The behaviour worth
-    // guarding against is a budget check that returns early, and the two checks
-    // below are what would catch that.
     pushes.clear();
     for (int64_t id = 391; id < 391 + 2; id++) {
       bind(id, static_cast<int>(id));
@@ -1766,15 +1180,6 @@ namespace {
     checkEquals(pushes.size(), size_t{2}, "and the corrections still go out");
   }
 
-  /**
-   * Review B1/S8: RN runs an asynchronous state update later, on the JS thread,
-   * after the flush that queued it has returned. So everything a push receives
-   * must be a value, not a reference into the engine's own batch buffer. The
-   * host does this in `pushMeasuredSize` (cpp/NitroUiIntrinsic.hpp), which needs
-   * React Native headers and so cannot be compiled here - what this pins is the
-   * engine-side half of the contract: nothing a push may read is alive after
-   * `flush()` returns, and a deferred consumer that copies gets the right sizes.
-   */
   void testDeferredPushesReadSizesAfterFlush() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1788,8 +1193,7 @@ namespace {
     check(engine().flush(), "the batch is applied");
     checkEquals(pushes.size(), size_t{0}, "nothing has been committed yet - RN queued it");
 
-    // The flush is over: its vector of sizes is freed. Reuse that memory, then
-    // run the updates the way the JS thread would.
+    // The flush has freed its vector of sizes: reuse that memory, then run the pushes.
     runDeferred();
     checkEquals(pushes.size(), size_t{5}, "all five corrections arrive");
     bool allRight = true;
@@ -1801,13 +1205,6 @@ namespace {
     deferPushes = false;
   }
 
-  /**
-   * A push can come back around synchronously: an immediate update re-layouts,
-   * `measureContent` calls `measure`, and the resulting state rebinds the
-   * instance. None of that may happen under the engine's lock, so a fake push
-   * that does all three is the regression test for the "no lock across a push"
-   * rule (a deadlock here is loud, which is the point).
-   */
   void testPushMayReEnterMeasureAndBind() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1822,10 +1219,6 @@ namespace {
     reentrantMeasure = false;
   }
 
-  /**
-   * The trace: laid out, corrected, drew - and only on *changes*, so a control
-   * laid out a hundred times is not a hundred events.
-   */
   void testTraceRecordsSizeChangesOnce() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1841,11 +1234,8 @@ namespace {
     measure(101, "");
 
     auto events = engine().drainTrace();
-    // Three events for a correction, and that is the whole log: laid out with the
-    // guess, corrected, drawn. The re-layout the correction causes is not a
-    // fourth event, because the push already recorded the size the instance is
-    // being laid out with. Three layout passes before the correction cost one
-    // event between them, not three.
+    // The re-layout a correction causes is not a fourth event: the push already
+    // recorded that size.
     checkEquals(events.size(), size_t{3}, "one event per size change, not per layout pass");
     if (events.size() == 3) {
       checkEquals(events[0].stage, NitroUiSizingEngine::kStageLaidOut, "first: laid out with the guess");
@@ -1870,25 +1260,10 @@ namespace {
     engine().report(41, 50, 30, 0);
     check(!engine().flush(), "and it needs no correction");
 
-    // The same state data under a different key is a different answer.
     auto other = measure(41, "Switch|disabled", NitroUiMeasuredSize{50, 30, key, 0});
     check(!other.valid(), "another key does not inherit it");
   }
 
-  /**
-   * A configuration change (a new `nuiSizingKey`) must re-measure, which means
-   * the instance's old size does not carry over into the new configuration and
-   * the report for the new size is not dropped as "already correct". Review S1:
-   * this used to be unreachable because the dirty check compared a node with
-   * itself - see `shouldNewRevisionDirtyMeasurement`.
-   */
-  /**
-   * A learned size belongs to the configuration that measured it (review B2's
-   * other half): `fallbacks_` is keyed by component alone, so a measurement filed
-   * there lets one variant become another variant's guess. Reproduced on a device
-   * as a fresh default Switch mounting 100pt wide after a 100pt variant reported,
-   * and reproduced here in milliseconds.
-   */
   void testALearnedSizeBelongsToItsOwnConfiguration() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1905,8 +1280,6 @@ namespace {
     checkSize(other, 52, 48, "a never-measured variant guesses the declared size");
     check(!other.valid(), "and it is a guess, not an answer");
 
-    // The configuration that measured 61x28 keeps that as its own history, even
-    // across an environment bump (which is what keeps such a mount free).
     engine().invalidateEnvironment();
     pushes.clear();
     auto again = measure(51, "");
@@ -1925,23 +1298,15 @@ namespace {
     engine().flush();
     checkEquals(pushes.size(), size_t{1}, "mounted at 61x28 for the default variant");
 
-    // The size-affecting prop moved: a new variant, laid out again.
     pushes.clear();
     auto wider = measure(45, "|w20");
     check(!wider.valid(), "the new configuration has no answer of its own");
-    /**
-     * The guess is the component's *declared* 52x48, not the other variant's
-     * measured 61x28. Filing a measurement under the component (what this used to
-     * do) made one configuration answer another one's size: on a device a fresh
-     * default mount came back 100pt wide because a 100pt variant had reported last.
-     */
     checkSize(wider, 52, 48, "guessed from the declared fallback, not the other variant's size");
     engine().report(45, 81, 28, 0);
     check(engine().flush(), "the real size for the new variant is corrected");
     checkEquals(pushes.size(), size_t{1}, "one commit for the new size");
     checkSize(NitroUiMeasuredSize{pushes[0].width, pushes[0].height, {}, 0}, 81, 28, "the wider size");
 
-    // And back again: each variant keeps its own answer.
     pushes.clear();
     auto narrow = measure(45, "");
     checkSize(narrow, 61, 28, "the original variant still has its own answer");
@@ -1958,16 +1323,9 @@ namespace {
     check((size.flags & NitroUiSizingEngine::kFlagFillWidth) != 0, "the fill-width policy survives the cache");
   }
 
-  /**
-   * The box a `fillWidth` node is laid out with: the height the engine answered
-   * with, and the width Yoga gave it. This mirrors the last lines of
-   * `IntrinsicShadowNode::measureContent` (cpp/NitroUiIntrinsic.hpp:205-212) -
-   * the engine cannot see the constraints, so the shadow node applies the policy
-   * after `measure` returns, and a test of the policy has to apply it too.
-   *
-   * Including its guard: an infinite constraint width is not a box width, so
-   * `INFINITY` means "there is no box width" and the cached width is what draws.
-   */
+  /// The box a `fillWidth` node is laid out with: the engine's height and Yoga's
+  /// width. The shadow node applies this after `measure` returns; an infinite
+  /// constraint width means there is no box width.
   NitroUiMeasuredSize layoutAt(const NitroUiMeasuredSize& measured, float boxWidth) {
     NitroUiMeasuredSize laidOut = measured;
     if ((measured.flags & NitroUiSizingEngine::kFlagFillWidth) != 0 &&
@@ -1977,23 +1335,8 @@ namespace {
     return laidOut;
   }
 
-  /**
-   * A Slider's width belongs to its parent, so two Sliders of one configuration
-   * legitimately have different widths - and the engine must see that as nothing
-   * to correct. D17: a configuration already exact in the cache lays out exact
-   * on its first frame, with 0 corrections, for *every* instance of it.
-   *
-   * The declared fallback is 328 wide and the real boxes are 300 and 200, so a
-   * comparison that looks at the width sees a change on every instance: each
-   * report queues a correction, and each correction rewrites the cache to that
-   * instance's box width. Measured on the round this was written: two pushes and
-   * a cache that answered 200 to a control that had only ever been 300 wide.
-   */
   void testFillWidthInstancesOfDifferentWidthsCostNothing() {
     resetEngine();
-    // 40 is a stand-in height - the engine is component-agnostic, and the real
-    // Slider measures 31 pt on iOS and 48 dp on Android. The guess is right
-    // where it can be (D17), so the only difference left is the width.
     engine().setFallback("NitroUiSwitch", 328, 40, NitroUiSizingEngine::kFlagFillWidth);
     bind(71, 71);
 
@@ -2003,8 +1346,6 @@ namespace {
     check(!engine().flush(), "a 300-wide report for a 300-wide layout is not a change");
     checkEquals(pushes.size(), size_t{0}, "which costs no commit");
 
-    // Warm now: the next instance is exact on its first layout (D17), in a box
-    // of a *different* width - which is the ordinary case, not an edge one.
     bind(72, 72);
     auto second = measure(72, "");
     checkSize(second, 328, 40, "the cached answer is the height the control measured, at the declared width");
@@ -2013,75 +1354,39 @@ namespace {
     check(!engine().flush(), "the 200-wide Slider's report is not a change either");
     checkEquals(pushes.size(), size_t{0}, "so the second instance costs nothing");
 
-    // And the cache did not become this instance's box width.
     bind(73, 73);
     auto third = measure(73, "");
     checkSize(third, 328, 40, "a third Slider reads the control's answer, not the last box");
   }
 
-  /**
-   * Row 10 of `docs/tasks/FOLLOWUPS.md`: a `fillWidth` control in a parent with no
-   * finite width (a horizontal scroller) kept the last cached width, forever.
-   *
-   * The policy says such a control's width is not its own - `measureContent`
-   * replaces it with the box's - so filing a report's width into the cache looked
-   * free. It was not free in exactly one case: that replacement is guarded on the
-   * constraint width being *finite*, so under an infinite parent the cached width
-   * is what draws. Filing the report's width therefore left whichever box a
-   * bounded instance had last been measured at, on a control in a different
-   * parent, with nothing left that could notice: the report agrees with the cache
-   * by height - all the policy allows it to compare - so it is confirmed rather
-   * than queued, and no later measure can differ either.
-   *
-   * What a `fillWidth` entry holds now is the width the component *declared* for
-   * this case (328 here, deliberately none of the box widths this test measures,
-   * and the number `docs/components/slider.md` already documents as "used only
-   * when a parent gives no finite width").
-   */
   void testFillWidthUnderAnInfiniteParentUsesTheDeclaredWidth() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 328, 40, NitroUiSizingEngine::kFlagFillWidth);
 
-    // A bounded Slider is measured first: the ordinary shape of a real screen,
-    // where a horizontal scroller is not the only `fillWidth` control in the app.
     bind(76, 76);
     measure(76, "");
     engine().report(76, 200, 40, NitroUiSizingEngine::kFlagFillWidth);
     check(!engine().flush(), "the bounded instance's report is not a correction");
     checkEquals(pushes.size(), size_t{0}, "which costs nothing");
 
-    // The scroller's instance: same configuration, so the engine is warm, and Yoga
-    // has no width to give it. This is the frame row 10 is about.
+    // Same configuration, so the engine is warm, and Yoga has no width to give it.
     bind(77, 77);
     auto underInfinity = measure(77, "");
     checkSize(layoutAt(underInfinity, INFINITY), 328, 40,
               "an unbounded parent draws the declared width, not the 200 dp of someone else's box");
 
-    // The unbounded instance then measures its own content at the box it was given
-    // and reports 328: a confirmation, not a correction, so the width it draws is
-    // the width it agreed to and nothing further moves.
     engine().report(77, 328, 40, NitroUiSizingEngine::kFlagFillWidth);
     check(!engine().flush(), "which the unbounded instance confirms rather than corrects");
     checkEquals(pushes.size(), size_t{0}, "and that costs no commit");
 
-    // A control that declared nothing keeps what it measured (there is no honest
-    // replacement to offer), so the filing has to be tested against the *other*
-    // half the report writes: the configuration's own history, which outlives an
-    // environment change while `cache_` does not. A fresh cold mount after a text
-    // size change guesses from that history, and a guess is the number an
-    // unbounded parent draws just as much as a cache hit is.
+    // A configuration's history outlives an environment change, and a cold mount
+    // guesses from it.
     engine().invalidateEnvironment();
     bind(78, 78);
     checkSize(measure(78, ""), 328, 40,
               "the configuration's history carries the declared width too");
   }
 
-  /**
-   * The width is what a `fillWidth` control may disagree about; the height is
-   * still its own answer and a wrong guess about it must still be corrected.
-   * The fallback here is deliberately 33 against a real 40 (fixtures must not
-   * coincide with the answer), so a blind comparison shows up as a missing push.
-   */
   void testFillWidthStillCorrectsAWrongHeight() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 328, 33, NitroUiSizingEngine::kFlagFillWidth);
@@ -2094,7 +1399,6 @@ namespace {
     checkEquals(pushes.size(), size_t{1}, "and it is corrected");
     check(std::fabs(pushes[0].height - 40) < 0.001f, "with the measured height");
 
-    // Warm with the right height: a different box width must not undo it.
     pushes.clear();
     bind(75, 75);
     auto second = measure(75, "");
@@ -2104,11 +1408,6 @@ namespace {
     checkEquals(pushes.size(), size_t{0}, "no commit for a warm instance");
   }
 
-  /**
-   * Review S7: a correction for an instance that is not bound yet must be kept,
-   * not dropped - both for the instance that reported and for another instance
-   * of the same configuration waiting for the answer.
-   */
   void testUnboundReporterKeepsItsCorrection() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -2135,8 +1434,6 @@ namespace {
     engine().flush();
     checkEquals(pushes.size(), size_t{1}, "the bound instance is corrected");
 
-    // The instance that could not be reached is still waiting, and the answer is
-    // already in the cache by the time it binds and measures.
     bind(111, 111);
     auto late = measure(111, "Switch|");
     checkSize(late, 61, 28, "its first layout after binding is already the right size");
@@ -2146,16 +1443,6 @@ namespace {
     checkEquals(pushes.size(), size_t{1}, "so it costs nothing");
   }
 
-  /**
-   * Review S7, pinned (review O1): the re-queue, not the cache.
-   *
-   * An instance that could not be reached during a flush goes back on the
-   * needs-correction list. Here it binds and is *never measured again*, so the
-   * cache cannot rescue it: the next report of its configuration - a sibling
-   * measuring the same variant - is the only thing left that can reach it. Dropping
-   * the re-queue leaves that control sitting at the guess for as long as it is on
-   * screen, and the case above cannot see it because it re-measures after binding.
-   */
   void testAnUnboundTargetIsCorrectedByALaterReport() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -2173,13 +1460,8 @@ namespace {
     checkSize(NitroUiMeasuredSize{pushes[1].width, pushes[1].height, {}, 0}, 61, 28, "at the size it was owed");
   }
 
-  /**
-   * Reports that arrive before *any* layout for an instance are dropped, and do
-   * not leave anything behind.
-   */
   void testReportsWithoutAnInstanceAreDropped() {
     resetEngine();
-    // Reported before any layout (or after the view died): nothing to correct.
     engine().report(99, 40, 40, 0);
     check(!engine().flush(), "a report with no ledger entry is dropped");
     check(!engine().hasPendingReports(), "and nothing is queued");
@@ -2197,18 +1479,11 @@ namespace {
     engine().report(61, 61, 28, 0);
     check(!engine().flush(), "a push to a dead state changes nothing");
     checkEquals(pushes.size(), size_t{0}, "and pushes nothing");
-    // The dead instance is pruned with its ledger entry, so it cannot hold a
-    // later instance's correction hostage.
     engine().report(61, 61, 28, 0);
     check(!engine().hasPendingReports(), "the pruned instance reports nothing afterwards");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and its ledger entry went with it");
   }
 
-  /**
-   * Teardown while a correction is in flight (the harness case S8 asks for): the
-   * host forgot the instance, so the flush must do nothing at all rather than
-   * push into a state that may already be gone.
-   */
   void testForgetDuringPendingCorrection() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -2238,15 +1513,6 @@ namespace {
     check(std::fabs(pushes[0].width - 61) < 0.001f, "and it is the last size");
   }
 
-  /**
-   * FIX2 (T15 Finding 1, D20). The correction lands as a new `State`, but React's
-   * next props clone copies the state of *its own* pre-correction revision, and our
-   * `adopt` mints a fresh `State` from it on every props change - so RN's
-   * `progressState` never re-dirties the node and a props-only clone stays clean
-   * (`shouldNewRevisionDirtyMeasurement`) with that revision's superseded size. Once
-   * an instance has been corrected it must stop trusting that revision; this is the
-   * flag the shadow node asks for on a props turn.
-   */
   void testACorrectedInstanceAsksForAFreshMeasure() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 40, 20, 0);
@@ -2259,9 +1525,6 @@ namespace {
     measure(91, "Switch|");
     check(!engine().requiresFreshMeasure(91), "a first answer is not a change, even a wrong one");
 
-    // Corrected without being measured again: the flag has to come from the
-    // report, because a props turn that never re-layouts is exactly the turn
-    // that would otherwise lay the control out at the superseded size.
     engine().report(91, 61, 28, 0);
     check(engine().flush(), "the correction commits");
     check(engine().requiresFreshMeasure(91), "an instance whose answer moved must re-ask on a props turn");
@@ -2274,11 +1537,6 @@ namespace {
     check(!engine().requiresFreshMeasure(91), "a dropped instance carries nothing with it");
   }
 
-  /**
-   * The other half of the fix: the exemption must not become a measure on every
-   * props turn. An instance that was never answered twice keeps review S1's
-   * promise that toggling a control costs no measure and no commit.
-   */
   void testAnUncorrectedInstanceKeepsTheMeasurementCache() {
     resetEngine();
     engine().seedSize("NitroUiSwitch", "Switch|", 61, 28, 0);
@@ -2296,20 +1554,8 @@ namespace {
                 "a control that agreed with the engine was never corrected");
   }
 
-  /**
-   * FIX2 fix round 1 (review finding 1). A configuration change is not a
-   * correction. `measure` deliberately clears what the instance was last laid out
-   * at when its key moves, so comparing the new answer against that cleared size
-   * flags *every* re-key - warm keys of the identical size included - and a control
-   * whose size never moved is on the paying path for the rest of its mount. Both
-   * halves are pinned: a re-key costs nothing, and an answer that really moved
-   * under an unchanged configuration still raises the flag. Without the second
-   * half the line could simply be deleted.
-   */
   void testARekeyIsNotACorrectionButAMovedAnswerIs() {
-    // A re-key between two configurations that happen to be the same size: a
-    // Button going from "Save" to "Edit". Both answers are warm, nothing was ever
-    // corrected, so nothing may be flagged and nothing may be committed.
+    // Two configurations of the same size, both warm: a Button going from "Save" to "Edit".
     resetEngine();
     engine().seedSize("NitroUiSwitch", "Switch|Save", 80, 35, 0);
     engine().seedSize("NitroUiSwitch", "Switch|Edit", 80, 35, 0);
@@ -2327,11 +1573,8 @@ namespace {
                 int64_t{0}, "and it corrected nothing");
     checkEquals(pushes.size(), size_t{0}, "and it committed nothing");
 
-    // The other half: with the configuration unchanged, an answer that moves is
-    // still a correction, and this is the line that has to notice it. The instance
-    // is laid out before the component's declared size arrives (T14's ordering), so
-    // the same key is later answered something else with no report in between - only
-    // `measure` can see that.
+    // The same key is answered a different size with no report in between, which
+    // only `measure` can see.
     resetEngine();
     engine().setFallback("NitroUiSwitch", 40, 20, 0);
     bind(95, 95);
@@ -2350,7 +1593,6 @@ namespace {
     engine().report(81, 61.2f, 28.3f, 0);
     check(!engine().flush(), "a third of a point is the same size");
 
-    // A state that differs by less than the epsilon must not commit either.
     const NitroUiSizeKey key = NitroUiSizingEngine::keyFor("NitroUiSwitch", "Switch|", engine().environmentEpoch());
     NitroUiMeasuredSize a{61, 28, key, 0};
     NitroUiMeasuredSize b{61.4f, 27.6f, key, 0};

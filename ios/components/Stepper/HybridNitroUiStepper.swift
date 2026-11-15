@@ -1,43 +1,15 @@
-//
-//  HybridNitroUiStepper.swift
-//  react-native-nitro-ui
-//
-//  The Stepper component: SwiftUI `Stepper` on the core runtime.
-//
-//  The value rules are Slider's, imported rather than copied: clamping, step
-//  snapping and the digits a binary fraction leaves behind live in
-//  `NitroUiSliderValue.swift`, and a second implementation of them is how two
-//  controls in one library start disagreeing about what `0.1` means. Everything
-//  here is about *when* a step is reported rather than what its value is.
-//
-//  Two things SwiftUI's control is relied on for, both of which this file would
-//  otherwise have to build: hold-to-repeat (a held half keeps stepping, and each
-//  repeat is one write to the Binding, so one step and one event) and the half
-//  that goes inert at a bound. Handing the control `in:` and `step:` is what buys
-//  both, and the range is only handed over as `step:` when the top of it is one
-//  of the control's own stops (`NitroUiSliderValue.Division.endsOnStep`).
-//
+// The Stepper component: SwiftUI's `Stepper`, which provides hold-to-repeat and disables the
+// half at a bound. The value rules are Slider's (`NitroUiSliderValue.swift`).
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// The opacity a disabled Stepper draws at.
-///
-/// `.disabled(_)` is on the control's modifier chain, and it does reach SwiftUI's controls
-/// in this host - a `Toggle` under the same modifier visibly dims, which is what the
-/// disabled rows of `switch-ios.png` show - but SwiftUI's `Stepper` is the one control in
-/// this library whose drawing it does not change. Measured on the round-2
-/// `stepper-ios.png`: the DISABLED row's two pill halves were byte-identical to the same
-/// control live (left/right means 0.959 and 0.947 a side), so iOS drew an affordance that
-/// answers to nobody while Android's two Material buttons painted themselves with
-/// `onSurface` at 38 % (the disabled row of `stepper-android.png`). The fix states the
-/// same fact in the number iOS itself uses for a control that is off: half.
+/// The opacity a disabled Stepper draws at. `.disabled(_)` does not change how SwiftUI's
+/// `Stepper` is drawn, so it is dimmed explicitly.
 private let nitroUiStepperDisabledOpacity = 0.5
 
-/// State of one Stepper. See ``NitroUiModel`` for why this is not `@Published`.
 final class StepperModel: NitroUiModel {
-  /// The stepped value, behind the event-count handshake (core.md §4).
   var state = NitroUiControlledValue<Double>(displayed: 0)
   var minimumValue = 0.0
   var maximumValue = 100.0
@@ -48,26 +20,22 @@ final class StepperModel: NitroUiModel {
   var testID: String?
   /// Names the control. The *value* is announced by ``accessibilityValueText``.
   var accessibilityLabel: String?
-  /// The size configuration React sent; the engine reads it out of Fabric state.
+  /// The sizing engine reads the key from Fabric state itself.
   var sizingKey = ""
-  /// `onValueChange`, wired through a stable JS callback.
   var onChange: ((_ value: Double, _ eventCount: Double) -> Void)?
 
-  /// The element UIKit vends to a screen reader for this control.
-  ///
-  /// Weak, for Slider's reason: the view owns both, and a strong reference here
-  /// would be a cycle that outlives the recycle.
+  /// The element UIKit vends to a screen reader for this control. Weak: the view owns both
+  /// the element and this model.
   weak var a11yElement: NitroUiStepperAccessibilityElement?
 
-  /// Re-copy what a reader announces into that element. `UIAccessibilityElement`
-  /// *stores* label, value and traits, so each has to be pushed when it changes.
+  /// `UIAccessibilityElement` stores its label, value and traits, so they are pushed
+  /// whenever one changes.
   func refreshAccessibility() {
     a11yElement?.refresh()
   }
 
   // MARK: - The value rules, which are Slider's
 
-  /// The value rule of `NitroUiSliderValue`, applied to this control's range.
   func quantize(_ raw: Double) -> Double {
     return NitroUiSliderValue.quantize(
       raw: raw,
@@ -77,21 +45,14 @@ final class StepperModel: NitroUiModel {
     )
   }
 
-  /// The range to hand SwiftUI, with the rule in `NitroUiStepperBinding` — shared with
-  /// the host test because the case worth holding down (`maximumValue = 0.1 + 0.2`) is
-  /// a number no on-device fixture sends.
+  /// The range to hand SwiftUI.
   var trackBounds: ClosedRange<Double> {
     return NitroUiStepperBinding.trackBounds(minimum: minimumValue, maximum: maximumValue)
   }
 
-  /// Whether SwiftUI's own `step:` can draw this range.
-  ///
-  /// True only when the range ends on a step, for Slider's reason
-  /// (`NitroUiSliderValue.Division.endsOnStep`): SwiftUI's stepped control stops at
-  /// `minimum + n * step`, so on a range that does not end on one its `maximumValue`
-  /// is not a value it can ever reach - and `maximumValue` has to be reachable.
-  /// Those ranges are drawn without a step and snapped here instead, which keeps one
-  /// rule for every range rather than two.
+  /// Whether SwiftUI's own `step:` can draw this range. Only when the range ends on a step:
+  /// SwiftUI stops at `minimum + n * step`, so otherwise the maximum would be unreachable.
+  /// Other ranges are drawn without a step and snapped here.
   var isStepped: Bool {
     guard let division = NitroUiSliderValue.division(minimum: minimumValue, maximum: maximumValue, step: step) else {
       return false
@@ -112,17 +73,9 @@ final class StepperModel: NitroUiModel {
 
   // MARK: - What the user does
 
-  /// The value the control now displays, asked for by a tap, a repeat, an
-  /// accessibility increment or the harness.
-  ///
-  /// Native is optimistic: show the new value now, before React has seen the
-  /// event, so there is no visual latency (§4).
-  ///
-  /// Asking for the value the control already shows reports **nothing**. That is not
-  /// an optimisation: it is what makes "a tap at a bound does nothing" true on both
-  /// platforms, where iOS's half is disabled by SwiftUI before any write and
-  /// Android's button is disabled before any click - so neither the harness seam nor
-  /// a real touch may invent an event the control could not have produced.
+  /// Moves to `raw`, from a tap, a repeat, an accessibility increment or a test. Optimistic:
+  /// the new value shows now, before React has seen the event. Asking for the value already
+  /// shown reports nothing, so a step at a bound emits no event on either platform.
   func userStep(to raw: Double) {
     let next = quantize(raw)
     guard next != state.displayed else { return }
@@ -132,24 +85,14 @@ final class StepperModel: NitroUiModel {
     onChange?(next, Double(eventCount))
   }
 
-  /// One step, in the direction asked for, through ``userStep(to:)``.
-  ///
-  /// Refused while `disabled`, as `.disabled(true)` refuses a tap, and a no-op at
-  /// either bound because ``stepped(from:up:)`` answers the bound itself.
+  /// One step in the given direction. Refused while disabled, and a no-op at either bound.
   func step(up: Bool) {
     guard !disabled else { return }
     userStep(to: stepped(from: state.displayed, up: up))
   }
 
-  /// What the SwiftUI control's `Binding` was just written with - one tap, or one
-  /// repeat of a hold.
-  ///
-  /// The write contributes a direction and nothing else: the destination is this
-  /// control's own step, from the value it displays. `NitroUiStepperBinding` carries
-  /// the argument (in short: on a range that does not end on a step the control is
-  /// drawn without one, so its write is SwiftUI's default stride of 1, and `quantize`
-  /// would accept `0` -> `1` on `0...1.05 step 0.1` as if ten steps had been asked
-  /// for), and it is the rule the host test runs, one case per range shape.
+  /// The SwiftUI control's `Binding` was written, by a tap or one repeat of a hold. The
+  /// write gives only a direction; the destination is this control's own step.
   func bindingWrite(_ requested: Double) {
     guard
       let next = NitroUiStepperBinding.value(
@@ -166,14 +109,13 @@ final class StepperModel: NitroUiModel {
 
   // MARK: - Test read-outs
 
-  /// Test-only read-outs (`nuiTestStateReport`), behind one lock: the probes arrive
-  /// on main and a test may read the report from JS.
+  /// Test-only read-outs behind one lock: the probes write on main and a test may read
+  /// from JS.
   private let reportLock = NSLock()
   private var drawn = "none"
   private var up = "none"
   private var down = "none"
-  /// The opacity the drawing code was handed: half for a disabled control, 1 for a
-  /// live one. iOS only - Android's buttons take the state themselves.
+  /// The opacity the drawing code was handed: half for a disabled control, 1 otherwise.
   private var opacity = "none"
   private var probes = 0
   private var merged = "unavailable"
@@ -181,21 +123,13 @@ final class StepperModel: NitroUiModel {
   private var stepCount = 0
   private var stepReport = "none"
 
-  /// Whether a step in one direction would change anything - the same answer that
-  /// decides which of SwiftUI's two halves it disables, spelled here so the harness can
-  /// assert the bound rather than infer it from a missing event.
+  /// Whether a step in one direction would change anything.
   func canStep(up: Bool) -> Bool {
     !disabled && stepped(from: state.displayed, up: up) != state.displayed
   }
 
-  /// Record what the drawing code was handed: the number the control is showing, which
-  /// half a tap could still move it, and the opacity it is drawn at.
-  ///
-  /// `up`/`down` are the two Android records from the same rule (`HybridNitroUiStepper.kt`),
-  /// which is what lets one assertion cover both platforms' bound behaviour. `opacity` is
-  /// iOS's own: Android's buttons take the disabled state as a Compose parameter and paint
-  /// themselves, so there is no opacity for it to report - see
-  /// ``nitroUiStepperDisabledOpacity`` for why the drawn result needs one here.
+  /// Records what the drawing code was handed: the number shown, which halves can still
+  /// move it, and the opacity.
   func recordDrawn(
     _ value: String,
     canStepUp: Bool,
@@ -210,7 +144,6 @@ final class StepperModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// Store an accessibility probe's answer and count it.
   func recordAccessibility(_ report: String) {
     reportLock.lock()
     probes += 1
@@ -225,9 +158,8 @@ final class StepperModel: NitroUiModel {
     return "displayed=\(drawn);up=\(up);down=\(down);opacity=\(opacity);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
   }
 
-  /// Store an adjust-action report and count it, so two reports that do the same
-  /// thing - the no-op at a bound - are still two different strings for a test
-  /// waiting on "the report changed".
+  /// Numbered, so two identical reports are still different strings for a test waiting on
+  /// a change.
   func noteStepReport(_ report: String) {
     reportLock.lock()
     stepCount += 1
@@ -241,7 +173,6 @@ final class StepperModel: NitroUiModel {
     return stepReport
   }
 
-  /// Back to "nothing yet", for recycling.
   func clearReports() {
     reportLock.lock()
     drawn = "none"
@@ -256,8 +187,7 @@ final class StepperModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// What a reader hears as this control's value: an integral value without a
-  /// fraction, so `0.1` steps do not read "zero point one zero zero zero…".
+  /// What a reader hears as this control's value. An integer drops its decimal point.
   var accessibilityValueText: String {
     let value = state.displayed
     if value.isFinite, value == value.rounded(), abs(value) < 1e15 {
@@ -267,7 +197,6 @@ final class StepperModel: NitroUiModel {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct StepperContent: NitroUIContent {
   @ObservedObject private var model: StepperModel
   init(model: StepperModel) {
@@ -275,8 +204,8 @@ struct StepperContent: NitroUIContent {
   }
 
   @ViewBuilder var body: some View {
-    // The reading `nuiTestStateReport()` answers with: taken where the control is
-    // drawn, so it is what the control is handed rather than what React sent.
+    // Recorded where the control is drawn, so it is what the control is handed rather than
+    // what React sent.
     let canStepUp = model.canStep(up: true)
     let canStepDown = model.canStep(up: false)
     let _ = model.recordDrawn(
@@ -291,11 +220,8 @@ struct StepperContent: NitroUIContent {
     )
     let bounds = model.trackBounds
 
-    // Two different controls, chosen by the range rather than by the caller -
-    // Slider's `isStepped` branch, for Slider's reason: the shape of this branch is
-    // SwiftUI's structural identity, so it may flip only when a range changes and
-    // nothing else moves it. Both halves share one `Binding`, so ``userStep(to:)``
-    // does not care which one drew a frame.
+    // Two different view types, so switching between them rebuilds the stepper. The
+    // condition reads only the range and step, so nothing else can flip it.
     Group {
       if model.isStepped {
         Stepper(value: value, in: bounds, step: model.step) {
@@ -307,19 +233,13 @@ struct StepperContent: NitroUIContent {
         }
       }
     }
-    // The label is the caller's `accessibilityLabel`, and `.labelsHidden()` hides the
-    // text while the stepper keeps it as the element's name. A `Stepper` with no
-    // label at all is a control with a name nobody can see, which is the reading
-    // `docs/components/stepper.md` gives `accessibilityLabel` for.
+    // `.labelsHidden()` hides the text while the stepper keeps it as the element's name.
     .labelsHidden()
     .disabled(model.disabled)
     .opacity(model.disabled ? nitroUiStepperDisabledOpacity : 1)
-    // SwiftUI's half of the accessibility, kept beside the UIKit element the view
-    // vends (see ``NitroUiStepperAccessibilityElement`` for why that element is the
-    // authoritative one): the same statement in SwiftUI's language, free, and the
-    // cover for a runtime that builds its reader tree past `accessibilityElements`.
-    // `children: .ignore` keeps that built element a single stop that steps by
-    // ``StepperModel/step(up:)`` rather than by whatever stride the platform picked.
+    // The authoritative accessibility element is `NitroUiStepperAccessibilityElement`,
+    // vended by the view; these modifiers say the same thing to SwiftUI. `children: .ignore`
+    // keeps it one element that steps by `step(up:)` rather than by the platform's stride.
     .accessibilityElement(children: .ignore)
     .accessibilityValue(Text(model.accessibilityValueText))
     .accessibilityAdjustableAction { direction in
@@ -329,9 +249,9 @@ struct StepperContent: NitroUIContent {
   }
 }
 
-/// An empty `accessibilityLabel(_:)` would silence the stepper's own label, so it is
-/// applied only when set - the Switch's, Checkbox's and Slider's rule, and `testID`
-/// deliberately not here for the same reason (RN puts it on the component view).
+/// An empty `accessibilityLabel(_:)` would silence the stepper's own label, so it is applied
+/// only when set. `testID` is not applied here: React Native already puts it on the
+/// component view.
 private struct OptionalStepperAccessibility: ViewModifier {
   let label: String?
 
@@ -344,23 +264,14 @@ private struct OptionalStepperAccessibility: ViewModifier {
   }
 }
 
-/// The accessibility element this control answers a screen reader with.
+/// The accessibility element this control answers a screen reader with, vended through the
+/// component view's `accessibilityElements`.
 ///
-/// Vended by the component view, for the reason
-/// `HybridNitroUiSlider.swift` measured rather than assumed: on iOS 27 a SwiftUI
-/// hosting view answers `accessibilityElements == []` to anything that is not an
-/// accessibility client, so an element built out of `.accessibility*` modifiers
-/// cannot be found, performed or tested from outside VoiceOver. Vending the element
-/// makes it a fact about the view at all times, and UIKit calls
-/// `accessibilityIncrement` / `accessibilityDecrement` on it - the same two calls
-/// VoiceOver's swipe makes.
-///
-/// Being the element also means **one focus stop** (UIKit does not descend into a
-/// view that answers with its own elements) and **our steps, not the platform's**:
-/// the increment moves by ``StepperModel/stepped(from:up:)``, which is the grid
-/// `NitroUiSliderValue.quantize` recognises, so a range that does not end on a step
-/// still steps rather than moving by a fraction of the range that quantises back to
-/// where it started.
+/// A SwiftUI hosting view reports no accessibility elements unless an accessibility client
+/// is attached, so an element built from `.accessibility*` modifiers cannot be found or
+/// tested in-process. Vending it here also makes it the only focus stop (UIKit does not
+/// descend into a view that vends its own elements) and makes increments step on this
+/// control's own grid rather than by a fraction of the range.
 final class NitroUiStepperAccessibilityElement: UIAccessibilityElement {
   private weak var model: StepperModel?
   private weak var anchor: UIView?
@@ -372,8 +283,7 @@ final class NitroUiStepperAccessibilityElement: UIAccessibilityElement {
     refresh()
   }
 
-  /// The control's box, in screen coordinates - computed rather than stored so the
-  /// element follows the control when the layout moves it.
+  /// In screen coordinates, computed rather than stored so the element follows the control.
   override var accessibilityFrame: CGRect {
     get {
       guard let anchor, let window = anchor.window else { return .zero }
@@ -400,12 +310,9 @@ final class NitroUiStepperAccessibilityElement: UIAccessibilityElement {
   }
 }
 
-/// The hosted element a screen reader would adjust, or nil.
-///
-/// Breadth-first over both kinds of node, and gated on `.adjustable` rather than on
-/// `responds(to:)` - Slider's helper, for its reasons: SwiftUI vends elements rather
-/// than subviews, and `accessibilityIncrement` is an `NSObject` category method that
-/// every node answers.
+/// The hosted element a screen reader would adjust, or nil. Breadth-first over subviews and
+/// `accessibilityElements`, matched by the `.adjustable` trait: every node responds to
+/// `accessibilityIncrement`, which is an `NSObject` category method.
 private func nitroUiFindStepperAdjustableElement(in root: UIView, dump: inout [String]) -> AnyObject? {
   var queue: [AnyObject] = [root]
   while !queue.isEmpty, dump.count < 64 {
@@ -424,8 +331,7 @@ private func nitroUiFindStepperAdjustableElement(in root: UIView, dump: inout [S
   return nil
 }
 
-/// Both kinds of node spell their traits `accessibilityTraits`, declared separately,
-/// so this is the one place that knows both.
+/// `UIView` and `UIAccessibilityElement` declare `accessibilityTraits` separately.
 private func nitroUiStepperTraits(of node: AnyObject) -> UIAccessibilityTraits? {
   if let view = node as? UIView {
     return view.accessibilityTraits
@@ -444,9 +350,8 @@ private func nitroUiDescribeStepperNode(_ node: AnyObject) -> String {
   return "\(name)[\(traits.rawValue)]"
 }
 
-/// The number a report names, without a float's noise: `4.0` reads as `4` and `0.1`
-/// stays `0.1`. The Android twin is `nitroUiStepperValueText`, and one harness
-/// assertion reads both platforms' reader-action reports, so the spellings agree.
+/// A value without floating-point noise: `4.0` reads as `4`. Must match the Android twin's
+/// format, because one test assertion reads both platforms' reports.
 private func nitroUiStepperValueText(_ value: Double) -> String {
   if value.isFinite, value == value.rounded(), abs(value) < 1e15 {
     return String(Int(value))
@@ -460,15 +365,11 @@ private func nitroUiStepperReport(_ text: String) -> String {
   return String(text.prefix(320)) + "…"
 }
 
-/// The Hybrid View React renders as `NitroUiStepper`.
 final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
   private let host: NitroSwiftUIHost<StepperContent>
 
-  /// The element a screen reader focuses, vended by the component view.
-  ///
-  /// Created once per instance and never replaced: it reads through to the model,
-  /// which is the same object for the life of this view including across a recycle,
-  /// and ``prepareForRecycle`` leaves the array alone for that reason.
+  /// Created once per instance and never replaced; it reads through to the model, which
+  /// survives a recycle.
   private lazy var a11yElement = NitroUiStepperAccessibilityElement(
     model: host.model,
     anchor: host
@@ -480,27 +381,15 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
 
   private static let sizingComponentName = "NitroUiStepper"
 
-  /// The size to lay a Stepper out with before anything has been measured, in points.
-  ///
-  /// Measured on this machine (D14): SwiftUI's `Stepper` with its label hidden lays out
-  /// at 94x32 pt on iOS 26 and 27, at every range and step - the control is two
-  /// fixed-width halves, so nothing the caller sends moves the box. There is no runtime
-  /// below 26 on this machine to measure, so the same box is declared for those rather
-  /// than this file claiming a number no device has read: an older OS pays at most the
-  /// one cold correction the sizing engine exists for. The number is what
-  /// `Stepper.harness.tsx`'s sizing cases and `DECLARED_FALLBACKS.NitroUiStepper.ios`
-  /// compare against, and a change to either is a change to what the first cold frame
-  /// shows (D17).
+  /// The fallback, in points: SwiftUI's `Stepper` with its label hidden is 94x32 at every
+  /// range and step.
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, 94.0, 32.0, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process.
-  ///
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
-  /// matters: Fabric measures a Stepper's shadow node before it creates any Stepper
-  /// view, so a fallback declared from `init` is one measure too late (T14).
+  /// Registers the fallback once per process. Called at startup, because Fabric measures a
+  /// Stepper's shadow node before it creates any Stepper view.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
@@ -512,7 +401,7 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
     host.needsContainment = false
     host.wantsContentSize = true
     host.sizingPolicy = .intrinsic
-    // One focus stop for the control, and it is ours.
+    // One focus stop for the control: the element this view vends.
     host.accessibilityElements = [a11yElement]
     host.model.a11yElement = a11yElement
     Self.declareFallback()
@@ -545,8 +434,7 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
       return .second(value)
     }
     set {
-      // Stored raw: the range it has to be quantised against may arrive in the same
-      // batch, and Nitro does not order props inside one.
+      // Stored raw: the range it is quantised against may arrive later in the same batch.
       model.defaultValue = newValue.asType(Double.self)
     }
   }
@@ -595,8 +483,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: `testID` is an RN base prop too, and
-      // `RCTViewComponentView` already puts it on the component view.
+      // Nothing to apply: React Native already puts `testID` on the component view as
+      // `accessibilityIdentifier`.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -604,8 +492,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
   var accessibilityLabel: Variant_NullType_String {
     get { model.accessibilityLabel.map { .second($0) } ?? .first(.null) }
     set {
-      // Rendered, not bookkeeping: the name is on the element and on the SwiftUI
-      // control, so it needs a commit or a late-set name never reaches VoiceOver.
+      // The name is on the element and on the SwiftUI control, so it needs a commit to
+      // reach VoiceOver.
       let next = newValue.asType(String.self)
       guard next != model.accessibilityLabel else { return }
       model.accessibilityLabel = next
@@ -639,10 +527,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // `value`, `defaultValue`, `minimumValue`, `maximumValue` and `step` can all land
-    // in one batch in any order, so none of them is interpreted until the batch is
-    // complete (Slider's rule, and the same reason): a `value` of 0.3 is only a legal
-    // number once the range it belongs to is known.
+    // `value`, `defaultValue`, the range and `step` can land in one batch in any order, so
+    // nothing is interpreted until the batch is complete.
     if let js = model.state.js {
       let quantised = model.quantize(js)
       if quantised != js { model.state.js = quantised }
@@ -652,20 +538,18 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
       model.state.displayed = model.quantize(`default`)
       host.markDirty()
     }
-    // The handshake decides whether React's write wins over what the user just
-    // stepped to (§4).
+    // The event counts decide whether React's write wins over what the user just stepped to.
     if model.state.reconcile() {
       host.markDirty()
     }
-    // A range or step that moved under an existing value can leave the shown value
-    // outside it. Idempotent, so a value that is already legal comes back unchanged.
+    // A range or step that changed can leave the shown value outside it.
     let shown = model.quantize(model.state.displayed)
     if shown != model.state.displayed {
       model.state.displayed = shown
       host.markDirty()
     }
-    // The label, the enabled state and the value are what a reader announces, and
-    // this is the one turn per commit where all three are known.
+    // The accessibility element stores its label, state and value, so it is updated once the
+    // batch is complete.
     model.refreshAccessibility()
     host.commit()
   }
@@ -684,9 +568,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
     model.onChange = nil
     model.clearReports()
     host.prepareForRecycle()
-    // The reset above changes the value, the name and the enabled state, and the
-    // element stores all three - so it is re-read here rather than left describing
-    // the previous owner's stepper.
+    // The element stores the value, name and enabled state, so it is refreshed after the
+    // reset.
     model.refreshAccessibility()
   }
 
@@ -697,10 +580,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
 
   // MARK: - Methods
 
-  /// The size SwiftUI wants for this stepper, from the host's cache.
-  ///
-  /// Never touches the main thread: this can be called from JS, and SwiftUI may only
-  /// be measured on main (core-architecture §1.4).
+  /// Reads the host's cache: this can be called from JS, and SwiftUI may only be measured
+  /// on main.
   func measureContent() throws -> NitroUiStepperSize {
     guard let size = host.contentSize else {
       return NitroUiStepperSize(width: 0, height: 0)
@@ -708,7 +589,7 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
     return NitroUiStepperSize(width: Double(size.width), height: Double(size.height))
   }
 
-  /// One step through the tap's path, on the UI thread. Returns at once.
+  /// One step through the tap's path, on main. Returns at once.
   func nuiTestStep(direction: Double) {
     let up = direction >= 0
     let run = { [host] in host.model.step(up: up) }
@@ -719,12 +600,9 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
     }
   }
 
-  /// Perform the platform's own adjust action on the hosted element.
-  ///
-  /// There is deliberately **no fallback**: with no adjustable element the probe does
-  /// nothing and says so. Falling back to ``StepperModel/step(up:)`` would move the
-  /// value either way and prove nothing about the path a screen reader takes, which
-  /// is the whole thing under test (Slider's rule).
+  /// Test-only: performs the selector VoiceOver performs on an adjustable element, on the
+  /// hosted element. No fallback: if no adjustable element is found the probe does nothing
+  /// and says so in the report.
   func nuiTestAccessibilityStep(direction: Double) {
     let up = direction >= 0
     let run = { [weak self] in self?.runTestAccessibilityStep(up: up) }
@@ -741,20 +619,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
 
   /// What the element this view vends tells a reader, as one line:
   /// `traits=<raw>,adjustable=<bool>,label=<text>,value=<text>,disabled=<bool>`.
-  ///
-  /// Comma-separated, because `;` is what splits this line's own fields apart inside
-  /// `nuiTestStateReport()` - a report that used it internally arrived as its first
-  /// word. `adjustable` is UIKit's own answer to `traits.contains(.adjustable)` rather
-  /// than a bit a test has to know: the raw mask is reported beside it as the evidence,
-  /// but the bit an adjustable element answers is UIKit's business, and on the OS this
-  /// was measured on it is not the one the pre-26 headers list.
-  ///
-  /// The element is the one this view hands UIKit, so it can be read in-process here
-  /// in a way a SwiftUI-modifier-built element cannot (`HybridNitroUiSlider.swift`
-  /// measured that), and the four fields are the four a harness asserts. `merged`
-  /// stays `unavailable`: what this can enumerate is the array this view vends, not
-  /// the tree a reader walks, and a count of the first would be an echo rather than
-  /// a measurement.
+  /// Comma-separated, because `;` separates the fields of `nuiTestStateReport()`, which
+  /// embeds this line.
   func nuiTestProbeAccessibility() {
     let run = { [weak self] in
       guard let self else { return }
@@ -777,18 +643,8 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
     }
   }
 
-  /// Counts the probe and answers `no pixels`, the way IconButton's iOS half does:
-  /// the glyph this control samples is a Material Symbols drawable, and there is no
-  /// Android artwork on this platform to sample.
-  ///
-  /// For this control there is a second, measured reason to refuse: capturing the box it
-  /// draws came back with no ink at all - the view's own box, its parent's and a crop of
-  /// the window it sits in each reported one flat colour (`flat view=#808080 spread=0
-  /// parent=#808080 spread=0 window=#0A1628 spread=0`) while SegmentedControl's box, in the
-  /// same host and the same suite shape, answers a tint. SwiftUI's `Stepper` is drawn where
-  /// none of those three reaches, so what is asserted about its disabled drawing is the
-  /// opacity the drawing code was handed (``StepperModel/recordDrawn(_:canStepUp:
-  /// canStepDown:opacity:)``), and what that looks like is what `stepper-ios.png` is for.
+  /// iOS has no Android icon glyph to sample, and SwiftUI's `Stepper` is drawn where a view
+  /// capture does not reach, so the report says `no pixels`.
   func nuiTestPixelProbe(color: Double) throws {
     pixelProbesLock.lock()
     pixelProbes += 1

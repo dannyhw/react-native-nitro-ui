@@ -1,49 +1,17 @@
-//
-//  HybridNitroUiPopover.swift
-//  react-native-nitro-ui
-//
-//  Popover (G22, DECISIONS D44): `UIPopoverPresentationController` whose content is React
-//  Native views, anchored to a view the app lays out in place. S5 built the prototype
-//  (`docs/tasks/S5-popover-spike.report.md`) and measured the three things this file is
-//  shaped around:
-//
-//  1. **The box is Yoga's.** The JS wrapper makes this view as wide as the cap with
-//     `alignItems: 'flex-start'`, so Yoga gives its one child - the content box - the
-//     content's own width and height. `preferredContentSize` is that child's frame, read
-//     one turn after the commit that mounted it, *before* the present. Without that
-//     ordering the first frame is UIKit's default 320x480 and then jumps (S5's red arm).
-//  2. **The content is adopted, not copied.** The generated `.mm` mounts the React Native
-//     children into this view (`CONTENT_CHILDREN_VIEWS` in `scripts/patch-nitrogen.mjs`),
-//     and the presentation adopts that view while it is up - BottomSheet's move (G14) -
-//     which is what keeps their frames, their responder chain and their accessibility
-//     tree intact inside the popover.
-//  3. **Touch.** The presentation owns an `RCTSurfaceTouchHandler` (`NitroUiTouchRoot`)
-//     over its content, as RN's own `Modal` does, or nothing inside would take a touch.
-//
-//  It presents from a window of its own (`NitroUiPresentation.presentInOwnWindow`), as
-//  Tooltip does (D41) and not through D35's chain. The reason is Tooltip's, measured there
-//  and re-measured here (`Popover.harness.tsx`, "a Modal opened while it is up still
-//  shows"): a popover sitting in the app's chain *is* what the top controller is
-//  presenting, so UIKit refuses the next RN `Modal` an app opens, and closing a `Modal`
-//  dismisses the popover instead of the Modal.
-//
-//  All members are main-thread only (`NitroUiMainThread`); the test report is snapshotted
-//  here and read from the JS thread without waiting for main.
-//
+// Popover: a `UIPopoverPresentationController` whose content is React Native views, anchored to a
+// view the app lays out in place. Main thread only; the test report is snapshotted here and read
+// from the JS thread.
 
 import NitroModules
 import UIKit
 
-// Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
 private typealias NitroUiPopoverPerf = margelo.nitro.nitroui.NitroUiPerf
 
 // MARK: - Views
 
-/// The React Native children's parent, adopted by the presentation while it is up.
-///
-/// Hidden whenever it is *not* in a popover: Fabric lays it out at the content's box in
-/// the app's tree before the present and after the dismissal, and the children must draw
-/// nowhere but in the popover.
+/// The React Native children's parent, adopted by the presentation while it is up. Hidden whenever
+/// it is not in a popover: Fabric lays it out in the app's tree before the present and after the
+/// dismissal, and the children must draw nowhere else.
 final class NitroUiPopoverContentView: UIView {
   /// The content box's size changed (a Fabric layout). Main thread.
   var onSizeChange: ((CGSize) -> Void)?
@@ -121,13 +89,10 @@ final class NitroUiPopoverAnchorView: UIView {
 
 // MARK: - The presentation's controller
 
-/// The popover's controller: an empty box that adopts the React Native content, and the
-/// delegate that keeps it a popover on a phone and reports the ways it leaves.
-///
-/// UIKit gives no witness for "this presented controller is gone" that covers every route
-/// - a tap outside, a dismissal we asked for, and a controller under it dismissed with it
-/// on top - so `viewDidDisappear` is the witness and the delegate's
-/// `presentationControllerDidDismiss` is the tap-outside half of it (D35 item 2's rule).
+/// The popover's controller: an empty box that adopts the React Native content, and the delegate
+/// that keeps it a popover on a phone. UIKit has no single callback for every way a presented
+/// controller goes away, so `viewDidDisappear` is the witness and
+/// `presentationControllerDidDismiss` marks a tap outside.
 final class NitroUiPopoverController: UIViewController, UIPopoverPresentationControllerDelegate {
   /// The React Native content's host inside the popover's own safe area.
   let contentHost = UIView()
@@ -138,9 +103,9 @@ final class NitroUiPopoverController: UIViewController, UIPopoverPresentationCon
   private var gone = false
   private var touchHandler: UIGestureRecognizer?
 
-  /// How many popover controllers this process has alive - a leak witness beside
-  /// ``HybridNitroUiPopover/live``, which counts *presentations* and comes down as soon as
-  /// one ends, while a controller lives until its dismissal has finished releasing it.
+  /// How many popover controllers this process has alive: a leak check. `HybridNitroUiPopover.live`
+  /// counts presentations and drops when one ends, while a controller lives until its dismissal has
+  /// released it.
   static let alive = NitroUiSheetCount()
 
   override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
@@ -170,6 +135,8 @@ final class NitroUiPopoverController: UIViewController, UIPopoverPresentationCon
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    // React Native's touch handler must be attached to the presented view, as RN's own `Modal`
+    // does, or nothing inside takes a touch.
     touchHandler = NitroUiTouchRoot.attach(to: view)
   }
 
@@ -201,7 +168,6 @@ final class NitroUiPopoverController: UIViewController, UIPopoverPresentationCon
     Self.alive.add(-1)
   }
 
-  /// Take the React Native content in for as long as the popover is up.
   func adopt(_ content: UIView) {
     loadViewIfNeeded()
     if content.superview !== contentHost {
@@ -229,8 +195,7 @@ final class NitroUiPopoverController: UIViewController, UIPopoverPresentationCon
 
   // MARK: UIPopoverPresentationControllerDelegate
 
-  /// Without these, UIKit adapts a popover to a full-screen sheet at compact width, which
-  /// is a different control (Tooltip and DatePicker both say this).
+  /// Without these, UIKit adapts a popover to a full-screen sheet at compact width.
   func adaptivePresentationStyle(for controller: UIPresentationController) -> UIModalPresentationStyle {
     .none
   }
@@ -254,10 +219,9 @@ final class NitroUiPopoverController: UIViewController, UIPopoverPresentationCon
 
 // MARK: - The first-frame witness
 
-/// Reads the popover's size on every display frame from the present until one second after
-/// it, so a test can say "the first frame the user could see was the final size" rather
-/// than assert it. Only ever started while a test is reading reports
-/// (`HybridNitroUiPopover.reportsWanted`), so an app pays nothing.
+/// Test-only: reads the popover's size on every display frame for one second after the present, so
+/// a test can check that the first visible frame was already the final size. Started only once a
+/// test has asked for a report.
 final class NitroUiPopoverSampler: NSObject {
   private weak var controller: UIViewController?
   private var link: CADisplayLink?
@@ -309,21 +273,15 @@ final class NitroUiPopoverSampler: NSObject {
 
 // MARK: - The Hybrid View
 
-/// The Hybrid View React renders as `NitroUiPopover`.
 final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
-  /// How many popovers this process has on screen. See ``NitroUiPresentationCounter``:
-  /// process-wide because a dropped mount has nothing left to report, so a harness reads
-  /// the count through a *fresh* mount.
   static let live = NitroUiPresentationCounter()
 
-  /// Whether any test has ever asked for a report. Until one has, `publishReport` returns
-  /// without building a line and the frame sampler never starts, so a shipped app pays
-  /// nothing for the witnesses (BottomSheet's rule).
+  /// Whether any test has ever asked for a report. Until one has, no report is built and the frame
+  /// sampler never starts.
   static let reportsWanted = NitroUiSheetCount()
 
-  /// The narrowest margin the popover keeps from the window's edges. The wrapper caps the
-  /// content with the same number (`Popover.tsx`); it is here so a popover presented in an
-  /// app that never heard of the cap still cannot span a notch.
+  /// The narrowest margin the popover keeps from the window's edges. The JS wrapper caps the
+  /// content with the same number.
   static let windowMargin: CGFloat = 16
 
   private let container = NitroUiPopoverContentView()
@@ -359,15 +317,13 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   private var owesDismissal = false
   /// How many turns the present has waited for the content box to have a size.
   private var contentWaits = 0
-  /// The RN `Modal` host the anchor lived in, remembered while it had a window, and whether
-  /// its going away is what closed this popover - which closes it silently (see
-  /// ``windowChanged(_:)``).
+  /// The RN `Modal` host the anchor lived in, remembered while it had a window, and whether its
+  /// going away is what closed this popover, which closes it silently.
   private weak var enclosingModalHost: UIViewController?
   private var closingWithTheModal = false
-  /// How many times this mount presented, for the harness.
+  /// How many times this mount presented (test read-out).
   private var presentCount = 0
-  /// The box the popover was presented with, for the harness's "first frame is the size we
-  /// asked for" line.
+  /// The size the popover was presented with (test read-out).
   private var sizeAtPresent = CGSize.zero
   private var userDismissals = 0
   private var unaskedExits = 0
@@ -440,8 +396,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
 
   func afterUpdate() {
     mark(.propsApplied)
-    // The handshake decides whether React's `presented` wins - including a close JS
-    // refused, which is how a refused close presents again (D33).
+    // The handshake decides whether React's `presented` wins, including a close JS refused, which
+    // presents again.
     _ = state.reconcile()
     sync()
     publishReport()
@@ -472,9 +428,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     lifetimeDrops += 1
     mark(.dropped)
     dropped = true
-    // A presentation must not outlive the mount that opened it. Callbacks go first, so
-    // nothing this teardown causes can reach JS for a mount React has finished with -
-    // the drop rule D44 item 2 gives Popover with BottomSheet's.
+    // A presentation must not outlive the mount that opened it. Callbacks go first, so nothing this
+    // teardown causes can reach JS for a mount React has finished with.
     presentedChange = nil
     dismissed = nil
     teardown()
@@ -503,8 +458,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
 
   // MARK: Where the content lives
 
-  /// The first turn has the component view: remember it as home, where the content goes
-  /// back to, and leave the window witness beside it.
+  /// The first superview is the component view: remember it as home, where the content goes back
+  /// to, and add the window witness beside it.
   private func noteContentSuperview() {
     guard let superview = container.superview else { return }
     if home == nil, !(superview.superview?.next is NitroUiPopoverController) {
@@ -514,7 +469,6 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     }
   }
 
-  /// Take the content out of the popover and hide it in the app's tree again.
   private func restoreContent() {
     container.isHidden = true
     guard let home, container.superview !== home else { return }
@@ -525,12 +479,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   /// front of the user, and UIKit resizes a popover around its `preferredContentSize`.
   private func contentBoxChanged(_ size: CGSize) {
     if popover == nil, state.displayed, awaitingPresent, size.width > 0, size.height > 0 {
-      // The box arrived late. `presentIfPossible` waits a bounded number of turns for it and
-      // then stands down rather than open a popover at UIKit's default size, and standing
-      // down used to be the last word: content that measured itself after that wait - a
-      // Suspense-like reveal, an image that sizes its own box - left `isPresented` true with
-      // nothing on screen (measured: `presentCount=0` forever after a 1.5 s box). The box is
-      // the only thing that was missing, so this is where the wait is picked up again.
+      // The content box got its size after `presentIfPossible` stopped waiting for it (content that
+      // measures itself late). Resume the present.
       contentWaits = 0
       schedulePresent()
       publishReport()
@@ -546,9 +496,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     publishReport()
   }
 
-  /// The anchor's box: the wrapper that hugs the app's anchor element - this component
-  /// view's parent. The wrapper is the component's own JSX, so its parent is never a view
-  /// of the app's that happens to look right: it is ours.
+  /// The anchor's box: the JS wrapper around the app's anchor element, which is this component
+  /// view's parent.
   private var anchorBox: UIView? {
     home?.superview ?? home
   }
@@ -586,8 +535,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
           // React asked for it to close: animated, and no event - not a native interaction.
           presentation.dismissAnimated()
         } else if popover == nil, owesDismissal {
-          // React withdrew a popover that never got up: the wrapper still has content
-          // mounted for it, so it still has to be told it can go (the spec's second call).
+          // React withdrew a popover that never got up. The wrapper still has content mounted for
+          // it, so it still has to be told it can go.
           awaitingPresent = false
           reportDismissed(ended: false)
         }
@@ -619,9 +568,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     }
     let size = cappedSize(container.contentBoxSize)
     if size.width <= 0 || size.height <= 0 {
-      // No layout yet. Wait a bounded number of turns: a popover of nothing would open at
-      // UIKit's default size and then jump, which is the thing this ordering exists to
-      // prevent, so it is better not open than to open wrong.
+      // No layout yet. Wait a bounded number of turns: a popover presented without a size opens at
+      // UIKit's default size and then jumps.
       contentWaits += 1
       guard contentWaits <= 60 else {
         awaitingPresent = true
@@ -659,22 +607,23 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     if Self.reportsWanted.value > 0 {
       sampler.start(controller)
     }
+    // A window of its own: a popover in the app's chain is what the top controller is presenting,
+    // so UIKit would refuse the next RN `Modal` the app opens, and closing a `Modal` would dismiss
+    // the popover instead.
     let shown = presentation.presentInOwnWindow(
       controller,
       over: anchor,
       animated: true,
       prepare: { root in
-        // The source is the wrapper's box expressed in the presentation window's root. Not
-        // a view in the app's window: with one of those as the source, UIKit put the
-        // popover back in the app's chain after all (measured for Tooltip, G18).
+        // The source is the wrapper's box expressed in the presentation window's root. With a view
+        // in the app's window as the source, UIKit puts the popover back in the app's chain.
         popoverSource.sourceView = root.view
         popoverSource.sourceRect = source.convert(source.bounds, to: root.view)
         popoverSource.permittedArrowDirections = [.up, .down]
       },
       onShown: { [weak self, weak controller] in
         guard let self, let controller, controller === self.popover else { return }
-        // VoiceOver reads the new content: the app opened it, so nothing else would tell a
-        // screen-reader user it is there (Tooltip's C5).
+        // The app opened it, so nothing else would tell a screen-reader user it is there.
         UIAccessibility.post(notification: .screenChanged, argument: controller.view)
         self.publishReport()
       }
@@ -688,13 +637,9 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     publishReport()
   }
 
-  /// The content's box, never wider than the cap the wrapper sent or the window less its
-  /// margins.
-  ///
-  /// The wrapper caps the layout with the same two numbers, so this normally changes
-  /// nothing; it is here for the case the wrapper cannot see - a window that shrank between
-  /// the commit and this turn - where presenting what Yoga laid out would put content
-  /// through the edge of the screen.
+  /// The content's box, never wider than the cap the wrapper sent or the window less its margins.
+  /// The wrapper applies the same cap, so this only matters when the window shrank between the
+  /// commit and the present.
   private func cappedSize(_ size: CGSize) -> CGSize {
     guard size.width > 0, size.height > 0 else { return .zero }
     let windowWidth = anchor.window?.bounds.width ?? .infinity
@@ -720,8 +665,7 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       presentation.forgetController()
     }
     restoreContent()
-    // A close taken with a closing `Modal` is a drop: nothing after it reaches the app, and
-    // the witness says so rather than counting an exit nobody caused.
+    // A close caused by a closing `Modal` counts as a drop: nothing is reported to the app.
     let withTheModal = closingWithTheModal
     closingWithTheModal = false
     if withTheModal {
@@ -733,8 +677,7 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       if controller.dismissedByUser {
         userDismissals += 1
       } else {
-        // Gone while nobody asked - not the app, not a tap outside: the window under it
-        // went away with the popover on it. D44 item 2's case.
+        // Nobody asked, neither the app nor a tap outside: the window under the popover went away.
         unaskedExits += 1
       }
       if state.displayed {
@@ -751,10 +694,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     publishReport()
   }
 
-  /// The nearest RN `Modal` host in `view`'s responder chain, by way of `next` - the walk
-  /// `NitroSwiftUIHost` uses for the same reason (`reactViewController()` is this walk, minus
-  /// the navigation/tab skipping). Read while the anchor still has a window: the chain is what
-  /// tells a `Modal`'s content from the app's own, and a view with no window is asked too late.
+  /// The nearest RN `Modal` host in `view`'s responder chain. Read while the anchor still has a
+  /// window: a view with no window is asked too late.
   private static func enclosingModalHost(for view: UIView?) -> UIViewController? {
     var responder: UIResponder? = view?.next
     while let current = responder {
@@ -766,12 +707,9 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     return nil
   }
 
-  /// Whether the `Modal` this popover's anchor was in has gone or is going.
-  ///
-  /// `isBeingDismissed` is the transition itself; a `Modal` closed with `animationType: "none"`
-  /// is off the chain and out of the window before this is asked, which is why both shapes are
-  /// counted. Only ever true for a mount that had a `Modal` host to remember, so an ordinary
-  /// drop - an unmount in a screen that stays up - keeps reporting its close.
+  /// Whether the `Modal` this popover's anchor was in has gone or is going. `isBeingDismissed`
+  /// covers an animated close; a `Modal` closed without animation is already off the chain and out
+  /// of the window.
   private func modalHostIsGoingAway() -> Bool {
     guard let host = enclosingModalHost ?? Self.enclosingModalHost(for: anchor) else {
       return false
@@ -779,24 +717,18 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     return host.isBeingDismissed || (host.presentingViewController == nil && host.view.window == nil)
   }
 
-  /// Tell the wrapper its content can go: `ended` when a presentation really ended.
-  ///
-  /// The debt is what makes the second kind exact: it is taken on whenever React asks for a
-  /// popover, settled by a presentation ending while React no longer wants it, and
-  /// otherwise by the first `false` that finds nothing on screen (the spec).
+  /// Tell the wrapper its content can go; `ended` when a presentation really ended. The debt is
+  /// taken on whenever React asks for a popover, and settled by a presentation ending or by the
+  /// first `false` that finds nothing on screen.
   private func reportDismissed(ended: Bool) {
     owesDismissal = state.displayed
     dismissed?(ended)
   }
 
-  /// The anchor gained or lost its window.
-  ///
-  /// Gained: a popover React wants up and that is not up yet is presented now. Lost while
-  /// up: one turn later - after an unmount's `onDropView`, which runs in the same mount
-  /// transaction, and after a reparent that puts the view straight back - the popover is
-  /// closed without animation and the close reported, as a sheet's is. The drop rule
-  /// (D44 item 2) is what that one-turn wait protects: a `Modal` closing under an open
-  /// popover drops this view in the same turn, and a dropped mount reports nothing.
+  /// The anchor gained or lost its window. Gained: a popover React wants up is presented now. Lost
+  /// while up: one turn later (after an unmount's `onDropView` in the same mount transaction, or a
+  /// reparent that puts the view straight back) the popover is closed without animation and the
+  /// close is reported.
   private func windowChanged(_ hasWindow: Bool) {
     if hasWindow {
       if enclosingModalHost == nil {
@@ -812,17 +744,11 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       guard let self, self.mountGeneration == generation, !self.dropped,
         self.anchor.window == nil
       else { return }
-      // The close first, then the teardown: a non-animated dismissal can finish inside
-      // `dismissForTeardown`, and the presentation's end should follow its reason.
-      //
-      // One case has no close to report: the window went because the React Native `Modal`
-      // the anchor was in is closing. RN takes that Modal's content with it, so this mount is
-      // being dropped, and a popover dropped while presented closes silently on both
-      // platforms (D44 item 2, and BottomSheet's rule). Which side wins the race is not
-      // something either platform hides: on Android the unmount is first, so the drop rule
-      // applies on its own; on iOS the anchor's window goes first (RN keeps a closing Modal's
-      // content mounted until its native dismissal has ended), and without this the same move
-      // reported `onIsPresentedChange(false)` there and nothing here.
+      // Report the close first, then tear down: a non-animated dismissal can finish inside
+      // `dismissForTeardown`. The exception is a window lost because the RN `Modal` the anchor was
+      // in is closing: that mount is being dropped, and a dropped popover closes silently. On iOS
+      // the anchor loses its window before the unmount, because RN keeps a closing Modal's content
+      // mounted until its dismissal ends.
       let withTheModal = self.modalHostIsGoingAway()
       if withTheModal {
         self.closingWithTheModal = true
@@ -843,8 +769,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   // MARK: Methods
 
   func nuiTestStateReport() throws -> String {
-    // From the first read on, every state change keeps the report fresh; until then nothing
-    // builds it (`reportsWanted`). Refresh on main for the next read - never wait for it.
+    // Reports are built only once a test has asked for one. Refresh on main for the next read,
+    // never wait for it.
     Self.reportsWanted.add(Self.reportsWanted.value == 0 ? 1 : 0)
     DispatchQueue.main.async { [weak self] in self?.publishReport() }
     reportLock.lock()
@@ -909,8 +835,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       fields.append("id=\(view.accessibilityIdentifier ?? "-")")
     }
     fields.append("anchorRect=\(Self.screenRect(of: anchorBox))")
-    // Two views up, as `sync` reads it: the content sits in the controller's host,
-    // whose own next is the controller's root view, not the controller.
+    // Two views up: the content sits in the controller's host, whose `next` is the controller's
+    // root view, not the controller.
     fields.append(
       "inPopover=\(container.superview?.superview?.next is NitroUiPopoverController ? 1 : 0)"
     )

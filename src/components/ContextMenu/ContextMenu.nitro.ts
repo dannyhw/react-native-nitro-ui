@@ -9,29 +9,21 @@ import type { NitroUiMenuRow } from '../Menu/Menu.nitro';
 /**
  * Native props of the `NitroUiContextMenu` Hybrid View.
  *
- * A ContextMenu is a `View` whose React Native children stay where Yoga put them and
- * which opens a menu of Menu's rows on a long press (`docs/tasks/Q6-contextmenu-design.report.md`,
- * DECISIONS D36/D37): `UIContextMenuInteraction` on the generated component view on iOS,
- * a Material 3 `DropdownMenu` anchored at the press point on Android.
+ * No prop is optional except the callbacks: a removed prop arrives as `null`,
+ * which crashes an optional one (nitro#1184), and Nitro only unwraps a callback
+ * prop whose type is a plain function. The wrapper always sends every prop,
+ * with `null` for "not set" and `[]` for "no rows".
  *
- * No member is optional (DECISIONS D7 / nitro#1184) except the callbacks (D7b). The
- * wrapper (`ContextMenu.tsx`) always sends every prop, `null` for "not set" and `[]`
- * for "no rows".
+ * There is no `testID`, `accessibilityLabel` or `style`: this view is the box
+ * React Native styles, so React Native's own `View` props land on it.
  *
- * There is no `testID`, `accessibilityLabel` or `style` here, unlike every leaf
- * control: the wrapper *is* the box React Native styles - the generated component view
- * on iOS, a `ReactViewGroup` under a `ReactViewManager` on Android - so React Native's
- * own `View` props land on exactly the view that carries the menu.
- *
- * No controlled value and no handshake (Button's and Menu's reasoning): a menu reports
- * a gesture, and there is no `open()` (D29, D36 item 3). Setters store raw values and
- * `afterUpdate()` applies them together, because Nitro does not order props in a batch.
+ * Nitro does not order props inside a batch, so setters store raw values and
+ * `afterUpdate()` applies them together.
  */
 export interface NitroUiContextMenuProps extends HybridViewProps {
   /**
-   * Menu's flattened rows (`MenuRows.ts`'s `flattenGroup`), in render order. Always
-   * sent; `[]` means no menu at all - a long press then does nothing and the children
-   * keep the gesture.
+   * Menu's flattened rows, in render order. `[]` means no menu: a long press
+   * does nothing and the children keep the gesture.
    */
   rows: NitroUiMenuRow[];
   /**
@@ -40,24 +32,22 @@ export interface NitroUiContextMenuProps extends HybridViewProps {
    */
   title: string | null;
   /**
-   * No menu: a long press does nothing, the children keep every gesture of their own,
-   * and an open menu closes (both platforms - UIKit has `dismissMenu`, unlike SwiftUI's
-   * `Menu`, so D32's iOS limit does not apply here).
+   * No menu: a long press does nothing, the children keep their own gestures,
+   * and an open menu closes.
    */
   disabled: boolean;
   /**
-   * The corner radius of the lifted preview on iOS, in points: the flattened style's
-   * `borderRadius`, sent by the wrapper (DECISIONS D37 item 3). `null` draws square
-   * corners. React Native leaves `layer.cornerRadius` at 0 whenever the view has a
-   * visible border (it draws the border in a layer of its own), so the native side
-   * never reads it there. Android ignores it: its menu is a popup, with no preview.
+   * The corner radius of the lifted preview on iOS, in points, or `null` for
+   * square corners. Sent by the wrapper from the style's `borderRadius`, because
+   * React Native leaves `layer.cornerRadius` at 0 when the view has a visible
+   * border. Android ignores it: its menu is a popup with no preview.
    */
   previewCornerRadius: number | null;
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
   /**
-   * Called with the picked row's id. Not called for a disabled row, a section header,
-   * a submenu, or while the control is disabled. Fires before `onClose` (D32).
+   * Called with the picked row's id, before `onClose`. Not called for a disabled
+   * row, a section header, a submenu, or while the control is disabled.
    */
   onSelect?: (id: string) => void;
   /**
@@ -76,29 +66,28 @@ export interface NitroUiContextMenuProps extends HybridViewProps {
 
 export interface NitroUiContextMenuMethods extends HybridViewMethods {
   /**
-   * TEMPORARY, test-only: pick the row `id` through the same path a row press takes -
-   * refused while the control or the row is disabled, no-op for an unknown id - and on
-   * an open menu the close that follows it. Hops to the UI thread.
+   * Test-only: pick the row `id` through the path a row press takes, including
+   * the close that follows on an open menu. Refused while the control or the row
+   * is disabled; a no-op for an unknown id. Hops to the UI thread.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestSelectRow(id: string): void;
 
   /**
-   * TEMPORARY, test-only: read the menu this platform would be handed right now into
-   * the report's `drawn` field. iOS runs this view's own configuration provider and
-   * action provider and writes the `UIMenu` tree in Menu's `drawn=` notation
-   * (`Menu.nitro.ts`), or `nil` when the provider refuses (disabled, no rows). Android
-   * has no second renderer to ask, and answers `drawn=-1`; its `rows` field counts the
-   * rows an open popup composed. Hops to the UI thread.
+   * Test-only: read the menu the platform would be handed right now into the
+   * report's `drawn` field. iOS writes the `UIMenu` tree in Menu's `drawn=`
+   * notation, or `nil` when there is no menu (disabled, no rows). Android answers
+   * `drawn=-1`; its `rows` field counts the rows an open popup composed. Hops to
+   * the UI thread.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestMenuProbe(): void;
 
   /**
-   * TEMPORARY, test-only: one line describing this ContextMenu as the platform sees
-   * it, `key=value` pairs separated by `;` (`ContextMenu.harness.tsx` parses it):
+   * Test-only: one line describing this ContextMenu as the platform sees it,
+   * `key=value` pairs separated by `;`:
    *
    * - `open`, `opens`, `closes`, `selects`: the model's flag and its counters;
    * - `box`: the wrapper's size, and `kids`: each React Native child's native frame
@@ -110,53 +99,47 @@ export interface NitroUiContextMenuMethods extends HybridViewMethods {
    *   (Android): the label of the long-click action its node offers, `none` for none and
    *   `-` for an unlabelled one;
    * - `press`, `menu` (Android): the last press point and the open popup's window,
-   *   screen px; `live`: popups this process has composed right now (Menu's rule);
+   *   screen px; `live`: popups this process has composed right now;
    * - `arms`: long presses armed since mount (Android), `armed`: one is pending now,
    *   `copies`: `MotionEvent` copies since mount (Android, made only while one is);
    * - `watchStray` (Android): runs of a layout-move listener whose menu was closed or
    *   whose view had left its window, process-wide - a leaked registration;
    * - `seq`: reports this object has built.
    *
-   * A field a platform cannot answer reads `-1`, never `0`. Reads a snapshot published
-   * on the UI thread, so it is safe from the JS thread and never waits. Nothing builds
-   * that snapshot until the first read asks for it (an app never does), so the first
-   * read answers `pending`.
+   * A field a platform cannot answer reads `-1`, never `0`. Reads a snapshot
+   * published on the UI thread, so it never waits. The snapshot is built on
+   * demand, so the first read answers `pending`.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestContextMenuReport(): string;
 
   /**
-   * TEMPORARY, test-only: Android performs `ACTION_LONG_CLICK` on the wrapper - the
-   * action TalkBack's double-tap-and-hold sends. A no-op on iOS, where the menu's
-   * accessibility action is UIKit's, derived from the interaction (nothing here can
-   * perform it). Hops to the UI thread.
+   * Test-only: Android performs `ACTION_LONG_CLICK` on the wrapper, the action
+   * TalkBack's double-tap-and-hold sends. A no-op on iOS, where UIKit derives the
+   * accessibility action from the interaction. Hops to the UI thread.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestA11yLongClick(): void;
 
   /**
-   * TEMPORARY, test-only: sample the pixels the **open menu** is drawing, looking for
-   * `color`, and keep the answer for ``nuiTestMenuPixelReport``. Returns at once.
+   * Test-only: sample the pixels the open menu is drawing, looking for `color`,
+   * and keep the answer for `nuiTestMenuPixelReport`. Returns at once. With no
+   * popup open the report says `no popup`; iOS, whose menu is drawn in a window
+   * this process cannot rasterise, says `no pixels`.
    *
-   * Menu's method of the same name, for the same reason: a row's `androidIcon` is a
-   * drawing contract, and the rows live in a popup window of their own, so nothing
-   * readable on this wrapper says whether a glyph was painted. With no popup open the
-   * report says `no popup`, and iOS - whose menu UIKit draws in a window this process
-   * cannot rasterise - says `no pixels`.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   * @internal Not app API. Remove once the test harness can read pixels.
    */
   nuiTestMenuPixelProbe(color: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last ``nuiTestMenuPixelProbe`` found, in Button's
-   * shape - `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
-   * closest=#<RRGGBB>`, plus the `no popup` / `no pixels` refusals. Empty before the
-   * first probe.
+   * Test-only: what the last `nuiTestMenuPixelProbe` found:
+   * `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, or the `no popup` / `no pixels` refusals. Empty before
+   * the first probe.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestMenuPixelReport(): string;
 }
@@ -164,8 +147,8 @@ export interface NitroUiContextMenuMethods extends HybridViewMethods {
 /**
  * The Hybrid View React renders as `NitroUiContextMenu`.
  *
- * @internal Not semver surface (DECISIONS D14): exported for this repo's example,
- * harness and bench apps, and for the typed `hybridRef` handle.
+ * @internal Not semver surface: exported for this repo's example, tests and
+ * benchmarks, and for the typed `hybridRef` handle.
  */
 export type NitroUiContextMenu = HybridView<
   NitroUiContextMenuProps,

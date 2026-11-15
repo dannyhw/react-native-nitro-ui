@@ -16,38 +16,34 @@ type HybridRefHandler = (view: NitroUiPopoverHandle) => void;
 /**
  * The read side of the native popover - what a `hybridRef` callback gets.
  *
- * Read-only for the reason every handle here is (DECISIONS D14): a prop written from
- * JS runs the native setter off the UI thread and never commits. The two methods are
- * the test seams, and each hops to the UI thread itself.
+ * Read-only: a prop written from JS runs the native setter off the UI thread and
+ * never commits. The two methods are test seams, and each hops to the UI thread
+ * itself.
  *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so `hybridRef`
+ * @internal Hybrid View types are not published; this alias exists so `hybridRef`
  * can be typed for this repo's harness.
  */
 export interface NitroUiPopoverHandle {
-  /** What React last asked for. */
   readonly presented: boolean;
-  /** The event count JS has echoed. */
   readonly mostRecentEventCount: number;
   /** The cap the content is laid out at, in points. */
   readonly maxWidth: number;
   /**
-   * Test-only readback - see `NitroUiPopoverMethods.nuiTestStateReport`.
+   * Test-only state readback.
    * @internal
    */
   nuiTestStateReport(): string;
   /**
-   * Test-only dismissal seam - see `NitroUiPopoverMethods.nuiTestDismiss`.
+   * Test-only dismissal seam.
    * @internal
    */
   nuiTestDismiss(): void;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with callbacks in
- * Nitro's `{ f: … }` wrapper (DECISIONS D7, D7b). `Popover.tsx` is the friendly API.
- *
- * No `NitroUiIntrinsicProps`: a popover is not self-sizing (`sizing: null`) - its box
- * comes from the content Yoga has already laid out.
+ * Props of the raw host component: every spec prop, always sent, with callbacks
+ * in Nitro's `{ f: … }` wrapper. A popover is not self-sizing, so there are no
+ * sizing props: its box comes from the content Yoga has already laid out.
  */
 export interface NativeNitroUiPopoverProps extends HybridViewProps {
   presented: boolean;
@@ -61,8 +57,8 @@ export interface NativeNitroUiPopoverProps extends HybridViewProps {
 }
 
 /**
- * The host component for the `NitroUiPopover` Hybrid View. Only the props type is
- * corrected here, as for every other control (`NativeNitroUiDialog.ts`).
+ * The host component for the `NitroUiPopover` Hybrid View. The cast corrects only
+ * the props type, which `getHostComponent` intersects with `ViewProps`.
  */
 export const NativeNitroUiPopover = getHostComponent<
   NativeNitroUiPopoverProps,

@@ -9,119 +9,62 @@ import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 /**
  * Native props of the `NitroUiSwitch` Hybrid View.
  *
- * No member is optional (DECISIONS D7 / nitro#1184): Fabric sends `null` for a
- * prop that JS removed, and Nitro 0.37 only treats `undefined` as "unset", so
- * an optional prop that goes away crashes. The JS wrapper (`Switch.tsx`) always
- * sends every prop, using `null` for "not set".
- *
- * All props are applied in one batch between `beforeUpdate()` and
- * `afterUpdate()`; setters only store + mark dirty.
+ * No prop is optional: a removed prop arrives as `null`, which crashes an
+ * optional one (nitro#1184). The wrapper always sends every prop.
  */
 export interface NitroUiSwitchProps
   extends HybridViewProps, NitroUiIntrinsicProps {
-  /**
-   * Controlled selected state, or `null` for an uncontrolled Switch - in which
-   * case native keeps the displayed value and `defaultValue` seeded it.
-   */
+  /** Controlled value, or `null` for an uncontrolled Switch. */
   value: boolean | null;
   /** Initial value of an uncontrolled Switch; ignored while `value` is set. */
   defaultValue: boolean | null;
   /**
-   * The last event count JS has fully processed (core-architecture §4). Native
-   * only accepts a `value` write once it has seen this many of its own events.
+   * The last event count JS has fully processed. Native accepts a `value` write
+   * only once it has seen this many of its own events.
    */
   mostRecentEventCount: number;
-  /** Disable interaction (and show the disabled style). */
   disabled: boolean;
-  /**
-   * RN-processed (`processColor`) ARGB color for the "on" accent, or `null` for
-   * the platform default: SwiftUI `.tint()` / Compose checked track color.
-   */
+  /** `processColor` output (ARGB) for the "on" accent, or `null` for the platform default. */
   tintColor: number | null;
-  /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
-  /** Accessibility label of the control itself. */
   accessibilityLabel: string | null;
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
-  /**
-   * TEMPORARY, test-only: the control's width in platform units, so a harness can
-   * make a self-sizing control genuinely change size through a prop and prove that
-   * a `nuiSizingKey` change re-measures (review S1). The
-   * Switch has no size-affecting public prop, and per DECISIONS D16 the real
-   * test belongs to the G2 Button; this is the seam until that lands. Not a
-   * feature: no wrapper prop exposes it, and it is deleted with the G2 test.
-   */
+  /** Test-only: the control's width in platform units, so a test can resize it through a prop. */
   nuiTestWidth: number | null;
   /**
-   * Called on every user interaction with the value native now displays, plus
-   * native's event count (the JS wrapper echoes it back as
-   * `mostRecentEventCount`).
+   * Called on every user interaction with the value native now displays and
+   * native's event count.
    *
-   * Callback props are the one exception to the no-optional rule above, and
-   * `| null` is not an alternative: RN cannot send a function as a prop, so
-   * Nitro sends `{ f: fn }` and only unwraps `f` for props whose type *is* a
-   * function (`IsFunctionProp`). A `fn | null` union becomes a
-   * `std::variant<std::function, NullType>`, which is not a function type, so
-   * the wrapper never gets unwrapped and converting the prop throws at mount.
-   * Optional (`?`) generates `std::optional<std::function>`, which does unwrap.
-   * The JS wrapper therefore always sends a callback (see `useControlled`) and
-   * `undefined` instead of `null` when there is none.
+   * Callbacks are the exception to the no-optional rule: Nitro only unwraps a
+   * callback prop whose type is a plain function, so `fn | null` throws at mount.
+   * The wrapper always sends a callback.
    */
   onValueChange?: (value: boolean, eventCount: number) => void;
 }
 
 export interface NitroUiSwitchMethods extends HybridViewMethods {
   /**
-   * The size of the hosted control, as measured on the UI thread during the last
-   * layout/commit. Never calls into SwiftUI/Compose: JS reads a cached value, so
-   * this is safe to call from the JS thread (core-architecture §1.2 rejects a
-   * synchronous measure that needs the UI thread).
+   * The size of the hosted control as of the last layout. It returns a cached
+   * value, so it is safe to call from the JS thread.
    */
   measureContent(): NitroUiSize;
 
   /**
-   * TEMPORARY, test-only (task H2a, follow-up N4 from H1's re-review): the guards this
-   * view has armed **for a composition of its own**, as one line — `strategy` for the
-   * Compose composition strategy (the activity `LifecycleRegistry` observer), `preDraw`
-   * for its first-frame pre-draw listener.
-   *
-   * The line is `ever|live:<live>`. The first half is what this mount has armed **at any
-   * point** — it does not describe the current instant, and both flags reset when the view
-   * is recycled. The `live` half is what is installed right now, which is how a test sees a
-   * control that armed the guards while unhosted and then handed them back on moving into a
-   * `<Host>`.
-   *
-   * A control a `<Host>` composes answers `|live:` — nothing armed and nothing installed,
-   * because it builds no composition and the Host arms its own. The same control outside a
-   * Host answers `strategy,preDraw|live:strategy` once its first frame has been marked
-   * (the pre-draw listener takes itself off when it marks). Android-only meaning: iOS has
-   * no composition strategy and no pre-draw listener, so it answers `|live:` for every
-   * Switch and the test that reads this is gated to Android.
+   * Test-only: the Android guards this view has armed for a composition of its
+   * own, as `<ever>|live:<live>`. `ever` lists what this mount armed at any point
+   * (`strategy`, `preDraw`), `live` what is installed now. A control composed by a
+   * `<Host>` answers `|live:`, and so does every Switch on iOS.
    */
   nuiTestArmedGuards(): string;
 
   /**
-   * TEMPORARY, test-only (task F6): how many mounts of **this object** have ended, and
-   * how many of them entered the platform's view pool, as one line —
-   * `drops=<n> recycles=<m>`.
+   * Test-only: `drops=<n> recycles=<m>`, how many mounts of this object have
+   * ended and how many of those entered the platform's view pool. The counters
+   * survive recycling, so a non-zero answer proves the pool handed the instance
+   * back.
    *
-   * The counters belong to the host object and are deliberately *not* reset by
-   * `prepareForRecycle`, because the question they answer is about one object's
-   * lifetime rather than one mount's: a fresh instance answers `drops=0 recycles=0`,
-   * and a second mount that reads `drops>=1 recycles>=1` can only be looking at an
-   * instance the pool handed back. That is the difference between "a reset method was
-   * called" and "views really recycle on this platform", which is what F6 had to
-   * measure rather than infer — and it needs a per-object counter, since every
-   * per-mount flag reads the same either way.
-   *
-   * Both platforms answer for real: iOS pools through
-   * `RCTComponentViewRegistry.prepareForRecycle`, Android through
-   * `ViewManager.onDropViewInstance` -> `prepareToRecycleView` when RN's
-   * `enableViewRecycling` flag is on (which the example app turns on). An example app
-   * that leaves the flag off answers `drops=n recycles=0` forever, which is the point.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestLifetimeReport(): string;
 }
@@ -129,13 +72,7 @@ export interface NitroUiSwitchMethods extends HybridViewMethods {
 /**
  * A size in platform units (iOS points / Android density-independent pixels).
  *
- * @internal Only reachable through a Hybrid View, which v0.1 does not expose
- * publicly (DECISIONS D14).
- *
- * The value a native host reports as the *content* size of what it hosts (a
- * SwiftUI `Toggle`, a Compose `Switch`, ...), independent of the size Yoga gave
- * the Fabric node. T11 (the intrinsic-size ShadowNode) is the primary consumer;
- * until then it is only reachable through a Hybrid View's `measureContent()`.
+ * @internal Only reachable through a Hybrid View, which is not public.
  */
 export interface NitroUiSize {
   width: number;
@@ -145,9 +82,8 @@ export interface NitroUiSize {
 /**
  * The Hybrid View behind the `Switch` wrapper.
  *
- * @internal v0.1 does not expose Hybrid Views or their settable props publicly
- * (DECISIONS D14): it is exported for this repo's example, harness, bench and
- * smoke apps, and for the typed `hybridRef` handle, and is not semver surface.
+ * @internal Not public and not semver surface: exported for this repo's example,
+ * tests and benchmarks, and for the typed `hybridRef` handle.
  */
 export type NitroUiSwitch = HybridView<
   NitroUiSwitchProps,

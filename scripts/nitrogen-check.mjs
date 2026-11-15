@@ -1,14 +1,7 @@
 #!/usr/bin/env node
-//
-// nitrogen-check.mjs
-//
-// Drift gate: regenerate the Nitro codegen into a temp directory (plus the
-// ViewProps patch) and compare it with the committed `nitrogen/generated`.
-// Fails if someone edited generated files by hand or forgot to run
-// `bun run nitrogen` after touching a `*.nitro.ts` spec.
-//
-// Also asserts every generated Hybrid View Props constructor restores RN's base
-// ViewProps (our patch or upstream's), see scripts/patch-nitrogen.mjs.
+// Drift gate: regenerates the Nitro codegen into a temp directory and compares it
+// with the committed `nitrogen/generated`. Also asserts every generated Hybrid
+// View Props constructor restores RN's base ViewProps.
 
 import { spawnSync } from 'node:child_process';
 import {
@@ -82,8 +75,7 @@ let failed = false;
 
 try {
   // Same base path as `bun run nitrogen`: only this package's `src/` holds
-  // library specs, so a spec that belongs to another nitro module in the repo
-  // (T02's bench app) can never show up in the library's codegen.
+  // library specs.
   const nitrogenArgs = [
     'nitrogen',
     join(root, 'src'),

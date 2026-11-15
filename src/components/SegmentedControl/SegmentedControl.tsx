@@ -10,41 +10,31 @@ import { NativeNitroUiSegmentedControl } from './NativeNitroUiSegmentedControl';
 /**
  * What {@link SegmentedControlProps.onChange} reports: the index that was
  * selected, plus the option's text.
- *
- * Both are included because callers want both — `index` to address the model,
- * `value` to show or store the label — and the wrapper can supply `value` for
- * free from the `options` it is already rendering.
  */
 export interface SegmentedControlChange {
   /** Position of the chosen option in `options`. */
   index: number;
-  /** That option's label, read from the `options` rendered at event time. */
+  /** That option's label, or `''` if `options` no longer has that index. */
   value: string;
 }
 
 /**
- * Props of {@link SegmentedControl}.
- *
- * `selectedIndex`/`defaultSelectedIndex`/`onChange`/`disabled`/`tintColor`
- * follow the library's other controls (`Switch`, `Slider`); everything else
- * comes from `ViewProps`.
+ * Props of {@link SegmentedControl}. Everything not listed comes from
+ * `ViewProps`.
  */
 export interface SegmentedControlProps extends ViewProps {
   /**
-   * The segment labels, in order. The control is as wide as these labels, so
-   * this is the prop that decides its size.
+   * The segment labels, in order. The control is as wide as these labels.
    *
    * Two options may share a label; the value of the control is always the
    * *index*, never the text.
    */
   options: string[];
   /**
-   * Selected index. Pass it to control the control; leave it `undefined` for an
-   * uncontrolled one (native then owns the displayed selection, and a tap costs
-   * no React render).
+   * Selected index. Pass it to control the selection; leave it `undefined` for
+   * an uncontrolled control, where a tap causes no React render.
    *
-   * A value outside the current `options` is clamped into range (see
-   * `docs/components/segmented-control.md`), on both platforms and in JS.
+   * A value outside the current `options` is clamped into range.
    */
   selectedIndex?: number | undefined;
   /**
@@ -55,36 +45,23 @@ export interface SegmentedControlProps extends ViewProps {
   /**
    * Called after every user selection, with the new index and its label.
    *
-   * Not called for a selection React itself made, and not called while
+   * Not called when `selectedIndex` changes from React, and not called while
    * `disabled`.
    */
   onChange?: ((event: SegmentedControlChange) => void) | undefined;
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
-   * Accent colour of the selected segment on **Android** (its container and
+   * Accent colour of the selected segment on Android (its container and
    * border). Default: the Material 3 scheme.
    *
-   * It has **no visible effect on iOS**: a SwiftUI segmented `Picker` ignores
-   * `.tint()`, and the one per-control UIKit knob
-   * (`selectedSegmentTintColor`) is not reachable from SwiftUI without
-   * introspection. The prop is still sent, and a tinted control simply looks like
-   * the default one on iOS (`docs/components/segmented-control.md`, Limits).
+   * No visible effect on iOS, where a segmented picker ignores the tint.
    */
   tintColor?: ColorValue | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for tests and benchmarks.
    *
-   * @internal Not app API (DECISIONS D14): props must flow through React, so a
-   * direct write here runs the native setter off the UI thread and never commits.
-   * Reading props and calling `measureContent()` is all it is for, and the
-   * callback runs once, when the view mounts - a new function does not re-run it.
-   *
-   * The shape is written inline rather than named: it is the same read-only
-   * handle as `NitroUiSegmentedControlHandle` in
-   * `NativeNitroUiSegmentedControl.ts`, and naming it here would make
-   * api-extractor demand that a v0.1-hidden native type be exported from the
-   * entry point.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -101,39 +78,27 @@ export interface SegmentedControlProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`). Benchmark
-   * only; `null` turns marks off for this view.
+   * Instance id for native performance marks, for benchmarks; `null` turns
+   * marks off for this view.
    *
-   * @internal Benchmark and diagnostics only - not app API.
+   * @internal
    */
   nuiPerfId?: number | null | undefined;
 }
 
-/**
- * The separator between options in `nuiSizingKey`.
- *
- * A label may contain it, so labels are escaped on the way in (`\` -> `\\`,
- * `|` -> `\|`) and only the unescaped ones separate. Without the escape,
- * `['a|b']` and `['a', 'b']` would build the same key and share one cached
- * size - one of which is wrong, for the whole life of the process.
- */
 const OPTION_SEPARATOR = '|';
 
-/** Escape one free-form label so it cannot forge a separator. */
+/**
+ * Escapes the separator in a label: otherwise `['a|b']` and `['a', 'b']`
+ * would build the same sizing key and share one cached size.
+ */
 function escapeOption(label: string): string {
   return label.replace(/[\\|]/g, '\\$&');
 }
 
 /**
- * The size configuration of one SegmentedControl, as the sizing engine sees it.
- *
- * The labels *are* the control's width on both platforms, so they are the whole
- * variant - and the count goes in front, because escaping alone cannot tell
- * `[]` from `['']` apart once joined (both join to nothing). `disabled` and
- * `tintColor` repaint, they do not resize, and the text size / density / OS
- * control size are *not* here: native folds the environment in through the
- * epoch, and repeating it would fragment the cache
- * (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
+ * The labels decide the control's width, so they are the whole sizing variant.
+ * The count goes in front because `[]` and `['']` join to the same string.
  */
 function sizingVariantFor(options: readonly string[]): string {
   return `${String(options.length)}${OPTION_SEPARATOR}${options
@@ -141,7 +106,6 @@ function sizingVariantFor(options: readonly string[]): string {
     .join(OPTION_SEPARATOR)}`;
 }
 
-/** Clamp a caller's index into `options`, non-numerics going to the front. */
 function clampToOptions(index: number, optionCount: number): number {
   if (!(optionCount > 0)) {
     return 0;
@@ -157,9 +121,8 @@ function clampToOptions(index: number, optionCount: number): number {
 }
 
 /**
- * The platform segmented control: SwiftUI `Picker` with `.pickerStyle(.segmented)`
- * on iOS, Material 3 `SingleChoiceSegmentedButtonRow` + `SegmentedButton` on
- * Android.
+ * The platform segmented control: a segmented SwiftUI `Picker` on iOS,
+ * Material 3 segmented buttons on Android.
  *
  * ```tsx
  * const [index, setIndex] = useState(0)
@@ -170,9 +133,8 @@ function clampToOptions(index: number, optionCount: number): number {
  * />
  * ```
  *
- * The selection is a number, so it goes through the event-count handshake
- * (`docs/architecture/core.md` §4): native paints a tap at once and reverts it
- * if the parent does not move `selectedIndex`.
+ * A tap is painted at once, and reverted if a controlled parent does not move
+ * `selectedIndex`.
  */
 export function SegmentedControl({
   options,
@@ -189,16 +151,9 @@ export function SegmentedControl({
   ...restProps
 }: SegmentedControlProps) {
   const selfSizingBaseStyle = useSelfSizingBaseStyle();
-  // `options` may be `undefined` at runtime despite the type; treat that as no
-  // options rather than throwing inside a render.
+  // `options` may be `undefined` at runtime despite the type.
   const safeOptions = options ?? [];
   const optionCount = safeOptions.length;
-  // The handshake works on the index. The public `onChange` also carries the
-  // label, looked up from the `options` of *this* render: `useControlled` keeps
-  // one native callback identity forever and swaps only the closure it reads, so
-  // an event reports the labels that were on screen when the tap happened. If
-  // `options` shrank between the tap and the event, the label is `''` - the
-  // index is what the app gets, and it is the one that cannot be stale.
   const controlled = useControlled<number>(
     selectedIndex,
     clampToOptions(defaultSelectedIndex, optionCount),

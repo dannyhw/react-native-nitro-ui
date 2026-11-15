@@ -5,32 +5,18 @@ import type {
 } from 'react-native-nitro-modules';
 
 /**
- * Native props of the `NitroUiHost` Hybrid View.
- *
- * The Host has **no native props**: it owns no state of its own, it renders
- * nothing of its own, and everything a control inside it needs already travels
- * on that control (`docs/components/host.md`). Base `View` props
- * (`style`, layout, testID, a11y) are RN's, applied by the view manager.
+ * The Host has no native props of its own. `style`, layout and `testID` are
+ * React Native's base view props.
  */
 export interface NitroUiHostProps extends HybridViewProps {}
 
-/**
- * Methods of the Host. None: the Host takes no imperative calls, and what a
- * control inside it can do (`measureContent()`) stays on that control.
- */
 export interface NitroUiHostMethods extends HybridViewMethods {}
 
 /**
  * The Hybrid View behind the `Host` wrapper.
  *
- * Android only in behaviour: `Host.tsx` renders a plain view on iOS, so this
- * Hybrid View is never instantiated there — it exists because nitrogen requires
- * a native implementation on both platforms for a Hybrid View, and
- * `HybridNitroUiHost.swift` is the documented no-op that satisfies it. The iOS
- * passthrough is permanent, not a port pending: T17 built and measured an iOS Host and
- * D23's outcome was not to ship it.
- *
- * Apps render `Host`, not this type; it is exported because this repo's example and
- * bench screens are separate packages and cannot reach a non-exported component.
+ * Only Android instantiates it: `Host` renders a plain view on iOS, where the
+ * native class is a no-op that exists because a Hybrid View needs an
+ * implementation on both platforms. Apps render `Host`, not this type.
  */
 export type NitroUiHost = HybridView<NitroUiHostProps, NitroUiHostMethods>;

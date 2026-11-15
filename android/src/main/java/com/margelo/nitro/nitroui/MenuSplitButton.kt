@@ -34,43 +34,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.margelo.nitro.nitroui.core.nitroUiIcon
 
-/*
- * The Menu's split trigger: what Material 3 Expressive draws when a menu has both a
- * primary action and a list (`docs/components/menu.md`, DECISIONS D29 as E3 lifts it).
- *
- * `SplitButtonLayout(leadingButton, trailingButton)` is Material's own split button
- * (material3 1.5.0-beta02). It needs no `@ExperimentalMaterial3ExpressiveApi` opt-in -
- * Q8 Appendix C row 2 checked that against the AAR's annotations, and D39 is what makes
- * a beta02-only control buildable at all. The leading half runs `primaryAction`; the
- * trailing half is Material's *checked* button, whose `checked` is the menu's open state,
- * so Material morphs its inner corner to full for as long as the list is up.
- *
- * Both halves are sized by E1's `ButtonScale` ladder and painted with the trigger's own
- * variant colours, so a Menu that grows a second half is still the same design as the
- * Button beside it.
- */
+// The Menu's split trigger: Material 3's `SplitButtonLayout`. The leading half runs the
+// primary action; the trailing half's `checked` is the menu's open state.
 
-/**
- * The trailing half's accessibility label.
- *
- * The library bundles no string catalogue, and this half has no text of its own to be
- * read - only a chevron - so its name is written here. It says what the half does, which is what a reader needs: the title belongs to
- * the leading half, and the rows are in a window of their own.
- */
+/** The trailing half's accessibility name: it shows only a chevron. Not localised. */
 internal const val MENU_MORE_OPTIONS_LABEL = "More options"
 
 /**
- * Which of Material's four split-button sets a [ButtonVariant] draws.
- *
- * `text` has nothing to map to: a split button is two containers, and the text variant
- * has none. It resolves to [Outlined], colours and hairline included, so a
- * `variant="text"` Menu changes looks the moment a `primaryAction` arrives - which
- * `docs/components/menu.md` documents rather than hides. The mapping is one function
- * with a JVM test (`MenuSplitButtonTest.kt`), because a `when` branch inside the
- * composable is the shape that gets forgotten when a sixth variant arrives.
+ * Which of Material's four split-button sets a [ButtonVariant] draws. `text` has no
+ * container, and a split button is two containers, so it draws the outlined set.
  */
 internal enum class MenuSplitVariant(
-  /** The variant whose colours and border this set draws. */
   val button: ButtonVariant
 ) {
   Filled(ButtonVariant.Filled),
@@ -80,7 +54,6 @@ internal enum class MenuSplitVariant(
   ;
 
   companion object {
-    /** The split-button set for a trigger variant. See the class comment for `text`. */
     fun of(variant: ButtonVariant): MenuSplitVariant =
       when (variant) {
         ButtonVariant.Filled -> Filled
@@ -92,7 +65,6 @@ internal enum class MenuSplitVariant(
   }
 }
 
-/** [splitButtonShapes]' store: one motion scheme and one rung at a time. */
 private object SplitButtonShapesCache {
   private var motion: MotionScheme? = null
   private var scale: ButtonScale? = null
@@ -135,22 +107,8 @@ private object SplitButtonShapesCache {
 }
 
 /**
- * The resting / pressed / checked corners of both halves at [scale].
- *
- * `SplitButtonDefaults` has a height ladder of its own - `leadingButtonShapesFor` and
- * `trailingButtonShapesFor` index an inner-corner size by the button's height - and the
- * split button reads *that* ladder rather than [buttonShapes]: a split button's corner is
- * a pair (each half's outer corner plus the shared inner one), and Material derives the
- * pair from the height the same way E1's ladder derives a single one. The height read is
- * [ButtonScale.layoutHeight] - the box actually drawn, never below the 48 dp touch
- * target - the same number [buttonShapes] reads, so the two triggers of one Menu agree on
- * which rung they are on. `docs/components/menu.md` carries the mapping.
- *
- * Cached per (motion scheme, scale) for the reason [ButtonShapesCache] gives: these are
- * composable reads of the theme, and a hosted control is its own composition, so an
- * uncached call builds four `Shape` objects per recomposition of every mounted split
- * button. Keyed by the scale rather than the height, because two rungs share a layout
- * height once the touch target floors them.
+ * The corners of both halves at [scale], from `SplitButtonDefaults`' own height ladder,
+ * read at [ButtonScale.layoutHeight]. Cached per motion scheme and scale.
  */
 @Composable
 private fun splitButtonShapes(scale: ButtonScale): Pair<SplitButtonShapes, SplitButtonShapes> {
@@ -164,21 +122,8 @@ private fun splitButtonShapes(scale: ButtonScale): Pair<SplitButtonShapes, Split
 }
 
 /**
- * The split-button trigger: `primaryAction` on the left half, the list on the right.
- *
- * [modifier] carries the anchor's `onGloballyPositioned` - the same layout callback that
- * files the control's box with [MenuModel.noteAnchorBox], because the popup still has to
- * agree with a box React Native moves (`docs/components/host.md`) and that box is now the
- * split button's rather than one button's.
- *
- * Where [popup] is composed *is* the anchor question, and E3 measured the answer rather
- * than assuming it: the list lands under the half whose *slot* composes it. Composing it
- * in the leading half's slot instead moved the window to 21 px on a device where the
- * trailing half starts at 202 px (`docs/tasks/E3/mutations.json`), and moving the call out
- * of this half's own `Box` while staying in this half's slot moved it nowhere - the `Box`
- * is `propagateMinConstraints` plumbing, not the anchor. No offset arithmetic and no
- * second anchor either way, and the popup window still hangs off this composition, which
- * is what lets a layout move or a dispose take it down (`MenuWitness`).
+ * The split trigger. [popup] is composed in the trailing half's slot because the list
+ * anchors to the half whose slot composes it. [modifier] carries the anchor callback.
  */
 @Composable
 internal fun MenuSplitButton(
@@ -191,22 +136,12 @@ internal fun MenuSplitButton(
   val enabled = model.enabled
   val expanded = model.expanded
   val title = model.title
-  // The leading half's name: an explicit `accessibilityLabel`, else the visible title -
-  // the same rule the plain trigger follows, applied to the half that shows the title.
   val spokenLabel = model.accessibilityLabel ?: title
-  // The variant's colours, from the trigger's own helper: `tintColor` lands on the
-  // container for the three filled sets and on the label (with the hairline that follows
-  // it) for `outlined`, which is what the same prop does to the plain trigger. For `text`
-  // these are the *outlined* set's colours - see [MenuSplitVariant].
+  // For `text` these are the outlined set's colours.
   val colors = buttonColors(split.button, model.tintColor)
   val (leadingShapes, trailingShapes) = splitButtonShapes(scale)
-  // Material's own padding and icon-size ladders, read at the same rung as the corners.
-  // These two are plain functions of the height, so `remember` keys on the scale alone.
-  // The glyph the plain trigger draws, at the same rung: `docs/components/menu.md`
-  // measures one Menu's trigger against a Button's box, and a control that changed
-  // shape because it grew a second half would not be the same control any more. So
-  // the ladder is [ButtonDefaults]' rather than `SplitButtonDefaults`' own icon
-  // ladder, and a Menu's glyph is one size whether or not `primaryAction` is set.
+  // Button's icon ladder, not `SplitButtonDefaults`' own, so the glyph matches the plain
+  // trigger's.
   val iconSize = remember(scale) { ButtonDefaults.iconSizeFor(scale.height) }
   val iconSpacing = remember(scale) { ButtonDefaults.iconSpacingFor(scale.height) }
   val leadingPadding =
@@ -220,9 +155,6 @@ internal fun MenuSplitButton(
   val chevronSize: Dp =
     remember(scale) { SplitButtonDefaults.trailingButtonIconSizeFor(scale.height) }
   val labelStyle = buttonLabelStyle(scale)
-  // The chevron turns as Material's own split-button sample does: half a turn while the
-  // list is up, on the theme's effects spec so the spring belongs to the motion scheme
-  // (X18's) rather than to a duration written here.
   val rotation by
     animateFloatAsState(
       targetValue = if (expanded) 180f else 0f,
@@ -230,11 +162,7 @@ internal fun MenuSplitButton(
       label = "nitroUiMenuChevron",
     )
 
-  // The witness: this composition drew a split button. Cleared on dispose, so a control
-  // that stops having a `primaryAction` - or one that goes through the pool - cannot
-  // leave `split=1` for the next owner to be measured against. It is deliberately a
-  // different claim from `hasPrimaryAction`: that is what JS sent, this is what Android
-  // composed, and the harness asserts both halves of "the trigger is a split button".
+  // Test-harness witness that a split button was composed; cleared on dispose.
   DisposableEffect(model) {
     model.noteSplitDrawn(true)
     onDispose {
@@ -243,36 +171,22 @@ internal fun MenuSplitButton(
     }
   }
 
-  // Material switches the minimum interactive component size *off* inside the halves and
-  // says so: "Enforce it on the parent instead" (`SplitButton.kt`). Its parent's
-  // enforcement only expands the outer box, so left alone both halves rest at the rung's
-  // own container height - 40 dp at `small` and `medium` - inside a 48 dp box, and a
-  // split trigger would sit visibly shorter than the plain trigger it replaces. The floor
-  // is therefore enforced on the halves, at [ButtonScale.layoutHeight], which is E1's rule
-  // spelled the other way round: the box is the touch target, and the containers fill it.
+  // Material turns the minimum interactive size off inside the halves, so they would rest
+  // at the container height (40 dp at `small` and `medium`). This minimum makes them
+  // fill the same box as the plain trigger.
   SplitButtonLayout(
     modifier = modifier.heightIn(min = scale.layoutHeight),
     leadingButton = {
       val leadingModifier =
         halfModifier(model, spokenLabel, title, leading = true, enabled = enabled)
       val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-        // The trigger's glyph, on the half that carries the label — the trailing half
-        // is the chevron, and iOS has one button for both jobs. Same helper the Button
-        // and the plain trigger use, so `Pending` reserves the same empty slot here and
-        // the artwork cannot widen the control when it arrives.
-        //
-        // The half's own padding is Material's `leadingButtonContentPaddingFor`, which
-        // has no `hasStartIcon` form the way `ButtonDefaults.contentPaddingFor` does;
-        // the glyph therefore sits at the resting inset and the half grows by the glyph
-        // plus [iconSpacing]. Measured, in `docs/components/menu.md`.
+        // The icon goes on the half with the label. Material's leading padding has no
+        // start-icon form, so the half grows by the glyph plus its spacing.
         NitroUiIconSlotContent(
           icon = model.androidIconContent,
           size = iconSize,
           spacing = iconSpacing,
         )
-        // One line, tail-truncated, exactly as `NitroUiM3Button` draws its label: the
-        // half's intrinsic width is the title's, and a caller who gives the control a
-        // narrower box truncates the title rather than painting outside it.
         Text(text = title, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
       when (split) {
@@ -319,27 +233,17 @@ internal fun MenuSplitButton(
       }
     },
     trailingButton = {
-      // The half's own box, and the list composed inside it: see the KDoc above.
-      // `propagateMinConstraints` is what `SplitButtonLayout`'s slot box does for its
-      // child, and the wrapper has to keep doing it now that it sits in between.
+      // `propagateMinConstraints` passes on what `SplitButtonLayout`'s slot does for its child.
       Box(propagateMinConstraints = true) {
         val trailingModifier =
           halfModifier(model, MENU_MORE_OPTIONS_LABEL, null, leading = false, enabled = enabled)
-        // `checked` is the menu's open state, so the half is the list's own toggle:
-        // Material fills its corner while the window is up. The callback is the press,
-        // and the value it hands over is the one the press asks for - opening when the
-        // list is down, closing when it is somehow up - which [MenuModel.setOpen]
-        // funnels either way, so one press is never two events. The semantics arm in
-        // [halfModifier] asks for that same transition through [MenuModel.applyListAction].
+        // `checked` is the menu's open state; Material fills the half's inner corner while
+        // the list is open.
         val onOpenChange: (Boolean) -> Unit = { wantsOpen -> model.setOpen(wantsOpen) }
         val chevron: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
           Icon(
-            // Google's Material Symbols `keyboard_arrow_down` - the icon Material's own
-            // split button uses - parsed once per process (`core/NitroUiIcons.kt`).
             imageVector = nitroUiIcon(R.drawable.nitroui_keyboard_arrow_down),
-            // Nothing of its own to announce: the half's node carries
-            // [MENU_MORE_OPTIONS_LABEL] and the expanded/collapsed state, so a second
-            // description here would be read twice.
+            // No description: the half's node already carries the label and the state.
             contentDescription = null,
             modifier = Modifier.size(chevronSize).rotate(rotation),
           )
@@ -396,35 +300,9 @@ internal fun MenuSplitButton(
   )
 }
 
-/**
- * One half's modifier: where it ended up, and what a screen reader hears there.
- *
- * `clearAndSetSemantics` rather than `semantics` is the G6 review M3 fix carried over
- * from the plain trigger (`HybridNitroUiPicker.kt` records what `uiautomator dump` said
- * about the alternative): Material's own node would be a second, nameless focus stop
- * beside this one, and the half's own click / toggle action is dropped by the clear and
- * restated here - pointer input is untouched, and the restated action is what makes the
- * dump report the half as actionable at all.
- *
- * That is also how the trigger becomes two announcement sites instead of one:
- *
- * - leading: named by `accessibilityLabel` (falling back to `title`), `Role.Button`, and
- *   TalkBack says the title then "Button" - a press runs the app's `primaryAction`;
- * - trailing: named [MENU_MORE_OPTIONS_LABEL], `Role.Button`, `stateDescription`
- *   `expanded` / `collapsed` - so TalkBack says "More options", then the state, then
- *   "Button", and the state is the menu's, not a local toggle's. Its click action is
- *   [MenuModel.applyListAction], which toggles: this arm bypasses the checked button
- *   below, so an `open = true` here would be a list a screen reader could raise and
- *   never put down (E3's review).
- *
- * The plain trigger's single `Role.DropdownList` node cannot survive a split: there is no
- * single node left to carry it, and a half that opens a list is not the same control as a
- * half that runs an action. `docs/components/menu.md` says which node a screen reader
- * reaches in each configuration.
- *
- * The layout callback comes first and files the half's box with the model: like the
- * anchor's, it costs no recomposition and writes no observed state.
- */
+// `clearAndSetSemantics`, not `semantics`: Material's own node would be a second, nameless
+// focus stop. The clear drops the click action, so it is restated. The trailing half's
+// action toggles, so a screen reader can close the list as well as open it.
 private fun halfModifier(
   model: MenuModel,
   label: String,

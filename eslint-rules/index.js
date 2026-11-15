@@ -1,6 +1,5 @@
 // Local ESLint plugin: perf/API guardrails for react-native-nitro-ui.
 // CommonJS on purpose so both `eslint.config.mjs` and Jest can load it.
-// See docs/research/setup-decisions.md §6 "Static guardrails".
 
 /** Names that memoize a callback - a `callback(...)` inside them is stable. */
 const STABLE_HOOK = /^use[A-Z_]/;
@@ -363,8 +362,8 @@ const noOptionalViewProps = {
           }
           const type = member.typeAnnotation?.typeAnnotation;
           if (isFunctionType(type)) {
-            // Callbacks are the one exception to the rule below: see the
-            // `callbackProp*` messages.
+            // Callbacks are the one exception: they follow the `callbackProp*`
+            // messages instead.
             if (includesNull(type)) {
               context.report({
                 node: member,

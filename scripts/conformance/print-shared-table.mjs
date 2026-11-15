@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 /**
- * Print the shared-table region for `example/__tests__/Conformance.harness.tsx`.
+ * Prints the shared-table region of `example/__tests__/Conformance.harness.tsx`, which mirrors
+ * the tables in `scripts/conformance-core.mjs` because the harness bundle cannot import them.
  *
- * The harness bundle cannot import a Node script, so the numbers the in-app rules assert
- * against are embedded in that file as text — and text that nobody checks is a copy, which
- * is how a suite ends up asserting against its own answer. `checkSharedTableMirror` is the
- * check (it runs in `scripts/__tests__/conformance.test.js`, so `bun run check` goes red on
- * drift); this is the printer, so the region is regenerated rather than hand-maintained.
- *
- * With no argument it prints; with `--write` it replaces the region in place, which is what
- * a fix round should run after changing a table.
+ * Usage: with no argument it prints the region; `--write` replaces it in the file.
+ * Exits 1 when the file has no region or the new region fails its own check.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -25,20 +20,9 @@ import {
 
 const TARGET = 'example/__tests__/Conformance.harness.tsx';
 
-/**
- * The region as it should appear in the file: a JSDoc comment naming where the numbers come
- * from, then `const SHARED = <json>;`, then the end marker the checker looks for.
- *
- * The JSON is emitted by `JSON.stringify` and nothing else, because the checker compares it
- * by parsing and re-stringifying — so anything added here by hand is a divergence waiting to
- * happen.
- *
- * The `prettier-ignore` is load-bearing, not cosmetics. Prettier rewrites an object literal's
- * keys without their quotes, which turns the region into valid TypeScript and *invalid JSON* —
- * and a mirror that no longer parses is not a mirror, so `checkSharedTableMirror` would fail
- * the tree the formatter just wrote. Pinning the node is the only way to have a region that is
- * both valid TS and byte-exact JSON.
- */
+// The JSON must come from `JSON.stringify` alone: the checker compares it by parsing and
+// re-stringifying. The emitted `prettier-ignore` stops Prettier unquoting the keys, which
+// would leave the region invalid JSON.
 function region() {
   return [
     '/**',
@@ -77,8 +61,6 @@ if (begin < 0 || end < 0) {
   )}`;
   const problems = checkSharedTableMirror(updated);
   if (problems.length > 0) {
-    // Write nothing that the checker would reject — a printer that produces a region its own
-    // check calls wrong is worse than one that stops.
     console.error(problems.join('\n'));
     process.exitCode = 1;
   } else if (process.argv.includes('--write')) {

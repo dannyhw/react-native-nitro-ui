@@ -52,26 +52,13 @@ import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
-/*
- * The TextField component (G13): Compose `BasicTextField(TextFieldState)` - the
- * `TextFieldState` API, because its `composition` is the IME flag the controlled
- * value's guard needs (Q2 §4, orchestrator answer 1).
- *
- * The `TextFieldState` belongs to the model, not to the composition. That is what
- * lets a React write be applied where React's writes arrive - `afterUpdate()`, on
- * the UI thread, outside any composition - with `edit {}`, in the same turn, instead
- * of a tick a `LaunchedEffect` picks up a frame later. A recycle disposes the
- * composition anyway (`docs/architecture/core.md` §6), so the model hands the next
- * mount a fresh state rather than a cleared one: no text, selection or undo
- * history can survive into it.
- */
+// The TextField component: Compose `BasicTextField(TextFieldState)`. The state belongs to
+// the model, not the composition, so a React write is applied in `afterUpdate()` at once.
 
-/** State of one TextField. See [NitroUiModel] for the shape this has to have. */
 internal class TextFieldModel : NitroUiModel() {
   /**
-   * The text on the shipped handshake. `unreported` is never set: a field's edits
-   * are discrete, and setting it per keystroke would make a fast typist's writes
-   * permanently stale (Q2 §2.4).
+   * The handshake. `unreported` is never set: edits are discrete, and setting it per
+   * keystroke would make a fast typist's writes permanently stale.
    */
   val state = NitroUiControlledValue<String>("")
 
@@ -94,14 +81,9 @@ internal class TextFieldModel : NitroUiModel() {
   var sizingKey = ""
   var lastWrite = "none"
 
-  /** Focus, as the field's own `onFocusChanged` reported it. */
   var focused = false
 
-  /**
-   * What the last composition drew - the secure field or the plain one, one line or
-   * many - so the harness's report says what is on screen rather than what the props
-   * asked for. Written from a `SideEffect`, i.e. after the composition that drew it.
-   */
+  // What the last composition drew, written from a `SideEffect`; read by tests.
   var drawnSecure = false
   var drawnMultiline = false
 
@@ -119,59 +101,31 @@ internal class TextFieldModel : NitroUiModel() {
   val secureApplied: Boolean
     get() = secureTextEntry && !multiline
 
-  /** Whether an IME composition is open in [textState]. */
   val composing: Boolean
     get() = (textState.composition?.length ?: 0) > 0
 
   /**
-   * The text [textState] is known to hold: the last one native wrote into it or
-   * counted out of it. A user edit is a difference from *this*, not from
-   * `state.displayed` - a `defaultValue` or a reset moves `displayed` before
-   * [syncText] has written it, and that gap is not an edit.
+   * The text [textState] is known to hold. A user edit is a difference from this, not
+   * from `state.displayed`, which a default or a reset moves before the field is written.
    */
   var accounted = ""
 
-  /** Whether the last [observe] saw an open composition; see [settle]. */
   private var wasComposing = false
 
-  /**
-   * Whether the `maxLength` backstop is owed: an open composition left the field past the
-   * cap, and the cut waits for it to end. Writing an `EditText` inside a composition closes
-   * it and clears the IME's undo state, which takes the half-typed word with it - a cap is
-   * not worth that, and does not have to be: every way out of a composition reports the
-   * field again ([catchUp] through the `snapshotFlow` collector), and the cut is cheap then
-   * (G13 review, fix round 2).
-   */
+  // A `maxLength` cut that is waiting for an open composition to end: editing the field
+  // inside a composition closes it and clears the IME's undo state.
   private var capOwed = false
 
-  /**
-   * Runs a `value` write a composition held back (`lastWrite == "composing"`) once the
-   * composition is over. Installed by the Hybrid View, which owns reconciling and
-   * writing the field.
-   */
+  /** Runs a `value` write that a composition held back, once the composition ends. */
   var settle: (() -> Unit)? = null
 
-  /** [observe] what the field holds now. The `snapshotFlow` collector and `afterUpdate()`. */
   fun catchUp() = observe(textState.text.toString(), composing)
 
   /**
-   * The field holds [observed], inside an open IME composition or not.
-   *
-   * - An edit native has not counted is counted and emitted, **composing or not**.
-   *   Gboard keeps every Latin word in a composing region while autocorrect is on, so
-   *   a field that waited for compositions to end reported once per word, and a refused
-   *   edit reverted only at the word's end; React Native emits during a composition on
-   *   both platforms (G13 review, fix round 1). What stays composition-aware is the
-   *   write: `afterUpdate()` still drops a `value` write while one is open.
-   * - Text past `maxLength` that grew past what native accounted for is cut back, at a
-   *   grapheme boundary. A backstop: [NitroUiTextLimit] cuts an insertion as it
-   *   happens, and this catches what reaches the field another way. A JS write is
-   *   accounted for when it is written, so it is never cut here. While a composition is
-   *   open the cut is deferred ([capOwed]) and applied by the observation that reports the
-   *   field once the composition has ended, so the cap holds afterwards either way.
-   * - When a composition ends, a write it held back is settled ([settle]), whether or
-   *   not its end changed the text: a composition the user deleted leaves the text
-   *   native already counted, so no edit and no commit would ever decide it again.
+   * The field holds [observed]. An uncounted edit is counted and emitted, composing or
+   * not: Gboard keeps every Latin word composing while autocorrect is on. Text past
+   * `maxLength` is cut at a grapheme boundary, after any open composition ends. When a
+   * composition ends, a write it held back is settled.
    */
   fun observe(observed: String, isComposing: Boolean) {
     var text = observed
@@ -248,12 +202,9 @@ internal class TextFieldModel : NitroUiModel() {
 }
 
 /**
- * `maxLength`, enforced the way React Native enforces it: counted in UTF-16 code
- * units (JavaScript's `string.length`, `String.length` here), cutting the *inserted*
- * text short rather than the end of the field, and never inside a grapheme cluster -
- * an emoji, a flag, a ZWJ family. Built-in `InputTransformation.maxLength` refuses a
- * whole edit that overflows instead of keeping the part that fits, which is not what
- * RN or iOS do.
+ * `maxLength` as React Native enforces it: counted in UTF-16 units, cutting the inserted
+ * text and never inside a grapheme cluster. The built-in `InputTransformation.maxLength`
+ * refuses the whole edit instead.
  */
 internal class NitroUiTextLimit(private val model: TextFieldModel) : InputTransformation {
   // `changes` is the one experimental member read here: it is what says which part
@@ -266,9 +217,7 @@ internal class NitroUiTextLimit(private val model: TextFieldModel) : InputTransf
     if (length <= limit || length <= originalText.length) {
       return
     }
-    // Composing or not: an IME that keeps a whole word composing (Gboard, autocorrect
-    // on) would otherwise take a field past its limit one composition at a time. React
-    // Native's `LengthFilter` cuts composing text too.
+    // Composing text is cut too, or an IME that composes whole words would exceed the limit.
     val changes = changes
     if (changes.changeCount != 1) {
       replace(graphemeFloor(asCharSequence(), limit), length, "")
@@ -300,11 +249,7 @@ internal class NitroUiTextLimit(private val model: TextFieldModel) : InputTransf
   }
 }
 
-/**
- * The field's text style: Material 3 `bodyLarge` in `onSurface`, shared between
- * every field drawn with one colour scheme (`docs/architecture/core.md` §3, "Shared
- * objects") rather than copied per composition.
- */
+/** The field's text styles, shared between every field drawn with one colour scheme. */
 private object TextFieldStyleCache {
   private var scheme: ColorScheme? = null
   private var typography: Typography? = null
@@ -364,30 +309,12 @@ internal fun capitalizationOf(name: String): KeyboardCapitalization =
   }
 
 /**
- * The read-back side of [keyboardTypeOf] and [capitalizationOf]: the RN spelling of a
- * keyboard a Compose field was configured with.
- *
- * `SearchField`'s test state reports what the field was *configured with*, so a prop
- * that never reached the composition is visible from JS. While the field is focused
- * it reads the `EditorInfo` the IME is handed (see
- * `HybridNitroUiSearchField.currentEditorInfo`), and these three functions are the
- * only decoder for that; with no input connection up yet they decode the
- * [KeyboardType] / [KeyboardCapitalization] the mapping produced instead.
- *
- * Android cannot tell `"numeric"` from `"decimal-pad"`, because Compose offers one
- * keyboard for both (`docs/components/text-field.md`'s table): the read-back says
- * `"decimal-pad"` for either, and that is the truth rather than a lost prop.
+ * Decodes a configured keyboard back to React Native's names, for the test state. `numeric`
+ * and `decimal-pad` both read back as `decimal-pad`: Compose has one keyboard for both.
  */
 internal object NitroUiKeyboardNames {
-  /**
-   * The RN spelling of an `EditorInfo.inputType`'s keyboard.
-   *
-   * The class is read first and the variation only inside `CLASS_TEXT`, because the
-   * `InputType` masks overlap between classes: `TYPE_NUMBER_VARIATION_PASSWORD` and
-   * `TYPE_TEXT_VARIATION_URI` are the same bit (0x10), so a secure number pad read by
-   * variation alone decodes as a URL keyboard. That is not a hypothetical: it is what
-   * an earlier cut of this function did, and `KeyboardNamesTest` keeps it fixed.
-   */
+  // The class is read first and the variation only inside `CLASS_TEXT`: the masks
+  // overlap between classes (a number password and a text URI are the same bit).
   fun nameOfInputType(inputType: Int): String =
     when (inputType and android.text.InputType.TYPE_MASK_CLASS) {
       android.text.InputType.TYPE_CLASS_PHONE -> "phone-pad"
@@ -408,12 +335,8 @@ internal object NitroUiKeyboardNames {
       else -> "default"
     }
 
-  /**
-   * The RN spelling of an `EditorInfo.inputType`'s capitalisation flags — for a text
-   * keyboard. The `CAP_*` bits overlap another class's flags
-   * (`TYPE_TEXT_FLAG_CAP_WORDS` == `TYPE_NUMBER_FLAG_DECIMAL`), so a number keyboard has
-   * no capitalisation to read and says `"none"`, which is also what it was told.
-   */
+  // The `CAP_*` bits overlap another class's flags, so only a text keyboard has
+  // capitalisation to read.
   fun nameOfCapitalization(inputType: Int): String =
     when (inputType and android.text.InputType.TYPE_MASK_CLASS) {
       android.text.InputType.TYPE_CLASS_TEXT ->
@@ -428,25 +351,8 @@ internal object NitroUiKeyboardNames {
       else -> "none"
     }
 
-  /**
-   * Whether an `EditorInfo.inputType` allows autocorrection.
-   *
-   * The flag is [android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT], which is what
-   * Compose 1.12.1 writes for `autoCorrectEnabled = true` and does not write for
-   * `false` — read out of the artifact's `EditorInfo.update()`, not from memory, because
-   * the two readings differ exactly where the prop matters: an
-   * [android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS]-only rule calls a field that
-   * refused autocorrection an allowed one, since nothing in this mapping ever sets that
-   * flag. `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is still honoured, as an outright refusal
-   * whoever wrote it.
-   *
-   * [asked] is what the field was told, and it answers for the keyboards that carry no
-   * autocorrection flag at all: Compose writes the capitalisation and autocorrection
-   * flags only inside `TYPE_CLASS_TEXT`, so a number or phone keyboard has nothing to
-   * read back, and "what did the app ask for" is the only honest answer — which is also
-   * what iOS reports for the same keyboard, whose `autocorrectionType` is not consulted
-   * by the keys that are up.
-   */
+  // Compose writes `TYPE_TEXT_FLAG_AUTO_CORRECT` only for a text keyboard with autocorrect
+  // enabled. Other classes carry no such flag, so [asked] answers for them.
   fun autoCorrectOf(inputType: Int, asked: Boolean): Boolean {
     if (inputType and android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0) {
       return false
@@ -462,7 +368,6 @@ internal object NitroUiKeyboardNames {
     )
   }
 
-  /** The same answer for a mapped [KeyboardType], with no input connection up. */
   fun nameOfKeyboardType(type: KeyboardType): String =
     when (type) {
       KeyboardType.Number, KeyboardType.NumberPassword -> "number-pad"
@@ -473,7 +378,6 @@ internal object NitroUiKeyboardNames {
       else -> "default"
     }
 
-  /** The same answer for a mapped [KeyboardCapitalization]. */
   fun nameOfCapitalization(capitalization: KeyboardCapitalization): String =
     when (capitalization) {
       KeyboardCapitalization.Words -> "words"
@@ -483,7 +387,6 @@ internal object NitroUiKeyboardNames {
     }
 }
 
-/** The field's host: [NitroComposeHost] plus the composable. */
 private class TextFieldHost(
   context: ThemedReactContext,
   activity: Activity?,
@@ -509,21 +412,15 @@ private fun TextFieldContent(model: TextFieldModel) {
   val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
 
-  // A user edit is counted and emitted from here. `snapshotFlow` sees every change
-  // to the state's text, the IME's included; a React write is not a user edit, and
-  // `catchUp` tells the two apart by comparing with `displayed`, which a write
-  // updates before it edits the state. `afterUpdate()` calls the same function, so
-  // an edit this collector has not reached yet is counted before a write can land
-  // over it.
+  // `snapshotFlow` sees every change to the text, the IME's included. `catchUp` tells a
+  // user edit from a React write.
   LaunchedEffect(state) {
     snapshotFlow { state.text.toString() to (state.composition != null) }
       .collect { model.catchUp() }
   }
 
-  // `focus()`/`blur()` arrive as ticks so a call made before this composable is
-  // attached cannot throw (`FocusRequester.requestFocus()` needs a focus owner).
-  // `focus` starts from 0, so a `focus()` that came before this composition existed
-  // is still honoured once it does.
+  // `focus()` and `blur()` arrive as ticks: `FocusRequester.requestFocus()` needs a focus
+  // owner, so a call made before attach is honoured once the composition exists.
   var seenFocus by remember { mutableIntStateOf(0) }
   var seenBlur by remember { mutableIntStateOf(model.blurTick) }
   LaunchedEffect(model.focusTick) {
@@ -537,8 +434,8 @@ private fun TextFieldContent(model: TextFieldModel) {
   LaunchedEffect(model.blurTick) {
     if (model.blurTick != seenBlur) {
       seenBlur = model.blurTick
-      // Through Compose's focus system, which is the one that holds the field: a
-      // `View.clearFocus()` on the host does not release a Compose field (T18).
+      // Through Compose's focus system: `View.clearFocus()` on the host does not
+      // release a Compose field.
       if (model.focused) {
         focusManager.clearFocus(force = true)
       }
@@ -560,12 +457,7 @@ private fun TextFieldContent(model: TextFieldModel) {
   val label = model.accessibilityLabel
   val modifier =
     Modifier.fillMaxWidth()
-      // The name goes on the field, never on the host around it
-      // (`docs/architecture/core.md` §3, "testID and accessibility"). Measured in a dump:
-      // `BasicTextField` publishes its editable node (`EditText`, the text, the actions)
-      // with this modifier's semantics as a child node of the same box, which is the
-      // shape Material 3's own `TextField` label has, and what X4's rule reads as one
-      // named control (`scripts/real-input/a11y.mjs`).
+      // The name goes on the field, not on the host view around it.
       .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
       .focusRequester(focusRequester)
       .onFocusChanged { focus -> model.focusMoved(focus.isFocused) }
@@ -633,7 +525,6 @@ private fun TextFieldContent(model: TextFieldModel) {
   }
 }
 
-/** The Hybrid View React renders as `NitroUiTextField`. */
 class HybridNitroUiTextField(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiTextFieldSpec(), RecyclableView {
@@ -654,7 +545,6 @@ class HybridNitroUiTextField(
 
   init {
     host.wantsContentSize = true
-    // Height is the field's (one line, or its text at its width); width is the box.
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
     declareFallback()
     model.publish = ::publishState
@@ -666,14 +556,11 @@ class HybridNitroUiTextField(
   }
 
   companion object {
-    /** This component's name in the sizing engine. */
+    // Must match the component name in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiTextField"
 
-    /**
-     * One line of `bodyLarge` (24 sp line height) at the default font scale, and the
-     * width a field draws at under a parent that gives it none (a row with no
-     * `flex`).
-     */
+    // The size before anything is measured, in dp: one line of `bodyLarge`, and the
+    // width a field draws at under a parent that gives it none.
     private const val FALLBACK_WIDTH_DP = 200.0
     private const val FALLBACK_HEIGHT_DP = 24.0
 
@@ -884,8 +771,8 @@ class HybridNitroUiTextField(
     if (js != null && js != model.state.displayed) {
       model.lastWrite =
         when {
-          // Q2 §2.2: a write under an open composition destroys it. Held back, not
-          // queued: `settle` decides it again when the composition ends.
+          // A write under an open IME composition destroys it. Held back, not queued:
+          // `settle` decides again when the composition ends.
           model.composing -> "composing"
           model.state.reconcile() -> "applied"
           else -> "stale"
@@ -949,7 +836,7 @@ class HybridNitroUiTextField(
 
   // MARK: - Methods
 
-  /** The size Compose measured, from the host's cache. Never touches the UI thread. */
+  // Reads the host's cached size, so it is safe on the JS thread.
   override fun measureContent(): NitroUiSize {
     val size = host.contentSize ?: return NitroUiSize(0.0, 0.0)
     return NitroUiSize(size.width, size.height)
@@ -968,10 +855,10 @@ class HybridNitroUiTextField(
   /** Android has no public API that opens a composition outside an IME: a no-op. */
   override fun nuiTestSetMarkedText(text: String) {}
 
-  /** iOS-only, like [nuiTestSetMarkedText]: the example app's probe drives Android's IME. */
+  /** iOS-only. */
   override fun nuiTestCancelMarkedText() {}
 
-  /** iOS-only: UIKit's `paste(_:)` is the path it exercises. */
+  /** iOS-only. */
   override fun nuiTestPaste(text: String, at: Double) {}
 
   override fun nuiTestLifetimeReport(): String = host.lifetimeReport()

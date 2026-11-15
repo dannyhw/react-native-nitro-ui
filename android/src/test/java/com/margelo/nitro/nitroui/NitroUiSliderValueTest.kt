@@ -8,18 +8,8 @@ import org.junit.Test
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-/**
- * JVM unit test for the Slider's value rule, the Android twin of
- * `scripts/native-tests/slider-value.test.swift`.
- *
- * The vectors are that file's vectors, one for one: the rule is duplicated in
- * Swift and Kotlin on purpose, and a platform that snaps a drag to a different
- * number than the other is a control whose value changes with the OS.
- *
- * Every assertion is an *exact* Double comparison - the whole point of tidying is
- * that the value native holds is bit-for-bit the value React holds, so a test that
- * allowed an epsilon would pass the bug it exists to catch.
- */
+// The vectors match `scripts/native-tests/slider-value.test.swift`. Comparisons are exact:
+// an epsilon would pass the float noise the rule exists to remove.
 class NitroUiSliderValueTest {
   private fun quantize(
     raw: Double,
@@ -105,16 +95,6 @@ class NitroUiSliderValueTest {
     expect(quantize(0.4, Double.NaN, 1.0, 0.0), 0.4, "an unbounded range keeps the value")
   }
 
-  /**
-   * Ties, the reason [NitroUiSliderValue.roundHalfAway] exists.
-   *
-   * `kotlin.math.round` is `Math.rint`: it rounds a tie to the **even** neighbour.
-   * Swift's `.rounded()` goes away from zero, and every quantity this rule rounds is
-   * a count of steps, where "up" is the rule. Before `roundHalfAway` these four
-   * vectors were the reviewer's repro: Android answered 0, 2, 0 and 0 where iOS
-   * answered 1, 3, 0.5 and 1, so a JS `value={2.5}` with `step={1}` put the thumb on
-   * a different stop per OS.
-   */
   @Test
   fun tiesGoAwayFromZeroNotToTheEvenNeighbour() {
     expect(NitroUiSliderValue.roundHalfAway(0.5), 1.0, "0.5 goes to 1, not to the even 0")
@@ -126,28 +106,14 @@ class NitroUiSliderValueTest {
     expect(NitroUiSliderValue.roundHalfAway(-0.6), -1.0, "...including below zero")
     expect(quantize(0.5, 0.0, 2.0, 1.0), 1.0, "a mid-range tie goes up")
     expect(quantize(2.5, 0.0, 10.0, 1.0), 3.0, "a mid-range tie goes up, not to the even 2")
-    // The steps are counted *up from the minimum*, so -2.5 in -5..5 is 2.5 steps in:
-    // the tie is in the step count, and it goes up the track (old Kotlin: -3).
+    // Steps are counted up from the minimum, so -2.5 in -5..5 is 2.5 steps in: a tie.
     expect(quantize(-2.5, -5.0, 5.0, 1.0), -2.0, "a tie in a negative range counts steps up from the minimum")
     expect(quantize(0.25, 0.0, 1.0, 0.5), 0.5, "a tie in a fraction goes up to the next stop")
     expect(quantize(1.5, 0.0, 3.0, 1.0), 2.0, "an integer-valued tie is the same either way")
   }
 
-  /**
-   * A step count that is a hair *under* a tie, which is where `floor(x + 0.5)` and
-   * a real round-to-nearest part company.
-   *
-   * `(0.21 - 0.1) / 0.22` is `0.49999999999999994`: not a tie, and nearer 0 than
-   * 1. Adding a half first turns it into one, because `0.49999999999999994 + 0.5`
-   * *is* `1.0` in binary - so `floor(x + 0.5)`, the first spelling of
-   * [NitroUiSliderValue.roundHalfAway], answered 1 here while Swift's
-   * `Double.rounded()` answered 0. `roundHalfAway`'s own comment says the point of
-   * the function is that "the thumb goes to the next stop" is the same stop on both
-   * OSes; a stop that depends on the OS is the bug, whatever the arithmetic reason.
-   *
-   * The fixture is checked, not assumed: the first two lines below are the reason
-   * the rest of the test can say anything.
-   */
+  // `(0.21 - 0.1) / 0.22` is 0.49999999999999994, a hair under a tie, and adding 0.5 to
+  // it gives exactly 1.0.
   @Test
   fun aHairUnderATieIsNotATie() {
     val justUnder = (0.21 - 0.1) / 0.22
@@ -162,32 +128,13 @@ class NitroUiSliderValueTest {
       0.0,
       "…and so does its mirror image, toward zero rather than away from a tie it is not on",
     )
-    // The same count reached through the rule the app actually calls. iOS answers
-    // the stop below on each of these; `floor(x + 0.5)` answered one step up.
     expect(quantize(0.21, 0.1, 3.1, 0.22), 0.1, "0.21 on a 0.1 + n*0.22 grid is the stop below")
     expect(quantize(-0.89, -1.0, 2.0, 0.22), -1.0, "…including on a grid that starts below zero")
     expect(quantize(0.31, 0.2, 2.2, 0.22), 0.2, "…and on a grid with a fractional minimum")
   }
 
-  /**
-   * [NitroUiSliderValue.roundHalfAway] against the definition itself, on a ladder
-   * of ties at every magnitude the rule can be asked about, each rung with its two
-   * neighbouring doubles.
-   *
-   * `BigDecimal(Double)` holds the *exact* value of a double, so
-   * `setScale(0, HALF_UP)` is round-to-nearest-with-ties-away-from-zero computed on
-   * that exact value — which is what Swift's `Double.rounded()` does. That makes it a
-   * reference this platform can check itself against without a second copy of the
-   * same arithmetic, and it catches the class rather than one instance:
-   * `floor(x + 0.5)`, the first spelling of the rule, perturbs anything within half
-   * an ulp below a tie *into* a tie, so it was wrong on every near-side neighbour at
-   * the small rungs and correct everywhere else. The Swift twin walks the same ladder
-   * and spells its expectations out, because there is no `BigDecimal` there.
-   *
-   * The rungs are half-integers, `odd / 2`, because those are the only ties a double
-   * can hold: `(k + 0.5) * 2^n` is a whole number for n >= 1, and a whole number is
-   * not a tie. Every odd numerator below 2^53 is exact.
-   */
+  // `BigDecimal(Double)` is exact, so `setScale(0, HALF_UP)` is the reference for ties away
+  // from zero. The rungs are half-integers (`odd / 2`), the only ties a double can hold.
   @Test
   fun roundHalfAwayIsTheDefinitionOnLaddersThroughATie() {
     val oddNumerators = mutableListOf<Long>()
@@ -257,15 +204,6 @@ class NitroUiSliderValueTest {
     assertNull("an empty range is not stepped", NitroUiSliderValue.division(1.0, 1.0, 0.1))
   }
 
-  /**
-   * The accessibility increment: the next legal value in one direction.
-   *
-   * 0..10 step 3 is the docs' own example and the range that breaks a platform's
-   * own increment - it does not end on a step, so the control is continuous, the
-   * platform moves by a fraction of the range, and quantising that fraction lands
-   * back on the value it started from. Every answer here is a value [quantize]
-   * accepts, and both ends must be reachable.
-   */
   @Test
   fun accessibilityStepGoesToTheNextLegalValueOnANonAlignedRange() {
     expect(stepped(0.0, true, 0.0, 10.0, 3.0), 3.0, "0..10 step 3: up from the bottom")
@@ -289,9 +227,8 @@ class NitroUiSliderValueTest {
     expect(stepped(100.0, true, 0.0, 100.0, 25.0), 100.0, "0..100 step 25: no overshoot")
     expect(stepped(100.0, false, 0.0, 100.0, 25.0), 75.0, "0..100 step 25: down")
     expect(stepped(0.0, false, 0.0, 100.0, 25.0), 0.0, "0..100 step 25: no undershoot")
-    // A fractional grid: (0.3 - 0) / 0.1 is 2.9999999999999996, so without the
-    // tolerance an increment from 0.3 computes 0.30000000000000004 and quantises
-    // back to 0.3 - the stuck increment again.
+    // (0.3 - 0) / 0.1 is 2.9999999999999996, so without the tolerance a step up from 0.3
+    // lands back on 0.3.
     expect(stepped(0.3, true, 0.0, 1.0, 0.1), 0.4, "tenths: up from 0.3 clears the binary fraction")
     expect(stepped(0.3, false, 0.0, 1.0, 0.1), 0.2, "tenths: down from 0.3")
     expect(stepped(0.9, true, 0.0, 1.0, 0.1), 1.0, "tenths: up to the top")

@@ -20,44 +20,39 @@ type HybridRefHandler = (view: NitroUiBottomSheetHandle) => void;
 
 /**
  * The read side of the native sheet - what a `hybridRef` callback gets.
+ * Read-only: a prop written from JS never commits. The three methods are test
+ * seams, and each hops to the main thread itself.
  *
- * Read-only for the reason every handle here is (DECISIONS D14). The three
- * methods are the test seams, and each hops to the main thread itself.
- *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
+ * @internal Hybrid View types are not published; this alias exists so
  * `hybridRef` can be typed for this repo's harness and benchmarks.
  */
 export interface NitroUiBottomSheetHandle {
-  /** What React last asked for. */
   readonly presented: boolean;
-  /** The event count JS has echoed. */
   readonly mostRecentEventCount: number;
   readonly dismissible: boolean;
   /**
-   * Test-only readback - see `NitroUiBottomSheetMethods.nuiTestStateReport`.
+   * Test-only state readback.
    * @internal
    */
   nuiTestStateReport(): string;
   /**
-   * Test-only dismissal seam - see `NitroUiBottomSheetMethods.nuiTestDismiss`.
+   * Test-only dismissal seam.
    * @internal
    */
   nuiTestDismiss(): void;
   /**
-   * Test-only detent seam - see `NitroUiBottomSheetMethods.nuiTestSelectDetent`.
+   * Test-only detent seam.
    * @internal
    */
   nuiTestSelectDetent(index: number): void;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with
- * callbacks in Nitro's `{ f: … }` wrapper (DECISIONS D7, D7b). `BottomSheet.tsx`
- * is the friendly API.
+ * Props of the raw host component: every spec prop, always sent, with callbacks
+ * in Nitro's `{ f: … }` wrapper.
  *
- * No `NitroUiIntrinsicProps`: a sheet is not self-sizing (`sizing: null`). Its
- * node's `style` is the content's box, which the wrapper writes from
- * `onContentBox`.
+ * A sheet is not self-sizing, so there are no sizing props: its node's `style`
+ * is the content's box, which the wrapper writes from `onContentBox`.
  */
 export interface NativeNitroUiBottomSheetProps extends HybridViewProps {
   presented: boolean;
@@ -78,8 +73,8 @@ export interface NativeNitroUiBottomSheetProps extends HybridViewProps {
 }
 
 /**
- * The host component for the `NitroUiBottomSheet` Hybrid View. Only the props
- * type is corrected here, as for every other control (`NativeNitroUiDialog.ts`).
+ * The host component for the `NitroUiBottomSheet` Hybrid View. The cast corrects
+ * only the props type, which `getHostComponent` intersects with `ViewProps`.
  */
 export const NativeNitroUiBottomSheet = getHostComponent<
   NativeNitroUiBottomSheetProps,

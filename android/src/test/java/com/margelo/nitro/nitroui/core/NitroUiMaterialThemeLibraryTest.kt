@@ -8,31 +8,8 @@ import java.io.File
 import java.io.PrintStream
 import java.util.zip.ZipFile
 
-/**
- * JVM unit test for the claim [NitroUiTheme] rests on, run by
- * `bun run test:native:android`.
- *
- * The opt-out to the baseline theme is one `MaterialExpressiveTheme` call with
- * `MotionScheme.standard()`, `Shapes()` and `Typography()` (X18 fix round 1: a second call
- * site would rebuild every control's composition on a switch). That is the baseline theme
- * while the internal `LocalUsingExpressiveTheme` - the one thing `MaterialExpressiveTheme`
- * provides that a root `MaterialTheme` does not - is consulted by nothing but
- * `MaterialExpressiveTheme` itself (to tell a nested call from a root one).
- *
- * What this checks, against the material3 library on the test classpath:
- * 1. exactly one class refers to the flag, `MaterialThemeKt` (`MaterialTheme.kt`'s file
- *    class) - a component that read it would have to name it in its own class;
- * 2. inside that class, only [ALLOWED_METHODS] touch it: `MaterialExpressiveTheme`, the
- *    flag's own accessor, and the static initializer that creates it. A `MaterialTheme`
- *    overload or anything else in that file that started reading it fails here.
- *
- * What it does not catch: a component that changes behaviour under a theme without
- * reading this flag - by reading the motion scheme, say, which is the difference the
- * opt-out is meant to make. Material's own release notes are the check for anything else.
- *
- * Either failure names what reads the flag, and then the opt-out is no longer "the same
- * theme with standard motion": `NitroUiTheme` needs another look before the version moves.
- */
+// Checks the material3 jar: only `MaterialExpressiveTheme` may read the internal
+// `LocalUsingExpressiveTheme` flag. [NitroUiTheme]'s baseline opt-out relies on that.
 class NitroUiMaterialThemeLibraryTest {
   @Test
   fun onlyMaterialExpressiveThemeReadsTheExpressiveFlag() {
@@ -59,7 +36,6 @@ class NitroUiMaterialThemeLibraryTest {
     )
   }
 
-  /** The jar (or class directory) the material3 library was loaded from. */
   private fun libraryLocation(): File {
     val location =
       checkNotNull(Class.forName("androidx.compose.material3.MaterialThemeKt").protectionDomain?.codeSource?.location) {
@@ -68,7 +44,6 @@ class NitroUiMaterialThemeLibraryTest {
     return File(location.toURI())
   }
 
-  /** Every class file in [library] whose bytes contain [needle], as `a/b/C.class`. */
   private fun classesReferring(
     library: File,
     needle: String,
@@ -79,11 +54,8 @@ class NitroUiMaterialThemeLibraryTest {
     return found.sorted()
   }
 
-  /**
-   * The methods of [className] whose bytecode mentions [needle], by `javap -c -p`: a
-   * field access or a call is printed with the member's name in its comment, under the
-   * method that makes it. The static initializer is `<clinit>`.
-   */
+  // `javap -c -p` prints a member reference under the method that makes it. The static
+  // initializer prints as `static {};`.
   private fun methodsTouching(
     library: File,
     className: String,
@@ -120,11 +92,8 @@ class NitroUiMaterialThemeLibraryTest {
     }
   }
 
-  /**
-   * The JDK's in-process `javap` (`java.util.spi.ToolProvider`). Reached by reflection:
-   * these tests compile against `android.jar`, which has no `ToolProvider`, but they run
-   * on the JDK that builds the app, which has.
-   */
+  // `javap` through `java.util.spi.ToolProvider`, by reflection: the tests compile against
+  // `android.jar`, which lacks it, but run on a full JDK.
   private fun runJavap(
     out: PrintStream,
     err: PrintStream,
@@ -171,7 +140,6 @@ class NitroUiMaterialThemeLibraryTest {
   private companion object {
     const val NEEDLE = "LocalUsingExpressiveTheme"
 
-    /** `MaterialTheme.kt`'s file class: the theme functions and the flag. */
     const val THEME_FILE_CLASS = "androidx/compose/material3/MaterialThemeKt.class"
 
     /** The reader, the flag's accessor, and the static initializer that creates it. */

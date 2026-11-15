@@ -1,11 +1,3 @@
-//
-//  NitroUiSizingEngine.cpp
-//  react-native-nitro-ui
-//
-//  Implementation of the intrinsic-sizing core. See `NitroUiSizingEngine.hpp`
-//  for the three data structures and `docs/architecture/sizing.md` for the flow.
-//
-
 #include "NitroUiSizingEngine.hpp"
 
 #include "core/NitroUiClock.hpp"
@@ -24,12 +16,7 @@ namespace margelo::nitro::nitroui {
 
   namespace {
 
-    /**
-     * FNV-1a, 64 bit. Small, allocation-free, and stable across platforms and
-     * compilers, which matters because the value is a cache identity written on
-     * one thread and read on another (a randomised `std::hash` would be worse,
-     * not better).
-     */
+    // FNV-1a, 64 bit: allocation-free, and the same on every platform and compiler.
     constexpr uint64_t kFnvOffset = 14695981039346656037ULL;
     constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -55,48 +42,16 @@ namespace margelo::nitro::nitroui {
       return std::fabs(a - b) <= NitroUiSizingEngine::kEpsilon;
     }
 
-    /**
-     * Same size, ignoring which configuration it belongs to.
-     *
-     * Used wherever the question is "would a push change what is on screen", and
-     * the key is deliberately not part of that: after an environment change the
-     * size on screen belongs to the old key, and a control whose size did not move
-     * must not be pushed a byte-identical second size just because the epoch did.
-     */
+    // Same size, ignoring which configuration it belongs to. After an environment change the size
+    // on screen belongs to the old key, and a control whose size did not move must not be pushed
+    // again.
     inline bool sameSizeIgnoringKey(const NitroUiMeasuredSize& a, const NitroUiMeasuredSize& b) {
       return a.flags == b.flags && nearlyEqual(a.width, b.width) && nearlyEqual(a.height, b.height);
     }
 
-    /**
-     * Same *on-screen* size, which for a `fillWidth` control is not the same
-     * question as "same numbers".
-     *
-     * `fillWidth` means the width belongs to the Yoga box:
-     * `IntrinsicShadowNode::measureContent` answers with the cached height and
-     * then replaces the width with the constraint's (cpp/NitroUiIntrinsic.hpp:205-212),
-     * and the host measures the control *at that width* - so every report of a
-     * wide Slider says "wide" and every report of a narrow one says "narrow",
-     * whatever the configuration's own answer was. Two Sliders of one
-     * configuration therefore differ in the one number the policy declares not to
-     * matter, and comparing it:
-     *
-     * - made every instance pay a correction on its first report, where D17
-     *   promises an already-exact configuration 0 stale frames and
-     *   `docs/architecture/sizing.md` SS4 promises "every later instance is free
-     *   either way"; and
-     * - let each correction rewrite the cache with that instance's box width, so
-     *   the answer a cold mount got depended on the last parent that happened to
-     *   be measured.
-     *
-     * A `fillWidth` width can only ever restate the box the instance was measured
-     * at, so the only number such a configuration owns is the height. Hence the
-     * comparison above takes the height alone, and what gets filed beside it is the
-     * component's own declared width rather than the reported one (see
-     * `filedSizeLocked`) - `docs/architecture/sizing.md` SS5.
-     *
-     * An `intrinsic` control's width *is* its own answer, so nothing is ignored
-     * there: Switch behaves exactly as before.
-     */
+    // Whether a push would change what is on screen. A `fillWidth` control's width belongs to its
+    // Yoga box and each report only restates the box it was measured in, so only the height is
+    // compared. An `intrinsic` control compares both.
     inline bool sameSizeForPush(const NitroUiMeasuredSize& a, const NitroUiMeasuredSize& b) {
       if (a.flags != b.flags) {
         return false;
@@ -108,15 +63,10 @@ namespace margelo::nitro::nitroui {
     }
 
 #if defined(__APPLE__)
-    /**
-     * iOS: one observer on the main run loop, ordered *before* Core Animation's
-     * commit observer (UIKit's is registered at order 2 000 000 on
-     * `kCFRunLoopBeforeWaiting`), so every size measured this turn is in the
-     * shadow tree and laid out before Core Animation commits the frame.
-     *
-     * Installed lazily on the first report, which can only happen once a hosted
-     * control exists, i.e. once the main run loop is running.
-     */
+    // One observer on the main run loop, ordered before Core Animation's commit observer (order
+    // 2,000,000 on `kCFRunLoopBeforeWaiting`), so every size measured this turn is laid out before
+    // the frame commits. Installed on the first report, when the main run loop is certainly
+    // running.
     void installFlushObserverIfNeeded() {
       static std::once_flag installed;
       std::call_once(installed, [] {
@@ -145,18 +95,13 @@ namespace margelo::nitro::nitroui {
   }
 
   NitroUiSizingEngine& NitroUiSizingEngine::shared() {
-    // Deliberately leaked (review N3): a function-local static is destroyed at
-    // process exit, and the run-loop observer, a layout thread or a host teardown
-    // can still be calling in at that point - the observer is never removed.
-    // The engine owns nothing that has to be released (no file handles, no JS
-    // references), so never running its destructor is the safe answer.
+    // Leaked on purpose: the run-loop observer or a layout thread can still call in at process
+    // exit, after a function-local static would have been destroyed.
     static auto* engine = new NitroUiSizingEngine();
     return *engine;
   }
 
   int64_t NitroUiSizingEngine::nextInstanceId() {
-    // `std::atomic<int64_t>` of a trivially destructible type: no exit-order
-    // problem here either, and ids are never reused.
     static std::atomic<int64_t> counter{0};
     return counter.fetch_add(1, std::memory_order_relaxed) + 1;
   }
@@ -199,8 +144,6 @@ namespace margelo::nitro::nitroui {
   }
 
   uint64_t NitroUiSizingEngine::guessHash(const char* componentName, const std::string& sizingKey) {
-    // Epoch 0 is not a real epoch (`environmentEpoch_` starts at 1), so this can
-    // never collide with a live `NitroUiSizeKey`.
     return keyFor(componentName, sizingKey, 0).hash;
   }
 
@@ -210,8 +153,7 @@ namespace margelo::nitro::nitroui {
     }
     auto fallback = fallbacks_.find(componentHash(componentName.c_str()));
     if (fallback == fallbacks_.end()) {
-      // Nothing declared: no honest replacement for the width exists, so the
-      // reported number is the only one on offer.
+      // Nothing declared, so there is no width to substitute.
       return reported;
     }
     NitroUiMeasuredSize filed = reported;
@@ -239,24 +181,16 @@ namespace margelo::nitro::nitroui {
       if (ledger.componentName.empty()) {
         continue;
       }
-      // The key belonged to the environment that just went away; recompute it for
-      // this one and mark the entry inexact, so a mounted instance's next report
-      // finds something to correct instead of being dropped (review S2). An entry
-      // that was exact still has the old size on screen, which is exactly the
-      // thing the next report has to be measured against.
+      // Re-key for the new environment and mark the entry inexact, so the instance's next report is
+      // compared with the size still on screen instead of being dropped.
       ledger.key = keyFor(ledger.componentName.c_str(), ledger.sizingKey, environmentEpoch_);
       if (ledger.key) {
         ledger.exact = false;
         addNeedsCorrectionLocked(ledger.key, entry.first);
       }
     }
-    // The fallbacks deliberately stay. A component declares its fallback once, at
-    // process start, and nothing re-declares it - clearing it here would leave a
-    // cache miss in the new environment with *no* guess at all, so the first
-    // instance would be laid out at 0x0 and be invisible for a frame. A guess
-    // from the old environment is not exact (it carries an empty key, so the
-    // ledger still marks the instance inexact and the real measurement still
-    // corrects it), it is just better than nothing.
+    // The fallbacks stay: components declare them once at process start, and without one the first
+    // layout in the new environment would be 0x0. They carry an empty key, so they remain guesses.
   }
 
   void NitroUiSizingEngine::invalidateEnvironmentIfChanged(const std::string& signature) {
@@ -302,37 +236,17 @@ namespace margelo::nitro::nitroui {
     if (instanceId == NitroUiSizing::NO_INSTANCE || push == nullptr || state == nullptr) {
       return;
     }
-    // Overwrite: after our own push the family has a new `State` object, and the
-    // platform calls this again with it from the resulting `updateState`.
+    // Overwrites: after a push the family has a new `State`, and the platform binds again with it.
     const std::lock_guard<std::shared_mutex> lock(mutex_);
-    // Binding is the proof of life that `measure`'s forgotten-id guard needs: an
-    // id that reaches this line has a `State` in the shadow tree, whatever it was
-    // doing in an earlier mount. Recycle is the case that makes the order matter —
-    // the *same native view* is re-mounted, and if its new props happen to carry an
-    // id the engine finished, `updateState:oldState:` binds it here.
+    // A bind proves the id is live, whatever an earlier mount did with it.
     clearForgottenLocked(instanceId);
-    // The layout of a re-shown view ran before this line and is held, not filed;
-    // it belongs to the instance being bound, and `report` cannot be answered
-    // without it. Claiming here is what makes a hide/show lose nothing.
+    // A re-shown view was laid out before this bind and that layout is on hold. Claim it, or
+    // `report` has no ledger entry to compare with.
     const bool claimedHold = claimLateFilingLocked(instanceId);
-    // And this row is no longer owed a mount window: it has its instance.
     waitingForBind_.erase(instanceId);
-    /**
-     * A bind that found nothing to claim, and whose entry this engine is on record
-     * having thrown away, is a mount that arrived after both windows closed — the
-     * unbound row's second plus the hold's. That is not hypothetical on a saturated
-     * runner (F8 measured load1 380 on 3 cores), and its cost is asymmetric in the
-     * usual way: the instance is live and correctable forever, but it has no row, so
-     * the report that is on its way is dropped at `report`'s first line and the
-     * control sits at the size a *guess* laid it out at.
-     *
-     * What is owed is a fresh measure, not a resurrection: the entry is gone, and
-     * inventing one here would mean filing a size for a configuration `report` never
-     * named. So the instance is marked as owing itself a re-ask, which is the same
-     * FIX2 channel a corrected instance uses — `shouldNewRevisionDirtyMeasurement`
-     * asks `requiresFreshMeasure`, and the layout that follows files the row that
-     * `report` needs. See {@link BoundInstance::owesFreshMeasure}.
-     */
+    // Nothing to claim, and the engine dropped this id's entry earlier: the bind arrived after both
+    // windows closed. The instance has no ledger row, so its report would be ignored. Make its next
+    // props update re-measure, which files the row.
     const bool owedASecondLook = !claimedHold && consumeFilingAbandonedLocked(instanceId);
     registry_[instanceId] = BoundInstance{componentHash, push, state, owedASecondLook};
   }
@@ -346,79 +260,35 @@ namespace margelo::nitro::nitroui {
   }
 
   void NitroUiSizingEngine::stageLateFilingLocked(int64_t instanceId, const LedgerEntry& entry) {
-    /**
-     * The queue holds one slot per id currently on hold while it holds it, in staged
-     * order; a slot whose entry has gone (claimed, or forgotten) is left behind and
-     * dropped by the prune rather than chased, because removing an arbitrary id from a
-     * deque is a scan and `forget` runs on every dropped view.
-     *
-     * At capacity, the *window* is closed first and the ceiling only then takes a slot.
-     * The order is the whole fix for the cliff F8b found: a commit that re-shows three
-     * hundred hidden controls stages three hundred holds inside the same millisecond,
-     * and evicting the oldest for being numerous throws away a correction that was
-     * still owed its window - for a control that had done nothing wrong but arrive with
-     * company. Nothing in-window is ever evicted while there is an expired entry to
-     * take instead, so the working bound is the rate of orphans over one second, which
-     * is what the table was sized for. See {@link kLateFilingCapacity}.
-     */
+    // At capacity, expired holds are pruned first. Only if none are left is a hold that is still
+    // inside its window evicted.
     if (lateFilings_.find(instanceId) == lateFilings_.end()) {
       if (lateFilingQueue_.size() >= kLateFilingCapacity) {
-        // The cheap half: everything at the front whose bind has already missed the
-        // window. One compare per entry it frees, and it stops at the first hold that
-        // is still in time.
         pruneLateFilingsLocked();
       }
       while (lateFilingQueue_.size() >= kLateFilingCapacity) {
-        /**
-         * The memory backstop, and the only place a hold is given up while it is still
-         * in time. Reaching it means more than `kLateFilingCapacity` orphans staged in
-         * under a second - far past any commit this project has measured - and what it
-         * costs is that one control keeps the size it was laid out at instead of the
-         * correction it was owed. Bounded, and never a leak: the entry is gone either
-         * way, and the ledger never saw it. Recorded as abandoned, the same cost the
-         * window's own expiry pays.
-         */
+        // Memory backstop: the oldest hold is dropped while still in its window, and that control
+        // loses its correction.
         const int64_t oldest = lateFilingQueue_.front();
         lateFilingQueue_.pop_front();
         if (lateFilings_.erase(oldest) > 0) {
-          // Same marking the window's own expiry makes, for the same reason: this is
-          // an entry that can no longer be claimed, and a bind that turns up later is
-          // owed the second look rather than a silent nothing.
           markFilingAbandonedLocked(oldest);
         }
       }
       lateFilingQueue_.push_back(instanceId);
     }
     lateFilings_[instanceId] = HeldFiling{entry, NitroUiClock::nowNs()};
-    // `measure` added this instance to the needs-correction set for the row it
-    // just wrote, and that row is leaving the ledger. The set is walked for
-    // *bound* instances, so an id held here must not sit in it; `claim` puts it
-    // back if the instance turns out to be real.
+    // The needs-correction set is walked for bound instances only, so a held id must not be in it.
+    // `claimLateFilingLocked` puts it back.
     if (entry.key && !entry.exact) {
       removeNeedsCorrectionLocked(entry.key, instanceId);
     }
   }
 
   void NitroUiSizingEngine::pruneLateFilingsLocked() {
-    /**
-     * Reclaim what can no longer be saved, oldest staged first.
-     *
-     * An orphan's `forget` has already run by the time its late layout arrives
-     * (`onDropView` is what ended the view), so `forget` cannot be its reclaimer,
-     * and the registry sweep cannot find it either — a held entry has no registry
-     * row by definition. Something has to take it back, and the queue is staged
-     * order, so the front is always the hold with the least chance left.
-     *
-     * Age is the rule, and the alternative — an id horizon — is wrong in a way
-     * that is easy to miss: a re-shown view keeps the id it was minted at *React*
-     * mount time, which for a control that was hidden when it mounted can be
-     * thousands of ids in the past. Prune on id arithmetic and you drop precisely
-     * the holds that save re-shown views, i.e. you reintroduce the bug this fix
-     * exists to cure, quietly, and only for long-lived controls.
-     *
-     * A slot whose id has been claimed or forgotten carries no entry and is
-     * dropped on sight, so the queue measures holds rather than history.
-     */
+    // Oldest staged first. The rule is age, not id distance: a re-shown view keeps the id from its
+    // React mount, which can be thousands of ids old. Slots whose entry was claimed or forgotten
+    // are skipped.
     const int64_t oldestAllowed = NitroUiClock::nowNs() - kLateFilingGraceNs;
     while (!lateFilingQueue_.empty()) {
       const int64_t instanceId = lateFilingQueue_.front();
@@ -428,23 +298,16 @@ namespace margelo::nitro::nitroui {
         continue;
       }
       if (held->second.stagedAtNs > oldestAllowed) {
-        // The front is the oldest hold and it is still in its window, so
-        // everything behind it is too.
+        // The queue is in staged order, so everything behind the front is in its window too.
         break;
       }
       lateFilings_.erase(held);
       lateFilingQueue_.pop_front();
-      // This is the abandonment a late bind is paid for: the entry is gone and
-      // nothing else can bring it back, so if that bind does turn up, the instance
-      // has to be told it owes itself a second look.
       markFilingAbandonedLocked(instanceId);
     }
   }
 
   void NitroUiSizingEngine::markFilingAbandonedLocked(int64_t instanceId) {
-    // Direct-mapped by the low bits, for the same reason and with the same exactness as
-    // `rememberForgottenLocked`: ids are monotonic, so a slot answers for its own id and
-    // no other. See {@link abandonedFilings_}.
     abandonedFilings_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] = instanceId;
   }
 
@@ -458,32 +321,9 @@ namespace margelo::nitro::nitroui {
   }
 
   void NitroUiSizingEngine::pruneUnboundFilingsLocked() {
-    /**
-     * Close the mount window on rows whose bind never came — by *demoting* them, not
-     * deleting them.
-     *
-     * A demotion is exactly what a late layout of a finished id already gets: the row
-     * leaves `ledger_`, so the leak stops, and lands in the held table, where a bind
-     * that arrives late can still claim it back. Reusing that machinery is also why this
-     * is safe: `stageLateFilingLocked` takes the row out of the needs-correction set, the
-     * held table is bounded by its own capacity, and its own prune is what finally drops
-     * a row nobody claims.
-     *
-     * Deleting the row instead would be one line shorter and wrong. "Not bound yet" is
-     * not evidence of absence — layout runs before the mount transaction binds, which is
-     * the ordering `measure` exists to survive (review S7) — and a runner saturated
-     * enough to take longer than the window between a layout and its bind would lose that
-     * control's correction for the life of its mount. Losing a correction is the failure
-     * this file exists to fix, so the window hands the row to a place where it can still
-     * come home.
-     *
-     * The id is marked forgotten as well, so a further layout for it is held rather than
-     * filed: one row per abandoned mount, not one per layout after it.
-     *
-     * Age is the rule, and the queue is filed order, so the front is the row with the
-     * least chance left; a slot for an id that has since bound is dropped on sight rather
-     * than chased (see {@link unboundQueue_}).
-     */
+    // Rows whose bind did not come in time are demoted to the held table, not deleted: layout
+    // legitimately runs before the bind, and a late bind can still claim a held row. Deleting would
+    // lose that control's correction for the life of its mount.
     const int64_t oldestAllowed = NitroUiClock::nowNs() - kLateFilingGraceNs;
     while (!unboundQueue_.empty()) {
       const UnboundFiling filing = unboundQueue_.front();
@@ -492,7 +332,7 @@ namespace margelo::nitro::nitroui {
       }
       unboundQueue_.pop_front();
       if (waitingForBind_.erase(filing.instanceId) == 0) {
-        // Bound, or already demoted through the late-layout door: the slot is stale.
+        // Already bound or demoted: a stale slot.
         continue;
       }
       demoteUnboundFilingLocked(filing.instanceId);
@@ -510,20 +350,11 @@ namespace margelo::nitro::nitroui {
 
   void NitroUiSizingEngine::fileAwaitingBindLocked(int64_t instanceId) {
     if (!waitingForBind_.insert(instanceId).second) {
-      // Already owed a window, and its original filing time is the one to age from.
+      // Already waiting; it ages from its original filing time.
       return;
     }
-    /**
-     * At capacity, the oldest waiting row gives up its slot before the new row takes
-     * one, so {@link kUnboundFilingCapacity} is the number that can be waiting at any
-     * moment, the row being filed included.
-     *
-     * Overflow is not fatal and not what the constant is for: a long list's first commit
-     * legitimately has one row per view in it, laid out before its mount transaction
-     * binds any of them. Those overflow rows go the same way the window sends them — to
-     * the held table, where the bind that follows claims them back — so the valve costs
-     * a later correction at worst, never a lost one.
-     */
+    // At capacity the oldest waiting row is demoted to the held table, where its bind can still
+    // claim it.
     while (unboundQueue_.size() >= kUnboundFilingCapacity) {
       const int64_t oldest = unboundQueue_.front().instanceId;
       unboundQueue_.pop_front();
@@ -542,10 +373,7 @@ namespace margelo::nitro::nitroui {
     LedgerEntry& ledger = ledger_[instanceId];
     ledger = held->second.entry;
     lateFilings_.erase(held);
-    // Its queue slot is left behind on purpose (see `lateFilingQueue_`): the prune
-    // drops a slot with no entry, and `forget` would have to scan to remove one.
-    // The proof of life is what the hold was waiting for, so the entry is live
-    // bookkeeping again and the correction it is owed is owed by a real instance.
+    // The queue slot is left behind for the prune to skip, so no deque scan is needed here.
     if (ledger.key && !ledger.exact) {
       addNeedsCorrectionLocked(ledger.key, instanceId);
     }
@@ -563,8 +391,6 @@ namespace margelo::nitro::nitroui {
   }
 
   void NitroUiSizingEngine::rememberForgottenLocked(int64_t instanceId) {
-    // Direct-mapped by the low bits, which is exact for a monotonic id sequence:
-    // see the `forgotten_` declaration for why a false positive is impossible.
     forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] = instanceId;
   }
 
@@ -580,9 +406,8 @@ namespace margelo::nitro::nitroui {
   }
 
   void NitroUiSizingEngine::forgetLocked(int64_t instanceId) {
-    // Before anything else, and even for an id with nothing to erase: this is the
-    // moment the id stops being a live instance, and the only thing that makes a
-    // layout arriving after it harmless. See `forgotten_`.
+    // First, and even when there is nothing to erase: this mark is what makes a layout that arrives
+    // after the drop harmless.
     rememberForgottenLocked(instanceId);
     registry_.erase(instanceId);
     auto ledger = ledger_.find(instanceId);
@@ -590,38 +415,18 @@ namespace margelo::nitro::nitroui {
       removeNeedsCorrectionLocked(ledger->second.key, instanceId);
     }
     ledger_.erase(instanceId);
-    // And whatever a late layout of this id left on hold: it belongs to a revision
-    // that is gone, and this id is finished again.
-    // (Its queue slot is left behind; the prune drops a slot that has no entry.)
+    // A hold left by a late layout belongs to a revision that is gone. Its queue slot stays for the
+    // prune to skip.
     lateFilings_.erase(instanceId);
-    // Same for a filing we gave up on: the debt behind that mark was "you bound with
-    // nothing, so re-ask", and an id that is finished again has no mount to pay it.
-    // Clearing here is also what makes the ring safe to reuse an id over — the only
-    // situation where a slot could be read against the wrong mount is one where ids are
-    // minted again, which is a test's id space, not `nextInstanceId()`'s.
+    // A finished id has no mount left to re-measure, so clear the abandoned mark too.
     consumeFilingAbandonedLocked(instanceId);
-    // A correction on its way to an instance that is gone must not be applied
-    // later, when some other code may have taken over the id (`unboundTries`
-    // aside, the ledger check in `applyReports` is the second guard).
+    // A queued correction for an instance that is gone must not be applied later.
     pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
                                   [&](const Report& report) { return report.instanceId == instanceId; }),
                    pending_.end());
-    // And this id is finished whether or not its row was still owed a mount window, so
-    // the prune must not come back later and "reclaim" an id it was told about twice.
-    // (Its queue slot is left behind; the prune drops a slot whose id is not waiting.)
     waitingForBind_.erase(instanceId);
-    /**
-     * Re-anchor the sweep's gate to the registry's new size.
-     *
-     * The gate means "the registry has grown by a stride since the last walk", and the
-     * walk's cost is proportional to the registry, so the comparison is only honest
-     * against the size it has now. Without this line, an app that mounts a few thousand
-     * views and then drops them all — closing a screen, a list whose data is replaced —
-     * leaves the gate far above the registry, and the next sweep waits for another full
-     * stride *on top of nothing*: the reclaimer for a `State` that died without a
-     * `forget` goes quiet for as long as it takes to mount that many more views. The
-     * clamp is one compare on a path that already erases from four containers.
-     */
+    // Re-anchor the sweep threshold to the registry's new size. Otherwise, after many views are
+    // dropped at once, the next sweep would wait for the registry to regrow past its old peak.
     nextRegistrySweepAt_ = std::min(nextRegistrySweepAt_, registry_.size() + kRegistrySweepStride);
   }
 
@@ -645,17 +450,14 @@ namespace margelo::nitro::nitroui {
   }
 
   void NitroUiSizingEngine::sweepExpiredLocked() {
-    // `forget` is the path that keeps these maps bounded; this walk is only there
-    // for a host that went away without calling it, so it costs nothing until the
-    // registry has grown by a full stride since the last walk.
+    // `forget` is what keeps these maps bounded. This walk only covers a host that went away
+    // without calling it, so it waits until the registry has grown by a full stride.
     if (registry_.size() < nextRegistrySweepAt_) {
       return;
     }
     nextRegistrySweepAt_ = registry_.size() + kRegistrySweepStride;
-    // `forgetLocked` erases the registry node itself, so it must never be called
-    // from a loop holding an iterator into `registry_` - the loop here used to read
-    // the node it had just freed (review F1, reproduced under ASan). Collect the
-    // expired ids first, then forget each one.
+    // `forgetLocked` erases from `registry_`, so collect the expired ids first rather than erase
+    // while iterating.
     std::vector<int64_t> expired{};
     for (const auto& entry: registry_) {
       if (entry.second.state.expired()) {
@@ -670,22 +472,15 @@ namespace margelo::nitro::nitroui {
   NitroUiMeasuredSize NitroUiSizingEngine::measure(const char* componentName, int64_t instanceId, const std::string& sizingKey,
                                                    const NitroUiMeasuredSize& fromState) {
     if (instanceId == NitroUiSizing::NO_INSTANCE) {
-      // Sizing is off for this view (JS never gave it a `nuiSizingId`), or it is
-      // a plain Yoga leaf like every view before this one: measure nothing.
+      // Sizing is off for this view: JS never gave it a `nuiSizingId`.
       return NitroUiMeasuredSize{};
     }
 
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     stats_.measurements += 1;
-    // Runs here rather than only under `filedLate` so the reclaim does not need a
-    // late filing to trigger it: a trickle of orphans, one per scroll, is the
-    // workload that grows state and the one that would never reach a capacity. The
-    // call is one branch when nothing is held.
+    // Pruned on every measure, not only on a late filing: a slow trickle of orphans would otherwise
+    // never be reclaimed. One branch each when nothing is held or waiting.
     pruneLateFilingsLocked();
-    // Same argument, for rows waiting on a bind: the leak this reclaims is one row per
-    // abandoned mount, and an app that abandons one every scroll needs the walk running
-    // on layouts that have nothing to do with the abandoned id. One branch when nothing
-    // is waiting.
     pruneUnboundFilingsLocked();
     const NitroUiSizeKey key = keyFor(componentName, sizingKey, environmentEpoch_);
 
@@ -696,24 +491,16 @@ namespace margelo::nitro::nitroui {
     if (cached != cache_.end() && cached->second.key == key) {
       result = cached->second.size;
       result.key = key;
-      // A pre-warmed or seeded entry answers the layout - that is the point of
-      // pre-warming - but it is not an *answer* until a control confirmed it, so
-      // the instance stays inexact and its report either promotes the entry or
-      // replaces it (review B2).
+      // A pre-warmed or seeded entry answers the layout, but the instance stays inexact until a
+      // control confirms it.
       exact = !cached->second.provisional;
     } else if (fromState.valid() && fromState.key == key) {
       // Native pushed this size into the state for *this* configuration.
       result = fromState;
       exact = true;
     } else {
-      /**
-       * Cold for this configuration in this environment. The guess comes from what
-       * *this* configuration last measured (`guesses_`, which survives an epoch
-       * bump), and only falls back to the component's declared number when this
-       * configuration has never been measured at all. Filing the last measurement
-       * under the component instead is what let one variant's size become another's
-       * guess.
-       */
+      // Cold. Guess from what this configuration last measured (`guesses_` survives an environment
+      // change), else from the component's declared size.
       auto guess = guesses_.find(guessHash(componentName, sizingKey));
       if (guess != guesses_.end() && guess->second.componentName == componentName &&
           guess->second.sizingKey == sizingKey) {
@@ -722,50 +509,23 @@ namespace margelo::nitro::nitroui {
         auto fallback = fallbacks_.find(componentHash(componentName));
         result = fallback != fallbacks_.end() ? fallback->second : NitroUiMeasuredSize{};
       }
-      // The fallback keeps an empty key on purpose: it is a *guess* for this
-      // configuration, and `valid()` is how the rest of the code tells a guess
-      // from an answer. The ledger still records the key, so the real size
-      // reported later finds this instance and corrects it.
+      // A guess keeps an empty key: `valid()` is how the rest of the code tells a guess from an
+      // answer. The ledger still records the key, so the real size finds this instance.
     }
 
-    /**
-     * A layout for an id the engine has finished gets its entry, and a place in
-     * the held set that keeps it from becoming a leak.
-     *
-     * Round 1 refused to file here, and that was wrong: an id is *not* new per
-     * native mount. `useSizingId` mints one per React mount, and iOS Fabric
-     * creates no native view for a `display: none` node — so hiding a control runs
-     * `drop()` -> `forget(X)` while the React mount, and its id, survive. Showing
-     * it again lays the new view out *before* mounting it: this branch refused the
-     * layout, `registerInstance` then cleared the mark, and the instance was bound
-     * with no ledger entry. `report` returns at its first line without one, and
-     * `invalidateEnvironment` re-keys `ledger_`, so the control sat at the size it
-     * was laid out at for the rest of its life — one lost correction per hide/show,
-     * and `mode`/`variant` changes with it.
-     *
-     * So the entry is filed, but *held* rather than in `ledger_`: `ledger_` counts
-     * live instances, and an id that has been through `forget` is not one until it
-     * binds again. Only `registerInstance` claims a hold, because it is the one call
-     * that means "this id has a `State` in the shadow tree"; a hold that no bind comes
-     * for is reclaimed by the prune {@link pruneLateFilingsLocked}, whose bound is the
-     * window — a bind that arrives after it is charged a fresh measure rather than left
-     * with nothing. See {@link lateFilings_}.
-     */
+    // A layout for a finished id is still recorded, but held outside `ledger_` (see
+    // `lateFilings_`): a re-shown view is laid out before its bind and needs the entry.
     const bool filedLate = isForgottenLocked(instanceId);
 
-    // Record what this instance laid out with, and whether that is the answer we
-    // already believe. `exact` instances never get a state push, which is what
-    // makes a pre-warmed mount cost zero extra commits.
+    // Record what this instance laid out with. An `exact` instance never gets a state push, which
+    // is why a pre-warmed mount costs no extra commit.
     LedgerEntry& ledger = ledger_[instanceId];
-    // Does this instance already have a row? A late filing for an id whose entry
-    // `forget` erased always creates one, and that is the row the hold below
-    // takes back out of the ledger.
     const bool freshRow = !ledger.key && !ledger.hasMeasured;
     if (ledger.key) {
       removeNeedsCorrectionLocked(ledger.key, instanceId);
     }
-    // The instance moved configuration (or the environment moved under it): what
-    // it is on screen with no longer belongs to this key.
+    // The configuration or the environment changed: the size on screen no longer belongs to this
+    // key.
     const bool sameConfiguration = ledger.key == key;
     if (!sameConfiguration) {
       ledger.laidOut = NitroUiMeasuredSize{};
@@ -776,31 +536,14 @@ namespace margelo::nitro::nitroui {
     ledger.sizingKey = sizingKey;
 
     if (traceEnabled_.load(std::memory_order_relaxed)) {
-      // Only when the answer for this instance changed: a control that is laid
-      // out a hundred times at one size is not a hundred trace events.
+      // Only when the answer changed, so repeated layouts at one size are one trace event.
       if (!(ledger.laidOut.width > 0 && sameSizeIgnoringKey(ledger.laidOut, result))) {
         recordTraceLocked(instanceId, kStageLaidOut, result.width, result.height);
       }
     }
-    /**
-     * The answer for this instance moved (FIX2, D20). A correction lands as a new
-     * `State` on the family, but React's next props clone is made without `.state`
-     * and copies the *previous revision's* state, so it still carries the size from
-     * before the correction - in its Yoga measurement cache and in its
-     * `layoutMetrics_`. Our `adopt` then mints a fresh, never-obsolete `State` from
-     * that revision on every props change, so RN's `progressState` never re-dirties
-     * the node and the next clean clone is committed at the superseded size. From
-     * here the node has to re-ask on a props turn instead of trusting that
-     * revision; see `requiresFreshMeasure`.
-     *
-     * Only a correction raises this, never a configuration change. A key is a JS
-     * prop, so the turn that re-keys is already dirty for another reason
-     * (`shouldNewRevisionDirtyMeasurement` answers `newConfiguration`) and receives
-     * the fresh answer in that same turn's layout. If that answer then moves, the
-     * correction raises the flag in `applyReports`. Flagging on a re-key instead
-     * would put every re-keyed control - warm keys of the identical size included -
-     * on the paying path for the rest of its mount.
-     */
+    // The answer for this instance changed, so its node must re-measure on later props updates (see
+    // `requiresFreshMeasure`). A change of configuration does not count: that update is already
+    // dirty and gets the fresh answer in the same layout.
     if (ledger.hasMeasured && sameConfiguration && !sameSizeForPush(ledger.laidOut, result)) {
       ledger.answerChanged = true;
     }
@@ -812,30 +555,14 @@ namespace margelo::nitro::nitroui {
     if (filedLate) {
       stageLateFilingLocked(instanceId, ledger);
       if (freshRow) {
-        // The row `ledger` refers to was created by this layout, and the id is
-        // finished: hold the entry off-ledger and take the row back out, so
-        // `ledger_` keeps meaning "an instance the engine knows about".
+        // This layout created the row and the id is finished: take the row back out, so `ledger_`
+        // holds live instances only.
         ledger_.erase(instanceId);
       }
       return result;
     }
-    /**
-     * A row filed for an id that is not bound yet is owed a mount window (see
-     * {@link UnboundFiling}).
-     *
-     * It has to be *after* the filing rather than a condition on it, because "not in
-     * `registry_`" is the normal state of an instance whose commit is in flight — that
-     * is the ordering `measure` exists to survive — so the row is kept and only *time*
-     * decides whether it was filed for something that is coming. The check is one hash
-     * lookup on a path that already did two, and a bound instance never enters it, so
-     * the cost of the rule is on the layout of a view that has not mounted yet.
-     */
-    /**
-     * A row that did not exist and now does, for an id that was bound with nothing to
-     * its name, is the debt being paid: this is the re-ask {@link
-     * BoundInstance::owesFreshMeasure} existed to cause, and leaving the flag set would
-     * put the instance on the paying path for the rest of its mount.
-     */
+    // A new row for an unbound id waits for its bind; not being bound yet is normal while a commit
+    // is in flight. A new row for a bound id is the re-measure that instance owed.
     if (freshRow) {
       const auto bound = registry_.find(instanceId);
       if (bound == registry_.end()) {
@@ -866,8 +593,7 @@ namespace margelo::nitro::nitroui {
     }
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     fallbacks_[componentHash(componentName)] = NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags};
-    // A re-declaration means the history this component's configurations had is
-    // about the environment or build that this number replaces.
+    // A new declaration supersedes what this component's configurations measured before.
     dropGuessesForLocked(componentHash(componentName), componentName);
   }
 
@@ -877,21 +603,19 @@ namespace margelo::nitro::nitroui {
     }
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     const NitroUiSizeKey key = keyFor(componentName, sizingKey, environmentEpoch_);
-    // Provisional: nothing measured this, so a control that disagrees still wins
-    // (review B2). This is also what makes the on-device tests able to fail.
+    // Provisional: nothing measured this, so a control that disagrees still wins.
     cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{width, height, key, flags}, true};
     stats_.cachedSizes = static_cast<int64_t>(cache_.size());
     fallbacks_[componentHash(componentName)] = NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags};
     dropGuessesForLocked(componentHash(componentName), componentName);
-    // The seed is also this configuration's new history, so an epoch bump after it
-    // still guesses the seeded number rather than an older measurement.
+    // The seed is also this configuration's history, so an environment change after it still
+    // guesses the seeded size.
     guesses_[guessHash(componentName, sizingKey)] = GuessEntry{std::string(componentName), sizingKey,
                                                                NitroUiMeasuredSize{width, height, NitroUiSizeKey{}, flags}};
   }
 
   void NitroUiSizingEngine::report(int64_t instanceId, float width, float height, uint32_t flags) {
     if (instanceId == NitroUiSizing::NO_INSTANCE || !std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0) {
-      // A control that measured nothing has not measured anything.
       return;
     }
     bool needsFlush = false;
@@ -899,19 +623,12 @@ namespace margelo::nitro::nitroui {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
       auto ledger = ledger_.find(instanceId);
       if (ledger == ledger_.end() || !ledger->second.key) {
-        // Nothing ever laid out for this instance, so there is nothing to correct.
-        // It gets its ledger entry from the next `measure`, and can report again
-        // then; that is the order a mount actually happens in. A layout held for a
-        // re-shown view cannot reach here either: the bind claims it as it happens,
-        // and a bound id with a hold is not a state this engine can be in.
+        // Nothing has laid out for this instance yet, so there is nothing to correct. The next
+        // `measure` creates its entry and it can report again.
         return;
       }
       const NitroUiSizeKey& key = ledger->second.key;
       const NitroUiMeasuredSize measured{width, height, key, flags};
-      // Does this agree with what the instance is already laid out with - would a
-      // push change what is on screen? Neither the key (see `sameSizeIgnoringKey`)
-      // nor a `fillWidth` control's box-owned width is part of that question
-      // (see `sameSizeForPush`).
       const bool agrees = ledger->second.laidOut.width > 0 && sameSizeForPush(ledger->second.laidOut, measured);
 
       if (agrees) {
@@ -926,20 +643,14 @@ namespace margelo::nitro::nitroui {
           }
         }
         if (!othersPending) {
-          // Nothing on this instance needs a commit: neither does anything else
-          // with the same configuration. Confirm it and stop here - this is where
-          // a pre-warmed mount, and an environment change that did not move this
-          // control, stop costing anything at all.
+          // Neither this instance nor any other of its configuration needs a commit. This is where
+          // a pre-warmed mount stops costing anything.
           stats_.reportsDropped += 1;
           stats_.reportsConfirmed += 1;
           ledger->second.exact = true;
           removeNeedsCorrectionLocked(key, instanceId);
-          // The control confirmed a size for *this* configuration, so this
-          // configuration now has an authoritative answer - whether the cache had
-          // a provisional guess that agreed, a provisional guess that this control
-          // happens to match by luck, or nothing at all. Filling the entry here is
-          // what keeps the next mount from falling back to the component's declared
-          // guess again; only the guess being *wrong* may cost a correction (B2).
+          // The control confirmed a size for this configuration, so record it as authoritative: the
+          // next mount no longer falls back to the declared guess.
           const NitroUiMeasuredSize confirmed =
               filedSizeLocked(measured, ledger->second.componentName);
           guesses_[guessHash(ledger->second.componentName.c_str(), ledger->second.sizingKey)] =
@@ -959,8 +670,7 @@ namespace margelo::nitro::nitroui {
         }
       }
 
-      // Something to correct - either this instance's size, or another instance of
-      // the same configuration waiting for the answer this control measured.
+      // This instance, or another one of the same configuration, needs a correction.
       ledger->second.exact = false;
       // Last report of the turn wins for this instance.
       pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
@@ -973,11 +683,8 @@ namespace margelo::nitro::nitroui {
 #if defined(__APPLE__)
     if (needsFlush) {
       installFlushObserverIfNeeded();
-      // The observer only runs when the run loop next gets to that point, and
-      // nothing else guarantees another pass: without this, a correction that
-      // lands at the end of a turn waits for the next touch. Waking the loop costs
-      // nothing when it is already awake, and a block on the main queue (the trace
-      // sample used to be the accidental reason this worked) is not a design.
+      // The observer only runs when the run loop reaches that point. Wake the loop, so a correction
+      // reported at the end of a turn does not wait for the next event.
       CFRunLoopWakeUp(CFRunLoopGetMain());
     }
 #else
@@ -1005,23 +712,8 @@ namespace margelo::nitro::nitroui {
     std::vector<Report> reports{};
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
-      /**
-       * Both mount windows are closed from here, not only from `measure`.
-       *
-       * A churn of mounts and drops is exactly the workload that *stops* laying out when
-       * it finishes, and CI's rule reads the ledger after the churn has settled — so a
-       * reclaim that needed a further layout would be reporting a leak the engine had
-       * already decided to give up on. On iOS this runs on every run-loop turn, idle
-       * included (the observer fires on `kCFRunLoopBeforeWaiting`), so one abandoned row
-       * costs one turn rather than the silence after the last animation. The call is one
-       * compare when nothing is waiting, which is every turn of a healthy app.
-       *
-       * The held table needs it for the same reason, and needed it before this round:
-       * a hold's other reclaimer is `forget`, and an orphan's `forget` has already run.
-       * With the prune only in `measure`, a churn that stopped left its holds on the
-       * table until the *next* layout came by — correct, but a set the leak rule could
-       * read as a survivor, which is exactly the reading F8 was chasing.
-       */
+      // Pruned here as well as in `measure`: a burst of mounts and drops stops laying out when it
+      // ends, and the rows it abandoned would otherwise sit until the next layout.
       pruneLateFilingsLocked();
       pruneUnboundFilingsLocked();
       if (pending_.empty()) {
@@ -1038,17 +730,6 @@ namespace margelo::nitro::nitroui {
       stats_.lastFlushNs = elapsed;
       stats_.maxFlushNs = std::max(stats_.maxFlushNs, elapsed);
       if (changed) {
-        // Renamed for what it counts (DECISIONS D16).
-        // What this counts is "a flush changed at least one size", and what that
-        // is worth depends on the platform. Android's `OnPreDrawListener` returns
-        // `false` on exactly these flushes, so here the count is also the number
-        // of frames that never reached the screen. iOS flushes from a run-loop
-        // observer below Core Animation's commit observer, so a correction that
-        // arrives *within* a turn is committed in that same turn - but a size can
-        // only be corrected once the native side has measured it, and when that is
-        // a later turn the frame the turn started with is already on screen. The
-        // T11 harness measures that case (one stale frame in `poison`), so this is
-        // not evidence of a skipped frame on iOS; the trace's `drew` samples are.
         stats_.changedFlushes += 1;
       }
       sweepExpiredLocked();
@@ -1060,17 +741,10 @@ namespace margelo::nitro::nitroui {
     bool changed = false;
     // Registry entries whose state has died (an unmounted or recycled node).
     std::vector<int64_t> dead{};
-    // What this flush may spend synchronously - the platform's call, see
-    // `flush(int32_t)`.
     int32_t remaining = immediateBudget > 0 ? immediateBudget : 0;
-    /**
-     * The pushes to issue, collected under the lock and run after it is dropped.
-     *
-     * A push is a Fabric state update, and a state update can reach this file
-     * again on the same thread: the resulting commit re-layouts, `measureContent`
-     * calls `measure`, and `std::shared_mutex` is not recursive - holding the lock
-     * across a push is a deadlock waiting for the layout to be synchronous.
-     */
+    // Pushes are collected under the lock and run after it is released. A push is a Fabric state
+    // update whose commit can re-enter `measure` on this thread, and `std::shared_mutex` is not
+    // recursive.
     struct Pending {
       NitroUiPushFn push;
       NitroUiStateRef state;
@@ -1078,10 +752,8 @@ namespace margelo::nitro::nitroui {
       bool immediate;
     };
     std::vector<Pending> pending{};
-    // Reports whose instance has no state to push into yet, and instances that are
-    // waiting for this configuration but cannot be reached yet. Both mean "not
-    // now", and dropping them outright is how a control ends up stuck at the
-    // fallback size (review S7).
+    // Reports whose instance has no state to push into yet. Dropping them would leave the control
+    // at its fallback size, so they are retried.
     std::vector<Report> requeue{};
 
     {
@@ -1093,24 +765,16 @@ namespace margelo::nitro::nitroui {
           continue;
         }
         const NitroUiSizeKey key = ledger->second.key;
-        /**
-         * What this report becomes: the height the control measured, plus the width
-         * the component declared when the policy says the width is not the control's
-         * own. `measured` is what goes in the cache, in the configuration's history,
-         * in the ledger and in the pushed state, so filing happens once here rather
-         * than at each of those four writes - and every one of them then agrees,
-         * including `laidOut`, which is meant to be the size the engine actually
-         * told Yoga to lay the node out with.
-         */
+        // Filed once here, so the cache, the guess, the ledger and the pushed state all get the
+        // same size.
         const NitroUiMeasuredSize measured =
             filedSizeLocked({ report.width, report.height, key, report.flags },
                             ledger->second.componentName);
 
         auto instance = registry_.find(report.instanceId);
         if (instance == registry_.end()) {
-          // Never bound: the report arrived between `measure` and the mount that
-          // binds the state. Try again for a bounded number of flushes; the ledger
-          // entry stays either way, so a later report works normally.
+          // The report arrived between `measure` and the mount that binds the state: retry for a
+          // bounded number of flushes.
           if (report.unboundTries < kUnboundReportRetries) {
             Report retry = report;
             retry.unboundTries += 1;
@@ -1120,35 +784,20 @@ namespace margelo::nitro::nitroui {
         }
         auto state = instance->second.state.lock();
         if (state == nullptr) {
-          // The shadow tree let this node's state go and nobody called `forget`:
-          // the instance is gone, so everything filed under it goes with it.
+          // The shadow tree released this node's state and nobody called `forget`: the instance is
+          // gone.
           dead.push_back(report.instanceId);
           continue;
         }
 
-        // The cache entry is what makes the *next* mount of this configuration
-        // exact on its first layout, so it goes in before any push. A size a
-        // control measured is authoritative: it replaces a provisional entry that
-        // disagreed, which is the other half of review B2.
+        // Cache first, so the next mount of this configuration is exact on its first layout. A
+        // measured size replaces a provisional entry.
         cache_[key.hash] = SizeEntry{key, measured, false};
         stats_.cachedSizes = static_cast<int64_t>(cache_.size());
-        // Same configuration, so it is this configuration's history - filed by
-        // (component, sizingKey), never by component alone.
         const std::string& sizingKey = ledger->second.sizingKey;
         guesses_[guessHash(ledger->second.componentName.c_str(), sizingKey)] =
             GuessEntry{ledger->second.componentName, sizingKey,
                        NitroUiMeasuredSize{measured.width, measured.height, NitroUiSizeKey{}, report.flags}};
-/**
-         * The measured size deliberately does **not** become the component's
-         * fallback. `fallbacks_` is keyed by component alone, so writing the last
-         * measurement into it lets one configuration become another one's guess:
-         * a 100-wide variant was measured, and the next cold mount of the default
-         * configuration was laid out 100 wide (reproduced on the host: a fresh
-         * default mount answered 100x28 after a wide variant reported). A guess
-         * belongs to the configuration it came from, which is what `cache_` is
-         * for; the declared fallback stays the only component-wide guess, and it
-         * is exactly the number the component declared for this OS (D14).
-         */
         // Every instance that laid out with a wrong size for this key gets the
         // same correction, not only the one that reported.
         auto needs = needsCorrection_.find(key.hash);
@@ -1165,7 +814,7 @@ namespace margelo::nitro::nitroui {
         for (const int64_t target: targets) {
           auto targetInstance = registry_.find(target);
           if (targetInstance == registry_.end()) {
-            // Not bound yet - put it back rather than lose the correction (S7).
+            // Not bound yet: put it back rather than lose the correction.
             waiting.push_back(target);
             continue;
           }
@@ -1182,21 +831,16 @@ namespace margelo::nitro::nitroui {
           // `measure`, find the cache full, and record `exact` itself.
           targetLedger->second.exact = true;
           if (targetLedger->second.laidOut.width > 0 && sameSizeForPush(targetLedger->second.laidOut, measured)) {
-            // It is already on screen at this size (an environment change that
-            // moved the epoch and not the control). Confirming it must not cost a
-            // commit - or the epoch bump would push every mounted control a size it
-            // already has.
+            // Already on screen at this size (the environment changed but this control's size did
+            // not), so no commit.
             stats_.reportsConfirmed += 1;
             continue;
           }
-          // What the instance is now being told to lay out with. Recording it here
-          // (rather than only in `measure`, which runs when the commit lands) is
-          // what makes the host's next report of the same size a confirmation
-          // instead of a second correction.
+          // Recorded here as well as in `measure`, so the host's next report of this size is a
+          // confirmation rather than a second correction.
           targetLedger->second.laidOut = measured;
-          // An instance can be corrected without ever being measured again (its
-          // node may not lay out in this turn), so the answer moving is recorded
-          // here as well as in `measure`.
+          // The node may not lay out again this turn, so the change is recorded here as well as in
+          // `measure`.
           targetLedger->second.answerChanged = true;
           changed = true;
           const bool immediate = remaining > 0;
@@ -1251,12 +895,8 @@ namespace margelo::nitro::nitroui {
       return false;
     }
     const NitroUiSizeKey key = keyFor(componentName, "", environmentEpoch_);
-    // Provisional, never authoritative (review B2): this is the library's own
-    // guess at what the control is, not a measurement of it. An app that
-    // pre-warms must be able to be wrong without freezing a wrong layout for the
-    // session - the case that used to bite iOS 26 apps running with
-    // `UIDesignRequiresCompatibility`, where the declared 61x28 was laid over a
-    // 51x31 control and every Switch kept a box 3 pt too short.
+    // Provisional: this is the declared size, not a measurement, so a control that disagrees still
+    // corrects it.
     cache_[key.hash] = SizeEntry{key, NitroUiMeasuredSize{fallback->second.width, fallback->second.height, key,
                                                          fallback->second.flags},
                                  true};

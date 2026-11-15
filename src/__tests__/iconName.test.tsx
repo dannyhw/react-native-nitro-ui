@@ -10,22 +10,6 @@ import {
   warnAndroidIconName,
 } from '../iconName';
 
-/**
- * The JavaScript half of the `androidIcon` name rules (task G19).
- *
- * Android answers "that is not a resource name" and "you did not ship that file"
- * with the same thing — no id, no icon, no exception — and only one of the two is
- * something the developer can fix while writing the screen. `androidIconNameProblem`
- * is the function that tells them apart before anything is shipped, so its table
- * is the whole value of the feature and it is asserted name by name rather than by
- * round-tripping the same regular expression.
- *
- * The Kotlin twin is `NitroUiIconNames`
- * (`android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt`), tested
- * from the same table. Two languages, two copies of a rule, and one shared list of
- * cases is the only thing that keeps them from drifting into different answers for
- * the same typo.
- */
 beforeEach(() => {
   nitroUiHybridObjects.NitroUiCore = () => ({ nextSizingId: () => 1 });
   resetAndroidIconNameWarningsForTests();
@@ -50,14 +34,12 @@ describe('androidIcon name rules', () => {
     expect(androidIconNameProblem('share')).toBeNull();
     expect(androidIconNameProblem('ic_share_2')).toBeNull();
     expect(androidIconNameProblem('share24')).toBeNull();
-    // Normalised first, so these are fine too - which is the point of normalising.
+    // Names are normalised before they are checked.
     expect(androidIconNameProblem('Share')).toBeNull();
     expect(androidIconNameProblem('share-24px')).toBeNull();
   });
 
   it('names the reason a name can never resolve', () => {
-    // Each of these reaches `getIdentifier` as a name the resource table cannot
-    // contain, and comes back indistinguishable from a missing file.
     expect(androidIconNameProblem('')).toMatch(/empty/);
     expect(androidIconNameProblem('24px_share')).toMatch(/resource name/);
     expect(androidIconNameProblem('share icon')).toMatch(/resource name/);
@@ -97,9 +79,6 @@ describe('Button · androidIcon', () => {
   });
 
   it('is part of the size configuration, because a glyph makes the control wider', async () => {
-    // Two Buttons that differ only in `androidIcon` share one cached size if the
-    // key omits it, and the second is laid out at the first one's width for the
-    // life of the process - a wrong size that no device test can attribute.
     const plain = await render(<Button title="Share" testID="plain" />);
     const withIcon = await render(
       <Button title="Share" androidIcon="share" testID="icon" />
@@ -113,12 +92,6 @@ describe('Button · androidIcon', () => {
   });
 
   it('escapes a pipe in the drawable name, spelled out', async () => {
-    // Pinned as the literal key rather than as "these two keys differ". A
-    // collision needs two *unescaped* fields to forge each other, and `title` is
-    // escaped on its own, so dropping the escape on `androidIcon` alone would
-    // still leave every pair of Buttons distinguishable - a test built as a
-    // collision check therefore stays green over the very bug it is meant to
-    // catch. The string is what says the field was escaped before it was joined.
     const view = await render(
       <Button title="c" androidIcon={'a|b'} testID="first" />
     );
@@ -128,8 +101,6 @@ describe('Button · androidIcon', () => {
   });
 
   it('warns in development about a name the app can never ship', async () => {
-    // The call site, not the function: a rule nobody calls is a rule that does
-    // not exist, and this is the line a developer actually sees.
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await render(

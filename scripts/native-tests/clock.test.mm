@@ -1,17 +1,3 @@
-//
-//  clock.test.mm
-//
-//  Host-side unit test for the shared clock and perf ring (DECISIONS D1).
-//  Run by `bun run test:native` (scripts/native-tests.sh) on the dev machine /
-//  CI's macOS runner - it compiles the shipping headers directly, so it tests
-//  the same code the app does.
-//
-//  The point of this test is the bug T10's review found: `steady_clock` on Apple
-//  is `CLOCK_MONOTONIC_RAW`, which keeps counting during sleep, so marks built on
-//  it are tens of thousands of seconds away from `CADisplayLink` timestamps.
-//  The checks below are the ones that fail if someone goes back to it.
-//
-
 #include "core/NitroUiClock.hpp"
 #include "core/NitroUiPerf.hpp"
 
@@ -53,7 +39,7 @@ int main() {
   std::printf("NitroUiClock\n");
 
   const int64_t ours = NitroUiClock::nowNs();
-  const double caCurrent = CACurrentMediaTime();  // the base CADisplayLink uses
+  const double caCurrent = CACurrentMediaTime();
   checkNear(ours, static_cast<int64_t>(caCurrent * 1e9), 5000000,
             "nowNs() matches CACurrentMediaTime() (CADisplayLink base)");
   checkNear(ours, static_cast<int64_t>(NSProcessInfo.processInfo.systemUptime * 1e9), 5000000,
@@ -61,9 +47,8 @@ int main() {
 
 #if defined(__APPLE__)
   {
-    // Bracketed, not a tolerance: a fresh read must land between two reads of the reference clock taken
-    // around it. A fixed window failed on a loaded CI runner under ASan (off by 1.4 ms) because time
-    // passed between `ours` and the reference read, not because the clocks differ.
+    // Bracketed between two reads of the reference clock, not compared within a tolerance:
+    // on a loaded machine time passes between one clock's read and the other's.
     const int64_t lo = static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
     const int64_t mid = NitroUiClock::nowNs();
     const int64_t hi = static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW));

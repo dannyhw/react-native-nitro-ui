@@ -1,15 +1,6 @@
 /**
- * What the watchdog says, and when it stays quiet.
- *
- * The orchestrator is one long conversation, so when it stalls nothing inside it can
- * notice. Three stalls cost 78 hours in eighteen days: a full disk (34 h), a network
- * loss nothing resumed from (39 h), and a dead session (6 h). A second process has to
- * look, and it has to be quiet when nothing moved or it will be switched off - the
- * first watch here fired 38 times, found nothing, and was deleted the next morning.
- *
- * So each check is a *fact* with a `state`, and a fact is reported only when its state
- * changes, plus a reminder while it stays at `alert`. `scripts/watchdog.mjs` gathers
- * the facts; this file decides, with no process, clock or filesystem of its own.
+ * Decides what the watchdog reports. Each check is a fact with a `state`, reported
+ * only when the state changes, plus a reminder while it stays at `alert`.
  */
 
 import { leaseIsLive } from './lease-core.mjs';
@@ -97,12 +88,8 @@ const CI_RED = ['failure', 'timed_out', 'startup_failure', 'action_required'];
 
 /**
  * For each workflow, the newest finished run on `main` that reached a verdict.
- *
- * A cancelled, skipped or neutral run is not a verdict: `main` cancels a superseded
- * run by design, and reading that as red would raise an alert that fixes itself. The
- * caller asks for each workflow's own recent runs, because one shared list of the
- * last N lets a red run age out behind scheduled runs of another workflow and read
- * as a recovery nobody made.
+ * A cancelled, skipped or neutral run is not one: `main` cancels a superseded
+ * run by design.
  *
  * @param {{workflowName: string, status: string, conclusion: string | null,
  *   headSha: string}[] | null} runs newest first within each workflow
@@ -197,14 +184,9 @@ export function pullRequestsFact(prs) {
 }
 
 /**
- * A fact the caller observed itself, as `key=level:state:text`. The scheduled agent
- * uses this for what only it can see: whether the orchestrator's conversation is
- * alive and how many delegated tasks are waiting on a person.
- *
- * `state` is what gets compared between runs, so it is held to a small alphabet: no
- * colon (it would cut the state short and make two different states compare equal),
- * no quote or space (it travels through a shell), and no free text from a thread
- * title, which is someone else's words and would be passed on as if it were ours.
+ * A fact the caller observed itself, as `key=level:state:text`. `state` is
+ * compared between runs and travels through a shell, so it is held to a small
+ * alphabet: no colon, quote or space.
  *
  * @param {string} argument
  * @returns {Fact}
