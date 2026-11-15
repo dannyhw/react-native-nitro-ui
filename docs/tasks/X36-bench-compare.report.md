@@ -41,7 +41,7 @@ only, and the first real run is the orchestrator's to schedule. `scripts/bench/l
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1953 tests / 86 suites | `185a3bcc63a7` | 1 m 38 s | start 8.5 / med 20.6 / max 23.6 |
+| `check` | **PASS** | 1965 tests / 88 suites | `e3533d4261b8` | 1 m 34 s | start 5.8 / med 12.6 / max 14.9 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
@@ -115,6 +115,17 @@ Dry run:   1 reason(s) not to start it as asked
 - `AGENTS.md`: it still promises `gate.mjs export` writes a failure excerpt per red run to
   `docs/tasks/<ID>/failures/`; the v6 ledger stopped writing `failureLogPath` and nothing writes that
   directory any more (gone on the branch this one stacks on, not here).
+- `scripts/bench/render.mjs` `gateSummary`: it counts head noise only, so a noisy base still reads "every verdict is conclusive"; no test pins `baseNoisy`.
+- `--compare-release --component <unknown> --dry-run` ends in a stack trace from `buildSchedule`; a plain dry run prints a reason.
+- `scripts/bench/run.mjs`: a comparison resolves its ref only after the head build, so a bad ref costs a build first.
+- Base records are aggregated, and base launch strings built, by the head's `lib.mjs`; nothing checks the base's `SCHEMA_VERSION`.
+- The two sides' ART states are recorded and not compared: a `verify` base against a `speed-profile` head would read as a speed-up.
+- `installBaseDependencies` skips when `node_modules` exists, so an interrupted `bun install` is never repaired.
+- The base cache is keyed by the checkout's directory name, so every worktree pays its own extraction, install and build.
+- With `--launches 2` or `3`, or after a failure, the release's app is the one left installed.
+- A head metric that loses its samples drops out of its comparison row without a word.
+- The default tag is the newest one in the local clone; nothing fetches, and the clone has no `v0.9.1` tag.
+- `runDependencies` labels the base side `bun.lock in the working tree`, and only the head's install is checked for staleness.
 
 ## Questions for orchestrator
 
@@ -131,8 +142,8 @@ Dry run:   1 reason(s) not to start it as asked
 
 ## Design changes
 
-`docs/DECISIONS.md` is not on this branch, so the wording X36 implies for it goes here for the
-orchestrator to apply. Everything not quoted is unchanged.
+`docs/DECISIONS.md` is on this branch (round 1 said it was not, which was wrong). Fix round 1
+applied the wording below to D9, D15 and D18 there; it stays here as the record of what changed.
 
 **D9 (T02) Benchmark policy** — replace the committed-baseline bullet and the mint-only parts of the
 R4/A4 amendments with:
@@ -174,3 +185,23 @@ R4/A4 amendments with:
 > measured mid-session (`--perf-marks`, any `--timeout-*` override). "Baselines are minted only from
 > `speed-profile` runs" and "primed Android baselines are recorded during release readiness" are
 > withdrawn: readiness *is* the comparison.
+
+## Fix round 1
+
+Lease: none, no device. `check` is green on `e3533d4261b8` (table above).
+
+- **Explicit ref at HEAD.** Both sides are now full commit ids, and the ref is peeled to its commit, so
+  an annotated tag is refused too. `--compare-release HEAD --dry-run` now prints the refusal.
+- **Failed base side.** A cell the plan measures on both sides that ends without a verdict, because a
+  side has no record or no sample of it or of its control, is listed under "Not compared" and fails
+  the session; so does a base launch that did not complete. A cell both sides measured and neither can
+  quote (a flat leak slope) is left alone.
+- **False statements.** D9, D15 and D18 in `docs/DECISIONS.md`, the `run.mjs` header, the 31-cell
+  quick plan and two `render.mjs` strings.
+- **Nice-to-have, two of them.** `runDependencies` has its two tests again. The launch loop moved to
+  `scripts/bench/drive.mjs`: a failed install or stop ends the run with its reason, its records and a
+  non-zero exit.
+
+Red proofs: 14 rows appended to `mutations.json`; the first four restore the pre-fix expressions.
+
+Not run on a device, as before. The other review items are one line each under Follow-ups.
