@@ -440,14 +440,19 @@ export function factsForItem(groupLabel: string, title: string): TextFacts {
       detail: `no node carries the group name "${groupLabel}"`,
     };
   }
-  const titled = findAllByText(nodes, title).find(
-    (node) =>
-      node.bounds.x1 >= group.bounds.x1 - 1 &&
-      node.bounds.y1 >= group.bounds.y1 - 1 &&
-      node.bounds.x2 <= group.bounds.x2 + 1 &&
-      node.bounds.cy >= group.bounds.y1 - 1 &&
-      node.bounds.cy <= group.bounds.y2 + 1
-  );
+  const insideGroup = (node: TreeNode): boolean =>
+    node.bounds.x1 >= group.bounds.x1 - 1 &&
+    node.bounds.y1 >= group.bounds.y1 - 1 &&
+    node.bounds.x2 <= group.bounds.x2 + 1 &&
+    node.bounds.cy >= group.bounds.y1 - 1 &&
+    node.bounds.cy <= group.bounds.y2 + 1;
+  // A Compose row that merges its descendants is *named* by its title and draws no
+  // separate text node at all, so the words are either a node's text or the name a
+  // reader is told - the two places the driver's own `getByText` looks. Refusing the
+  // second would call a merged row an item the group does not draw.
+  const titled =
+    findAllByText(nodes, title).find(insideGroup) ??
+    namedNodesIn(nodes, title).find(insideGroup);
   if (titled == null) {
     return {
       checked: null,
