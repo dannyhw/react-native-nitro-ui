@@ -1,0 +1,14 @@
+[
+  {
+    "file": "example/e2e/real-input/hosted-picker.e2e.ts",
+    "mutation": "(file removed from the tree, so one control in scripts/real-input/controls.mjs has no Android check)",
+    "result": "red",
+    "firstRedTest": "hosted-picker has a check on both platforms — expected \"present\", received \"example/e2e/real-input/hosted-picker.e2e.ts is missing, so no real touch is delivered to \\\"hosted-picker\\\" and nothing would notice\""
+  },
+  {
+    "file": "example/e2e/real-input/hosted-picker.e2e.ts",
+    "mutation": "(same removal)",
+    "result": "red",
+    "firstRedTest": "hosted-picker's Android check opens the screen its row names"
+  }
+]
