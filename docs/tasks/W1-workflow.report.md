@@ -45,7 +45,7 @@ entry was restored, and the 284 commits that lost reflog protection are pinned u
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2287 tests / 93 suites | `19a6506b3acf` | 3 m 03 s | start 4.3 / med 20.5 / max 39.2 |
+| `check` | **PASS** | 2288 tests / 93 suites | `dabcee06b69a` | 2 m 50 s | start 7.0 / med 10.3 / max 16.5 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
@@ -56,7 +56,7 @@ The four device gates are for the merge, and this diff touches neither platform 
 
 ## Red proofs
 
-26 mutations, all red, recorded in `docs/tasks/W1/mutations.json`. One per guard:
+27 mutations, all red, recorded in `docs/tasks/W1/mutations.json`. One per guard:
 
 - `refuses a leased device gate, runs nothing and records nothing` -> drop `deviceGateDiskBlock` from the preflight -> `expect(run.status).toBe(1)`
 - `` `CI=false` is a shell, not a runner `` -> `isCiRunner` returns `Boolean(env.CI)` -> `expect(shell.status).toBe(1)`
