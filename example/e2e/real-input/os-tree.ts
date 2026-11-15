@@ -51,6 +51,17 @@ interface DriverNode {
   depth?: number;
 }
 
+/**
+ * The driver session this run holds the device with.
+ *
+ * The device belongs to the session that opened it and `agent-device` refuses a second
+ * client on it (`DEVICE_IN_USE`), so this read rides along in the session the worker
+ * opened instead of opening one of its own. The name is the engine's own recipe -
+ * `e2e-<target>-<worker slot>` - and the suite runs one worker, so the slot is 0. A
+ * wrong name is not a silent pass: the refusal names the session holding the device.
+ */
+const DRIVER_SESSION = 'e2e-android-0';
+
 /** The driver's own binary, from the install this suite runs against. */
 function driverBinary(): string {
   return resolve(
@@ -83,7 +94,16 @@ export function tree(): TreeNode[] {
   try {
     stdout = execFileSync(
       process.execPath,
-      [driverBinary(), 'snapshot', '--json', '--force-full', '--serial', serial],
+      [
+        driverBinary(),
+        'snapshot',
+        '--json',
+        '--force-full',
+        '--serial',
+        serial,
+        '--session',
+        DRIVER_SESSION,
+      ],
       { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60_000 }
     );
   } catch (error) {
