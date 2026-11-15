@@ -1,24 +1,16 @@
 # Orchestrating nitro-ui tasks
 
-The playbook moved. It was a 180-line document that grew a paragraph per incident; it is now a set
-of short skills an orchestrator loads when it needs them, and the reference text went where it is
-used.
-
-| What                                                    | Where                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------------ |
-| The loop: pick, brief, delegate, review, merge, clean up | `.claude/skills/orchestrate/SKILL.md`                       |
-| Writing a brief, and the delegation message              | `.claude/skills/brief/SKILL.md`                             |
-| Every message to the owner                               | `.claude/skills/owner-digest/SKILL.md`                      |
-| A red or intermittent gate                               | `.claude/skills/flake/SKILL.md`                             |
-| The hourly check from outside the orchestrator           | `.claude/skills/watchdog/SKILL.md`, `scripts/watchdog.mjs`  |
-| Standing agreements                                      | `docs/agents/working-agreements.md`                         |
-| Every rule, its enforcer and the incident behind it      | `docs/agents/rules.md`                                      |
-| Reusing a `check` at merge (was "The loop" step 5), logs | `docs/agents/gates.md`                                      |
-| Live state                                               | `STATUS.md` (task table), `RECOVERY.md` (what is in flight) |
-
-Older briefs and reports cite this file by step number ("The loop" step 1b, 3, 5). Step 1b is the
-context pack, now in the `brief` skill; step 3 is the hand-in check, now in `orchestrate`; step 5
-is in `docs/agents/gates.md`.
+| What | Where |
+| --- | --- |
+| The loop: pick, brief, delegate, review, merge, clean up | `.claude/skills/orchestrate/SKILL.md` |
+| Writing a brief, and the delegation message | `.claude/skills/brief/SKILL.md` |
+| Every message to the owner | `.claude/skills/owner-digest/SKILL.md` |
+| A red or intermittent gate | `.claude/skills/flake/SKILL.md` |
+| The hourly check from outside the orchestrator | `.claude/skills/watchdog/SKILL.md`, `scripts/watchdog.mjs` |
+| Standing agreements | `docs/agents/working-agreements.md` |
+| Every rule and what enforces it | `docs/agents/rules.md` |
+| Gates, the ledger and logs | `docs/agents/gates.md` |
+| Live state | `STATUS.md` (task table), `RECOVERY.md` (what is in flight) |
 
 ## A new machine
 
