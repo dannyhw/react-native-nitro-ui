@@ -26,26 +26,39 @@ import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { expect, type Locator } from 'e2e';
+import { centreOf } from './support';
+import { expect, type Locator, type Screen } from 'e2e';
 import type { Device } from '@e2e-dev/mobile';
 
-import { centreOf } from './support';
-import { decodePng, pixelAt, type DecodedPng } from '../../../scripts/real-input/png-pixel.mjs';
+import {
+  decodePng,
+  pixelAt,
+  type DecodedPng,
+} from '../../../scripts/real-input/png-pixel.mjs';
 
-/** How long the finger stays down, in ms. */
-const HOLD_MS = 1500;
+/**
+ * How long the finger stays down, in ms.
+ *
+ * Long, because a capture is not instantaneous and its latency is not short: the
+ * driver's own screenshot call is a daemon round trip that came back 4 830 ms
+ * after it was asked on this bench, by which time a 5 s hold had lifted and both
+ * "during" frames showed the row at rest — which reads exactly like a row that
+ * paints no pressed state, the very thing G30 is about. The hold is therefore
+ * sized for the slowest capture, not for the animation: ten seconds gives the
+ * first frame, asked for at +700 ms, some four seconds of held finger after it
+ * lands, and a Material state layer stays under the finger for as long as the
+ * finger is down.
+ */
+const HOLD_MS = 10_000;
 
-/** How long after the finger lands the capture happens, in ms. */
-const CAPTURE_AT_MS = 450;
+/** When each frame during the hold is asked for, in ms after the finger lands. */
+const CAPTURE_AT_MS = [700, 2400];
 
-/** How far inside the row's box the sample grid starts, in device px. */
+/** How far inside the control's box the sample starts, in device px. */
 const INSET_PX = 12;
 
 /** How far apart the sample points are, in device px. */
 const STEP_PX = 8;
-
-/** How far the sample window reaches around the finger, in device px. */
-const REACH_PX = 150;
 
 interface Image {
   path: string;
@@ -59,7 +72,9 @@ async function capture(device: Device, label: string): Promise<Image> {
   const dir =
     process.env.NITRO_UI_PRESS_DIR ?? path.join(tmpdir(), 'nitro-ui-x35-press');
   const file = path.join(dir, `${label}.png`);
-  const result = await device.unstable_raw.client.capture.screenshot({ path: file });
+  const result = await device.unstable_raw.client.capture.screenshot({
+    path: file,
+  });
   return {
     path: result.path,
     png: decodePng(readFileSync(result.path)),
@@ -74,18 +89,35 @@ interface Box {
   height: number;
 }
 
+/** The control's own box, pulled in by `INSET_PX` on every side. */
+function inset(box: Box): Box {
+  return {
+    x: box.x + INSET_PX,
+    y: box.y + INSET_PX,
+    width: Math.max(1, box.width - INSET_PX * 2),
+    height: Math.max(1, box.height - INSET_PX * 2),
+  };
+}
+
 /** Mean relative luminance of a grid inside a box, clamped to the image. */
 function meanLuma(image: DecodedPng, box: Box): number {
   const x1 = Math.max(0, Math.round(box.x) + INSET_PX);
-  const x2 = Math.min(image.width - 1, Math.round(box.x + box.width) - INSET_PX);
+  const x2 = Math.min(
+    image.width - 1,
+    Math.round(box.x + box.width) - INSET_PX
+  );
   const y1 = Math.max(0, Math.round(box.y) + INSET_PX);
-  const y2 = Math.min(image.height - 1, Math.round(box.y + box.height) - INSET_PX);
+  const y2 = Math.min(
+    image.height - 1,
+    Math.round(box.y + box.height) - INSET_PX
+  );
   let total = 0;
   let samples = 0;
   for (let y = y1; y <= y2; y += STEP_PX) {
     for (let x = x1; x <= x2; x += STEP_PX) {
       const pixel = pixelAt(image, x, y);
-      total += (0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]) / 255;
+      total +=
+        (0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]) / 255;
       samples += 1;
     }
   }
@@ -94,28 +126,10 @@ function meanLuma(image: DecodedPng, box: Box): number {
   if (samples === 0) {
     throw new Error(
       `press-feedback: the box ${JSON.stringify(box)} is outside a ` +
-        `${String(image.width)}x${String(image.height)} capture.`,
+        `${String(image.width)}x${String(image.height)} capture.`
     );
   }
   return total / samples;
-}
-
-/** The part of a control's box around the finger, where its ink appears. */
-function inkWindow(box: Box, point: { x: number; y: number }): Box {
-  const x = Math.min(
-    Math.max(box.x, point.x - REACH_PX),
-    box.x + box.width - REACH_PX * 2,
-  );
-  const y = Math.min(
-    Math.max(box.y, point.y - REACH_PX),
-    box.y + box.height - REACH_PX * 2,
-  );
-  return {
-    x: Math.max(0, x),
-    y: Math.max(0, y),
-    width: Math.min(box.width, REACH_PX * 2),
-    height: Math.min(box.height, REACH_PX * 2),
-  };
 }
 
 /**
@@ -128,38 +142,82 @@ function inkWindow(box: Box, point: { x: number; y: number }): Box {
  *   a threshold tuned to one theme hides a faint-but-present regression in another.
  */
 export async function pressPaintsFeedback(
+  screen: Screen,
   device: Device,
   hold: Locator,
-  options: { minimumDrop?: number } = {},
+  options: { minimumDrop?: number } = {}
 ): Promise<void> {
-  const minimumDrop = options.minimumDrop ?? 0.01;
+  const minimumDrop = options.minimumDrop ?? 0.005;
   const box = await hold.boundingBox();
   if (box == null) {
     throw new Error('press-feedback: the control has no box to sample.');
   }
 
+  let startedAt = Date.now();
   const atRest = await capture(device, 'press-at-rest');
+  // A press-and-hold expressed as a drag that travels two px while the finger is
+  // down. That shape is deliberate: it is one gesture stream that is genuinely
+  // *in flight* — a `longPress` presses and holds too, but a row inside a
+  // scrolling section settles it as its own gesture and paints nothing (measured:
+  // the standalone item inked either way, the section row only as a hold in
+  // flight). Two px is inside the touch slop, so the list does not scroll and
+  // nothing is cancelled.
   const point = await centreOf(hold);
-  // Start the gesture and do not await it: the whole check is what the screen
-  // looks like *while* the finger is down.
-  const held = device.unstable_raw.client.interactions.longPress({
-    x: point.x,
-    y: point.y,
-    durationMs: HOLD_MS,
-    settle: false,
+  const held = screen.swipe({
+    from: point,
+    to: { x: point.x, y: point.y + 2 },
+    duration: HOLD_MS,
   });
-  await new Promise((resolve) => setTimeout(resolve, CAPTURE_AT_MS));
-  const during = await capture(device, 'press-during-hold');
+  // Timed from the finger, not from the call: the capture at rest is itself a
+  // round trip, and the hold is short enough that counting from it would spend
+  // part of the window before the pointer is even down.
+  startedAt = Date.now();
+  // Two frames, both asked for while the finger is down, and the darker of the
+  // two is the reading: a Material state layer is steady under a held finger
+  // while a bounded ripple is brightest for a moment near the touch point, and
+  // the driver's own capture latency decides which of the two a single frame
+  // catches. Both numbers go into the failure message, so a flat reading is
+  // evidence in the log rather than a mystery a later round has to re-run.
+  const samples: { at: number; took: number; mean: number; path: string }[] =
+    [];
+  for (const [index, at] of CAPTURE_AT_MS.entries()) {
+    await sleepUntil(startedAt + at);
+    const askedAt = Date.now() - startedAt;
+    const during = await capture(device, `press-during-hold-${String(index)}`);
+    samples.push({
+      at,
+      took: Date.now() - startedAt - askedAt,
+      mean: meanLuma(during.png, inset(box)),
+      path: during.path,
+    });
+  }
   await held;
 
-  const sample = inkWindow(box, point);
-  const before = meanLuma(atRest.png, sample);
-  const duringMean = meanLuma(during.png, sample);
+  const before = meanLuma(atRest.png, inset(box));
+  const best = samples.reduce(
+    (lowest, sample) => (sample.mean < lowest.mean ? sample : lowest),
+    samples[0] as (typeof samples)[number]
+  );
   expect(
-    before - duringMean,
+    before - best.mean,
     `holding the control left its own box at mean luminance ` +
-      `${duringMean.toFixed(4)}, against ${before.toFixed(4)} at rest: a press ` +
-      `that paints nothing is what G30 Android shipped with ("no press feedback ` +
-      `drawn"), and the captures are at ${atRest.path} and ${during.path}`,
+      `${samples
+        .map(
+          (sample) =>
+            `${sample.mean.toFixed(4)} at +${String(sample.at)}ms ` +
+            `(captured ${String(sample.took)}ms later)`
+        )
+        .join(', ')}, against ` +
+      `${before.toFixed(4)} at rest: a press that paints nothing is what G30 ` +
+      `Android shipped with ("no press feedback drawn"). The captures are ` +
+      `${atRest.path} and ${samples.map((sample) => sample.path).join(' and ')}`
   ).toBeGreaterThan(minimumDrop);
+}
+
+/** Wait until the wall clock reaches `at`, or return at once if it has passed. */
+async function sleepUntil(at: number): Promise<void> {
+  const left = at - Date.now();
+  if (left > 0) {
+    await new Promise((resolve) => setTimeout(resolve, left));
+  }
 }
