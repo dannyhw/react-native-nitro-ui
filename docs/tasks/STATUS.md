@@ -8,18 +8,29 @@ the task merges. Open follow-ups are in `FOLLOWUPS.md`.
 
 Name · ID · branch · pull request · next action.
 
-- A workflow that runs unattended (short rules, skills, worktree lister, watchdog) · W1 ·
-  `task/W1-workflow` · #75 · owner review, then the merge gates. #76 and #77 are stacked on it.
-- One design document, task records kept 14 days, failure logs never committed, one status file ·
-  W2 · `task/W2-records` · #76 · owner review; merge after #75.
-- Tooling and tests that nothing uses, removed · W3 · `task/W3-tooling-removal` · #77 · owner
-  review; `harness:ios` and `harness:android` before review is satisfied; merge after #75.
+- Tooling and tests that nothing uses, removed · W3 · `task/W3-tooling-removal` · #77 · device
+  gates, then merge.
+- The comment sweep for the files #77 also changes · X40 · `task/X40-comments` · #78 · merges
+  with #77.
+- Two unused lease-pool features removed · X38 · `task/X38-lease-unused-features` · #79 · device
+  gates, then merge.
+- The bench compares against the last release · X36 · `task/X36-bench-compare` · #80 · device
+  gates, then merge; the first comparison run on a device is still to do.
+- Android real-input on e2e · X35 · `task/X35-real-input-e2e` · none yet · in progress on a
+  device pair.
+- Harness tests that measure or repeat, and the closed dwell probe, removed · X37 ·
+  `task/X37-harness-trims` · none yet · in progress on a device pair.
 
 ## Recently merged
 
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-15 Nothing user-visible: short agent rules and skills, a worktree lister, an outside
+  watchdog and a disk floor for device gates (W1, #75); one design document, task records kept
+  14 days, failure logs no longer committed (W2, #76); component pages, upstream defects and
+  architecture notes rewritten as current fact (X41, #81); a comment sweep over the sources
+  (X40, part of #78).
 - 11-15 Slider: Android screen-reader steps land on the value that was read out (X33, #72).
 - 11-15 Nothing user-visible: gate runner and iOS real-input hygiene (X34, #73).
 - 11-14 Form: a flick no longer presses an iOS row; Stepper screen-reader and default-value
