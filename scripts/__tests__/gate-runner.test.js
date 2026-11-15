@@ -1393,6 +1393,16 @@ describe('a real supervisor, and a real gate that gets killed', () => {
             `gate ${String(gate.pid)} alive: ${pidIsAlive(gate.pid)}, pollMs: ${String(pollMs)}`
         );
       }
+      // The pids go before the supervisor's last line does: it asks the kernel who is left in the
+      // group and only then writes the outcome. Wait for that line (either outcome), not for time.
+      await until(
+        () =>
+          /the run is gone with it|still alive in group/.test(
+            readFileSync(logFile, 'utf8')
+          ),
+        'the supervisor to write how its sweep ended',
+        20_000
+      );
       const log = readFileSync(logFile, 'utf8');
       expect(log).toContain('died without a ledger line');
       expect(log).toContain(stdin === 'pipe' ? 'stdin' : 'pid');
