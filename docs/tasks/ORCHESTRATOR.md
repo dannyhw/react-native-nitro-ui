@@ -10,7 +10,8 @@
 | Standing agreements | `docs/agents/working-agreements.md` |
 | Every rule and what enforces it | `docs/agents/rules.md` |
 | Gates, the ledger and logs | `docs/agents/gates.md` |
-| Live state | `STATUS.md` (task table), `RECOVERY.md` (what is in flight) |
+| Live state | `STATUS.md` (in flight, recently merged, blocked) |
+| Which task records are still in git | `node scripts/task-records.mjs` |
 
 ## A new machine
 

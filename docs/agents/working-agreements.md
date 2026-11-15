@@ -1,7 +1,7 @@
 # Working agreements
 
 How work on this repository is run: the standing answers to questions an orchestrator would
-otherwise have to ask. Design and API rulings are in `docs/DECISIONS.md` and are cited here by
+otherwise have to ask. Design and API rulings are in `docs/DESIGN.md` and are cited here by
 number rather than restated.
 
 This file is public, like the rest of the repository (D25). It holds project policy only. Anything
@@ -59,6 +59,13 @@ anyone. Every line says what holds now, not how it came about.
 - A commit on `main` describes the change, not the task: a conventional subject with the pull
   request number and a short body. Status-only updates are batched into the next real commit.
 - A task's worktrees are removed when it merges (`node scripts/worktrees.mjs --prune`).
+- Task records (brief, report, reviews, the task's folder) stay in git for 14 days after the task
+  reaches `main` and are then archived locally by `node scripts/task-records.mjs --archive`. A task
+  with a brief and no report, an unmerged branch, or an uncommitted record in any worktree is kept
+  whatever its age. Failure logs are never committed. The removal is staged into the next merge
+  commit, never a commit of its own.
+- A document that stays (`docs/DESIGN.md`, a component page, `docs/upstream.md`) does not link to a
+  task record. A fact worth keeping is written into the document.
 - CI is checked after every push to `main`.
 - No periodic self-check runs inside the orchestrator's own conversation. The hourly watchdog is
   separate: it runs outside and is silent unless something changed.

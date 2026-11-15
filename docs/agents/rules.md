@@ -63,6 +63,7 @@ These depend on an agent reading and obeying. They are the candidates for the ne
 | Process tooling under 10 % of agent hours a week; gate and lease code takes bug fixes only | orchestrate |
 | Benchmarks run before a release, not per task | orchestrate |
 | No commit on `main` only updates task records | orchestrate |
+| Task records leave git 14 days after their task reaches `main` (`task-records.mjs --archive`); failure logs are never committed | orchestrate |
 | A tool or test nothing calls, or that never caught a defect, is removed | working agreements |
 | Nothing reaches `main` ungated | orchestrate |
 | Look at every screenshot before merge | orchestrate |

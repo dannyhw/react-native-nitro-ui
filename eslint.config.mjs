@@ -91,7 +91,7 @@ export default defineConfig([
   },
   {
     // Perf contract for Hybrid Views - see AGENTS.md and
-    // docs/research/nitro-patterns.md. Rules live in eslint-rules/index.js.
+    // docs/DESIGN.md 3.3. Rules live in eslint-rules/index.js.
     files: ['src/**/*.{ts,tsx}', 'example/**/*.tsx', 'bench/**/*.tsx'],
     plugins: { 'nitro-ui': nitroUi },
     rules: {

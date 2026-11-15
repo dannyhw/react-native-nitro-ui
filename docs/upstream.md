@@ -7,7 +7,7 @@ it — an issue draft that pastes straight into GitHub. It exists so every
 workaround in this repo is attributable to a named upstream bug rather than to
 repo folklore, which is what makes it deletable. **When upstream ships a fix,
 delete the entry and the workaround it describes**; each entry ends with a
-**Removal** line saying what to delete and what to bump first. DECISIONS D11
+**Removal** line saying what to delete and what to bump first. DESIGN.md D11
 requires an entry for every dev-tooling patch in `patches/`; D5 keeps those
 patches dev-only (never needed by consumers, never in the npm tarball).
 
@@ -494,7 +494,7 @@ inject is a tap: `simulatePress` sends a DOWN and, 50 ms later, an UP on Android
 (`UIHelperImpl.kt`, `TAP_DURATION_MS = 50L`) and a `UITouch` that begins and ends 50 ms
 apart on iOS (`HarnessUI.mm`, `kTapDuration = 0.05`). Neither is long enough for any
 long-press recognizer, so a test of what a hold does - opens the menu, cancels the child's
-touch, never presses it - could only be real input. Q6's question B and DECISIONS D36
+touch, never presses it - could only be real input. Q6's question B and DESIGN.md D36
 item 2 chose to patch the module rather than ship a touch injector in the library.
 
 **Evidence.** `@react-native-harness/ui` 1.6.0's TurboModule spec has `simulatePress`,
@@ -560,7 +560,7 @@ with RN floor 0.88 (D39; 0.86 under D8 when this was written).
 
 **Observed.** On Android, a Hybrid View ignores RN's base props —
 `backgroundColor`, `opacity`, `transform`, `testID`, accessibility
-(`docs/research/nitro-patterns.md:35-37`). Measured before/after in the spike:
+(`docs/DESIGN.md` 3.7). Measured before/after in the spike:
 on an Android emulator with RN 0.88 the Nitro view ignored `backgroundColor` and
 `opacity`; after the patch it applies them, in the example app and in both
 consumer smoke apps (`docs/research/setup-decisions.md:241`). Cause: nitrogen
@@ -666,7 +666,7 @@ Exception in HostFunction: NitroUi.label: Value is null, expected a String
 `JSIConverter<std::optional<T>>` still accepts only `undefined`
 (`docs/research/setup-decisions.md:274-276`).
 
-**Today.** Worked around in code, by rule (D7 in `docs/DECISIONS.md`),
+**Today.** Worked around in code, by rule (D7 in `docs/DESIGN.md`),
 enforced three ways:
 
 - Lint: `nitro-ui/no-optional-view-props` (`eslint-rules/index.js`,
@@ -735,7 +735,7 @@ unwraps `f` only when the prop type *is* a function (`IsFunctionProp`). A
 `fn | null` union generates `std::variant<std::function, NullType>`, which is not
 a function type, so the wrapper is never unwrapped and converting the prop
 **throws while mounting**. Callbacks therefore have to be declared `fn?` — an
-explicit exception to D7, recorded as D7b (`docs/DECISIONS.md`,
+explicit exception to D7, recorded as D7b (`docs/DESIGN.md`,
 `docs/architecture/core.md` §3, the "Callbacks are the one exception" bullet).
 
 **Evidence.** Spec comment and the resulting shape:
@@ -855,7 +855,7 @@ measured size through the commit, and — on iOS — an `updateState:oldState:` 
 forwards that state to the Swift side. Nitro 0.37.1 generates all three itself,
 `final` and with no substitution point
 (`nitro:nitrogen/src/views/CppHybridViewComponent.ts`), so a Hybrid View cannot
-report its own intrinsic size. `docs/research/core-architecture.md` §1.5 lists
+report its own intrinsic size. `docs/DESIGN.md` 3.6 lists
 this as the thing to propose upstream; T11 is the task that needed it.
 
 **Today.** `scripts/patch-nitrogen.mjs` rewrites the generated output for each

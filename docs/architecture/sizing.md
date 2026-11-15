@@ -4,7 +4,7 @@ A Nitro Hybrid View is a plain Yoga leaf: with no style it is 0×0, and the Swif
 control inside it is centred in nothing. This document is how a control instead reports its own
 size, so a caller writing `<Switch />` gets the control's real box and nobody sees a jump.
 
-Design source: `docs/research/core-architecture.md` §1. This is the mechanism **as built**, plus
+Design source: `docs/DESIGN.md` 3.6. This is the mechanism **as built**, plus
 what a device measured (task T11: `docs/tasks/T11-intrinsic-sizing.report.md`).
 
 ## 1. The one rule that shapes everything

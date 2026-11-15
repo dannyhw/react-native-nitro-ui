@@ -33,11 +33,11 @@ Use create-react-native-library (bob) 0.64.0 with the `nitro-view` template and 
 ```sh
 cd /tmp && npx -y create-react-native-library@0.64.0 react-native-nitro-ui --no-interactive \
   --slug react-native-nitro-ui --description "SwiftUI and Jetpack Compose controls for React Native, powered by Nitro" \
-  --author-name "Daniel Williams" --author-email <email> --author-url https://github.com/<you> \
+  --author-name "<name>" --author-email <email> --author-url https://github.com/<you> \
   --repo-url https://github.com/<org>/nitro-ui \
   --type nitro-view --languages kotlin-swift --example vanilla \
   --tools eslint --tools jest --tools lefthook --tools release-it
-rsync -a --exclude .git /tmp/react-native-nitro-ui/ ~/Developer/oss/nitro-ui/
+rsync -a --exclude .git /tmp/react-native-nitro-ui/ <checkout>/
 ```
 
 Repeat `--tools` once per tool. In the spike, `--tools a b c` silently kept only the first tool.

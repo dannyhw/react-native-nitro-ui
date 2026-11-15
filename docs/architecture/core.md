@@ -1,6 +1,6 @@
 # The core runtime — how to build a component
 
-The contract every component follows, from T10 (the Switch tracer bullet) and `docs/research/core-architecture.md`; where
+The contract every component follows, from T10 (the Switch tracer bullet) and `docs/DESIGN.md` section 3; where
 the two disagree this file describes what the code does, and every claim names the file you can check it in. Everything is
 one package (`react-native-nitro-ui`, D6) — the core is inside it, not a separate `@nitro-ui/core`.
 

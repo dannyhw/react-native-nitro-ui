@@ -112,7 +112,7 @@ the app's chain after all (measured).
 
 The isolated harness file `example/__tests__/isolated/TooltipModalHazard.harness.tsx`
 closes a `Modal` while a tooltip inside it is up, and pins that no `Modal` host is left
-behind (DECISIONS D35 item 5's hazard). With the popover put back in the chain, that
+behind (DESIGN.md D35 item 5's hazard). With the popover put back in the chain, that
 case did **not** strand the Modal (measured); it is kept as a pin, not as the reason.
 
 ## Platform mapping

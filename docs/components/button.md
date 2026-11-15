@@ -39,7 +39,7 @@ An unknown `variant`, `size` or `shape` string resolves to the default rather
 than throwing, on both platforms and in JS — and so does `null`, which is how you
 say "the platform's own" for `shape`.
 
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): the handle is
+`hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14): the handle is
 read-only plus `measureContent()`, and it runs once, when the view mounts.
 
 ## Platform mapping
@@ -97,11 +97,11 @@ does.
 
 | iOS light                                     | iOS dark                                      |
 | ----------------------------------------------- | ----------------------------------------------- |
-| ![iOS light](../tasks/G2-button/ios-light.png)   | ![iOS dark](../tasks/G2-button/ios-dark.png)   |
+| ![iOS light](../images/button/ios-light.png)   | ![iOS dark](../images/button/ios-dark.png)   |
 
 | Android light                                     | Android dark                                     |
 | --------------------------------------------------- | ---------------------------------------------------- |
-| ![Android light](../tasks/G2-button/android-light.png) | ![Android dark](../tasks/G2-button/android-dark.png) |
+| ![Android light](../images/button/android-light.png) | ![Android dark](../images/button/android-dark.png) |
 
 Each screenshot is the example screen (`example/src/ButtonScreen.tsx`) as it
 opens, down to the tinted pair and the SF Symbol row: the five variants, the
@@ -240,7 +240,7 @@ answer, reads it on a worker thread off the main thread, parses it into a Compos
 `VectorPainter` as any Material icon. It does **not** patch React Native's global
 asset resolver to make `.xml` loadable: registering a transformer would change
 how every `Image` in your app resolves its sources, for a decision that belongs
-to one prop (DECISIONS D43).
+to one prop (DESIGN.md D43).
 
 A gradient fill — a `<gradient>` inside an `<aapt:attr>` — is the one thing in the
 format nitro-ui does not read in development: the parser refuses it rather than
