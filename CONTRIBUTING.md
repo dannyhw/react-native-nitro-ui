@@ -199,7 +199,7 @@ src/index.ts                            the export list
 bench/src/implementations/*.tsx         one branch per arm
 bench/src/implementations/shared.ts     its ROW_HEIGHTS entry (benched controls)
 example/.../RealInputTests.swift        func testRealInput<Name>
-scripts/real-input/android.mjs          one CHECKS entry
+example/e2e/real-input/<id>.e2e.ts      one test file per control (Android)
 docs/components/<name>.md               the component page
 bun run changeset
 ```
@@ -401,8 +401,8 @@ sides' appended lines, and `regen` rewrites the files from scratch anyway (see
 These are inputs, not outputs, and need the two sides' lines kept together
 (`bench/src/implementations/shared.ts`'s `ROW_HEIGHTS` too, for benched
 controls; `bench:typecheck` fails if one is lost): `src/index.ts` (one export per component), the bench arm's import and
-branch, `func testRealInput<Name>` in `RealInputTests.swift`, and the `CHECKS`
-entry in `scripts/real-input/android.mjs`. The docs are the same kind of thing.
+branch, `func testRealInput<Name>` in `RealInputTests.swift`, and the Android test
+`example/e2e/real-input/<id>.e2e.ts`. The docs are the same kind of thing.
 `nitro.json` used to be in this list and no longer is: its `autolinking` entry is
 generated now, which matters because a lost entry used to break the recipe —
 nitrogen refuses to generate a Hybrid View that is not in `nitro.json`, so
@@ -1114,7 +1114,8 @@ the operating system reaches a hosted SwiftUI/Compose control inside a React
 Native app - a known failure class for SwiftUI-in-RN, and one this library hit
 when a SwiftUI `Button` ignored the harness's HID-less touch. The real-input suite does
 that one thing: it synthesises taps and drags outside the app (`XCUIDevice`'s
-event path on iOS, `adb shell input` on Android) and asserts only on `Text` the
+event path on iOS, `agent-device`'s on Android, driven by an e2e suite in
+`example/e2e/`) and asserts only on `Text` the
 app renders on screen. No test hook, no Nitro callback, no in-app tracer.
 
 ```sh
@@ -1134,8 +1135,9 @@ and refreshes `app.stamp` with what it built; Android installs the debug APK tha
 `node scripts/build-app.mjs --platform android` left, and **refuses** when that
 stamp does not match the tree - the same `app.stamp` the harness reads, so an
 unbuilt change cannot pass here either. Both install, point the debug build at your
-`METRO_PORT`, and read the screen afterwards - `accessibilityIdentifier` on iOS,
-`uiautomator dump` on Android - which is what a person and a screen reader have.
+`METRO_PORT`, and read the screen afterwards - `accessibilityIdentifier` on iOS, the
+accessibility tree as `agent-device` reads it on Android - which is what a person and
+a screen reader have.
 Neither script boots or shuts down a device, and neither accepts a device it was
 not told about: a simulator UDID (`IOS_UDID`, or the `IOS_SIM_UDID` a lease
 exports) and `ANDROID_AVD`/`ANDROID_SERIAL` are required, and an emulator running
@@ -1150,10 +1152,11 @@ themselves under it with `fnm exec` rather than refusing a device run, so that o
 runtime produced every device gate - a real-input pass on a Node the harness cannot
 run on is not comparable evidence.
 
-Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the full
-`xcodebuild` and `adb` logs, the accessibility hierarchy printed by a failing
-case, the `.xcresult` bundle, and Metro's log. When a check fails, that is the
-directory to read.
+Each run keeps its evidence where it is gitignored and out of the package: iOS in
+`.real-input/ios/` (the full `xcodebuild` log, the `.xcresult` bundle, Metro's log),
+Android in `example/e2e/.e2e/android/` (e2e's `report.json`, and per attempt a
+`trace.md`, the screen as the driver read it at the moment it failed, and a
+screenshot). When a check fails, those are the directories to read.
 
 ### Adding a control to the suite
 
@@ -1161,8 +1164,8 @@ One row in `scripts/real-input/controls.mjs` — for a library component, the ro
 manifest with `realInput: true` and a `realInputTitle` generates (`bun run
 registry`), not a hand edit — then one check per platform:
 `func testRealInput<Id>` in
-`example/ios/NitroUiExampleUITests/RealInputTests.swift`, and one key in `CHECKS`
-in `scripts/real-input/android.mjs`. Both runners compare their checks against
+`example/ios/NitroUiExampleUITests/RealInputTests.swift`, and one
+`example/e2e/real-input/<id>.e2e.ts` on Android. Both runners compare their checks against
 the shared table and fail - never skip - if a control has no check, or a check
 has no control, so a control cannot leave the suite unnoticed. The `hosted-*`
 rows stay hand-written: they prove things about `<Host>`, which is a container
