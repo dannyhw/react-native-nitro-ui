@@ -69,6 +69,8 @@ quoting anyone.
   are never committed. The removal is staged into the next merge commit, never a commit of its
   own. A `docs/tasks/` path cited in a comment or a document may therefore name a record that is
   now only in git history. (2026-11-15)
+- A document that stays (`docs/DESIGN.md`, a component page, `docs/upstream.md`) does not link to a
+  task record. A fact worth keeping is written into the document. (2026-11-15)
 - CI is checked after every push to `main`. (2026-10-31)
 - No periodic self-check runs inside the orchestrator's own conversation. The hourly watchdog is
   separate: it runs outside and is silent unless something changed. (2026-10-28, 2026-11-14)
