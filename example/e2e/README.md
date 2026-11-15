@@ -10,10 +10,16 @@ node scripts/gate.mjs real-input:android --control slider
 ```
 
 `scripts/real-input/android.mjs` owns the device, the stamped APK, Metro and the
-private agent-device daemon; this directory owns the checks. Nothing here shells
-out to `adb`, and nothing here asks a model what to do next: `agent.act` and
-`agent.assert` are not used, because a gate that depends on a model is not a
-gate. `retries` is 0 — a flaky check is fixed or reported, never retried green.
+private agent-device daemon; this directory owns the checks. Nothing here drives a
+device outside the driver — no `adb input`, no `uiautomator`, no `am` — and nothing
+here asks a model what to do next: `agent.act` and `agent.assert` are not used,
+because a gate that depends on a model is not a gate. `retries` is 0 — a flaky check
+is fixed or reported, never retried green.
+
+Two _reads_ do go straight to the device, both because the driver's own route
+cannot answer them, both named and explained in
+`example/e2e/real-input/device-read.ts`: the window manager's `ime` inset, and one
+frame of the screen taken while a finger is down.
 
 ## What a test asserts
 
@@ -50,12 +56,13 @@ One `<control-id>.e2e.ts` per row of `scripts/real-input/controls.mjs` — the
 runner refuses a control with no file and a file with no control, so a control
 cannot leave the suite unnoticed. Shared parts:
 
-| File                | What it is                                                |
-| ------------------- | --------------------------------------------------------- |
-| `support.ts`        | tab navigation, the tappable band, echo readers           |
-| `reader.ts`         | the screen-reader rule and its known-debt rows            |
-| `keyboard.ts`       | keyboard geometry, measured from the resized content view |
-| `press-feedback.ts` | pixels of a held press, through the driver's own capture  |
+| File                | What it is                                                          |
+| ------------------- | ------------------------------------------------------------------- |
+| `support.ts`        | tab navigation, the tappable band, echo readers                     |
+| `reader.ts`         | the screen-reader rule and its known-debt rows                      |
+| `keyboard.ts`       | keyboard geometry, measured from the resized content view           |
+| `press-feedback.ts` | pixels of a held press                                              |
+| `device-read.ts`    | the two device reads the driver will not make, on the leased serial |
 
 ## Reading a failure
 

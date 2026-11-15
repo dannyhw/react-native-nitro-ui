@@ -4,87 +4,58 @@
  * This is the fourth class the audit kept (A.3: drawn press feedback — G30
  * Android, "no press feedback drawn", and the Form section rows that drew no
  * ripple ink under a held press). Nothing inside the React tree knows what was
- * painted, so the check reads the screen: a screenshot with the row at rest, a
- * screenshot with the same row held, and the mean luminance of a grid inside the
- * row's box, before and during.
+ * painted, so the check reads the screen: a frame with the row at rest, a frame
+ * with the same row held, and the mean luminance of a grid inside the row's box,
+ * before and during.
  *
  * The grid, not one pixel: a bounded ripple is brightest near the touch point and
  * a single sample can land on the one spot it has not reached at the instant of
  * the capture. The inset keeps the sample on the row's own fill rather than on a
  * pixel of whatever is drawn around it, and the whole thing is in device pixels
- * because the capture is in device pixels — `boundingBox()` and the screenshot
- * share one space.
+ * because the capture is in device pixels — `boundingBox()` and the frame share
+ * one space.
  *
- * Why this file reaches for `device.unstable_raw`: e2e has no "press and hold,
- * and look at the screen while it is held" step. `longPress` is the driver's own
- * gesture; the raw client call below only *starts* it, and the test takes the
- * capture while the finger is still down. Both halves stay inside e2e's engine —
- * the touch is agent-device's, the pixel read is e2e's, and no `adb input` is
- * anywhere near this.
+ * Why the frame comes from `device-read.ts` and not from e2e's own screenshot: the
+ * driver takes a screenshot through the same on-device automation helper that
+ * injects the gesture, and that helper serves one thing at a time. Measured on
+ * `list-item`, a capture asked for 500 ms into a 10 000 ms press came back 10 240
+ * ms later and showed the row *unpressed*, because by the time the helper got to
+ * it the finger was up. That made this check unable to pass on a Form row however
+ * well the library painted: the standalone item happened to still be fading its
+ * ripple at the boundary, and the Form row was not. Asking for the frame beside
+ * the helper — a read, one `adb exec-out screencap` on the leased serial — returns
+ * in a few hundred ms, so the frame is genuinely taken under the finger, the press
+ * can be a person's length rather than the driver's ceiling, and both rows are
+ * measured the same way. The gesture itself is still e2e's.
  */
-import { readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-
 import { centreOf } from './support';
+import { screenCapture } from './device-read';
 import { expect, type Locator, type Screen } from 'e2e';
-import type { Device } from '@e2e-dev/mobile';
 
 import {
-  decodePng,
   pixelAt,
   type DecodedPng,
 } from '../../../scripts/real-input/png-pixel.mjs';
 
 /**
- * How long one press lasts, in ms — and the driver puts a ceiling on a gesture at
- * 10 000 ms, so this is that ceiling, not a choice.
- */
-const HOLD_MS = 10_000;
-
-/**
- * How many presses in a row, at the same point, make up "the finger is down".
+ * How long the finger stays down, in ms.
  *
- * Two, because the capture is not instantaneous and its latency is not short: the
- * driver's own screenshot call is a daemon round trip measured at 4 830 ms and, on a
- * busy machine with a ripple still animating, 10 190 ms — longer than one press is
- * allowed to last. So the second press starts as the first reaches its ceiling, and
- * the picture is taken under a finger however long the round trip takes. Two presses
- * at one point are one continued interest to a person and one `Pressable`'s press
- * state twice; what the check needs is a frame in which a finger is down, and this is
- * the only way the driver's own surface can promise that.
+ * Long enough that Compose has composed and drawn the state layer by the time the
+ * frame is read (the frame is asked for at {@link CAPTURE_AFTER_MS} and takes a few
+ * hundred ms), and short enough that this is still the press a person makes. The
+ * driver's own ceiling on a gesture is 10 000 ms, which the previous shape of this
+ * check had to sit at for want of a frame that arrived in time.
  */
-const PRESSES = 2;
+const HOLD_MS = 1_800;
 
-/** How long after the first finger lands the capture is asked for, in ms. */
-const CAPTURE_AFTER_MS = 500;
+/** How long after the finger lands the frame is asked for, in ms. */
+const CAPTURE_AFTER_MS = 450;
 
 /** How far inside the control's box the sample starts, in device px. */
 const INSET_PX = 12;
 
 /** How far apart the sample points are, in device px. */
 const STEP_PX = 8;
-
-interface Image {
-  path: string;
-  png: DecodedPng;
-}
-
-async function capture(device: Device, label: string): Promise<Image> {
-  // An absolute path of our own: a relative one lands wherever the daemon happens
-  // to be standing, and a failure that names no file the reader can open is a
-  // failure nobody can diagnose.
-  const dir =
-    process.env.NITRO_UI_PRESS_DIR ?? path.join(tmpdir(), 'nitro-ui-x35-press');
-  const file = path.join(dir, `${label}.png`);
-  const result = await device.unstable_raw.client.capture.screenshot({
-    path: file,
-  });
-  return {
-    path: result.path,
-    png: decodePng(readFileSync(result.path)),
-  };
-}
 
 /** A box: position and size, in device px. */
 interface Box {
@@ -122,7 +93,7 @@ function meanLuma(image: DecodedPng, box: Box): number {
     for (let x = x1; x <= x2; x += STEP_PX) {
       const pixel = pixelAt(image, x, y);
       total +=
-        (0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]) / 255;
+        (0.2126 * pixel[0]! + 0.7152 * pixel[1]! + 0.0722 * pixel[2]!) / 255;
       samples += 1;
     }
   }
@@ -140,15 +111,15 @@ function meanLuma(image: DecodedPng, box: Box): number {
 /**
  * A real press on this control paints a pressed state on it.
  *
- * @param device the running device, for the capture and the held press
+ * @param screen only for the gesture: the press is e2e's own swipe
  * @param hold the control to hold; its box is the region that must change
- * @param minimumDrop how much darker the row has to get, as mean luminance. Small
- *   on purpose: Material's state-layer ink over a light row is a few percent, and
- *   a threshold tuned to one theme hides a faint-but-present regression in another.
+ * @param options.minimumDrop how much darker the row has to get, as mean luminance.
+ *   Small on purpose: Material's state-layer ink over a light row is a few percent,
+ *   and a threshold tuned to one theme hides a faint-but-present regression in
+ *   another. It is the number the adb driver measured G30 with, and it has not moved.
  */
 export async function pressPaintsFeedback(
   screen: Screen,
-  device: Device,
   hold: Locator,
   options: { minimumDrop?: number } = {}
 ): Promise<void> {
@@ -157,8 +128,12 @@ export async function pressPaintsFeedback(
   if (box == null) {
     throw new Error('press-feedback: the control has no box to sample.');
   }
+  const region = inset(box);
+  const point = await centreOf(hold);
 
-  const atRest = await capture(device, 'press-at-rest');
+  const atRest = screenCapture();
+  const before = meanLuma(atRest, region);
+
   // A press-and-hold expressed as a drag that travels two px while the finger is
   // down. That shape is deliberate: it is one gesture stream that is genuinely *in
   // flight* — a `longPress` presses and holds too, but a row inside a scrolling
@@ -166,38 +141,28 @@ export async function pressPaintsFeedback(
   // standalone item inked either way, the section row only as a hold in flight). Two
   // px is inside the touch slop, so the list does not scroll and nothing is
   // cancelled.
-  const point = await centreOf(hold);
-  const press = () =>
-    screen.swipe({
-      from: point,
-      to: { x: point.x, y: point.y + 2 },
-      duration: HOLD_MS,
-    });
+  const pressed = screen.swipe({
+    from: point,
+    to: { x: point.x, y: point.y + 2 },
+    duration: HOLD_MS,
+  });
+  const downAt = Date.now();
+  await sleepUntil(downAt + CAPTURE_AFTER_MS);
+  const askedAt = Date.now() - downAt;
+  const held = screenCapture();
+  const took = Date.now() - downAt - askedAt;
+  await pressed;
 
-  let finger = press();
-  // Timed from the finger, not from the call: the capture at rest is itself a round
-  // trip, and the hold is short enough that counting from it would spend part of the
-  // window before the pointer is even down.
-  const startedAt = Date.now();
-  await sleepUntil(startedAt + CAPTURE_AFTER_MS);
-  const askedAt = Date.now() - startedAt;
-  const capturing = capture(device, 'press-during-hold-0');
-  await finger;
-  if (PRESSES > 1) finger = press();
-  const during = await capturing;
-  const took = Date.now() - startedAt - askedAt;
-  await finger;
-
-  const before = meanLuma(atRest.png, inset(box));
-  const duringMean = meanLuma(during.png, inset(box));
+  const duringMean = meanLuma(held, region);
   expect(
     before - duringMean,
     `holding the control left its own box at mean luminance ` +
-      `${duringMean.toFixed(4)} (capture asked for at +${String(askedAt)}ms, ` +
-      `${String(took)}ms round trip across ${String(PRESSES)} presses of ` +
-      `${String(HOLD_MS)}ms), against ${before.toFixed(4)} at rest: a press that ` +
-      `paints nothing is what G30 Android shipped with ("no press feedback drawn"). ` +
-      `The captures are ${atRest.path} and ${during.path}`
+      `${duringMean.toFixed(4)} (frame asked for +${String(askedAt)}ms after the ` +
+      `finger landed and read ${String(took)}ms later, inside a ` +
+      `${String(HOLD_MS)}ms press), against ${before.toFixed(4)} at rest: a press ` +
+      `that paints nothing is what G30 Android shipped with ("no press feedback ` +
+      `drawn"). The sampled region is ${JSON.stringify(region)} of a ` +
+      `${String(held.width)}x${String(held.height)} frame`
   ).toBeGreaterThan(minimumDrop);
 }
 

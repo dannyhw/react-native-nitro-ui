@@ -27,11 +27,10 @@
  * every failure here, so a release that renames the line it parses reddens the
  * gate instead of quietly passing.
  */
-import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
 
 import { expect, type Locator } from 'e2e';
+
+import { adbShell as adb } from './device-read';
 
 import {
   imeInsetSample,
@@ -54,41 +53,6 @@ const KEYBOARD_TIMEOUT_MS = 10_000;
  * person's emulator is visible on the default server, and AGENTS.md is explicit
  * about not reaching it.
  */
-function adb(args: readonly string[]): string {
-  const env = process.env;
-  const serial = env.ANDROID_SERIAL;
-  if (serial == null || serial === '') {
-    throw new Error(
-      'real-input: ANDROID_SERIAL is unset, so the keyboard check has no device ' +
-        'it may configure. Source the lease before running the suite.'
-    );
-  }
-  const home = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;
-  const sdkAdb =
-    home != null ? path.join(home, 'platform-tools', 'adb') : undefined;
-  const binary =
-    sdkAdb != null && fs.existsSync(sdkAdb) ? sdkAdb : (env.ADB_BIN ?? 'adb');
-  const port = env.ANDROID_ADB_SERVER_PORT;
-  try {
-    return execFileSync(
-      binary,
-      [
-        ...(port != null && port !== '' ? ['-P', port] : []),
-        '-s',
-        serial,
-        'shell',
-        ...args,
-      ],
-      { encoding: 'utf8', timeout: 30_000 }
-    ).trim();
-  } catch (error) {
-    throw new Error(
-      `real-input: adb ${args.join(' ')} failed: ` +
-        String((error as Error)?.message ?? error)
-    );
-  }
-}
-
 /** One setting, read back; `null` for the `null` the settings provider prints. */
 function setting(key: string): string | null {
   const value = adb(['settings', 'get', 'secure', key]);
