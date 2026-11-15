@@ -208,14 +208,18 @@ describe('the release comparison rule', () => {
   });
 
   it('will not call a cell slower when the cell was bouncing inside its own run', () => {
-    // The same 1.27x, this time from launches that swing: the within-run noise guard is
-    // what stops a busy minute on one side becoming a regression claim.
+    // 1.36x on the median, and the four launches disagree by more than the noise bound
+    // - a busy minute on one side of the session. Deliberately *not* a wide interval:
+    // every launch is over 1.25x, so the interval excludes 1.05 and the quiet-cell rule
+    // is the only thing standing between this measurement and a failed release.
     const section = compare({
-      head: side({ nitroUi: 1.4, launchFactors: [1, 1.8, 0.6, 1.45] }),
+      head: side({ nitroUi: 1.2, launchFactors: [1.05, 1.45, 1.15, 1.35] }),
       base: side({ nitroUi: 1.1 }),
     });
     const failure = nitroUiFailure(section.result);
     expect(failure.overThreshold).toBe(true);
+    expect(failure.ratio).toBeGreaterThan(RATIO_FAIL_THRESHOLD);
+    expect(failure.ci.low).toBeGreaterThan(RATIO_CI_EXCLUDES);
     expect(failure.noisy).toBe(true);
     expect(failure.conclusive).toBe(false);
     expect(section.exitCode).toBe(0);
@@ -391,27 +395,43 @@ describe('the release comparison plan', () => {
 });
 
 describe('the newest release tag', () => {
-  /** git's `--sort=-creatordate` order: the tag made most recently comes first. */
-  const tags = ['v0.9.1', 'v0.10.0', 'v0.9.0', 'v0.10.0-rc.1', 'bench-old'];
+  // git's `--sort=-creatordate` order: the tag made most recently comes first. Both
+  // fixtures are shaped so that a name-based answer is a different tag — sorting the
+  // list, or sorting it as versions, each picks the wrong one here.
+  const trainTags = [
+    'v0.10.0',
+    'v0.9.11',
+    'v0.9.0',
+    'v0.10.0-rc.1',
+    'bench-old',
+  ];
+  const hotfixTags = ['v0.9.2', 'v0.10.1', 'v0.10.0'];
 
-  it('picks the tag that shipped last, not the biggest version number', () => {
-    // v0.9.1 is a hotfix released after v0.10.0 was cut. Sorting the names — lexically
-    // or as versions — answers a different question and would pick v0.10.0.
-    const answer = newestReleaseTag({ tags, headSha: 'cccc333' });
-    expect(answer.ref).toBe('v0.9.1');
+  it('picks the tag that shipped last, not the one a sort of the names gives', () => {
+    // v0.10.0 is the release that shipped last; the v0.9.11 hotfix is older than it, and
+    // `sort()` would put the hotfix first because "9" sorts above "1".
+    const answer = newestReleaseTag({ tags: trainTags, headSha: 'cccc333' });
+    expect(answer.ref).toBe('v0.10.0');
     expect(answer.problem).toBeNull();
+  });
+
+  it('picks a hotfix that shipped after a bigger version was cut', () => {
+    // v0.9.2 was released after v0.10.1: the question is "slower than what?", and what
+    // is running in the world is the thing that shipped last, not the biggest number.
+    const answer = newestReleaseTag({ tags: hotfixTags, headSha: 'cccc333' });
+    expect(answer.ref).toBe('v0.9.2');
   });
 
   it('skips a tag that is the commit under review', () => {
     // The shape of "release branch cut, tag pushed, still tagging": measuring HEAD
     // against HEAD produces 1.00 everywhere and a gate that cannot fail.
     const answer = newestReleaseTag({
-      tags,
-      shaOfTag: { 'v0.9.1': 'cccc333', 'v0.10.0': 'dddd444' },
+      tags: trainTags,
+      shaOfTag: { 'v0.10.0': 'cccc333', 'v0.9.11': 'dddd444' },
       headSha: 'cccc333',
     });
-    expect(answer.ref).toBe('v0.10.0');
-    expect(answer.skipped).toEqual(['v0.9.1']);
+    expect(answer.skipped).toEqual(['v0.10.0']);
+    expect(answer.ref).toBe('v0.9.11');
   });
 
   it('ignores names that are not releases', () => {
@@ -428,11 +448,11 @@ describe('the newest release tag', () => {
     // `git rev-parse` failing for one tag is a reason to say less about it, not a
     // reason to refuse the comparison.
     const answer = newestReleaseTag({
-      tags,
+      tags: trainTags,
       shaOfTag: { 'v0.9.1': null },
       headSha: 'cccc333',
     });
-    expect(answer.ref).toBe('v0.9.1');
+    expect(answer.ref).toBe('v0.10.0');
     expect(answer.sha).toBeNull();
   });
 
