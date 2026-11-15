@@ -30,6 +30,7 @@ import { comparisonSections } from '../bench/render.mjs';
 import {
   RELEASE_TAG_PATTERN,
   baseRefDir,
+  comparisonOutcome,
   newestReleaseTag,
   planComparison,
   sideOrderForRound,
@@ -236,6 +237,171 @@ describe('the release comparison rule', () => {
   });
 });
 
+/**
+ * A release whose app crashes, or loses its launches, leaves nothing to be slower
+ * than - and "nothing was slower" must not be what the session then reports.
+ */
+describe('a comparison whose release side has nothing to compare', () => {
+  const PLANNED = ['mount:rn-core:50', 'mount:nitro-ui:50'];
+
+  it('fails, and names every planned cell, when the release side measured nothing', () => {
+    // 1.5x: far past the bound, so the only reason no cell reads FAIL is that there is
+    // no release number to divide by.
+    const section = comparisonSections({
+      run: side({ nitroUi: 1.5 }),
+      base: { ...side({}), cells: {} },
+      label: 'v0.9.0 (measured in this session)',
+      expected: PLANNED,
+    });
+    expect(section.exitCode).not.toBe(0);
+    expect(section.uncompared.map((cell) => cell.key)).toEqual(PLANNED);
+    expect(section.uncompared[1].reasons).toEqual(['base has no record']);
+    // Not the "slower" ending: nothing was measured to be slower than.
+    expect(section.result.conclusiveFailures).toEqual([]);
+    expect(section.markdown).not.toContain('FAIL');
+    expect(section.markdown).toContain('**Not compared** - 2 cell(s)');
+    expect(section.markdown).toContain(
+      '- `mount:nitro-ui:50`: base has no record'
+    );
+  });
+
+  it('names the gated cell alone when only that cell is missing from the release', () => {
+    const base = side({});
+    delete base.cells['mount:nitro-ui:50'];
+    const section = comparisonSections({
+      run: side({ nitroUi: 1.5 }),
+      base,
+      label: 'v0.9.0 (measured in this session)',
+      expected: PLANNED,
+    });
+    expect(section.exitCode).not.toBe(0);
+    expect(section.uncompared.map((cell) => cell.key)).toEqual([
+      'mount:nitro-ui:50',
+    ]);
+  });
+
+  it('names the control when the release lost the arm every ratio divides by', () => {
+    const base = side({});
+    delete base.cells['mount:rn-core:50'];
+    const section = comparisonSections({
+      run: side({ nitroUi: 1.5 }),
+      base,
+      label: 'v0.9.0 (measured in this session)',
+      expected: PLANNED,
+    });
+    expect(section.uncompared).toEqual([
+      { key: 'mount:rn-core:50', reasons: ['base has no record'] },
+      {
+        key: 'mount:nitro-ui:50',
+        reasons: ['base has no record of its rn-core control'],
+      },
+    ]);
+  });
+
+  it('counts a release cell whose launches wrote no sample', () => {
+    // The app started and wrote its header, then nothing: a cell that exists and holds
+    // no measurement.
+    const base = side({});
+    base.cells = {
+      ...base.cells,
+      ...aggregateRecords([
+        cellRecords({
+          implementation: 'nitro-ui',
+          mounted: 1,
+          presented: 1,
+          jsCommit: 1,
+        })[0],
+      ]),
+    };
+    const section = comparisonSections({
+      run: side({ nitroUi: 1.5 }),
+      base,
+      label: 'v0.9.0 (measured in this session)',
+      expected: PLANNED,
+    });
+    expect(section.exitCode).not.toBe(0);
+    expect(section.uncompared).toEqual([
+      { key: 'mount:nitro-ui:50', reasons: ['base has no samples'] },
+    ]);
+  });
+
+  it('leaves alone a cell both sides measured and neither can quote', () => {
+    // A leak cell whose footprint does not climb has no slope to compare on either
+    // side. Both sides ran it, so nothing failed and there is nothing to name.
+    const flatLeak = (implementation) =>
+      [0, 1, 2].map((cycle) => ({
+        kind: 'mem',
+        scenario: 'leak',
+        implementation,
+        n: 200,
+        launch: 0,
+        phase: `leak${String(cycle)}`,
+        footprintBytes: 5_000_000 - cycle,
+      }));
+    const withLeak = () => {
+      const run = side({});
+      run.cells = {
+        ...run.cells,
+        ...aggregateRecords([...flatLeak('rn-core'), ...flatLeak('nitro-ui')]),
+      };
+      return run;
+    };
+    const section = comparisonSections({
+      run: withLeak(),
+      base: withLeak(),
+      label: 'v0.9.0 (measured in this session)',
+      expected: [...PLANNED, 'leak:rn-core:200', 'leak:nitro-ui:200'],
+    });
+    const row = section.result.rows.find((r) => r.key === 'leak:nitro-ui:200');
+    expect(Object.keys(row.perMetric)).toEqual([]);
+    expect(section.uncompared).toEqual([]);
+    expect(section.exitCode).toBe(0);
+  });
+
+  it('ends a session non-zero for each of its three bad endings, by name', () => {
+    const uncompared = [
+      { key: 'mount:nitro-ui:50', reasons: ['base has no record'] },
+    ];
+    const lost = comparisonOutcome({
+      ref: 'v0.9.0',
+      baseProblems: ['base mount:nitro-ui:50 launch 3/4: no end sentinel'],
+    });
+    expect(lost.exitCode).toBe(1);
+    expect(lost.lines[0]).toBe('1 launch(es) of v0.9.0 did not complete:');
+    expect(lost.lines.join('\n')).toContain('launch 3/4: no end sentinel');
+
+    const notCompared = comparisonOutcome({ ref: 'v0.9.0', uncompared });
+    expect(notCompared.exitCode).toBe(1);
+    expect(notCompared.lines.join('\n')).toContain(
+      'mount:nitro-ui:50: base has no record'
+    );
+    expect(notCompared.lines.join('\n')).toContain('Not compared with v0.9.0');
+    expect(notCompared.lines.join('\n')).not.toContain('Slower');
+
+    const slower = comparisonOutcome({
+      ref: 'v0.9.0',
+      slower: [
+        {
+          key: 'mount:nitro-ui:50',
+          metric: 'mountedNs',
+          ratio: 1.31,
+          ci: { low: 1.22, high: 1.4 },
+        },
+      ],
+    });
+    expect(slower.exitCode).toBe(1);
+    expect(slower.lines).toEqual([
+      'Slower than v0.9.0 on 1 cell(s):',
+      '  - mount:nitro-ui:50 mountedNs: 1.31x (CI 1.22-1.40)',
+    ]);
+
+    expect(comparisonOutcome({ ref: 'v0.9.0' })).toEqual({
+      exitCode: 0,
+      lines: [],
+    });
+  });
+});
+
 function scheduleOf({
   launches,
   cells = [
@@ -330,22 +496,30 @@ describe('the release comparison plan', () => {
   });
 
   it('refuses a ref that is the commit under review', () => {
+    // One commit, abbreviated to two lengths - what a 7-character slice and
+    // `git rev-parse --short` give in a repository big enough to need 8. The labels
+    // differ, so only a comparison of the whole ids can see that this is one commit.
+    const commit = '4f2a9c1d7e3b8a6f5c0d9e2b1a4c7f3e8d6b5a90';
     const same = plan({
       launches: 2,
-      baseSha: 'same111',
-      headSha: 'same111',
+      baseSha: commit.slice(0, 7),
+      headSha: commit.slice(0, 8),
+      baseCommit: commit,
+      headCommit: commit,
       headSchedule: scheduleOf({ launches: 2 }),
       baseSchedule: scheduleOf({ launches: 2 }),
     });
     expect(same.problem).toContain('measures nothing');
     expect(same.rounds).toEqual([]);
 
-    // The same plan with a genuinely older base is plannable: the refusal is about the
-    // two shas being one commit, not about the shape of the run.
+    // And the converse: two commits whose labels happen to read the same are two
+    // commits, and the run is plannable.
     const older = plan({
       launches: 2,
-      baseSha: 'older11',
-      headSha: 'same111',
+      baseSha: commit.slice(0, 7),
+      headSha: commit.slice(0, 7),
+      baseCommit: `${commit.slice(0, 7)}0b3e5d7f9a1c2e4f6a8b0c1d3e5f7a9b2`,
+      headCommit: commit,
       headSchedule: scheduleOf({ launches: 2 }),
       baseSchedule: scheduleOf({ launches: 2 }),
     });

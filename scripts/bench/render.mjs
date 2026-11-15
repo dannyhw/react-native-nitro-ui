@@ -34,6 +34,7 @@ import {
   RATIO_FAIL_THRESHOLD,
   ratioTable,
   scenarioActionOf,
+  uncomparedCells,
 } from './lib.mjs';
 
 const METRIC_LABELS = {
@@ -357,7 +358,7 @@ export function detailSections(run) {
               formatNs(cell.marks.drawLatencyNs),
             ],
           ]
-        )}\n\n> Instrumented: recording a mark is a UI-thread mutex write and the drain is JS\n> work, so this explains the numbers above instead of measuring them again. A\n> \`--perf-marks\` run can never mint a baseline.\n`
+        )}\n\n> Instrumented: recording a mark is a UI-thread mutex write and the drain is JS\n> work, so this explains the numbers above instead of measuring them again. A\n> \`--perf-marks\` run is a diagnostic, and \`--compare-release\` refuses it.\n`
       );
     }
     if (cell.memory?.heapCollected === false) {
@@ -447,6 +448,7 @@ export function comparisonSections({
   label,
   baseTable = null,
   baseNoise = null,
+  expected = null,
 }) {
   const headTable = ratioTable(run);
   const headNoise = noiseTable(headTable);
@@ -461,6 +463,10 @@ export function comparisonSections({
     baseNoise: resolvedBaseNoise,
   });
   const movement = controlMovement(cellsFrom(base), cellsFrom(run));
+  const uncompared =
+    expected == null
+      ? []
+      : uncomparedCells({ expected, head: run, base, rows: result.rows });
 
   const sections = [
     `## head/base vs ${label}`,
@@ -471,6 +477,16 @@ export function comparisonSections({
     '',
     gateSummary(result),
   ];
+  if (uncompared.length > 0) {
+    sections.push(
+      '',
+      `**Not compared** - ${String(uncompared.length)} cell(s) the plan measures on both sides have no verdict. That is a failed measurement, not a pass and not a slower cell:`,
+      '',
+      ...uncompared.map(
+        (cell) => `- \`${cell.key}\`: ${cell.reasons.join('; ')}`
+      )
+    );
+  }
   if (movement.length > 0) {
     sections.push(
       '',
@@ -487,7 +503,8 @@ export function comparisonSections({
   return {
     markdown: `${sections.join('\n')}\n`,
     result,
-    exitCode: result.conclusiveFailure ? 1 : 0,
+    uncompared,
+    exitCode: result.conclusiveFailure || uncompared.length > 0 ? 1 : 0,
   };
 }
 
@@ -515,7 +532,7 @@ function gateTable(result) {
         '-',
         '-',
         '-',
-        `new arm - ${ratios.slice(0, 2).join(', ')} versus rn-core, nothing to regress against until the baseline is refreshed`,
+        `new arm - ${ratios.slice(0, 2).join(', ')} versus rn-core, no base ratio to regress against`,
       ]);
       continue;
     }

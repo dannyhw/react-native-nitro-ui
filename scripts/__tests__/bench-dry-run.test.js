@@ -327,8 +327,11 @@ describe('the dry-run report and its exit code', () => {
         plan: 'quick',
         launches: 2,
         ref: 'v0.9.0',
-        baseSha: 'bbbbbbb',
-        headSha: 'bbbbbbb',
+        // One commit under two labels of different length: only its whole id says so.
+        baseSha: 'b7e98c6',
+        headSha: 'b7e98c6e',
+        baseCommit: 'b7e98c6e2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e',
+        headCommit: 'b7e98c6e2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e',
         repoRoot: '/repo',
         baseDir: '/base/v0.9.0',
         headSchedule: comparisonFixtureSchedule(2),
@@ -438,7 +441,14 @@ describe('bench --dry-run (the CLI)', () => {
       fixtureGit(root, 'init', '--quiet');
       fixtureGit(root, 'add', '-A');
       fixtureGit(root, 'commit', '--quiet', '-m', 'bench fixture');
-      fixtureGit(root, 'tag', tag);
+      // A fresh repository abbreviates to 7 characters, which is also the length a
+      // hand-written slice would pick; 12 is what neither picks by accident.
+      fixtureGit(root, 'config', 'core.abbrev', '12');
+      if (options.annotated === true) {
+        fixtureGit(root, 'tag', '-a', tag, '-m', `release ${tag}`);
+      } else {
+        fixtureGit(root, 'tag', tag);
+      }
       if (options.tag != null) {
         writeFileSync(path.join(root, 'candidate.txt'), 'under review\n');
         fixtureGit(root, 'add', '-A');
@@ -575,20 +585,25 @@ describe('bench --dry-run (the CLI)', () => {
   it('refuses a comparison that would measure a tree against itself', () => {
     // The tag is the commit we are standing on: every ratio would be 1.00, and a gate
     // that cannot fail is worse than no gate (T02 review B1).
-    const root = workspace({ tagAtHead: 'v9.9.1' });
-    const out = cli(root, [
-      '--platform',
-      'ios',
-      '--plan',
-      'quick',
-      '--launches',
-      '1',
-      '--compare-release',
-      'v9.9.1',
-      '--dry-run',
-    ]);
-    expect(out.status).toBe(2);
-    expect(out.all).toContain('measures nothing');
+    // Twice: a plain tag, and an annotated one, which is an object of its own with an
+    // id that is not the commit's.
+    for (const annotated of [false, true]) {
+      const root = workspace({ tagAtHead: 'v9.9.1', annotated });
+      const out = cli(root, [
+        '--platform',
+        'ios',
+        '--plan',
+        'quick',
+        '--launches',
+        '1',
+        '--compare-release',
+        'v9.9.1',
+        '--dry-run',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('measures nothing');
+      expect(out.all).not.toContain('rounds:');
+    }
   });
 
   it('still refuses a bad flag before printing anything, and keeps the usage line', () => {

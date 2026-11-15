@@ -364,7 +364,7 @@ Plan:      quick (31 cells x 4 implementations x 4 launches = 496 launches)
 Device:    UNKNOWN
 Host:      10 cores, load 6.51 now (quiet under 5.0)
            note:    the machine was busy: load average 6.51 over 10 cores (ceiling 5.0)
-Compare:   v0.9.0 (ded5c9b) vs HEAD (416f19be)
+Compare:   v0.9.0 (ded5c9bf) vs HEAD (416f19be)
   head:    496 launches from /path/to/this-checkout
   base:    496 launches from ~/.nitro-ui/bench-base/this-checkout/v0.9.0 (built there, installed under the same app id)
   device:  UNKNOWN - both sides, one session
@@ -382,6 +382,14 @@ asymmetries are counted in the plan lines above, because a table where a quarter
 read `-` needs saying out loud before the run, not after. Each side is also written to its own
 results file, so the comparison can be re-rendered offline with
 `bun run bench:report <head.json> --compare <base.json>` without the device that made it.
+
+A session has three bad endings, each non-zero and each named in its own words. **Slower**
+is the verdict above. **Not compared** is a cell the plan measured on both sides that ended
+with no verdict because one side has no record or no sample of it, or of its `rn-core`
+control: the release's app crashed, or its launches were lost. And a launch of the release
+that **did not complete** fails the session even when every cell still got a verdict. A run
+that stops early because an app could not be installed keeps and reports what it had
+measured, and its unmeasured cells read as not compared.
 
 Two shapes are refused rather than run: `--perf-marks` (marks instrument this tree only, and
 a comparison needs both sides measured the same way) and either `--timeout-*` flag (a
@@ -615,7 +623,7 @@ iterations pays the probe's timeout - visible in the log as
 | Android launch ~5-10x slower than usual, frame signals missing | The AVD may be booting without a host GPU (`hw.gpu.enabled=no` in `~/.android/avd/<name>.avd/config.ini` - `avdmanager create` can leave it, and the runner does not boot Android devices, so nothing corrects it). Boot it yourself with `emulator -avd <name> -port <port> -gpu host`. |
 | `--compare-release` refuses before starting | It names the reason: no release tag to compare against (`--compare-release <ref>` takes one explicitly), the ref resolves to the commit under review - measuring a tree against itself cannot fail, so it cannot pass either - `--perf-marks` or a `--timeout-*` flag, which the comparison cannot hold constant, or a base side whose plan could not be read. All of them are answered by `--dry-run` in a second, without a device. |
 | `--compare-release` says the base ref could not be built | The base checkout is a real checkout with real dependencies: its `bun install` and its build are its own, so a toolchain or registry change since the tag can break the *base* side alone. `~/.nitro-ui/bench-base/<repo>/<ref>/` is a cache — delete it and re-run, or compare against a nearer tag. Both sides must build before a launch is spent. |
-| A whole side reads `not measured in base` | The two sides ran different plans: `--component`, `--scenario`, `--n` or `--launches` are applied to both, but a cell the release never had cannot appear there. The plan lines print the head-only and base-only counts before the run starts. |
+| A whole side reads `not measured in base` | Either the two sides ran different plans - `--component`, `--scenario`, `--n` or `--launches` are applied to both, but a cell the release never had cannot appear there, and the plan lines print the head-only and base-only counts before the run starts - or the release side failed. The second case exits non-zero and lists the cells under **Not compared** with the side that has no record of them; the release's own results file carries its problems list. |
 | The host is busy (`the machine was busy` in the header) | Reported, not refused: judge the run by its own noise flags, which are per cell. Cells that bounced inside the run are not gated; if the whole session looks unstable, run it again when the machine is free — the comparison re-measures both sides either way. |
 | Stale native code despite editing sources | `build.mjs` rebuilds when any source is newer than the artifact; `--prebuild` forces a full CNG regen. |
 | Emulator vanished mid-run (`device not found`) | qemu aborts occasionally on macOS. Re-run the same command: each cell is independent and results are per-file. |

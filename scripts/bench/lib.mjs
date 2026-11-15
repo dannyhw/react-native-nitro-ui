@@ -2002,6 +2002,55 @@ export function gate({
   };
 }
 
+function unmeasuredReason(cells, key) {
+  const cell = cells[key];
+  if (cell == null) {
+    return 'no record';
+  }
+  return cell.skipReason == null && !(cell.launches > 0) ? 'no samples' : null;
+}
+
+/**
+ * The cells of `expected` that ended without a verdict because a side has no
+ * measurement of them. A cell both sides measured and neither can quote a metric
+ * for (a flat leak slope) is not one: nothing failed there.
+ */
+export function uncomparedCells({ expected, head, base, rows }) {
+  const verdicts = new Set(
+    rows
+      .filter((row) => Object.keys(row.perMetric).length > 0)
+      .map((row) => row.key)
+  );
+  const sides = [
+    ['base', cellsFrom(base)],
+    ['head', cellsFrom(head)],
+  ];
+  const uncompared = [];
+  for (const key of expected) {
+    if (verdicts.has(key)) {
+      continue;
+    }
+    const { scenario, implementation, n } = parseCellKey(key);
+    const reasons = [];
+    for (const [side, cells] of sides) {
+      const own = unmeasuredReason(cells, key);
+      const control =
+        implementation === 'rn-core'
+          ? null
+          : unmeasuredReason(cells, cellKey(scenario, 'rn-core', n));
+      if (own != null) {
+        reasons.push(`${side} has ${own}`);
+      } else if (control != null) {
+        reasons.push(`${side} has ${control} of its rn-core control`);
+      }
+    }
+    if (reasons.length > 0) {
+      uncompared.push({ key, reasons });
+    }
+  }
+  return uncompared;
+}
+
 /**
  * The load average a run is quiet at (D9): 0.5 x core count.
  */
