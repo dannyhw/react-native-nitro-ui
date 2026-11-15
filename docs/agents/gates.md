@@ -55,7 +55,7 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
   the assertion messages, the last 150 lines, the load at both ends and, for a device gate, the
   device context — and records its path in that line's `failureLogPath`. Passing runs get no file.
   The excerpt is written there locally and ignored by git (`.gitignore`): failure logs are never
-  committed (2026-11-15), so a report cites a failed run by its gate and start time, not by an
+  committed, so a report cites a failed run by its gate and start time, not by an
   excerpt path.
   An excerpt holds no secret and no machine identity (D25): scrubbed are PEM blocks, URL
   userinfo, `curl -u user:pass` and `user:pass@host`, credential-shaped assignments (`.npmrc`
