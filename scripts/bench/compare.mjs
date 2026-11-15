@@ -165,6 +165,8 @@ function cellKeysOf(schedule) {
  *   ref: string,
  *   baseSha: string | null,
  *   headSha: string | null,
+ *   baseCommit?: string | null,
+ *   headCommit?: string | null,
  *   repoRoot: string,
  *   baseDir: string,
  *   headSchedule: object[],
@@ -184,6 +186,8 @@ export function planComparison({
   ref,
   baseSha,
   headSha,
+  baseCommit = null,
+  headCommit = null,
   repoRoot,
   baseDir,
   headSchedule,
@@ -192,7 +196,9 @@ export function planComparison({
 }) {
   const warnings = [];
 
-  if (headSha != null && baseSha != null && headSha === baseSha) {
+  // Full object ids: two abbreviations of one commit can differ in length, because
+  // git lengthens a short id as the repository grows.
+  if (headCommit != null && baseCommit != null && headCommit === baseCommit) {
     return {
       sides: [],
       rounds: [],
@@ -200,7 +206,7 @@ export function planComparison({
       totalLaunches: 0,
       cells: { compared: [], headOnly: [], baseOnly: [] },
       warnings: [],
-      problem: `--compare-release ${ref} is this commit (${String(baseSha)}): a run against itself measures nothing. Pass an older ref.`,
+      problem: `--compare-release ${ref} is this commit (${String(baseSha ?? baseCommit)}): a run against itself measures nothing. Pass an older ref.`,
     };
   }
 
@@ -307,6 +313,37 @@ export function comparisonPlanLines({ plan, deviceKey }) {
   return lines;
 }
 
+export function comparisonOutcome({
+  ref,
+  slower = [],
+  uncompared = [],
+  baseProblems = [],
+}) {
+  const lines = [];
+  if (slower.length > 0) {
+    lines.push(
+      `Slower than ${ref} on ${String(slower.length)} cell(s):`,
+      ...slower.map(
+        (failure) =>
+          `  - ${failure.key} ${failure.metric}: ${failure.ratio.toFixed(2)}x (CI ${failure.ci.low.toFixed(2)}-${(failure.ci.high ?? failure.ci.low).toFixed(2)})`
+      )
+    );
+  }
+  if (uncompared.length > 0) {
+    lines.push(
+      `Not compared with ${ref} - ${String(uncompared.length)} cell(s) of the plan have no verdict, which is not a pass:`,
+      ...uncompared.map((cell) => `  - ${cell.key}: ${cell.reasons.join('; ')}`)
+    );
+  }
+  if (baseProblems.length > 0) {
+    lines.push(
+      `${String(baseProblems.length)} launch(es) of ${ref} did not complete:`,
+      ...baseProblems.map((problem) => `  - ${problem}`)
+    );
+  }
+  return { exitCode: lines.length > 0 ? 1 : 0, lines };
+}
+
 /* --------------------------------- effects -------------------------------- */
 
 /**
@@ -322,7 +359,8 @@ export function comparisonPlanLines({ plan, deviceKey }) {
  */
 export function extractBaseRef({ repoRoot, baseDir, ref }) {
   const stamp = path.join(baseDir, '.bench-base-ref');
-  const resolved = execFileSync('git', ['rev-parse', ref], {
+  // An annotated tag is its own object; the commit it names is what gets compared.
+  const resolved = execFileSync('git', ['rev-parse', `${ref}^{commit}`], {
     cwd: repoRoot,
     encoding: 'utf8',
   }).trim();

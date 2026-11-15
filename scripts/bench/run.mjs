@@ -13,8 +13,9 @@
  * which of the two installed apps is launched, so the two library versions are subject
  * to the same machine at the same moment. It then gates `head(x/rn-core) /
  * base(x/rn-core)` per cell and exits non-zero on a regression (D9). The base side is a
- * second bench app, built from the ref in `bench/base-ref/` (gitignored): one artifact
- * per side, one install swap per launch round (`scripts/bench/compare.mjs`).
+ * second bench app, built from the ref in a checkout outside the repository
+ * (`~/.nitro-ui/bench-base/<repo>/<ref>/`): one artifact per side, one install per side
+ * switch (`scripts/bench/compare.mjs`).
  *
  * `--compare <ref|results-file>` stays the offline half: it gates this run against a
  * results file that already exists, measured earlier on this machine.
@@ -74,7 +75,6 @@ import {
   requestedTimeouts,
   resultsFileName,
   SCHEMA_VERSION,
-  summarizeMissingReasons,
   componentOf,
   LOAD_SAMPLE_INTERVAL_MS,
   aggregateRecords,
@@ -83,6 +83,7 @@ import { collectMachine, runDependencies, tryExec } from './machine.mjs';
 import {
   baseRefDir,
   buildBaseSide,
+  comparisonOutcome,
   comparisonPlanLines,
   extractBaseRef,
   installBaseDependencies,
@@ -91,6 +92,7 @@ import {
   planComparison,
   readBaseSchedule,
 } from './compare.mjs';
+import { drive } from './drive.mjs';
 import { dryRun } from './dry-run.mjs';
 import { installedDependenciesProblem } from './deps.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
@@ -166,6 +168,37 @@ function shortSha() {
   } catch {
     return 'unknown';
   }
+}
+
+function headCommit() {
+  try {
+    return gitProbe(['rev-parse', 'HEAD^{commit}']);
+  } catch {
+    return null;
+  }
+}
+
+function abbreviated(commit) {
+  try {
+    return gitProbe(['rev-parse', '--short', commit]);
+  } catch {
+    return commit;
+  }
+}
+
+function comparedCommits(baseCommit) {
+  return {
+    baseCommit,
+    headCommit: headCommit(),
+    baseSha: abbreviated(baseCommit),
+    headSha: shortSha(),
+  };
+}
+
+function firstLine(error) {
+  return (error instanceof Error ? error.message : String(error)).split(
+    '\n'
+  )[0];
 }
 
 function isGitDirty() {
@@ -624,82 +657,6 @@ function launchBudget(entry, platform) {
   });
 }
 
-function summarize(records) {
-  const skipped = records.find((record) => record.kind === 'skip');
-  if (skipped != null) {
-    return `skipped (${skipped.reason})`;
-  }
-  const iterations = records.filter(
-    (record) => record.kind === 'iter' && !record.warmup
-  ).length;
-  // Missing signals with their reason codes, so a slow arm shows up in the run's own
-  // progress line as it happens instead of four hours later, in the report.
-  const notes = summarizeMissingReasons(records);
-  return `${String(iterations)} iterations${notes === '' ? '' : `, ${notes}`}`;
-}
-
-/**
- * Run the schedule, sampling the machine as it goes.
- *
- * `sample` is called at every launch boundary: installing, launching and
- * terminating an app is where a busy host shows up in the load, and on a run
- * whose launches each outlast the sampling interval it is the only sampling there
- * is.
- */
-async function drive({
-  targetFor,
-  schedule,
-  platform,
-  sample = () => {},
-  tagFor = () => '',
-}) {
-  const records = [];
-  const problems = [];
-  for (let index = 0; index < schedule.length; index++) {
-    const entry = schedule[index];
-    sample();
-    const target = await targetFor(entry);
-    // Counted within the side: a release comparison drives both sides' launches of one
-    // cell in the same array, and "launch 6/8" for the fourth launch of a four-launch
-    // plan would read as a plan nobody asked for.
-    const launchesOfSide = schedule.filter(
-      (other) =>
-        other.scenario === entry.scenario &&
-        other.implementation === entry.implementation &&
-        other.n === entry.n &&
-        (other.side ?? null) === (entry.side ?? null)
-    ).length;
-    const label = `${tagFor(entry)}${launchPlanString(entry)} launch ${String(entry.launch + 1)}/${String(launchesOfSide)}`;
-    process.stderr.write(
-      `[${String(index + 1)}/${String(schedule.length)}] ${label} ... `
-    );
-    try {
-      const result = await runLaunch(target, entry, platform);
-      records.push(
-        ...result.records.map((record) => ({
-          ...record,
-          launch: entry.launch,
-          ...(entry.side == null ? {} : { side: entry.side }),
-        }))
-      );
-      process.stderr.write(
-        `${summarize(result.records)} (${String(Math.round(result.ms / 100) / 10)}s)\n`
-      );
-      if (result.error != null) {
-        problems.push(`${label}: ${result.error}`);
-        log(`  ! ${result.error}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      problems.push(`${label}: ${message.split('\n')[0]}`);
-      process.stderr.write(`failed: ${message.split('\n')[0]}\n`);
-    }
-    await target.terminate();
-    await sleep(300);
-  }
-  return { records, problems };
-}
-
 function appendSection(markdownFile, section) {
   fs.appendFileSync(markdownFile, section);
 }
@@ -839,8 +796,7 @@ export async function main(argv) {
                 plan,
                 launches,
                 ref: chosen.ref,
-                baseSha: extracted.sha.slice(0, 7),
-                headSha: shortSha(),
+                ...comparedCommits(extracted.sha),
                 repoRoot: REPO_ROOT,
                 baseDir,
                 headSchedule: buildSchedule({
@@ -985,7 +941,14 @@ export async function main(argv) {
     const ref = chosen.ref;
     const baseDir = baseRefDir({ repoRoot: REPO_ROOT, ref });
     log(`Base ref:  ${ref} -> ${baseDir}`);
-    const extracted = extractBaseRef({ repoRoot: REPO_ROOT, baseDir, ref });
+    let extracted;
+    try {
+      extracted = extractBaseRef({ repoRoot: REPO_ROOT, baseDir, ref });
+    } catch (error) {
+      log(`--compare-release: could not extract ${ref}: ${firstLine(error)}`);
+      process.exitCode = 2;
+      return;
+    }
     const basePlan = readBaseSchedule({
       baseDir,
       platform,
@@ -1003,8 +966,7 @@ export async function main(argv) {
       plan,
       launches,
       ref,
-      baseSha: extracted.sha.slice(0, 7),
-      headSha: shortSha(),
+      ...comparedCommits(extracted.sha),
       repoRoot: REPO_ROOT,
       baseDir,
       headSchedule: schedule,
@@ -1021,19 +983,24 @@ export async function main(argv) {
       process.exitCode = 2;
       return;
     }
-    if (!argv.includes('--skip-build')) {
-      installBaseDependencies({ baseDir });
-    }
-    const baseBuilt = argv.includes('--skip-build')
-      ? {
+    let baseBuilt;
+    try {
+      if (argv.includes('--skip-build')) {
+        baseBuilt = {
           artifact: locateBaseArtifact({ baseDir, platform }),
           problem: null,
-        }
-      : buildBaseSide({
+        };
+      } else {
+        installBaseDependencies({ baseDir });
+        baseBuilt = buildBaseSide({
           baseDir,
           platform,
           prebuildFirst: argv.includes('--prebuild'),
         });
+      }
+    } catch (error) {
+      baseBuilt = { artifact: null, problem: firstLine(error) };
+    }
     if (baseBuilt.problem != null || baseBuilt.artifact == null) {
       log(
         `\nthe base ref ${ref} could not be built into a bench app: ${String(baseBuilt.problem)}`
@@ -1099,7 +1066,15 @@ export async function main(argv) {
   // drive loop, because which app is on the device changes with the round.
   let art = null;
   if (comparison == null) {
-    art = (await target.install()) ?? null;
+    try {
+      art = (await target.install()) ?? null;
+    } catch (error) {
+      log(
+        `\nthe app could not be installed on ${target.label}: ${firstLine(error)}`
+      );
+      process.exitCode = 2;
+      return;
+    }
   }
 
   const started = Date.now();
@@ -1113,9 +1088,11 @@ export async function main(argv) {
   loadTick.unref?.();
   let records;
   let problems;
+  let stopped;
   try {
-    ({ records, problems } = await drive({
+    ({ records, problems, stopped } = await drive({
       targetFor,
+      runLaunch,
       schedule: driveSchedule,
       platform,
       sample: () => load.sample(),
@@ -1123,6 +1100,12 @@ export async function main(argv) {
     }));
   } finally {
     clearInterval(loadTick);
+  }
+  if (stopped != null) {
+    problems.push(`the run stopped early: ${stopped}`);
+    log(
+      `\nThe run stopped early: ${stopped}\nWhat was measured before that is kept and reported below.`
+    );
   }
   const headArt = comparison == null ? art : (installedArt.get('head') ?? null);
   const baseProblems =
@@ -1276,21 +1259,21 @@ export async function main(argv) {
       run,
       base: baseRun,
       label: `${comparison.ref} (measured in this session)`,
+      expected: comparison.cells.compared,
     });
     process.stdout.write(`\n${section.markdown}\n`);
     appendSection(written.md, `\n${section.markdown}\n`);
     appendSection(baseWritten.md, `\n${section.markdown}\n`);
-    if (section.result.conclusiveFailures.length > 0) {
-      log(
-        `\nSlower than ${comparison.ref} on ${String(section.result.conclusiveFailures.length)} cell(s):\n${section.result.conclusiveFailures
-          .map(
-            (failure) =>
-              `  - ${failure.key} ${failure.metric}: ${failure.ratio.toFixed(2)}x (CI ${String(failure.ci.low.toFixed(2))}-${String((failure.ci.high ?? failure.ci.low).toFixed(2))})`
-          )
-          .join('\n')}`
-      );
+    const outcome = comparisonOutcome({
+      ref: comparison.ref,
+      slower: section.result.conclusiveFailures,
+      uncompared: section.uncompared,
+      baseProblems,
+    });
+    if (outcome.lines.length > 0) {
+      log(`\n${outcome.lines.join('\n')}`);
     }
-    exitCode = Math.max(exitCode, section.exitCode);
+    exitCode = Math.max(exitCode, outcome.exitCode);
   }
 
   process.exitCode = exitCode;
