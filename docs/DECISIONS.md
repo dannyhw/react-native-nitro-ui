@@ -19,37 +19,34 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   verify it in CI on an older runtime later.
 - **D9 (T02) Benchmark policy.**
   - Gate only `nitro-ui` arms, on **launch-paired ratios to `rn-core`** measured in the same run;
-    noise is judged within the run per (scenario, metric), not by absolute drift vs baseline.
-  - Committed baselines are ratio-only, produced on a clean tree, on an idle machine (record load
-    average; refuse when busy), in a dedicated commit. Absolute numbers/trends live in CI artifacts.
-  - **R4 amendment - the idle rule judges the run, not its last minute.** The runner samples
+    noise is judged within the run per (scenario, metric), never by absolute drift against a stored
+    number.
+  - **X36 amendment - the release is the baseline, measured in the same session.** Before a release,
+    one session on one canonical device measures the newest release tag and the candidate:
+    `--compare-release [ref]`. The base side is that ref's own app, built by that ref's own scripts in
+    a checkout outside the repository, and the two sides alternate in ABBA launch rounds under one app
+    id. A cell fails at ratio over 1.20 whose interval excludes 1.05 and which stayed quiet inside the
+    run - the same verdict rule as before, with a fresh "before" instead of a committed one. No device
+    timing is committed: no mint, no `--check`, no `--update-baseline`, no per-machine file.
+    Wrapper re-render counts stay a hard gate in `bun run check` (`bench/baselines/renders.json` is
+    the one committed measurement, and it is not a device timing).
+  - **R4 amendment, as amended by X36 - load is recorded, not refused on.** The runner samples
     `load1` every 30 s and at every launch boundary and records `{ count, ceiling, median, p90,
-    max, over, overFraction }`; a run is refused when its **median** is over 0.5 x cores or when
-    **more than 10 %** of the samples are, and `--update-baseline` also refuses *before starting*
-    when `load1` is already over the ceiling (fail fast rather than burn three hours). Results
-    files without samples keep the single-sample rule. Learned from A1/A1b: two complete,
-    problem-free iOS runs were refused by the load of their final minute.
-  - **A4 amendment (2026-10-28) - an incomplete metric costs its own cell, not the table.** The
-    completeness rule (a metric with too few samples is `n/a`, and a baseline may not
-    carry an `n/a` it gates on) stayed, but its scope narrowed by arm: an incomplete
-    metric on a **comparison arm** (`expo-ui-host-per-control`, `expo-ui-shared-host` -
-    measured, reported, never gated, and not our code) now leaves **that cell** out of
-    the baseline and records it in the file's `skippedCells` with its metric, sample
-    counts and the recorded reasons; an incomplete metric on `nitro-ui` (the gated arm),
-    on `nitro-ui-host` (never gated, but our own runtime) or on `rn-core` (the
-    denominator of every ratio) still refuses the mint. Reason: one
-    reference cell's lost frames were refusing an entire machine's baseline - A3's iOS
-    mint died on `mount.date-picker` N=200 at 55/160 and 87/160 samples on the two
-    `@expo/ui` arms, with every `nitro-ui` row in the run measured cleanly. A
-    survivor-biased reference number is worthless to gate against, and a machine with no
-    baseline gates nothing at all.
+    max, over, overFraction }`. Load is sampled and recorded on every run and printed with the
+    comparison; a busy host is a visible fact, not a pre-start refusal, because the only refusal
+    that ever needed it (a mint) is gone. A cell that was noisy inside its own run is not gated
+    either way.
+  - **A4 amendment (2026-10-28), as amended by X36 - an incomplete metric costs its own cell, not
+    the table.** The completeness rule stays: a metric with more than 10 % of its samples missing
+    is `n/a` - not printed, not ratioed, not gated - for that metric of that cell only. The parts
+    of this amendment that governed a mint (`skippedCells`, and which arms refused one) are
+    withdrawn with the baselines.
   - **A4 amendment (2026-10-28) - a missing sample records why.** Every iteration that produces no
     value for `mountedNs`/`presentedNs` records a reason (`probe-timeout`,
     `not-awaited`, `probe-error`), the wait it ran and the timeout in force, per
-    iteration; the runner prints them per launch, the report prints them per cell, and
-    both the refusal and the left-out-cell note say where the detail lives. A count of
-    nulls cannot be diagnosed after the fact, and a mint refusal is the expensive moment
-    to discover that. Relatedly: the probe's native "no frame" backstop is a **ceiling**,
+    iteration; the runner prints them per launch, and the report prints them per cell and
+    says where the detail lives. A count of nulls cannot be diagnosed after the fact.
+    Relatedly: the probe's native "no frame" backstop is a **ceiling**,
     not the wait the runner asked for - it used to be a hardcoded 2 s, which silently
     *was* the timeout however long JS waited. iOS's ceiling is now 90 s; Android's stays
     at 2 s, and the requested-timeout cap is per platform (80 s on iOS, 1.9 s on Android)
@@ -80,17 +77,19 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
     which is also what keeps this machine's committed Android table and Android run times
     unchanged. The 8 never-mounting Android `update.*` reference cells are a follow-up
     (a platform-scoped `NO_MOUNT_SIGNAL` entry), not part of this task.
-  - **A4 amendment (2026-10-28) - the waiting rule is recorded, and any non-default wait is a diagnostic.**
+  - **A4 amendment (2026-10-28), as amended by X36 - the waiting rule is recorded, and any
+    non-default wait is a diagnostic.**
     `--timeout-mount` / `--timeout-presented` change how long a launch waits for a signal
     (to ask "did that arm never draw, or did it draw later than we waited?"). A run that
-    asks for anything other than its platform's default cannot mint - in either
-    direction: a sample that arrives keeps its value, but *which* samples arrive moves the
-    median, and a 1 000 ms wait is as little baseline material as a 40 s one. Baselines
-    carry their `timeouts` block so a `presented` column has its rule attached, and that
-    block is read back from what the app reported: a run whose app recorded nothing is
-    refused rather than stamped with whatever the default happens to be today.
-  - Device keys = platform + OS runtime + device class (e.g. `ios27-sim-iphone17`,
-    `android35-emu-pixel9`). One canonical device per platform; other hardware uses `--compare`.
+    asks for anything other than its platform's default is not comparable with one that
+    did not - in either direction: a sample that arrives keeps its value, but *which*
+    samples arrive moves the median - so `--compare-release` refuses both flags. A results
+    file carries its `timeouts` block so a `presented` column has its rule attached, and
+    that block is read back from what the app reported, not echoed from the flags.
+  - Device keys stay (`platform + OS runtime + device class`, e.g. `ios27-sim-iphone17`,
+    `android35-emu-pixel9`) as metadata on a results file, so a reader knows what produced a
+    number; they are no longer a lookup key, because there is nothing committed to look up.
+    One canonical device per platform.
   - Locally and on hosted CI, benchmarks **inform review**; they block only on a clear regression
     (ratio CI excludes the threshold) on the canonical device.
   - Wrapper re-render counts are a hard gate via Reassure `measureRenders` scenarios
@@ -112,13 +111,14 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   through React (UI thread, batched). Imperative methods come later with explicit main-thread
   hopping + commit. iOS default sizes must match the running OS (iOS 26+ Toggle is 61×28 layout),
   until T11's measured sizing replaces defaults (done: defaults are now only the cache-miss fallback, D16).
-- **D15 (T02)** Canonical iOS bench device = iPhone 17 simulator (iOS 27). The iOS baseline is
-  recorded by the first task that holds that device on an idle machine. A component's *first*
-  `nitro-ui` arm never blocks (no baseline yet); its report must show ratios vs both `@expo/ui`
-  arms and `rn-core`, and the target is **≤ 1.0× `expo-ui-shared-host` and well below
-  `expo-ui-host-per-control`** on mount presented, UI CPU and memory. Misses need an explanation
-  and a follow-up item; the reviewer decides. Same-class machines are distinguished by recording
-  the machine model/CPU in result metadata (keys stay class-level).
+- **D15 (T02, amended by X36)** Canonical iOS bench device stays the iPhone 17 simulator (iOS 27).
+  Nothing is recorded "by the first task that holds that device": there is no baseline to record. A
+  comparison is run on the canonical device so its two halves are comparable with each other, and
+  its machine model/CPU is recorded in the results file for the reader. A component's first
+  `nitro-ui` arm is still reviewed against the `@expo/ui` and `rn-core` arms in the same run,
+  target unchanged (**≤ 1.0× `expo-ui-shared-host` and well below `expo-ui-host-per-control`** on
+  mount presented, UI CPU and memory); that target is a review judgement, not a gate against stored
+  data. Misses need an explanation and a follow-up item; the reviewer decides.
 - **D16 (T11)** Sizing: accept T11's recommendations — size-affecting-prop verification (R3)
   is owned by the first size-affecting component (G2 Button must add the test); `prewarmKeys`
   deferred past 0.1; measured sizes are explicit sizes, so cross-axis stretch is opt-in via
@@ -139,10 +139,14 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
   No "hide until measured" mode in 0.1. Declared fallbacks must be accurate per OS (D14), and
   `prewarm` is the recommended way to make first mounts exact. Harness tests assert exactly this
   rule, with poisoned (wrong) fallbacks so a failed correction is visible.
-- **D18 (T12)** Android bench numbers are only comparable within one ART compilation state.
-  Runs record it (`art`); baselines are minted only from `speed-profile` runs. Android numbers
-  published before T12 (T02 rounds 3–4, T11, T12 phase 1) were measured at `verify` — ratios and
-  absolutes both differ. Primed Android baselines are recorded during release readiness (Phase 4).
+- **D18 (T12, amended by X36)** Android bench numbers are only comparable within one ART
+  compilation state, and runs record it (`art`). The release comparison is comparable by
+  construction - both sides are measured in the same session on the same device - and
+  `--compare-release` refuses a run that would change what is being measured mid-session
+  (`--perf-marks`, any `--timeout-*` override). "Baselines are minted only from `speed-profile`
+  runs" and "primed Android baselines are recorded during release readiness" are withdrawn:
+  readiness *is* the comparison. Android numbers published before T12 (T02 rounds 3–4, T11, T12
+  phase 1) were measured at `verify` — ratios and absolutes both differ.
 - **D19 (human: "we can't spin on this forever")** Hard stops.
   - **Rounds:** each task gets at most **one implementation round + two fix rounds**. Fix rounds
     only for correctness bugs, failing gates or false claims in docs. Anything else becomes a

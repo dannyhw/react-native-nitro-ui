@@ -1334,7 +1334,7 @@ slower. Benchmarks are a release-time measurement: a component task runs the `qu
 when it wants numbers for its report, and the verdict against the previous release is made
 once, before the release, on a machine nobody else is using.
 
-A quick plan is hours, not minutes: it is 35 cells x 4-5 arms x 4 launches, and the reports
+A quick plan is hours, not minutes: it is 31 cells x 4-5 arms x 4 launches, and the reports
 show 6-10 s per launch, so budget roughly one to two hours per platform. That is an estimate
 from the per-launch times on record, not a measured plan duration. `--shutdown` powers off a
 simulator or emulator the runner booted itself.
