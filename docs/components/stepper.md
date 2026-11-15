@@ -27,23 +27,23 @@ import { Stepper } from 'react-native-nitro-ui';
 
 ## API
 
-| Prop                 | Type                             | Default | Notes                                                              |
-| -------------------- | -------------------------------- | ------- | ------------------------------------------------------------------ |
-| `value`              | `number \| undefined`            | —       | Present → controlled. Omit it and native owns the displayed value.  |
-| `defaultValue`       | `number \| undefined`            | `minimumValue` | Seed for an uncontrolled Stepper. Ignored while `value` is set. |
-| `onValueChange`      | `(value: number) => void`        | —       | Once per step, with the value native now displays.                  |
-| `minimumValue`       | `number`                         | `0`     | Lower bound.                                                        |
-| `maximumValue`       | `number`                         | `100`   | Upper bound.                                                        |
-| `step`               | `number`                         | `1`     | Must be greater than `0` — anything else throws in development.     |
-| `disabled`           | `boolean`                        | `false` | Both halves take the disabled style; no event fires.                |
-| `accessibilityLabel` | `string \| undefined`            | —       | Names the control. The *value* is announced by the control itself.  |
-| `testID`             | `string`                         | —       | Forwarded to the native view.                                       |
-| `style`              | `StyleProp<ViewStyle>`           | —       | Applied over the control's own `alignSelf: 'flex-start'`.           |
+| Prop                 | Type                      | Default        | Notes                                                              |
+| -------------------- | ------------------------- | -------------- | ------------------------------------------------------------------ |
+| `value`              | `number \| undefined`     | —              | Present → controlled. Omit it and native owns the displayed value. |
+| `defaultValue`       | `number \| undefined`     | `minimumValue` | Seed for an uncontrolled Stepper. Ignored while `value` is set.    |
+| `onValueChange`      | `(value: number) => void` | —              | Once per step, with the value native now displays.                 |
+| `minimumValue`       | `number`                  | `0`            | Lower bound.                                                       |
+| `maximumValue`       | `number`                  | `100`          | Upper bound.                                                       |
+| `step`               | `number`                  | `1`            | Must be greater than `0` — anything else throws in development.    |
+| `disabled`           | `boolean`                 | `false`        | Both halves take the disabled style; no event fires.               |
+| `accessibilityLabel` | `string \| undefined`     | —              | Names the control. The _value_ is announced by the control itself. |
+| `testID`             | `string`                  | —              | Forwarded to the native view.                                      |
+| `style`              | `StyleProp<ViewStyle>`    | —              | Applied over the control's own `alignSelf: 'flex-start'`.          |
 
-The value names are `Slider`'s, and so is everything the value *means*: clamping,
+The value names are `Slider`'s, and so is everything the value _means_: clamping,
 step snapping and the digits a binary fraction leaves behind are
-`NitroUiSliderValue.quantize` on both platforms — imported, not copied, so `0.1`
-cannot start meaning two things in one library.
+`NitroUiSliderValue.quantize` on both platforms, shared with `Slider` so `0.1`
+means one thing in the library.
 
 - **Snapping is measured from `minimumValue`**, not from 0, so a `0.5` step on a
   range starting at `0.25` lands on `0.25, 0.75, 1.25`, not on whole halves.
@@ -58,11 +58,11 @@ cannot start meaning two things in one library.
 
 ## Platform mapping
 
-| iOS                                          | Android                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------ |
+| iOS                                                           | Android                                                                |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `Stepper(value:in:step:) { Text(label) }` + `.labelsHidden()` | two `FilledTonalIconButton`s in a `Row`, 8 dp apart, sharing one value |
-| hold-to-repeat included                       | **no hold-to-repeat**                                              |
-| one `.adjustable` element                     | one merged node with `ProgressBarRangeInfo` and a `SetProgress` action |
+| hold-to-repeat included                                       | **no hold-to-repeat**                                                  |
+| one `.adjustable` element                                     | one merged node with `ProgressBarRangeInfo` and a `SetProgress` action |
 
 - **iOS** hands SwiftUI the range and the step, and gets two things for it:
   hold-to-repeat, where **every repeat is one step and so one `onValueChange`**,
@@ -72,15 +72,14 @@ cannot start meaning two things in one library.
   `maximumValue` has to be reachable and SwiftUI's stepped control can stop short
   of it.
 - **Android** composes the control. Each half is IconButton's own container at the
-  `medium` rung — Material's 48 dp minimum interactive size *outside* the 40 dp
+  `medium` rung — Material's 48 dp minimum interactive size _outside_ the 40 dp
   container token — with IconButton's colours and shapes, so the two halves are
   the same control as the one you get from `<IconButton variant="tonal">`. The
   minus and plus glyphs are the Material Symbols `remove` and `add`, fetched into
   `android/src/main/res/drawable/` by `scripts/icons/fetch-material-symbols.mjs`
-  and recorded in its lock (D43).
+  and recorded in its lock.
 - **There is no hold-to-repeat on Android.** A tap steps once; press and hold does
-  nothing beyond that. It is the one behaviour the two platforms do not share, and
-  it is not scheduled.
+  nothing beyond that. It is the one behaviour the two platforms do not share.
 
 ## Sizing
 
@@ -90,27 +89,19 @@ fixed-width on both platforms, so `minimumValue`, `maximumValue`, `step` and
 like, never how wide they are. The sizing key is therefore empty, and one cached
 size answers every Stepper in the tree.
 
-Measured on both platforms — and the control's declared fallback and its
-conformance row are these same numbers, because the fallback is the box and nothing
-else (`docs/architecture/sizing.md` §5 says where those tables live):
+Measured on both platforms; the control's declared fallback is these same numbers:
 
-|            | Width | Height | The box is                                                         |
-| ---------- | ----- | ------ | ------------------------------------------------------------------ |
-| iOS        | 94 pt | 32 pt  | SwiftUI's own stepper with its label hidden                         |
-| Android    | 104 dp| 48 dp  | two 48 dp touch targets and the 8 dp the design puts between them   |
+|         | Width  | Height | The box is                                                        |
+| ------- | ------ | ------ | ----------------------------------------------------------------- |
+| iOS     | 94 pt  | 32 pt  | SwiftUI's own stepper with its label hidden                       |
+| Android | 104 dp | 48 dp  | two 48 dp touch targets and the 8 dp the design puts between them |
 
-Because the fallback *is* the default box on both platforms, the conformance rule
-compares the whole box (`both`), and a warm mount needs no correction. The
-poisoned run replaces those numbers with a size no stepper has before a cold
-mount, so "the guess was never corrected" still goes red — `Stepper.harness.tsx`
-and [conformance](../../example/__tests__/Conformance.harness.tsx) each hold a
-line to it.
+Because the fallback is the default box on both platforms, a mount needs no
+correction.
 
-`Stepper.harness.tsx` measures the claim that the box does not depend on the
-range: a `0…2`, a `-500…2000`, a `0…10`-by-`0.5` and a disabled stepper all
-measure one number. If a prop that *does* move the box is ever added, that
-component has to start naming it in its sizing key, and those cases stop agreeing
-first.
+The box does not depend on the range: a `0…2`, a `-500…2000`, a `0…10`-by-`0.5` and a
+disabled stepper all measure one number (`Stepper.harness.tsx`). A prop that does
+move the box has to be named in the sizing key.
 
 ## Accessibility
 
@@ -123,10 +114,8 @@ name.
   steps it with a swipe up or down. While `disabled`, the element also carries
   `.notEnabled`, because an inert control a reader can still act on reads as
   broken.
-  XCUITest — the tree the real-input sweep reads — has no element type for a
-  trait, so that tree calls this element `other` while naming it correctly
-  (measured, iOS 27). It is recorded as iOS debt rather than fixed: the harness
-  probe reads the trait mask itself and is the witness that the element really is
+  XCUITest has no element type for a trait, so its tree calls this element
+  `other` while naming it correctly (iOS 27); the trait mask itself says
   adjustable.
 - **Android** merges the row into one node that publishes
   `ProgressBarRangeInfo(current, minimum..maximum, steps)` and a `SetProgress`
@@ -152,11 +141,9 @@ Both spell the value without a float's noise — `4`, not `4.0`, and `0.1` stays
 - **A step the app refuses snaps back.** Not adopting the value leaves `value`
   unchanged while the event echo still arrives, so the control puts its own number
   back on screen.
-- **At a bound the half is disabled and produces no event at all.** Not an event
-  with the same value in it: neither the harness seam nor a finger may invent an
-  event the control could not have produced. That is one rule with two
-  implementations — SwiftUI disables the half itself, and Android hands each button
-  the same `canStep` answer the harness reads back.
+- **At a bound the half is disabled and produces no event at all**, not an event
+  with the same value in it. SwiftUI disables the half itself, and Android hands
+  each button its own `canStep` answer.
 - **`disabled` sends nothing** in either direction, and follows the flag back on the
   same instance. It also has to look disabled, which the two platforms reach by
   different routes: Android's two Material buttons take the state themselves and paint
@@ -177,10 +164,9 @@ Both spell the value without a float's noise — `4`, not `4.0`, and `0.1` stays
 - **No value label, no formatting, no suffix.** The control draws two halves and
   nothing else; render the number yourself, which is also how you get `€`, `%` or
   a localized decimal separator.
-- **No `step: 0`.** Slider reads `0` as *continuous*; a stepper with no step is a
+- **No `step: 0`.** Slider reads `0` as _continuous_; a stepper with no step is a
   bug, so the wrapper throws in development instead.
-- **No wrapping, no momentum, no page step** (hold for ten). Each is its own API
-  surface and none of them is on the roadmap.
+- **No wrapping, no momentum, no page step** (hold for ten).
 - **The box is not configurable.** No `size`, no `variant`: iOS's control has no
   sizes to offer, and a third of Android's icon-button ladder would then be a lie
   about a control that has two fixed halves.
