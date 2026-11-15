@@ -304,7 +304,7 @@ internal class HybridNitroUiFormSection(
       // The same four numbers per row, out of the layout pass rather than out of [rects]:
       // `cardBoxes` is what the layer was given, this is where that box landed. A section whose
       // rows are drawn outside their own containers has one of these two wrong, and only this
-      // one can say which (`FormFidelity`'s card case, X24 round 3).
+      // one can say which (`Form.harness`'s card case, X24 round 3).
       "drawnCards=" +
         view
           .model
@@ -349,7 +349,7 @@ internal class FormSectionModel : NitroUiModel() {
    * `LaunchedEffect` re-runs only when something *else* recomposes the layer — which races the
    * layout pass that measured the band. Measured red: a section whose heading was measured
    * after its last recomposition went on telling Yoga it had no header, and its rows drew
-   * under the heading (`FormFidelity`'s band check, fix round 1).
+   * under the heading (`Form.harness`'s band check, fix round 1).
    */
   var insetPx = 0f
   /**
@@ -596,7 +596,7 @@ internal class NitroUiFormSectionView(
       host.layout(0, 0, width, height)
       // ... and ask for the draw a real parent gives for free. A measure driven from here is
       // not followed by one of its own, so whatever the layout pass just changed would wait for
-      // something else to invalidate the host. Nothing in `FormFidelity` can see a frame that
+      // something else to invalidate the host. Nothing in `Form.harness` can see a frame that
       // never came - it reads numbers, not pixels - so this line is a guarantee rather than a
       // fix with a test behind it: it is here because a hand-driven measure should not depend on
       // someone else redrawing, and the `Sections` screenshot is the only thing that would notice
@@ -920,7 +920,7 @@ internal fun FormSegmentedLayer(
     // canvas was one for a long time: `offset` and [withPixelSize] each placed the box once, so
     // every card landed at twice the row's offset from the layer's corner - one row-inset right
     // and one header-band below the row whose shape it draws. That is the offset
-    // `form-android.png` shows and the one `FormFidelity`'s card case failed on
+    // `form-android.png` shows and the one `Form.harness`'s card case failed on
     // (`drawnCards=0:24.4,77.0` beside a row at `12.2,37.3`). `createOutline` builds an outline
     // at the origin of the scope that asks for it, so a single canvas over the whole layer has
     // to move every shape into place by hand, and a shape that forgot where it came from shows
@@ -1141,7 +1141,7 @@ private fun Modifier.withPixelSize(
  * measures the child is the one that places it, so exactly one place applies a position.
  *
  * [onPlaced] is handed the box this pass applied - the width and height the child came back
- * with, at the position that was placed - so `FormFidelity` can put a drawn container beside
+ * with, at the position that was placed - so `Form.harness` can put a drawn container beside
  * the row's own frame, which is Fabric's reading of the same row and does not come from here.
  */
 private fun Modifier.placedPixelBox(

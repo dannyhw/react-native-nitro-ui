@@ -6,16 +6,11 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Switch as RNSwitch,
   Text,
   useColorScheme,
   View,
 } from 'react-native';
 import { Switch } from 'react-native-nitro-ui';
-import {
-  SWITCH_SCREEN_PROBE_CONTROLS,
-  SWITCH_SCREEN_VARIANT,
-} from './probeVariant';
 
 /**
  * Text colours for the current appearance.
@@ -80,46 +75,8 @@ export default function SwitchScreen() {
     []
   );
 
-  // F7 probe pair: two switches that are as identical as two controls can be —
-  // same place on the screen, same controlled shape, same "count what JS was
-  // told" witness — except that one is this library's hosted SwiftUI `Toggle`
-  // and the other is React Native's own native `Switch`.
-  //
-  // The pair exists because the earlier cells of the matrix could not tell those
-  // two apart: a control's accessibility `value:` and a rendered count are
-  // different witnesses, and reading a busy tree through the first is itself
-  // expensive. Here both switches are read the same way, in the same launch, so
-  // which of them loses a 50 ms press is a fact about the control and not about
-  // the probe.
-  const [probeHosted, setProbeHosted] = useState(false);
-  const [probeHostedEvents, setProbeHostedEvents] = useState(0);
-  const [probeNative, setProbeNative] = useState(false);
-  const [probeNativeEvents, setProbeNativeEvents] = useState(0);
-  // A counting witness for the probe's own positive control. `js-toggle` flips a
-  // boolean, so "how many of twelve presses landed" cannot be read from it as a
-  // delta — an even number looks identical to none. This one counts, which is what
-  // the quiet probe shape needs: press twelve times, read once, the delta is the
-  // answer.
-  const [probePressEvents, setProbePressEvents] = useState(0);
-  const countProbePress = useCallback(() => {
-    setProbePressEvents((count) => count + 1);
-  }, []);
-  const acceptHosted = useCallback((next: boolean) => {
-    setProbeHosted(next);
-    setProbeHostedEvents((count) => count + 1);
-  }, []);
-  const acceptNative = useCallback((next: boolean) => {
-    setProbeNative(next);
-    setProbeNativeEvents((count) => count + 1);
-  }, []);
-
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
-  // F7 dwell probe only — see `./probeVariant`. Variant 3 drops the 200-row
-  // list, variant 4 puts it in a plain View, 5 swaps the hosted Switch for RN's
-  // own, 6 swaps it for a plain box of the same size.
-  const variant = SWITCH_SCREEN_VARIANT;
-  const showList = variant !== 3;
   const page = (
     <>
       <Text style={[styles.title, { color: ink.ink }]}>
@@ -138,61 +95,6 @@ export default function SwitchScreen() {
           accessibilityLabel="Controlled switch"
         />
       </Row>
-      {/* F7 dwell probe's witnesses, rendered only when a probe asks for them —
-          see `SWITCH_SCREEN_PROBE_CONTROLS` for why that default is `false`. */}
-      {SWITCH_SCREEN_PROBE_CONTROLS ? (
-        <>
-          <Text style={[styles.section, { color: ink.ink }]}>Probe pair</Text>
-          <Row label="hosted · events JS saw">
-            <Switch
-              value={probeHosted}
-              onValueChange={acceptHosted}
-              testID="probe-hosted-switch"
-              accessibilityLabel="Probe hosted switch"
-            />
-          </Row>
-          <Row label="">
-            <Text
-              testID="probe-hosted-events"
-              style={[styles.value, { color: ink.ink }]}
-            >
-              {probeHostedEvents}
-            </Text>
-          </Row>
-          <Row label="react native · events JS saw">
-            <RNSwitch
-              value={probeNative}
-              onValueChange={acceptNative}
-              testID="probe-native-switch"
-            />
-          </Row>
-          <Row label="">
-            <Text
-              testID="probe-native-events"
-              style={[styles.value, { color: ink.ink }]}
-            >
-              {probeNativeEvents}
-            </Text>
-          </Row>
-          <Row label="pressable · events JS saw">
-            <Pressable
-              onPress={countProbePress}
-              testID="probe-pressable"
-              hitSlop={8}
-            >
-              <Text style={styles.link}>count me</Text>
-            </Pressable>
-          </Row>
-          <Row label="">
-            <Text
-              testID="probe-press-events"
-              style={[styles.value, { color: ink.ink }]}
-            >
-              {probePressEvents}
-            </Text>
-          </Row>
-        </>
-      ) : null}
       <Row label="value shown to JS">
         <Text
           testID="switch-controlled-value"
@@ -259,19 +161,8 @@ export default function SwitchScreen() {
         </Text>
       </Row>
 
-      {showList ? (
-        <>
-          <Text style={[styles.section, { color: ink.ink }]}>
-            200 in a list
-          </Text>
-          <List
-            rows={list}
-            kind={
-              variant === 5 ? 'rn-switch' : variant === 6 ? 'box' : 'hosted'
-            }
-          />
-        </>
-      ) : null}
+      <Text style={[styles.section, { color: ink.ink }]}>200 in a list</Text>
+      <List rows={list} />
     </>
   );
 
@@ -285,50 +176,17 @@ export default function SwitchScreen() {
       {/* Edge to edge draws the screen behind the status bar, so only the icon
           colour has to follow the appearance. */}
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
-      {/* F7 dwell probe only: the screen says which variant it is rendering, so a
-          cell of the matrix can be thrown out when Metro served somebody else's
-          JS. Behind the same flag as the probe's controls, because this line is
-          above the content and would move every frame below it — including the
-          ones another check compares across a tap. */}
-      {SWITCH_SCREEN_PROBE_CONTROLS ? (
-        <Text
-          testID="probe-variant"
-          style={[styles.note, { color: ink.muted }]}
-        >
-          probe variant-{variant}
-        </Text>
-      ) : null}
-      {/* Variant 4 keeps all 200 hosted Switches mounted but takes the scroll
-          view away, which is the difference between "a control inside a busy
-          scroller drops the touch" and "a control drops the touch". */}
-      {variant === 4 ? (
-        <View style={styles.page}>{page}</View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.page}
-          canCancelContentTouches={variant === 1 ? false : undefined}
-          scrollEnabled={variant === 2 ? false : undefined}
-        >
-          {page}
-        </ScrollView>
-      )}
+      <ScrollView contentContainerStyle={styles.page}>{page}</ScrollView>
     </SafeAreaView>
   );
 }
 
 /**
- * The 200-row block, in the three shapes the probe compares: this library's
- * hosted Switch, React Native's own `Switch`, and a plain box of the same
- * geometry. Row testIDs are stable across the three so the probe's aim does not
- * change when the shape does.
+ * The 200-row block: the case `RecyclableView` exists for, and the screen the
+ * real-input suite calls "busy" when it counts whether a press survives a large
+ * tree (`RealInputTests.assertBusyScreenDeliversEveryPress`).
  */
-function List({
-  rows,
-  kind,
-}: {
-  rows: ReadonlyArray<{ id: string; on: boolean }>;
-  kind: 'hosted' | 'rn-switch' | 'box';
-}) {
+function List({ rows }: { rows: ReadonlyArray<{ id: string; on: boolean }> }) {
   // The screen's own palette rather than a literal: `Row` beside it uses `ink.muted`,
   // and a hard-coded grey is the one that shows up wrong in dark mode.
   const ink = useInk();
@@ -337,17 +195,11 @@ function List({
       {rows.map((row, index) => (
         <View key={row.id} style={styles.row}>
           <Text style={[styles.label, { color: ink.muted }]}>row {index}</Text>
-          {kind === 'hosted' ? (
-            <Switch
-              defaultValue={row.on}
-              testID={`switch-list-${index}`}
-              nuiPerfId={null}
-            />
-          ) : kind === 'rn-switch' ? (
-            <RNSwitch value={row.on} testID={`switch-list-${index}`} />
-          ) : (
-            <View testID={`switch-list-${index}`} style={styles.fauxSwitch} />
-          )}
+          <Switch
+            defaultValue={row.on}
+            testID={`switch-list-${index}`}
+            nuiPerfId={null}
+          />
         </View>
       ))}
     </View>
@@ -419,14 +271,5 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 2,
-  },
-  // F7 probe variant 6 only: a box the size of a hosted Switch on this iOS, so
-  // the row's geometry and the scroll view's hit-test cost are as close to the
-  // real thing as a plain `View` can be — with no hosting controller inside it.
-  fauxSwitch: {
-    width: 61,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#d1d1d6',
   },
 });

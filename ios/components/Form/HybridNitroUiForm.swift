@@ -35,7 +35,6 @@
 //
 
 import NitroModules
-import SwiftUI
 import UIKit
 
 /// One section of the prototype Form: its rows, in React's order, and its chrome.
@@ -1704,11 +1703,6 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
 
   private func buildFormReport() -> String {
     nitroUiAssertMainThread()
-    if reference != nil, let measured = measuredList() {
-      // The reference is over the box, so the prototype cannot be measured at the same time;
-      // the harness takes the prototype reading first.
-      return geometryFields(of: measured, kind: "reference").joined(separator: ";")
-    }
     var rows = 0
     var orphans = 0
     for section in sections {
@@ -1905,11 +1899,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
   }
 
-  // MARK: - The SwiftUI `Form` reference (question 2)
-
-  /// The hosted reference, while it is up.
-  private var reference: UIHostingController<NitroUiFormReferenceForm>?
-
+  /// Test-only: drive one of the list's own behaviours from inside the library.
   func nuiTestCommand(command: String) throws {
     DispatchQueue.main.async { [weak self] in self?.run(command: command) }
   }
@@ -1917,20 +1907,6 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   private func run(command: String) {
     nitroUiAssertMainThread()
     switch command {
-      case "show-reference":
-        guard reference == nil, let component else { return }
-        let host = UIHostingController(rootView: NitroUiFormReferenceForm())
-        host.view.backgroundColor = .systemGroupedBackground
-        host.view.frame = component.bounds
-        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        list.isHidden = true
-        component.addSubview(host.view)
-        component.bringSubviewToFront(host.view)
-        reference = host
-        component.setNeedsLayout()
-        component.layoutIfNeeded()
-      case "hide-reference":
-        hideReference()
       case "scroll-no-report":
         // Move the content and *not* report it, from inside the library - the shape of every
         // settle callback that used to be missing. E7 then has to notice the new offset by
@@ -1958,26 +1934,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
   }
 
-  private func hideReference() {
-    guard let reference else { return }
-    reference.view.removeFromSuperview()
-    self.reference = nil
-    list.isHidden = false
-  }
-
-  /// The list currently answering for this Form's box: the reference's when it is up.
-  private func measuredList() -> UICollectionView? {
-    if let reference { return nitroUiFindListView(reference.view) }
-    return list
-  }
-
   /// What a grouped list measures like, read from the list itself.
   ///
-  /// One function for both sides of question 2 on purpose: the prototype and the SwiftUI
-  /// reference are only comparable if the same code measures them, and the go line is in
-  /// points, not in impressions. The item frame is the group's box, `radius` the corner the
-  /// list actually draws, `sep` the x a separator starts at, and the header/footer frames
-  /// the supplementary view's own - all of it the layout's answer, never a constant.
+  /// The item frame is the group's box, `radius` the corner the list actually draws, `sep` the
+  /// x a separator starts at, and the header/footer frames the supplementary view's own - all
+  /// of it the layout's answer, never a constant.
   private func geometryFields(of list: UICollectionView, kind: String) -> [String] {
     var out = ["kind=\(kind)", "listW=\(Self.number(list.bounds.width))"]
     list.layoutIfNeeded()
@@ -1997,9 +1958,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
     while heights.count < 3 { heights.append("-") }
     out.append("h0=\(heights[0])")
-    // Diagnostic only (never a compared field): what the row itself measured, so a
-    // row box that is off by N is visibly the chrome and not the content. Absent for
-    // the SwiftUI reference, whose rows are not ours.
+    // Diagnostic only: what the row itself measured, so a row box that is off by N is
+    // visibly the chrome and not the content. Absent when the list has no filled cell for
+    // that row yet, which is every row UIKit has not put on screen.
     if let cell = list.cellForItem(at: first) as? NitroUiFormRowCell, cell.lastRowHeight > 0 {
       out.append("rowH=\(Self.number(cell.lastRowHeight))")
     }
@@ -2014,9 +1975,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       out.append("headerH=\(Self.number(header.frame.height))")
     }
     // Ask every section, and take the first footer the layout has: the last section of a
-    // form usually has none, and asking only it is how the reference came back with no
-    // `footerH` at all while the prototype - whose sections all have one - had a number.
-    // The two are then measured at the same place, which is the whole point of the seam.
+    // form usually has none, so asking only it reads `footerH` absent for a form whose
+    // footer sits in the middle of it.
     var footer: UICollectionViewLayoutAttributes?
     var footerSection = -1
     for section in 0..<max(1, list.numberOfSections) {
@@ -2097,6 +2057,21 @@ enum NitroUiFormItem: Hashable {
       case let .row(view): hasher.combine(ObjectIdentifier(view))
     }
   }
+}
+
+/// The largest corner radius anywhere in a cell's layers, which is the radius a grouped
+/// list actually draws with: the cell layer itself is square and the rounding lives on the
+/// background view UIKit puts behind its content.
+///
+/// X37 moved this out of `NitroUiFormReference.swift`, the harness's SwiftUI comparison,
+/// which it outlived; the Form's own `radius` report is what reads it now.
+private func nitroUiMaxCornerRadius(_ layer: CALayer, depth: Int = 0) -> CGFloat {
+  guard depth < 4 else { return layer.cornerRadius }
+  var best = layer.cornerRadius
+  for sublayer in layer.sublayers ?? [] {
+    best = max(best, nitroUiMaxCornerRadius(sublayer, depth: depth + 1))
+  }
+  return best
 }
 
 private extension UIView {

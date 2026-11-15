@@ -39,9 +39,9 @@ import {
 } from '../scripts/harness-suite-timing.mjs';
 // CommonJS, because `example/metro.config.js` requires the same module to serve
 // the state this publishes.
-import harnessTimingGate from '../scripts/harness-timing-gate.js';
+import harnessRunState from '../scripts/harness-run-state.js';
 
-const { publishTimingGate } = harnessTimingGate;
+const { publishRunState } = harnessRunState;
 
 // The harness transforms `.harness.tsx` with Jest on this machine, and that
 // transform breaks on Node 25/26 with an ESM error that reads like a bug in the
@@ -253,7 +253,8 @@ function avd() {
  * the pin exists to make the comparison meaningful, and a run that reported a skip
  * instead would read green while comparing less than it claims. Only
  * `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` turns it into the printed skip, and it is for
- * someone deliberately probing another locale — see `localePremiseMiss`.
+ * someone deliberately probing another locale — see `localePremiseMiss` in
+ * `example/__tests__/Conformance.harness.tsx`, which reads this run's published answer.
  *
  * Override per shell with `NITRO_UI_TEST_LOCALE`/`NITRO_UI_TEST_TZ`; an empty
  * value means "ask the device", which is what a developer's own machine already
@@ -340,19 +341,20 @@ if (emulatorBoot.port != null) {
 }
 
 /**
- * The machine state the wall-clock gates need (D21), published for the app to
- * read. `example/` is Metro's project root, and Metro serves a file under it
- * from disk per request, so an assertion reads a current load average instead
- * of one frozen at bundle time. Structural counters stay gated everywhere; this
- * only decides the duration gates, which run just under `HARNESS_TIMING=1`.
+ * What this run decided, published for the app to read (one flag today: the locale
+ * opt-out the conformance rule reads). `example/` is Metro's project root, and Metro
+ * serves a file under it from disk per request, so an assertion reads the state of the
+ * run that is judging it rather than a value frozen at bundle time — and a file left
+ * by a dead run is rejected by its `metroPort` and its age. The wall-clock gates this
+ * used to serve are gone (X37): no gate run judged a duration.
  */
 const metroPort = Number(process.env.METRO_PORT ?? 8291);
-const stopTimingGate = publishTimingGate({
+const stopRunStatePublisher = publishRunState({
   exampleDir,
   port: metroPort,
   log: (message) => console.log(message),
 });
-process.once('exit', stopTimingGate);
+process.once('exit', stopRunStatePublisher);
 
 /**
  * Per-suite timings (X11), when `HARNESS_SUITE_TIMING` names a file.

@@ -37,13 +37,13 @@
  * 3. **Pooling does not leak.** A pooled host is a retained object by design — the pool
  *    is a cache — so the question is whether the *floor* after a collect keeps climbing
  *    cycle over cycle while the pool is being reused. Same shape as
- *    `MountChurn.harness.tsx`, whose 2 MiB/cycle bound this reuses, with one addition
+ *    `MountChurn.android.harness.tsx`, whose 2 MiB/cycle bound this reuses, with one addition
  *    that churn alone does not need: the loop has to prove it recycled, or a heap that
  *    is flat because nothing was ever pooled would pass for the wrong reason.
  *
  * The residue probes themselves live in `Conformance.harness.tsx`, one per control; this
  * file gates the machinery those probes now depend on. Both platforms run tests 1 and 2;
- * the leak test is Android-only, for the reason `MountChurn.harness.tsx` gives — the
+ * the leak test is Android-only, for the reason `MountChurn.android.harness.tsx` gives — the
  * question is about the Compose hosting lifecycle, and iOS hosts SwiftUI with a
  * different lifetime, so the iOS branch registers one pending test that says so.
  *
@@ -67,7 +67,7 @@ import { DatePicker, Switch, nitroUiCore } from 'react-native-nitro-ui';
 /** The `nuiPerfId` every view in this file mounts with, so its marks are findable. */
 const PERF_ID = 71;
 
-/** Controls per churn cycle. 200 is the batch `MountChurn.harness.tsx` dies at. */
+/** Controls per churn cycle. 200 is the batch `MountChurn.android.harness.tsx` dies at. */
 const COUNT = 200;
 
 /** Churn cycles between two heap readings. */
@@ -75,7 +75,7 @@ const CYCLES = 3;
 
 /**
  * Post-GC heap floor growth allowed per cycle, in MiB. The same bound
- * `MountChurn.harness.tsx` uses, and for the same reason: it sits between the leak that
+ * `MountChurn.android.harness.tsx` uses, and for the same reason: it sits between the leak that
  * gate was written for (8.18 MiB/cycle) and a loop that frees everything (~0.13 MiB of
  * ART slack), so a pooled-but-leaking host shows up here without riding on machine load.
  */
@@ -576,7 +576,7 @@ if (Platform.OS === 'android') {
         // Pay the one-time costs first, and fill the pool: it is a cache, so the first
         // cycle legitimately raises the floor to hold its contents. Measuring from the
         // second floor is what makes the slope about retention rather than about a cache
-        // reaching its working set (MountChurn.harness.tsx does the same).
+        // reaching its working set (MountChurn.android.harness.tsx does the same).
         nitroUiCore.prewarmSizing(['NitroUiSwitch']);
         nitroUiCore.drainPerf();
         await churnCycle('pool-warmup');
@@ -740,8 +740,9 @@ if (Platform.OS === 'android') {
 } else {
   /**
    * iOS has no recycling leak gate, and the reason is that **no native iOS probe has been
-   * written yet — and the retention to gate is native**, not JS. Registered as pending
-   * rather than deleted so the gap is in the run's output, with the reason attached.
+   * written yet — and the retention to gate is native**, not JS. X37 removed the pending
+   * test that used to stand here: the gate is the absence of a probe, and this comment is
+   * where the reason lives, beside the FOLLOWUPS line it names.
    *
    * ## Why that is the reason, and what earlier drafts of this comment got wrong
    *
@@ -771,11 +772,4 @@ if (Platform.OS === 'android') {
    * gated on is the recycle machinery itself — the marks and the per-object identity
    * checks above run on both platforms, and they are the part of the rule that broke.
    */
-  describe('recycling · churn does not leak (iOS)', () => {
-    it.skip(
-      'is pending: no native iOS probe has been written yet, and the retention to ' +
-        'gate is native (see the comment above, and the iOS line in FOLLOWUPS)',
-      () => {}
-    );
-  });
 }

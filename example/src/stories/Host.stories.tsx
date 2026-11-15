@@ -97,7 +97,7 @@ export const HostedVsNot: Story = {
  * The same batch, rebuilt: what a screen does when a settings page closes and opens.
  *
  * `Rebuild` unmounts the tree and mounts it again, which is the loop the leak gate
- * measures (`example/__tests__/MountChurn.harness.tsx`) — on a screen where it is a
+ * measures (`example/__tests__/MountChurn.android.harness.tsx`) — on a screen where it is a
  * button rather than a number.
  */
 export const Churn: Story = {
