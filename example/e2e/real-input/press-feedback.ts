@@ -47,12 +47,14 @@ import {
  * sized for the slowest capture, not for the animation: ten seconds gives the
  * first frame, asked for at +700 ms, some four seconds of held finger after it
  * lands, and a Material state layer stays under the finger for as long as the
- * finger is down.
+ * finger is down. On a busy machine that round trip measured 10 190 ms, so the
+ * window is twenty seconds: enough for a capture that has to wait out a ripple
+ * before the driver will take the picture at all.
  */
-const HOLD_MS = 10_000;
+const HOLD_MS = 20_000;
 
 /** When each frame during the hold is asked for, in ms after the finger lands. */
-const CAPTURE_AT_MS = [700, 2400];
+const CAPTURE_AT_MS = [500, 2500];
 
 /** How far inside the control's box the sample starts, in device px. */
 const INSET_PX = 12;
