@@ -2971,9 +2971,14 @@ describe('Form section drawing (E2, Android)', () => {
     // on is that the reservation is not the glyph box: put `onSizeChanged` back inside the
     // padding and both lines below go red at once.
     const bands = await sectionReport('first', (r) => {
-      num(r, 'headerBand');
-      num(r, 'footerBand');
-      return true;
+      // Asked until both bands have been *measured*, not merely published: before the
+      // section's round trip comes back both read `0.0`, and the difference between two
+      // zeros is nothing. `FormFidelity` read them the same way and got its settle for
+      // free from a 400 ms pause that existed to name a screenshot; the wait is here
+      // instead, so the case cannot pass or fail on how fast the host answered.
+      const header = num(r, 'headerBand');
+      const footer = num(r, 'footerBand');
+      return header > 0 && footer > 0;
     });
     console.log(`FORM BANDS first section ${JSON.stringify(bands)}`);
     const padding = (band: string, text: string) =>
