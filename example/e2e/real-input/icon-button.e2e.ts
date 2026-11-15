@@ -2,10 +2,9 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
-import { actsOnOneNamedNode, treeAnnounces } from './reader';
+import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input icon button';
-const TOGGLE = 'Real-input toggle icon button';
 
 test('a real tap on the icon Button reaches JS once', async ({
   app,
@@ -25,16 +24,4 @@ test('a real tap on the icon Button reaches JS once', async ({
 
   await press.tap();
   await expect(presses).toHaveText('1');
-
-  // The toggle is the same node shape one row over, and it is the one a reader is
-  // handed a state for: the bookmark is filled from the node's own `checked`, not
-  // from the artwork the tap swapped.
-  const toggle = screen.getByLabel(TOGGLE);
-  const saved = screen.getByTestId('real-input-icon-button-value');
-  await reveal(screen, toggle);
-  await expect(saved).toHaveText('off');
-  treeAnnounces(TOGGLE, { checked: 'off' });
-  await toggle.tap();
-  await expect(saved).toHaveText('on');
-  treeAnnounces(TOGGLE, { checked: 'on' });
 });

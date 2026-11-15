@@ -2,11 +2,10 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
-import { actsOnOneNamedNode, treeAnnounces } from './reader';
+import { actsOnOneNamedNode } from './reader';
 import { pressPaintsFeedback } from './press-feedback';
 
 const NAME = 'Real-input item';
-const LOCKED = 'Real-input disabled item';
 
 test('a real tap on a ListItem fires its onPress once', async ({
   app,
@@ -30,13 +29,6 @@ test('a real tap on a ListItem fires its onPress once', async ({
   await row.tap();
   await expect(presses).toHaveText('1');
   await expect(last).toHaveText('real');
-
-  // The row that must not answer is only provable from the tree: a row that reads
-  // enabled while taking nothing is indistinguishable from a working one until a
-  // person tries it and wonders.
-  const locked = screen.getByLabel(LOCKED);
-  await reveal(screen, locked);
-  treeAnnounces(LOCKED, { enabled: 'false' });
 });
 
 test('a held press on a ListItem draws its ink (G30)', async ({

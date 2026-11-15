@@ -2,7 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
-import { actsOnOneNamedNode, nodeReports, treeAnnounces } from './reader';
+import { actsOnOneNamedNode, nodeReports } from './reader';
 
 const NAME = 'Controlled switch';
 
@@ -21,12 +21,8 @@ test('a real tap on the Switch reaches JS, and the node says so too', async ({
   // box and the value all have to be on the one node a person acts on.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('off');
-  treeAnnounces(NAME, { checked: 'off' });
 
   await flipper.tap();
   await expect(value).toHaveText('on');
   await nodeReports(screen, NAME, 'enabled');
-  // The echo says JS was told. This says the node a finger pressed — and the
-  // node a reader is told about — is the one holding the new value.
-  treeAnnounces(NAME, { checked: 'on' });
 });

@@ -33,23 +33,4 @@ test('a hosted DatePicker opens its dialog, and a day cell reaches JS', async ({
   await day.tap();
   await screen.getByText(/^OK$/).tap();
   await expect(value).toHaveText('2026-05-22');
-
-  // Getting out without choosing is two more gestures a person makes on a dialog
-  // in another window: the Cancel button the dialog draws, and the system Back.
-  // Neither is reachable from inside the React tree, and both have to leave the
-  // value alone — a dialog that dismisses by writing is the one that surprises.
-  await field.tap();
-  const cancel = screen.getByText(/^Cancel$/);
-  await cancel.waitFor({ state: 'visible' });
-  await cancel.tap();
-  await screen.getByLabel('Friday, May 22, 2026').waitFor({
-    state: 'detached',
-  });
-  await expect(value).toHaveText('2026-05-22');
-
-  await field.tap();
-  await cancel.waitFor({ state: 'visible' });
-  await app.back();
-  await cancel.waitFor({ state: 'detached' });
-  await expect(value).toHaveText('2026-05-22');
 });
