@@ -436,13 +436,14 @@ export function runHeader(run) {
 
 /**
  * One comparison -> markdown + exit code, shared by `run.mjs` and the standalone
- * reporter (`mode` only changes the wording and whether absolute control
- * movement is worth printing).
+ * reporter. There is one shape: `head` is the run under review and `base` is another
+ * run of the same plan - the release side of a `--compare-release` session, or any
+ * results file `--compare` names. The gate never sees a committed number, so the
+ * control movement between the two runs is always worth printing.
  */
 export function comparisonSections({
   run,
   base,
-  mode,
   label,
   baseTable = null,
   baseNoise = null,
@@ -459,19 +460,16 @@ export function comparisonSections({
     headNoise,
     baseNoise: resolvedBaseNoise,
   });
-  const movement =
-    mode === 'compare' ? controlMovement(cellsFrom(base), cellsFrom(run)) : [];
+  const movement = controlMovement(cellsFrom(base), cellsFrom(run));
 
   const sections = [
-    `## ${mode === 'check' ? 'Check against' : 'head/base vs'} ${label}`,
+    `## head/base vs ${label}`,
     '',
-    mode === 'check'
-      ? 'Both columns are launch-paired ratios to `rn-core`, so an OS or machine change cannot move the verdict.'
-      : 'Gated on `head(x/rn-core) / base(x/rn-core)`, so machine drift cancels.',
+    'Gated on `head(x/rn-core) / base(x/rn-core)`, so machine drift cancels.',
     '',
-    gateTable(result, mode),
+    gateTable(result),
     '',
-    gateSummary(result, mode),
+    gateSummary(result),
   ];
   if (movement.length > 0) {
     sections.push(
@@ -493,7 +491,7 @@ export function comparisonSections({
   };
 }
 
-function gateTable(result, mode) {
+function gateTable(result) {
   const rows = [];
   for (const row of result.rows) {
     if (row.status === 'missing-base') {
@@ -543,7 +541,7 @@ function gateTable(result, mode) {
         formatRatio(value.head),
         formatRatio(value.ratio),
         notes.join(', ') ||
-          (mode === 'check' ? 'within tolerance' : 'within tolerance'),
+          'within tolerance',
       ]);
     }
   }
@@ -560,7 +558,7 @@ function gateTable(result, mode) {
   );
 }
 
-function gateSummary(result, mode) {
+function gateSummary(result) {
   const lines = [];
   const noisyCount = Object.values(result.headNoise).reduce(
     (total, cell) =>
@@ -579,9 +577,7 @@ function gateSummary(result, mode) {
   if (result.failures.length === 0) {
     lines.push(
       ``,
-      `No gated metric exceeded the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold${
-        mode === 'check' ? ' against the baseline' : ' versus base'
-      }.`
+      `No gated metric exceeded the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold versus base.`
     );
     return lines.join('\n');
   }

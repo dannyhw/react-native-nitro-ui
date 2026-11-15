@@ -1,12 +1,12 @@
 /**
  * A simulator's device key comes from its hardware type, not its name.
  *
- * The device key is half of a committed baseline's path
- * (`bench/baselines/<machine>/<deviceKey>.json`), so a key that describes what a
- * simulator was *named* rather than what it *is* silently splits the baselines:
- * the lease pool's pair-a is an iPhone 17 simulator named `nitro-ui A`, and by
- * name that keys as `ios27-sim-nitrouia` - a file no canonical run will ever
- * gate against, and one D9 never contemplated. The fixture below keeps the two
+ * The device key is how a run says *what it measured on*, on the results file, in the
+ * report header and on the `device:` line of a release comparison - the two sides of a
+ * comparison are only the same measurement if the key is the same. A key that describes
+ * what a simulator was *named* rather than what it *is* breaks that quietly: the lease
+ * pool's pair-a is an iPhone 17 simulator named `nitro-ui A`, and by name that keys as
+ * `ios27-sim-nitrouia` - a key no canonical device has, and one D9 never contemplated. The fixture below keeps the two
  * sources deliberately apart (`nitro-ui A` vs `…iPhone-17`): a derivation that
  * reads the wrong one produces a visibly wrong key, not an accidental match.
  *
@@ -30,7 +30,7 @@ const PAIR_A = {
 
 describe('the iOS device key', () => {
   it('classes a leased simulator by its hardware type, not its lease name', () => {
-    // The name says nothing a baseline path can use; the type identifier says
+    // The name says nothing a device key can use; the type identifier says
     // exactly the D9 class.
     expect(iosDeviceClassName(PAIR_A)).toBe('iphone17');
     expect(iosDeviceKey('27.0', PAIR_A)).toBe('ios27-sim-iphone17');

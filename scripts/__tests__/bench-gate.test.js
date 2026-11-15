@@ -11,8 +11,8 @@
  * *not* evidence - control drift, a slow reference arm, a noisy cell - must not
  * suppress or manufacture one.
  *
- * The same `gate()` is used by `run.mjs --check/--compare` and by
- * `report.mjs --compare/--check` (review S11), so covering it covers both.
+ * The same `gate()` is used by `run.mjs --compare-release`, by `run.mjs
+ * --compare` and by `report.mjs --compare` (review S11), so covering it covers all three.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -134,9 +134,9 @@ function cellRecords({
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
-      // The waiting rule this fixture's app would have reported (iOS's defaults). A run
-      // that records none is refused by `baselineBlockers`, so every mintable fixture
-      // has to carry one.
+      // The waiting rule this fixture's app reports (iOS's defaults). A run whose app
+      // records none is called out in its own problems list rather than stamped with
+      // today's defaults, so a fixture has to carry one.
       mountTimeoutMs: 1_500,
       presentedTimeoutMs: 8_000,
     },
@@ -300,9 +300,8 @@ function leakRun({ rnCore, nitroUi }) {
 }
 
 /**
- * `makeRun` plus the metadata `--check` and `--update-baseline` read: a whole
- * run object that is allowed to mint a baseline (clean tree, `full` plan, 8
- * launches, quiet machine).
+ * `makeRun` plus the metadata a results file carries: the whole run object a
+ * release comparison writes (clean tree, `full` plan, 8 launches, quiet machine).
  */
 function measuredRun(overrides = {}) {
   return {
@@ -517,7 +516,6 @@ describe('benchmark gate', () => {
     const noisy = comparisonSections({
       run: noisyHead,
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(noisy.exitCode).toBe(0);
@@ -526,7 +524,6 @@ describe('benchmark gate', () => {
     const clear = comparisonSections({
       run: makeRun({ 'nitro-ui': { mounted: 220_000, presented: 260_000 } }),
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(clear.exitCode).toBe(1);
@@ -829,7 +826,7 @@ describe('memory aggregation', () => {
 describe('a gated arm with no base value', () => {
   /**
    * The first run after a component lands has ratios to `rn-core` but no ratio to
-   * regress against, because the baseline cell was skipped. Silently reporting
+   * regress against, because the base run's cell was skipped. Silently reporting
    * that as `ok` reads like a pass, so the gate labels it and prints how the arm
    * compares to the control.
    */
@@ -850,8 +847,7 @@ describe('a gated arm with no base value', () => {
     const markdown = comparisonSections({
       run: { platform: 'ios', cells: makeRun().cells },
       base: { platform: 'ios', cells: base.cells },
-      mode: 'check',
-      label: 'baseline',
+      label: 'v0.9.0',
     }).markdown;
     expect(markdown).toContain('new arm');
     expect(markdown).toContain('rn-core');
@@ -1105,7 +1101,7 @@ describe('the Button cells (--component button)', () => {
      * `n` is rows inside one container and it is priced at two row counts (20 and
      * 50, S6's question 6) where every other component is priced at one.
      * Since H2b every bench control is hostable, so no component's schedule is naturally
-     * free of the Host arm any more: the baseline is that same schedule with the scoped
+     * free of the Host arm any more: the base is that same schedule with the scoped
      * arms taken out, which measures the quantity instead of assuming a probe. The half
      * that rode on the probe is asserted in its own right below — the Host arm is scoped
      * to Android, so an iOS schedule must not carry one.

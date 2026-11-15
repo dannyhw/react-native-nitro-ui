@@ -1,9 +1,9 @@
 /**
  * `bun bench --dry-run` — what a run would resolve, decided without a device.
  *
- * Minting a machine's baselines burned hours before telling anyone that there was no
- * per-machine baseline directory to write to, or that the iOS device key had been
- * built from the simulator's *name*. A pre-flight is only worth having if its answer
+ * A bench session burns hours before anyone learns that its device key was built from
+ * the simulator's *name*, or that the ref it is comparing against is the commit under
+ * review. A pre-flight is only worth having if its answer
  * is the run's real answer, so the cases below are about the three ways it could lie:
  *
  *   - booting or starting something while "checking" (it must read a listing only);
@@ -186,7 +186,7 @@ describe('the Android half of a dry run', () => {
       })
     ).toEqual({
       // `android30-emu-` would be shaped like a real key and match no committed
-      // baseline, which reads as resolved. Null is the honest answer.
+      // release ref, which reads as resolved. Null is the honest answer.
       deviceKey: null,
       detail: expect.stringContaining('profile unknown'),
       problem: expect.stringContaining('cannot be built from this AVD'),

@@ -149,7 +149,6 @@ if (
     const section = comparisonSections({
       run,
       base: readJson(target.file),
-      mode: 'compare',
       label: target.label,
     });
     process.stdout.write(`\n${section.markdown}\n`);

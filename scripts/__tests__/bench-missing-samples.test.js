@@ -55,8 +55,8 @@ const ITERATIONS = 20;
 const QUIET = [1, 1.01, 0.995, 1.005];
 
 /**
- * The waiting rule a baseline is minted under, per platform (A4/M1). Most fixtures in
- * this file are iOS-shaped because that is the run A4 minted; the ones that are not say
+ * The waiting rule each platform measures under, per platform (A4/M1). Most fixtures
+ * in this file are iOS-shaped because that is the run A4 measured; the ones that are not say
  * so by naming `ANDROID_RULE`.
  */
 const IOS_RULE = DEFAULT_TIMEOUTS_MS.ios;
@@ -168,7 +168,7 @@ function cellRecords({
   return records;
 }
 
-/** One memory cell per arm, so a mint has a `memory` row and the ratios have denominators. */
+/** One memory cell per arm, so a run has a `memory` row and the ratios have denominators. */
 function memoryRecords({ implementation, n = 200, perInstance = 40_000 }) {
   const empty = 120_000_000;
   const records = [
@@ -224,7 +224,7 @@ const ARMS = {
 const HOST_ARM = { mounted: 115_000 };
 
 /**
- * A whole mintable run, with one arm's `mount` cell optionally gutted.
+ * A whole complete run, with one arm's `mount` cell optionally gutted.
  *
  * The gap defaults to the A3 shape: 3 of 20 measured iterations per launch (12 of 80),
  * which is over the 10 % budget (`MAX_MISSING_SAMPLE_RATIO`) and therefore incomplete.
@@ -505,7 +505,7 @@ describe('the per-launch budget follows the requested waits', () => {
     // The reason the table is what it is. A launch where no frame ever arrives waits the
     // full default on every iteration: 25 x (2 mount + 1 presented). A budget below that
     // kills the launch as "stalled" for a reason the runner chose, and a killed launch
-    // loses 20 iterations of data and becomes a `problem` - a mint refusal - instead of
+    // loses 20 iterations of data and becomes a `problem` in the run's own list - instead of
     // 20 recorded `probe-timeout` reasons. A4's raise from 2 000 to 8 000 ms is what
     // pushed iOS past the old 180 s table value; Android's 125 s is what keeps its own
     // row honest if anyone shrinks it again.
@@ -547,7 +547,7 @@ describe('the per-launch budget follows the requested waits', () => {
   it('grows by the extra wait for every iteration of the launch', () => {
     // 25 iterations x (40 000 - 8 000) extra = 800 000 ms on top of the table value.
     // Without this a diagnostic run is killed as "stalled" for waiting on purpose, and a
-    // killed launch becomes a `problem` - which is also a mint refusal.
+    // killed launch becomes a `problem` - which the comparison also reports.
     expect(
       launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }), {
         platform: 'ios',
@@ -852,8 +852,8 @@ describe('the two ends of the timeout rule agree', () => {
       'utf8'
     );
 
-  it('waits by the same defaults the baseline is minted under, on both platforms', () => {
-    // The drift this pins is the expensive kind: a mint refused for a wait nobody asked
+  it('waits by the same platform defaults on both platforms', () => {
+    // The drift this pins is the expensive kind: a run measured under a wait nobody asked
     // for, or accepted under a rule it was not recorded with. Per platform, because the
     // two no longer share a number (M1).
     for (const platform of ['ios', 'android']) {
@@ -1036,8 +1036,8 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
    * The claim part 3 rests on, checked rather than argued: a longer wait changes *which*
    * samples arrive and never *what* an arriving sample says. So a cell that already
    * measured every iteration inside the old wait has identical numbers under the new one,
-   * and a committed baseline - every cell of which is complete by the mint rule - stays
-   * comparable across the change. The only cells that move are the ones that were losing
+   * a run whose cells are complete by that rule - which is what a comparison side looks
+   * like when it is worth gating - stays comparable across the change. The only cells that move are the ones that were losing
    * samples, and they move towards the truth: the iterations a short wait dropped are
    * exactly the slow ones, which is why their survivor-biased median reads fast.
    *
@@ -1158,9 +1158,9 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
       maxRequestedTimeoutMsFor('ios')
     );
     expect(maxRequestedTimeoutMsFor('ios')).toBeLessThan(90_000);
-    // And the two ends have to agree, because the number that gates a mint is the
+    // And the two ends have to agree, because the number that decides a verdict is the
     // runner's and the number a launch actually waits by is the app's. `waits by the
-    // same defaults the baseline is minted under` asserts the equality; this one is the
+    // same platform defaults on both platforms` asserts the equality; this one is the
     // proof that a revert cannot slip through as a pair - both constants would have to
     // move together, and one of them is read from the app's own module.
     expect(BENCH_DEFAULT_TIMEOUTS.ios.presentedTimeoutMs).toBe(
@@ -1178,7 +1178,7 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
   });
 });
 
-describe('Android keeps the waiting rule it was minted with (review M1)', () => {
+describe('Android keeps the waiting rule it measures with (review M1)', () => {
   /**
    * One place that reads Android's *effective* waits end to end: the string the runner
    * puts on a default launch, the number the app parses off it, the native timer that
@@ -1187,7 +1187,7 @@ describe('Android keeps the waiting rule it was minted with (review M1)', () => 
    * a different file, so a fix in one would otherwise look complete.
    *
    * Proven red by moving each in turn: the app default to 8 000 (both the parse and the
-   * mint-rule equality go red), the ceiling constant or its `postDelayed` call site to
+   * rule-equality tests go red), the ceiling constant or its `postDelayed` call site to
    * 90 s (the backstop and call-site tests), the budget table to iOS's (the table pin),
    * and the platform's rule to iOS's (the mint test above).
    */
@@ -1254,7 +1254,7 @@ describe('Android keeps the waiting rule it was minted with (review M1)', () => 
     expect(extraSeconds).toBe(9_600); // ~2.7 h per Android full run
     // ...and at iOS's 8 s the same cells would run past the budget Android's launches get,
     // which is the other half of why the raise was not simply taken at face value: a
-    // launch killed as "stalled" is a `problem`, and a `problem` refuses the whole mint.
+    // launch killed as "stalled" is a `problem`, and a `problem` fails the whole run.
     expect((iterations * (2 * 1_500 + 8_000)) / 180_000).toBeGreaterThan(1);
     expect((iterations * (2 * 1_500 + 2_000)) / 180_000).toBeLessThan(1);
   });
