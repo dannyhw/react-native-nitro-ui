@@ -8,6 +8,9 @@ pre-commit:
       glob: '*.{js,ts,jsx,tsx}'
       run: bunx --no-install eslint {staged_files}
 
+    format:
+      run: bunx --no-install prettier --check --ignore-unknown {staged_files}
+
     types:
       glob: '*.{js,ts,jsx,tsx}'
       run: bunx --no-install tsc

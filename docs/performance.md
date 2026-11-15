@@ -2,15 +2,15 @@
 
 Every cell behind the README's [Performance](../README.md#performance) summary, the
 conditions each one holds under, how the readings from two Macs compare, and how the
-committed baselines gate a change. How to run the benchmark, what each metric is and how
+a release comparison gates a change. How to run the benchmark, what each metric is and how
 the numbers are read is [architecture/benchmarks.md](architecture/benchmarks.md).
 
 The numbers come from two Macs running the same two devices: an iPhone 17 simulator on
 iOS 27 and an API 35 Pixel 9 emulator. One is an Apple M4 Pro with 14 cores and a load
 ceiling of 7.0, the other an Apple M1 Max with 10 cores and a load ceiling of 5.0. A
 simulator or emulator runs on its Mac's CPU and GPU, so a cell from one is not a repeat
-of the other: read the two together for the shape, and a cell against its own Mac's
-baseline for a verdict.
+of the other: read the two together for the shape, and take a verdict only
+from runs made on the same Mac.
 
 ## What is compared
 
@@ -29,7 +29,7 @@ three arms in the same run, on the same device, in Release builds:
 
 One `--plan full --launches 8` run per platform, on a clean tree and an idle
 machine: an iPhone 17 simulator (iOS 27) and an API 35 Pixel 9 emulator with ART
-primed to `speed-profile`. These runs are that Mac's committed baselines. Each
+primed to `speed-profile`. Each
 cell is the launch-paired median ratio of nitro-ui to `expo-ui-shared-host`;
 mount is at N=50, memory at N=200. `✓` meets the ≤ 1.0× target, `✗` misses it,
 `n/v` means that cell's spread across launches was over 10 %, so the harness
@@ -215,7 +215,7 @@ CPU is at parity, 1.00×, where a `quick`-plan run reads 0.92×:
 
 No Android `@expo/ui` arm has `DatePicker` cells, so that column is hosted-vs-unhosted
 only. Every cell above carries a verdict except the unmount ones and `Progress`
-memory: read against this machine's own baseline, `--check` on the same run fails
+memory: read against this machine's own full-plan run, the gate fails
 nothing — 159 rows within tolerance, 33 noisy, and the only over-threshold row that
 is not noisy is `update:nitro-ui:1` UI CPU at 1.26× with a 95 % CI of 0.98–1.38× that
 covers 1.05, so it is reported and not conclusive. No number here is about an
@@ -232,12 +232,17 @@ where a Host is a passthrough, Menu is the usual per-control story: 352.8 KiB
 against the shared host's 263.6 (1.34×), presented 33.0 ms against 16.1 (`n/v`),
 UI CPU 1.28×. No run composes a popup — the arm never opens a menu.
 
-## Baselines and gating
+## How a change gets gated
 
-Baselines are committed per machine as well as per device —
-`bench/baselines/<machine-label>/<deviceKey>.json` — because a ratio to `rn-core`
-only cancels drift inside the machine that measured it. Both Macs above have
-both canonical devices, so `bun bench --check` gates on both platforms there; a
-machine without its own directory refuses rather than reading another's. Each
-baseline stores ratios to `rn-core`, not absolute times; see
-`bench/baselines/README.md` for the rules a baseline run has to meet.
+No number here gates anything by itself: a number measured on one host is not comparable
+with a number from another. What gates a release is a pair.
+`bun bench --platform <p> --compare-release [ref]` builds the release's own bench app and the
+candidate's, installs one at a time on one device, and alternates them launch round by launch
+round, so the host's drift in that session falls on both versions. The verdict is per cell: a
+`head(x/rn-core) / base(x/rn-core)` ratio over 1.20, whose bootstrap 95 % interval excludes
+1.05, in a cell that was quiet inside its own run. A run's ratios to `rn-core` are what travel
+between machines, never absolute milliseconds.
+
+The only committed performance number in the repository is
+[`bench/baselines/renders.json`](../bench/baselines/renders.json): JS render counts, which are
+machine-independent and gated by exact equality in `bun run check`.

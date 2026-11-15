@@ -3,9 +3,8 @@
  * still owes.
  *
  * The failure mode being tested is not a crash, it is a green that means more
- * than it should, because that is what cost 27.6 h of fix rounds re-running
- * gates that had already run (docs/tasks/PROCESS-review-2026-10-26.md §3). So the
- * cases here are the ones where a wrong answer reads like proof:
+ * than it should. So the cases here are the ones where a wrong answer reads like
+ * proof:
  *
  *   - a result keyed to the code tree, so a report commit does not invalidate a
  *     device run - and a *code* change does;
@@ -39,7 +38,6 @@ import {
   ledgerFileName,
   ledgerLineFromRun,
   ledgerRelativePath,
-  latestByGate,
   listByGate,
   ownMetroPids,
   parseLedger,
@@ -52,7 +50,6 @@ import {
   renderGateTable,
   requiredGatesFor,
   resolveGate,
-  lookLeaseRefusal,
   summarizeGates,
   summarizeLoad,
   codeTreeDigest,
@@ -212,19 +209,9 @@ describe('ledger lines', () => {
     );
     expect(parsed).toHaveLength(2);
     expect(parsed.every((entry) => entry.corrupt === true)).toBe(true);
-    expect(latestByGate(parsed)).toEqual({});
     expect(
       gateStateFor({ gate: 'check', tree: TREE_A, entry: undefined }).state
     ).toBe('missing');
-  });
-
-  it('takes the last line per gate by append order, not by clock', () => {
-    const older = { ...line({ gate: 'check', result: 'fail' }) };
-    older.ts = '2099-01-01T00:00:00.000Z';
-    const newer = line({ gate: 'check', result: 'pass' });
-    const latest = latestByGate([older, newer]);
-    expect(latest.check.result).toBe('pass');
-    expect(latestByGate([newer, older]).check.result).toBe('fail');
   });
 
   it('puts one file per branch under .gates, no separator to collide', () => {
@@ -705,8 +692,8 @@ describe('summarizeLoad', () => {
       median: 3,
       max: 9,
       count: 5,
-      // X12: the last sample, so a failure excerpt can say what load the run
-      // *ended* under and not just how it averaged.
+      // X12: the last sample, what load the run *ended* under and not just how
+      // it averaged.
       end: 3,
     });
     // Even count: the middle two, so a run that was busy for half its length is
@@ -2737,9 +2724,9 @@ describeCli('gate.mjs --background and wait', () => {
     // X16 item 3. `gate.mjs bench --help` used to resolve as the bench gate with a
     // `--help` filter, run `run.mjs --help` - which prints usage and exits 2 - and
     // append `bench:--help FAIL` to the branch ledger. A FAIL row is evidence that a
-    // gate ran and lost: `table` puts it first, `status` reports the branch as red,
-    // and `export --task` writes a scrubbed failure excerpt for a command that never
-    // measured anything. Asking how a gate is spelled is not a run.
+    // gate ran and lost: `table` puts it first and `status` reports the branch as
+    // red, for a command that never measured anything. Asking how a gate is spelled
+    // is not a run.
     //
     // `FAKE_EXIT=2` keeps the fixture honest about the shape of the bug: the real
     // runner's help does exit non-zero, so a pre-fix probe lands a *FAIL* row, the
@@ -3000,105 +2987,6 @@ describeCli(
   }
 );
 
-/**
- * X20 item 3: a look-check simulator never runs the merge gates. Its lease exports
- * `NITRO_UI_LEASE_IOS_RUNTIME`, and every gate that drives a device is refused on it, while the
- * two that touch no device still run from that shell. Checked over every gate name `resolveGate`
- * knows, so a gate added later is refused by default rather than by remembering this list.
- */
-describe('a lease on an older iOS runtime', () => {
-  const LOOK = {
-    NITRO_UI_LEASE_ID: 'G20-ab12',
-    NITRO_UI_LEASE_IOS_RUNTIME: '26.5',
-  };
-  const DEVICE_GATES = [
-    'harness:ios',
-    'harness:android',
-    'harness:ios:ColdSizing',
-    'real-input:ios',
-    'real-input:android',
-    'smoke:expo',
-    'smoke:rn-cli',
-    'bench',
-  ];
-
-  it('refuses every gate that drives a device, naming the runtime and the way out', () => {
-    for (const name of DEVICE_GATES) {
-      const why = lookLeaseRefusal(LOOK, resolveGate(name));
-      expect(why).toContain('iOS 26.5 look-check simulator');
-      expect(why).toContain('G20-ab12');
-      expect(why).toContain('without --ios-runtime');
-    }
-  });
-
-  it('still runs check and smoke:pack, which touch no device', () => {
-    expect(lookLeaseRefusal(LOOK, resolveGate('check'))).toBeNull();
-    expect(lookLeaseRefusal(LOOK, resolveGate('smoke:pack'))).toBeNull();
-  });
-
-  it('refuses nothing on a default lease, or with no lease at all', () => {
-    for (const name of DEVICE_GATES) {
-      expect(
-        lookLeaseRefusal({ NITRO_UI_LEASE_ID: 'G6-1' }, resolveGate(name))
-      ).toBeNull();
-      expect(lookLeaseRefusal({}, resolveGate(name))).toBeNull();
-      expect(
-        lookLeaseRefusal({ NITRO_UI_LEASE_IOS_RUNTIME: ' ' }, resolveGate(name))
-      ).toBeNull();
-    }
-  });
-});
-
-/**
- * X20 fix round 1: the refusal as `gate.mjs` runs it, not only the pure rule above. Deleting the
- * `if (lookRefusal != null)` block in `runGate` left every case in this file green, because nothing
- * here went through the CLI with a look-check lease in the environment.
- *
- * The throwaway checkout's `node` is the fake runner, so a refusal that went missing runs a stub
- * and records a ledger line - which is the failure this case catches - and never a real harness or
- * a device. The control half runs the same gate in the same checkout without the variable and must
- * record a line, so "no line was written" cannot pass because the fixture never writes one.
- */
-describeCli('gate.mjs refuses a device gate on a look-check lease', () => {
-  const cleanup = [];
-  afterAll(() => {
-    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('exits 1 before the run and writes no ledger line, where a default lease runs and records', () => {
-    const dir = makeCheckout({
-      'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
-    });
-    cleanup.push(dir);
-    const home = path.join(dir, 'state');
-    // A look-check lease is a real lease — live, this task's, holding a real pair —
-    // so it has to survive X28's store check to reach the refusal this case is about.
-    const look = leaseRecord({ id: 'G20-ab12', task: 'G20', platform: 'ios' });
-    writeLeaseStore(home, {
-      pairs: [DEFAULT_PAIR, OTHER_PAIR],
-      leases: [look],
-    });
-    const lease = leasedEnv({ home, pair: DEFAULT_PAIR, lease: look });
-
-    const refused = runCli(dir, ['harness:ios'], {
-      ...lease,
-      NITRO_UI_LEASE_IOS_RUNTIME: '26.5',
-    });
-    expect(refused.status).toBe(1);
-    expect(refused.stderr).toContain('gate: refused before the run');
-    expect(refused.stderr).toContain('iOS 26.5 look-check simulator');
-    expect(refused.stdout).not.toContain('fake runner');
-    expect(ledgerLines(dir)).toEqual([]);
-
-    const ran = runCli(dir, ['harness:ios'], lease);
-    expect(ran.status).toBe(0);
-    expect(ran.stdout).toContain('fake runner');
-    expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual([
-      'harness:ios',
-    ]);
-  });
-});
-
 describeCli('gate.mjs refuses a misplaced --background (X30 item 3)', () => {
   /** The marker `repoRootOf()` needs; a fixture without it dies at import. */
   const CHECKOUT = {
@@ -3198,29 +3086,26 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
    * `USAGE` is a chain of literals joined with `+`, and a `'…';` where a `'… ' +`
    * belongs is not a syntax error: the assignment ends at the semicolon and every
    * literal after it is a no-op expression statement that lints and formats clean.
-   * X30's `--background` edit did that four times, so the help stopped mid-sentence
-   * and the flag, the merge-reuse rule, `export` and `logs` had no explanation
-   * anywhere — including in the usage error about a misplaced `--background`, which
-   * prints the same truncated string. Asserting the *tail* is what catches the shape:
-   * a string that was cut short has no tail, and no amount of middle text shows it.
+   * The help then stops mid-sentence, and so does the usage error about a misplaced
+   * `--background`, which prints the same string. Asserting the *tail* is what catches
+   * the shape: a string that was cut short has no tail, and no amount of middle text
+   * shows it.
    */
   it('the help runs to the last paragraph, not the first stray semicolon', () => {
     const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
     cleanup.push(dir);
     const help = runCli(dir, ['--help']).stdout;
-    // The four paragraphs that went missing, by the words only the whole string has.
+    // Paragraphs past the first, by the words only the whole string has.
     for (const section of [
       'never\n        after `--`, where the arguments belong to the gate',
       '--background starts a gate detached and returns at once',
-      "at merge, `check` may be satisfied by another branch's ledger",
-      'Export *merges*',
       "(`logs` lists this clone's stored gate logs",
     ]) {
       expect(help).toContain(section);
     }
     // And the end really is the end: the `logs` line and the last clause of the file.
     expect(help).toContain('node scripts/gate.mjs logs [--branch <b>]');
-    expect(help.trimEnd().endsWith('retention without listing)')).toBe(true);
+    expect(help.trimEnd().endsWith('--all shows every branch)')).toBe(true);
   });
 
   it('and the refusal for a misplaced --background carries all of it', () => {
@@ -3232,7 +3117,7 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
     // Whoever mistyped the flag is reading this text to find the right form, so the
     // half of it that explains `--background` and `wait` has to be in there.
     expect(run.stderr).toContain('--background starts a gate detached');
-    expect(run.stderr).toContain('retention without listing)');
+    expect(run.stderr).toContain('--all shows every branch)');
   });
 
   it('and eslint is set to catch the shape of the bug itself', () => {

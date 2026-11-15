@@ -1,19 +1,3 @@
-/**
- * The `check` runner: does the graph still run *the chain*, and does it order what
- * shares an output?
- *
- * The failure mode here is a fast `check` that quietly proves less than the
- * reports say it does, so the cases are the ones that would let that happen:
- *
- *   - the graph and `package.json`'s `check:serial` drifting apart (a step added
- *     to one and not the other) - the test that fails, in both directions;
- *   - two steps touching the same output with nothing between them (the `needs`
- *     edge that keeps `prepare` from deleting `nitrogen/` under `nitrogen:check`);
- *   - a scheduler that interleaves two steps' logs, or that keeps starting steps
- *     after one failed, so the ledger's first Jest summary is whichever finished
- *     first rather than the unit-test run (X2 review M3).
- */
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,8 +16,6 @@ import {
   parseJobsArgument,
   planProblems,
   runCheckPlan,
-  serialChainFromSteps,
-  stepsFromSerialChain,
   unknownCheckArguments,
   validateCheckSteps,
 } from '../check-steps.mjs';
@@ -50,94 +32,25 @@ function stepNames(steps = CHECK_STEPS) {
   return steps.map((step) => step.name);
 }
 
-describe('the check step list is the chain', () => {
-  it('`check:serial` in package.json is exactly what the graph declares', () => {
-    // This is the test the brief asks for: add a step to the old chain and not to
-    // `CHECK_STEPS`, or the reverse, and it fails. The runner refuses to run at
-    // all when the two disagree (planProblems, below), so a report's `check`
-    // cannot quietly mean something narrower than CI's.
-    expect(serialChainFromSteps(CHECK_STEPS)).toBe(
-      packageJson.scripts['check:serial']
-    );
+describe('the check step list', () => {
+  it('`check` in package.json is the runner, and every step is a real script', () => {
     expect(packageJson.scripts.check).toBe('node scripts/check.mjs');
-  });
-
-  it('`check:serial` is a plain `bun run <step>` chain, so the names are real scripts', () => {
-    const parsed = stepsFromSerialChain(packageJson.scripts['check:serial']);
-    expect(parsed.problems).toEqual([]);
-    for (const name of parsed.names) {
+    for (const name of stepNames()) {
       expect(packageJson.scripts[name]).toEqual(expect.any(String));
     }
-    // The old order, kept as the reference: 17 steps, `prepare` before the three
-    // that read `lib/`.
-    expect(parsed.names).toHaveLength(17);
-    expect(parsed.names.indexOf('prepare')).toBeLessThan(
-      parsed.names.indexOf('api-extractor:check')
+    expect(stepNames()).toHaveLength(17);
+    expect(stepNames().indexOf('prepare')).toBeLessThan(
+      stepNames().indexOf('api-extractor:check')
     );
-  });
-
-  it('a step added to the chain and not to the graph is the failure this guards', () => {
-    // The same comparison the real one makes, in both directions, with fixtures
-    // that cannot coincide with the answer: `smoke:pack` is a real script that is
-    // deliberately not in `check`.
-    const chain = serialChainFromSteps(CHECK_STEPS);
-    const added = `${chain} && bun run smoke:pack`;
-    expect(stepsFromSerialChain(added).names).not.toEqual(stepNames());
-    expect(stepsFromSerialChain(added).names.slice(0, 17)).toEqual(stepNames());
-
-    const dropped = stepsFromSerialChain(
-      chain.replace(' && bun run readme:check', '')
-    ).names;
-    expect(dropped).not.toEqual(stepNames());
-    expect(dropped).toHaveLength(16);
-  });
-
-  it('the runner refuses to start when the chain and the graph differ, either way', () => {
-    // `planProblems` is what `check.mjs` checks before spawning anything, so the
-    // two directions of drift are the two ways a green `check` can come to mean
-    // less than the reports claim.
-    const chain = packageJson.scripts['check:serial'];
-    expect(planProblems(CHECK_STEPS, chain)).toEqual([]);
-
-    const addedToChain = planProblems(
-      CHECK_STEPS,
-      `${chain} && bun run smoke:pack`
-    );
-    expect(addedToChain).toHaveLength(1);
-    expect(addedToChain[0]).toContain(
-      'the chain and the graph are different steps'
-    );
-    expect(addedToChain[0]).toContain('smoke:pack');
-
-    const addedToGraph = planProblems(
-      [
-        ...CHECK_STEPS,
-        { name: 'smoke:pack', needs: [], group: null, writes: [], reads: [] },
-      ],
-      chain
-    );
-    expect(addedToGraph.join('\n')).toContain('smoke:pack');
-
-    // A step name in the chain that is not a plain `bun run <step>` (an argument,
-    // say) is reported rather than skipped, because the runner could not run it.
-    expect(
-      planProblems(
-        CHECK_STEPS,
-        chain.replace(
-          'bun run perf:renders',
-          'bun run perf:renders -- --update'
-        )
-      )[0]
-    ).toContain('not a plain "bun run <script>"');
   });
 
   it('the runner refuses a graph that races over a shared output', () => {
-    // Same guard, the other failure mode: a `needs` edge deleted, so the schedule
-    // would let `prepare` delete `nitrogen/` under `nitrogen:check`.
+    // `planProblems` is what `check.mjs` checks before spawning anything.
+    expect(planProblems(CHECK_STEPS)).toEqual([]);
     const mutated = CHECK_STEPS.map((step) =>
       step.name === 'prepare' ? { ...step, needs: [] } : step
     );
-    const problems = planProblems(mutated, packageJson.scripts['check:serial']);
+    const problems = planProblems(mutated);
     expect(problems).toEqual(
       expect.arrayContaining([
         'shared output: prepare writes nitrogen/generated while test reads it - add a needs edge or a shared group',
@@ -145,21 +58,8 @@ describe('the check step list is the chain', () => {
     );
   });
 
-  it('a chain section that is not a plain `bun run <step>` is reported, not skipped', () => {
-    const parsed = stepsFromSerialChain(
-      'bun run typecheck && bun run perf:renders -- --update-baseline'
-    );
-    expect(parsed.names).toEqual(['typecheck']);
-    expect(parsed.problems).toHaveLength(1);
-    expect(parsed.problems[0]).toContain('not a plain "bun run <script>"');
-  });
-
-  it('the step names, in order, are the ones the chain runs', () => {
-    expect(stepNames()).toEqual(
-      stepsFromSerialChain(packageJson.scripts['check:serial']).names
-    );
-    // Spelled out as well, so renaming a step in both places without thinking
-    // about what the chain means still has to pass this.
+  it('the step names, in order', () => {
+    // Spelled out, so adding, dropping or renaming a step has to be done here too.
     expect(stepNames()).toEqual([
       'typecheck',
       'lock:check',
@@ -224,8 +124,6 @@ describe('the step list is usable', () => {
 
 describe('steps that share an output are ordered', () => {
   it('no two steps touch the same region with nothing between them', () => {
-    // The whole claim of the brief's "find them and serialise them", as data: this
-    // is the structural check the runner also refuses to run without.
     expect(findOutputConflicts(CHECK_STEPS)).toEqual([]);
   });
 
@@ -234,19 +132,16 @@ describe('steps that share an output are ordered', () => {
     expect(prepare.writes).toEqual(
       expect.arrayContaining(['nitrogen/generated', 'lib'])
     );
-    // bob's `custom` target has `clean: "nitrogen/"`, so this is a delete-rewrite:
-    // a reader concurrent with it can see the directory gone, and `nitrogen:check`
-    // *after* it could no longer fail at all.
+    // builder-bob's `custom` target has `clean: "nitrogen/"`, so `prepare`
+    // deletes and rewrites the directory: a concurrent reader can see it gone.
     expect(prepare.needs).toEqual(
       expect.arrayContaining(['nitrogen:check', 'test', 'perf:renders'])
     );
   });
 
   it('removing that edge is the red this guards', () => {
-    // Mutation, in the test: drop the `needs` and the conflicts appear - including
-    // the one that matters, `prepare` deleting the directory `nitrogen:check` is
-    // reading. The `lib/` readers are not in this list because their own `needs:
-    // [prepare]` edge still orders them; the next test mutates one of those.
+    // The `lib/` readers are not in this list: their own `needs: [prepare]`
+    // edge still orders them.
     const mutated = CHECK_STEPS.map((step) =>
       step.name === 'prepare' ? { ...step, needs: [] } : step
     );
@@ -254,9 +149,8 @@ describe('steps that share an output are ordered', () => {
       'prepare writes nitrogen while lint reads it',
       'prepare writes nitrogen while format reads it',
       'prepare writes nitrogen/generated while test reads it',
-      // X15 item 2: the Android JVM test compiles the library, whose autolinking adds
-      // `nitrogen/generated/android/kotlin` to the Kotlin source set - so bob deleting
-      // the directory underneath it is the same race the three above are.
+      // The Android JVM test compiles the library, whose autolinking adds
+      // `nitrogen/generated/android/kotlin` to the Kotlin source set.
       'prepare writes nitrogen/generated while test:native:android reads it',
       'prepare writes nitrogen/generated while perf:renders reads it',
       'prepare writes nitrogen/generated while nitrogen:check reads it',
@@ -264,9 +158,8 @@ describe('steps that share an output are ordered', () => {
   });
 
   it('`nitrogen/` as a whole is a region, and lint/format are its readers (N5)', () => {
-    // ESLint and Prettier ignore `nitrogen/generated` only, so they walk the rest of the directory
-    // that `prepare` deletes. Declaring that is what makes the order a checked fact: drop either
-    // declaration below and the structural guard names the pair again.
+    // ESLint and Prettier ignore `nitrogen/generated` only, so they walk the rest
+    // of the directory that `prepare` deletes.
     const lint = CHECK_STEPS.find((step) => step.name === 'lint');
     const format = CHECK_STEPS.find((step) => step.name === 'format');
     const prepare = CHECK_STEPS.find((step) => step.name === 'prepare');
@@ -290,9 +183,8 @@ describe('steps that share an output are ordered', () => {
       'prepare writes nitrogen while lint reads it',
       'prepare writes nitrogen while format reads it',
     ]);
-    // And dropping the *declaration* rather than the edge is invisible to the guard, which is why
-    // the assertion above is on `reads` and not only on the conflict list: a reader that stops
-    // saying it reads is the one way to lose this check.
+    // Dropping the declaration instead of the edge is invisible to the conflict
+    // check, which is why `reads` is asserted above.
     const undeclared = CHECK_STEPS.map((step) =>
       step.name === 'lint' ? { ...step, reads: [] } : step
     );
@@ -329,13 +221,8 @@ describe('steps that share an output are ordered', () => {
   });
 
   it('says where the Kotlin step writes, and the big half is the library module', () => {
-    // X15 review 5b. This step first declared `example/android/build` alone, which is the
-    // root project's directory: gradle drops a couple of config-cache files there. Measured
-    // by touching `MenuModelTest.kt` and re-running, the step leaves 43 new or changed files
-    // under `android/build` - the library module's `kotlin/`, `test-results/` and
-    // `reports/`, 215 MB in total - and none under the app's directory. A step that names a
-    // directory it barely writes is a step whose conflicts nobody can find, so the assertion
-    // is on both halves and on the order of the claim.
+    // The step writes under `android/build`, the library module's directory, and
+    // almost nothing under the root project's `example/android/build`.
     const step = CHECK_STEPS.find(
       (entry) => entry.name === 'test:native:android'
     );
@@ -410,15 +297,9 @@ describe('--jobs', () => {
 });
 
 /**
- * A fake step runner: each step resolves after `ms` of *simulated* time on a clock
- * the test advances, so ordering assertions are about the graph, not about how
- * loaded the machine running jest happens to be.
- *
- * `events` records every observable thing in the order it happened: a step's log
- * lines and its completion, plus the clock. Resolution is deferred through a queue
- * the driver drains, which is how "no interleaving" gets to mean something - a
- * real interleaving is two steps' lines in one another's gaps, and this fixture
- * produces exactly those gaps.
+ * A fake step runner: each step resolves after `ms` of simulated time on a clock
+ * the test advances, so ordering assertions do not depend on machine load.
+ * `events` records every step's log lines and completion in the order they happened.
  */
 function makeDriver({ durations = {}, defaultMs = 1, fail = [] }) {
   let clock = 0;
@@ -483,9 +364,8 @@ async function drive(options) {
     now: driver.now,
     onEvent: (event) => {
       seen.push(event);
-      // Only the flush carries a log block: the engine hands the log out once, in
-      // one event, and `check.mjs` decides when to print it. `line` events are what
-      // an interleave would show up in, so they come from flushes only.
+      // Only the flush carries a log block: the engine hands the log out once,
+      // in one event.
       if (event.type === 'flush') {
         for (const line of (event.result.log ?? '').split('\n')) {
           if (line !== '') seen.push({ type: 'line', at: driver.now(), line });
@@ -496,9 +376,7 @@ async function drive(options) {
   let guard = 0;
   while (driver.hasPending()) {
     driver.tick();
-    // Let the engine's promise callbacks (`finish`, and the `pump` they trigger)
-    // run before the next tick. This is where a bad scheduler hangs: a step that
-    // should have started after that completion never gets its turn.
+    // Let the engine's promise callbacks run before the next tick.
     for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
     guard += 1;
     if (guard > 500)
@@ -533,16 +411,13 @@ describe('the scheduler', () => {
         }
       }
       expect(peak).toBeLessThanOrEqual(jobs);
-      // And the cap is not decorative: with 16 steps and a graph this shallow, a
-      // machine with room must actually use it.
+      // With a graph this shallow, a machine with room must use every slot.
       expect(peak).toBe(jobs);
     }
   });
 
   it('two steps in a group never overlap', async () => {
-    // 16 steps, one slot per group: `test` and `perf:renders` share the `jest`
-    // group, so a fixture with two slots and everything else instant still cannot
-    // have them in flight together.
+    // `test` and `perf:renders` share the `jest` group, which has one slot.
     const { events } = await drive({
       steps: CHECK_STEPS,
       jobs: 4,
@@ -587,8 +462,8 @@ describe('the scheduler', () => {
   });
 
   it('a log is printed whole, in declared step order', async () => {
-    // The M3 property: whichever Jest finishes first, the log's *document* order is
-    // the chain's, because flushes go out in declared order as they become ready.
+    // Flushes go out in declared order as they become ready, whichever step
+    // finishes first.
     const { seen, plan } = await drive({
       steps: CHECK_STEPS,
       jobs: 4,
@@ -609,8 +484,8 @@ describe('the scheduler', () => {
   });
 
   it('a step that ends late still cannot cut in front of one that ended early', async () => {
-    // `test:native` is 7th in the list and by far the slowest thing in the first
-    // half; everything behind it finishes first and must still print after it.
+    // `test:native` is 7th in the list and the slowest of the first half:
+    // everything behind it finishes first and must still print after it.
     const { seen } = await drive({
       steps: CHECK_STEPS,
       jobs: 4,
@@ -620,18 +495,14 @@ describe('the scheduler', () => {
       .filter((e) => e.type === 'flush')
       .map((e) => e.step.name);
     const index = flushes.indexOf('test:native');
-    // Six steps precede it in the list, all of them quicker, and all six printed
-    // first; nothing behind it printed before it.
     expect(index).toBe(6);
     expect(flushes.slice(0, index)).toEqual(stepNames().slice(0, 6));
     expect(flushes.indexOf('perf:renders')).toBeGreaterThan(index);
   });
 
   it('on the first failure it starts nothing new, lets running steps finish, and says who was skipped', async () => {
-    // `typecheck` fails at t=10 while `test` (50) is in flight and everything else
-    // is queued behind the slots: the run must end with `test` done (its log still
-    // evidence), `typecheck` failed, and the rest *reported* as skipped rather than
-    // silently absent.
+    // `typecheck` fails at t=10 while `test` (50) is in flight and everything
+    // else is queued behind the slots.
     const { plan, seen } = await drive({
       steps: CHECK_STEPS,
       jobs: 4,
@@ -686,11 +557,9 @@ describe('the scheduler', () => {
   });
 
   it('a step whose need failed is never started - and that guard has a mode that reaches it', async () => {
-    // The default is fail-fast, which halts the whole plan, so the `needs` guard
-    // below it would never be exercised through the CLI. `haltOnFailure: false` is
-    // the scheduler's other mode, and the reason the guard is real rather than dead
-    // code: keep starting independent work, but never a step whose need did not
-    // pass. Mutating that guard turns *this* test red (X10 review N3).
+    // Fail-fast halts the whole plan, so the `needs` guard is only reachable
+    // with `haltOnFailure: false`: keep starting independent work, but never a
+    // step whose need did not pass.
     const steps = [
       { name: 'a', needs: [], writes: [], reads: [] },
       { name: 'b', needs: ['a'], writes: [], reads: [] },
@@ -799,11 +668,8 @@ describe('the scheduler', () => {
 /* ------------------------- the runner, really spawned ------------------------ */
 
 /**
- * A fake `bun` that stands in for `bun run <step>`, so the *runner* can be tested
- * against real processes without running the checks: ~1 s for the whole file
- * instead of ~3 minutes, and, more importantly, with steps that overlap on
- * purpose. A unit test of the scheduler cannot show an interleaved log - only a
- * run with real children and real chunks arriving out of order can.
+ * A fake `bun` that stands in for `bun run <step>`, so the runner is tested against
+ * real processes whose output overlaps, without running the checks.
  *
  * `X10_FAKE_STEPS` says what each step does: `{ "lint": { "ms": 300, "exit": 1 } }`.
  * Every step prints twenty numbered lines plus one on stderr, so a log block that
@@ -896,11 +762,8 @@ function ownersOf(stdout) {
 
 describe('check.mjs, spawning real steps', () => {
   it('prints each step log whole, in step order, however the children interleave', () => {
-    // Every fake step prints at the same time with a 20-line body, so a runner that
-    // forwarded stdout as it arrived would produce a single blended mess. The
-    // blocks here have to be contiguous *and* in declared order - the property the
-    // ledger relies on to quote the unit-test summary rather than whichever Jest
-    // finished first (M3).
+    // Every fake step prints at the same time, so a runner that forwarded stdout
+    // as it arrived would blend the blocks.
     const slow = Object.fromEntries(
       CHECK_STEPS.map((step, index) => [step.name, { ms: 300 + index * 8 }])
     );
@@ -915,8 +778,8 @@ describe('check.mjs, spawning real steps', () => {
     // stderr is part of the same block, not a separate stream in the log.
     expect(run.stdout).toContain('lint:err');
 
-    // And the fake steps really did overlap - otherwise this test would be
-    // proving that a serial run does not interleave, which is not the claim.
+    // The fake steps really did overlap. Otherwise this would only prove that a
+    // serial run does not interleave.
     const events = run.trace
       .map((e) => ({ at: e.at, delta: e.kind === 'start' ? 1 : -1 }))
       .sort((a, b) => a.at - b.at);
@@ -958,8 +821,8 @@ describe('check.mjs, spawning real steps', () => {
   }, 120_000);
 
   it('on a failing step: exits non-zero, starts nothing new, and prints that log last', () => {
-    // `lock:check` fails after 300 ms; `typecheck` is still in flight and must
-    // finish, and everything behind the four slots must be reported skipped.
+    // `lock:check` fails while `typecheck` is still in flight and must finish.
+    // Everything behind the slots is reported skipped.
     const run = runRunner(['--jobs', '2'], {
       'lock:check': { ms: 100, exit: 3 },
       'typecheck': { ms: 400 },
@@ -971,9 +834,8 @@ describe('check.mjs, spawning real steps', () => {
     // Skipped steps are named on the summary lines rather than missing.
     expect(run.stdout).toContain('skipped');
 
-    // The failing log appears twice: once in declared position (suppressed) and
-    // once at the end. Here: only the last one, since a failing step's block is
-    // withheld from the ordered flush.
+    // A failing step's block is withheld from the ordered flush and printed
+    // once, at the end.
     const lastRule = run.stdout.lastIndexOf('──────── full log: lock:check');
     expect(lastRule).toBeGreaterThan(-1);
     const tail = run.stdout.slice(lastRule);
@@ -1040,25 +902,19 @@ describe('check.mjs, spawning real steps', () => {
   });
 
   it('the CI job runs this same runner, under the same name', () => {
-    // Item 5 of the brief: parallelism must not become "fast locally, different in
-    // CI". The `checks` job is the required status the release path waits on, so its
-    // name and its command are both pinned here - renaming it, or pointing it at a
-    // hand-written list of steps instead of the runner, fails a unit test rather
-    // than passing review.
+    // The `checks` job is the required status the release path waits on, so its
+    // name and its command are both pinned here.
     const ci = fs.readFileSync(
       path.join(root, '.github', 'workflows', 'ci.yml'),
       'utf8'
     );
     const job = /\n {2}checks:\n([\s\S]*?)\n {2}\S/.exec(ci);
     expect(job).not.toBeNull();
-    // The exact name, not a substring: this is the required status the release path
-    // waits on, so `Checks (parallel)` would be a new check name with the old one
-    // reported as expected-but-never-run.
+    // The exact name: a renamed job would be a new check name, with the old one
+    // reported as expected but never run.
     expect(job[1]).toMatch(/^ {4}name: Checks\n/);
-    // The exact command line, not a substring: `run: bun run check:serial` contains
-    // `run: bun run check`, so a loose match stayed green when CI was pointed back at
-    // the old chain (review N2). Eight spaces: `run:` is a step key, `name:` above is
-    // a job key at four.
+    // The exact command line, not a substring. Eight spaces: `run:` is a step
+    // key, `name:` above is a job key at four.
     expect(job[1]).toMatch(/^ {8}run: bun run check\n/m);
     // Not a chain of steps, and not forced to a job count: a pinned `--jobs` would
     // make CI's evidence a different experiment from the local one.
@@ -1067,32 +923,21 @@ describe('check.mjs, spawning real steps', () => {
   });
 });
 
-/* --------------------- the entry guard, in an odd path (M3) ------------------- */
+/* ----------------------- the entry guard, in an odd path ---------------------- */
 
 /**
- * The runner decides whether to *run* by comparing its own URL with `argv[1]`, and
- * that comparison is where a silent no-op hides: an ESM URL is percent-encoded and
- * symlink-resolved, so the naive `file://${argv[1]}` form never matched for a
- * checkout under a path with a space or reached through a symlink. `main()` then
- * never ran, the process exited 0 with no output, and `gate.mjs check` recorded
- * that silence as a green run (X10 review M3).
- *
- * A copy of the runner in a scratch checkout is the only way to test this honestly:
- * the guard compares the file that was *invoked*, so the path under test has to be
- * the path in `argv[1]`.
+ * The runner decides whether to run by comparing its own URL with `argv[1]`. An ESM
+ * URL is percent-encoded and symlink-resolved, so the comparison has to hold for a
+ * checkout under a path with a space or reached through a symlink. The guard
+ * compares the file that was invoked, hence a copy of the runner in a scratch
+ * checkout.
  */
 function runnerInScratchCheckout(named) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-entry-'));
   fs.mkdirSync(path.join(dir, named, 'scripts'), { recursive: true });
-  // The graph is only allowed to run if it still describes `check:serial`, so the
-  // scratch manifest carries the real chain - generated from the real graph, which
-  // the parity test above already pins to the real manifest.
   fs.writeFileSync(
     path.join(dir, named, 'package.json'),
-    JSON.stringify({
-      name: 'x10-entry-fixture',
-      scripts: { 'check:serial': serialChainFromSteps() },
-    })
+    JSON.stringify({ name: 'x10-entry-fixture' })
   );
   for (const file of ['check.mjs', 'check-steps.mjs']) {
     fs.copyFileSync(
@@ -1173,11 +1018,8 @@ describe('the runner runs itself from any path (M3)', () => {
   }, 120_000);
 
   it('a no-op runner is visible: no header and exit 0 is the bug, not a pass', () => {
-    // The M3 shape from the other side. With the guard fixed this cannot happen for
-    // a path reason, so the assertion is the one `gate.mjs check` now leans on: an
-    // exit-0 run with no step list is refused by the ledger, which is tested there.
-    // Here: prove the runner says something when it works, so "printed nothing" is a
-    // signal rather than a normal-looking outcome.
+    // A working runner prints its header, so "printed nothing" is a signal and
+    // not a normal-looking outcome.
     const { dir, script } = runnerInScratchCheckout('quiet');
     const trace = path.join(dir, 'trace.log');
     fs.writeFileSync(trace, '');

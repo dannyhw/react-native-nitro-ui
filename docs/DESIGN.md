@@ -434,16 +434,17 @@ obsolete; a few that are still cited elsewhere are kept as one line naming what 
 
 ### Testing and benchmarks
 
-- D9. Benchmarks gate only the `nitro-ui` arm (an arm is one implementation in the comparison),
-  on ratios to `rn-core` paired within one launch. A cell fails when its ratio is over 1.20, its
-  confidence interval excludes 1.05 and the cell was quiet within the run. Baselines store
-  ratios only, per machine and device (`bench/baselines/README.md`). Device benchmarks inform
-  review; wrapper render counts are the hard gate.
+- D9. Device benchmarks compare the candidate with the newest release in one session on one
+  device (`--compare-release`), the two sides alternating. A cell fails when the candidate's
+  ratio to the release is over 1.20, its confidence interval excludes 1.05 and the cell was quiet
+  within the run. No device timing is committed, and load is recorded with the run, not refused
+  on. Device benchmarks inform review; wrapper render counts are the hard gate
+  (`bench/baselines/renders.json`, in `check`).
 - D15. The canonical iOS benchmark device is an iPhone 17 simulator. The target is at most 1.0×
   `expo-ui-shared-host`, and well below `expo-ui-host-per-control`, on mount latency, UI-thread
   CPU and memory; a miss needs an explanation. The numbers are in [performance.md](performance.md).
-- D18. Android baselines are minted only from ART `speed-profile` runs; other states do not
-  compare with them.
+- D18. Android benchmark numbers compare only within one ART compilation state, which every
+  run records.
 - D21. On-device tests assert structure: counts of corrections, flushes, stale frames, events.
   Wall-clock thresholds run only under `HARNESS_TIMING=1` on a quiet machine.
 

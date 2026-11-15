@@ -274,17 +274,6 @@ describe('the queue (X26: first come, first served)', () => {
     expect(
       pairSatisfiesWaiter(pairB, { platform: 'both', exclusive: true })
     ).toBe(true);
-    // A look-check simulator is its own resource: it reserves no other pair, and no
-    // ordinary pair is reserved for it.
-    expect(
-      pairSatisfiesWaiter(pairA, { platform: 'ios', iosRuntime: '26.5' })
-    ).toBe(false);
-    expect(
-      pairSatisfiesWaiter(
-        { id: 'rt', ios: { udid: 'R' }, iosRuntime: '26.5', metroPort: 8299 },
-        { platform: 'ios', iosRuntime: '26.5' }
-      )
-    ).toBe(true);
     expect(pairSatisfiesWaiter(null, { platform: 'both' })).toBe(false);
   });
 
@@ -535,7 +524,13 @@ describe('the CLI keeps a queue in the lease file', () => {
           '0',
         ]).status
       ).toBe(0);
-      expect(readState().leases.map((entry) => entry.task)).toEqual(['X24']);
+      // X24 holds its pair, granted first. Once it is served, X25 is the head of the queue
+      // with a pair free, polling every 50 ms, so it may already have been granted that one
+      // within its poll: both states are the queue working, and asserting `['X24']` alone
+      // would be a race against that poll.
+      expect([['X24'], ['X24', 'X25']]).toContainEqual(
+        readState().leases.map((entry) => entry.task)
+      );
       // Served: out of the queue, so it is not blocking the next grant either.
       expect(
         (readState().waiters ?? []).some((entry) => entry.task === 'X24')

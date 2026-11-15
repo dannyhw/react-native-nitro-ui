@@ -1,20 +1,16 @@
 /**
  * Which task records `scripts/task-records.mjs --archive` may take out of git.
  *
- * The cost of being wrong is one-sided, as it is for worktrees. Keeping a task's
- * records a little longer costs nothing; removing the brief or the review of a task
- * that is still in flight takes away what its worker is reading. So every unit case
- * starts from a task that *is* archivable and changes exactly one fact, and each single
- * fact must be enough to keep it. The end-to-end cases run the real command in a
- * throwaway repository, where the same facts come from git rather than from a fixture.
+ * The cost of being wrong is one-sided. Keeping a task's records a little longer costs
+ * nothing; removing the brief of a task that is still in flight takes away what its
+ * worker is reading. So every unit case starts from a task that *is* archivable and
+ * changes exactly one fact, and each single fact must be enough to keep it. The
+ * end-to-end cases run the real command in a throwaway repository, where the same
+ * facts come from git rather than from a fixture.
  *
- * The first version was reviewed before it merged and was wrong where it mattered
- * most: it dated a task by its branch's commits, so a branch three weeks old was
- * archived the day after it merged. The dated cases below are that review.
- *
- * Fixtures do not sit on the answer: the archivable base is 40 days old against a
- * 14-day window, the recent task is 3 days old, a late merge is 20 days of branch and
- * 1 day of `main`, and the edge is tested on both sides.
+ * Fixtures do not sit on the answer: old is 40 days against a 14-day branch life, the
+ * recent task is 3 days old, a late merge is 20 days of branch and 1 day of HEAD, and
+ * each edge is tested on both sides.
  */
 
 import { afterAll, describe, expect, it } from '@jest/globals';
@@ -25,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  BRANCH_LIVE_DAYS,
   DEFAULT_KEEP_DAYS,
   arrivalByReflog,
   classifyTask,
@@ -38,24 +35,26 @@ import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 const ARCHIVABLE = {
   task: 'G24',
-  files: ['G24-form.md', 'G24-form.report.md', 'G24/gates.jsonl'],
+  files: ['G24-form.md', 'G24-form.report.md', 'G24/context.md'],
   symlinks: 0,
-  // Another task's edit, and a worktree on another task's branch, are not this task's.
+  // Another task's edit is not this task's, and a worktree still on the branch HEAD
+  // already contains is a checkout nobody has removed yet.
   worktrees: [
     { branch: 'main', dirty: ['X31-flakes.md'] },
-    { branch: 'task/X31-flakes', dirty: [] },
+    { branch: 'task/G24-form', dirty: [] },
   ],
-  unmergedBranch: null,
-  ageDays: 40,
+  openBranches: [],
+  ageDays: 0.01,
   since: '2026-10-06 (merge commit)',
-  keepDays: 14,
+  keepDays: 0,
 };
 
 describe('classifyTask', () => {
-  it('archives an old, finished task nobody is working from', () => {
+  it('archives a finished task as soon as HEAD contains its branches', () => {
+    expect(DEFAULT_KEEP_DAYS).toBe(0);
     expect(classifyTask(ARCHIVABLE)).toEqual({
       verdict: 'archive',
-      reason: 'on main since 2026-10-06 (merge commit), no open branch',
+      reason: 'merged, in HEAD since 2026-10-06 (merge commit)',
     });
   });
 
@@ -68,7 +67,7 @@ describe('classifyTask', () => {
     ],
     [
       'an uncommitted record in a worktree on any branch',
-      { worktrees: [{ branch: 'feature/x', dirty: ['G24/gates.jsonl'] }] },
+      { worktrees: [{ branch: 'feature/x', dirty: ['G24/context.md'] }] },
       '1 uncommitted path(s) in the worktree on feature/x',
     ],
     [
@@ -77,40 +76,63 @@ describe('classifyTask', () => {
       '2 uncommitted path(s) in the worktree on a detached head',
     ],
     [
-      'a worktree on its branch',
-      { worktrees: [{ branch: 'task/G24-fix1', dirty: [] }] },
+      'a worktree on a branch HEAD does not contain, however old the branch',
+      {
+        worktrees: [{ branch: 'task/G24-fix1', dirty: [] }],
+        openBranches: [{ branch: 'task/G24-fix1', tipDays: 40 }],
+      },
       'a worktree is on task/G24-fix1',
     ],
     [
-      'a branch waiting to merge',
-      { unmergedBranch: 'task/G24-fix2' },
-      'task/G24-fix2 is not merged',
+      'a live branch HEAD does not contain',
+      { openBranches: [{ branch: 'task/G24-fix2', tipDays: 3 }] },
+      'task/G24-fix2 is not merged into HEAD',
+    ],
+    [
+      'a live branch beside a stale one',
+      {
+        openBranches: [
+          { branch: 'task/G24-proto', tipDays: 40 },
+          { branch: 'task/G24-fix2', tipDays: 3 },
+        ],
+      },
+      'task/G24-fix2 is not merged into HEAD',
     ],
     [
       'a brief with no report',
-      { files: ['G24-form.md', 'G24-form.review.md', 'G24/gates.jsonl'] },
+      { files: ['G24-form.md', 'G24-form.review.md', 'G24/context.md'] },
       'a brief and no report: not done',
     ],
-    ['records that are not on main', { ageDays: null }, 'not on main'],
-    ['a task merged this week', { ageDays: 3 }, 'kept 14 days'],
-    ['a longer window', { keepDays: 60 }, 'kept 60 days'],
+    ['records no commit holds', { ageDays: null }, 'not committed'],
+    ['a merged task inside a window', { ageDays: 3, keepDays: 14 }, 'kept 14'],
   ])('keeps %s', (_name, change, reason) => {
     const result = classifyTask({ ...ARCHIVABLE, ...change });
     expect(result.verdict).toBe('keep');
     expect(result.reason).toContain(reason);
   });
 
-  it('keeps a task up to the window and archives it from there', () => {
-    const at = (ageDays) => classifyTask({ ...ARCHIVABLE, ageDays }).verdict;
-    expect(at(13.99)).toBe('keep');
-    expect(at(14)).toBe('archive');
-    expect(DEFAULT_KEEP_DAYS).toBe(14);
+  it('lets a stale branch go, and says that is why', () => {
+    const openBranches = [{ branch: 'task/G24-proto', tipDays: 40 }];
+    expect(classifyTask({ ...ARCHIVABLE, openBranches })).toEqual({
+      verdict: 'archive',
+      reason:
+        'task/G24-proto is stale, in HEAD since 2026-10-06 (merge commit)',
+    });
   });
 
-  it('archives a recent task when the window is shorter than its age', () => {
-    expect(
-      classifyTask({ ...ARCHIVABLE, ageDays: 3, keepDays: 2 }).verdict
-    ).toBe('archive');
+  it('counts a branch as live up to 14 days, and a window up to its last day', () => {
+    const branch = (tipDays) =>
+      classifyTask({
+        ...ARCHIVABLE,
+        openBranches: [{ branch: 'task/G24-fix2', tipDays }],
+      }).verdict;
+    expect(BRANCH_LIVE_DAYS).toBe(14);
+    expect(branch(13.99)).toBe('keep');
+    expect(branch(14)).toBe('archive');
+    const window = (ageDays) =>
+      classifyTask({ ...ARCHIVABLE, ageDays, keepDays: 7 }).verdict;
+    expect(window(6.99)).toBe('keep');
+    expect(window(7)).toBe('archive');
   });
 });
 
@@ -148,9 +170,7 @@ describe('taskOfRecord and groupByTask', () => {
 
   it.each([
     'STATUS.md',
-    'RECOVERY.md',
     'FOLLOWUPS.md',
-    'ORCHESTRATOR.md',
     'REPORT-TEMPLATE.md',
     'PLAN-0.2.md',
     'HANDOFF-mac1-2026-10-28.md',
@@ -328,8 +348,8 @@ describe('task-records.mjs, end to end', () => {
 
   /**
    * The environment every child here runs with: no lease, no inherited `GIT_*` (they
-   * win over `cwd`, see `worktrees.test.js`), no host git config, and a state home of
-   * its own so the archive lands in the fixture.
+   * win over `cwd`), no host git config, and a state home of its own so the archive
+   * lands in the fixture.
    */
   function childEnv(home) {
     const env = withoutLeaseEnv(process.env);
@@ -351,6 +371,7 @@ describe('task-records.mjs, end to end', () => {
 
   const OLD = 40;
   const RECENT = 3;
+
   function makeRepo() {
     // One clock for the fixture's dates and for the dates the cases expect.
     const now = Date.now();
@@ -366,7 +387,7 @@ describe('task-records.mjs, end to end', () => {
     fs.mkdirSync(home);
     /**
      * Every git command is dated, because dates are what the rule reads: a commit's,
-     * a merge's, and the reflog entry a fast-forward leaves.
+     * a merge's, a branch tip's, and the reflog entry a fast-forward leaves.
      */
     const git = (args, daysAgo = OLD) => {
       const date = new Date(now - daysAgo * 86_400_000).toISOString();
@@ -398,12 +419,21 @@ describe('task-records.mjs, end to end', () => {
       git(['add', '-A']);
       git(['commit', '-qm', message], daysAgo);
     };
-    /** Commits on a new branch `branchDays` ago and brings it to main `mergeDays` ago. */
-    const land = (branch, how, branchDays, mergeDays, fill) => {
+    /** A branch off HEAD with one commit of its own, `tipDays` old, left unmerged. */
+    const side = (branch, tipDays, fill = () => {}) => {
+      const from = git(['branch', '--show-current']);
       git(['checkout', '-q', '-b', branch]);
+      fs.writeFileSync(
+        path.join(repo, `${branch.replace(/\W/g, '-')}.txt`),
+        'x'
+      );
       fill();
-      commit(`${branch} records`, branchDays);
-      git(['checkout', '-q', 'main']);
+      commit(`${branch} work`, tipDays);
+      git(['checkout', '-q', from]);
+    };
+    /** `side`, then brought into the current branch `mergeDays` ago. */
+    const land = (branch, how, branchDays, mergeDays, fill) => {
+      side(branch, branchDays, fill);
       const merge =
         how === 'ff' ? ['--ff-only'] : ['--no-ff', '-m', `merge ${branch}`];
       git(['merge', '-q', ...merge, branch], mergeDays);
@@ -438,6 +468,7 @@ describe('task-records.mjs, end to end', () => {
       write,
       done,
       commit,
+      side,
       land,
       run,
       tracked,
@@ -446,21 +477,20 @@ describe('task-records.mjs, end to end', () => {
 
   const STANDING = [
     'STATUS.md',
-    'RECOVERY.md',
     'FOLLOWUPS.md',
-    'ORCHESTRATOR.md',
     'REPORT-TEMPLATE.md',
     'PLAN-0.2.md',
-    'D4merge/gates.jsonl',
   ];
 
-  /** Two old finished tasks, the standing files, and one task per reason to keep. */
+  /** The standing files, the merged tasks, and one task per reason to keep. */
   function makeScenario() {
     const repo = makeRepo();
     for (const name of STANDING) repo.write(name);
     for (const [id, slug] of [
       ['S9', 'spike'],
       ['X8', 'remote'],
+      ['P7', 'proto'],
+      ['K6', 'parked'],
       ['F3', 'fix'],
       ['Q4', 'notes'],
       ['D6', 'gone'],
@@ -488,30 +518,36 @@ describe('task-records.mjs, end to end', () => {
       repo.done('G71', 'done');
       repo.write('G71.review.md');
       repo.write('G71/G71-done.md', 'the copy in the folder\n');
-      repo.write('G71/gates.jsonl', '{"gate":"check"}\n');
+      repo.write('G71/context.md', 'where the code is\n');
       repo.write(
         'G71/shots/a.png',
         Buffer.from([0x89, 0x50, 0x00, 0xff, 0x0a])
       );
     });
-    // G72 is new, and N8 is old except for one file in its folder.
+    // G72 has no branch, and N8 is old except for one file in its folder.
     repo.done('G72', 'new');
     repo.write('N8/late.json');
     repo.commit('this week', RECENT);
-    // M1 and F2: three weeks on a branch, on main since yesterday.
+    // M1 and F2: three weeks on a branch, in HEAD since yesterday.
     repo.land('task/M1-late', 'no-ff', 20, 1, () => repo.done('M1', 'late'));
     repo.land('task/F2-forward', 'ff', 20, 1, () => repo.done('F2', 'forward'));
 
-    // S9: a local branch that never merged. X8: the same, known only from a remote.
-    repo.git(['checkout', '-q', '-b', 'task/S9-spike']);
-    fs.writeFileSync(path.join(repo.repo, 'prototype.txt'), 'on a branch\n');
-    repo.commit('S9 prototype');
-    repo.git(['update-ref', 'refs/remotes/origin/task/X8-remote', 'HEAD']);
-    repo.git(['checkout', '-q', 'main']);
+    // S9: a branch with work from this week that HEAD does not have. X8: the same,
+    // known only from a remote. P7 and K6: branches nobody has touched in 40 days.
+    repo.side('task/S9-spike', RECENT);
+    repo.git([
+      'update-ref',
+      'refs/remotes/origin/task/X8-remote',
+      'task/S9-spike',
+    ]);
+    repo.side('task/P7-proto', OLD);
+    repo.side('task/K6-parked', OLD);
 
-    // F3: a worktree on its branch with no commits of its own, which reads as merged.
-    // W5 and W6: an edit under their records in worktrees that name no task.
+    // K6's old branch is checked out somewhere, F3's worktree is still on a branch
+    // HEAD already contains, and W5 and W6 have an edit under their records in
+    // worktrees that name no task.
     const tree = (name) => path.join(repo.root, name);
+    repo.git(['worktree', 'add', '-q', tree('k6'), 'task/K6-parked']);
     repo.git([
       'worktree',
       'add',
@@ -540,7 +576,7 @@ describe('task-records.mjs, end to end', () => {
 
     // Here: Q4 is being edited, Q5 exists only as a draft, D6 lost a file nobody
     // staged, D7 has a staged edit, and one of B2's files is already staged for
-    // removal, which is how the failure logs left.
+    // removal.
     fs.appendFileSync(repo.record('Q4-notes.md'), 'an edit in progress\n');
     repo.write('Q5-draft.md');
     fs.rmSync(repo.record('D6-gone.report.md'));
@@ -550,33 +586,37 @@ describe('task-records.mjs, end to end', () => {
     return repo;
   }
 
+  const MERGED = ['B2', 'F2', 'F3', 'G71', 'G72', 'M1', 'N8', 'P7'];
+  const kept = (reason) => ({ verdict: 'keep', reason });
+
   it('lists every task with its verdict and never a standing file', () => {
     const repo = makeScenario();
     const before = repo.git(['status', '--porcelain']);
     const { rows, stderr } = repo.run();
     expect(stderr).toBe('');
     expect(Object.keys(rows).sort()).toEqual(
-      'B2 D6 D7 F2 F3 G71 G72 L4 M1 N8 Q4 Q5 S9 T3 W5 W6 X8'.split(' ')
+      'B2 D6 D7 F2 F3 G71 G72 K6 L4 M1 N8 P7 Q4 Q5 S9 T3 W5 W6 X8'.split(' ')
     );
-    const kept = (reason) => ({ verdict: 'keep', reason });
+    // Merged is enough: a task from this week and one merged yesterday both go.
+    for (const task of MERGED) expect(rows[task].verdict).toBe('archive');
     expect(rows.G71).toMatchObject({
-      verdict: 'archive',
       files: 6,
-      reason: `on main since ${repo.dayAgo(OLD)} (main's reflog), no open branch`,
+      reason: `merged, in HEAD since ${repo.dayAgo(OLD)} (reflog)`,
     });
-    expect(rows.B2).toMatchObject({ verdict: 'archive', files: 2 });
-    expect(rows.G72).toMatchObject(
-      kept(`on main since ${repo.dayAgo(RECENT)} (main's reflog), kept 14 days`)
+    expect(rows.B2.files).toBe(2);
+    // F3's worktree is on a branch HEAD contains: a checkout not yet removed.
+    expect(rows.F3.reason).toContain('merged, in HEAD since');
+    expect(rows.P7.reason).toContain('task/P7-proto is stale, in HEAD since');
+
+    expect(rows.S9).toMatchObject(
+      kept('task/S9-spike is not merged into HEAD')
     );
-    expect(rows.S9).toMatchObject(kept('task/S9-spike is not merged'));
-    expect(rows.X8).toMatchObject(kept('task/X8-remote is not merged'));
-    expect(rows.F3).toMatchObject(kept('a worktree is on task/F3-fix'));
+    expect(rows.X8).toMatchObject(
+      kept('task/X8-remote is not merged into HEAD')
+    );
+    expect(rows.K6).toMatchObject(kept('a worktree is on task/K6-parked'));
     expect(rows.T3).toMatchObject(kept('a brief and no report: not done'));
     expect(rows.L4).toMatchObject(kept('a record is a symbolic link'));
-    // One file of N8 is three days old; its first file is forty.
-    expect(Math.floor(rows.N8.ageDays)).toBe(RECENT);
-    expect(rows.N8.verdict).toBe('keep');
-
     const here = 'in the worktree on main';
     expect(rows.Q4).toMatchObject(kept(`1 uncommitted path(s) ${here}`));
     expect(rows.Q5).toMatchObject({ ...kept(rows.Q4.reason), files: 0 });
@@ -594,18 +634,27 @@ describe('task-records.mjs, end to end', () => {
     expect(fs.existsSync(repo.archive)).toBe(false);
   });
 
-  it('dates a task from the day it reached main, not from its commits', () => {
+  it('with --days, counts from the day the records reached HEAD', () => {
     const repo = makeScenario();
-    const { rows } = repo.run();
+    const { rows } = repo.run(['--days', '14']);
+    expect(rows.G71.verdict).toBe('archive');
+    expect(rows.G72).toMatchObject(
+      kept(
+        `merged, in HEAD since ${repo.dayAgo(RECENT)} (reflog), kept 14 days`
+      )
+    );
     // Both branches were committed 20 days ago, past the window, and merged yesterday.
     for (const task of ['M1', 'F2']) {
       expect(rows[task].verdict).toBe('keep');
       expect(Math.floor(rows[task].ageDays)).toBe(1);
-      expect(rows[task].reason).toContain(`on main since ${repo.dayAgo(1)}`);
+      expect(rows[task].reason).toContain(`in HEAD since ${repo.dayAgo(1)}`);
     }
-    const { stdout } = repo.run([], { json: false });
+    // One file of N8 is three days old; its first file is forty.
+    expect(Math.floor(rows.N8.ageDays)).toBe(RECENT);
+    expect(rows.N8.verdict).toBe('keep');
+    const { stdout } = repo.run(['--days', '14'], { json: false });
     expect(stdout).toMatch(
-      /^keep +F2 +1 d +2 file\(s\) {2}- {2}on main since \S+ \(main's reflog\), kept 14 days$/m
+      /^keep +F2 +1 d +2 file\(s\) {2}- {2}merged, in HEAD since \S+ \(reflog\), kept 14 days$/m
     );
   });
 
@@ -613,17 +662,19 @@ describe('task-records.mjs, end to end', () => {
     const repo = makeScenario();
     // A fresh clone, or a reflog that ran out: nothing recorded the fast-forward.
     repo.git(['reflog', 'expire', '--expire=now', '--all']);
-    const { rows } = repo.run();
-    expect(rows.M1).toMatchObject({
-      verdict: 'keep',
-      reason: `on main since ${repo.dayAgo(1)} (merge commit), kept 14 days`,
-    });
-    expect(rows.F2.reason).toBe(
-      `on main since ${repo.dayAgo(20)} (commit date, not a merge), no open branch`
+    const { rows } = repo.run(['--days', '14']);
+    expect(rows.M1).toMatchObject(
+      kept(
+        `merged, in HEAD since ${repo.dayAgo(1)} (merge commit), kept 14 days`
+      )
     );
+    expect(rows.F2).toMatchObject({
+      verdict: 'archive',
+      reason: `merged, in HEAD since ${repo.dayAgo(20)} (commit date, not a merge)`,
+    });
   });
 
-  it('archives the old tasks: copied, removed, staged and not committed', () => {
+  it('archives the merged tasks: copied, removed, staged and not committed', () => {
     const repo = makeScenario();
     const head = repo.git(['rev-parse', 'HEAD']);
     const png = fs.readFileSync(repo.record('G71/shots/a.png'));
@@ -640,7 +691,7 @@ describe('task-records.mjs, end to end', () => {
       fs.readFileSync(path.join(archive, name), 'utf8');
     expect(archived('G71/G71-done.md')).toBe('G71-done.md\n');
     expect(archived('G71/G71/G71-done.md')).toBe('the copy in the folder\n');
-    expect(archived('G71/G71/gates.jsonl')).toBe('{"gate":"check"}\n');
+    expect(archived('G71/G71/context.md')).toBe('where the code is\n');
     expect(fs.readFileSync(path.join(archive, 'G71/G71/shots/a.png'))).toEqual(
       png
     );
@@ -651,7 +702,7 @@ describe('task-records.mjs, end to end', () => {
       'G71.review.md',
     ]);
     // Only what was archived, and only tracked files: B2's log was already gone.
-    expect(fs.readdirSync(archive).sort()).toEqual(['B2', 'G71']);
+    expect(fs.readdirSync(archive).sort()).toEqual(MERGED);
     expect(fs.readdirSync(path.join(archive, 'B2')).sort()).toEqual([
       'B2-old.md',
       'B2-old.report.md',
@@ -659,27 +710,26 @@ describe('task-records.mjs, end to end', () => {
 
     // Gone from the working tree and from the index ...
     expect(fs.existsSync(repo.record('G71'))).toBe(false);
-    expect(fs.existsSync(repo.record('G71-done.md'))).toBe(false);
-    expect(fs.existsSync(repo.record('B2-old.md'))).toBe(false);
-    expect(repo.tracked().filter((file) => /\/(G71|B2)/.test(file))).toEqual(
-      []
-    );
+    expect(fs.existsSync(repo.record('M1-late.md'))).toBe(false);
+    expect(
+      repo
+        .tracked()
+        .filter((file) => MERGED.some((task) => file.includes(`/${task}`)))
+    ).toEqual([]);
     // ... as a staged removal, with no commit made.
     expect(repo.git(['rev-parse', 'HEAD'])).toBe(head);
     expect(repo.git(['diff', '--cached', '--name-status'])).toContain(
       'D\tdocs/tasks/G71-done.report.md'
     );
 
-    // Everything else is where it was, the late merges included.
+    // Everything else is where it was.
     for (const name of [
       ...STANDING,
-      'G72-new.md',
-      'M1-late.md',
-      'F2-forward.report.md',
       'S9-spike.md',
+      'X8-remote.report.md',
+      'K6-parked.md',
       'T3-started.md',
       'L4/pointer.md',
-      'N8-late.md',
       'W5-elsewhere.md',
       'Q5-draft.md',
     ]) {
@@ -695,15 +745,59 @@ describe('task-records.mjs, end to end', () => {
     expect(Object.values(again).filter((row) => row.archived)).toEqual([]);
   });
 
-  it('takes the window from --days, and only a whole number of days', () => {
+  it('judges merged against HEAD, so the removal can join the merge commit', () => {
+    const repo = makeRepo();
+    repo.done('G71', 'done');
+    repo.commit('an old task');
+    repo.side('task/J2-feature', RECENT, () => repo.done('J2', 'feature'));
+    repo.side('task/J2-fix1', RECENT);
+    // A merge checkout: HEAD has the branch, `main` does not yet.
+    repo.git(['checkout', '-q', '-b', 'merge/train']);
+    repo.git(
+      ['merge', '-q', '--no-ff', '-m', 'merge J2', 'task/J2-feature'],
+      0
+    );
+
+    // Every branch of the task has to be in HEAD, not only the one that was merged.
+    expect(repo.run().rows.J2).toMatchObject(
+      kept('task/J2-fix1 is not merged into HEAD')
+    );
+    repo.git(
+      ['merge', '-q', '--no-ff', '-m', 'merge J2 fix', 'task/J2-fix1'],
+      0
+    );
+    const { rows, stderr } = repo.run(['--archive']);
+    expect(stderr).toBe('');
+    expect(rows.J2.verdict).toBe('archived');
+
+    repo.git(['commit', '-q', '--amend', '--no-edit'], 0);
+    expect(repo.git(['status', '--porcelain'])).toBe('');
+    expect(
+      repo.git(['rev-list', '--parents', '-1', 'HEAD']).split(' ')
+    ).toHaveLength(3);
+    expect(repo.tracked()).toEqual(['']);
+  });
+
+  it('never archives the task whose branch it runs on', () => {
+    const repo = makeRepo();
+    repo.done('H5', 'here');
+    repo.commit('a task with its report written');
+    repo.git(['checkout', '-q', '-b', 'task/H5-here']);
+
+    const { rows } = repo.run(['--archive']);
+    expect(rows.H5).toMatchObject(kept('a worktree is on task/H5-here'));
+    expect(repo.git(['status', '--porcelain'])).toBe('');
+  });
+
+  it('takes the window from --days, zero or a whole number of days', () => {
     const repo = makeScenario();
-    expect(repo.run(['--days', '2']).rows.G72.verdict).toBe('archive');
+    expect(repo.run(['--days', '0']).rows.G72.verdict).toBe('archive');
+    expect(repo.run(['--days', '14']).rows.G72.verdict).toBe('keep');
     expect(repo.run(['--days', '60']).rows.G71).toMatchObject({
       verdict: 'keep',
       reason: expect.stringContaining('kept 60 days'),
     });
-    // `Number('')` is 0, which read as "archive everything that is not in flight".
-    for (const bad of ['', ' ', '0', '-3', '1.5', 'soon', '14d']) {
+    for (const bad of ['', ' ', '-3', '1.5', 'soon', '14d']) {
       const { stderr } = repo.run(['--archive', '--days', bad], { status: 2 });
       expect(stderr).toContain('--days needs a whole number of days');
       expect(stderr).toContain('usage: node scripts/task-records.mjs');
@@ -718,11 +812,11 @@ describe('task-records.mjs, end to end', () => {
     const repo = makeRepo();
     repo.done('G71', 'done');
     repo.commit('an old task');
-    repo.git(['checkout', '-q', '-b', 'task/K9-stale']);
+    repo.git(['checkout', '-q', '-b', 'merge/stale']);
     repo.git(['checkout', '-q', 'main']);
     repo.done('G72', 'new');
     repo.commit('main moved on', RECENT);
-    repo.git(['checkout', '-q', 'task/K9-stale']);
+    repo.git(['checkout', '-q', 'merge/stale']);
 
     // From here G71 looks archivable, and what main did since is out of sight.
     const listing = repo.run();
@@ -745,28 +839,15 @@ describe('task-records.mjs, end to end', () => {
   it('reads origin/main where there is no local main', () => {
     const repo = makeRepo();
     repo.done('G71', 'done');
-    repo.done('S9', 'spike');
-    repo.commit('two old tasks');
-    repo.land('task/M1-late', 'no-ff', 20, 1, () => repo.done('M1', 'late'));
-    repo.git(['checkout', '-q', '-b', 'task/S9-spike']);
-    fs.writeFileSync(path.join(repo.repo, 'prototype.txt'), 'on a branch\n');
-    repo.commit('S9 prototype');
-    // What a fresh clone on a task branch has: the remote's main and no local one.
+    repo.commit('an old task');
+    // What a fresh clone on another branch has: the remote's main and no local one.
     repo.git(['update-ref', 'refs/remotes/origin/main', 'main']);
-    repo.git(['checkout', '-q', '-b', 'work', 'main']);
+    repo.git(['checkout', '-q', '-b', 'merge/train', 'main']);
     repo.git(['branch', '-q', '-D', 'main']);
 
     const { rows, stderr } = repo.run(['--archive']);
     expect(stderr).toBe('');
     expect(rows.G71.verdict).toBe('archived');
-    expect(rows.M1).toMatchObject({
-      verdict: 'keep',
-      reason: `on main since ${repo.dayAgo(1)} (merge commit), kept 14 days`,
-    });
-    expect(rows.S9).toMatchObject({
-      verdict: 'keep',
-      reason: 'task/S9-spike is not merged',
-    });
   });
 
   it('needs a main of some kind', () => {

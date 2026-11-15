@@ -28,7 +28,7 @@
  *    covers the task that holds the lease too - the `exceptLeaseId` self-exemption that used to
  *    live here is what let a task's own `list` kill its own claim-less run;
  *  - **nothing reaps passively** (X11 fix round 2, the orchestrator's scope decision): `acquire`,
- *    `release` and `list` never power a device off and never reset one. Reaping runs on an explicit
+ *    `release` and `list` never power a device off. Reaping runs on an explicit
  *    `lease.mjs reap` and on the power-off an `--exclusive` acquire promises, and nowhere else. It
  *    powers a device off once that device has been idle past `idleShutdownMinutes` (devices.json,
  *    default 30) and no live lease holds it - never while a claim is live, and never on the
@@ -39,8 +39,6 @@
  *    `simctl shutdown` / `emu kill`, so a lease and claim taken after the plan are seen. The window
  *    that used to exist was as wide as the *previous* device's I/O - five minutes of `simctl`, two
  *    of adb - and the device lost in it was leased and claimed at the time;
- *  - a reset is refused on a device with a live claim, whoever holds it (X11 re-review M2), and an
- *    app that is not installed is a successful no-op rather than four retries (X11 re-review N5);
  *  - `acquire --exclusive` hands a bench a quiet machine and does so whether or not `--boot` was
  *    passed (X11 review M6). The power-off runs before the hand-off, so `--exclusive --boot` gets its
  *    own pair back booted as well, rather than a dead machine and a flag that did nothing (X16 item 2)
@@ -114,16 +112,6 @@ function nonNegativeNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
-
-/**
- * The example app's id, for the between-task reset. Both platforms use the same application id
- * (`example/android/app/build.gradle`, `PRODUCT_BUNDLE_IDENTIFIER`), so one value per platform is
- * spelled out rather than shared, in case they ever split.
- */
-export const EXAMPLE_APP_ID = {
-  android: 'nitroui.example',
-  ios: 'nitroui.example',
-};
 
 export function poolStatePath(home = stateHome()) {
   return join(home, POOL_FILE);
@@ -250,7 +238,7 @@ function upsertDevice(state, key, fields) {
 /**
  * Device operations, overridable so a test can prove the rules without a machine. The defaults are
  * the real binaries; `NITRO_UI_ADB_BIN` / `NITRO_UI_SIMCTL_BIN` point them at a stub, exactly as
- * `scripts/doctor.mjs` and the `list` unowned-device check already do.
+ * `scripts/gate.mjs` already does.
  */
 export function deviceOperations({
   home = stateHome(),
@@ -292,104 +280,9 @@ export function deviceOperations({
 
   const out = (res) => (res?.stdout ?? '').trim();
 
-  /** A simctl mutation's outcome: it prints nothing on success and the problem on stderr. */
-  function simctlResult(res, onOk) {
-    const answer =
-      out(res) ||
-      String(res?.stderr ?? '')
-        .split('\n')
-        .find(Boolean)
-        ?.trim() ||
-      '';
-    return {
-      ok: res?.status === 0,
-      answer:
-        answer || (res?.status === 0 ? onOk : `exit ${String(res.status)}`),
-    };
-  }
-
   return {
     adb,
     simctl,
-
-    /**
-     * Whether the app is even installed, asked before a reset reports what it cleared
-     * (`adb -s <serial> shell pm path <pkg>`, `simctl get_app_container <udid> <bundle> app`).
-     *
-     * Three answers, not two, and the middle one is the reason this exists (X11 re-review N5). On an
-     * AVD where the app has never been installed, `pm clear` fails - four times, with sleeps - and the
-     * line said "the next run inherits its data" when there was no data to inherit. `ok` is only
-     * meaningful when `answered` is true: a timed-out `adb` has no status at all, and reading that as
-     * "not installed" would let a reset claim a clean no-op because the tool never answered. Unknown
-     * falls back to attempting the clear and reporting the device's own answer, which is honest in
-     * both directions.
-     *
-     * **The three answers, measured on the API 35 device this pool runs on**, because the first
-     * version guessed at two of them: installed is exit 0 with `package:/data/app/…`; genuinely not
-     * installed is **exit 1 with nothing on stdout and nothing on stderr** (not the `No package
-     * found` line this file's first fixture was written with, which this API level never prints); and
-     * a device the client cannot reach is exit 1 with `adb: device 'emulator-5574' not found` on
-     * **stderr**. The last two are identical on stdout, so the second version read an unreachable
-     * device as "not installed" — and did, on a real `acquire --boot` where the boot had gone to the
-     * wrong adb server: the log said `reset avd:nitroui_a: pm clear` as a clean no-op for a device
-     * that had never been asked anything, on a pair whose app was very much installed. So a
-     * client-side error on stderr means "could not ask", the same rule the `emu avd name` parser
-     * applies to the same phrases.
-     *
-     * @returns {{answered: boolean, ok: boolean, answer: string}}
-     */
-    deviceAppInstalled(device, appId) {
-      if (device?.kind === 'android') {
-        if (!device.serial)
-          return { answered: false, ok: false, answer: 'no serial to address' };
-        const res = adb(
-          ['-s', device.serial, 'shell', 'pm', 'path', appId],
-          device.adbPort ?? null
-        );
-        const answer = out(res);
-        const firstErr = String(res?.stderr ?? '')
-          .split('\n')
-          .find(Boolean)
-          ?.trim();
-        if (res?.error != null || res?.status == null)
-          return {
-            answered: false,
-            ok: false,
-            answer: `could not ask (${answer || String(res?.error ?? 'no exit status')})`,
-          };
-        // The client's own voice, not the device's: `adb: device 'X' not found`, `error: device
-        // offline`, `error: no devices/emulators found`. Only an answer *from* the device may become
-        // a no-op, so the prefixes are listed rather than matched loosely — `Error: Package 'x' not
-        // found` is a device answering, on some API levels, and must stay an answer.
-        if (
-          firstErr != null &&
-          /^(adb:|error: device|error: no devices)/i.test(firstErr)
-        )
-          return {
-            answered: false,
-            ok: false,
-            answer: `could not ask (${firstErr})`,
-          };
-        return {
-          answered: true,
-          ok: res.status === 0 && /^package:/m.test(answer),
-          answer: answer || `exit ${res.status}`,
-        };
-      }
-      const res = simctl(['get_app_container', device?.udid, appId, 'app']);
-      const answer = out(res);
-      if (res?.error != null || res?.status == null)
-        return {
-          answered: false,
-          ok: false,
-          answer: `could not ask (${answer || String(res?.error ?? 'no exit status')})`,
-        };
-      return {
-        answered: true,
-        ok: res.status === 0 && answer !== '',
-        answer: answer || (res?.stderr ?? '').trim() || `exit ${res.status}`,
-      };
-    },
 
     /**
      * `adb devices`, and whether the server actually answered (X11 re-review N2).
@@ -459,71 +352,12 @@ export function deviceOperations({
         : null;
     },
 
-    /**
-     * Removes the app from a simulator, which takes its data container with it.
-     *
-     * This is the iOS reset (X11 review M2). What the pool used to report instead — "none needed,
-     * `simctl install` replaces the app container" — is false, and the repo's own patch to
-     * `platform-apple` says so in its installed code: "`simctl install` is fast and keeps the app
-     * container". So a task's `NSUserDefaults` and Documents survived into the next task's run on
-     * the same pooled simulator, while `lease` printed a row saying the reset was satisfied.
-     *
-     * `simctl` prints nothing on success and the problem on stderr, so the answer is read from both.
-     */
-    uninstallSimulatorApp(udid, appId) {
-      return simctlResult(simctl(['uninstall', udid, appId]), 'uninstalled');
-    },
-
-    /** Re-installs a bundle the reset just removed, so a device leaves the pool ready, not empty. */
-    installSimulatorApp(udid, appPath) {
-      return simctlResult(simctl(['install', udid, appPath]), 'installed');
-    },
-
-    /**
-     * Where a simulator keeps an installed app's data, or null when it has none
-     * (`simctl get_app_container <udid> <bundle> data`).
-     *
-     * This is what makes the iOS reset *provable* rather than promised: an uninstall that worked
-     * leaves no container to find, so the reset checks the device after the fact instead of trusting
-     * an exit code. It is also the hook the completeness proof writes its marker through.
-     */
-    simulatorDataContainer(udid, appId) {
-      const res = simctl(['get_app_container', udid, appId, 'data']);
-      const found = out(res);
-      return res?.status === 0 && found !== '' ? found : null;
-    },
-
     bootComplete(serial, adbPort = null) {
       return (
         out(
           adb(['-s', serial, 'shell', 'getprop', 'sys.boot_completed'], adbPort)
         ) === '1'
       );
-    },
-
-    /**
-     * The cheapest reset that reports what it did: `adb -s <serial> shell pm clear <appId>`, which
-     * wipes the app's data directory and leaves the installed bundle alone.
-     *
-     * The `shell` is not decoration. `pm` is a *device-side* command, so `adb -s X pm clear Y` —
-     * what this line used to build — answers `adb: unknown command pm` on stderr, empty stdout and
-     * exit 1 on every device, forever. The retry loop then looked like a device that would not
-     * clear, four times, and the log said "pm clear FAILED (no answer)" instead of "this command
-     * was never a command".
-     *
-     * `pm clear` answers `Success` or `Failure`/`Failed` on stdout, and the answer is returned
-     * rather than reduced to a boolean: a reset that failed has to say which, because a device
-     * still coming up and a package that is not installed need different things from whoever reads
-     * the line. An empty stdout with a non-zero exit is reported with its exit code for the same
-     * reason — that combination is how a *malformed* command answers, as opposed to a refused one.
-     */
-    clearAppData(serial, appId, adbPort = null) {
-      const res = adb(['-s', serial, 'shell', 'pm', 'clear', appId], adbPort);
-      const answer = out(res);
-      return {
-        ok: /Success/i.test(answer),
-        answer: answer || `(no answer, exit ${String(res.status)})`,
-      };
     },
 
     shutdownAndroid(serial, adbPort = null) {
@@ -1170,7 +1004,7 @@ export class DevicePool {
    *
    * `NITRO_UI_LOAD_SETTLE_TIMEOUT_MS` shortens the wait, and `0` skips it after one reading. That
    * is not a test-only escape hatch: the wait is a courtesy to the *next* measurement, and a
-   * caller that does not care (a reset, a reap, a CI runner whose numbers nobody benchmarks)
+   * caller that does not care (a reap, a CI runner whose numbers nobody benchmarks)
    * should say so rather than sit for three minutes behind a load it will never get under.
    */
   waitForLoadToSettle({ deadlineMs, timeoutMs = this.settleTimeoutMs } = {}) {
@@ -1190,243 +1024,6 @@ export class DevicePool {
       );
     }
     return { settled, load, ceiling, waitedMs: this.now() - start };
-  }
-
-  /**
-   * Clears the example app's data on each device of the pair, so the next task does not inherit the
-   * last one's storage, and reports what was actually done on each.
-   *
-   * Android: `adb -s <serial> shell pm clear <appId>`, retried. The pool resets a device *it has
-   * just booted*, and an emulator whose `sys.boot_completed` is already `1` can still answer
-   * `Failed` for a few seconds while PackageManager settles — which is what the first real boot of
-   * this code did, and what a single attempt reported as a permanent failure. The retries are
-   * bounded and use the injected clock, so a test drives them without waiting.
-   *
-   * iOS: `simctl uninstall`, verified by asking for the data container afterwards. The row used to
-   * read "none needed (simctl install replaces the app container)", which the repo's own
-   * platform-apple patch contradicts — `simctl install` *keeps* the container — so the pool was
-   * printing a satisfied reset while a task's defaults and Documents sat there for the next task.
-   * Uninstall is the cheapest thing that is provably complete: `get_app_container … data` then has
-   * nothing to return, and that check, not the exit code, is what the row reports.
-   *
-   * Removing the app is only safe because everything that runs on a pooled device installs it
-   * first: the harness's patched iOS path installs `HARNESS_APP_PATH` on every run, and real-input
-   * installs its own `.app`. When `HARNESS_APP_PATH` is set we reinstall here too, so a device never
-   * leaves the pool empty for a consumer that does not install (and the reinstall failure is
-   * reported, not swallowed).
-   *
-   * What it refuses to do (X11 re-review M2): touch a device with a live gate claim, whoever holds
-   * it. `resetPair` used to consult nothing but the pair, so a task that re-ran `acquire --boot` in a
-   * second shell — the idempotent path, whose whole purpose is regenerating an env file — ran `pm
-   * clear` and `simctl uninstall` under its own running suite. The row now reads "not reset", with
-   * the pid and gate, and `acquire` skips the reset altogether when it is handing a task the lease it
-   * already held.
-   *
-   * And a device with no app installed is a *successful* no-op, not a failure (X11 re-review N5):
-   * the fresh-AVD case used to retry four times and then claim "the next run inherits its data" when
-   * there was no data to inherit.
-   *
-   * And it resets only the half the lease was taken for (X20 item 2). An iOS-only lease is handed
-   * the whole pair object, and this used to reset both halves of it: Q9 took `--platform ios` and
-   * the acquire printed `pm clear` on the pair's emulator - a device the task never asked for, which
-   * another task may hold for Android at that moment. `platform` is the lease's, and `both` keeps the
-   * old behaviour for a lease that really is for both.
-   *
-   * `platform` is required, with no default (X20 fix round 1): a default of `both` is how the
-   * hand-off came to reset the emulator under an iOS lease, and a future caller that forgot it would
-   * widen a reset by omission. Leaving it out throws rather than guessing.
-   *
-   * @param {object} pair
-   * @param {{platform: 'ios' | 'android' | 'both', appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null}} options
-   */
-  resetPair(
-    pair,
-    {
-      appId = EXAMPLE_APP_ID,
-      attempts = 4,
-      reinstallApp = process.env.HARNESS_APP_PATH ?? null,
-      platform,
-    } = /** @type {any} */ ({})
-  ) {
-    if (!['ios', 'android', 'both'].includes(platform)) {
-      throw new Error(
-        `resetPair needs { platform: 'ios' | 'android' | 'both' } (got ${String(platform)}): ` +
-          'a reset widened to both halves by omission is how an iOS lease cleared the emulator (X20)'
-      );
-    }
-    const devices = [
-      platform !== 'ios' && pair?.android?.avd
-        ? {
-            kind: 'android',
-            key: `avd:${pair.android.avd}`,
-            action: 'pm clear',
-            serial:
-              pair?.android?.emulatorPort != null
-                ? emulatorSerial(pair.android.emulatorPort)
-                : (pair?.android?.serial ?? null),
-            adbPort: pair.android?.adbPort ?? null,
-            appId: appId.android,
-          }
-        : null,
-      platform !== 'android' && pair?.ios?.udid
-        ? {
-            kind: 'ios',
-            key: `ios:${pair.ios.udid}`,
-            action: 'simctl uninstall',
-            udid: pair.ios.udid,
-            appId: appId.ios,
-          }
-        : null,
-    ].filter((x) => x != null);
-    // One brief lock hold for the whole pair: whose device is it, right now. The clears themselves
-    // must not run under the lock (N1), and reading three fields is not what the lock is for.
-    const inUse = this.busyDevices(devices.map((d) => d.key));
-    const results = [];
-    for (const device of devices) {
-      const busy = inUse.get(device.key);
-      if (busy != null) {
-        this.log(`  ${device.key}: ${busy} - not reset`);
-        results.push({
-          key: device.key,
-          action: device.action,
-          ok: true,
-          skipped: busy,
-          attempts: 0,
-          answer: busy,
-        });
-        continue;
-      }
-      const installed = this.ops.deviceAppInstalled(device, device.appId);
-      if (installed.answered && !installed.ok) {
-        // Nothing installed, nothing to clear, nothing inherited. Reported as a success with the
-        // device's own answer, and with no retries: the retries exist for a device that is still
-        // settling, which is not what "no such package" is (X11 re-review N5).
-        let answer = `not installed (${installed.answer}) - nothing to clear`;
-        let tries = 1;
-        if (device.kind === 'ios' && reinstallApp != null) {
-          // The one thing a device with no app still needs from a reset: the round-1 rule is that a
-          // device never leaves the pool empty for a consumer that does not install, so this is the
-          // install that would have followed a successful uninstall, taken directly.
-          tries += 1;
-          const re = this.ops.installSimulatorApp(device.udid, reinstallApp);
-          if (!re?.ok) {
-            results.push({
-              key: device.key,
-              action: device.action,
-              ok: false,
-              attempts: tries,
-              answer: `${answer}; reinstall FAILED (${re?.answer})`,
-            });
-            continue;
-          }
-          answer = `${answer}; installed ${reinstallApp}`;
-        }
-        results.push({
-          key: device.key,
-          action: device.action,
-          ok: true,
-          noop: 'app not installed',
-          attempts: tries,
-          answer,
-        });
-        continue;
-      }
-      results.push(
-        device.kind === 'android'
-          ? this.resetAndroid(device, { attempts })
-          : this.resetIos(device, { reinstallApp })
-      );
-    }
-    return results;
-  }
-
-  /**
-   * Which of these pool keys have a live claim, read in one lock hold (X11 re-review M2). Answers
-   * with the pid and gate because "in use" is not actionable — "in use by pid 4242
-   * (harness:ios)" is.
-   *
-   * A key with no record is not in use: a device the pool has never handed out has no claim on it.
-   * A record whose claims are all from dead pids is not in use either, and `pruneClaims` has already
-   * forgotten those by the time `acquire` gets here.
-   */
-  busyDevices(keys = []) {
-    const wanted = new Set(keys);
-    return this.withPool((state) => {
-      const byKey = new Map();
-      for (const entry of state.devices) {
-        if (
-          !wanted.has(entry.key) ||
-          !deviceIsBusy(entry, this.now(), this.isPidAlive)
-        )
-          continue;
-        const live = (entry.claims ?? []).find((c) => this.isPidAlive(c?.pid));
-        byKey.set(
-          entry.key,
-          entry.phase === 'booting'
-            ? 'a boot is in flight'
-            : `in use by pid ${live?.pid}${live?.gate ? ` (${live.gate})` : ''}`
-        );
-      }
-      return byKey;
-    });
-  }
-
-  /** Android half of the reset: `pm clear`, retried while the device settles. */
-  resetAndroid(device, { attempts }) {
-    const { serial } = device;
-    let ok = false;
-    let answer = 'no serial to address';
-    let tries = 0;
-    while (!ok && tries < attempts) {
-      tries += 1;
-      if (!serial) break;
-      const clear = this.ops.clearAppData(serial, device.appId, device.adbPort);
-      ok = !!clear?.ok;
-      answer = clear?.answer ?? '(no answer)';
-      if (!ok && tries < attempts) this.sleep(this.pollMs);
-    }
-    return {
-      key: device.key,
-      action: device.action,
-      ok,
-      attempts: tries,
-      answer,
-    };
-  }
-
-  /** iOS half of the reset: uninstall, verify the container is gone, reinstall when asked. */
-  resetIos(device, { reinstallApp }) {
-    const { udid } = device;
-    const un = this.ops.uninstallSimulatorApp(udid, device.appId);
-    // Believe the device, not the exit code: the thing a reset promises is that the data is
-    // gone, and `simctl` answers that directly.
-    const container = this.ops.simulatorDataContainer(udid, device.appId);
-    let ok = !!un?.ok && container == null;
-    // Both answers, when both went wrong: "simctl refused" and "the container is still there" are
-    // different failures to whoever has to fix them, and reporting only one of them sends them to
-    // the wrong tool.
-    const parts = [un?.answer ?? '(no answer)'];
-    if (container != null) parts.push(`data container survived: ${container}`);
-    let answer = parts.join('; ');
-    let tries = 1;
-    if (ok && reinstallApp != null) {
-      tries += 1;
-      const re = this.ops.installSimulatorApp(udid, reinstallApp);
-      // A device left without an app is worse than one with stale data, so a failed reinstall is
-      // a failed reset: the next run installs anyway, and whoever read the line should know the
-      // device is not ready.
-      ok = ok && !!re?.ok;
-      answer = re?.ok
-        ? `${answer}; reinstalled ${reinstallApp}`
-        : `${answer}; reinstall FAILED (${re?.answer})`;
-    }
-    return {
-      key: device.key,
-      action: device.action,
-      ok,
-      attempts: tries,
-      answer,
-    };
   }
 
   /**
@@ -1983,7 +1580,7 @@ export function pairFromEnv(env = process.env) {
   const port = Number(env.EMULATOR_PORT);
   const adbPort = Number(env.ANDROID_ADB_SERVER_PORT);
   return {
-    id: env.NITRO_UI_LEASE_PAIR ?? 'env',
+    id: 'env',
     ios: env.IOS_SIM_UDID ? { udid: env.IOS_SIM_UDID } : null,
     android: env.ANDROID_AVD
       ? {
@@ -1995,8 +1592,8 @@ export function pairFromEnv(env = process.env) {
           serial:
             env.ANDROID_SERIAL ??
             (Number.isInteger(port) ? emulatorSerial(port) : null),
-          // The adb server that can see this device. Without it a claim or a reset asks the
-          // default server about an emulator it has never heard of, and gets "not found".
+          // The adb server that can see this device. Without it a claim asks the default
+          // server about an emulator it has never heard of, and gets "not found".
           adbPort: Number.isInteger(adbPort) ? adbPort : null,
         }
       : null,

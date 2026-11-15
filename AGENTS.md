@@ -95,7 +95,21 @@ macOS, Xcode 27, bun 1.4, Node 24 (`fnm exec --using 24 --`), Java 17, CocoaPods
 - Never block the JS thread on main (`DispatchQueue.main.sync`) or main on JS, and no redundant
   `main.async` hop when already on main.
 - Controlled values use the event-count handshake (`docs/DESIGN.md` 3.5).
-- Components include benchmark numbers in the report.
+- Benchmarks are a release-time measurement, not a per-task gate:
+  `node scripts/gate.mjs bench -- --platform <ios|android> --plan full --compare-release`
+  measures the newest release tag and your tree in one session on one device and names the
+  cells that got slower (`docs/architecture/benchmarks.md`). A component task quotes quick-plan
+  numbers in its report when its brief asks for them; it gates nothing and needs no baseline.
+
+## Comments
+
+- Write code that needs no comment. Add one only for what the code cannot show: a platform or
+  upstream quirk, a constraint on ordering, threading, units or lifetime, or why the obvious
+  approach is wrong. One to three lines, understandable on its own.
+- A comment never cites a task, a review, a decision number or a project document, and never
+  tells history. An upstream bug keeps its public identifier (`nitro#1184`).
+- Doc comments on exported components and props are for the app developer: what it does, the
+  default, accepted values, visible platform differences. Nothing internal.
 
 ## Comments
 
@@ -127,6 +141,7 @@ Copy `docs/tasks/REPORT-TEMPLATE.md` to `docs/tasks/<ID>.report.md`: a summary o
 less, the generated gate table (`node scripts/gate.mjs table`), red proofs, follow-ups, questions.
 A fix round appends a `## Fix round N` section of 200 words or less. Write no gate result the table
 does not print, and no device-hygiene section: report a hygiene incident only if one happened.
-Run `bun run task-ready` before the final commit and `node scripts/gate.mjs export
---task <ID>` to commit the ledger. Your final message is a short version of the report plus the
-branch name and final commit SHA.
+Red proofs are lines in the report. Gate ledgers, mutation records and screenshots stay local and
+are never committed, so the report cites none of them. Run `bun run task-ready` before the final
+commit. Your final message is a short version of the report plus the branch name and final commit
+SHA.

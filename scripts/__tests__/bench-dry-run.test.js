@@ -1,9 +1,9 @@
 /**
  * `bun bench --dry-run` — what a run would resolve, decided without a device.
  *
- * Minting a machine's baselines burned hours before telling anyone that there was no
- * per-machine baseline directory to write to, or that the iOS device key had been
- * built from the simulator's *name*. A pre-flight is only worth having if its answer
+ * A bench session burns hours before anyone learns that its device key was built from
+ * the simulator's *name*, or that the ref it is comparing against is the commit under
+ * review. A pre-flight is only worth having if its answer
  * is the run's real answer, so the cases below are about the three ways it could lie:
  *
  *   - booting or starting something while "checking" (it must read a listing only);
@@ -15,7 +15,7 @@
  */
 
 import { afterAll, describe, expect, it } from '@jest/globals';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   copyFileSync,
@@ -30,15 +30,14 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { labelPreFlightProblem } from '../bench/baseline.mjs';
 import { childEnv } from './helpers/scrubbed-env.js';
 import {
   androidDryRunDevice,
   dryRunReport,
   iosDryRunDevice,
-  mergeDependencyEvidence,
   readAvdHardware,
 } from '../bench/dry-run.mjs';
+import { planComparison } from '../bench/compare.mjs';
 
 /** A `simctl list devices -j` shaped like the real one, with an Air and a 17. */
 const LISTING = {
@@ -129,15 +128,6 @@ describe('the Android half of a dry run', () => {
     ).toEqual({
       deviceKey: 'android33-emu-pixel7',
       detail: expect.stringContaining('not attached'),
-      // The device identity a merge pre-flight compares with a baseline file's
-      // (X14): the API level read from the AVD's own files, and a null system-image
-      // fingerprint because only a booted device can answer that.
-      device: {
-        avd: 'nitroui_b',
-        sdk: '33',
-        image: null,
-        profile: 'pixel_7',
-      },
       problem: null,
     });
   });
@@ -196,13 +186,10 @@ describe('the Android half of a dry run', () => {
       })
     ).toEqual({
       // `android30-emu-` would be shaped like a real key and match no committed
-      // baseline, which reads as resolved. Null is the honest answer.
+      // release ref, which reads as resolved. Null is the honest answer.
       deviceKey: null,
       detail: expect.stringContaining('profile unknown'),
       problem: expect.stringContaining('cannot be built from this AVD'),
-      // The half-read identity is reported as the half-read it is: no profile, and
-      // never a value filled in from this repo's own requirement (X14).
-      device: { avd: 'nitroui_a', sdk: '30', image: null, profile: null },
     });
     // The same for the other half: a profile with no API level.
     expect(
@@ -228,328 +215,60 @@ describe('the Android half of a dry run', () => {
 });
 
 /**
- * The merge pre-flight inside `--dry-run` (X14).
- *
- * A `--component --update-baseline` mint replaces the narrowing refusal with the
- * merge question, so a dry run that did not answer it would print `would start` for
- * a run the runner refuses before booting anything - the exact failure this command
- * exists to prevent. `mergeEvidence` is injected, because the real one reads this
- * repo's `bun.lock` and a founding commit, neither of which a rule test should
- * depend on.
+ * A schedule shaped like the real builder's output: one cell, two arms, N launches.
+ * The numbers are deliberately not round multiples of anything the plan uses, so a
+ * comparison that counted the wrong thing shows up (AGENTS.md: no fixture may coincide
+ * with the right answer by accident).
  */
-describe('the merge half of a dry run', () => {
-  const MINE = 'maintainer-mac-2';
-  const DEVICE_KEY = 'android35-emu-pixel9';
-
-  /** A v2 Android baseline for `switch`, in the shape a committed file has. */
-  function existingFile() {
-    return {
-      schemaVersion: 2,
-      platform: 'android',
-      deviceKey: DEVICE_KEY,
-      sha: '9cf95f3',
-      plan: 'full',
-      launches: 8,
-      updatedAt: '2026-10-27T00:00:00.000Z',
-      machine: {
-        hostname: MINE,
-        cpuCount: 10,
-        cpuModel: 'Fixture M4 Pro',
-        androidApi: '35',
-        androidImage: 'fixture/google_apis/35',
-        loadavg1: 1.2,
-      },
-      art: { status: 'speed-profile', primed: true },
-      cells: {
-        'mount:nitro-ui:50': {
-          scenario: 'mount',
-          implementation: 'nitro-ui',
-          n: 50,
-          metrics: { presentedNs: { ratio: 1.1 } },
-        },
-      },
-    };
+function comparisonFixtureSchedule(launches) {
+  const entries = [];
+  for (let launch = 0; launch < launches; launch += 1) {
+    for (const implementation of ['nitro-ui', 'rn-core']) {
+      entries.push({
+        scenario: 'mount.slider',
+        implementation,
+        n: 37,
+        launch,
+      });
+    }
   }
-
-  const EVIDENCE = {
-    dependencies: {
-      reactNative: '0.88.0',
-      expoUi: '58.0.22',
-      installedReactNative: '0.88.0',
-      installedExpoUi: '58.0.22',
-      source: 'bun.lock in the working tree',
-    },
-    resolved: {
-      'dependencies.reactNative': {
-        value: '0.88.0',
-        why: "bun.lock at the baseline's founding commit 9cf95f3",
-      },
-      'dependencies.expoUi': {
-        value: '58.0.22',
-        why: "bun.lock at the baseline's founding commit 9cf95f3",
-      },
-    },
-  };
-
-  const base = {
-    platform: 'android',
-    plan: 'full',
-    launches: 8,
-    component: 'slider',
-    argv: ['--update-baseline', '--component', 'slider'],
-    env: { NITRO_UI_MACHINE_LABEL: MINE },
-    deviceKey: DEVICE_KEY,
-    deviceDetail: 'AVD nitroui_a, API 35, profile pixel_9',
-    deviceProblem: null,
-    deviceInfo: {
-      avd: 'nitroui_a',
-      sdk: '35',
-      image: null,
-      profile: 'pixel_9',
-    },
-    // The host the merge compares against, injected for the same reason the device
-    // key is: this suite cannot know the machine it runs on.
-    machine: {
-      hostname: MINE,
-      cpuCount: 10,
-      cpuModel: 'Fixture M4 Pro',
-      loadavg1: 1.2,
-      xcode: null,
-      androidApi: '35',
-    },
-    cpuCount: 10,
-    loadavg1: 1.2,
-    baselinesDir: '/repo/bench/baselines',
-    existsSync: () => true,
-    relative: (file) => file.replace('/repo/', ''),
-    readJson: () => existingFile(),
-    mergeEvidence: () => EVIDENCE,
-  };
-
-  it('answers the merge question instead of refusing a narrowed schedule', () => {
-    const out = dryRunReport(base);
-    const text = out.lines.join('\n');
-    // The narrowing guard would call this run part of a plan; a merge is allowed
-    // to be narrowed, and the line proving that is the one about the merge.
-    expect(text).not.toContain('the schedule is narrowed');
-    expect(text).toContain('Mint:      would start');
-    expect(out.exitCode).toBe(0);
-    // The fields a v2 file cannot answer for are printed, deferred or accepted, so
-    // the reader sees what the verdict rested on rather than only the verdict.
-    expect(text).toContain('Merge:');
-    expect(text).toContain('deferred');
-    expect(text).toContain('Android system image');
-    expect(text).toContain('founding commit 9cf95f3');
-  });
-
-  it('refuses a component the file already holds', () => {
-    const out = dryRunReport({
-      ...base,
-      argv: ['--update-baseline', '--component', 'switch'],
-      component: 'switch',
-    });
-    expect(out.exitCode).toBe(2);
-    expect(out.problems.join('\n')).toContain('already has');
-    expect(out.lines.join('\n')).toContain('would refuse');
-  });
-
-  it('refuses when the file does not exist, and says a full mint comes first', () => {
-    const out = dryRunReport({ ...base, existsSync: () => false });
-    expect(out.exitCode).toBe(2);
-    expect(out.problems.join('\n')).toContain('nothing to merge into');
-  });
-
-  it('refuses when the device the file was measured on differs', () => {
-    const out = dryRunReport({
-      ...base,
-      readJson: () => ({
-        ...existingFile(),
-        machine: { ...existingFile().machine, cpuModel: 'Fixture M2 Ultra' },
-      }),
-    });
-    expect(out.exitCode).toBe(2);
-    expect(out.problems.join('\n')).toContain('CPU model differs');
-    expect(out.problems.join('\n')).toContain('Fixture M2 Ultra');
-  });
-
-  it('refuses the same command under --force, because force is not comparability', () => {
-    // `--force` means "I know the machine was busy", never "I know this is a
-    // different simulator", so the merge refusals stay in force. The API level is a
-    // field the host can answer for before booting, so this is a refusal and not a
-    // deferral - a pre-flight that deferred everything would pass this test for the
-    // wrong reason, which is why the system-image case below is a separate test.
-    const out = dryRunReport({
-      ...base,
-      argv: ['--update-baseline', '--component', 'switch', '--force'],
-      readJson: () => ({
-        ...existingFile(),
-        machine: { ...existingFile().machine, androidApi: '34' },
-      }),
-    });
-    expect(out.problems.join('\n')).toContain('Android API level differs');
-  });
-
-  it('defers only what a booted device cannot answer yet, and says which', () => {
-    // The two halves a stopped emulator cannot report. A pre-flight that deferred
-    // *everything* would pass the force case above for the wrong reason, so the
-    // deferrals are named here, and the API level - which the AVD's own files do
-    // answer for - is a refusal in the test above.
-    const out = dryRunReport(base);
-    const deferred = out.lines.filter((line) =>
-      line.startsWith('Merge:     deferred')
-    );
-    expect(
-      deferred.map((line) => line.split('deferred - ')[1].split(' ')[0])
-    ).toEqual(['Android', 'ART']);
-    expect(out.exitCode).toBe(0);
-  });
-
-  it('refuses a quick plan or a thin launch count without touching the file rules', () => {
-    const thin = dryRunReport({ ...base, launches: 4 });
-    expect(thin.problems.join('\n')).toContain('launches per cell');
-    const quick = dryRunReport({ ...base, plan: 'quick' });
-    expect(quick.problems.join('\n')).toContain('quick-plan numbers');
-  });
-
-  it('says nothing about a merge when no component was asked for', () => {
-    const out = dryRunReport({
-      ...base,
-      component: null,
-      argv: ['--update-baseline'],
-    });
-    expect(out.lines.join('\n')).not.toContain('Merge:');
-    expect(out.exitCode).toBe(0);
-  });
-
-  /**
-   * The pre-flight recovers a pre-X14 file's app versions through the *same*
-   * function the authoritative write-time check uses (review L3: it had its own
-   * copy of eleven lines, which is how the two drifted apart in the first place).
-   * Only `run.mjs` calls `mergeDependencyEvidence()` — no test reached it — so the
-   * shared reader is asserted here rather than trusted: the pre-flight must answer
-   * with what `git show <the file's sha>:bun.lock` says, with the same `why`, or it
-   * would wave a merge through and the write would then refuse it after the device
-   * time was spent.
-   */
-  it("recovers a pre-X14 file's versions through the reader the run uses", () => {
-    const shown = [];
-    const git = (args) => {
-      shown.push(args.join(' '));
-      if (args[1] === 'dead123:bun.lock') {
-        return '{"lockfileVersion":1,"packages":{"react-native":["react-native@0.80.0",{},"react-native-0.80.0.tgz"],"@expo/ui":["@expo/ui@54.0.0",{},"expo-ui-54.0.0.tgz"]},}';
-      }
-      if (args[1] === 'dead123:bench/package.json') {
-        return '{"dependencies":{"react-native":"0.80.0","@expo/ui":"54.0.0"}}';
-      }
-      throw new Error(`nothing at ${String(args[1])}`);
-    };
-    const out = mergeDependencyEvidence({
-      lockPath: '/repo/bun.lock',
-      nodeModulesDir: null,
-      git,
-      // A file that predates the `dependencies` field, so the recovery is what is
-      // being asked for, and that names the commit it was measured at.
-      baseline: { sha: 'dead123', dependencies: null },
-      read: () => {
-        throw new Error('no working-tree lock in this case');
-      },
-    });
-    expect(shown).toEqual([
-      'show dead123:bun.lock',
-      'show dead123:bench/package.json',
-    ]);
-    expect(out.resolved).toEqual({
-      'dependencies.reactNative': {
-        value: '0.80.0',
-        why: "bun.lock at the baseline's founding commit dead123",
-      },
-      'dependencies.expoUi': {
-        value: '54.0.0',
-        why: "bun.lock at the baseline's founding commit dead123",
-      },
-    });
-  });
-});
+  return entries;
+}
 
 describe('the dry-run report and its exit code', () => {
-  const baselinesDir = '/repo/bench/baselines';
   const base = {
     platform: 'ios',
     plan: 'quick',
     launches: 4,
     component: null,
     argv: ['--platform', 'ios'],
-    env: { NITRO_UI_MACHINE_LABEL: 'maintainer-mac-2' },
     deviceKey: 'ios27-sim-iphone17',
     deviceDetail: '"nitro-ui B" Shutdown',
     deviceProblem: null,
     cpuCount: 10,
     loadavg1: 2,
-    baselinesDir,
-    existsSync: () => true,
-    relative: (file) => file.replace('/repo/', ''),
   };
 
-  it('reports the key, label, baseline path and load ceiling it resolved', () => {
-    const out = dryRunReport(base);
-    const text = out.lines.join('\n');
+  it('reports the device key, host and schedule it resolved', () => {
+    const text = dryRunReport(base).lines.join('\n');
     expect(text).toContain('ios27-sim-iphone17');
-    expect(text).toContain('maintainer-mac-2');
-    expect(text).toContain(
-      'bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json exists'
-    );
-    // 0.5 x cores (D9), and the load it would be judged against.
-    expect(text).toContain('2.00 now, ceiling 5.0 for 10 cores');
+    // 0.5 x cores (D9), and the load it is reported beside.
+    expect(text).toContain('quiet under 5.0');
     expect(text).toContain('cells x');
     expect(text).toContain('could start');
+    expect(dryRunReport(base).exitCode).toBe(0);
+  });
+
+  it('reports a busy machine as a note, and still says a run could start', () => {
+    // X36: nothing refuses a run for being busy. The load is printed with the numbers -
+    // a comparison made inside one session cancels that drift the same way the ratio to
+    // `rn-core` cancels drift between launches, so "busy" is a reason to read the noise
+    // column, not a reason the command exits non-zero.
+    const out = dryRunReport({ ...base, loadavg1: 9 });
     expect(out.exitCode).toBe(0);
-  });
-
-  it('refuses a mint on a busy machine, and accepts it under --force', () => {
-    const busy = { ...base, argv: ['--update-baseline'], loadavg1: 9 };
-    expect(busy.argv.join(' ')).toContain('--update-baseline');
-    const out = dryRunReport(busy);
-    expect(out.exitCode).toBe(2);
-    expect(out.lines.join('\n')).toContain('would refuse');
-    expect(out.problems.join('\n')).toContain('busy');
-
-    const forced = dryRunReport({
-      ...busy,
-      argv: ['--update-baseline', '--force'],
-    });
-    expect(forced.exitCode).toBe(0);
-    expect(forced.lines.join('\n')).toContain('would start');
-  });
-
-  it('treats a missing baseline as a reason only when --check asked for it', () => {
-    const missing = { ...base, existsSync: () => false };
-    // A plain run gates nothing, so an absent baseline is not a reason to stop.
-    expect(dryRunReport(missing).exitCode).toBe(0);
-    const check = dryRunReport({ ...missing, argv: ['--check'] });
-    expect(check.exitCode).toBe(2);
-    expect(check.problems.join('\n')).toContain('no baseline at');
-  });
-
-  it('reports an unlabelled machine as a note for a run and a refusal for a check', () => {
-    const unlabelled = { ...base, env: {} };
-    const plain = dryRunReport(unlabelled);
-    expect(plain.exitCode).toBe(0);
-    expect(plain.lines.join('\n')).toContain('no machine label');
-    expect(plain.lines.join('\n')).toContain('Baseline:  unknown');
-
-    const argv = ['--check'];
-    const check = dryRunReport({ ...unlabelled, argv });
-    expect(check.exitCode).toBe(2);
-    // The refusal is X8's own string, whole (N7). Comparing against the function
-    // rather than against a copy of its text is the point: a dry run that rebuilt
-    // the message - or prefixed the flag a second time, which it used to print as
-    // `--check: --check:` - goes red here even if its own text still reads well.
-    expect(check.problems).toContain(labelPreFlightProblem(argv, {}));
-    // And the reader gets the fix, which is on the message's second line: dropping
-    // to the first line left "no machine label" with nothing to do about it.
-    const reason = check.lines.filter((line) => line.startsWith('Reason:'))[0];
-    expect(reason).toContain('NITRO_UI_MACHINE_LABEL');
-    expect(reason.match(/--check:/g)).toHaveLength(1);
+    expect(out.lines.join('\n')).toContain('the machine was busy');
+    expect(out.problems).toEqual([]);
+    expect(out.lines.join('\n')).toContain('could start');
   });
 
   it('carries an unresolvable device into the answer', () => {
@@ -560,113 +279,114 @@ describe('the dry-run report and its exit code', () => {
       deviceProblem: 'IOS_SIM_UDID is not set',
     });
     expect(out.exitCode).toBe(2);
-    expect(out.lines.join('\n')).toContain('Device:    UNKNOWN');
+    expect(out.lines.join('\n')).toContain('UNKNOWN');
     expect(out.problems).toContain('IOS_SIM_UDID is not set');
   });
 
-  it("carries X8's refusal by calling it, not by copying its dispatch (N7)", () => {
-    // Behaviour cannot prove this: a copy of `labelPreFlightProblem`'s dispatch is
-    // byte-identical until X8 changes, which is exactly why the review called it a
-    // drift risk rather than a bug. So the assertion is on the source, as
-    // `bench-baseline-machine.test.js` does for baseline paths: dry-run may ask X8's
-    // predicate for a *literal* flag (the plain-run note, and the "can this label
-    // name a directory" gate), but it must not build the minting/checking choice
-    // itself — that decision belongs to `labelPreFlightProblem`.
-    const code = readFileSync(
-      path.join(process.cwd(), 'scripts', 'bench', 'dry-run.mjs'),
-      'utf8'
-    )
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '');
-    expect(code).toContain('labelPreFlightProblem(argv');
-    expect(code).not.toMatch(
-      /machineLabelProblem\([\s\S]{0,80}flag:\s*minting\s*\?/
-    );
-  });
-
-  it('refuses to mint or check against a device key it could not resolve', () => {
-    // The key is the *filename*, so an unknown key means the run would write or read
-    // a file named after nothing. Both flags have to say so, in their own words: a
-    // mint is about a file to write and a check about one to gate against, and a
-    // caller reading the reason needs to know which one it failed.
-    const unresolved = {
-      ...base,
-      deviceKey: null,
-      deviceDetail: null,
-      deviceProblem: null,
-    };
-    const mint = dryRunReport({ ...unresolved, argv: ['--update-baseline'] });
-    expect(mint.exitCode).toBe(2);
-    expect(mint.problems.join('\n')).toContain('no baseline file to write');
-
-    const check = dryRunReport({ ...unresolved, argv: ['--check'] });
-    expect(check.exitCode).toBe(2);
-    expect(check.problems.join('\n')).toContain(
-      'no baseline file to gate against'
-    );
-  });
-
   it('refuses a component the plan has no cell for, with the run’s own message', () => {
-    // `buildSchedule` is the runner's schedule builder, so this is the same refusal
-    // the run would print rather than a paraphrase of it.
-    const out = dryRunReport({ ...base, component: 'nonexistent-widget' });
+    const out = dryRunReport({ ...base, component: 'not-a-component' });
     expect(out.exitCode).toBe(2);
-    expect(out.problems.join('\n')).toContain(
-      '--component nonexistent-widget matched no cell'
-    );
+    // The runner's builder is what says no, so a component added to the plan later
+    // cannot make this test's expectation stale in the other direction.
+    expect(out.problems.join('\n')).toContain('not-a-component');
   });
 
-  it('refuses to mint from a narrowed schedule, and says a plain run is fine', () => {
-    // The A4 diagnostic shape: one cell, so the mint must be refused *here* rather
-    // than three hours later, and the same command without `--update-baseline` is
-    // exactly what a diagnostic run should do.
-    const argv = ['--scenario', 'mount.date-picker', '--n', '200'];
-    const mint = dryRunReport({
+  it('prints the two-sided plan of a comparison, device included', () => {
+    const out = dryRunReport({
       ...base,
-      plan: 'full',
-      launches: 8,
-      argv: [...argv, '--update-baseline'],
+      argv: ['--platform', 'ios', '--compare-release', '--dry-run'],
+      comparison: planComparison({
+        platform: 'ios',
+        plan: 'quick',
+        launches: 2,
+        ref: 'v0.9.0',
+        baseSha: 'aaaaaaa',
+        headSha: 'bbbbbbb',
+        repoRoot: '/repo',
+        baseDir: '/base/v0.9.0',
+        headSchedule: comparisonFixtureSchedule(2),
+        baseSchedule: comparisonFixtureSchedule(2).slice(0, -4),
+      }),
     });
-    expect(mint.exitCode).toBe(2);
-    expect(mint.problems.join('\n')).toContain('--update-baseline');
-    expect(mint.problems.join('\n')).toContain('narrowed to');
-    expect(mint.lines.join('\n')).toContain('Mint:      would refuse');
+    const text = out.lines.join('\n');
+    expect(text).toContain('Compare:   v0.9.0 (aaaaaaa) vs HEAD (bbbbbbb)');
+    expect(text).toContain('ios27-sim-iphone17 - both sides, one session');
+    expect(text).toContain('base/head');
+    expect(text).toContain('compared');
+    // The cell the base ref cannot measure is named, not silently dropped.
+    expect(text).toContain('head-only');
+    expect(out.exitCode).toBe(0);
+  });
 
-    // Forced, it is a local experiment again and the guard steps aside like `--force`
-    // does for the load rule.
-    const forced = dryRunReport({
+  it('turns a comparison that cannot be planned into a refusal', () => {
+    const out = dryRunReport({
       ...base,
-      plan: 'full',
-      launches: 8,
-      argv: [...argv, '--update-baseline', '--force'],
+      argv: ['--platform', 'ios', '--compare-release', '--dry-run'],
+      comparison: planComparison({
+        platform: 'ios',
+        plan: 'quick',
+        launches: 2,
+        ref: 'v0.9.0',
+        // One commit under two labels of different length: only its whole id says so.
+        baseSha: 'b7e98c6',
+        headSha: 'b7e98c6e',
+        baseCommit: 'b7e98c6e2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e',
+        headCommit: 'b7e98c6e2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e',
+        repoRoot: '/repo',
+        baseDir: '/base/v0.9.0',
+        headSchedule: comparisonFixtureSchedule(2),
+        baseSchedule: comparisonFixtureSchedule(2),
+      }),
     });
-    expect(forced.problems.join('\n')).not.toContain('narrowed to');
-
-    // Without the mint flag the same narrow run is legitimate: a diagnostic that gates
-    // nothing needs one cell, not the whole plan.
-    const plain = dryRunReport({ ...base, plan: 'full', launches: 8, argv });
-    expect(plain.exitCode).toBe(0);
+    expect(out.exitCode).toBe(2);
+    expect(out.problems.join('\n')).toContain('measures nothing');
   });
 
   it('lists no reasons when everything resolves', () => {
     expect(dryRunReport(base).problems).toEqual([]);
   });
 
-  it('puts every answer in the same column, including the verdict rows', () => {
-    // A reader scans one column to compare machine to machine, so the verdict rows
-    // (`Mint:` / `Check:`) are the ones short enough to slip out of it.
-    const out = dryRunReport({ ...base, argv: ['--update-baseline'] });
-    expect(out.lines.join('\n')).toContain('Mint:      would start');
-    const check = dryRunReport({ ...base, argv: ['--check'] });
-    expect(check.lines.join('\n')).toContain('Check:     would start');
-    for (const line of out.lines) {
-      // The `busy:` row is a continuation of `Load:` and is deliberately indented.
-      if (/^\s/.test(line)) continue;
-      const value = line.indexOf(':');
-      expect(value).toBeGreaterThan(0);
-      // Label, then at least two spaces of padding, out to the shared column.
-      expect(line.slice(0, value + 1).length).toBeLessThanOrEqual(9);
-      expect(/^ {2}/.test(line.slice(value + 1))).toBe(true);
+  it('puts every answer in the same column', () => {
+    // A reader scans one column to compare plan to plan, so a row is only as good as
+    // its padding: a longer label (`Compare:`, `Dry run:`) that slips past the column
+    // is the bug. The rows under `Compare:` are indented one level and share their own
+    // column, which is why they are measured separately.
+    const comparison = dryRunReport({
+      ...base,
+      argv: ['--platform', 'ios', '--compare-release', 'v0.9.0', '--dry-run'],
+      comparison: planComparison({
+        platform: 'ios',
+        plan: 'quick',
+        launches: 2,
+        ref: 'v0.9.0',
+        baseSha: 'aaaaaaa',
+        headSha: 'bbbbbbb',
+        repoRoot: '/repo',
+        baseDir: '/base/v0.9.0',
+        headSchedule: comparisonFixtureSchedule(2),
+        baseSchedule: comparisonFixtureSchedule(2),
+      }),
+    });
+
+    for (const { lines } of [dryRunReport(base), comparison]) {
+      for (const line of lines) {
+        // Continuation rows (`note:` under `Host:`) are deliberately indented.
+        if (/^\s/.test(line)) continue;
+        const colon = line.indexOf(':');
+        expect(colon).toBeGreaterThan(0);
+        // Label within 9 columns, then at least two spaces out to the shared column.
+        expect(colon + 1).toBeLessThanOrEqual(9);
+        expect(/^ {2}/.test(line.slice(colon + 1))).toBe(true);
+      }
+
+      const at = lines.findIndex((line) => line.startsWith('Compare:'));
+      if (at === -1) continue;
+      for (const line of lines.slice(at + 1)) {
+        if (!line.startsWith('  ')) continue;
+        expect(line[2]).not.toBe(' '); // a label starts one level in,
+        expect(line[10]).toBe(' '); // and its value starts
+        expect(line[11]).not.toBe(' '); // in the column, at one width.
+      }
     }
   });
 });
@@ -681,13 +401,60 @@ describe('the dry-run report and its exit code', () => {
 describe('bench --dry-run (the CLI)', () => {
   const cleanup = [];
 
+  /**
+   * A git command inside a throwaway fixture repository, isolated from the machine's
+   * git config the same way `gate-logs.test.js` isolates its repositories: someone who
+   * signs commits globally must not make this fixture fail for an unrelated reason.
+   */
+  function fixtureGit(root, ...args) {
+    return execFileSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_AUTHOR_NAME: 'nitro-ui',
+        GIT_AUTHOR_EMAIL: 'bench@example.invalid',
+        GIT_COMMITTER_NAME: 'nitro-ui',
+        GIT_COMMITTER_EMAIL: 'bench@example.invalid',
+        GIT_AUTHOR_DATE: '2026-11-15T12:00:00Z',
+        GIT_COMMITTER_DATE: '2026-11-15T12:00:00Z',
+      },
+    });
+  }
+
   /** `scripts/` on its own, so the child's repo root is the throwaway tree. */
-  function workspace() {
+  function workspace(options = {}) {
     const root = mkdtempSync(path.join(realpathSync(tmpdir()), 'bench-dry-'));
     copyScripts(
       path.join(process.cwd(), 'scripts'),
       path.join(root, 'scripts')
     );
+    const tag = options.tag ?? options.tagAtHead;
+    if (tag != null) {
+      // A git repository with a release tag, so `--compare-release` has something real
+      // to resolve and extract: the plan it prints is read out of that tag's own
+      // `lib.mjs`, which is the whole design of the comparison. `tag` is *older* than
+      // HEAD — the extra commit is the candidate — while `tagAtHead` leaves the tag on
+      // the only commit, which is the shape of a comparison against itself.
+      fixtureGit(root, 'init', '--quiet');
+      fixtureGit(root, 'add', '-A');
+      fixtureGit(root, 'commit', '--quiet', '-m', 'bench fixture');
+      // A fresh repository abbreviates to 7 characters, which is also the length a
+      // hand-written slice would pick; 12 is what neither picks by accident.
+      fixtureGit(root, 'config', 'core.abbrev', '12');
+      if (options.annotated === true) {
+        fixtureGit(root, 'tag', '-a', tag, '-m', `release ${tag}`);
+      } else {
+        fixtureGit(root, 'tag', tag);
+      }
+      if (options.tag != null) {
+        writeFileSync(path.join(root, 'candidate.txt'), 'under review\n');
+        fixtureGit(root, 'add', '-A');
+        fixtureGit(root, 'commit', '--quiet', '-m', 'candidate');
+      }
+    }
     cleanup.push(root);
     return root;
   }
@@ -710,7 +477,7 @@ describe('bench --dry-run (the CLI)', () => {
       {
         encoding: 'utf8',
         cwd: root,
-        timeout: 120_000,
+        timeout: 180_000,
         // `childEnv` (X34 item 1): the blanks below are the suite's answer to "which device", and
         // they only mean that if no lease arrives underneath them. `bench/run.mjs` reads a device
         // identity out of the environment, so a *half*-blanked lease — the shell's
@@ -723,7 +490,9 @@ describe('bench --dry-run (the CLI)', () => {
           ANDROID_SERIAL: '',
           ANDROID_AVD: '',
           AVD: '',
-          NITRO_UI_MACHINE_LABEL: 'maintainer-mac-9',
+          // The base checkout is a cache: point it at the throwaway tree so a test
+          // can never write into the developer's real one.
+          NITRO_UI_BENCH_BASE_DIR: path.join(root, 'bench-base'),
           ...env,
         }),
       }
@@ -754,53 +523,87 @@ describe('bench --dry-run (the CLI)', () => {
       expect(out.all).not.toContain('No Android device');
       expect(out.all).not.toContain('is not attached');
       expect(out.all).toContain(`Platform:  ${platform}`);
-      expect(out.all).toContain('maintainer-mac-9');
-      expect(out.all).toContain('ceiling');
+      expect(out.all).toContain('quiet under');
       expect(out.all).toContain('reason(s) not to start');
     }
   });
 
-  it('refuses to mint under a non-default waiting rule, and names it', () => {
-    // Review N1: `run.mjs` prints any `--timeout-*` run as DIAGNOSTIC ("cannot mint a
-    // baseline"), so `--update-baseline --timeout-presented 1000` has to be a refusal,
-    // and the dry run's whole job is to answer that before the device is booted. The
-    // shorter side is the case that used to mint.
-    const root = workspace();
-    // Both platforms asked for a wait *under* their own default (8 000 / 2 000), which
-    // is the shape that used to mint. Asking past a platform's backstop is refused
-    // earlier still, by the flag cap itself.
-    for (const [platform, ms] of [
-      ['ios', '1000'],
-      ['android', '1000'],
-    ]) {
-      const out = cli(root, [
-        '--platform',
-        platform,
-        '--plan',
-        'quick',
-        '--update-baseline',
-        '--timeout-presented',
-        ms,
-        '--dry-run',
-      ]);
-      expect(out.status).toBe(2);
-      expect(out.all).toContain('Mint:      would refuse');
-      expect(out.all).toContain(`${ms} ms for a presenting frame`);
-      expect(out.all).toContain('Drop the `--timeout-*` flags to mint');
-    }
-    // Asking for the platform's own default explicitly is not a diagnostic, so the
-    // waiting rule alone must not refuse the mint.
-    const atRule = cli(root, [
+  it('prints the whole comparison for --compare-release, from the tag itself', () => {
+    const root = workspace({ tag: 'v9.9.0' });
+    const out = cli(root, [
       '--platform',
       'ios',
       '--plan',
       'quick',
-      '--update-baseline',
-      '--timeout-presented',
-      '8000',
+      '--launches',
+      '2',
+      '--compare-release',
       '--dry-run',
     ]);
-    expect(atRule.all).not.toContain('for a presenting frame');
+    // The ref is resolved and its plan read (no device, no install, no build), and the
+    // only reason left is the one this environment cannot answer: no simulator.
+    expect(out.all).toContain('Compare:   v9.9.0');
+    expect(out.all).toContain('vs HEAD');
+    expect(out.all).toContain('rounds:  2, order base/head head/base');
+    expect(out.all).toContain('compared,');
+    expect(out.all).toContain('IOS_SIM_UDID is not set');
+    expect(out.all).not.toContain('No iOS simulator');
+    expect(out.all).not.toContain('bun install');
+    expect(out.status).toBe(2);
+  });
+
+  it('says which release tag it picked, and refuses when there is none', () => {
+    const tagged = workspace({ tag: 'v9.9.0' });
+    const bare = cli(tagged, [
+      '--platform',
+      'ios',
+      '--plan',
+      'quick',
+      '--launches',
+      '1',
+      '--compare-release',
+      '--dry-run',
+    ]);
+    expect(bare.all).toContain('Compare:   v9.9.0');
+
+    const untagged = workspace();
+    const none = cli(untagged, [
+      '--platform',
+      'ios',
+      '--plan',
+      'quick',
+      '--launches',
+      '1',
+      '--compare-release',
+      '--dry-run',
+    ]);
+    expect(none.status).toBe(2);
+    expect(none.all).toContain('no release tag');
+    expect(none.all).toContain('--compare-release <ref>');
+  });
+
+  it('refuses a comparison that would measure a tree against itself', () => {
+    // The tag is the commit we are standing on: every ratio would be 1.00, and a gate
+    // that cannot fail is worse than no gate (T02 review B1).
+    // Twice: a plain tag, and an annotated one, which is an object of its own with an
+    // id that is not the commit's.
+    for (const annotated of [false, true]) {
+      const root = workspace({ tagAtHead: 'v9.9.1', annotated });
+      const out = cli(root, [
+        '--platform',
+        'ios',
+        '--plan',
+        'quick',
+        '--launches',
+        '1',
+        '--compare-release',
+        'v9.9.1',
+        '--dry-run',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('measures nothing');
+      expect(out.all).not.toContain('rounds:');
+    }
   });
 
   it('still refuses a bad flag before printing anything, and keeps the usage line', () => {
@@ -812,6 +615,24 @@ describe('bench --dry-run (the CLI)', () => {
     expect(
       cli(root, ['--platform', 'ios', '--plan', 'nope', '--dry-run']).all
     ).toContain('--plan must be');
+  });
+
+  it('refuses a flag the bench no longer has, and names its replacement', () => {
+    // An unknown flag is otherwise ignored, and these three were ignored into a green:
+    // `bun bench --check` would run a plain bench, print a plain report, and exit 0 on
+    // someone believing a committed baseline had been consulted.
+    const root = workspace();
+    for (const [flag, replacement] of [
+      ['--check', '--compare-release'],
+      ['--update-baseline', 'bench/results'],
+      ['--force', 'reported'],
+    ]) {
+      const out = cli(root, ['--platform', 'ios', flag, '--dry-run']);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain(`${flag} no longer exists`);
+      expect(out.all).toContain(replacement);
+      expect(out.all).not.toContain('Platform:  ios');
+    }
   });
 
   it('asks the tools read-only questions, and never a booting one', () => {

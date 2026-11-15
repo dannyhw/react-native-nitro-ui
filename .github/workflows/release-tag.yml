@@ -1,38 +1,17 @@
 name: Release tag
 
-# Tags and GitHub releases, once a version is really on npm (DESIGN.md D28).
-#
-# Nothing creates them at publish time: publishing is not automated, because the
-# package's Trusted Publisher allows staged publishing only. When the release
-# workflow stages `0.1.1`, that version is not live — it waits for the owner to
-# approve it on npmjs.com. A tag made then would point at a release that does not
-# exist yet, and a tag made from the wrong run would be wrong in the other
-# direction. So this job keys on state instead: when `package.json`'s version is
-# on the registry and `v<version>` has no release, it creates `v<version>` at the
-# commit that bumped the version, with that version's `CHANGELOG.md` section as
-# the notes.
-#
-# Every path through `scripts/release-catch-up.mjs` is a no-op once the work is
-# done, which is what makes an hourly schedule, a manual run and a re-run of
-# either all safe. The script takes its arguments as argv arrays and never
-# through a shell, and this workflow interpolates nothing into `run:`.
-#
-# It needs no OIDC rights: creating a tag and a release is `GITHUB_TOKEN` work.
+# Creates `v<version>` and its GitHub release once `package.json`'s version is
+# live on npm. Every path is a no-op when the tag exists, so re-runs are safe.
 
 on:
   schedule:
-    # Hourly, but not on the hour: minute 0 is when the hourly-cron traffic from
-    # every other repository in the world arrives, and a scheduled workflow that
-    # has to wait for a runner can be skipped outright when none is free. A
-    # fixed offset costs nothing and gets a runner sooner (F4, row 53). Cheap
-    # either way: two registry/API reads and a no-op unless something is waiting
-    # for its tag, so the wait after an approval is at most an hour.
+    # Off the hour: minute 0 is when hourly crons everywhere fire, and a
+    # scheduled run that cannot get a runner can be skipped outright.
     - cron: '17 * * * *'
   # Run it by hand right after approving a staged version.
   workflow_dispatch:
 
-# Only one at a time; there is nothing to gain from cancelling a run that is
-# already creating a release.
+# One at a time, and never cancel a run that is already creating a release.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false

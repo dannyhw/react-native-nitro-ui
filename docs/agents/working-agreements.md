@@ -59,11 +59,13 @@ anyone. Every line says what holds now, not how it came about.
 - A commit on `main` describes the change, not the task: a conventional subject with the pull
   request number and a short body. Status-only updates are batched into the next real commit.
 - A task's worktrees are removed when it merges (`node scripts/worktrees.mjs --prune`).
-- Task records (brief, report, reviews, the task's folder) stay in git for 14 days after the task
-  reaches `main` and are then archived locally by `node scripts/task-records.mjs --archive`. A task
-  with a brief and no report, an unmerged branch, or an uncommitted record in any worktree is kept
-  whatever its age. Failure logs are never committed. The removal is staged into the next merge
-  commit, never a commit of its own.
+- Task records (brief, report, reviews, `context.md`) leave git when their task merges:
+  `node scripts/task-records.mjs --archive`, run in the merge checkout, copies them to the local
+  archive and stages the removal, which goes into the merge commit. A task is kept while it has a
+  brief and no report, an uncommitted record in any worktree, or a branch the merge checkout does
+  not contain that is live (its tip is younger than 14 days) or checked out in a worktree.
+- Gate ledgers, mutation records, screenshots and failure logs are never committed. Red proofs
+  are lines in the report.
 - A document that stays (`docs/DESIGN.md`, a component page, `docs/upstream.md`) does not link to a
   task record. A fact worth keeping is written into the document.
 - CI is checked after every push to `main`.

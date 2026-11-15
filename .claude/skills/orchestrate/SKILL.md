@@ -111,14 +111,17 @@ or provider error. After that, replan around it.
   CocoaPods, CI workflows), look at CI for the branch before merging it.
 - The merge commit says what changed for users, with the PR number. The STATUS lines
   (the task's "In flight" line goes, a "Recently merged" line is added, and merged lines
-  older than 14 days are dropped), follow-up lines, decisions and ledger export go inside
-  it. Make no commit on `main` that only updates task records: between merges, what you
-  know lives in the pull requests and in your thread. The exception is the resume line
-  under "Stopping".
+  older than 14 days are dropped), follow-up lines and decisions go inside it. Make no
+  commit on `main` that only updates task records: between merges, what you know lives
+  in the pull requests and in your thread. The exception is the resume line under
+  "Stopping".
+- After merging a branch into the merge checkout, run
+  `node scripts/task-records.mjs --archive`. It stages the removal of the merged task's
+  records: put that into the merge commit (`git commit --amend --no-edit`), so a task's
+  records leave git in the commit that merges it.
 - After the push: wait for CI on that SHA and read it; run
-  `node scripts/worktrees.mjs --prune`; run `node scripts/task-records.mjs --archive` and
-  let the removals it stages ride in the next merge commit; check `npm view` before
-  saying anything about a release.
+  `node scripts/worktrees.mjs --prune`; check `npm view` before saying anything about a
+  release.
 - Nothing reaches `main` ungated, a one-line CI fix included.
 
 ## Stopping

@@ -11,8 +11,8 @@
  * *not* evidence - control drift, a slow reference arm, a noisy cell - must not
  * suppress or manufacture one.
  *
- * The same `gate()` is used by `run.mjs --check/--compare` and by
- * `report.mjs --compare/--check` (review S11), so covering it covers both.
+ * The same `gate()` is used by `run.mjs --compare-release`, by `run.mjs
+ * --compare` and by `report.mjs --compare` (review S11), so covering it covers all three.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -24,11 +24,7 @@ import { join, resolve } from 'node:path';
 import {
   SCHEMA_VERSION,
   aggregateRecords,
-  baselineBlockers,
-  baselineNoise,
-  baselineTable,
   buildSchedule,
-  buildBaseline,
   cellKey,
   ARM_SCOPES,
   armScopeCovers,
@@ -40,7 +36,7 @@ import {
   IMPLEMENTATIONS,
   incompleteMetrics,
   launchPlanString,
-  loadBlocker,
+  loadOverCeiling,
   loadCeiling,
   scenarioActionOf,
   summarizeLoadSamples,
@@ -138,9 +134,9 @@ function cellRecords({
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
-      // The waiting rule this fixture's app would have reported (iOS's defaults). A run
-      // that records none is refused by `baselineBlockers`, so every mintable fixture
-      // has to carry one.
+      // The waiting rule this fixture's app reports (iOS's defaults). A run whose app
+      // records none is called out in its own problems list rather than stamped with
+      // today's defaults, so a fixture has to carry one.
       mountTimeoutMs: 1_500,
       presentedTimeoutMs: 8_000,
     },
@@ -304,11 +300,10 @@ function leakRun({ rnCore, nitroUi }) {
 }
 
 /**
- * `makeRun` plus the metadata `--check` and `--update-baseline` read: a whole
- * run object that is allowed to mint a baseline (clean tree, `full` plan, 8
- * launches, quiet machine).
+ * `makeRun` plus the metadata a results file carries: the whole run object a
+ * release comparison writes (clean tree, `full` plan, 8 launches, quiet machine).
  */
-function baselineRun(overrides = {}) {
+function measuredRun(overrides = {}) {
   return {
     ...makeRun(overrides),
     platform: 'ios',
@@ -521,7 +516,6 @@ describe('benchmark gate', () => {
     const noisy = comparisonSections({
       run: noisyHead,
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(noisy.exitCode).toBe(0);
@@ -530,117 +524,10 @@ describe('benchmark gate', () => {
     const clear = comparisonSections({
       run: makeRun({ 'nitro-ui': { mounted: 220_000, presented: 260_000 } }),
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(clear.exitCode).toBe(1);
     expect(clear.markdown).toContain('nitro-ui');
-  });
-
-  it('refuses to mint a baseline from a dirty, broken or busy machine', () => {
-    const clean = {
-      ...makeRun(),
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-    };
-    expect(baselineBlockers(clean)).toEqual([]);
-    expect(
-      baselineBlockers({ ...clean, dirty: true }).some((reason) =>
-        reason.includes('dirty')
-      )
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, problems: ['launch 2 ended early'] }).length
-    ).toBeGreaterThan(0);
-    expect(
-      baselineBlockers({
-        ...clean,
-        machine: { cpuCount: 14, loadavg1: 12, quiet: false },
-      }).some((reason) => reason.includes('load average'))
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, machine: { cpuCount: 14 } }).length
-    ).toBeGreaterThan(0);
-    // A `quick` run at 4 launches is local feedback, not baseline material
-    // (docs/DESIGN.md D9). `report.mjs --update-baseline` reads files from
-    // disk, so the guard belongs in the shared blocker list rather than in the
-    // runner's flags.
-    expect(
-      baselineBlockers({ ...clean, plan: 'quick' }).some((reason) =>
-        reason.includes('full')
-      )
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, launches: 4 }).some((reason) =>
-        reason.includes('launches')
-      )
-    ).toBe(true);
-  });
-
-  /**
-   * The ART regime guard (T12 round 2). `speed-profile` and `verify` are two
-   * comparability regimes - T12 measured the same code's ratio to the shared host
-   * move 1.22x -> 0.99x on mount `presented` across that line - so a baseline may
-   * not be minted from an app that is still interpreting. iOS has no ART, so the
-   * guard is keyed on the platform, and a pre-T12 results file that recorded no
-   * `art` at all is refused rather than assumed compiled.
-   */
-  it('refuses to mint an Android baseline from an uncompiled app', () => {
-    // Rebuilt under Android's waiting rule, because that is what an Android run has to
-    // report to mint at all (A4/M1: the rule is per platform, and `makeRun`'s cells carry
-    // iOS's).
-    const androidCells = makeRun().cells;
-    for (const cell of Object.values(androidCells)) {
-      cell.timeouts = { mountTimeoutMs: 1_500, presentedTimeoutMs: 2_000 };
-    }
-    const cleanAndroid = {
-      ...makeRun(),
-      cells: androidCells,
-      platform: 'android',
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-      art: {
-        packageName: 'com.nitroui.bench',
-        status: 'speed-profile',
-        primed: true,
-        attempts: 1,
-      },
-    };
-    expect(baselineBlockers(cleanAndroid)).toEqual([]);
-    expect(
-      baselineBlockers({
-        ...cleanAndroid,
-        art: { ...cleanAndroid.art, status: 'verify', primed: false },
-      }).some((reason) => reason.includes('verify'))
-    ).toBe(true);
-    expect(
-      baselineBlockers({
-        ...cleanAndroid,
-        art: { ...cleanAndroid.art, status: 'interpret-only' },
-      }).some((reason) => reason.includes('interpreter'))
-    ).toBe(true);
-    // A run from before the state was recorded: unknown regime, no baseline.
-    expect(
-      baselineBlockers({ ...cleanAndroid, art: null }).some((reason) =>
-        reason.includes('did not record an ART compile state')
-      )
-    ).toBe(true);
-    // iOS is exempt: it has no ART, and must keep minting baselines as before.
-    const cleanIos = {
-      ...makeRun(),
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-    };
-    expect(baselineBlockers(cleanIos)).toEqual([]);
   });
 });
 
@@ -682,22 +569,22 @@ describe('the idle-machine rule samples the run (R4)', () => {
       loadavg5: 4.06,
       loadSamples,
     };
-    machine.quiet = loadBlocker(machine) === null;
-    return { ...baselineRun(), machine };
+    machine.quiet = loadOverCeiling(machine) === null;
+    return { ...measuredRun(), machine };
   }
 
-  it('accepts a run that was quiet from start to finish', () => {
+  it('calls a run that was quiet from start to finish quiet', () => {
     const run = sampledRun({ samples: quiet(180), loadavg1: 2.4 });
     expect(run.machine.loadSamples).toMatchObject({ count: 180, over: 0 });
     expect(run.machine.quiet).toBe(true);
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
   });
 
   /**
    * The bug: one sample at the end of a 154-minute run. The spike is still
    * recorded and still visible in `max`, it just cannot condemn the run.
    */
-  it('accepts the shape that refused A1b - quiet for hours, a spike at the end', () => {
+  it('calls the shape that condemned A1b quiet - hours of quiet, a spike at the end', () => {
     const run = sampledRun({
       samples: [...quiet(300), A1B_SPIKE, A1B_SPIKE],
       loadavg1: A1B_SPIKE,
@@ -707,23 +594,22 @@ describe('the idle-machine rule samples the run (R4)', () => {
       over: 2,
       max: A1B_SPIKE,
     });
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
     expect(run.machine.quiet).toBe(true);
-    // The same instant, read the way the guard used to read it, is a refusal.
-    expect(loadBlocker({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })).toContain(
-      'load average 7.60'
-    );
+    // The same instant, read on its own, is still what it looks like.
+    expect(
+      loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
+    ).toContain('load average 7.60');
   });
 
-  it('refuses a run that was busy for more than half of it', () => {
+  it('calls a run busy that was busy for more than half of it', () => {
     const run = sampledRun({
       samples: [...quiet(45), ...busy(55)],
       loadavg1: 3.0, // the last minute was fine; the run was not
     });
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('busy for half the run');
-    expect(reasons[0]).toContain('median load average');
+    const reason = loadOverCeiling(run.machine);
+    expect(reason).toContain('busy for half the run');
+    expect(reason).toContain('median load average');
     expect(run.machine.quiet).toBe(false);
   });
 
@@ -732,35 +618,35 @@ describe('the idle-machine rule samples the run (R4)', () => {
    * the end-of-run load average is quiet, but a seventh of the run was spent over
    * the ceiling. This is the test the old rule fails on its own terms.
    */
-  it('refuses a run with more than 10 % of its samples over the ceiling', () => {
+  it('calls a run busy with more than 10 % of its samples over the ceiling', () => {
     const run = sampledRun({
       samples: [...quiet(88), ...busy(12)],
       loadavg1: 2.9,
     });
     expect(run.machine.loadSamples.overFraction).toBeCloseTo(0.12, 10);
     expect(CEILING).toBeCloseTo(7, 10);
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('12 of 100 load samples');
-    expect(reasons[0]).toContain('12% of the run');
+    const reason = loadOverCeiling(run.machine);
+    expect(reason).toContain('12 of 100 load samples');
+    expect(reason).toContain('12% of the run');
     expect(run.machine.quiet).toBe(false);
   });
 
   /**
-   * Boundary: the allowance is *more than* 10 %, so exactly a tenth stays mintable
-   * and the sample after it does not.
+   * Boundary: the allowance is *more than* 10 %, so exactly a tenth is still quiet
+   * and the sample after it is not.
    */
   it('allows exactly 10 % of the samples over the ceiling and refuses the next one', () => {
     expect(LOAD_OVER_CEILING_FRACTION).toBeCloseTo(0.1, 10);
-    const exactlyTen = baselineBlockers(
+    const exactlyTen = loadOverCeiling(
       sampledRun({ samples: [...quiet(90), ...busy(10)], loadavg1: 2.9 })
+        .machine
     );
-    expect(exactlyTen).toEqual([]);
-    const eleven = baselineBlockers(
+    expect(exactlyTen).toBeNull();
+    const eleven = loadOverCeiling(
       sampledRun({ samples: [...quiet(89), ...busy(11)], loadavg1: 2.9 })
+        .machine
     );
-    expect(eleven).toHaveLength(1);
-    expect(eleven[0]).toContain('of the run');
+    expect(eleven).toContain('of the run');
   });
 
   /**
@@ -773,40 +659,28 @@ describe('the idle-machine rule samples the run (R4)', () => {
       loadavg1: CEILING,
     });
     expect(run.machine.loadSamples).toMatchObject({ over: 0, median: CEILING });
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
   });
 
   it('keeps the single-sample rule for files recorded before the sampler', () => {
     // The two real A1b numbers, read from a file that has no samples at all.
     expect(
-      baselineBlockers({
-        ...baselineRun(),
-        machine: { cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE },
-      })
-    ).toEqual([
-      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
-    ]);
+      loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
+    ).toContain(
+      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)'
+    );
+    expect(loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: 2.39 })).toBeNull();
+    // A file with no load recorded at all still says so, samples or not.
+    expect(loadOverCeiling({ cpuCount: CPU_COUNT })).toContain(
+      'the run did not record a load average'
+    );
     expect(
-      baselineBlockers({
-        ...baselineRun(),
-        machine: { cpuCount: CPU_COUNT, loadavg1: 2.39 },
-      })
-    ).toEqual([]);
-    // A file with no load recorded at all is still refused, samples or not.
-    expect(
-      baselineBlockers({ ...baselineRun(), machine: { cpuCount: CPU_COUNT } })
-    ).toContain('the run did not record a load average');
-    const withEmptySamples = {
-      ...baselineRun(),
-      machine: {
+      loadOverCeiling({
         cpuCount: CPU_COUNT,
         loadavg1: A1B_SPIKE,
         loadSamples: null,
-      },
-    };
-    expect(baselineBlockers(withEmptySamples)).toEqual([
-      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
-    ]);
+      })
+    ).toContain('load average 7.60');
   });
 
   it('samples the load every 30 s', () => {
@@ -949,10 +823,10 @@ describe('memory aggregation', () => {
   });
 });
 
-describe('a gated arm with no baseline value', () => {
+describe('a gated arm with no base value', () => {
   /**
    * The first run after a component lands has ratios to `rn-core` but no ratio to
-   * regress against, because the baseline cell was skipped. Silently reporting
+   * regress against, because the base run's cell was skipped. Silently reporting
    * that as `ok` reads like a pass, so the gate labels it and prints how the arm
    * compares to the control.
    */
@@ -973,8 +847,7 @@ describe('a gated arm with no baseline value', () => {
     const markdown = comparisonSections({
       run: { platform: 'ios', cells: makeRun().cells },
       base: { platform: 'ios', cells: base.cells },
-      mode: 'check',
-      label: 'baseline',
+      label: 'v0.9.0',
     }).markdown;
     expect(markdown).toContain('new arm');
     expect(markdown).toContain('rn-core');
@@ -1048,19 +921,6 @@ describe('native perf marks (--perf-marks)', () => {
     expect(detailSections({ platform: 'ios', cells })).toContain(
       'Native perf marks'
     );
-  });
-
-  it('never gates, so a marks run cannot mint a baseline', () => {
-    const reasons = baselineBlockers({
-      ...makeRun(),
-      dirty: false,
-      plan: 'full',
-      launches: 8,
-      problems: [],
-      machine: { loadavg1: 1, cpuCount: 14 },
-      perfMarks: true,
-    });
-    expect(reasons.some((reason) => reason.includes('perf marks'))).toBe(true);
   });
 
   it('narrows the schedule to the arm that has marks, and keeps :marks out of the cell key', () => {
@@ -1143,141 +1003,47 @@ describe('sample completeness (round 4)', () => {
     expect(summaryTable(run)).toContain('n/a');
     expect(MAX_MISSING_SAMPLE_RATIO).toBe(0.1);
   });
-
-  it('never mints a baseline from a cell with an unreportable metric', () => {
-    const blockers = baselineBlockers(
-      baselineRun({ 'nitro-ui': { missingPresented: 12 } })
-    );
-    expect(
-      blockers.some((reason) => reason.includes('n/a because too few'))
-    ).toBe(true);
-  });
-});
-
-describe('--check against a committed baseline', () => {
-  // `--check` reads `bench/baselines/<machine-label>/<deviceKey>.json` through
-  // `baselineTable()`/`baselineNoise()` rather than a run, and until round 4 no
-  // test went down that path - the reviewer had to script it by hand to prove
-  // the gate fires there at all.
-
-  it('mints a ratio-only baseline from a clean full-plan run', () => {
-    const baseline = buildBaseline(baselineRun());
-    expect(baseline.platform).toBe('ios');
-    expect(baseline.deviceKey).toBe('ios27-sim-testdevice');
-    const cell = baseline.cells['mount:nitro-ui:50'];
-    expect(cell.metrics.mountedNs.ratio).toBeCloseTo(1.1, 1);
-    // Ratio-only (D9): a baseline stores no absolute nanoseconds at all.
-    expect(JSON.stringify(baseline)).not.toContain('launchMedians');
-    expect(baselineBlockers(baselineRun())).toEqual([]);
-  });
-
-  it('fails a 2x nitro-ui regression against that baseline', () => {
-    const baseTable = baselineTable(buildBaseline(baselineRun()));
-    const baseNoise = baselineNoise(buildBaseline(baselineRun()));
-    const result = gate({
-      head: baselineRun({
-        'nitro-ui': { mounted: 220_000, presented: 260_000 },
-      }),
-      base: { cells: {} },
-      baseTable,
-      baseNoise,
-    });
-    expect(result.conclusiveFailure).toBe(true);
-    const failure = result.conclusiveFailures.find(
-      (entry) => entry.metric === 'mountedNs'
-    );
-    expect(failure.implementation).toBe('nitro-ui');
-    expect(failure.ratio).toBeCloseTo(2, 1);
-  });
-
-  it('passes the same baseline when nothing moved', () => {
-    const baseline = buildBaseline(baselineRun());
-    const result = gate({
-      head: baselineRun(),
-      base: { cells: {} },
-      baseTable: baselineTable(baseline),
-      baseNoise: baselineNoise(baseline),
-    });
-    expect(result.conclusiveFailures).toEqual([]);
-    expect(result.failures).toEqual([]);
-  });
 });
 
 /**
- * The Button cells (`bun bench --component button`, task G2).
- *
- * A component is part of the scenario cell (`mount.button`), so the one thing a
- * reviewer cannot see from the schedule alone is whether the gate still pairs a
- * cell with the `rn-core` control of the **same cell**. Cross that wire and every
- * Button ratio is computed against a Switch: a number, a confident one, and
- * meaningless. These fixtures are the case that must not silently happen, and the
- * reason the Button cells are gated at all (D15's targets are per `nitro-ui` arm).
+ * `--component` (`bun bench --component button`, task G2): a component is part of the
+ * scenario cell (`mount.button`), and the filter schedules one whole component.
  */
 describe('the Button cells (--component button)', () => {
   /**
-   * A Button run, plus a Switch run mixed into the same file.
-   *
-   * Both are here on purpose, and their controls are deliberately far apart
-   * (`mount` 100 us, `mount.button` 200 us): a gate that paired a Button arm with
-   * the Switch control would read 2.2x or 0.55x instead of 1.1x, so the ratios
-   * below are only reachable through the correct pairing.
+   * A cell is paired with the `rn-core` control of the **same cell**. Two components
+   * in one run, with controls far apart (`mount` 100 us, `mount.button` 200 us) and
+   * arms that sit at different ratios over their own control (1.1x and 1.5x): a
+   * Button arm divided by the Switch control reads 3.0x, and a Switch arm divided by
+   * the Button control 0.55x, so neither expected number is reachable by a crossed
+   * pairing.
    */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const scenario of ['mount', 'mount.button']) {
-        const scale = scenario === 'mount' ? 1 : 2;
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-      }
-      records.push(...memoryRecords({ implementation, ...values }));
-      records.push(
-        ...memoryRecords({
-          scenario: 'memory.button',
-          implementation,
-          ...values,
-        })
-      );
-    }
-    return {
+  it('divides a Button arm by the Button control, never the Switch control', () => {
+    const records = [
+      ...cellRecords({ scenario: 'mount', implementation: 'rn-core' }),
+      ...cellRecords({
+        scenario: 'mount',
+        implementation: 'nitro-ui',
+        mounted: 110_000,
+      }),
+      ...cellRecords({
+        scenario: 'mount.button',
+        implementation: 'rn-core',
+        mounted: 200_000,
+      }),
+      ...cellRecords({
+        scenario: 'mount.button',
+        implementation: 'nitro-ui',
+        mounted: 300_000,
+      }),
+    ];
+    const table = ratioTable({
       platform: 'ios',
       cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the Button component, as `--component button` runs it. */
-  function makeButtonRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) => componentOf(cell.scenario ?? key) === 'button'
-        )
-      ),
-    };
-  }
-
-  it('divides a Button arm by the Button control, never the Switch control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 220 us over a 200 us control. The Switch arm is also 1.1x over its own
-    // control, so a crossed wire shows up as 2.2x / 0.55x on one of these rows.
+    });
     expect(
       table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
+    ).toBeCloseTo(1.5, 4);
     expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
       1.1,
       4
@@ -1285,40 +1051,6 @@ describe('the Button cells (--component button)', () => {
     expect(table['mount.button:rn-core:50'].metrics.mountedNs.control).toBe(
       true
     );
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({ head: makeButtonRun(), base: makeButtonRun() });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the Button arm doubles', () => {
-    const result = gate({
-      head: makeButtonRun({
-        'nitro-ui': { mounted: 440_000, presented: 520_000 },
-      }),
-      base: makeButtonRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    // The Button cell is the one that moved; the Switch cell of the same arm is
-    // absent from a `--component button` run rather than quietly passing.
-    expect(mounted.key).toBe('mount.button:nitro-ui:50');
-  });
-
-  it('never gates a Button reference arm', () => {
-    const result = gate({
-      head: makeButtonRun({
-        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
-      }),
-      base: makeButtonRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
   });
 
   it('schedules one complete component per --component, never a mix', () => {
@@ -1369,7 +1101,7 @@ describe('the Button cells (--component button)', () => {
      * `n` is rows inside one container and it is priced at two row counts (20 and
      * 50, S6's question 6) where every other component is priced at one.
      * Since H2b every bench control is hostable, so no component's schedule is naturally
-     * free of the Host arm any more: the baseline is that same schedule with the scoped
+     * free of the Host arm any more: the base is that same schedule with the scoped
      * arms taken out, which measures the quantity instead of assuming a probe. The half
      * that rode on the probe is asserted in its own right below — the Host arm is scoped
      * to Android, so an iOS schedule must not carry one.
@@ -1401,295 +1133,10 @@ describe('the Button cells (--component button)', () => {
 });
 
 /**
- * The SegmentedControl cells (`bun bench --component segmented-control`, task G4).
- *
- * The same three claims the Button block makes, with a third component in the
- * file: a gate that pairs an arm with a *different* component's `rn-core` control
- * still produces confident, meaningless numbers, and G4 is the first component
- * added since that rule was written - so it is the one that has to prove the rule
- * still holds with five components in the plan rather than two.
- */
-describe('the SegmentedControl cells (--component segmented-control)', () => {
-  /**
-   * A run holding Switch, Button and SegmentedControl cells at once.
-   *
-   * Three components with controls deliberately far apart (`mount` 100 us,
-   * `mount.button` 200 us, `mount.segmented-control` 300 us), and every arm
-   * exactly 1.1x over the control of *its own* cell. A gate that crossed the
-   * pairing would read 3.3x or 0.3x on the rows below, so 1.1 is only reachable
-   * through the right one.
-   */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const scenarios = [
-      ['mount', 1],
-      ['mount.button', 2],
-      ['mount.segmented-control', 3],
-    ];
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const [scenario, scale] of scenarios) {
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-        const action = scenarioActionOf(scenario);
-        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
-        records.push(
-          ...memoryRecords({
-            scenario: `memory${suffix}`,
-            implementation,
-            ...values,
-          })
-        );
-      }
-    }
-    return {
-      platform: 'ios',
-      cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the SegmentedControl component, as `--component segmented-control` runs it. */
-  function makeSegmentedRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) =>
-            componentOf(cell.scenario ?? key) === 'segmented-control'
-        )
-      ),
-    };
-  }
-
-  it('divides a SegmentedControl arm by the SegmentedControl control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 330 us over a 300 us control - and *not* 330 over the 100 us Switch
-    // control (3.3x) or the 200 us Button one (1.65x).
-    expect(
-      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.segmented-control:rn-core:50'].metrics.mountedNs.control
-    ).toBe(true);
-    // The other two components are still paired with their own controls, so this
-    // is a fourth row joining the table rather than a row that moved the others.
-    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
-    expect(
-      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({
-      head: makeSegmentedRun(),
-      base: makeSegmentedRun(),
-    });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the SegmentedControl arm doubles', () => {
-    const result = gate({
-      head: makeSegmentedRun({
-        'nitro-ui': { mounted: 440_000, presented: 520_000 },
-      }),
-      base: makeSegmentedRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    expect(mounted.key).toBe('mount.segmented-control:nitro-ui:50');
-  });
-
-  it('never gates a SegmentedControl reference arm', () => {
-    const result = gate({
-      head: makeSegmentedRun({
-        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
-      }),
-      base: makeSegmentedRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
-  });
-
-  it('schedules every segmented cell and every arm', () => {
-    const segmented = buildSchedule({
-      plan: 'quick',
-      component: 'segmented-control',
-    });
-    expect([...new Set(segmented.map((entry) => entry.scenario))]).toEqual([
-      'mount.segmented-control',
-      'update.segmented-control',
-      'memory.segmented-control',
-    ]);
-    expect(new Set(segmented.map((entry) => entry.implementation))).toEqual(
-      armsFor('segmented-control')
-    );
-  });
-});
-
-/**
- * The DatePicker cells (`bun bench --component date-picker`, task G5).
- *
- * The same four claims as the SegmentedControl block, now with a *fourth*
- * component in the fixture: `componentOf` is what pairs an arm with the
- * `rn-core` control of its own cell, and a plan that grows is exactly when a
- * pairing bug would start dividing a date arm by a segmented control's number.
- * Scales are 1/2/3/4 microseconds apart per component, so a crossed pairing is
- * arithmetically unreachable: 1.1x only comes from the right control.
+ * The DatePicker cells (`bun bench --component date-picker`, task G5): the arms that
+ * have no DatePicker cell on Android (`ARMS_WITHOUT_COMPONENT`).
  */
 describe('the DatePicker cells (--component date-picker)', () => {
-  /**
-   * A run holding Switch, Button, SegmentedControl and DatePicker cells at once.
-   *
-   * Every arm is exactly 1.1x over the control of *its own* cell, and each
-   * component's control is a different size, so a ratio can only be 1.1 when the
-   * pairing is right.
-   */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const scenarios = [
-      ['mount', 1],
-      ['mount.button', 2],
-      ['mount.segmented-control', 3],
-      ['mount.date-picker', 4],
-    ];
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const [scenario, scale] of scenarios) {
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-        const action = scenarioActionOf(scenario);
-        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
-        records.push(
-          ...memoryRecords({
-            scenario: `memory${suffix}`,
-            implementation,
-            ...values,
-          })
-        );
-      }
-    }
-    return {
-      platform: 'ios',
-      cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the DatePicker component, as `--component date-picker` runs it. */
-  function makeDateRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) => componentOf(cell.scenario ?? key) === 'date-picker'
-        )
-      ),
-    };
-  }
-
-  it('divides a DatePicker arm by the DatePicker control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 440 us over a 400 us control - and not 440 over the Switch (4.4x), Button
-    // (2.2x) or SegmentedControl (1.47x) controls.
-    expect(
-      table['mount.date-picker:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.date-picker:rn-core:50'].metrics.mountedNs.control
-    ).toBe(true);
-    // The three earlier components keep their own pairings, so this is a fifth
-    // row joining the table rather than a row that moved the others.
-    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
-    expect(
-      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({ head: makeDateRun(), base: makeDateRun() });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the DatePicker arm doubles', () => {
-    const result = gate({
-      head: makeDateRun({
-        'nitro-ui': { mounted: 440_000, presented: 520_000 },
-      }),
-      base: makeDateRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    expect(mounted.key).toBe('mount.date-picker:nitro-ui:50');
-  });
-
-  it('never gates a DatePicker reference arm', () => {
-    const result = gate({
-      head: makeDateRun({
-        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
-      }),
-      base: makeDateRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
-  });
-
-  it('schedules every date-picker cell and every arm', () => {
-    const datePicker = buildSchedule({
-      plan: 'quick',
-      component: 'date-picker',
-    });
-    expect([...new Set(datePicker.map((entry) => entry.scenario))]).toEqual([
-      'mount.date-picker',
-      'update.date-picker',
-      'memory.date-picker',
-    ]);
-    expect(new Set(datePicker.map((entry) => entry.implementation))).toEqual(
-      armsFor('date-picker')
-    );
-  });
-
   /**
    * `@expo/ui` has no mountable date *field* on Android: its only picker form is
    * the inline M3 calendar, whose month pager is horizontally scrollable, so the
@@ -1735,157 +1182,6 @@ describe('the DatePicker cells (--component date-picker)', () => {
     });
     expect(new Set(androidSwitch.map((entry) => entry.implementation))).toEqual(
       new Set(IMPLEMENTATIONS)
-    );
-  });
-});
-
-/**
- * The Picker cells (`bun bench --component picker`, task G6).
- *
- * The same four claims the SegmentedControl block makes, with a fourth component
- * in the file: G6 is the first component added since the pairing rule was
- * written against six components, and the claim that has to survive that is that
- * a Picker arm is divided by a *Picker* control - a crossed wire would read a
- * ratio no arm in here can produce.
- */
-describe('the Picker cells (--component picker)', () => {
-  /**
-   * A run holding Switch, Button, SegmentedControl and Picker cells at once.
-   *
-   * Four components whose controls are deliberately far apart (`mount` 100 us,
-   * `mount.button` 200 us, `mount.segmented-control` 300 us, `mount.picker`
-   * 400 us), and every arm exactly 1.1x over the control of *its own* cell. A
-   * gate that crossed the pairing would read 4.4x or 0.25x on the Picker rows,
-   * so 1.1 is only reachable through the right one.
-   */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const scenarios = [
-      ['mount', 1],
-      ['mount.button', 2],
-      ['mount.segmented-control', 3],
-      ['mount.picker', 4],
-    ];
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const [scenario, scale] of scenarios) {
-        const action = scenarioActionOf(scenario);
-        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-        if (action === 'mount') {
-          records.push(
-            ...memoryRecords({
-              scenario: `memory${suffix}`,
-              implementation,
-              ...values,
-            })
-          );
-        }
-      }
-    }
-    return {
-      platform: 'ios',
-      cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the Picker component, as `--component picker` runs it. */
-  function makePickerRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    const cells = Object.fromEntries(
-      Object.entries(run.cells).filter(
-        ([key, cell]) => componentOf(cell.scenario ?? key) === 'picker'
-      )
-    );
-    // A run that came back empty would make every `gate()` assertion below pass
-    // by saying nothing, so the filter itself is part of what is under test.
-    if (Object.keys(cells).length === 0) {
-      throw new Error(
-        'the component-scoped filter found no Picker cells - ' +
-          '`componentOf` is crossed, and these cases would be vacuous'
-      );
-    }
-    return { platform: 'ios', cells };
-  }
-
-  it('divides a Picker arm by the Picker control, never another control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 440 us over a 400 us control - and *not* 4.4x over the Switch control or
-    // 2.2x over the Button one.
-    expect(
-      table['mount.picker:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(table['mount.picker:rn-core:50'].metrics.mountedNs.control).toBe(
-      true
-    );
-    // The other three components keep their own pairing, so this is a fifth row
-    // joining the table rather than a row that moved the others.
-    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
-    expect(
-      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({ head: makePickerRun(), base: makePickerRun() });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the Picker arm doubles', () => {
-    const result = gate({
-      head: makePickerRun({
-        'nitro-ui': { mounted: 880_000, presented: 1_040_000 },
-      }),
-      base: makePickerRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    expect(mounted.key).toBe('mount.picker:nitro-ui:50');
-  });
-
-  it('never gates a Picker reference arm', () => {
-    const result = gate({
-      head: makePickerRun({
-        'expo-ui-shared-host': { mounted: 1_280_000, presented: 1_560_000 },
-      }),
-      base: makePickerRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
-  });
-
-  it('schedules every picker cell and every arm', () => {
-    const picker = buildSchedule({ plan: 'quick', component: 'picker' });
-    expect([...new Set(picker.map((entry) => entry.scenario))]).toEqual([
-      'mount.picker',
-      'update.picker',
-      'memory.picker',
-    ]);
-    expect(new Set(picker.map((entry) => entry.implementation))).toEqual(
-      armsFor('picker')
     );
   });
 });

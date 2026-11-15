@@ -8,27 +8,23 @@ the task merges. Open follow-ups are in `FOLLOWUPS.md`.
 
 Name · ID · branch · pull request · next action.
 
-- Tooling and tests that nothing uses, removed · W3 · `task/W3-tooling-removal` · #77 · device
-  gates, then merge.
-- The comment sweep for the files #77 also changes · X40 · `task/X40-comments` · #78 · merges
-  with #77.
-- Two unused lease-pool features removed · X38 · `task/X38-lease-unused-features` · #79 · device
-  gates, then merge.
-- The bench compares against the last release · X36 · `task/X36-bench-compare` · #80 · device
-  gates, then merge; the first comparison run on a device is still to do.
-- Android real-input on e2e · X35 · `task/X35-real-input-e2e` · none yet · in progress on a
-  device pair.
+- Android real-input on e2e · X35 · `task/X35-real-input-e2e` · none yet · device proof in
+  progress; then review and the merge gates.
 - Harness tests that measure or repeat, and the closed dwell probe, removed · X37 ·
-  `task/X37-harness-trims` · none yet · in progress on a device pair.
+  `task/X37-harness-trims` · #82 · reviewed; merge gates, with X35.
 
 ## Recently merged
 
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-15 Nothing user-visible: tooling and tests that nothing uses removed (W3, #77); the rest
+  of the comment sweep (X40, #78); two unused lease-pool features removed (X38, #79); the bench
+  compares against the last release in place of committed baselines (X36, #80); task records
+  leave git at merge, and ledgers and task screenshots are no longer committed.
 - 11-15 Nothing user-visible: short agent rules and skills, a worktree lister, an outside
-  watchdog and a disk floor for device gates (W1, #75); one design document, task records kept
-  14 days, failure logs no longer committed (W2, #76); component pages, upstream defects and
+  watchdog and a disk floor for device gates (W1, #75); one design document, failure logs no
+  longer committed (W2, #76); component pages, upstream defects and
   architecture notes rewritten as current fact (X41, #81); a comment sweep over the sources
   (X40, part of #78).
 - 11-15 Slider: Android screen-reader steps land on the value that was read out (X33, #72).
@@ -90,6 +86,6 @@ pull request number is left out where the records do not carry one.
 - Release: two patch changesets are on `main` since 0.9.0 (`x32-review-debt`,
   `slider-reader-steps-float`). Next is the Version Packages pull request, then the npm approval
   (D28). Check `npm view` before saying anything about it.
-- Records: `node scripts/task-records.mjs` keeps 12 old tasks only because a `task/<ID>-...`
-  branch of theirs was never merged (prototype and fix branches: G12, S2, S3, S5, S6, S6b, T16,
-  T17, T18, T19, X25, X29). Deleting a branch lets its task's records be archived.
+- Records: `node scripts/task-records.mjs` keeps G12, S2, S3, S5, S6, S6b and T19 while their
+  unmerged prototype branches are live, and FIX3 and T18 because each has a brief and no report.
+  Deleting a branch, or the brief, lets the records be archived.

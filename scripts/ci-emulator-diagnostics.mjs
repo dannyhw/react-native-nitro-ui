@@ -1,45 +1,12 @@
 #!/usr/bin/env node
 /**
- * The emulator boot diagnostics the Android harness job uploads.
+ * Collects the emulator boot diagnostics the Android harness job uploads.
  *
- * Why this is a script and not the step body it replaces: run 41269235234 got what it
- * asked for and then hung. `Run Harness tests` failed at 03:46, and the next step —
- * `Collect emulator boot diagnostics`, `if: always()` — ran until the run was cancelled
- * **90 minutes later**. A diagnostics step is the one step that must never do that: it is
- * the evidence for the failure above it, and a job that produces no artifact and no log
- * tells nobody anything about a run that already cost an hour and a half.
+ *   node scripts/ci-emulator-diagnostics.mjs [--out <dir>]   (default: harness-diag)
  *
- * Two rules follow from that, and they are the whole design:
- *
- *  1. **Nothing may block indefinitely.** Every command is spawned with its own deadline
- *     and killed when it passes it. `timeout(1)` would have been the shell answer and is
- *     not one: these tests run the step for real, on macOS, where `timeout` is not
- *     installed — a guard nobody can execute is not a guard.
- *  2. **Cheap evidence goes first.** Reading `date`, the AVD's `config.ini` and qemu's own
- *     log cannot block, so they run before anything that talks to an emulator or to
- *     `sudo`. On a machine where the emulator is wedged, that ordering is the difference
- *     between an artifact with the GPU mode in it and an empty directory — which is what
- *     the GPU question this job exists to answer needs.
- *
- * What could hang, all of it now bounded, in the order it was suspected:
- *   - `adb devices` waiting on a server that is starting, and `-e shell …` waiting for a
- *     device that will never arrive — the emulator has just died under the harness;
- *   - `adb logcat` with no `-d`, which is a stream that never ends (kept `-d`, and
- *     bounded as well: a flag can be dropped by the next edit, a deadline cannot);
- *   - `sudo -n dmesg` — `-n` should refuse rather than prompt, but a `sudo` that prompts
- *     reads a tty that never answers;
- *   - anything else, because bounding one command and not the rest is how the first
- *     version of a step like this gets written.
- *
- * The step also carries `timeout-minutes: 5` (and the job a whole-job one), which is the
- * belt for a runner that stops responding to everything, including to being cancelled.
- * This script's own budget is inside that.
- *
- * Exit status is 0 whatever happened, and the last line counts the files collected: the
- * step's job is to report, and `if-no-files-found: error` on the upload is what makes an
- * empty artifact red.
- *
- * @since F8 fix round 2, after CI dispatch 41269235234.
+ * Every command runs under its own deadline and an overall budget
+ * (`NITRO_UI_DIAG_COMMAND_TIMEOUT_MS`, `NITRO_UI_DIAG_BUDGET_MS`), and file reads
+ * come before anything that talks to the emulator. Always exits 0.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -47,23 +14,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-/**
- * Per-command and overall budgets. Both overridable so a test can prove the bound in
- * seconds instead of waiting half a minute per hanging command — and, per this repo's own
- * rule about fakes that change timing, the shortened form is paired with a second case at
- * the *real* numbers (a tool that is merely slow), so a script that only honoured a small
- * deadline could not pass. Every timeout below is expressed as a multiple of
- * {@link COMMAND_TIMEOUT_MS} rather than as a fresh literal, so one knob moves them all
- * and no command can end up longer than the thing meant to bound it.
- */
+/** Per-command deadline. Every timeout below is a multiple of it. */
 const COMMAND_TIMEOUT_MS = Number(
   process.env.NITRO_UI_DIAG_COMMAND_TIMEOUT_MS ?? 20_000
 );
-/**
- * Overall budget: the step's 5 minutes minus a minute to write and exit. A machine where
- * every `adb` call times out spends this and stops, with what it had already collected
- * written to disk.
- */
+/** Overall budget: the CI step's 5 minutes minus a minute to write and exit. */
 const TOTAL_BUDGET_MS = Number(process.env.NITRO_UI_DIAG_BUDGET_MS ?? 240_000);
 
 const argv = process.argv.slice(2);
@@ -73,17 +28,14 @@ const OUT =
   outIndex >= 0 ? String(argv[outIndex + 1] ?? 'harness-diag') : 'harness-diag';
 
 const startedAt = Date.now();
-/** Commands that gave no answer, in the shape both the log and the assertions read. */
+/** Commands that gave no answer. */
 const incomplete = [];
 const elapsed = () => Date.now() - startedAt;
 const budgetLeft = () => TOTAL_BUDGET_MS - elapsed();
 
 /**
- * Run one command, bounded, and return the text the log should carry for it.
- *
- * Never throws, never blocks past its deadline, and never lets a failure end the run: the
- * caller is assembling an evidence file, and one absent tool must not cost it the other
- * seven facts.
+ * Runs one command under a deadline and returns the text the log should carry
+ * for it. Never throws.
  *
  * @param {string[]} command
  * @param {{timeoutMs?: number, label?: string}} [options]
@@ -100,24 +52,16 @@ function run(command, { timeoutMs = COMMAND_TIMEOUT_MS, label } = {}) {
     encoding: 'utf8',
     timeout: Math.min(timeoutMs, budgetLeft()),
     killSignal: 'SIGKILL',
-    // No stdin: a tool that wants a password or a keypress gets EOF rather than an open
-    // tty. `sudo -n` is supposed to refuse on its own; this is the belt.
+    // No stdin: a tool that wants a password or a keypress gets EOF, not a tty.
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const combined = `${result.stdout ?? ''}${result.stderr ?? ''}`.replace(
     /\s+$/u,
     ''
   );
-  /**
-   * Killed by our own deadline. `spawnSync` reports `error` (ETIMEDOUT) on some versions
-   * and only `signal` on others, so both are handled rather than either.
-   *
-   * Whatever the tool managed to print is kept and labelled, because *that* is the
-   * evidence a hang produces: `adb` naming the device it is waiting for, or logcat's last
-   * lines before the emulator stopped writing, is the difference between "adb hung" and
-   * "adb hung on `devices`, having printed nothing at all". Discarding the partial output
-   * when a kill happens is the mistake that left the 90-minute run with an empty log.
-   */
+  // Killed by the deadline: `spawnSync` reports `error` (ETIMEDOUT) on some
+  // versions and only `signal` on others. Partial output is kept, because what
+  // a tool printed before it hung is the evidence.
   if (result.error != null || result.signal != null) {
     incomplete.push(name);
     const reason =
@@ -138,7 +82,7 @@ function run(command, { timeoutMs = COMMAND_TIMEOUT_MS, label } = {}) {
   return combined;
 }
 
-/** The first executable `adb` this machine has, found the way the shell version did. */
+/** The first `adb` this machine has. */
 function findAdb() {
   const fromPath = (process.env.PATH ?? '')
     .split(path.delimiter)
@@ -181,14 +125,8 @@ fs.writeFileSync(
   'utf8'
 );
 
-/**
- * The AVD's real hardware configuration, `hw.gpu.mode` included — the number this job's
- * GPU change is judged by, and the reason this section is above the `adb` ones: it is a
- * file read, so it is the evidence most likely to still exist on a machine whose emulator
- * is wedged. First point in the job where the file exists, too: the harness creates or
- * restores the AVD after the preflight, so asking there printed "no such file" on a cache
- * miss (41256853746).
- */
+// The AVD's hardware configuration, `hw.gpu.mode` included. A file read, so it
+// comes before the `adb` sections and survives a wedged emulator.
 const avdName = run(['node', path.join('scripts', 'ci-avd-name.mjs')], {
   timeoutMs: COMMAND_TIMEOUT_MS / 2,
 }).trim();
@@ -258,13 +196,8 @@ appendHost(
         ]),
   ].join('\n')
 );
-/**
- * The clock and locale the emulator booted with. The Android job's DatePicker DST rule
- * prints `DST PREMISE MISSING` on a zone with no transition, and the zone is a *device*
- * setting (`persist.sys.timezone`) that nothing in this repo passes — Android's
- * `appLaunchOptions` has `extras` only, no environment. Read from the device rather than
- * asserted, so the artifact is the answer.
- */
+// The zone and locale the emulator booted with. They are device settings that
+// nothing in this repo sets, so they are read and recorded.
 appendHost(
   [
     '== device clock and locale ==',
@@ -280,26 +213,15 @@ appendHost(
   ].join('\n')
 );
 /**
- * Whether the text above is a command's *answer* or the record of it not answering.
- *
- * A killed command keeps whatever it printed and appends the reason, so the reason can
- * be anywhere in the string rather than at the start — testing the prefix would let a
- * `sudo` that printed one line and then hang be filed as a healthy `dmesg`, which is the
- * mistake in the other direction: the log would then say "nothing mentions kvm" about a
- * machine that never got as far as answering.
+ * Matches the record of a command not answering. A killed command keeps what it
+ * printed and appends the reason, so the reason can be anywhere in the string.
  */
 const UNANSWERED =
   /(\bno output \(|<timed out after |\bgave up \(|skipped, the diagnostics budget)/u;
 
-/**
- * The kernel ring needs CAP_SYSLOG, which the job user does not have (41256853746's plain
- * `dmesg` printed "read kernel buffer failed: Operation not permitted" twice). The runners
- * grant the tool user passwordless sudo, and `-n` means "refuse rather than prompt" — but
- * a bounded call is the difference between that being true, and it being true on the day
- * the diagnostics matter. The `kvm|binder` filter happens here rather than in a shell
- * pipeline, so there is one process to bound rather than two, and one read of the ring
- * rather than two.
- */
+// The kernel ring needs CAP_SYSLOG, which the job user lacks, hence `sudo -n`.
+// The `kvm|binder` filter runs here instead of in a shell pipeline, so there is
+// one process to bound.
 const dmesg = run(['sudo', '-n', 'dmesg'], { label: 'sudo -n dmesg' });
 const unanswerable = UNANSWERED.test(dmesg);
 appendHost(
@@ -317,10 +239,7 @@ appendHost(
   ].join('\n')
 );
 
-/**
- * `-d`: dump and exit. Without it this is a stream that never ends, which is one of the
- * shapes this step hung in — and the reason it is bounded as well as flagged.
- */
+// `-d`: dump and exit. Without it logcat is a stream that never ends.
 const logcatPath = path.join(OUT, 'logcat.txt');
 if (adb != null) {
   const dump = run([adb, '-e', 'logcat', '-d', '-v', 'brief'], {

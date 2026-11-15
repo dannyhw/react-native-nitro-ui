@@ -3,14 +3,14 @@
 Everything in this file is a contract: these are the exact commands the
 project's gates run. If you change one, change it here too.
 
-**Four of the six workflows are on; the two that need a device are off.** `gh
+**Four of the five workflows are on; the one that needs a device is off.** `gh
 workflow list --all` says `CI`, `Changeset status`, `Release` and `Release tag` are
 active: the first runs `bun run check`, the host native tests and an Android debug
 build on every push to `main` and every pull request, the second adds a warning (never a
 red check) to a pull request that changes library code without a changeset, and the
 third and fourth run
-the release path (see "Releasing"). `Bench` and `Smoke` are disabled, and their
-triggers are `workflow_dispatch` only anyway — hosted runners make device jobs slow
+the release path (see "Releasing"). `Smoke` is disabled, and its
+trigger is `workflow_dispatch` only anyway — hosted runners make device jobs slow
 and noisy, and the device gates that decide a task run locally (D22, D25).
 So the harness, real-input, smoke and bench suites a change cites are ones someone
 ran locally, and `bun run check` on your machine is still the first gate a change
@@ -42,16 +42,13 @@ install (hoisted layout, see `bunfig.toml`):
 bun install
 ```
 
-To check a machine against all of the above (plus `gh` push access, the agent
-CLIs, disk and load), run the doctor. `--setup` also creates two simulator/AVD
+To check a machine against all of the above (plus `gh` push access, disk and
+load), run the doctor. `--setup` also creates two simulator/AVD
 pairs (`nitro-ui A`/`B`, `nitroui_a`/`b`) and writes the `~/.nitro-ui/devices.json`
-the lease script reads (see "Leasing a device or port"). It also creates one
-simulator per _other_ installed iOS runtime (`nitro-ui iOS 26.5`, …) for look
-checks, and lists it under `iosRuntimes` in `devices.json` - on a machine whose
-file already exists too, which is the one edit it makes to that file (see "Older
-iOS runtimes, for look checks"). It only adds: it never touches an existing
-device, never changes an entry already in `devices.json`, never installs SDK
-packages or accepts licenses (it prints the command), and never boots anything.
+the lease script reads (see "Leasing a device or port"). It only adds: it never
+touches an existing device, never changes an entry already in `devices.json`, never
+installs SDK packages or accepts licenses (it prints the command), and never boots
+anything.
 
 What that file can say is in `scripts/devices.example.json`, so copy it rather than
 typing it. Besides the pool it carries the machine's two limits: `maxDeviceLeases`
@@ -101,7 +98,6 @@ Run from the repo root.
 | Command                         | What it does                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------------ |
 | `bun run check`                 | **All static gates.** Run this before pushing.                                 |
-| `bun run check:serial`          | The same steps as one `&&` chain, for timing the runner against it             |
 | `bun run typecheck`             | `tsc` over the library and example                                             |
 | `bun run bench:typecheck`       | `tsc` over `bench/` for each platform                                          |
 | `bun run lint`                  | ESLint, including the local perf-contract rules                                |
@@ -139,7 +135,7 @@ Run from the repo root.
 | `bun run build:app`             | Build + stamp the example app for one platform (see below)                     |
 | `node scripts/worktrees.mjs`    | List this clone's worktrees and why each is kept (`--prune` removes the rest)  |
 | `node scripts/watchdog.mjs`     | Report what changed on the machine and project since the last run (`--status`) |
-| `node scripts/task-records.mjs` | `--archive`: old records to `~/.nitro-ui`, outside git; staged, not committed  |
+| `node scripts/task-records.mjs` | `--archive`: a merged task's records to `~/.nitro-ui`; staged, not committed   |
 | `bun run lease <command>`       | Device/port leases for this machine: `acquire`, `release`, `list`              |
 | `bun run example <script>`      | Run an `example/` script, e.g. `bun run example ios`                           |
 | `bun run storybook:ios`         | The example app in Storybook mode (`:android`; see `example/README.md`)        |
@@ -154,10 +150,7 @@ autolinking:check, prepare, api-extractor:check, publint, manifest:check,
 readme:check — run through a small scheduler (`scripts/check.mjs` + the step graph in
 `scripts/check-steps.mjs`), so independent ones overlap: up to half the machine's
 cores at once, capped at 4 (`--jobs N` to override — the heavy steps already fan out
-internally, so more slots cost context-switching, not time). The _steps_ and their
-order are unchanged, and
-`scripts/__tests__/check-runner.test.js` fails if the graph and `check:serial` ever
-disagree. `bun run check:serial` is the plain `&&` chain, for comparing the two.
+internally, so more slots cost context-switching, not time).
 `perf:renders` is part of `check` on purpose: render counts are deterministic, so they
 can block, unlike anything measured on a device.
 
@@ -259,12 +252,11 @@ to the measured size, and a recycle that fully resets — are driven from
 - `real-input:android` sweeps the a11y rule over the screen your tab names, and
   `checkA11yTable` fails `check` when a manifest has no case, or its case points at a
   tab or a label that no longer exists;
-- `coverageMatrix` prints the rule × control table for your report, and
-  `checkCoverage` refuses a cell that is neither covered nor marked `failing` with a
-  line that exists in `docs/tasks/FOLLOWUPS.md`.
+- `coverageMatrix` builds the rule × control table, and `checkCoverage` refuses a
+  control with no row or a cell with no verdict.
 
 So the new control is _in_ the suite automatically; what it does with that depends on
-the control. If a rule fails on it, add a `FOLLOWUPS.md` line and a row to the matching
+the control. If a rule fails on it, add a row to the matching
 exemption list (`A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs`, or
 `CONFORMANCE_EXEMPTIONS` in `scripts/conformance-core.mjs`) rather than fixing the
 control in an unrelated round — the suite then reports it as known debt instead of
@@ -511,7 +503,7 @@ Six rules are enforced rather than written down:
   the queue: it takes a pair now if nothing older is waiting, and is refused if
   something is. `list` shows the queue (task, waiting since, position), and a
   refusal names who is in front of you;
-- `--exclusive` - for a bench run or a baseline mint, which needs a quiet
+- `--exclusive` - for a bench session, which needs a quiet
   machine - **waits until every other lease has ended**, then holds every pair;
   a waiting exclusive request keeps its place in the queue while it does, and it
   holds _new_ leases back until the machine goes quiet, so it is the one request the
@@ -562,7 +554,7 @@ these rules apply to it specifically:
   may not stop - a server on a port it was never given - is no reason to linger:
   once the ledger line is written the gate drops its read ends on the run's output
   and exits with its code, so `wait` never reports a finished gate as running.
-- an **`--exclusive`** acquire (a bench, a baseline mint) does **not** wait on
+- an **`--exclusive`** acquire (a bench session, including a release comparison) does **not** wait on
   Metro ports, and says why, naming the process. A bench builds a Release app with
   the bundle inside it, so it never uses the port; waiting an hour for one would
   also block every other task behind the pending-exclusive marker. The device reap
@@ -617,57 +609,12 @@ real one.
 task means one task's `adb` never queues behind another's, and it is what makes
 `adb kill-server` on the default port somebody else's problem - so don't.
 
-A lease is for the platform it names. `--platform ios` boots and resets only the
-pair's simulator, and `--platform android` only its emulator: the hand-off used to
-reset the whole pair, so an iOS-only lease ran `pm clear` on an emulator another
-task may have been using (X20 item 2). A re-acquire narrows to what the lease was
-taken for, so re-running `acquire --boot` without `--platform` does not widen an
-iOS lease to the emulator either.
-
-### Older iOS runtimes, for look checks
-
-The pairs run the gates on one iOS runtime. A design question is sometimes about
-another one - how a SwiftUI control looks on 26.5, or whether 27.1 changed it - so
-the pool also holds **one simulator per other installed runtime** (D42 item 1):
-
-```sh
-node scripts/doctor.mjs --setup                                  # creates them, adds them to devices.json
-node scripts/lease.mjs acquire --task G20 --ios-runtime 26.5 --boot
-node scripts/lease.mjs release G20                               # it stays booted, like a pair
-```
-
-```json
-"iosRuntimes": [
-  {
-    "id": "ios-26.5",
-    "ios": { "name": "nitro-ui iOS 26.5", "udid": "<simulator udid>", "system": "26.5" },
-    "metroPort": 8297
-  }
-]
-```
-
-- **For screenshots and probes only.** The env file exports
-  `NITRO_UI_LEASE_IOS_RUNTIME`, and `gate.mjs` refuses every gate that drives a
-  device under it (harness, real-input, smoke installs, bench): merge evidence is
-  measured on the pairs' runtime, so a row recorded on 26.5 would answer the wrong
-  question. `check` still runs. Install and launch by hand, as in "README
-  screenshots".
-- **iOS only, and never exclusive.** `--ios-runtime` implies `--platform ios` and
-  refuses `--platform android|both` and `--exclusive`.
-- **Kept apart from the pairs.** An acquire without `--ios-runtime` never gets one
-  of these, and `--ios-runtime` never gets a pair. A task holds one lease, so a
-  task that holds a pair and wants a look check leases it under a second name
-  (`--task G20-26.5`); the refusal names the command.
-- **The same rules as any device lease.** It counts against `maxDeviceLeases` (a
-  simulator boot is the load D13 limits, whatever the runtime), `--boot` boots
-  and resets it, `release` leaves it booted, only `lease.mjs reap` or an
-  `--exclusive` acquire powers it off, and an exclusive lease holds it with the
-  pairs.
-- **What `--setup` picks.** Every available iOS runtime the pairs do not use, on
-  an iPhone 17 where the runtime has one and otherwise the first iPhone it lists
-  (27.1 shipped with a single device type). Remove a runtime with Xcode and its
-  entry stays in `devices.json` until you delete it; `doctor` then reports the
-  missing simulator.
+A lease is for the platform it names. `--platform ios` boots only the pair's
+simulator, and `--platform android` only its emulator: the emulator may be another
+task's Android device at that moment, and an iOS-only lease has no business asking
+anything of it (X20 item 2). A re-acquire narrows to what the lease was taken for,
+so re-running `acquire --boot` without `--platform` does not widen an iOS lease to
+the emulator either.
 
 ### The lease owns device lifecycle (X11)
 
@@ -694,18 +641,17 @@ What that means in practice:
 - **Booting is opt-in.** `--boot` (or `NITRO_UI_LEASE_BOOT=1`, which is what an
   agent's shell should set) boots what is down, waits for `adb devices` /
   `simctl list` rather than for the boot process, waits for the load average to
-  fall under the bench's settle ceiling, and resets the example app. Without it
-  a lease only reserves names - which is what a test, a CI runner or a bench
+  fall under the bench's settle ceiling. Without it a lease only reserves names - which is what a test, a CI runner or a bench
   host wants. An `--exclusive` lease ignores that variable and boots only for a
   typed `--boot`: a bench host is the host most likely to have it set.
 - **Nothing reaps passively.** `acquire`, `release` and `list` never power a
-  device off and never reset one, not even one that is idle past
+  device off, not even one that is idle past
   `idleShutdownMinutes` (`devices.json`, default 30). Devices are powered off in
   exactly two places: when you type `node scripts/lease.mjs reap`, and when an
   `--exclusive` acquire promises its bench a quiet machine. There is no daemon,
   and no lease command kills on your behalf, because `list` is the command every
   task runs most often and a `list` that reaps is a reaper in every shell.
-  `--no-reap` opts out of even the explicit reap, and `NITRO_UI_LEASE_BOOT=0`
+  `NITRO_UI_LEASE_BOOT=0`
   takes the whole device lifecycle offline for a machine that manages its own
   devices. `reap --idle-minutes N` overrides the configured limit for that one
   call - `0` is "off now", which is what you want when the machine is yours again
@@ -721,16 +667,14 @@ What that means in practice:
   trace - and 31 idle minutes is ordinary work. The way to get a leased device
   powered off is to release its lease, not to pass a flag in your own shell;
   `list` names whose it is.
-- **What a reset does not cover.** The between-task reset clears the example
-  app's data (`pm clear`; `simctl uninstall` plus a check that the data container
-  is gone). It does not clear the iOS **keychain** or the **privacy-consent
-  (TCC) grants** - `simctl uninstall` leaves both. `simctl privacy` can reset the
-  second, but only per service: you have to know which ones a run touched, which
-  is not something the pool can know, so it is not run per hand-off. A warm
-  pooled device can therefore inherit a permission prompt somebody already
-  answered. The reset is storage-complete, not state-complete; a test that
-  asserts a permission prompt appears needs a freshly created device, not a
-  pooled one.
+- **A warm device keeps app state.** The pool powers devices on and off and
+  touches nothing inside them, so the example app's data, the iOS **keychain**
+  and the **privacy-consent (TCC) grants** all carry over from whoever used the
+  pair last. `simctl privacy` can clear the grants, but only per service: you
+  have to know which ones a run touched, which is not something the pool can
+  know. A run that needs clean app state therefore clears or reinstalls the app
+  itself, and a test that asserts a permission prompt appears needs a freshly
+  created device, not a pooled one.
 - **A device is only ever powered off if `devices.json` names it**, and never
   on a reserved serial. The pool shuts down what the machine _declared_, never
   something it merely observed booted. And it never acts on the serial a state
@@ -743,18 +687,15 @@ What that means in practice:
   reap cannot power off an emulator mid-suite, and a second gate aimed at the
   same device is refused before it starts. Every kill re-checks that claim at the
   moment it acts, so a lease and claim taken _while a reap is running_ are seen:
-  the decision is not allowed to be minutes old. The between-task reset does the
-  same and skips a device with a live claim, which is what stops a task
-  re-running `acquire --boot` in a second shell - the documented way to
-  regenerate its env file - from wiping its own running suite.
+  the decision is not allowed to be minutes old.
   `NITRO_UI_GATE_DEVICE_FORCE=1` runs anyway; a bench that wants the machine to
   itself uses `--exclusive`, which powers off every pool device no _other_ lease
   holds. That power-off happens with or without `--boot`; the boot does not.
   `--boot` is what brings up the pair the lease hands you, and an exclusive
   `--boot` has to name the half it warms (`--platform android|ios|both`) or it is
   refused: `--platform` defaults to `both`, so a line that never said which half
-  would cold-boot a simulator under an Android baseline - minutes of load, and a
-  simulator idling through the rest of the mint (X16 item 2).
+  would cold-boot a simulator under an Android run - minutes of load, and a
+  simulator idling through the rest of it (X16 item 2).
   `NITRO_UI_LEASE_BOOT=1` does not boot an exclusive lease either: only a typed
   `--boot` does, because a bench host is exactly the host that keeps that
   variable in its profile. One exception is made to the power-off, and only when
@@ -763,7 +704,7 @@ What that means in practice:
   killing it costs the bench a cold boot of the device it is about to measure on
   (X16 item 3). Ask for no boot and the promise stays whole: the machine is
   powered down however warm it was. An exclusive acquire used to skip the
-  hand-off altogether, so the documented baseline-mint line below left both of
+  hand-off altogether, so the bench line then current left both of
   its simulators off and the bench host booted its leased device by hand
   (X16 item 2).
 - **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
@@ -881,17 +822,10 @@ platforms, and so does any code path the mapping does not claim: unknown is
 expensive, never free. `table --full` adds the log path to every
 row and, under it, the per-step durations of the `check` run — `check` is the one
 gate long enough that its total is not an actionable number, so the ledger keeps
-what each of the steps cost. At merge, `need` may accept a `check` from
-another branch's ledger when it passed on this exact code tree and its commit is
-merged here (see `docs/agents/gates.md`, "Reusing a `check` at merge"); `--no-reuse`
-asks the strict question. A task report starts from
-`docs/tasks/REPORT-TEMPLATE.md`, and `gate.mjs export --task <id>` commits the
-ledger beside it — **merging**, not rewriting (X30): lines already in
-`docs/tasks/<id>/gates.jsonl` are kept byte-for-byte and this branch's lines are
-appended, a line already there is not written twice (identity: ts + gate + code
-tree), and a failure excerpt that is already there is left alone. A fix round
-therefore adds its runs instead of erasing round 1's. The rules are in the header of `scripts/gate.mjs` and in
-`scripts/gate-core.mjs`.
+what each of the steps cost. A task report starts from
+`docs/tasks/REPORT-TEMPLATE.md` and carries that table; the ledger itself stays
+local and is never committed. The rules are in the header of `scripts/gate.mjs` and
+in `scripts/gate-core.mjs`.
 
 A run's **log** is not in the worktree: it goes to the clone's gate log store,
 `<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, which every
@@ -899,22 +833,11 @@ worktree of the clone shares and `git worktree remove` leaves alone, so removing
 merged worktree cannot lose the evidence (`gate.mjs logs [--branch b] [--failed]
 [--all]` lists it; 35 days, then 64 MiB, oldest first). Each run's record also names
 the worktree that started it, so `wait` and `status` follow _your_ background gate
-when several worktrees are running one at the same time. `export --task <id>` also
-writes a scrubbed excerpt of every **failed** run into
-`docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names, the assertion
-messages, the last 150 lines, the load at both ends and, for a failed device gate,
-the booted simulators, the leased emulator's `adb get-state`, the lease list, load1
-and the app's last `logcat` lines. Any device identifier in that block that is not
-this run's own lease becomes `<other device>`, so another task's simulator or the
-maintainer's emulator is never written down. It names that file in the ledger line's
-`failureLogPath`. Passing runs get no file. The `failures/` folders are ignored by git:
-an excerpt is written locally and never committed. An excerpt holds no credential
-and no machine identity: tokens, `Authorization:`/`Cookie:` headers (whole, any
-scheme), `.npmrc` `_auth=` lines, `curl -u user:pass`, `user:pass@host`, a config
-file's whole `password: some phrase`, email addresses and Stripe/Anthropic/GitLab
-token shapes are replaced, and your home, scratch directory, username, hostname,
-repo and store paths — and anyone else's `/Users/<name>` or `/var/folders/<hash>`
-— are written as `~`, `<tmp>`, `<user>`, `<host>`, `<repo>` and `<store>`.
+when several worktrees are running one at the same time. Logs are not committed.
+A failed device gate appends to its
+log the booted simulators, the leased emulator's `adb get-state`, the lease list,
+load1 and the app's last `logcat` lines. Any device identifier in that block that is
+not this run's own lease becomes `<other device>`.
 
 ### Build speed
 
@@ -1014,7 +937,8 @@ runs its cleanup, which is how `xcodebuild` and Gradle children get orphaned mid
 
 ```sh
 cat ~/.nitro-ui/builds.json                  # who is building now
-node scripts/lease.mjs list                  # held device leases, and devices nobody owns
+node scripts/lease.mjs list                  # held device leases
+node scripts/doctor.mjs                      # booted devices nobody owns
 ```
 
 ### Devices and ports
@@ -1089,8 +1013,8 @@ how the suite measures rather than what an app gets:
 - **"Known debt" rows are pinned to the measurement that opened them.**
   `A11Y_EXEMPTIONS` (`scripts/real-input/a11y.mjs`) matches a failure's own numbers, so
   a row is reported _stale_ the moment the geometry changes for any reason - including
-  being fixed - and a fixed control has to delete its row. `docs/tasks/FOLLOWUPS.md`
-  owns what each one is for.
+  being fixed - and a fixed control has to delete its row. Each row's `followups`
+  field says what it is for.
 
 ### Wall-clock gates (`HARNESS_TIMING`)
 
@@ -1336,27 +1260,34 @@ and these scripts are run by hand today.
 
 `bench/` is a release-build app that measures a component against RN core on a
 real simulator or emulator. The full story — metrics, protocol, what the numbers
-mean, baselines, per-component checklist — is
+mean, the release comparison, per-component checklist — is
 `docs/architecture/benchmarks.md`. The commands:
 
 ```sh
 IOS_SIM_UDID=<udid>   bun bench --platform ios     --plan quick
 ANDROID_AVD=<avd>     bun bench --platform android --plan quick
+IOS_SIM_UDID=<udid>   bun bench --platform ios     --plan full --compare-release
 ```
 
-A change to a component runs the `quick` plan on **both** platforms and puts both
-tables (absolute and ratio-to-`rn-core`) in its pull request. It takes a few
-minutes per platform. `--shutdown` powers off a simulator or emulator the runner
-booted itself.
+The third line is the release check: `--compare-release [ref]` measures `ref` (by default
+the newest release tag) **and** this tree in one session on one device — two bench apps, one
+installed at a time, alternating launch rounds — and exits non-zero naming the cells that got
+slower. Benchmarks are a release-time measurement: a component task runs the `quick` plan
+when it wants numbers for its report, and the verdict against the previous release is made
+once, before the release, on a machine nobody else is using.
 
-| Variable                 | Default      | Meaning                                                              |
-| ------------------------ | ------------ | -------------------------------------------------------------------- |
-| `IOS_SIM_UDID`           | unset        | Simulator UDID to boot and measure on                                |
-| `ANDROID_AVD`            | unset        | AVD name — the runner finds its serial among attached ones           |
-| `ANDROID_SERIAL`         | unset        | Used only when there is no AVD name (physical device)                |
-| `NITRO_UI_MACHINE_LABEL` | `unlabelled` | This machine's label — required by `--check` and `--update-baseline` |
-| `BENCH_ABIS`             | `arm64-v8a`  | Android ABIs to build (`x86_64` on an Intel host)                    |
-| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300`  | Per-launch wall-clock budget (s); raise it on a loaded machine       |
+A quick plan is hours, not minutes: it is 31 cells x 4-5 arms x 4 launches, and the reports
+show 6-10 s per launch, so budget roughly one to two hours per platform. That is an estimate
+from the per-launch times on record, not a measured plan duration. `--shutdown` powers off a
+simulator or emulator the runner booted itself.
+
+| Variable                 | Default     | Meaning                                                        |
+| ------------------------ | ----------- | -------------------------------------------------------------- |
+| `IOS_SIM_UDID`           | unset       | Simulator UDID to boot and measure on                          |
+| `ANDROID_AVD`            | unset       | AVD name — the runner finds its serial among attached ones     |
+| `ANDROID_SERIAL`         | unset       | Used only when there is no AVD name (physical device)          |
+| `BENCH_ABIS`             | `arm64-v8a` | Android ABIs to build (`x86_64` on an Intel host)              |
+| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300` | Per-launch wall-clock budget (s); raise it on a loaded machine |
 
 Prefer `ANDROID_AVD` over `ANDROID_SERIAL`: console ports are allocated by
 availability, so a serial goes stale the moment another emulator boots or dies,
@@ -1368,92 +1299,15 @@ Metro — `METRO_PORT` is irrelevant to it. Native projects under `bench/ios` an
 when configuration changes.
 
 Gates: on-device numbers **inform review** and block only on a clear regression.
-Both `--compare <ref>` and `--check` gate the `nitro-ui` arms on launch-paired
+`--compare-release` and `--compare <ref|file>` both gate the `nitro-ui` arms on launch-paired
 ratios to `rn-core`, and a verdict needs the ratio over 1.20 with a 95 % CI that
 excludes 1.05 on a cell that was quiet inside its own run; the `rn-core` control
-and the `expo-ui-*` reference arms can never fail your pull request. `--check`
-compares against the committed baselines, which live per machine —
-`bench/baselines/<NITRO_UI_MACHINE_LABEL>/<deviceKey>.json` — so a machine gates only
-against baselines it measured itself. Both labelled machines have both canonical
-devices (an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a
-machine without its own directory, or any other device, uses `--compare <ref>`
-instead. `.github/workflows/bench.yml` would post these tables on a pull request;
-its label and comment triggers are off, so it is `workflow_dispatch` only. The
+and the `expo-ui-*` reference arms can never fail your pull request. Nothing is committed to
+gate against: the base side of a verdict is a run — the release measured beside the candidate,
+or a results file you already have — because a ratio only cancels drift inside the machine
+that measured it. The
 gate that always blocks is the Reassure render count, below, because it is
 deterministic.
-
-### Adding a component to a committed baseline
-
-A baseline that is missing a component gates nothing for it, and the only way to add
-one used to be a full mint — A3's on this machine was 4 h 24 min on iOS and 5 h 13 min
-on Android, so components went missing rather than being added. One component's cells
-can now join an existing file, which is one component's launches instead of the whole
-matrix: Menu on Android is 7 cells x 5 arms x 8 launches = 280 launches, and the run
-that did it took 35 min:
-
-```sh
-export NITRO_UI_MACHINE_LABEL=maintainer-mac-2
-node scripts/lease.mjs acquire --task <ID> --exclusive --boot --platform android
-node scripts/bench/run.mjs --platform android --plan full --launches 8 \
-  --component menu --update-baseline   # add --dry-run first: it answers the same
-                                       # startup questions without booting anything
-```
-
-Everything in the file that is not that component survives byte-for-byte. What the diff
-adds depends on whether the file already had X14's bookkeeping. A **current** file gains
-exactly two things: the component's cells and its one `components` entry. The **first**
-merge into a pre-X14 file gains that plus the bookkeeping it never had, all of it written
-so the next merge can check versions without going back to git:
-
-- the file's `components` block, seeded with one entry per component it already holds
-  (marked `seededFromFoundingRun: true`, so a reader can tell a founding run's numbers
-  from a merge's);
-- a top-level `dependencies` block, recovered from `bun.lock` at the commit the file's
-  own `sha` names, whose `source` field says so;
-- `skippedCells`, which the old files never wrote (empty in practice: an incomplete cell
-  on a gated arm was always a refusal);
-- the `schemaVersion` bump from 2 to 3.
-
-None of those is a measured number — that is the promise: the removed lines are the old
-`"schemaVersion": 2,` and one closing brace. Then read it back:
-
-```sh
-node scripts/bench/run.mjs --platform android --plan full --launches 8 \
-  --component menu --check            # or report.mjs <results.json> --check
-```
-
-What it refuses, and why each refusal matters:
-
-- **A component the file already holds**, and any other filter (`--scenario`, `--n`,
-  `--only`): a merge writes that component's whole block, and a partial one reads to
-  `--check` as "not measured in base". Refreshing existing numbers means a full re-mint.
-- **A results file that is not one component's whole run.** `report.mjs` will re-report any
-  results file with any flags, so `--component menu` over a full run, or over a `slider`
-  run, or over a `--scenario`-narrowed one, used to write those cells under `menu`. Every
-  refusal here is absolute, `--force` included: a record that holds another component's
-  cells; one measured on a plan the file does not hold; one that is missing any cell **the
-  file's plan** measures for the named component — so `--plan quick --component menu --force`
-  cannot write 12 of menu's 28 rows into a `full`-plan table, because rows left out could
-  never be added afterwards; one whose cells' `scenario` fields disagree with the keys that
-  store them (the key is what `--check` gates and what the merge writes, so the record
-  cannot be trusted to know which component it measured); or one that holds no cells at all,
-  which would write a provenance entry claiming a component was measured with no numbers
-  anywhere to contradict it.
-- **An environment that is not the same measurement** — CPU model and core count,
-  simulator runtime and Xcode, Android API level and system image, ART compile state,
-  the waiting rule, and the `react-native` and `@expo/ui` versions. Each refusal names
-  the field and both values. `--force` does not get you past this one: it is a human
-  overruling judgements about their own measurement, and "this is a different
-  simulator" is not one.
-- **A field the file predates that it cannot answer for.** `bun.lock` at the commit the
-  file's own `sha` names recovers the two app versions, and the platform's default
-  waiting rule stands in for a `timeouts` block a v2 file never wrote; a runtime,
-  image or ART state cannot be recovered from anything, so those refuse. What was
-  matched that way is recorded in the merged entry's `comparabilityNotes`, and the
-  versions land in the file so the next merge does not have to ask git again.
-
-The details, including the provenance a merged file keeps per component, are
-`bench/baselines/README.md` ("Adding one component").
 
 ## Perf contract
 
@@ -1491,7 +1345,7 @@ lefthook is therefore not in bun's `trustedDependencies` allowlist. Enable them
 in a checkout whose dependencies are installed:
 
 ```sh
-bun run hooks:install      # commit-msg runs commitlint; pre-commit runs ESLint + tsc
+bun run hooks:install      # commit-msg runs commitlint; pre-commit runs ESLint, Prettier + tsc
 bun run hooks:uninstall    # remove them again
 ```
 

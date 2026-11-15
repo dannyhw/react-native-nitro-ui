@@ -3,10 +3,22 @@
  *
  *   bun bench --platform ios     --plan quick
  *   bun bench --platform android --plan quick
- *   bun bench --platform ios --plan full --check
- *   bun bench --platform ios --plan quick --compare <git-ref|results-file>
- *   bun bench --platform ios --plan quick --update-baseline
+ *   bun bench --platform ios     --plan quick --compare-release
+ *   bun bench --platform ios     --plan quick --compare-release v0.9.0
  *   bun bench --platform android --plan quick --component button
+ *   node scripts/bench/report.mjs <results.json> --compare <git-ref|results-file>
+ *
+ * `--compare-release [ref]` is the release check: it measures `ref` (the newest release
+ * tag by default) and the working tree **in one session, on one device**, alternating
+ * which of the two installed apps is launched, so the two library versions are subject
+ * to the same machine at the same moment. It then gates `head(x/rn-core) /
+ * base(x/rn-core)` per cell and exits non-zero on a regression (D9). The base side is a
+ * second bench app, built from the ref in a checkout outside the repository
+ * (`~/.nitro-ui/bench-base/<repo>/<ref>/`): one artifact per side, one install per side
+ * switch (`scripts/bench/compare.mjs`).
+ *
+ * `--compare <ref|results-file>` stays the offline half: it gates this run against a
+ * results file that already exists, measured earlier on this machine.
  *
  * `--component` restricts the run to one component's cells. A component is part
  * of the scenario cell (`mount.button`), so the filter crosses the plan rather
@@ -22,18 +34,16 @@
  * complete when its `end` sentinel is there. `--skip-build` reuses the installed
  * artifact instead of rebuilding.
  *
+ * Nothing here refuses a run for being busy: the load the session ran at is recorded
+ * and printed, and a comparison made inside one session cancels that drift the same way
+ * the launch-paired ratio to `rn-core` does.
+ *
  * Devices come from the environment (see scripts/bench/devices.mjs) and must be
  * the ones your brief assigned. The runner boots what you point it at and leaves
  * it running, because booting an emulator costs minutes and `quick` plans run
  * back to back; pass `--shutdown` to power off whatever *this* run booted (AGENTS.md:
  * never touch a device you did not start).
  *
- * `--check` and `--update-baseline` also need `NITRO_UI_MACHINE_LABEL`: a committed
- * baseline is keyed by machine as well as by device
- * (`bench/baselines/<label>/<deviceKey>.json`), and there is no other machine's file
- * to fall back to, so an unusable label is refused before the run starts rather than
- * at the end of a three-hour plan (scripts/bench/baseline.mjs). A plain run, which
- * gates nothing against a baseline, does not need one.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -52,57 +62,43 @@ import {
   simctl,
 } from './devices.mjs';
 import {
-  androidDryRunDevice,
-  iosDryRunDevice,
-  mergeDependencyEvidence,
-  readAvdHardware,
-  avdHomeFrom,
-  attachedEmulatorSerials,
-  simctlListing,
-} from './dry-run.mjs';
-import {
   ARMS_WITHOUT_COMPONENT,
-  baselineNoise,
-  baselineTable,
-  baselineTimeoutsFor,
   buildSchedule,
   createLoadSampler,
-  isCompatibleBaseline,
+  defaultTimeoutsFor,
   LAUNCHES_PER_CELL,
   launchBudgetMs,
   launchPlanString,
-  loadBlocker,
   MARK_CAPABLE_IMPLEMENTATIONS,
-  mergeBaselineProblems,
-  mergeRunProblems,
-  narrowingProblem,
   parseTimeoutFlags,
   PLANS,
   requestedTimeouts,
   resultsFileName,
   SCHEMA_VERSION,
-  summarizeMissingReasons,
-  timeoutRuleProblem,
   componentOf,
   LOAD_SAMPLE_INTERVAL_MS,
   aggregateRecords,
 } from './lib.mjs';
+import { collectMachine, runDependencies, tryExec } from './machine.mjs';
 import {
-  foundingDependencies,
-  labelPreFlightProblem,
-  mintBaselineFileFor,
-  openBaselineForCheck,
-  openBaselineForMerge,
-} from './baseline.mjs';
-import { collectMachine, mergeCandidateRun, tryExec } from './machine.mjs';
+  baseRefDir,
+  buildBaseSide,
+  comparisonOutcome,
+  comparisonPlanLines,
+  extractBaseRef,
+  installBaseDependencies,
+  locateBaseArtifact,
+  newestReleaseTag,
+  planComparison,
+  readBaseSchedule,
+} from './compare.mjs';
+import { drive } from './drive.mjs';
 import { dryRun } from './dry-run.mjs';
 import { installedDependenciesProblem } from './deps.mjs';
 import { comparisonSections, renderMarkdown, summaryTable } from './render.mjs';
 import {
-  BASELINES_DIR,
   readJson,
   resolveCompareTarget,
-  writeBaseline,
   writeReportFiles,
   writeRawRecords,
 } from './report.mjs';
@@ -153,32 +149,153 @@ if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) {
   }
 }
 
-function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+/**
+ * A git *question*, as opposed to a git step of the build: git answers these with a
+ * `fatal:` on stderr as well as a non-zero exit, and the caller here already has an
+ * answer for the failure. Without this, a plain `--dry-run` outside a repository prints
+ * a git error and a bench refusal, and only one of them is ours.
+ */
+function gitProbe(args) {
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
 }
 
 function shortSha() {
   try {
-    return git(['rev-parse', '--short', 'HEAD']);
+    return gitProbe(['rev-parse', '--short', 'HEAD']);
   } catch {
     return 'unknown';
   }
 }
 
+function headCommit() {
+  try {
+    return gitProbe(['rev-parse', 'HEAD^{commit}']);
+  } catch {
+    return null;
+  }
+}
+
+function abbreviated(commit) {
+  try {
+    return gitProbe(['rev-parse', '--short', commit]);
+  } catch {
+    return commit;
+  }
+}
+
+function comparedCommits(baseCommit) {
+  return {
+    baseCommit,
+    headCommit: headCommit(),
+    baseSha: abbreviated(baseCommit),
+    headSha: shortSha(),
+  };
+}
+
+function firstLine(error) {
+  return (error instanceof Error ? error.message : String(error)).split(
+    '\n'
+  )[0];
+}
+
 function isGitDirty() {
   try {
-    return git(['status', '--porcelain']).length > 0;
+    return gitProbe(['status', '--porcelain']).length > 0;
   } catch {
     return false;
   }
 }
 
+/**
+ * The newest release tag, as `--compare-release` means it when given no ref.
+ *
+ * git's creatordate order is the answer ("the release that shipped last"), not a sort of
+ * the version strings - a patch on an older line released after a newer minor release is
+ * still the most recent thing the next release must not be slower than. The filtering
+ * and the "that tag is this very commit" skip are `newestReleaseTag`'s, so the rule is
+ * one function the unit tests can drive.
+ */
+function chooseReleaseTag() {
+  let tags = [];
+  try {
+    tags = gitProbe(['tag', '--sort=-creatordate'])
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch {
+    return {
+      ref: null,
+      problem:
+        'no release tag: `git tag` failed, so this checkout cannot name a release to compare against - pass --compare-release <ref>',
+    };
+  }
+  const shaOfTag = {};
+  for (const tag of tags.slice(0, 30)) {
+    try {
+      shaOfTag[tag] = gitProbe(['rev-parse', '--short', `${tag}^{commit}`]);
+    } catch {
+      shaOfTag[tag] = null;
+    }
+  }
+  const answer = newestReleaseTag({ tags, shaOfTag, headSha: shortSha() });
+  return answer.problem == null
+    ? { ref: answer.ref, problem: null }
+    : { ref: null, problem: answer.problem };
+}
+
 function resolveRef(ref) {
   try {
-    return git(['rev-parse', '--short', ref]);
+    return gitProbe(['rev-parse', '--short', ref]);
   } catch {
     return ref;
   }
+}
+
+/**
+ * A flag whose value may be omitted: `--compare-release` alone means "the newest release
+ * tag", `--compare-release v0.9.0` means that ref. Anything else that starts a flag is
+ * the next flag, not this flag's value - `--compare-release --dry-run` is the common
+ * spelling, and a ref that begins with `--` is not a thing git resolves anyway.
+ */
+function readOptionalFlag(argv, name) {
+  const at = argv.indexOf(name);
+  if (at === -1) return null;
+  const next = argv[at + 1];
+  return next == null || next.startsWith('--') ? '' : next;
+}
+
+/**
+ * Flags the bench used to take and no longer does.
+ *
+ * An unknown flag is otherwise ignored, and these three were ignored into a *green*:
+ * `--check` on today's runner would measure a plain run, print a plain report and exit
+ * 0 while its author believed a baseline had been consulted (X36 deleted the committed
+ * baselines). Silence is the failure, so each one is answered with what replaced it.
+ */
+const REMOVED_FLAGS = {
+  '--check':
+    'the bench no longer carries committed baselines to check against. ' +
+    'Use --compare-release [ref] to measure a release in this same session, ' +
+    'or --compare <ref|file> to gate this run against results you already have.',
+  '--update-baseline':
+    'nothing mints a baseline any more. A plain run writes results to bench/results/; ' +
+    '--compare-release measures the release you would have minted against, when you need the verdict.',
+  '--force':
+    'it existed to override a mint refusal (a busy machine, a narrowed plan). ' +
+    'There is nothing to override: the load is reported now, and a cell that was noisy ' +
+    'inside its own run is not gated.',
+};
+
+export function removedFlagProblem(argv) {
+  for (const [name, replacement] of Object.entries(REMOVED_FLAGS)) {
+    if (argv.includes(name)) {
+      return `${name} no longer exists: ${replacement}`;
+    }
+  }
+  return null;
 }
 
 function log(message) {
@@ -197,7 +314,7 @@ function sleep(ms) {
  * on external storage (Android - `run-as` needs a debuggable build, and this is
  * a release build).
  */
-function iosTarget(device, appPath, bundleId) {
+function iosTarget(device, appPath, bundleId, labelPrefix = '') {
   const appBinaryName = path.basename(appPath, '.app');
   const ndjsonPath = () => {
     const container = simctl([
@@ -210,7 +327,10 @@ function iosTarget(device, appPath, bundleId) {
   };
 
   return {
-    label: `iOS ${device.name} (${device.udid})`,
+    // The prefix is what tells the two apps of a release comparison apart in the log:
+    // same device, same identifier, different artifact.
+    label: `${labelPrefix}iOS ${device.name} (${device.udid})`,
+    appPath,
     async install() {
       simctl(['install', device.udid, appPath]);
     },
@@ -319,7 +439,7 @@ function iosTarget(device, appPath, bundleId) {
  * two ART regimes are not comparable with each other (T12 round 2: the same code's
  * launch-paired ratio to the shared host moved 1.22x -> 0.99x on mount `presented`
  * with no library change at all), so a result file has to say which regime it
- * belongs to. `--update-baseline` refuses anything but `speed-profile` for that
+ * belongs to. A run that ends anywhere else measured the interpreter, and the report
  * reason, and Android numbers published before T12 are `verify` numbers with nothing
  * in the file saying so.
  */
@@ -362,10 +482,11 @@ function primeArtProfile(serial, packageName) {
   return { packageName, status, primed: false, attempts: 2 };
 }
 
-function androidTarget(device, apkPath, packageName) {
+function androidTarget(device, apkPath, packageName, labelPrefix = '') {
   const remote = `/sdcard/Android/data/${packageName}/files/bench.ndjson`;
   return {
-    label: `Android ${device.name} (${device.serial})`,
+    label: `${labelPrefix}Android ${device.name} (${device.serial})`,
+    apkPath,
     async install() {
       adb(device.serial, ['install', '-r', apkPath]);
       return primeArtProfile(device.serial, packageName);
@@ -536,188 +657,37 @@ function launchBudget(entry, platform) {
   });
 }
 
-function summarize(records) {
-  const skipped = records.find((record) => record.kind === 'skip');
-  if (skipped != null) {
-    return `skipped (${skipped.reason})`;
-  }
-  const iterations = records.filter(
-    (record) => record.kind === 'iter' && !record.warmup
-  ).length;
-  // Missing signals with their reason codes, so a slow arm shows up in the run's own
-  // progress line as it happens instead of four hours later in the mint's refusal.
-  const notes = summarizeMissingReasons(records);
-  return `${String(iterations)} iterations${notes === '' ? '' : `, ${notes}`}`;
-}
-
-/**
- * Run the schedule, sampling the machine as it goes.
- *
- * `sample` is called at every launch boundary: installing, launching and
- * terminating an app is where a busy host shows up in the load, and on a run
- * whose launches each outlast the sampling interval it is the only sampling there
- * is.
- */
-async function drive({ target, schedule, platform, sample = () => {} }) {
-  const records = [];
-  const problems = [];
-  for (let index = 0; index < schedule.length; index++) {
-    const entry = schedule[index];
-    sample();
-    const label = `${launchPlanString(entry)} launch ${String(entry.launch + 1)}/${String(schedule.filter((other) => other.scenario === entry.scenario && other.implementation === entry.implementation && other.n === entry.n).length)}`;
-    process.stderr.write(
-      `[${String(index + 1)}/${String(schedule.length)}] ${label} ... `
-    );
-    try {
-      const result = await runLaunch(target, entry, platform);
-      records.push(
-        ...result.records.map((record) => ({ ...record, launch: entry.launch }))
-      );
-      process.stderr.write(
-        `${summarize(result.records)} (${String(Math.round(result.ms / 100) / 10)}s)\n`
-      );
-      if (result.error != null) {
-        problems.push(`${label}: ${result.error}`);
-        log(`  ! ${result.error}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      problems.push(`${label}: ${message.split('\n')[0]}`);
-      process.stderr.write(`failed: ${message.split('\n')[0]}\n`);
-    }
-    await target.terminate();
-    await sleep(300);
-  }
-  return { records, problems };
-}
-
 function appendSection(markdownFile, section) {
   fs.appendFileSync(markdownFile, section);
 }
 
 /* ----------------------------------- main --------------------------------- */
 
-/**
- * The device key a *pre-flight* can name without booting anything (X14).
- *
- * `resolveIosDevice` boots a stopped simulator and `resolveAndroidDevice` requires
- * a running emulator, which is exactly what a pre-flight must survive - so the key
- * comes from the read-only paths `--dry-run` already uses, and the two cannot
- * disagree because both call these same functions.
- */
-function preflightDevice(platform, env = process.env) {
-  if (platform === 'ios') {
-    const udid = env.IOS_SIM_UDID ?? null;
-    return iosDryRunDevice({
-      udid,
-      listing: udid == null || udid === '' ? null : simctlListing(env),
-    });
-  }
-  const avd = env.ANDROID_AVD ?? env.AVD ?? null;
-  return androidDryRunDevice({
-    avd,
-    serial: env.ANDROID_SERIAL ?? null,
-    hardware: readAvdHardware({
-      avd,
-      avdHome: avdHomeFrom(env),
-      read: (file) => {
-        try {
-          return fs.readFileSync(file, 'utf8');
-        } catch {
-          return null;
-        }
-      },
-    }),
-    attachedSerials: attachedEmulatorSerials(env),
-  });
-}
-
-/**
- * May this component's cells be merged into this machine's baseline file?
- *
- * One question, asked twice: once from what the command line and the host already
- * know (so a run that can only be refused is never started), and once of the
- * measured run before a byte is written (X14). The second call is the authoritative
- * one: it sees a real ART compile state and a real system-image fingerprint, and
- * only the first call passes `allowDeferred`, which is what lets a field the
- * pre-flight genuinely cannot measure be *deferred* rather than passed.
- *
- * The candidate run is not the run: it is the stand-in `mergeCandidateRun()` builds
- * so the same guard can be evaluated twice, and it carries nothing the host has not
- * measured - nulls where the device has not answered, and `bun.lock` for the app
- * versions.
- */
-function decideMerge({
-  platform,
-  plan,
-  launches,
-  perfMarks,
-  component,
-  timeouts,
-  filters = {},
-  scheduled = null,
-  run = null,
-  device = null,
-  deviceKey = null,
-  allowDeferred = false,
-}) {
-  const componentPlan = buildSchedule({
-    plan,
-    launches,
-    perfMarks,
-    platform,
-    component,
-  }).length;
-  const candidate =
-    run ??
-    mergeCandidateRun({
-      platform,
-      plan,
-      launches,
-      perfMarks,
-      dirty: isGitDirty(),
-      sha: shortSha(),
-      deviceKey,
-      device: device ?? {},
-      dependencies: mergeDependencyEvidence({
-        lockPath: path.join(REPO_ROOT, 'bun.lock'),
-        nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
-        git,
-      }).dependencies,
-      timeouts,
-    });
-  const opened = openBaselineForMerge({
-    baselinesDir: BASELINES_DIR,
-    run: candidate,
-    component,
-    isCompatibleBaseline,
-    readJson,
-    display: (file) => path.relative(process.cwd(), file),
-    resolved: (baseline) => foundingDependencies({ baseline, git }),
-    mergeProblems: (input) =>
-      mergeBaselineProblems({
-        ...input,
-        filters,
-        scheduled,
-        componentPlan,
-        allowDeferred,
-      }),
-  });
-  return { opened, candidate };
-}
-
 export async function main(argv) {
   const platform = flag(argv, '--platform');
   if (platform !== 'ios' && platform !== 'android') {
     log(
-      'usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]\n' +
-        '           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]\n' +
+      'usage: bun bench --platform ios|android [--plan quick|full]\n' +
+        '           [--compare-release [ref]] [--compare <ref|file>]\n' +
+        '           [--skip-build] [--only <impl,impl>]\n' +
         '           [--launches N] [--prebuild] [--shutdown] [--perf-marks]\n' +
         '           [--component <name>] [--dry-run]\n' +
         '\n' +
-        '  --dry-run  print what this run would resolve and whether it would be\n' +
-        '             refused, then stop: no boot, no build, no measurement.'
+        '  --compare-release [ref]  measure <ref> (default: the newest release tag) and\n' +
+        '             this tree in one session on one device, then gate head/base;\n' +
+        '             base is a second bench app, built from that ref.\n' +
+        '  --compare <ref|file>     gate this run against results already on disk.\n' +
+        '  --dry-run  print what this run would resolve - for --compare-release the\n' +
+        '             whole two-sided plan - then stop: no boot, build, or measurement.'
     );
+    process.exitCode = 2;
+    return;
+  }
+  // Before anything is resolved or booted: a run that believes it gated something and
+  // did not is worse than one that stops.
+  const removed = removedFlagProblem(argv);
+  if (removed != null) {
+    log(removed);
     process.exitCode = 2;
     return;
   }
@@ -727,19 +697,6 @@ export async function main(argv) {
     process.exitCode = 2;
     return;
   }
-  const minting = argv.includes('--update-baseline');
-  const force = argv.includes('--force');
-  const component = flag(argv, '--component');
-  const perfMarks = argv.includes('--perf-marks');
-  const launches = Number(
-    flag(argv, '--launches') ?? String(LAUNCHES_PER_CELL)
-  );
-  if (!Number.isInteger(launches) || launches < 1) {
-    log('--launches must be a positive integer');
-    process.exitCode = 2;
-    return;
-  }
-
   const timeouts = parseTimeoutFlags(
     argv,
     (name) => flag(argv, name),
@@ -751,10 +708,40 @@ export async function main(argv) {
     return;
   }
 
-  // Print what this run would resolve and whether it would be refused, then stop:
-  // no boot, no build, no measurement (`scripts/bench/dry-run.mjs`). Placed before
-  // the label and load refusals below because answering those questions *is* the
-  // job here, so a dry run has to get past them rather than exit on them.
+  const component = flag(argv, '--component');
+  const perfMarks = argv.includes('--perf-marks');
+  // `--compare-release` takes its ref optionally: bare means "the newest release tag",
+  // so a value is only consumed when the next token is not another flag.
+  const compareRelease = readOptionalFlag(argv, '--compare-release');
+  if (compareRelease != null && perfMarks) {
+    log(
+      '--compare-release cannot be combined with --perf-marks: marks instrument this tree only, and a comparison needs both sides measured the same way'
+    );
+    process.exitCode = 2;
+    return;
+  }
+  if (
+    compareRelease != null &&
+    (timeouts.mountTimeoutMs != null || timeouts.presentedTimeoutMs != null)
+  ) {
+    log(
+      '--compare-release cannot be combined with --timeout-mount/--timeout-presented: each app waits by its own defaults, and a comparison of two different waits is not a comparison'
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const launches = Number(
+    flag(argv, '--launches') ?? String(LAUNCHES_PER_CELL)
+  );
+  if (!Number.isInteger(launches) || launches < 1) {
+    log('--launches must be a positive integer');
+    process.exitCode = 2;
+    return;
+  }
+
+  // Print what this run would resolve - and for `--compare-release`, the whole
+  // two-sided plan - then stop: no boot, no build, no measurement
+  // (`scripts/bench/dry-run.mjs`).
   if (argv.includes('--dry-run')) {
     process.exitCode = dryRun({
       argv,
@@ -762,168 +749,72 @@ export async function main(argv) {
       plan,
       launches,
       component: flag(argv, '--component'),
-      baselinesDir: BASELINES_DIR,
-      mergeEvidence: (baseline) =>
-        mergeDependencyEvidence({
-          lockPath: path.join(REPO_ROOT, 'bun.lock'),
-          nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
-          git,
-          baseline,
-        }),
-    });
-    return;
-  }
-
-  // A baseline is keyed by machine as well as by device (bench/baselines/README.md),
-  // so a run that cannot name its machine has no directory to gate against and none
-  // to write one to. Refuse on the same second as the load check below rather than
-  // three hours later, when the run would have discovered it. `--force` does not
-  // bypass this one: the load and cleanliness guards judge measurement quality, and
-  // this is the absence of a path to write to.
-  const labelProblem = labelPreFlightProblem(argv);
-  if (labelProblem != null) {
-    log(`\n${labelProblem}`);
-    process.exitCode = 2;
-    return;
-  }
-
-  // Fail fast on the load the run starts with (R4). A `--update-baseline` run has
-  // to stay quiet for hours, so a machine that is already over the ceiling when
-  // the command starts has no realistic chance of minting: say so in a second
-  // instead of after a three-hour plan. Local feedback runs are not refused -
-  // their ratios are same-run pairs, and a busy machine is information there, not
-  // a disqualification.
-  if (minting) {
-    // Two lists, because `--force` means different things to each. The first is
-    // judgement about *this measurement* - how busy the machine is, whether the
-    // schedule and waiting rule are the ones a baseline is recorded under - and a
-    // human who types `--force` is overruling exactly that. The second is whether
-    // these numbers belong in *this file* at all: a merge refused because the
-    // simulator runtime or the `@expo/ui` version differs is not a warning to
-    // wave through, and `--force` says nothing about either.
-    const overridable = [];
-    const absolute = [];
-    const blocker = loadBlocker({
-      loadavg1: os.loadavg()[0] ?? null,
-      cpuCount: os.cpus().length,
-    });
-    if (blocker != null) {
-      overridable.push(blocker);
-    }
-    // Same fail-fast reasoning for a narrowed schedule: a filtered run cannot mint the
-    // table `--check` gates against, and finding that out after three hours of device
-    // time is the same waste. Both numbers come from the real builder so arm scopes and
-    // any filter added later are counted, not re-derived here.
-    const filters = {
-      only: flag(argv, '--only'),
-      component: flag(argv, '--component'),
-      scenario: flag(argv, '--scenario'),
-      n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
-    };
-    const scheduled = buildSchedule({
-      plan,
-      launches,
-      perfMarks,
-      platform,
-      ...filters,
-    }).length;
-    const narrowed = narrowingProblem({
-      scheduled,
-      wholePlan: buildSchedule({ plan, launches, perfMarks, platform }).length,
-      filters,
-    });
-    if (narrowed != null && component == null) {
-      overridable.push(narrowed);
-    }
-    // Same for the waiting rule: the runner's own startup line calls any `--timeout-*`
-    // run a diagnostic that "cannot mint a baseline", so a mint that asks for a
-    // non-default wait has to be refused - and refusing it after four hours of device
-    // time is the waste this preflight exists to prevent (review N1).
-    const waitingProblem = timeoutRuleProblem({
-      platform,
-      mountTimeoutMs: timeouts.mountTimeoutMs,
-      presentedTimeoutMs: timeouts.presentedTimeoutMs,
-    });
-    if (waitingProblem != null) {
-      overridable.push(waitingProblem);
-    }
-    // A merge mint is the one run `narrowingProblem()` must not refuse: writing one
-    // component's cells into an existing file *is* a narrowed schedule (X14). So for
-    // that shape the narrowing guard is replaced by the question that actually
-    // matters - may this file take this component's cells at all - answered here,
-    // before the device is booted, from what the host already knows. Anything the
-    // pre-flight cannot measure yet (an ART compile state, a system-image
-    // fingerprint) is deferred to the authoritative check below, not passed.
-    if (component != null) {
-      const device = preflightDevice(platform);
-      // A merge targets one machine's file, and the file's path is derived from the
-      // device's key, so a device that could not be resolved has no path to name.
-      // Saying "no baseline at …/null.json — the first mint is a full run" would
-      // send a contributor off to re-mint a whole table (eleven hours) for what is
-      // an unset `IOS_SIM_UDID` (review L1). The device's own problem is the refusal.
-      if (device.deviceKey == null) {
-        absolute.push(
-          `--component ${String(component)} --update-baseline: the device could not be resolved, so this machine's baseline file cannot be named.\n        ${String(device.problem ?? 'no device was resolved')}`
-        );
-      }
-      // The plan and launch count are the run's own fault and so are overridable;
-      // the file's answer about its contents is not.
-      overridable.push(
-        ...mergeRunProblems({
-          plan,
-          launches,
-          perfMarks,
-          dirty: isGitDirty(),
-        })
-      );
-      // With no device key there is no file to open, and the merge question has no
-      // subject: asking it would add a second, wrong refusal about a path ending in
-      // `null.json` on top of the one above that says what is actually missing.
-      const decided =
-        device.deviceKey == null
+      // The two-sided plan, for `--compare-release`. Reading a ref's plan needs its
+      // files but nothing else - `scripts/bench/lib.mjs` has no dependencies - so a dry
+      // run extracts the ref and asks it, without installing or building anything.
+      prepareComparison:
+        compareRelease == null
           ? null
-          : decideMerge({
-              platform,
-              plan,
-              launches,
-              perfMarks,
-              component,
-              timeouts,
-              filters: {
-                only: filters.only,
-                scenario: filters.scenario,
-                n: filters.n,
-              },
-              scheduled,
-              deviceKey: device.deviceKey,
-              device: device.device,
-              allowDeferred: true,
-            });
-      if (decided?.opened.refusal != null) {
-        absolute.push(decided.opened.refusal.message);
-      }
-      if (decided != null) {
-        absolute.push(...decided.opened.problems);
-        for (const entry of decided.opened.unverified) {
-          log(`Merge:     ${entry.reason}`);
-        }
-        for (const entry of decided.opened.deferred) {
-          log(`Merge:     deferred - ${entry.reason}`);
-        }
-      }
-    }
-    const preflight = force ? absolute : [...overridable, ...absolute];
-    if (preflight.length > 0) {
-      log(
-        `--update-baseline refused before the run started${
-          force
-            ? ':'
-            : ' (pass --force to override the measurement-quality guards only):'
-        }\n${preflight.map((reason) => `  - ${reason}`).join('\n')}`
-      );
-      process.exitCode = 2;
-      return;
-    }
+          : () => {
+              const chosen =
+                compareRelease === ''
+                  ? chooseReleaseTag()
+                  : { ref: compareRelease, problem: null };
+              if (chosen.ref == null) {
+                return { problem: chosen.problem };
+              }
+              const baseDir = baseRefDir({
+                repoRoot: REPO_ROOT,
+                ref: chosen.ref,
+              });
+              let extracted;
+              try {
+                extracted = extractBaseRef({
+                  repoRoot: REPO_ROOT,
+                  baseDir,
+                  ref: chosen.ref,
+                });
+              } catch (error) {
+                return {
+                  problem: `could not extract ${chosen.ref}: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+                };
+              }
+              const basePlan = readBaseSchedule({
+                baseDir,
+                platform,
+                plan,
+                launches,
+                filters: {
+                  only: flag(argv, '--only'),
+                  component: flag(argv, '--component'),
+                  scenario: flag(argv, '--scenario'),
+                  n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
+                },
+              });
+              return planComparison({
+                platform,
+                plan,
+                launches,
+                ref: chosen.ref,
+                ...comparedCommits(extracted.sha),
+                repoRoot: REPO_ROOT,
+                baseDir,
+                headSchedule: buildSchedule({
+                  plan,
+                  launches,
+                  only: flag(argv, '--only'),
+                  perfMarks,
+                  component,
+                  scenario: flag(argv, '--scenario'),
+                  n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
+                  platform,
+                }),
+                baseSchedule: basePlan.schedule,
+                baseProblem: basePlan.problem,
+              });
+            },
+    });
+    return;
   }
 
   const device =
@@ -983,13 +874,13 @@ export async function main(argv) {
     presentedTimeoutMs: timeouts.presentedTimeoutMs,
   });
   if (timeouts.mountTimeoutMs != null || timeouts.presentedTimeoutMs != null) {
-    const rule = baselineTimeoutsFor(platform);
+    const rule = defaultTimeoutsFor(platform);
     log(
       `Timeouts:  mount ${String(
         timeouts.mountTimeoutMs ?? rule.mountTimeoutMs
       )} ms, presented ${String(
         timeouts.presentedTimeoutMs ?? rule.presentedTimeoutMs
-      )} ms - DIAGNOSTIC: which samples arrive depends on this rule, so the run cannot mint a baseline (launchBudget widens each launch's budget by the extra wait)`
+      )} ms - DIAGNOSTIC: which samples arrive depends on this rule, so its ratios are not comparable with a run measured under the default (launchBudget widens each launch's budget by the extra wait)`
     );
   }
 
@@ -1020,9 +911,171 @@ export async function main(argv) {
       schedule.length
     )} launches)`
   );
+  /* ------------------------- the release comparison ------------------------
+   *
+   * The base side is a second bench app, built by the ref's own `build.mjs` in the
+   * ref's own checkout, outside this repository (`~/.nitro-ui/bench-base/...`). Both apps answer to the
+   * same app identifier, so exactly one is installed at a time and the session is
+   * driven in launch rounds: install a side, drive that round's launches for it, then
+   * install the other side for the next round. `sideOrderForRound` decides who goes
+   * first, and it is ABBA for the same reason the arms are: a host that drifts across
+   * two hours must not land on one library version (scripts/bench/compare.mjs).
+   */
+  let comparison = null;
+  let baseDependencies = null;
+  let driveSchedule = schedule;
+  const targets = { head: target };
+  const installedArt = new Map();
+  if (compareRelease != null) {
+    const chosen =
+      compareRelease === ''
+        ? chooseReleaseTag()
+        : { ref: compareRelease, problem: null };
+    if (chosen.ref == null) {
+      log(`--compare-release: ${chosen.problem}`);
+      process.exitCode = 2;
+      return;
+    }
+    // The ref the user typed is the label and the directory name; `extractBaseRef`
+    // resolves it, and refuses the run on the spot if git cannot.
+    const ref = chosen.ref;
+    const baseDir = baseRefDir({ repoRoot: REPO_ROOT, ref });
+    log(`Base ref:  ${ref} -> ${baseDir}`);
+    let extracted;
+    try {
+      extracted = extractBaseRef({ repoRoot: REPO_ROOT, baseDir, ref });
+    } catch (error) {
+      log(`--compare-release: could not extract ${ref}: ${firstLine(error)}`);
+      process.exitCode = 2;
+      return;
+    }
+    const basePlan = readBaseSchedule({
+      baseDir,
+      platform,
+      plan,
+      launches,
+      filters: {
+        only: flag(argv, '--only'),
+        component,
+        scenario: flag(argv, '--scenario'),
+        n: argv.includes('--n') ? Number(flag(argv, '--n')) : null,
+      },
+    });
+    comparison = planComparison({
+      platform,
+      plan,
+      launches,
+      ref,
+      ...comparedCommits(extracted.sha),
+      repoRoot: REPO_ROOT,
+      baseDir,
+      headSchedule: schedule,
+      baseSchedule: basePlan.schedule,
+      baseProblem: basePlan.problem,
+    });
+    for (const line of comparisonPlanLines({
+      plan: comparison,
+      deviceKey: device.deviceKey,
+    })) {
+      log(line);
+    }
+    if (comparison.problem != null) {
+      process.exitCode = 2;
+      return;
+    }
+    let baseBuilt;
+    try {
+      if (argv.includes('--skip-build')) {
+        baseBuilt = {
+          artifact: locateBaseArtifact({ baseDir, platform }),
+          problem: null,
+        };
+      } else {
+        installBaseDependencies({ baseDir });
+        baseBuilt = buildBaseSide({
+          baseDir,
+          platform,
+          prebuildFirst: argv.includes('--prebuild'),
+        });
+      }
+    } catch (error) {
+      baseBuilt = { artifact: null, problem: firstLine(error) };
+    }
+    if (baseBuilt.problem != null || baseBuilt.artifact == null) {
+      log(
+        `\nthe base ref ${ref} could not be built into a bench app: ${String(baseBuilt.problem)}`
+      );
+      process.exitCode = 2;
+      return;
+    }
+    const baseArtifact = baseBuilt.artifact;
+    targets.base =
+      platform === 'ios'
+        ? iosTarget(
+            device,
+            baseArtifact.appPath,
+            baseArtifact.bundleId,
+            `${ref}-`
+          )
+        : androidTarget(
+            device,
+            baseArtifact.apkPath,
+            baseArtifact.packageName,
+            `${ref}-`
+          );
+    baseDependencies = runDependencies({
+      lockPath: path.join(baseDir, 'bun.lock'),
+      nodeModulesDir: path.join(baseDir, 'node_modules'),
+    });
+    driveSchedule = [];
+    for (const round of comparison.rounds) {
+      for (const side of round.order) {
+        for (const entry of (side === 'head'
+          ? schedule
+          : basePlan.schedule
+        ).filter((candidate) => candidate.launch === round.launch)) {
+          driveSchedule.push({ ...entry, side });
+        }
+      }
+    }
+    log(
+      `Driving:   ${String(driveSchedule.length)} launches, alternating sides per round`
+    );
+  }
+
+  /**
+   * Install the side a launch belongs to, when it is not the side already on the
+   * device. The install is the price of pairing two library versions on one app
+   * identifier, and it is paid once per side switch - not once per launch.
+   */
+  const installedSide = { current: null };
+  async function targetFor(entry) {
+    const side = entry.side ?? 'head';
+    if (comparison != null && installedSide.current !== side) {
+      log(`  installing ${side}: ${targets[side].label}`);
+      installedArt.set(side, (await targets[side].install()) ?? null);
+      installedSide.current = side;
+    }
+    return targets[side];
+  }
+
   // Android returns the ART state the app is in now that every arm is primed
-  // identically; iOS has no such state and contributes null.
-  const art = (await target.install()) ?? null;
+  // identically; iOS has no such state and contributes null. In a comparison each side
+  // is primed by its own install, and both states are recorded.
+  // A plain run installs its one app here. A comparison installs on demand inside the
+  // drive loop, because which app is on the device changes with the round.
+  let art = null;
+  if (comparison == null) {
+    try {
+      art = (await target.install()) ?? null;
+    } catch (error) {
+      log(
+        `\nthe app could not be installed on ${target.label}: ${firstLine(error)}`
+      );
+      process.exitCode = 2;
+      return;
+    }
+  }
 
   const started = Date.now();
   // Sample the whole run rather than its last minute (R4): on a timer, so a long
@@ -1035,15 +1088,51 @@ export async function main(argv) {
   loadTick.unref?.();
   let records;
   let problems;
+  let stopped;
   try {
-    ({ records, problems } = await drive({
-      target,
-      schedule,
+    ({ records, problems, stopped } = await drive({
+      targetFor,
+      runLaunch,
+      schedule: driveSchedule,
       platform,
       sample: () => load.sample(),
+      tagFor: (entry) => (entry.side == null ? '' : `${entry.side} `),
     }));
   } finally {
     clearInterval(loadTick);
+  }
+  if (stopped != null) {
+    problems.push(`the run stopped early: ${stopped}`);
+    log(
+      `\nThe run stopped early: ${stopped}\nWhat was measured before that is kept and reported below.`
+    );
+  }
+  const headArt = comparison == null ? art : (installedArt.get('head') ?? null);
+  const baseProblems =
+    comparison == null
+      ? []
+      : problems.filter((problem) => problem.startsWith('base '));
+  if (comparison != null) {
+    problems = problems.filter((problem) => !problem.startsWith('base '));
+  }
+  const baseRecords = records.filter((record) => record.side === 'base');
+  const headRecords =
+    comparison == null ? records : records.filter((r) => r.side !== 'base');
+  const baseCells =
+    comparison == null
+      ? null
+      : aggregateRecords(baseRecords, { keepRaw: true });
+  if (comparison != null) {
+    writeRawRecords({
+      fileName: resultsFileName(
+        comparison.sides[1]?.sha ?? 'unknown',
+        platform,
+        new Date(started),
+        false,
+        perfMarks
+      ),
+      records: baseRecords,
+    });
   }
   const resultsName = resultsFileName(
     shortSha(),
@@ -1054,21 +1143,17 @@ export async function main(argv) {
   );
   // Persist the raw pull *before* aggregating: re-aggregating is free, another
   // device run is not, so a bug in the maths must not cost the measurement.
-  const raw = writeRawRecords({ fileName: resultsName, records });
-  const cells = aggregateRecords(records, { keepRaw: true });
+  const raw = writeRawRecords({ fileName: resultsName, records: headRecords });
+  const cells = aggregateRecords(headRecords, { keepRaw: true });
 
   // The app versions these numbers belong to (X14). Read from `bun.lock` because
-  // that is the record that travels — a baseline minted today has to be
-  // comparable with a file written from a commit this checkout has never seen, and
-  // the lock is the only version list committed at both. The installed packages are
+  // that is the version list committed with this commit. The installed packages are
   // recorded beside it because the measured thing is the install, and a stale one
   // is a claim about an app that was never run.
-  const dependencyEvidence = mergeDependencyEvidence({
+  const dependencies = runDependencies({
     lockPath: path.join(REPO_ROOT, 'bun.lock'),
     nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
-    git,
   });
-  const dependencies = dependencyEvidence.dependencies;
   const installProblem = installedDependenciesProblem({
     resolved: dependencies,
     installed: {
@@ -1080,51 +1165,21 @@ export async function main(argv) {
     problems.push(installProblem);
   }
 
-  const run = {
-    schemaVersion: SCHEMA_VERSION,
+  const run = assembleRun({
     sha: shortSha(),
     dirty: isGitDirty(),
     platform,
-    deviceKey: device.deviceKey,
-    deviceName: device.name,
+    device,
     plan,
     launches,
     perfMarks,
-    art,
+    art: headArt,
     dependencies,
-    /**
-     * The waiting rule this run measured under (A4). Read back from the cells rather
-     * than echoed from the flags, so a run whose app binary predates the launch flag
-     * cannot claim a timeout it never applied - the problem below compares the two and
-     * says so. Zero means "nothing recorded", which is what a run of an app built
-     * before the flag looks like, and `baselineBlockers()` refuses to mint from it.
-     */
-    timeouts: requestedTimeouts({ cells }),
-    clock: Object.values(cells)[0]?.clock ?? null,
-    createdAt: new Date().toISOString(),
-    durationMs: Date.now() - started,
     machine: collectMachine(platform, device, load),
     problems,
     cells,
-  };
-
-  /**
-   * The runner asked the app to wait longer than the default and no launch reported a
-   * timeout, which means the installed binary predates the launch flag: the JS-side
-   * parser is what reads `presentedTimeout=`, so an app built before A4 ignores it and
-   * every sample would be recorded as a 2 s timeout while the run's own header claimed
-   * otherwise. Say so as a problem rather than produce a diagnostic that lies about
-   * itself (`--skip-build` is how this happens).
-   */
-  if (
-    (timeouts.mountTimeoutMs != null || timeouts.presentedTimeoutMs != null) &&
-    run.timeouts.mountTimeoutMs === 0 &&
-    run.timeouts.presentedTimeoutMs === 0
-  ) {
-    problems.push(
-      'the run asked for a signal timeout (--timeout-mount/--timeout-presented) and no launch recorded one, so the installed app does not understand the flag - rebuild the bench app (drop --skip-build) and run it again'
-    );
-  }
+    started,
+  });
 
   const written = writeReportFiles({
     run,
@@ -1158,7 +1213,6 @@ export async function main(argv) {
       const section = comparisonSections({
         run,
         base: readJson(comparisonTarget.file),
-        mode: 'compare',
         label: comparisonTarget.label,
       });
       process.stdout.write(`\n${section.markdown}\n`);
@@ -1167,124 +1221,111 @@ export async function main(argv) {
     }
   }
 
-  if (argv.includes('--update-baseline')) {
-    const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
-    if (mint.refusal != null) {
-      // The pre-flight above normally rules this out; the guard is here because a
-      // baseline must never be resolved from anything but the run that made it.
-      log(`\n${mint.refusal}`);
-      exitCode = Math.max(exitCode, 2);
-    } else {
-      const file = mint.file;
-      // The authoritative merge check (X14). The pre-flight asked the same question
-      // of a candidate run before the device was booted, and was told to *defer*
-      // whatever it could not measure yet; this is the run, so nothing is deferred
-      // and the answers here are the ones the file is written on. `--force` skips
-      // measurement-quality guards, never comparability: `--force` is a human saying
-      // "I know the machine was busy", not "I know this is a different simulator".
-      let merge = null;
-      if (component != null) {
-        merge = decideMerge({
-          platform,
-          plan,
-          launches,
-          perfMarks,
-          component,
-          timeouts,
-          run,
-          scheduled: schedule.length,
-        });
-        const blockers = merge.opened.problems;
-        if (merge.opened.refusal != null) {
-          log(`\n${merge.opened.refusal.message}`);
-          exitCode = Math.max(exitCode, 2);
-          process.exitCode = exitCode;
-          return;
-        }
-        if (blockers.length > 0) {
-          log(
-            `\n--update-baseline --component ${String(
-              component
-            )} refused: this run's numbers cannot live in ${String(merge.opened.display)}\n${blockers
-              .map((reason) => `  - ${reason}`)
-              .join('\n')}`
-          );
-          exitCode = Math.max(exitCode, 2);
-          process.exitCode = exitCode;
-          return;
-        }
-        for (const entry of merge.opened.unverified) {
-          log(`Merge:     ${entry.reason}`);
-        }
-      }
-      const outcome = writeBaseline(file, run, {
-        force,
-        component,
-        existing: merge?.opened.baseline ?? null,
-        componentsBase: merge?.opened.seeded ?? null,
-        dependencies: merge == null ? null : merge.opened.foundingDependencies,
-        comparabilityNotes: merge?.opened.unverified ?? [],
-      });
-      if (outcome.written) {
-        log(`Baseline written: ${path.relative(process.cwd(), file)}`);
-        if (outcome.note != null) {
-          log(`  ${outcome.note}`);
-        }
-        if (outcome.merged != null) {
-          log(
-            `  merged:  ${String(outcome.merged.addedCells)} \`${String(
-              component
-            )}\` cell(s) added, ${String(
-              outcome.merged.removedCells
-            )} replaced; ${String(
-              Object.keys(outcome.baseline.cells).length
-            )} cells in the file`
-          );
-        }
-        if (force) {
-          log('  (written with --force; review the guards below)');
-        }
-        for (const line of outcome.skippedCellNotes) {
-          log(line);
-        }
-      } else {
-        log(
-          `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
-            .map((reason) => `  - ${reason}`)
-            .join('\n')}`
-        );
-        exitCode = Math.max(exitCode, 2);
-      }
-    }
-  }
-
-  if (argv.includes('--check')) {
-    const opened = openBaselineForCheck({
-      baselinesDir: BASELINES_DIR,
-      run,
-      display: (file) => path.relative(process.cwd(), file),
-      readJson,
-      isCompatibleBaseline,
+  /**
+   * The release comparison: the base side's cells came from the same session, on the
+   * same device, with the other app installed, so this is the one pairing that answers
+   * "slower than the last release?" without a committed number to believe
+   * (scripts/bench/compare.mjs).
+   */
+  if (comparison != null) {
+    const baseRun = assembleRun({
+      sha: comparison.sides[1]?.sha ?? 'unknown',
+      dirty: false,
+      platform,
+      device,
+      plan,
+      launches,
+      perfMarks,
+      art: installedArt.get('base') ?? null,
+      dependencies: baseDependencies,
+      machine: run.machine,
+      problems: baseProblems,
+      cells: baseCells,
+      started,
     });
-    if (opened.refusal != null) {
-      log(`\n${opened.refusal.message}`);
-      exitCode = Math.max(exitCode, 2);
-    } else {
-      const section = comparisonSections({
-        run,
-        base: { cells: {} },
-        mode: 'check',
-        label: `${opened.display} (ratios to rn-core)`,
-        baseTable: baselineTable(opened.baseline),
-        baseNoise: baselineNoise(opened.baseline),
-      });
-      process.stdout.write(`\n${section.markdown}\n`);
-      appendSection(written.md, `\n${section.markdown}\n`);
-      exitCode = Math.max(exitCode, section.exitCode);
+    const baseWritten = writeReportFiles({
+      run: baseRun,
+      markdown: renderMarkdown(baseRun),
+      fileName: resultsFileName(
+        comparison.sides[1]?.sha ?? 'unknown',
+        platform,
+        new Date(started),
+        false,
+        perfMarks
+      ),
+    });
+    log(`Base run:  ${path.relative(process.cwd(), baseWritten.json)}`);
+    const section = comparisonSections({
+      run,
+      base: baseRun,
+      label: `${comparison.ref} (measured in this session)`,
+      expected: comparison.cells.compared,
+    });
+    process.stdout.write(`\n${section.markdown}\n`);
+    appendSection(written.md, `\n${section.markdown}\n`);
+    appendSection(baseWritten.md, `\n${section.markdown}\n`);
+    const outcome = comparisonOutcome({
+      ref: comparison.ref,
+      slower: section.result.conclusiveFailures,
+      uncompared: section.uncompared,
+      baseProblems,
+    });
+    if (outcome.lines.length > 0) {
+      log(`\n${outcome.lines.join('\n')}`);
     }
+    exitCode = Math.max(exitCode, outcome.exitCode);
   }
 
   process.exitCode = exitCode;
+}
+
+/**
+ * The results-file shape, from the parts a side contributed. Both sides of a release
+ * comparison go through this, so the base side is described by exactly the same fields
+ * as the head side and `gate()` sees two comparable runs.
+ */
+function assembleRun({
+  sha,
+  dirty,
+  platform,
+  device,
+  plan,
+  launches,
+  perfMarks,
+  art,
+  dependencies,
+  machine,
+  problems,
+  cells,
+  started,
+}) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    sha,
+    dirty,
+    platform,
+    deviceKey: device.deviceKey,
+    deviceName: device.name,
+    plan,
+    launches,
+    perfMarks,
+    art,
+    dependencies,
+    /**
+     * The waiting rule this run measured under (A4). Read back from the cells rather
+     * than echoed from the flags, so a run whose app binary predates the launch flag
+     * cannot claim a timeout it never applied - the problem below compares the two and
+     * says so. Zero means "nothing recorded", which is what a run of an app built
+     * before the flag looks like, and the problem below says so when that happens.
+     */
+    timeouts: requestedTimeouts({ cells }),
+    clock: Object.values(cells)[0]?.clock ?? null,
+    createdAt: new Date().toISOString(),
+    durationMs: Date.now() - started,
+    machine,
+    problems,
+    cells,
+  };
 }
 
 if (
