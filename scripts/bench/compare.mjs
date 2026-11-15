@@ -24,8 +24,8 @@
  * every cell, the runner installs one side, drives its launches, then installs the
  * other side for the next round. The order per round is the same ABBA the arms use
  * (`sideOrderForRound`), so neither side is always measured first in a round and the
- * host drift inside a session is shared. The cost is one install per side switch
- * (about 20 s each, 6 installs for a 4-launch plan) and one extra app build.
+ * host drift inside a session is shared. The cost is one install per side switch (6
+ * installs for a 4-launch plan - not yet timed on a device) and one extra app build.
  *
  * ## What is compared
  *
