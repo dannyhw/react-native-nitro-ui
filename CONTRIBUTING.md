@@ -1339,13 +1339,13 @@ show 6-10 s per launch, so budget roughly one to two hours per platform. That is
 from the per-launch times on record, not a measured plan duration. `--shutdown` powers off a
 simulator or emulator the runner booted itself.
 
-| Variable                 | Default      | Meaning                                                              |
-| ------------------------ | ------------ | -------------------------------------------------------------------- |
-| `IOS_SIM_UDID`           | unset        | Simulator UDID to boot and measure on                                |
-| `ANDROID_AVD`            | unset        | AVD name — the runner finds its serial among attached ones           |
-| `ANDROID_SERIAL`         | unset        | Used only when there is no AVD name (physical device)                |
-| `BENCH_ABIS`             | `arm64-v8a`  | Android ABIs to build (`x86_64` on an Intel host)                    |
-| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300`  | Per-launch wall-clock budget (s); raise it on a loaded machine       |
+| Variable                 | Default     | Meaning                                                        |
+| ------------------------ | ----------- | -------------------------------------------------------------- |
+| `IOS_SIM_UDID`           | unset       | Simulator UDID to boot and measure on                          |
+| `ANDROID_AVD`            | unset       | AVD name — the runner finds its serial among attached ones     |
+| `ANDROID_SERIAL`         | unset       | Used only when there is no AVD name (physical device)          |
+| `BENCH_ABIS`             | `arm64-v8a` | Android ABIs to build (`x86_64` on an Intel host)              |
+| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300` | Per-launch wall-clock budget (s); raise it on a loaded machine |
 
 Prefer `ANDROID_AVD` over `ANDROID_SERIAL`: console ports are allocated by
 availability, so a serial goes stale the moment another emulator boots or dies,

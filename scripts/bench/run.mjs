@@ -1230,7 +1230,7 @@ export async function main(argv) {
       const section = comparisonSections({
         run,
         base: readJson(comparisonTarget.file),
-          label: comparisonTarget.label,
+        label: comparisonTarget.label,
       });
       process.stdout.write(`\n${section.markdown}\n`);
       appendSection(written.md, `\n${section.markdown}\n`);

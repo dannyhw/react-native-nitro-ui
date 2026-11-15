@@ -540,8 +540,7 @@ function gateTable(result) {
         formatRatio(value.base),
         formatRatio(value.head),
         formatRatio(value.ratio),
-        notes.join(', ') ||
-          'within tolerance',
+        notes.join(', ') || 'within tolerance',
       ]);
     }
   }
