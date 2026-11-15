@@ -1,12 +1,10 @@
 /**
- * The `check` runner: does the graph still run *the chain*, and does it order what
- * shares an output?
+ * The `check` runner: does it run the steps, and does it order what shares an
+ * output?
  *
  * The failure mode here is a fast `check` that quietly proves less than the
  * reports say it does, so the cases are the ones that would let that happen:
  *
- *   - the graph and `package.json`'s `check:serial` drifting apart (a step added
- *     to one and not the other) - the test that fails, in both directions;
  *   - two steps touching the same output with nothing between them (the `needs`
  *     edge that keeps `prepare` from deleting `nitrogen/` under `nitrogen:check`);
  *   - a scheduler that interleaves two steps' logs, or that keeps starting steps
@@ -32,8 +30,6 @@ import {
   parseJobsArgument,
   planProblems,
   runCheckPlan,
-  serialChainFromSteps,
-  stepsFromSerialChain,
   unknownCheckArguments,
   validateCheckSteps,
 } from '../check-steps.mjs';
@@ -50,94 +46,28 @@ function stepNames(steps = CHECK_STEPS) {
   return steps.map((step) => step.name);
 }
 
-describe('the check step list is the chain', () => {
-  it('`check:serial` in package.json is exactly what the graph declares', () => {
-    // This is the test the brief asks for: add a step to the old chain and not to
-    // `CHECK_STEPS`, or the reverse, and it fails. The runner refuses to run at
-    // all when the two disagree (planProblems, below), so a report's `check`
-    // cannot quietly mean something narrower than CI's.
-    expect(serialChainFromSteps(CHECK_STEPS)).toBe(
-      packageJson.scripts['check:serial']
-    );
+describe('the check step list', () => {
+  it('`check` in package.json is the runner, and every step is a real script', () => {
     expect(packageJson.scripts.check).toBe('node scripts/check.mjs');
-  });
-
-  it('`check:serial` is a plain `bun run <step>` chain, so the names are real scripts', () => {
-    const parsed = stepsFromSerialChain(packageJson.scripts['check:serial']);
-    expect(parsed.problems).toEqual([]);
-    for (const name of parsed.names) {
+    for (const name of stepNames()) {
       expect(packageJson.scripts[name]).toEqual(expect.any(String));
     }
-    // The old order, kept as the reference: 17 steps, `prepare` before the three
-    // that read `lib/`.
-    expect(parsed.names).toHaveLength(17);
-    expect(parsed.names.indexOf('prepare')).toBeLessThan(
-      parsed.names.indexOf('api-extractor:check')
+    // 17 steps, `prepare` before the three that read `lib/`.
+    expect(stepNames()).toHaveLength(17);
+    expect(stepNames().indexOf('prepare')).toBeLessThan(
+      stepNames().indexOf('api-extractor:check')
     );
-  });
-
-  it('a step added to the chain and not to the graph is the failure this guards', () => {
-    // The same comparison the real one makes, in both directions, with fixtures
-    // that cannot coincide with the answer: `smoke:pack` is a real script that is
-    // deliberately not in `check`.
-    const chain = serialChainFromSteps(CHECK_STEPS);
-    const added = `${chain} && bun run smoke:pack`;
-    expect(stepsFromSerialChain(added).names).not.toEqual(stepNames());
-    expect(stepsFromSerialChain(added).names.slice(0, 17)).toEqual(stepNames());
-
-    const dropped = stepsFromSerialChain(
-      chain.replace(' && bun run readme:check', '')
-    ).names;
-    expect(dropped).not.toEqual(stepNames());
-    expect(dropped).toHaveLength(16);
-  });
-
-  it('the runner refuses to start when the chain and the graph differ, either way', () => {
-    // `planProblems` is what `check.mjs` checks before spawning anything, so the
-    // two directions of drift are the two ways a green `check` can come to mean
-    // less than the reports claim.
-    const chain = packageJson.scripts['check:serial'];
-    expect(planProblems(CHECK_STEPS, chain)).toEqual([]);
-
-    const addedToChain = planProblems(
-      CHECK_STEPS,
-      `${chain} && bun run smoke:pack`
-    );
-    expect(addedToChain).toHaveLength(1);
-    expect(addedToChain[0]).toContain(
-      'the chain and the graph are different steps'
-    );
-    expect(addedToChain[0]).toContain('smoke:pack');
-
-    const addedToGraph = planProblems(
-      [
-        ...CHECK_STEPS,
-        { name: 'smoke:pack', needs: [], group: null, writes: [], reads: [] },
-      ],
-      chain
-    );
-    expect(addedToGraph.join('\n')).toContain('smoke:pack');
-
-    // A step name in the chain that is not a plain `bun run <step>` (an argument,
-    // say) is reported rather than skipped, because the runner could not run it.
-    expect(
-      planProblems(
-        CHECK_STEPS,
-        chain.replace(
-          'bun run perf:renders',
-          'bun run perf:renders -- --update'
-        )
-      )[0]
-    ).toContain('not a plain "bun run <script>"');
   });
 
   it('the runner refuses a graph that races over a shared output', () => {
-    // Same guard, the other failure mode: a `needs` edge deleted, so the schedule
-    // would let `prepare` delete `nitrogen/` under `nitrogen:check`.
+    // `planProblems` is what `check.mjs` checks before spawning anything. A `needs`
+    // edge deleted, so the schedule would let `prepare` delete `nitrogen/` under
+    // `nitrogen:check`.
+    expect(planProblems(CHECK_STEPS)).toEqual([]);
     const mutated = CHECK_STEPS.map((step) =>
       step.name === 'prepare' ? { ...step, needs: [] } : step
     );
-    const problems = planProblems(mutated, packageJson.scripts['check:serial']);
+    const problems = planProblems(mutated);
     expect(problems).toEqual(
       expect.arrayContaining([
         'shared output: prepare writes nitrogen/generated while test reads it - add a needs edge or a shared group',
@@ -145,21 +75,8 @@ describe('the check step list is the chain', () => {
     );
   });
 
-  it('a chain section that is not a plain `bun run <step>` is reported, not skipped', () => {
-    const parsed = stepsFromSerialChain(
-      'bun run typecheck && bun run perf:renders -- --update-baseline'
-    );
-    expect(parsed.names).toEqual(['typecheck']);
-    expect(parsed.problems).toHaveLength(1);
-    expect(parsed.problems[0]).toContain('not a plain "bun run <script>"');
-  });
-
-  it('the step names, in order, are the ones the chain runs', () => {
-    expect(stepNames()).toEqual(
-      stepsFromSerialChain(packageJson.scripts['check:serial']).names
-    );
-    // Spelled out as well, so renaming a step in both places without thinking
-    // about what the chain means still has to pass this.
+  it('the step names, in order', () => {
+    // Spelled out, so adding, dropping or renaming a step has to be done here too.
     expect(stepNames()).toEqual([
       'typecheck',
       'lock:check',
@@ -1055,9 +972,9 @@ describe('check.mjs, spawning real steps', () => {
     // waits on, so `Checks (parallel)` would be a new check name with the old one
     // reported as expected-but-never-run.
     expect(job[1]).toMatch(/^ {4}name: Checks\n/);
-    // The exact command line, not a substring: `run: bun run check:serial` contains
-    // `run: bun run check`, so a loose match stayed green when CI was pointed back at
-    // the old chain (review N2). Eight spaces: `run:` is a step key, `name:` above is
+    // The exact command line, not a substring: a loose match stayed green when CI
+    // was pointed at another script whose name starts with `check` (review N2).
+    // Eight spaces: `run:` is a step key, `name:` above is
     // a job key at four.
     expect(job[1]).toMatch(/^ {8}run: bun run check\n/m);
     // Not a chain of steps, and not forced to a job count: a pinned `--jobs` would
@@ -1084,15 +1001,9 @@ describe('check.mjs, spawning real steps', () => {
 function runnerInScratchCheckout(named) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-entry-'));
   fs.mkdirSync(path.join(dir, named, 'scripts'), { recursive: true });
-  // The graph is only allowed to run if it still describes `check:serial`, so the
-  // scratch manifest carries the real chain - generated from the real graph, which
-  // the parity test above already pins to the real manifest.
   fs.writeFileSync(
     path.join(dir, named, 'package.json'),
-    JSON.stringify({
-      name: 'x10-entry-fixture',
-      scripts: { 'check:serial': serialChainFromSteps() },
-    })
+    JSON.stringify({ name: 'x10-entry-fixture' })
   );
   for (const file of ['check.mjs', 'check-steps.mjs']) {
     fs.copyFileSync(

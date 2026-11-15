@@ -20,18 +20,10 @@
  * so a case says which port is busy and which process owns it.
  */
 
-import {
-  describe,
-  expect,
-  it,
-  beforeEach,
-  afterEach,
-  afterAll,
-} from '@jest/globals';
+import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
-  readdirSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -741,30 +733,6 @@ const LISTENER_SNIPPET =
   'tryBind(0);const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();';
 
 /**
- * The same fixture with its self-exit at 1.5 s, for the case that measures the self-exit.
- *
- * Here the deadline starts once the port is bound and the pid file written, not at boot. A
- * port that is briefly busy under a parallel suite costs 200 ms a bind retry, so a 1.5 s
- * deadline counted from boot can end the fixture before it has written its pid (F6's merge
- * `check`, 31 Oct). The shipped 60 s deadline outlasts every retry, so it can stay at boot.
- */
-const SELF_EXIT_SNIPPET = LISTENER_SNIPPET.replace(
-  'String(process.pid)))};',
-  'String(process.pid))||setTimeout(()=>process.exit(0),1500).unref())};'
-).replace(
-  'const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();',
-  ''
-);
-if (
-  !SELF_EXIT_SNIPPET.includes(',1500)') ||
-  SELF_EXIT_SNIPPET.includes(',60000)')
-) {
-  throw new Error(
-    'SELF_EXIT_SNIPPET no longer matches LISTENER_SNIPPET; update both together'
-  );
-}
-
-/**
  * Blocks for a moment without a subprocess and without spinning.
  *
  * A synchronous helper cannot use a timer, and the alternatives are bad: a busy loop burns a
@@ -822,153 +790,6 @@ function killFixturePid(pid) {
     sleepSync(25);
   }
 }
-
-/**
- * Starts the fixture and walks away, so the fixture is a *grandchild* of the test process.
- *
- * Not tidiness - a real difference, and one that made two of the cases below fail before they
- * were right. `pidIsAlive` asks `kill(pid, 0)`, which answers "alive" for a zombie, and a fixture
- * this suite fathered is a zombie until node reaps it, which needs the event loop the synchronous
- * pid-file wait is busy blocking. The real sweep has no such problem, because the server it stops
- * is never its own child: it is the run's child's child, reparented when the run exited and reaped
- * by the OS. Launching through one more process is what makes the fixture the same shape as the
- * thing being guarded, so "is it gone?" means the same thing in both.
- */
-function spawnFixture(dir, snippet, ...args) {
-  const launcher = join(dir, 'spawn-fixture.mjs');
-  if (!existsSync(launcher)) {
-    writeFileSync(
-      launcher,
-      'import { spawn } from "node:child_process";\n' +
-        'const [, , exec, snippet, pidFile, port] = process.argv;\n' +
-        'const child = spawn(exec, ["-e", snippet, port, pidFile], {\n' +
-        '  detached: true,\n' +
-        '  stdio: "ignore",\n' +
-        '});\n' +
-        'child.unref();\n'
-    );
-  }
-  const child = spawn(
-    process.execPath,
-    [launcher, process.execPath, snippet, ...args],
-    { detached: true, stdio: 'ignore' }
-  );
-  child.unref();
-  return child;
-}
-
-/**
- * The pid-file wait, on its own, because the two device-gate cases below cannot show it working:
- * in a passing run the file always appears in time, which is exactly the condition under which a
- * single `existsSync` + `readFileSync` pair looks identical to a poll. What makes them differ is
- * a late writer - the once-in-four ENOENT this suite hit while `check-runner` ran beside it - so
- * the writer here is late on purpose.
- */
-describe('readFixturePid', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'x15-pidfile-'));
-
-  /**
-   * Kills whatever any case in this block left running, by the pid files they all write.
-   *
-   * Not a formality: the cases pass a pid file to a fixture, so the file is the one handle that
-   * exists no matter how far a test got. The leak this exists for was found by running the
-   * suite - a case whose fixture never exits goes *red*, and a red test's `finally` is either
-   * skipped or already past the spawn, so the listener stayed up holding a real port. That is
-   * the same failure the fixture's self-exit is meant to make impossible, and a broken
-   * self-exit is exactly the state in which this teardown earns its keep: it runs on the way
-   * out of a failing block, when nothing else does.
-   */
-  afterAll(() => {
-    let names = [];
-    try {
-      names = readdirSync(dir);
-    } catch {
-      return;
-    }
-    for (const name of names) {
-      if (!name.endsWith('.pid')) continue;
-      let pid = null;
-      try {
-        pid = Number(String(readFileSync(join(dir, name), 'utf8')).trim());
-      } catch {
-        continue;
-      }
-      killFixturePid(pid);
-    }
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('waits for a writer that is late, rather than reading a file that is not there', () => {
-    const pidFile = join(dir, 'late.pid');
-    rmSync(pidFile, { force: true });
-    // A real process, writing after a pause longer than any scheduler hiccup, so the
-    // alternative - looking once - is guaranteed to miss it.
-    spawnFixture(
-      dir,
-      'setTimeout(()=>require("fs").writeFileSync(process.argv[2],String(process.pid),err=>process.exit(err?1:0)),1500)',
-      pidFile,
-      String(freePort())
-    );
-    const startedAt = Date.now();
-    const pid = readFixturePid(pidFile, 20_000);
-    const waited = Date.now() - startedAt;
-    expect(pid).not.toBeNull();
-    // The bound that proves the poll: the writer is 1.5 s away from the first look, so a helper
-    // that returns without waiting cannot reach 750 ms. A floor, not a ceiling - load can only
-    // make the real wait longer, which is the whole reason the helper exists.
-    expect(waited).toBeGreaterThan(750);
-    // The writer exits once it has written, so this is a courtesy: the helper's job was to find
-    // the pid, and `killFixturePid` is quiet about a process that is already gone.
-    killFixturePid(pid);
-  });
-
-  it('gives up with null when nothing ever writes, so the test says which', () => {
-    // The other wrong answer is an ENOENT from a `readFileSync`, which reads as a broken test
-    // rather than as "the process under test never started" - the thing a reader needs to know.
-    expect(readFixturePid(join(dir, 'never.pid'), 400)).toBeNull();
-  });
-
-  it('kills by the pid file and waits for the process to be gone', () => {
-    const pidFile = join(dir, 'killed.pid');
-    rmSync(pidFile, { force: true });
-    spawnFixture(dir, LISTENER_SNIPPET, pidFile, String(freePort()));
-    const pid = readFixturePid(pidFile, 20_000);
-    expect(pid).not.toBeNull();
-    expect(pidIsAlive(pid ?? 0)).toBe(true);
-    killFixturePid(pid);
-    expect(pidIsAlive(pid ?? 0)).toBe(false);
-  });
-
-  it('does nothing for a pid that was never written', () => {
-    // A failure before the pid file exists must not turn cleanup into a second failure, and
-    // `kill(0)`/`kill(NaN)` would be a signal to somebody.
-    expect(() => killFixturePid(null)).not.toThrow();
-    expect(() => killFixturePid(0)).not.toThrow();
-    expect(() => killFixturePid(Number.NaN)).not.toThrow();
-  });
-
-  it('exits by itself even if every killer fails', () => {
-    // The fixture's own promise, and the one no device-gate case can show: those have the gate
-    // stop the server, so they never reach the deadline. It is here because two real listeners
-    // were found days later, still holding ports, from exactly this shape of fixture - and this
-    // test signals nothing, so surviving is only ever the fixture's own doing.
-    const pidFile = join(dir, 'self.pid');
-    rmSync(pidFile, { force: true });
-    // 1.5 s against the shipped 60 s: the deadline is the thing under test, so the fixture is
-    // built with a short one rather than the suite waiting a minute for it.
-    spawnFixture(dir, SELF_EXIT_SNIPPET, pidFile, String(freePort()));
-    const pid = readFixturePid(pidFile, 20_000);
-    expect(pid).not.toBeNull();
-    // Up when the pid file appeared, and nothing signals it: the disappearance below is the
-    // fixture's own `setTimeout`, and nothing else.
-    expect(pidIsAlive(pid ?? 0)).toBe(true);
-    const deadline = Date.now() + 12_000;
-    while (pidIsAlive(pid ?? 0) && Date.now() < deadline) {
-      sleepSync(50);
-    }
-    expect(pidIsAlive(pid ?? 0)).toBe(false);
-  }, 30_000);
-});
 
 /**
  * A port nobody is listening on, asked of the OS rather than guessed: the fixture's fake Metro

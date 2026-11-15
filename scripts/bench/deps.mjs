@@ -4,16 +4,13 @@
  * A baseline's ratios divide by `rn-core`, so an `@expo/ui` bump moves the two
  * reference arms and a React Native bump moves every row in the file. That makes
  * both versions a **comparability regime** — the same kind of thing as a simulator
- * runtime or an ART compile state (`docs/architecture/benchmarks.md`) — and a
- * merged baseline can only be checked against one if it says which versions its
- * cells were measured with (X14).
+ * runtime or an ART compile state (`docs/architecture/benchmarks.md`) — so a run
+ * and a baseline record which versions their cells were measured with (X14).
  *
  * Three sources, in order of what they can prove:
  *
  * 1. `bun.lock` — what `bun install` would install for this commit's
- *    `bench/package.json`. Committed, so it is also readable at *another* commit,
- *    which is how a baseline file older than this field still gets its versions
- *    (`resolvedDependenciesAt()`).
+ *    `bench/package.json`.
  * 2. The workspace manifest — the range the app asks for (`"react-native":
  *    "0.88.0"`). Recorded as the `requested` half so a caret range and an exact
  *    pin are not silently the same claim.
@@ -94,8 +91,8 @@ export function installedVersion(manifest) {
  * shipped file — "Expected double-quoted property name" — and a reader that only
  * tries strict JSON resolves *nothing*, on every machine, forever. That is the
  * bug this exists because of: the fixture lock in `bench-deps.test.js` was
- * hand-written strict JSON, so the reader looked fine while the real file made
- * every merge refuse with "could not be read to recover it".
+ * hand-written strict JSON, so the reader looked fine while the real file
+ * resolved nothing.
  *
  * Strict JSON is tried first, so a file that is already canonical is never
  * rewritten on the way through. The tolerant pass then walks the text outside
@@ -250,35 +247,6 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
     }
   }
   return out;
-}
-
-/**
- * Reads `bun.lock` and `bench/package.json` **at a git revision**, for the case
- * where a baseline file is older than this field and its own `sha` is the only
- * record of what app produced it.
- *
- * Read-only (`git show`), and null-ish on any failure — an unreadable revision is
- * a refusal downstream, never a version invented from the working tree, which
- * would be a different app's number wearing the founding commit's name.
- *
- * @param {{ git?: (args: string[]) => string | null, rev: string }} input
- * @returns {{ lockText: string | null, manifestText: string | null }}
- */
-export function dependenciesSourceAt({ git, rev }) {
-  const show = (file) => {
-    if (git == null || rev == null || rev === '') {
-      return null;
-    }
-    try {
-      return git(['show', `${rev}:${file}`]);
-    } catch {
-      return null;
-    }
-  };
-  return {
-    lockText: show('bun.lock'),
-    manifestText: show('bench/package.json'),
-  };
 }
 
 /**

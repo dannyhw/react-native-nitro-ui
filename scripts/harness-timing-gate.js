@@ -71,8 +71,8 @@ function timingGateState({ env = process.env } = {}) {
     // because it is the same problem as the load average — the app's JS cannot read
     // the runner's environment, so a premise a *run* opted out of has to be
     // published rather than guessed at. `localePremiseMiss` in
-    // `scripts/conformance-core.mjs` fails a locale-dependent comparison unless this
-    // is true, which is what stops that rule degrading into a silent skip.
+    // `example/__tests__/Conformance.harness.tsx` fails a locale-dependent comparison
+    // unless this is true, which is what stops that rule degrading into a silent skip.
     allowLocaleMismatch: env.NITRO_UI_ALLOW_LOCALE_MISMATCH === '1',
     load1,
     load5,

@@ -2,16 +2,13 @@
 /**
  * Failure evidence that outlives the thing that produced it (X12).
  *
- * Three claims, each of which was false before this task:
+ * Two claims, each of which was false before this task:
  *
  *   1. a gate's log is in the clone's **log store** (`<git-common-dir>/nitro-ui-gates/`),
  *      so `git worktree remove` cannot take it - the Q3 incident was a diagnosis of
  *      three flaky tests that could not read the failing runs because the branch's
  *      worktree was already gone;
- *   2. `export --task <ID>` attaches a scrubbed excerpt to every **failed** line and
- *      to no passing one, because a committed red row with no evidence is a red row
- *      nobody can act on;
- *   3. a failed device gate appends the device's own state to its log, which is the
+ *   2. a failed device gate appends the device's own state to its log, which is the
  *      difference between "the harness timed out" and "the simulator had already
  *      exited, and logcat says why".
  *
@@ -30,28 +27,18 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterAll, describe, expect, it } from '@jest/globals';
-import { Buffer } from 'node:buffer';
 
 import {
-  EXCERPT_TAIL_LINES,
   LOG_RETENTION_DAYS,
   LOG_RETENTION_MAX_BYTES,
   LOG_STORE_BASENAME,
-  failureExcerptName,
-  failureLinesFrom,
   gateLogStoreDir,
-  isFailedRunWithLog,
   ledgerLogCandidates,
   ledgerPairs,
-  localPathRedactions,
   logNameFor,
   mergeLedgerExports,
   logRelativePath,
   planLogRetention,
-  redactLocalPaths,
-  renderFailureExcerpt,
-  scrubMachinePaths,
-  scrubSecrets,
   splitDeviceContext,
   summarizeLoad,
 } from '../gate-core.mjs';
@@ -176,8 +163,7 @@ function makeRepo({ branch = 'task/x12-fixture' } = {}) {
  * The fake gate runner, plus fake `simctl`/`adb` that record their arguments.
  *
  * The device fakes write each invocation into `<dir>/fake-bin/calls.log` so a test
- * can assert both what was asked and that the reserved serial was never asked. They
- * print something recognisable so the excerpt has content of its own to show.
+ * can assert both what was asked and that the reserved serial was never asked.
  */
 function fakeBins(dir, hook = '') {
   const bin = path.join(dir, 'fake-bin');
@@ -191,16 +177,6 @@ function fakeBins(dir, hook = '') {
     'echo "    Received: false"\n' +
     'echo "Test Suites: 1 failed, 32 passed, 33 total"\n' +
     'echo "Tests: 3 failed, 662 passed, 665 total"\n' +
-    'echo "NPM_TOKEN=supersecrettokenvalue GITHUB_TOKEN=ghp_${FAKE_TOKEN_BODY}"\n' +
-    'echo "cloned with ghp_abcdefghijklmnopqrstuvwxyz123456 from the registry"\n' +
-    // Two things the excerpt has to survive: a header credential (M5) and a path
-    // under the home directory (M4), the shape a jest stack trace leaves in a log.
-    'echo "Authorization: Bearer abcdef0123456789secretvalue"\n' +
-    'echo "    at Object.<anonymous> ($HOME/work/oss/repo/example/index.js:7:3)"\n' +
-    // The other machine-identifying path a real failure prints: jest names every
-    // temp fixture by its absolute scratch path, which on macOS carries the per-user
-    // folder hash. Round 1's own exported excerpt is what proved it still leaked.
-    `echo "  in ${fs.realpathSync(os.tmpdir())}/x12-jest-fixture"\n` +
     (hook === '' ? '' : `${hook}\n`) +
     'exit ${FAKE_EXIT:-0}\n';
   for (const name of ['bun', 'node']) {
@@ -215,8 +191,8 @@ function fakeBins(dir, hook = '') {
     'exit ${FAKE_DEVICE_EXIT:-0}\n';
   // Two booted simulators, because the one that matters for N6 is the *other* one:
   // the probe is host-wide, so it names whoever else is running on this Mac -
-  // another task's pair, or the maintainer's own device - and the excerpt must not
-  // repeat a name it has no business committing. The first UDID is `pair-2`'s, the
+  // another task's pair, or the maintainer's own device - and the block must not
+  // repeat that name. The first UDID is `pair-2`'s, the
   // pair this task's lease holds; the second belongs to nobody in the fixture's
   // pool, which is exactly the case that has to go.
   fs.writeFileSync(
@@ -381,27 +357,7 @@ describe('gateLogStoreDir / logRelativePath (where a log goes)', () => {
   });
 });
 
-describe('ledgerLogCandidates (old lines still resolve)', () => {
-  const exists = (file) => file !== '/nothing';
-
-  it('prefers a worktree log that is still there over the migrated copy', () => {
-    const { file, candidates } = ledgerLogCandidates(
-      { logPath: '.gates/logs/check-1.log' },
-      {
-        repoRoot: '/wt',
-        worktreeGitDir: '/wt/.git',
-        storeDir: '/clone/.git/nitro-ui-gates',
-        existsSync: (candidate) => candidate === '/wt/.gates/logs/check-1.log',
-      }
-    );
-    expect(file).toBe('/wt/.gates/logs/check-1.log');
-    // And it looked in the store too, so a caller can say where it searched.
-    expect(candidates).toContain(
-      '/clone/.git/nitro-ui-gates/.gates/logs/check-1.log'
-    );
-    expect(exists('/nothing')).toBe(false);
-  });
-
+describe('ledgerLogCandidates', () => {
   it('falls through to the store when the worktree is gone', () => {
     const { file } = ledgerLogCandidates(
       { logPath: 'task/X12/check-1.log' },
@@ -619,147 +575,6 @@ describe('logs survive git worktree remove', () => {
     expect(failed.stdout.match(/check-/g)).toHaveLength(1);
   });
 
-  it('finds a migrated legacy log by branch, and judges it as long as evidence survives (N1)', () => {
-    // Review M2's silent zero, arriving again through the migration path. A
-    // pre-X12 worktree has `.gates/logs/check-….log`; `migrateWorktreeLogs` files it
-    // under `<store>/.gates/logs/<branch>/`, so the branch IS in the path — but
-    // `branchOfStoredLog` gave up on anything starting `.gates/`, and
-    // `outcomeOfStoredLogs` keyed judgements by the record's or line's own
-    // `.gates/logs/check-….log`, which is not the stored file's relative path. So
-    // `logs --branch task/a --failed` listed none of the logs that exist today on
-    // A4 and X11, and `--all --failed` called them unjudgeable while their own line
-    // said `fail`.
-    //
-    // Two legacy runs, because the honest answer differs and both matter:
-    //  - a *backgrounded* one, which left a `.gate.json` beside the log. That record
-    //    migrates too, so its verdict travels with the copy and survives even
-    //    `git worktree remove`.
-    //  - a *foreground* one, which left only a ledger line in the worktree. Once
-    //    the worktree is gone nothing in the store says how it ended, and the answer
-    //    has to stay "could not be judged" rather than "0 failed" (M2).
-    const dir = makeRepo({ branch: 'main' });
-    const wtParent = scratch('x12-wt-');
-    const worktree = path.join(wtParent, 'legacy');
-    gitInTempRepo(dir, [
-      'worktree',
-      'add',
-      '-q',
-      '-b',
-      'task/x12-legacy',
-      worktree,
-      'main',
-    ]);
-
-    // The pre-X12 state: two legacy logs ten days old, the backgrounded one's
-    // record, and a ledger line naming each.
-    const legacy = path.join(worktree, '.gates', 'logs');
-    fs.mkdirSync(legacy, { recursive: true });
-    const stale = (Date.now() - 10 * 86_400_000) / 1000;
-    const legacyRun = (name, withRecord) => {
-      const file = path.join(legacy, name);
-      fs.writeFileSync(file, `the old log\nFAIL ${name}\n`);
-      fs.utimesSync(file, stale, stale);
-      if (withRecord) {
-        fs.writeFileSync(
-          path.join(legacy, name.replace(/\.log$/, '.gate.json')),
-          `${JSON.stringify({
-            version: 1,
-            gate: 'check',
-            command: 'bun run check',
-            pid: 4242,
-            startedAt: Date.parse('2026-10-27T00:00:00.000Z'),
-            logPath: `.gates/logs/${name}`,
-            done: true,
-            finishedAt: Date.parse('2026-10-27T00:04:00.000Z'),
-            exitCode: 1,
-            result: 'fail',
-            branch: 'task/x12-legacy',
-          })}\n`
-        );
-      }
-    };
-    legacyRun('check-2026-10-27T00-00-00.000Z.log', true);
-    legacyRun('harness+ios-2026-10-27T01-00-00.000Z.log', false);
-    const legacyLedger = path.join(
-      worktree,
-      '.gates',
-      'task',
-      'x12-legacy.jsonl'
-    );
-    // The pre-X12 ledger, which a legacy gate would have created. It does not exist
-    // in a fresh worktree, so the fixture makes it: without the line there is no
-    // evidence the foreground run failed, and `--failed` would be right to skip it.
-    fs.mkdirSync(path.dirname(legacyLedger), { recursive: true });
-    for (const [gate, name] of [
-      ['check', 'check-2026-10-27T00-00-00.000Z.log'],
-      ['harness:ios', 'harness+ios-2026-10-27T01-00-00.000Z.log'],
-    ]) {
-      fs.appendFileSync(
-        legacyLedger,
-        `${JSON.stringify({
-          v: 5,
-          ts: '2026-10-27T00:00:00.000Z',
-          gate,
-          command: `bun run ${gate}`,
-          tree: 'b'.repeat(64),
-          head: 'dead000',
-          branch: 'task/x12-legacy',
-          result: 'fail',
-          exitCode: 1,
-          logPath: `.gates/logs/${name}`,
-        })}\n`
-      );
-    }
-    // And one ordinary failing run, so the two forms are listed together.
-    expect(runCli(worktree, ['check'], { FAKE_EXIT: '4' }).status).toBe(4);
-
-    const byBranch = runCli(worktree, ['logs', '--branch', 'task/x12-legacy']);
-    // Before the fix this printed `1 log file(s)`: the migration had already filed
-    // both legacy logs under this branch, and the listing could not see them.
-    expect(byBranch.stdout).toContain('3 log file(s) for task/x12-legacy');
-    expect(byBranch.stdout).toContain('check-2026-10-27T00-00-00.000Z.log');
-    expect(byBranch.stdout).toContain(
-      'harness+ios-2026-10-27T01-00-00.000Z.log'
-    );
-
-    const failed = runCli(worktree, [
-      'logs',
-      '--branch',
-      'task/x12-legacy',
-      '--failed',
-    ]);
-    // All three failed — the new run by its record, both legacy ones by the ledger
-    // line naming them at the migrated path.
-    expect(failed.stdout).toContain('3 log file(s)');
-    expect(failed.stdout).not.toContain('could not be judged');
-
-    // …and from a surviving checkout once the worktree is gone, which is the
-    // cleanup command ORCHESTRATOR.md tells the orchestrator to run. The
-    // backgrounded legacy run is still judged, because its record travelled with
-    // the copy into the store; the foreground one cannot be any more — its only
-    // evidence was the ledger line inside the worktree — and the honest answer for
-    // it stays "could not be judged" (M2) rather than a silent zero.
-    gitInTempRepo(dir, ['worktree', 'remove', '--force', worktree]);
-    expect(fs.existsSync(worktree)).toBe(false);
-    const afterRemoval = runCli(dir, [
-      'logs',
-      '--branch',
-      'task/x12-legacy',
-      '--failed',
-    ]);
-    expect(afterRemoval.stdout).toContain('check-2026-10-27T00-00-00.000Z.log');
-    expect(afterRemoval.stdout).toContain('could not be judged');
-    expect(afterRemoval.stdout).not.toContain(
-      'harness+ios-2026-10-27T01-00-00.000Z.log'
-    );
-    // All three are still *listed*, which is the half that was broken outright.
-    const unjudged = runCli(dir, ['logs', '--branch', 'task/x12-legacy']);
-    expect(unjudged.stdout).toContain('3 log file(s)');
-    expect(unjudged.stdout).toContain(
-      'harness+ios-2026-10-27T01-00-00.000Z.log'
-    );
-  });
-
   it('says it cannot tell, rather than "0 failed", when a stored log has no record (M2)', () => {
     // A log someone dropped into the store by hand (or one whose record was pruned):
     // the honest answer is "unknown", because "0 failed" reads as all-clear.
@@ -776,29 +591,6 @@ describe('logs survive git worktree remove', () => {
     const failed = runCli(dir, ['logs', '--failed']);
     expect(failed.stdout).toContain('could not be judged');
     expect(failed.stdout).toContain('pass or fail is unknown');
-  });
-
-  it('writes the log the ledger names, when a legacy launcher points at .gates/logs (N7)', () => {
-    // An older `gate.mjs` starts a background run with `NITRO_UI_GATE_LOG` inside the
-    // worktree's own `.gates/logs/`. The runner used to join that *name* onto the
-    // store, so the file it wrote and the path the record and ledger named were
-    // different files, and the reader was sent to one that did not exist.
-    const dir = makeRepo();
-    const legacy = path.join(dir, '.gates', 'logs');
-    fs.mkdirSync(legacy, { recursive: true });
-    const chosen = path.join(legacy, 'check-from-legacy-launcher.log');
-    const run = runCli(dir, ['check'], { NITRO_UI_GATE_LOG: chosen });
-    expect(run.status).toBe(0);
-
-    // The file that was opened is the file that was written...
-    expect(fs.existsSync(chosen)).toBe(true);
-    expect(fs.readFileSync(chosen, 'utf8')).toContain('fake gate:');
-    // ...and it is the one the ledger points at, in the legacy spelling.
-    const [line] = ledgerIn(dir, 'task/x12-fixture');
-    expect(line.logPath).toBe('.gates/logs/check-from-legacy-launcher.log');
-    // Which is why the migration is not needed to read it back: it resolves through
-    // this checkout, and `export` can excerpt it.
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
   });
 
   it('ignores an NITRO_UI_GATE_LOG that names another branch’s run (N8)', () => {
@@ -908,225 +700,6 @@ describe('logs survive git worktree remove', () => {
     expect(fs.existsSync(path.join(storeOf(dir), line.logPath))).toBe(true);
   });
 
-  it('migrates a pre-X12 .gates/logs/ directory into the store, by copy', () => {
-    const dir = makeRepo();
-    // A log an older gate.mjs wrote, a ledger line that names it, and an old mtime -
-    // the three things a migrated file has to keep: its bytes, its resolvability,
-    // and its place in the 35-day queue.
-    const legacy = path.join(dir, '.gates', 'logs');
-    fs.mkdirSync(legacy, { recursive: true });
-    const oldName = 'check-2026-10-27T00-00-00.000Z.log';
-    const oldFile = path.join(legacy, oldName);
-    fs.writeFileSync(
-      oldFile,
-      'the old log, verbatim\nFAIL old/Core.test.tsx\n'
-    );
-    // Ten days old: inside the 35-day window, so it survives the run that migrates
-    // it, and outside the two-hour grace, so a run that ignored its mtime would be
-    // visibly wrong about it.
-    const stale = (Date.now() - 10 * 86_400_000) / 1000;
-    fs.utimesSync(oldFile, stale, stale);
-    fs.writeFileSync(
-      path.join(legacy, 'check-2026-10-27T00-00-00.000Z.gate.json'),
-      '{"version":1,"gate":"check","pid":1,"done":true}\n'
-    );
-    expect(runCli(dir, ['check']).status).toBe(0);
-    // A *failed* line naming the legacy log, so the export below has something to
-    // find. Without it the export resolves nothing and exits 0 whatever happens,
-    // which is how the first version of this check proved nothing at all (N3).
-    fs.appendFileSync(
-      path.join(dir, '.gates', 'task', 'x12-fixture.jsonl'),
-      `${JSON.stringify({
-        v: 5,
-        ts: '2026-10-27T00:00:00.000Z',
-        gate: 'check',
-        command: 'bun run check',
-        tree: 'b'.repeat(64),
-        head: 'dead000',
-        branch: 'task/x12-fixture',
-        result: 'fail',
-        exitCode: 1,
-        logPath: `.gates/logs/${oldName}`,
-      })}\n`
-    );
-
-    const migrated = path.join(
-      storeOf(dir),
-      '.gates',
-      'logs',
-      'task/x12-fixture',
-      oldName
-    );
-    expect(fs.existsSync(migrated)).toBe(true);
-    expect(fs.readFileSync(migrated, 'utf8')).toBe(
-      'the old log, verbatim\nFAIL old/Core.test.tsx\n'
-    );
-    expect(
-      fs.existsSync(
-        path.join(
-          storeOf(dir),
-          '.gates',
-          'logs',
-          'task/x12-fixture',
-          'check-2026-10-27T00-00-00.000Z.gate.json'
-        )
-      )
-    ).toBe(true);
-    // And it kept its mtime (N4), or retention would give a two-month-old log a
-    // fresh 35-day clock and the size cap would sort it as the newest thing there.
-    expect(Math.round(fs.statSync(migrated).mtimeMs / 1000)).toBe(
-      Math.round(fs.statSync(oldFile).mtimeMs / 1000)
-    );
-
-    // And the copy that survives: remove the worktree's own copy, which is what
-    // `git worktree remove` does to the file a pre-X12 line names. The export below
-    // can only produce an excerpt if it resolves the migrated copy through the store.
-    fs.rmSync(oldFile);
-    expect(fs.existsSync(migrated)).toBe(true);
-
-    // The part that used to be vacuous: the old line has to *resolve*, which the
-    // export proves by writing an excerpt for it. `--out` would take the "no task, no
-    // failures directory" path and exit 0 without reading a byte of the log.
-    const run = runCli(dir, ['export', '--task', 'X12']);
-    expect(run.status).toBe(0);
-    const committed = fs
-      .readFileSync(
-        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
-        'utf8'
-      )
-      .split('\n')
-      .filter((raw) => raw.trim() !== '')
-      .map((raw) => JSON.parse(raw))
-      .find((entry) => entry.result === 'fail');
-    expect(committed.logPath).toBe(`.gates/logs/${oldName}`);
-    expect(typeof committed.failureLogPath).toBe('string');
-    expect(fs.existsSync(path.join(dir, committed.failureLogPath))).toBe(true);
-    // The excerpt is of the *migrated* log, which is the only copy the export could
-    // have read from a worktree that is no longer there.
-    const excerpt = fs.readFileSync(
-      path.join(dir, committed.failureLogPath),
-      'utf8'
-    );
-    expect(excerpt).toContain('FAIL old/Core.test.tsx');
-  });
-
-  it('does not migrate a legacy log retention would delete at once (N7)', () => {
-    // Migration kept the source's mtime (rightly: retention queues by age), so a
-    // legacy log already past 35 days was copied into the store and removed again by
-    // the same run, three times over: every run printed "retention removed 1 stored
-    // log file(s) (age)" and appended two lines to `.migrated` about a copy that had
-    // just been undone. The comment above the note claimed the opposite.
-    const dir = makeRepo();
-    const legacy = path.join(dir, '.gates', 'logs');
-    fs.mkdirSync(legacy, { recursive: true });
-    const expired = path.join(legacy, 'check-2026-09-01T00-00-00.000Z.log');
-    fs.writeFileSync(expired, 'old evidence, already past retention\n');
-    const ancient = (Date.now() - 40 * 86_400_000) / 1000;
-    fs.utimesSync(expired, ancient, ancient);
-    // Ten days inside the window: the control, and the file that *should* migrate.
-    const keepable = path.join(legacy, 'check-2026-10-20T00-00-00.000Z.log');
-    fs.writeFileSync(keepable, 'still inside retention, so still evidence\n');
-    const fresh = (Date.now() - 10 * 86_400_000) / 1000;
-    fs.utimesSync(keepable, fresh, fresh);
-
-    let runs = '';
-    for (let index = 0; index < 3; index += 1) {
-      const result = runCli(dir, ['check']);
-      expect(result.status).toBe(0);
-      runs += result.stderr;
-    }
-    // Nothing to remove, three times: the expired log never entered the store.
-    expect(runs).not.toContain('retention removed');
-    // The note records one migration event, not three — and never names the expired
-    // file it left where it was.
-    const note = fs.existsSync(path.join(legacy, '.migrated'))
-      ? fs.readFileSync(path.join(legacy, '.migrated'), 'utf8')
-      : '';
-    expect(
-      note.split('\n').filter((line) => line.startsWith('# migrated'))
-    ).toHaveLength(1);
-    expect(note).toContain('check-2026-10-20T00-00-00.000Z.log');
-    expect(note).not.toContain('check-2026-09-01T00-00-00.000Z.log');
-    // And the control still migrated, so the skip is age, not a broken walk.
-    expect(
-      fs.existsSync(
-        path.join(
-          storeOf(dir),
-          '.gates',
-          'logs',
-          'task/x12-fixture',
-          'check-2026-10-20T00-00-00.000Z.log'
-        )
-      )
-    ).toBe(true);
-    // The expired source is left alone: the migration never deletes, and a file the
-    // tool refused to copy is not the tool's to remove.
-    expect(fs.existsSync(expired)).toBe(true);
-  });
-
-  it('migrates each worktree’s legacy logs, not just the first one to run (M3)', () => {
-    const dir = makeRepo({ branch: 'main' });
-    const wtParent = scratch('x12-wt-');
-    const wtA = path.join(wtParent, 'a');
-    const wtB = path.join(wtParent, 'b');
-    gitInTempRepo(dir, [
-      'worktree',
-      'add',
-      '-q',
-      '-b',
-      'task/wt-a',
-      wtA,
-      'main',
-    ]);
-    gitInTempRepo(dir, [
-      'worktree',
-      'add',
-      '-q',
-      '-b',
-      'task/wt-b',
-      wtB,
-      'main',
-    ]);
-    // Both have pre-X12 logs, and one of them has a *same-named* log with different
-    // bytes - the collision a per-clone marker used to hide by never migrating B.
-    for (const [worktree, content] of [
-      [wtA, 'A wrote this\n'],
-      [wtB, 'B wrote this, and it is a different size\n'],
-    ]) {
-      const legacy = path.join(worktree, '.gates', 'logs');
-      fs.mkdirSync(legacy, { recursive: true });
-      fs.writeFileSync(
-        path.join(legacy, 'check-2026-10-27T00-00-00.000Z.log'),
-        content
-      );
-    }
-    expect(runCli(wtA, ['check']).status).toBe(0);
-    expect(runCli(wtB, ['check']).status).toBe(0);
-
-    // Both are in the store, under their own branch, with their own bytes: the
-    // marker is per worktree, and the branch keeps the same file name apart.
-    const storedA = path.join(
-      storeOf(dir),
-      '.gates',
-      'logs',
-      'task/wt-a',
-      'check-2026-10-27T00-00-00.000Z.log'
-    );
-    const storedB = path.join(
-      storeOf(dir),
-      '.gates',
-      'logs',
-      'task/wt-b',
-      'check-2026-10-27T00-00-00.000Z.log'
-    );
-    expect(fs.existsSync(storedA)).toBe(true);
-    expect(fs.existsSync(storedB)).toBe(true);
-    expect(fs.readFileSync(storedA, 'utf8')).toBe('A wrote this\n');
-    expect(fs.readFileSync(storedB, 'utf8')).toBe(
-      'B wrote this, and it is a different size\n'
-    );
-  });
-
   it('applies retention to the store without touching a young log', () => {
     const dir = makeRepo();
     expect(runCli(dir, ['check']).status).toBe(0);
@@ -1149,8 +722,10 @@ describe('logs survive git worktree remove', () => {
     // it can never be deleted: it sits in the shared store past the byte cap forever,
     // and that cap is the only thing limiting its growth. Moving `.suites.json` into
     // the store (ledger v6) is exactly the change that adds a per-run file without
-    // adding its name to the filter, so both sidecars are asserted here - `.steps.json`
-    // from X10 is already on the list and this is what keeps it there.
+    // adding its name to the filter, so every sidecar is asserted here - `.steps.json`
+    // from X10 is already on the list and this is what keeps it there. The isolated
+    // launch's `.suites.json.isolated.json` and a run's `.runner.json` were the two
+    // that had been left off it.
     const dir = makeRepo();
     const store = storeOf(dir);
     const branchDir = path.join(store, 'task', 'x12-fixture');
@@ -1160,6 +735,8 @@ describe('logs survive git worktree remove', () => {
     for (const name of [
       'harness+ios-2026-09-01T00-00-00.000Z.log',
       'harness+ios-2026-09-01T00-00-00.000Z.log.suites.json',
+      'harness+ios-2026-09-01T00-00-00.000Z.log.suites.json.isolated.json',
+      'harness+ios-2026-09-01T00-00-00.000Z.runner.json',
       'check-2026-09-01T00-00-00.000Z.log',
       'check-2026-09-01T00-00-00.000Z.log.steps.json',
     ]) {
@@ -1172,9 +749,9 @@ describe('logs survive git worktree remove', () => {
     const young = path.join(branchDir, 'harness+android-today.log.suites.json');
     fs.writeFileSync(young, '{}\n');
 
-    const pruned = runCli(dir, ['logs', '--prune']);
+    const pruned = runCli(dir, ['logs']);
     expect(pruned.status).toBe(0);
-    expect(pruned.stdout).toContain('retention removed 4 file(s)');
+    expect(pruned.stdout).toContain('retention removed 6 file(s)');
     for (const file of written) expect(fs.existsSync(file)).toBe(false);
     expect(fs.existsSync(young)).toBe(true);
   });
@@ -1344,7 +921,7 @@ describe('logs survive git worktree remove', () => {
       })
     );
 
-    const pruned = runCli(dir, ['logs', '--prune']);
+    const pruned = runCli(dir, ['logs']);
     expect(pruned.status).toBe(0);
     // Exactly one victim: the 60-day-old log nothing claims. The 36-day one is older
     // than the retention window and survives anyway, on the record alone.
@@ -1489,9 +1066,9 @@ describe('logs survive git worktree remove', () => {
     expect(wait.stderr).not.toContain('exit 7');
   });
 
-  it('keeps another branch’s legacy migrated record out of wait (N4)', () => {
-    // The last scoping rule with no test on it. A pre-X12 record migrated from a
-    // worktree has `branch` and no `worktree`, so the worktree comparison cannot
+  it('keeps another branch’s record that names no worktree out of wait (N4)', () => {
+    // The last scoping rule with no test on it. A record written before records
+    // named their worktree has `branch` and no `worktree`, so the worktree comparison cannot
     // exclude it and the branch comparison is the only thing that does. Review N4:
     // deleting that comparison left the suite green. The harm is concrete — such a
     // record from another task's branch, still open and with a live-looking pid,
@@ -1500,8 +1077,6 @@ describe('logs survive git worktree remove', () => {
     const dir = makeRepo();
     const foreign = path.join(
       storeOf(dir),
-      '.gates',
-      'logs',
       'task',
       'x12-other',
       'check-2026-10-27T00-00-00.000Z.log'
@@ -1515,7 +1090,7 @@ describe('logs survive git worktree remove', () => {
         gate: 'check',
         pid: process.pid,
         startedAt: Date.parse('2026-10-27T00:00:00.000Z'),
-        logPath: `.gates/logs/check-2026-10-27T00-00-00.000Z.log`,
+        logPath: 'task/x12-other/check-2026-10-27T00-00-00.000Z.log',
         done: false,
         branch: 'task/x12-other',
       })
@@ -1562,316 +1137,32 @@ describe('logs survive git worktree remove', () => {
     // And it is a store-relative path, so a reader in another worktree can resolve it.
     expect(ours[0].logPath.startsWith('task/x12-fixture/')).toBe(true);
   });
-
-  it('migrates a worktree’s legacy logs even when another worktree already migrated (M3)', () => {
-    // The M3 case in one line of code: the marker used to live in the *shared* store,
-    // so the first worktree to migrate stopped every other one from ever doing it, and
-    // the second's pre-X12 logs died with it - the exact loss X12 exists to prevent.
-    // Mutation check: `path.join(location.dir, MIGRATION_NOTE)` for the note's path
-    // does not reproduce it any more (see `writeMigrationNote`: the note is provenance,
-    // never a gate), so the honest proof is that nothing here can skip the copy -
-    // `migrateWorktreeLogs` has no marker read in it at all, which `logs --all` after
-    // two worktrees' runs pins down from the outside.
-    const dir = makeRepo({ branch: 'main' });
-    const wtParent = scratch('x12-wt-');
-    const [wtA, wtB] = ['a', 'b'].map((name) => path.join(wtParent, name));
-    for (const [worktree, branch] of [
-      [wtA, 'task/x12-mig-a'],
-      [wtB, 'task/x12-mig-b'],
-    ]) {
-      gitInTempRepo(dir, ['branch', branch, 'main']);
-      gitInTempRepo(dir, ['worktree', 'add', '-q', worktree, branch]);
-      const legacy = path.join(worktree, '.gates', 'logs');
-      fs.mkdirSync(legacy, { recursive: true });
-      // Same file name in both, different bytes: the collision the review warned
-      // about once the copy actually runs per worktree.
-      fs.writeFileSync(
-        path.join(legacy, 'check-2026-10-27T00-00-00.000Z.log'),
-        `${branch} wrote this, and the sizes differ on purpose\n`
-      );
-    }
-    expect(runCli(wtA, ['check']).status).toBe(0);
-    expect(runCli(wtB, ['check']).status).toBe(0);
-
-    for (const branch of ['task/x12-mig-a', 'task/x12-mig-b']) {
-      const stored = path.join(
-        storeOf(dir),
-        '.gates',
-        'logs',
-        branch,
-        'check-2026-10-27T00-00-00.000Z.log'
-      );
-      expect(fs.readFileSync(stored, 'utf8')).toContain(`${branch} wrote this`);
-    }
-  });
 });
-/* ---------------------------- export excerpts ---------------------------- */
+/* ------------------------------ the export ------------------------------ */
 
-describe('gate.mjs export attaches failure evidence', () => {
-  it('writes an excerpt for the failed run, none for the passed one, and points at it', () => {
+describe('gate.mjs export copies the ledger, and only the ledger', () => {
+  it('copies a failed line as it is and writes no log beside it', () => {
+    // Logs stay in the clone's log store. The committed directory gets the ledger
+    // file and nothing else: no `failures/` directory, and no pointer on the line.
     const dir = makeRepo();
-    expect(runCli(dir, ['check']).status).toBe(0);
     expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-
-    const exported = runCli(dir, ['export', '--task', 'X12']);
-    expect(exported.status).toBe(0);
-
-    const ledgerFile = path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl');
-    expect(fs.existsSync(ledgerFile)).toBe(true);
-    const lines = fs
-      .readFileSync(ledgerFile, 'utf8')
+    const live = fs
+      .readFileSync(
+        path.join(dir, '.gates', 'task', 'x12-fixture.jsonl'),
+        'utf8'
+      )
       .split('\n')
-      .filter((raw) => raw.trim() !== '')
-      .map((raw) => JSON.parse(raw));
-    expect(lines).toHaveLength(2);
-    const passed = lines.find((entry) => entry.result === 'pass');
-    const failed = lines.find((entry) => entry.result === 'fail');
-    expect(passed.failureLogPath).toBeNull();
-    expect(typeof failed.failureLogPath).toBe('string');
-    expect(failed.failureLogPath).toMatch(
-      /^docs\/tasks\/X12\/failures\/.*\.log$/
-    );
-
-    const failuresDir = path.join(dir, 'docs', 'tasks', 'X12', 'failures');
-    const written = fs.readdirSync(failuresDir);
-    // One file for one failure, not two for two runs.
-    expect(written).toHaveLength(1);
-    expect(written[0]).toBe(path.basename(failed.failureLogPath));
-
-    const excerpt = fs.readFileSync(path.join(failuresDir, written[0]), 'utf8');
-    // Failing test names and assertion messages, in their own section rather than
-    // only somewhere in the tail: a log shorter than 150 lines repeats everything in
-    // the tail, so asserting on the whole file would pass even if the failure list
-    // were never written (which is how the first version of this test read).
-    const failuresSection = excerpt
-      .split('## Failing tests and assertion messages')[1]
-      .split('\n## ')[0];
-    expect(failuresSection).toContain('FAIL ios/core/Core.test.tsx');
-    expect(failuresSection).toContain('Expected: true');
-    expect(failuresSection).toContain('Received: false');
-    expect(failuresSection).toContain('Switch › renders the checked state');
-    // The header a reader needs: which gate, which tree, what load, where the
-    // *full* log is.
-    expect(excerpt).toContain('# Failure excerpt \u2014 check');
-    expect(excerpt).toContain(failed.tree.slice(0, 12));
-    // Store-relative, because that is the spelling `gate.mjs logs` takes and the one
-    // that means the same thing on every machine.
-    expect(excerpt).toContain(`Full log: \`${failed.logPath}\``);
-    expect(excerpt).toContain(`<store>/${failed.logPath}`);
-    expect(excerpt).toMatch(/## Last \d+ log line\(s\)/);
-    expect(EXCERPT_TAIL_LINES).toBe(150);
-    expect(excerpt).toContain('Load: start');
-    // And the secret in the log is gone, with the count of what was replaced.
-    expect(excerpt).not.toContain('supersecrettokenvalue');
-    expect(excerpt).toContain('[scrubbed]');
-    expect(exported.stdout).toContain('1 failure excerpt(s)');
-    // The count, not just the phrase: an export claiming "0 value(s) scrubbed" over
-    // a log that had four credentials in it would read as an all-clear. The fake log
-    // prints two assignments, one bare `ghp_` and one `Authorization:` header, and
-    // the header has to agree with the number of markers the file actually carries.
-    expect(exported.stdout).toContain('4 value(s) scrubbed');
-    expect(excerpt).toContain('Scrubbed: 4 credential-looking value(s)');
-    expect(excerpt.match(/\[scrubbed/g)).toHaveLength(4);
-    expect(excerpt).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz123456');
-  });
-
-  it('commits no absolute path anywhere in an excerpt (D25)', () => {
-    const dir = makeRepo();
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
+      .filter((raw) => raw.trim() !== '');
     expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const failuresDir = path.join(dir, 'docs', 'tasks', 'X12', 'failures');
-    const excerpt = fs.readFileSync(
-      path.join(failuresDir, fs.readdirSync(failuresDir)[0]),
-      'utf8'
-    );
-    // This is the whole point of the assertion: the header used to print the store's
-    // absolute path in *every* excerpt, and the fake log prints a stack frame under
-    // $HOME, so both halves of the leak are in this one file.
-    const home = os.homedir();
-    const store = storeOf(dir);
-    expect(excerpt).not.toContain(store);
-    expect(excerpt).not.toContain(fs.realpathSync(dir));
-    expect(excerpt).not.toContain(home);
-    expect(excerpt).not.toContain(os.hostname());
-    expect(excerpt).not.toContain('/Users/');
-    // And the scratch directory, which is the leak round 1 found in *its own*
-    // exported excerpt: `/private/var/folders/x4/<32 chars>/T/...` names the machine
-    // as precisely as `$HOME`, and jest prints it for every temp fixture.
-    // A literal `/tmp` (Linux, so CI) names no machine, and `localPathRedactions`
-    // leaves it alone on purpose (it filters out anything no longer than `/tmp`), so
-    // the fixture's path passes through there. Every longer scratch path is redacted,
-    // including macOS's `/private/tmp` and its per-user `/var/folders/...`.
-    const tmp = fs.realpathSync(os.tmpdir());
-    if (tmp === '/tmp') {
-      expect(excerpt).toContain(`${tmp}/x12-jest-fixture`);
-    } else {
-      expect(excerpt).not.toContain(tmp);
-      expect(excerpt).toContain('<tmp>/x12-jest-fixture');
-    }
-    // The placeholders in their place, so the file is still useful: a reader on the
-    // machine that ran the gate can find the log and knows which checkout ran it.
-    // (The fake's HOME *is* the checkout here, so the stack frame reads as `<repo>`
-    // rather than `~`: the more specific path wins, which is the point of ordering.)
-    expect(excerpt).toContain('<store>/');
-    expect(excerpt).toContain('<repo>');
-    expect(excerpt).toContain('<repo>/work/oss/repo/example/index.js');
-    // And the credential the log carried is gone with the path, not instead of it.
-    expect(excerpt).not.toContain('abcdef0123456789secretvalue');
-    expect(excerpt).toContain('Authorization: [scrubbed]');
-  });
-
-  it('keeps two failed runs in the same second in two excerpts (N2)', () => {
-    // `failureExcerptName` folds milliseconds out of the file name, so two runs of
-    // one gate inside one second collide; `export` counted per raw `ts`, which still
-    // differs at the millisecond, so both runs got sequence `01` and the second
-    // export overwrote the first excerpt while *both* ledger lines pointed at it. A
-    // re-run right after a fast failure is exactly the case. The first run's evidence
-    // then survived only as a path in the commit, and nothing else.
-    const dir = makeRepo();
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-    const [first] = ledgerIn(dir, 'task/x12-fixture');
-    const branchDir = path.join(storeOf(dir), 'task', 'x12-fixture');
-    // A marker in each log, so an excerpt can be traced to the run it came from.
-    fs.appendFileSync(
-      path.join(branchDir, path.basename(first.logPath)),
-      '\nX12-FIRST-RUN\n'
-    );
-    const secondLog = 'check-2026-10-28T09-00-00.900Z.log';
-    fs.writeFileSync(
-      path.join(branchDir, secondLog),
-      'the second run\nFAIL Second.test.tsx\nX12-SECOND-RUN\n'
-    );
-    // The pair, spelled by hand, because a test cannot make two real runs land in
-    // one second. Both `ts` values carry milliseconds — as every real line does —
-    // and differ only there, which is precisely what the name then discards.
-    const live = path.join(dir, '.gates', 'task', 'x12-fixture.jsonl');
-    fs.writeFileSync(live, '');
-    for (const [ts, logPath] of [
-      ['2026-10-28T09:00:00.100Z', first.logPath],
-      ['2026-10-28T09:00:00.900Z', `task/x12-fixture/${secondLog}`],
-    ]) {
-      fs.appendFileSync(
-        live,
-        `${JSON.stringify({ ...first, ts, logPath, gate: 'check' })}\n`
-      );
-    }
-
-    const exported = runCli(dir, ['export', '--task', 'X12']);
-    expect(exported.status).toBe(0);
-    const written = fs
-      .readdirSync(path.join(dir, 'docs', 'tasks', 'X12', 'failures'))
-      .sort();
-    // Two files, one per run, differing only in the sequence suffix.
-    expect(written).toHaveLength(2);
-    expect(written[1]).toMatch(/--02\.log$/);
-
-    const lines = fs
-      .readFileSync(
-        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
-        'utf8'
-      )
+    const taskDir = path.join(dir, 'docs', 'tasks', 'X12');
+    expect(fs.readdirSync(taskDir)).toEqual(['gates.jsonl']);
+    const exported = fs
+      .readFileSync(path.join(taskDir, 'gates.jsonl'), 'utf8')
       .split('\n')
-      .filter((raw) => raw.trim() !== '')
-      .map((raw) => JSON.parse(raw));
-    expect(lines).toHaveLength(2);
-    const paths = lines.map((line) => line.failureLogPath);
-    // Two distinct paths — before the fix both lines named `…--01.log`.
-    expect(new Set(paths).size).toBe(2);
-    for (const [index, relative] of paths.entries()) {
-      expect(typeof relative).toBe('string');
-      // And each excerpt is the excerpt of *its own* run, not of whichever export
-      // happened to write last.
-      expect(fs.readFileSync(path.join(dir, relative), 'utf8')).toContain(
-        index === 0 ? 'X12-FIRST-RUN' : 'X12-SECOND-RUN'
-      );
-    }
-  });
-
-  it('does not overwrite a committed excerpt with a same-second run (X30 fix 1)', () => {
-    // N2 gave each *exported* run its own sequence number, and that was right until
-    // the merging export (X30 item 2): the file now arrives with round 1's lines
-    // already in it, each pointing at a committed `…--01.log`. The counter started at
-    // zero anyway, so a round-2 failure in round 1's second was handed `--01.log` too
-    // and wrote over the evidence the first round had already published — the merge
-    // keeps the *ledger* line byte-for-byte and pointed it at a file whose contents
-    // had just changed underneath it. Excerpts already in the checkout are therefore
-    // allocated before new names are.
-    const dir = makeRepo();
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-    const [first] = ledgerIn(dir, 'task/x12-fixture');
-    const branchDir = path.join(storeOf(dir), 'task', 'x12-fixture');
-    fs.appendFileSync(
-      path.join(branchDir, path.basename(first.logPath)),
-      '\nX13-FIRST-ROUND\n'
-    );
-    expect(runCli(dir, ['export', '--task', 'X13']).status).toBe(0);
-    const failures = path.join(dir, 'docs', 'tasks', 'X13', 'failures');
-    const committed = fs.readdirSync(failures);
-    expect(committed).toHaveLength(1);
-    expect(committed[0]).toMatch(/--01\.log$/);
-    const committedFile = path.join(failures, committed[0]);
-    expect(fs.readFileSync(committedFile, 'utf8')).toContain('X13-FIRST-ROUND');
-
-    // Round 2, milliseconds later: the same wall-clock second, which is the only
-    // second the excerpt name knows — `ts` carries the milliseconds,
-    // `failureExcerptName` throws them away, so both rounds name the same file.
-    const secondTs = String(first.ts).replace(/(\.\d{1,3})?Z$/, '.500Z');
-    const secondLog = `check-${secondTs.replaceAll(':', '-')}.log`;
-    fs.writeFileSync(
-      path.join(branchDir, secondLog),
-      'the second round\nFAIL Second.test.tsx\nX13-SECOND-ROUND\n'
-    );
-    const live = path.join(dir, '.gates', 'task', 'x12-fixture.jsonl');
-    fs.appendFileSync(
-      live,
-      `${JSON.stringify({
-        ...first,
-        ts: secondTs,
-        logPath: `task/x12-fixture/${secondLog}`,
-      })}\n`
-    );
-
-    expect(runCli(dir, ['export', '--task', 'X13']).status).toBe(0);
-    // Round 1's excerpt is untouched — same file, still its own run's log.
-    expect(fs.readFileSync(committedFile, 'utf8')).toContain('X13-FIRST-ROUND');
-    expect(fs.readFileSync(committedFile, 'utf8')).not.toContain(
-      'X13-SECOND-ROUND'
-    );
-    // And round 2 got the next name rather than the first one.
-    const written = fs.readdirSync(failures).sort();
-    expect(written).toHaveLength(2);
-    expect(written[1]).toMatch(/--02\.log$/);
-    expect(fs.readFileSync(path.join(failures, written[1]), 'utf8')).toContain(
-      'X13-SECOND-ROUND'
-    );
-    const lines = fs
-      .readFileSync(
-        path.join(dir, 'docs', 'tasks', 'X13', 'gates.jsonl'),
-        'utf8'
-      )
-      .split('\n')
-      .filter((raw) => raw.trim() !== '')
-      .map((raw) => JSON.parse(raw));
-    expect(lines).toHaveLength(2);
-    expect(new Set(lines.map((line) => line.failureLogPath)).size).toBe(2);
-  });
-
-  it('writes nothing at all when the ledger holds only passes', () => {
-    const dir = makeRepo();
-    expect(runCli(dir, ['check']).status).toBe(0);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    expect(
-      fs.existsSync(path.join(dir, 'docs', 'tasks', 'X12', 'failures'))
-    ).toBe(false);
-    const [line] = fs
-      .readFileSync(
-        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
-        'utf8'
-      )
-      .split('\n')
-      .filter((raw) => raw.trim() !== '')
-      .map((raw) => JSON.parse(raw));
-    expect(line.failureLogPath).toBeNull();
+      .filter((raw) => raw.trim() !== '');
+    expect(exported).toEqual(live);
+    expect(JSON.parse(exported[0]).result).toBe('fail');
+    expect('failureLogPath' in JSON.parse(exported[0])).toBe(false);
   });
 
   it('copies the other lines byte-for-byte, corrupt ones included', () => {
@@ -1896,769 +1187,6 @@ describe('gate.mjs export attaches failure evidence', () => {
     expect(exported).toHaveLength(2);
     expect(exported[0]).toBe(original[0]);
     expect(exported[1]).toBe('{"gate":"check","tree":');
-  });
-
-  it('says so, rather than writing an empty file, when the log cannot be found', () => {
-    const dir = makeRepo();
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '5' }).status).toBe(5);
-    const [line] = ledgerIn(dir, 'task/x12-fixture');
-    fs.rmSync(path.join(storeOf(dir), line.logPath), { force: true });
-    const exported = runCli(dir, ['export', '--task', 'X12']);
-    expect(exported.status).toBe(0);
-    expect(exported.stdout).toContain('NOTE no log for the failed `check` run');
-    expect(exported.stdout).toContain(storeOf(dir));
-    expect(
-      fs.existsSync(path.join(dir, 'docs', 'tasks', 'X12', 'failures'))
-    ).toBe(false);
-    // And the committed line points at nothing rather than at a file that does not
-    // exist: a `failureLogPath` on a run whose evidence was never found sends a
-    // reader looking for a file that is not there.
-    const [committed] = fs
-      .readFileSync(
-        path.join(dir, 'docs', 'tasks', 'X12', 'gates.jsonl'),
-        'utf8'
-      )
-      .split('\n')
-      .filter((raw) => raw.trim() !== '')
-      .map((raw) => JSON.parse(raw));
-    expect(committed.failureLogPath).toBeNull();
-  });
-});
-
-describe('scrubSecrets (what may be committed)', () => {
-  it('replaces assignment-shaped credentials in every spelling the gates print', () => {
-    const { text, replaced } = scrubSecrets(
-      [
-        'NPM_TOKEN=abcdef123456',
-        '  "github-token": "gh-secret-value",',
-        "export AWS_SECRET_ACCESS_KEY='wJalrEXAMPLEkey'",
-        '  password: hunter2hunter2',
-        '--api-key abcdefghijkl',
-        '<auth>abc123abc123</auth>',
-        'https://user:***@example.invalid/x',
-      ].join('\n')
-    );
-    for (const secret of [
-      'abcdef123456',
-      'gh-secret-value',
-      'wJalrEXAMPLEkey',
-      'hunter2hunter2',
-      'abcdefghijkl',
-      'abc123abc123',
-    ]) {
-      expect(text).not.toContain(secret);
-    }
-    expect(text.match(/\[scrubbed\]/g).length).toBe(replaced);
-    expect(replaced).toBe(7);
-  });
-
-  it('scrubs Authorization headers in every form a log keeps them in (M5)', () => {
-    // The first version replaced the *scheme* - the word `Bearer` - and published the
-    // credential next to a `[scrubbed]` marker that read as if it had worked. A curl
-    // verbose log, a JSON dump of request options and an env dump are all things a
-    // failing `bun install` or a release job prints.
-    const cases = [
-      [
-        'Authorization: Bearer abcdef0123456789secret',
-        'abcdef0123456789secret',
-      ],
-      ['Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA=='],
-      ["curl -H 'Authorization: token 0123456789abcdef'", '0123456789abcdef'],
-      [
-        '"Authorization": "Bearer abcdef0123456789secret"',
-        'abcdef0123456789secret',
-      ],
-      [
-        '{"headers": {"Authorization": "Bearer abcdef0123456789secret"}}',
-        'abcdef0123456789secret',
-      ],
-      [
-        'Proxy-Authorization: Negotiate YIIBhwYJKoZIhvcNAQcCo',
-        'YIIBhwYJKoZIhvcNAQcCo',
-      ],
-      ['Cookie: sessionid=abc123def456; other=2', 'abc123def456'],
-    ];
-    for (const [line, secret] of cases) {
-      const result = scrubSecrets(line);
-      expect(result.text).not.toContain(secret);
-      expect(result.replaced).toBe(1);
-      // The header's own key survives, so a reader can still tell which request leaked.
-      const [, key] = /([A-Za-z-]+)\s*["']?\s*[:=]/.exec(line);
-      expect(result.text).toContain(key);
-    }
-    // A header inside a quoted shell argument keeps its closing quote.
-    expect(
-      scrubSecrets("curl -H 'Authorization: token 0123456789abcdef'").text
-    ).toBe("curl -H 'Authorization: [scrubbed]'");
-  });
-
-  it('scrubs .npmrc registry credentials (M5)', () => {
-    // `.npmrc` is INI, not XML: its `_auth=` line is base64 `user:password` for a
-    // registry, and a failing `npm publish`/`bun install` is exactly what prints it.
-    // The first version's comment claimed `<auth>…</auth>` was npm's format; it is
-    // Maven's, and npm's line went out unscrubbed.
-    for (const line of [
-      '//registry.example.com/:_auth=dXNlcjpwYXNzd29yZA==',
-      '_auth=dXNlcjpwYXNzd29yZA==',
-      '//registry.example.com/:_authToken=npm_abcdefghijklmnopqrstuvwxyz123456',
-      '_password=s3cr3t-reg1stry-password',
-    ]) {
-      const result = scrubSecrets(line);
-      expect(result.text).not.toContain('dXNlcjpwYXNzd29yZA==');
-      expect(result.text).not.toContain('s3cr3t-reg1stry-password');
-      expect(result.replaced).toBe(1);
-      // And the line still says which key it was, which is the useful half.
-      expect(result.text).toContain('[scrubbed]');
-    }
-  });
-
-  it('scrubs a credential dump from an env-printing failure, and keeps the rest', () => {
-    // The realistic worst case: one line of a shell that echoed its own environment
-    // while failing. Two of these are secrets, two of them are the reason the run is
-    // interesting, and an excerpt that shredded all four is not evidence.
-    const { text } = scrubSecrets(
-      [
-        'env dump:',
-        '  GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz123456',
-        '  NPM_CONFIG_TOKEN=npm_abcdefghijklmnopqrstuvwx123456',
-        '  GRADLE_USER_HOME=/Users/dev/.gradle',
-        '  ANDROID_HOME=/Users/dev/Library/Android/sdk',
-      ].join('\n')
-    );
-    expect(text).not.toContain('ghp_');
-    expect(text).not.toContain('npm_');
-    expect(text).toContain('GRADLE_USER_HOME=/Users/dev/.gradle');
-    expect(text).toContain('ANDROID_HOME=/Users/dev/Library/Android/sdk');
-  });
-
-  it('replaces credential shapes that appear bare', () => {
-    const text = scrubSecrets(
-      'pulled with ghp_abcdefghijklmnopqrstuvwxyz123456 and a JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnopqrstuvwx'
-    ).text;
-    expect(text).not.toContain('ghp_');
-    expect(text).not.toContain('eyJhbGciOiJIUzI1NiJ9');
-  });
-
-  it('replaces a PEM private key whole instead of shredding its base64', () => {
-    const { text } = scrubSecrets(
-      '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0B\nAQEFAASCBKcw\n-----END PRIVATE KEY-----\n'
-    );
-    expect(text).toBe('[scrubbed: private key]\n');
-  });
-
-  it('leaves ordinary log lines alone, which is what makes an excerpt readable', () => {
-    const log =
-      'PASS ios/core/Core.test.tsx\n' +
-      'Tests: 665 passed, 665 total\n' +
-      'Transform time: 12.5s\n' +
-      'adb -s emulator-5574 shell input tap 100 200\n';
-    expect(scrubSecrets(log)).toEqual({ text: log, replaced: 0 });
-  });
-
-  it('does not call a keyword argument a credential', () => {
-    const log = 'sort_key=name\nmonkey=3 jobs\nkeyframes=1\nsession_count=4\n';
-    expect(scrubSecrets(log).text).toBe(log);
-  });
-
-  it('takes a config value to the end of the line, but not a JSON object', () => {
-    // The two halves of one rule. A config file's value is the rest of the line,
-    // because a passphrase is words (`password: correct horse battery`). A
-    // *structural* character after the separator means the value is not a phrase:
-    // it is an object, and swallowing to end-of-line would take the file's shape
-    // with it, so the reader loses the key that leaked as well as the secret.
-    const config = scrubSecrets('nexusPassword: correct horse battery');
-    expect(config.text).toBe('nexusPassword: [scrubbed]');
-    expect(config.replaced).toBe(1);
-
-    const json = scrubSecrets('cfg = { "password": "hunter2secret" }');
-    expect(json.text).toBe('cfg = { "password": "[scrubbed]" }');
-    // The object is still an object: the braces and the key survive, so the line
-    // still says *where* the credential sat.
-    expect(json.text).toContain('{ "password":');
-    expect(json.text).toContain('}');
-    expect(json.text).not.toContain('hunter2secret');
-
-    // The guard's real job is an *unquoted* object, where "the rest of the line"
-    // would swallow every key after the credential-shaped one. Without it, a
-    // config dump's remaining evidence — which is usually the reason the run is
-    // interesting — disappears from the committed excerpt.
-    const nested = scrubSecrets('nested {"a":{"secret":{"b":"c"}}}');
-    expect(nested.text).toContain('"b":"c"');
-    expect(nested.text).toContain('}');
-    expect(nested.replaced).toBe(1);
-  });
-
-  it('scrubs a multi-word password rather than its first word (N5)', () => {
-    // A YAML or properties value is not quoted, and a passphrase is words. Taking
-    // one word published the rest: `nexusPassword: correct horse battery` came out
-    // as `nexusPassword: [scrubbed] horse battery`, which is three quarters of the
-    // secret with a marker that reads as if it had been handled.
-    const cases = [
-      'password: correct horse battery staple',
-      '  nexusPassword = correct horse battery',
-      'git config credential.helper store\npassphrase: a b c d e',
-    ];
-    for (const line of cases) {
-      const { text } = scrubSecrets(line);
-      expect(text).not.toContain('horse');
-      expect(text).not.toContain('battery');
-      expect(text).not.toContain('staple');
-    }
-    // And a line that carries a *second* assignment keeps it: the two-token env
-    // dump is the realistic shape, and swallowing the rest of the line there would
-    // turn evidence into mush.
-    const both = scrubSecrets(
-      'NPM_TOKEN=abcdef123456 GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz123456'
-    );
-    expect(both.text).toContain('GITHUB_TOKEN=');
-    expect(both.text).not.toContain('ghp_');
-    expect(both.replaced).toBe(2);
-  });
-
-  it('scrubs an email address, and leaves an image scale alone (N5)', () => {
-    // D25 lists emails, and a build log prints them: `git log`, `.npmrc`'s
-    // `email=`, CocoaPods' `Author: Someone <…>`, a Gradle publication's pom.
-    const cases = [
-      ['email=daniel@example.com', 'daniel@example.com'],
-      ['Author: Dan <dan@example.co.uk> 2026', 'dan@example.co.uk'],
-      ['pushed by williams@corp.internal to main', 'williams@corp.internal'],
-    ];
-    for (const [line, address] of cases) {
-      const { text } = scrubSecrets(line);
-      expect(text).not.toContain(address);
-      expect(text).toContain('<email>');
-    }
-    // `logo@2x.png` is not an address, and redacting it would mangle the ordinary
-    // log lines an excerpt exists to keep readable.
-    const asset = 'copy logo@2x.png and @3x into assets\n';
-    expect(scrubSecrets(asset).text).toBe(asset);
-    // Nor is a protocol's own account: `git@github.com:owner/repo.git` is how every
-    // clone prints its remote, and redacting it hides which repository a release job
-    // pushed while naming nobody.
-    const remote =
-      'git push git@github.com:margelo/react-native-nitro-modules.git main\n';
-    expect(scrubSecrets(remote).text).toBe(remote);
-    expect(scrubSecrets(remote).replaced).toBe(0);
-  });
-
-  it('scrubs a `curl -u user:pass` and a bare `user:pass@host` (N5)', () => {
-    // The userinfo rule is a *URL* rule, so the two shapes a build script actually
-    // prints slipped through: the flag form, and the bare authority a curl error
-    // echoes back.
-    const cases = [
-      "curl -u janitor:'hunter2 pass' https://repo.internal/x",
-      'curl --user janitor:hunter2pass https://repo.internal/x',
-      'curl -u janitor:hunter2pass https://repo.internal/x',
-      'request to janitor:hunter2pass@repo.internal/x failed',
-      '--user=janitor:hunter2pass',
-    ];
-    for (const line of cases) {
-      const { text } = scrubSecrets(line);
-      expect(text).not.toContain('hunter2');
-      expect(text).toContain('[scrubbed]');
-      // The host survives where the line names one, so a reader still knows which
-      // service leaked.
-      if (line.includes('repo.internal'))
-        expect(text).toContain('repo.internal');
-    }
-    // A time is not a credential: `16:18:47` has the same shape as `user:pass`.
-    expect(scrubSecrets('failed at 16:18:47 after 3 retries').replaced).toBe(0);
-  });
-});
-
-/* ------------------- an excerpt must not name a person or a box ------------------- */
-
-describe('localPathRedactions covers what identifies a machine (N5)', () => {
-  // D25: the repo is public and an excerpt is committed into it. Round 1 covered
-  // the exact strings it happened to know - store, repo, lease file, `$HOME`,
-  // hostname, scratch dir. These are the rest of the shapes a real log prints,
-  // each one named by the re-review after it found them in a committed excerpt.
-  const HOME = '/Users/danielwilliams';
-  const base = {
-    repoRoot: `${HOME}/Workspace/oss/nitro-ui`,
-    storeDir: `${HOME}/Workspace/oss/nitro-ui/.git/nitro-ui-gates`,
-    leaseFile: `${HOME}/.nitro-ui/leases.json`,
-    home: HOME,
-    username: 'danielwilliams',
-    hostname: 'Daniels-MacBook-Pro.local',
-    tmpDir: '/private/var/folders/x4/ZZ34Q44R7S30Q5V4F04F0000gn/T',
-  };
-
-  const apply = (text, extra = {}) =>
-    redactLocalPaths(text, localPathRedactions({ ...base, ...extra }));
-
-  it('redacts the bare username where it stands for a person', () => {
-    for (const line of [
-      'ssh danielwilliams@build-box.internal',
-      'whoami\ndanielwilliams',
-      'user: danielwilliams',
-      'USER=danielwilliams',
-      'login: danielwilliams (console)',
-      'ps -o user,pid -p 4242\ndanielwilliams 4242',
-    ]) {
-      expect(apply(line)).not.toContain('danielwilliams');
-      expect(apply(line)).toContain('<user>');
-    }
-  });
-
-  it('does not redact a username that would shred the log', () => {
-    // A username is a word like any other: `main`, `test`, `admin`. Redacting one
-    // of those wherever it appears would turn every branch name and every test
-    // summary into a placeholder, which is an unreadable excerpt, not a private
-    // one. So the bare-name rule is limited to identity positions and to names
-    // that are unlikely to be an ordinary word.
-    for (const username of [
-      'main',
-      'test',
-      'admin',
-      'ci',
-      'guest',
-      'dev',
-      'ab',
-    ]) {
-      const redacted = apply('checkout main and run the test suite', {
-        username,
-      });
-      expect(redacted).toBe('checkout main and run the test suite');
-    }
-  });
-
-  it('redacts the hostname in every form a log prints it', () => {
-    for (const form of [
-      'Daniels-MacBook-Pro.local',
-      'Daniels-MacBook-Pro',
-      'daniels-macbook-pro.local',
-      'daniels-macbook-pro',
-      'DANIELS-MACBOOK-PRO',
-    ]) {
-      // Compared case-insensitively, and against the *lowercased* text: asserting
-      // `not.toContain(form.toLowerCase())` on text that still reads
-      // `Daniels-MacBook-Pro` is true whether or not anything was redacted, which is
-      // how the first draft of this test stayed green with the short-form rule
-      // deleted — the very thing it was written to catch (review N4's own complaint).
-      const redacted = apply(`ping ${form} (10.0.0.7) failed`).toLowerCase();
-      expect(redacted).not.toContain('daniels-macbook-pro');
-      expect(redacted).toContain('<host>');
-    }
-    // Including inside a path or a URL, where the exact-string rule of round 1
-    // could not reach.
-    expect(
-      apply('/Volumes/Daniels-MacBook-Pro/tmp/build').toLowerCase()
-    ).not.toContain('daniels-macbook-pro');
-    expect(apply('ssh user@Daniels-MacBook-Pro.local')).not.toContain(
-      'Daniels-MacBook-Pro.local'
-    );
-  });
-
-  it('redacts the whole per-user scratch folder, not only /T', () => {
-    // Xcode, SwiftPM and CoreSimulator write beside the temp dir: `…/C/com.apple
-    // .Xcode/...`, `…/0/com.apple.devicermanager`, and a device log repeats the
-    // hashed folder itself. Only `…/T` was redacted, so the hash went out anyway.
-    const parent = '/private/var/folders/x4/ZZ34Q44R7S30Q5V4F04F0000gn';
-    for (const line of [
-      `${parent}/C/com.apple.Xcode/ DerivedData`,
-      `${parent}/0/com.apple.CoreSimulator.CoreSimulatorService/logs`,
-      `${parent}/T/x12-jest-fixture`,
-      `/var/folders/x4/ZZ34Q44R7S30Q5V4F04F0000gn/TemporaryItems`,
-    ]) {
-      expect(apply(line)).not.toContain('ZZ34Q44R7S30Q5V4F04F0000');
-      expect(apply(line)).toContain('<tmp>');
-    }
-  });
-
-  it('still leaves a plain /tmp alone', () => {
-    // Redacting `/tmp` would mangle every unrelated path in a log, and it names no
-    // machine. Not hypothetical: `os.tmpdir()` *is* `/tmp` on a Linux runner and
-    // `gate.mjs` passes it, so the rule that keeps a short tmpdir out of the list is
-    // the difference between a CI log that reads and one where every `/tmp/...`
-    // became a placeholder.
-    expect(apply('rm -rf /tmp/whatever')).toBe('rm -rf /tmp/whatever');
-    const linux = { tmpDir: '/tmp' };
-    expect(apply('rm -rf /tmp/whatever', linux)).toBe('rm -rf /tmp/whatever');
-    expect(apply('rm -rf /tmp/whatever', linux)).not.toContain('<tmp>');
-    // A macOS-style scratch dir still redacts on both spellings, so the guard above
-    // is a floor and not a general exemption.
-    expect(apply(`${base.tmpDir}/jest-x`)).not.toContain(
-      'ZZ34Q44R7S30Q5V4F04F0000'
-    );
-  });
-
-  it('will not match an identity string too short to be safe', () => {
-    // Both guards are load-bearing in the same direction: a 2-character username or
-    // hostname, matched as a "whole word", would fire inside half the identifiers in
-    // a stack trace. Dropping it costs nothing — such a name appears in `$HOME` and
-    // in the store path, where the exact-string rules already cover it.
-    const shortUser = redactLocalPaths(
-      'ps -o user=p | grep -w id && whoami says id',
-      localPathRedactions({
-        home: '/Users/id',
-        username: 'id',
-        hostname: 'id',
-        repoRoot: null,
-        storeDir: null,
-        leaseFile: null,
-        tmpDir: '/tmp',
-      })
-    );
-    expect(shortUser).toBe('ps -o user=p | grep -w id && whoami says id');
-    // And the home path itself is still gone, which is the coverage the length
-    // guard gives up in exchange.
-    expect(
-      redactLocalPaths(
-        '/Users/id/.gradle',
-        localPathRedactions({
-          home: '/Users/id',
-          username: 'id',
-          hostname: 'id',
-          tmpDir: '/tmp',
-        })
-      )
-    ).toBe('~/.gradle');
-  });
-});
-
-describe('an excerpt redacts machine paths by shape, not only by exact string (N5)', () => {
-  // The exact-string redactions can only name *this* user's folders. A log can
-  // carry another person's too - a CI artifact, a shared cache, a teammate's
-  // stack trace pasted into an assertion - and those need a rule that recognises
-  // the shape.
-  const shapes = [
-    ['/Users/janesmith/.gradle/daemon.log', 'janesmith', '<user>'],
-    ['/home/janesmith/.android/avd', 'janesmith', '<user>'],
-    [
-      '/private/var/folders/9q/QWERTYUIOPASDFGHJKLZXCVBNM12345/T/jest-x',
-      'QWERTYUIOPASDFGHJKLZXCVBNM12345',
-      '<tmp>',
-    ],
-    ['/System/Volumes/Data/Users/janesmith/Library', 'janesmith', '<user>'],
-  ];
-  for (const [line, secret, marker] of shapes) {
-    it(`redacts ${line}`, () => {
-      const result = scrubMachinePaths(line);
-      expect(result).not.toContain(secret);
-      expect(result).toContain(marker);
-    });
-  }
-
-  it('leaves a path that names nobody alone', () => {
-    // The other half of the rule. A container or a CI box is full of accounts that are
-    // roles, and redacting those shreds an excerpt to hide no person: `/home/ci` and
-    // `/Users/Shared` are the lines a CI log repeats.
-    for (const line of [
-      '/usr/local/bin/xcodebuild -project App.xcodeproj',
-      '/Applications/Xcode.app/Contents/Developer',
-      'node_modules/react-native/index.js',
-      '/tmp/x12-jest-fixture',
-      '/Users/Shared/Jenkins/Caches/gradle',
-      '/home/ci/.gradle/daemon.log',
-      '/home/runner/work/react-native-nitro-ui',
-      '/home/vagrant/.android/avd',
-      '/opt/homebrew/bin/bun',
-    ]) {
-      expect(scrubMachinePaths(line)).toBe(line);
-    }
-  });
-});
-
-/* --------------------- the scrubber must cost what it reads ---------------- */
-
-describe('scrubSecrets is linear in what it reads (re-review N3)', () => {
-  // The re-review measured the *old* patterns under Node 24: 40 KB of `a.` took
-  // 12.6 s and 160 KB took 199 s, because `[\w.-]*` before `authorization` and
-  // `\b[\w.-]{3,}` restart an unbounded scan at every `.`/`_`/`-` boundary. A gate
-  // log that is one long data URI or base64url blob - a Metro bundle graph, a
-  // SwiftPM manifest, an xcodebuild `-showBuildSettings` dump - therefore hung
-  // `export` for minutes, which is the opposite of "the evidence survives".
-  //
-  // The budget is 1 s against a workload a linear scan finishes in a few ms, so it
-  // cannot flake on a loaded machine; and it is deliberately a *time* assertion,
-  // because that is the only way this failure mode is visible from outside.
-  const BUDGET_MS = 1000;
-
-  const scrubTimed = (text) => {
-    const started = process.hrtime.bigint();
-    const result = scrubSecrets(text);
-    return {
-      ...result,
-      ms: Number(process.hrtime.bigint() - started) / 1e6,
-    };
-  };
-
-  it('scrubs a 1 MB line of `a.` in under a second', () => {
-    const result = scrubTimed('a.'.repeat(500_000));
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-  });
-
-  it('scrubs a 1 MB base64url line in under a second', () => {
-    const alphabet =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-    let line = '';
-    for (let i = 0; i < 1_000_000; i += 1) {
-      line += alphabet[(i * 7919) % alphabet.length];
-    }
-    const result = scrubTimed(line);
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-  });
-
-  it('is not slower when the credential sits at the end of a long run', () => {
-    // The shape that costs the old patterns most: no separator until the very last
-    // character, so every one of the half-million boundaries is a candidate start
-    // that has to fail only after reading the whole rest of the line.
-    const result = scrubTimed(
-      `a.${'b.'.repeat(499_999)}authorization=abcdef0123456789`
-    );
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-    expect(result.text).not.toContain('abcdef0123456789');
-    expect(result.replaced).toBe(1);
-  });
-
-  it('is not quadratic in the number of URL-shaped runs', () => {
-    // The userinfo rule had the same disease, and worse: 64 KB of `a.` took 3.4 s.
-    const result = scrubTimed(`a.${'b.'.repeat(500_000)}@example.invalid`);
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-  });
-
-  it('is not quadratic in a line of XML-shaped runs', () => {
-    const result = scrubTimed('<a>'.repeat(300_000));
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-  });
-
-  it('is not quadratic when one separator sits at the end of a long run', () => {
-    // The case the linear pass can still get wrong on its own. There is one
-    // separator, so the outer scan costs nothing; but the *key* is a megabyte of
-    // dotted text, and the pass considers every word boundary inside it as a
-    // candidate key, each one tested against the credential-key pattern. Bounding
-    // how far back a key may reach (`MAX_KEY_SCAN`) is what keeps that bounded;
-    // drop the bound and this line is quadratic again.
-    //
-    // The run has to *end* on a word character: `a.a.a…=` ends on a dot, which the
-    // "a separator the key run does not reach" guard rejects before any candidate
-    // is considered, and a fixture that bails out early proves nothing.
-    const result = scrubTimed(
-      `${'a.'.repeat(500_000).slice(0, -1)}=not-a-secret`
-    );
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-  });
-
-  it('is not quadratic in one long undotted run before a separator', () => {
-    const result = scrubTimed(`${'a'.repeat(1_000_000)}:not-a-secret`);
-    expect(result.ms).toBeLessThan(BUDGET_MS);
-  });
-
-  it('still finds the credential shapes inside a long line', () => {
-    // The cheap way to pass a timing test is to stop matching things. This is the
-    // counterweight: the same shapes the short-line tests assert, now buried at the
-    // end of a megabyte of data-URI-looking text.
-    const prefix = 'data:application/json;base64,' + 'QUJD'.repeat(250_000);
-    const { text } = scrubTimed(
-      [
-        prefix,
-        'ghp_abcdefghijklmnopqrstuvwxyz123456',
-        'NPM_TOKEN=abcdef123456',
-        'Authorization: Bearer abcdef0123456789secretvalue',
-      ].join('\n')
-    );
-    expect(text).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz123456');
-    expect(text).not.toContain('abcdef123456');
-    expect(text).not.toContain('abcdef0123456789secretvalue');
-    expect(text).toContain('Authorization: [scrubbed]');
-  });
-});
-
-describe('renderFailureExcerpt', () => {
-  const entry = {
-    gate: 'harness:android',
-    ts: '2026-10-28T09:00:00.000Z',
-    tree: 'a'.repeat(64),
-    head: 'abcdef123456789',
-    branch: 'task/x12-fixture',
-    command: 'bun run harness:android',
-    result: 'fail',
-    exitCode: 1,
-    signal: null,
-    durationMs: 123_000,
-    load: { start: 3, median: 8, max: 40, count: 8, end: 39 },
-    logPath: 'task/x12-fixture/harness+android-1.log',
-    platform: 'android',
-    device: 'emulator-5574',
-    lease: 'lease-7',
-  };
-
-  it('lifts the device block out of the tail, so the tail is the failure', () => {
-    const log = [
-      'FAIL Switch renders',
-      ...Array.from(
-        { length: 400 },
-        (unused, index) => `harness output ${index}`
-      ),
-      'gate: ---- device context (recorded on failure, X12) ----',
-      'gate: adb devices',
-      '  | emulator-5574 device',
-      'gate: ---- end device context ----',
-    ].join('\n');
-    const { content } = renderFailureExcerpt({ entry, logText: log });
-    expect(content).toContain('## Device and run context');
-    expect(content).toContain('emulator-5574 device');
-    // The tail is run output, not the context block: without the split, the last
-    // 150 lines of this log would be nothing but `simctl` and lease output.
-    const tail = content.split('## Last')[1];
-    expect(tail).toContain('harness output 399');
-    expect(tail).not.toContain('emulator-5574 device');
-  });
-
-  it('reports the load at both ends, from the line rather than invented', () => {
-    const { content } = renderFailureExcerpt({ entry, logText: 'x\n' });
-    expect(content).toContain(
-      'Load: start 3.00, end 39.00, median 8.00, max 40.00'
-    );
-    expect(content).toContain('lease `lease-7`');
-  });
-
-  it('says when a log had no failure lines rather than printing nothing', () => {
-    const { content } = renderFailureExcerpt({
-      entry,
-      logText: 'build started\n',
-    });
-    expect(content).toContain('(none matched');
-  });
-
-  it('scrubs only the lines it keeps, so a big log costs what it keeps (N3)', () => {
-    // The second half of N3. `renderFailureExcerpt` used to scrub the *whole* log —
-    // up to 200 MiB — before choosing the failure lines and the 150-line tail, so one
-    // 40 KB data URI in a Metro bundle graph cost seconds and a 160 KB one cost
-    // minutes, all of it for text that was never going to be in the file.
-    //
-    // Asserted by the scrub counter rather than the clock: a credential sitting in a
-    // line that is neither a failure line nor in the tail must not be counted, because
-    // it must not be *read*. Timing is asserted too, in the sibling tests above, but a
-    // counter is the property and a stopwatch is only a symptom.
-    // 300 lines of 100 KiB, each carrying a token, and no tail kept at all: the only
-    // line the excerpt keeps is the failure line, which has no credential in it. So
-    // the count of replacements is the observable — under the old whole-log scrub it
-    // was 300, because 300 discarded lines had been read and rewritten first.
-    const noise = Array.from(
-      { length: 300 },
-      (unused, index) =>
-        `TOKEN=ghp_${'a'.repeat(36)} line ${index} ${'z'.repeat(100 * 1024)}`
-    ).join('\n');
-    const started = Date.now();
-    const { content, scrubbed } = renderFailureExcerpt({
-      entry,
-      logText: `${noise}\nFAIL the thing that broke\n`,
-      tailLines: 0,
-    });
-    const elapsed = Date.now() - started;
-    expect(scrubbed).toBe(0);
-    expect(content).toContain('FAIL the thing that broke');
-    expect(content).not.toContain('ghp_');
-    // …and the whole call is milliseconds, not the minutes a whole-log scrub of a
-    // 30 MB file with this shape took.
-    expect(elapsed).toBeLessThan(1000);
-  });
-
-  it('caps one absurd line, and says so, instead of shipping it whole', () => {
-    // An excerpt's whole size is capped, but the cap is applied to the assembled
-    // file: one line longer than the cap left the reader with a truncated line whose
-    // tail — the half that would have carried a credential's remainder — was simply
-    // gone with no note. Kept lines are capped where they are kept, and marked.
-    const { content } = renderFailureExcerpt({
-      entry,
-      logText: `a\n${'x'.repeat(70 * 1024)}\n`,
-    });
-    expect(content).toContain('[line truncated]');
-    // The cap is the constant, not an accident of the total clamp. The slack is the
-    // marker's own width, left loose on purpose: this asserts the cap, not the
-    // wording of the note beside it.
-    const longest = content
-      .split('\n')
-      .reduce((longestSoFar, line) => Math.max(longestSoFar, line.length), 0);
-    expect(longest).toBeLessThanOrEqual(64 * 1024 + 32);
-  });
-
-  it('bounds itself, and says it was bounded', () => {
-    // Long enough lines that 150 of them exceed the cap: the clamp is about the
-    // excerpt's total size, not the number of lines, and a reader of a truncated
-    // file has to be able to tell.
-    const line = (index) => `line ${index} ${'x'.repeat(1_000)}`;
-    const { content } = renderFailureExcerpt({
-      entry,
-      logText: Array.from({ length: 400 }, (unused, index) => line(index)).join(
-        '\n'
-      ),
-    });
-    expect(Buffer.byteLength(content, 'utf8')).toBeLessThanOrEqual(128 * 1024);
-    expect(content).toContain('excerpt truncated');
-    // The newest lines survive a truncation, because they are the ones nearest the
-    // failure; the header survives because it says where the full log is.
-    expect(content).toContain('line 399 ');
-    expect(content).toContain('Full log:');
-  });
-
-  it('names an excerpt after its run, and keeps two same-second runs apart', () => {
-    const name = failureExcerptName(entry);
-    expect(name).toBe('2026-10-28T09-00-00Z--harness+android--01.log');
-    expect(name).not.toContain('/');
-    // Two runs one second apart, spelled the way the ledger spells them (both with
-    // milliseconds). The name is deliberately second-granular, so the two are EQUAL:
-    // that is the collision the sequence below exists for, and the reason `export`
-    // has to count by the name rather than by `ts` (review N2). Round 1's fixture
-    // used a ts with no milliseconds, which is the only reason it never saw this.
-    const sameSecond = { ...entry, ts: '2026-10-28T09:00:00.900Z' };
-    expect(failureExcerptName(sameSecond)).toBe(name);
-    // Without the sequence the second export would overwrite the first excerpt while
-    // both ledger lines still pointed at it.
-    expect(failureExcerptName(entry, 2)).toBe(
-      '2026-10-28T09-00-00Z--harness+android--02.log'
-    );
-    expect(failureExcerptName(entry, 2)).not.toBe(name);
-  });
-
-  it('only wants a failed run that has a log', () => {
-    expect(isFailedRunWithLog(entry)).toBe(true);
-    expect(isFailedRunWithLog({ ...entry, result: 'pass' })).toBe(false);
-    expect(isFailedRunWithLog({ ...entry, logPath: null })).toBe(false);
-    expect(isFailedRunWithLog({ corrupt: true, result: 'fail' })).toBe(false);
-  });
-
-  it('splitDeviceContext leaves a log with no block untouched', () => {
-    expect(splitDeviceContext('plain\n')).toEqual({
-      body: 'plain\n',
-      context: null,
-    });
-  });
-});
-
-describe('failureLinesFrom (what the excerpt leads with)', () => {
-  it('takes the gate tools’ own failure bullets and assertion lines', () => {
-    expect(
-      failureLinesFrom(
-        [
-          'PASS ios/core/ok.test.tsx',
-          'FAIL ios/core/Core.test.tsx',
-          '  ● Switch › renders the checked state',
-          '    ✕ updates on press',
-          '    ✗ the thumb moved',
-          '    Expected: true',
-          '    Received: false',
-          '    ✓ a passing check',
-          'Tests: 3 failed, 662 passed, 665 total',
-        ].join('\n')
-      )
-    ).toEqual([
-      'FAIL ios/core/Core.test.tsx',
-      '● Switch › renders the checked state',
-      '✕ updates on press',
-      '✗ the thumb moved',
-      'Expected: true',
-      'Received: false',
-    ]);
-  });
-
-  it('caps the list, because a log where everything failed is not an excerpt', () => {
-    const lines = Array.from({ length: 50 }, (unused, i) => `✕ test ${i}`).join(
-      '\n'
-    );
-    expect(failureLinesFrom(lines, 5)).toHaveLength(5);
   });
 });
 
@@ -2793,7 +1321,7 @@ describe('a failed device gate records its device context', () => {
   it('names only this run’s own device in the block, and the rest as <other device>', () => {
     // The re-review's N6. `simctl list devices booted` is a host-wide question: it
     // answers with every simulator on the Mac, including another task's pair and the
-    // maintainer's own device, and the block is copied into a committed excerpt. The
+    // maintainer's own device. The
     // brief asked for the probe, so the fix is to keep the identifying half of the
     // *lease's* line and replace it on everyone else's.
     const dir = makeRepo();
@@ -2807,16 +1335,6 @@ describe('a failed device gate records its device context', () => {
     expect(context).toContain('iPhone 16');
     expect(context).not.toContain('1F2D3E4F-AAAA-BBBB-CCCC-DDDDCCCCAAAA');
     expect(context).toContain('<other device>');
-    // And the header of the committed file says the same thing the block does.
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const failures = path.join(dir, 'docs', 'tasks', 'X12', 'failures');
-    const excerpt = fs
-      .readdirSync(failures)
-      .map((name) => fs.readFileSync(path.join(failures, name), 'utf8'))
-      .join('\n');
-    expect(excerpt).not.toContain('1F2D3E4F-AAAA-BBBB-CCCC-DDDDCCCCAAAA');
-    expect(excerpt).toContain('CD670291-1111-1111-1111-111111111111');
-    expect(excerpt).toContain('Device identifiers are limited to this run');
   });
 
   it('names no device at all once the run stops holding a lease', () => {
@@ -2884,7 +1402,7 @@ describe('a failed device gate records its device context', () => {
     const asked = fs.readFileSync(run.calls, 'utf8');
     expect(asked).toContain('adb -s emulator-5574 get-state');
     // `adb devices` is a host-side query: it ignores `-s` and prints every emulator
-    // the server sees, which would commit the maintainer's serial in an excerpt. The
+    // the server sees, the maintainer's among them. The
     // fake prints such a list when asked, so this assertion has something to catch.
     expect(
       asked
@@ -2996,12 +1514,6 @@ describe('a failed device gate records its device context', () => {
     expect(line.result).toBe('fail');
     expect(line.exitCode).toBe(1);
     expect(logOf(dir)).toContain('[unavailable]');
-    // And the excerpt is still worth committing.
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const failures = fs.readdirSync(
-      path.join(dir, 'docs', 'tasks', 'X12', 'failures')
-    );
-    expect(failures).toHaveLength(1);
   });
 
   it('does not feed a failed probe’s error text to the next command', () => {
@@ -3027,22 +1539,11 @@ describe('a failed device gate records its device context', () => {
     expect(logOf(dir)).not.toContain('device context');
   });
 
-  it('the excerpt separates the device block from the tail for real logs too', () => {
-    const dir = makeRepo();
-    const { run } = failedDeviceRun(dir);
-    expect(run.status).toBe(1);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const failures = fs.readdirSync(
-      path.join(dir, 'docs', 'tasks', 'X12', 'failures')
-    );
-    const excerpt = fs.readFileSync(
-      path.join(dir, 'docs', 'tasks', 'X12', 'failures', failures[0]),
-      'utf8'
-    );
-    expect(excerpt).toContain('## Device and run context');
-    expect(excerpt).toContain('FAIL ios/core/Core.test.tsx');
-    // The harness output, not the probes, is what fills the tail.
-    expect(excerpt.split('## Last')[1]).toContain('fake gate:');
+  it('splitDeviceContext leaves a log with no block untouched', () => {
+    expect(splitDeviceContext('plain\n')).toEqual({
+      body: 'plain\n',
+      context: null,
+    });
   });
 });
 
@@ -3126,53 +1627,26 @@ describe('gate.mjs export merges the committed ledger (X30 item 2)', () => {
     expect(branch.stdout).toContain('1 already there');
   });
 
-  it('leaves a committed failure excerpt alone, even with its store log gone', () => {
-    // The pointer and the file are a pair. Re-writing an old red row from a store
-    // log that `git worktree remove` (or another machine) no longer has would drop
-    // `failureLogPath` and orphan the excerpt that is already in the commit — so
-    // an already-published excerpt is left as it is, and the store is only asked
-    // when there is nothing published to leave.
-    const dir = makeRepo({ branch: 'task/x12-fix1' });
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const before = rawOf(target(dir));
-    const failed = JSON.parse(before[0]);
-    const excerptFile = path.join(dir, failed.failureLogPath);
-    const excerptBytes = fs.readFileSync(excerptFile, 'utf8');
-    // Take the machine's own evidence away: only the committed excerpt is left.
-    fs.rmSync(path.join(storeOf(dir)), { recursive: true, force: true });
+  it('keeps an older line that still carries failureLogPath, byte-for-byte', () => {
+    // Exports used to add `failureLogPath` to a failed line. Those lines are in
+    // committed ledgers, so a later export into the same file has to leave them as
+    // they are.
+    const dir = makeRepo({ branch: 'task/x12-merge' });
+    const older =
+      '{"v":5,"ts":"2026-10-27T00:00:00.000Z","gate":"check","tree":"aa",' +
+      '"branch":"task/x12-fix1","result":"fail","logPath":"task/x12-fix1/check-1.log",' +
+      '"failureLogPath":"docs/tasks/X12/failures/2026-10-27T00-00-00Z--check--01.log"}';
+    fs.mkdirSync(path.dirname(target(dir)), { recursive: true });
+    fs.writeFileSync(target(dir), `${older}\n`);
 
-    gitInTempRepo(dir, ['checkout', '-qb', 'task/x12-merge']);
     expect(runCli(dir, ['check']).status).toBe(0);
     const exported = runCli(dir, ['export', '--task', 'X12']);
     expect(exported.status).toBe(0);
     const after = rawOf(target(dir));
-    expect(after[0]).toBe(before[0]);
-    expect(JSON.parse(after[0]).failureLogPath).toBe(failed.failureLogPath);
-    expect(fs.readFileSync(excerptFile, 'utf8')).toBe(excerptBytes);
-    expect(exported.stdout).toContain('already committed');
-    // And the merge's own line still arrived, unpointed: it passed, and a passing
-    // run gets no file.
     expect(after).toHaveLength(2);
-    expect(JSON.parse(after[1]).failureLogPath).toBeNull();
-  });
-
-  it('re-creates an excerpt whose pointer survives but whose file does not', () => {
-    // The other side of leaving it alone: a committed ledger copied into a checkout
-    // that never had the failures/ directory should get its evidence back, not a
-    // permanently dangling pointer.
-    const dir = makeRepo({ branch: 'task/x12-fix1' });
-    expect(runCli(dir, ['check'], { FAKE_EXIT: '3' }).status).toBe(3);
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    const failed = JSON.parse(rawOf(target(dir))[0]);
-    fs.rmSync(path.join(dir, 'docs', 'tasks', 'X12', 'failures'), {
-      recursive: true,
-      force: true,
-    });
-
-    expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
-    expect(fs.existsSync(path.join(dir, failed.failureLogPath))).toBe(true);
-    expect(rawOf(target(dir))).toHaveLength(1);
+    expect(after[0]).toBe(older);
+    expect(exported.stdout).toContain('1 kept from the file');
+    expect(fs.readdirSync(path.dirname(target(dir)))).toEqual(['gates.jsonl']);
   });
 
   it('merges on ts + gate + tree, and treats an unreadable line as its own bytes', () => {

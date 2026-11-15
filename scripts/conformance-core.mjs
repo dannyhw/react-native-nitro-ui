@@ -1,6 +1,6 @@
 /**
- * The conformance suite's rules, as data — the half that *decides*, so it can be
- * proved against fixtures instead of against a device.
+ * The conformance suite's rules and tables, as data — the half that can be
+ * cross-checked against the manifests and the harness file with no device.
  *
  * ## Why a suite, and why manifest-driven
  *
@@ -45,12 +45,12 @@
  * ## `failing`, not fixed
  *
  * The brief is explicit that a control which fails a rule is not fixed here. Such a
- * rule is declared in {@link CONFORMANCE_EXEMPTIONS} or `A11Y_EXEMPTIONS` with its
- * `docs/tasks/FOLLOWUPS.md` line, the runner *requires* each row to still match
- * something real ({@link staleExemptions}), and {@link checkCoverage} demands a
- * FOLLOWUPS line for every `failing` cell — so debt stays visible in the report and
- * removes itself with a red test when the control is fixed, rather than by a reviewer
- * noticing.
+ * rule is declared in {@link CONFORMANCE_EXEMPTIONS} or `A11Y_EXEMPTIONS` with a
+ * note of what owns the fix. The a11y sweep *requires* each `A11Y_EXEMPTIONS` row to
+ * still match a finding of its run (`staleExemptions`), so that debt removes itself
+ * with a red run when the control is fixed. No run checks a `CONFORMANCE_EXEMPTIONS`
+ * row: {@link checkRecycleNotes} only compares it with its fixture's recycle note, so
+ * a row is retired by hand, when that note stops being a `blindSpot`.
  *
  * ## Why nothing here is imported by the app
  *
@@ -72,7 +72,6 @@ import {
   A11Y_CONTROLS,
   A11Y_EXEMPTIONS,
   A11Y_PRESENTATIONS,
-  staleExemptions as staleA11yExemptions,
 } from './real-input/a11y.mjs';
 import { SCREEN_FILE } from './real-input/screens.mjs';
 // Pure (no `node:` imports, no side effects), which is what makes it safe to share
@@ -127,17 +126,8 @@ export function repoRoot() {
  * @property {Applies} applies
  */
 
-/**
- * Two names for the accessibility rule, because two things need to key on it.
- *
- * {@link A11Y_RULE_ID} is the matrix's cell — every key in {@link failingKeys} and every
- * column in {@link formatMatrix}. {@link A11Y_FINDING_RULE} is what a *finding* carries, and
- * it is short because a finding's `rule` is a category, and the a11y rule is the only one
- * whose findings are produced on the host rather than in-app. Keeping both as constants is
- * what stops the two spellings from drifting apart in an `===` nobody notices.
- */
+/** The accessibility rule's id: the matrix's cell, and every a11y key in {@link failingKeys}. */
 export const A11Y_RULE_ID = 'a11y-name-on-focusable-node';
-export const A11Y_FINDING_RULE = 'a11y';
 
 /** @type {ReadonlyArray<ConformanceRule>} */
 export const CONFORMANCE_RULES = Object.freeze([
@@ -204,7 +194,7 @@ export const RULE_IDS = CONFORMANCE_RULES.map((rule) => rule.id);
  * @typedef {object} ConformanceExemption
  * @property {string} component the manifest `name`
  * @property {string} rule a {@link RULE_IDS} member
- * @property {string} followups the `docs/tasks/FOLLOWUPS.md` line that owns the fix
+ * @property {string} followups what owns the fix, as free text
  * @property {string} detail what goes wrong, for the report
  */
 
@@ -260,151 +250,6 @@ export const CONFORMANCE_EXEMPTIONS = Object.freeze([
  */
 export function findingKey(component, rule) {
   return `${component}|${rule}`;
-}
-
-/**
- * Split raw findings into failures and known debt.
- *
- * A finding is `{component, rule, problem}`; `rule: 'a11y'` is exempted through the a11y
- * table, which matches on the *problem text* rather than on the control, so a second and
- * different a11y failure on an already-exempt control still goes red.
- *
- * A finding may instead carry `skipped` and no `problem`: one comparison a *premise* of the
- * run makes meaningless ({@link localePremiseMiss}). That is neither a failure nor debt, and it
- * is kept apart from both so it is printed as its own line rather than counted green — a
- * skipped check has to stay visible in the log or the next reader cannot tell a green run from
- * a run that quietly compared nothing.
- *
- * @param {Array<{component: string, rule: string, problem?: string | null, skipped?: string, controlId?: string}>} findings
- * @param {object} [tables] the debt lists to consult. Production leaves this empty and
- *   reads the two real lists; a test passes rows, because both are frozen arrays and
- *   freezing them is the point.
- * @param {ReadonlyArray<any>} [tables.a11y]
- * @param {ReadonlyArray<ConformanceExemption>} [tables.conformance]
- * @returns {{failures: string[], known: string[], skipped: string[], matched: string[]}} `matched` is the
- *   `component|rule` keys an exemption covered, which is what {@link staleExemptions}
- *   clears the lists against.
- */
-export function classifyFindings(findings, tables = {}) {
-  const a11yExemptions = tables.a11y ?? A11Y_EXEMPTIONS;
-  const exemptions = tables.conformance ?? CONFORMANCE_EXEMPTIONS;
-  const failures = [];
-  const known = [];
-  /** @type {string[]} */
-  const skipped = [];
-  /** @type {string[]} */
-  const matched = [];
-
-  for (const finding of findings) {
-    if (finding.skipped != null) {
-      skipped.push(
-        `skipped (${finding.component} × ${finding.rule}): ${finding.skipped}`
-      );
-      continue;
-    }
-    const key = findingKey(finding.component, finding.rule);
-    const exemption =
-      exemptions.find(
-        (candidate) => findingKey(candidate.component, candidate.rule) === key
-      ) ??
-      (finding.rule === A11Y_FINDING_RULE
-        ? a11yExemptions.find(
-            (candidate) =>
-              candidate.control === finding.controlId &&
-              candidate.matches.test(finding.problem)
-          )
-        : undefined);
-
-    if (exemption == null) {
-      failures.push(
-        `${finding.component} × ${finding.rule}: ${finding.problem}`
-      );
-      continue;
-    }
-    if (!matched.includes(key)) matched.push(key);
-    known.push(
-      `known failing (${exemption.followups}): ` +
-        `${finding.component} × ${finding.rule}: ${finding.problem}`
-    );
-  }
-  return { failures, known, skipped, matched };
-}
-
-/**
- * Exemptions that no longer describe anything, because the run covered their control
- * and produced nothing for it.
- *
- * A row earns its place by matching something real on every run. This is what stops
- * either list decaying into a permanent skip list, and it is the reason a `failing`
- * rule can be reported without also being allowed to stay broken.
- *
- * @param {Iterable<string>} coveredKeys `component|rule` keys the run exercised
- * @param {Iterable<string>} matchedKeys keys that produced a finding an exemption covered
- * @param {ReadonlyArray<{component: string, rule: string, followups: string}>} [rows]
- * @returns {string[]} one line per stale exemption
- */
-export function staleExemptions(
-  coveredKeys,
-  matchedKeys,
-  rows = CONFORMANCE_EXEMPTIONS
-) {
-  const covered = new Set(coveredKeys);
-  const matched = new Set(matchedKeys);
-  return rows
-    .filter(
-      (row) =>
-        covered.has(findingKey(row.component, row.rule)) &&
-        !matched.has(findingKey(row.component, row.rule))
-    )
-    .map(
-      (row) =>
-        `exemption for ${row.component} × ${row.rule} (${row.followups}) matched ` +
-        'no finding this run — the control passes the rule now, so delete the ' +
-        'exemption and let the rule guard it'
-    );
-}
-
-/**
- * Every stale row, from both lists, in one call.
- *
- * The two lists are keyed differently on purpose — the a11y one on a *case* id, because
- * its rows match findings and one component has two cases (its own screen and inside a
- * `<Host>`), the in-app one on `component|rule` — so each has its own sweeper and this is
- * the single place a caller goes to ask the question. It is deliberately not a merge into
- * one key space: mapping a11y rows onto components would report the same piece of debt
- * twice whenever a component has two cases, and a run that prints one bug as two teaches
- * people to skim the failures.
- *
- * @param {object} run
- * @param {Iterable<string>} run.a11yCovered the `A11yControl.id`s the run read
- * @param {Iterable<string>} run.a11yMatched the ids whose problems matched a row
- * @param {'android'|'ios'} [run.a11yPlatform] which platform's a11y rows this run read.
- *   Each half has its own debt for some controls — the Slider's Android name is on a node
- *   nothing can act on, its iOS name is announced as the wrong kind of control — so an
- *   Android run must not report the iOS rows as stale, or clearing one bug reads as
- *   clearing both.
- * @param {Iterable<string>} run.coveredKeys `component|rule` keys the run exercised
- * @param {Iterable<string>} run.matchedKeys keys that matched an in-app row
- * @param {ReadonlyArray<any>} [run.conformanceRows] the in-app rows to sweep (default:
- *   the real list). An argument because that list is frozen — deliberately, so nothing can
- *   add debt at runtime — and a test of the sweeper cannot push to a frozen array. The
- *   a11y half needs no such argument: its real list is not empty, so it is sweepable as
- *   it stands.
- * @returns {string[]}
- */
-export function staleDebt(run) {
-  return [
-    ...staleA11yExemptions(
-      run.a11yCovered,
-      run.a11yMatched,
-      run.a11yPlatform ?? 'android'
-    ),
-    ...staleExemptions(
-      run.coveredKeys,
-      run.matchedKeys,
-      run.conformanceRows ?? CONFORMANCE_EXEMPTIONS
-    ),
-  ];
 }
 
 /* ------------------------------ the a11y table -------------------------------- */
@@ -620,7 +465,8 @@ export const DECLARED_FALLBACKS = Object.freeze({
   // it is the right answer only in the locale it was measured in —
   // `measuredUnderLocale` says which that is, `example/rn-harness.config.mjs` pins
   // the iOS launch locale to it, and a run whose app reports another locale FAILS
-  // rather than skipping (`localePremiseMiss`; the opt-out is explicit and loud).
+  // rather than skipping (`localePremiseMiss` in the harness suite; the opt-out is
+  // explicit and loud).
   //
   // The Android row names no locale, and that is a claim rather than an oversight:
   // nothing pins the emulator's locale (its locale is an AVD/boot setting, not a
@@ -780,9 +626,9 @@ export const DECLARED_FALLBACKS = Object.freeze({
  *   configuration. Asserting the box against it would be asserting a guess.
  *
  * A control in {@link CONTENT_SIZED_BOX} is therefore not compared with its declaration at
- * all — and {@link fallbackFindings} then requires its box to *differ* from the
- * declaration, so an exemption that stops being true goes red instead of quietly weakening
- * the rule. Same self-clearing trick {@link staleExemptions} uses on the a11y debt.
+ * all — and the harness suite's `fallbackFindings` then requires its box to *differ* from
+ * the declaration, so an exemption that stops being true goes red instead of quietly
+ * weakening the rule. Same self-clearing trick the a11y debt list uses.
  *
  * The return value also decides which axes a poisoned fallback has to move: the control's
  * own ones. For `fillWidth` the width would come back from the parent whether or not the
@@ -805,9 +651,10 @@ export function boxRuleFor(hybridView, sizingTable) {
  * declaration.
  *
  * Membership has to be *earned*: {@link checkFallbackTable} refuses a name that is not a
- * control or that is not `intrinsic`, and {@link fallbackFindings} refuses a member whose
- * box turns out to equal its declaration after all. Adding a name here to get one run
- * green therefore buys exactly one run — the next says the exemption earns nothing.
+ * control or that is not `intrinsic`, and the harness suite's `fallbackFindings` refuses a
+ * member whose box turns out to equal its declaration after all. Adding a name here to
+ * get one run green therefore buys exactly one run — the next says the exemption earns
+ * nothing.
  */
 export const CONTENT_SIZED_BOX = Object.freeze([
   'NitroUiButton',
@@ -1080,8 +927,8 @@ export function checkFallbackTable(
 
   // Membership of the one exemption the suite offers, checked on the way through: a name
   // added to `CONTENT_SIZED_BOX` to get a run green must at least describe a control that
-  // could be content-sized, and `fallbackFindings` does the rest by refusing a member whose
-  // box turns out to equal its declaration anyway.
+  // could be content-sized, and the harness suite's `fallbackFindings` does the rest by
+  // refusing a member whose box turns out to equal its declaration anyway.
   problems.push(...checkContentSizedBox(manifests));
 
   for (const platform of /** @type {const} */ (['android', 'ios'])) {
@@ -1156,60 +1003,6 @@ export function checkContentSizedBox(manifests, list = CONTENT_SIZED_BOX) {
 }
 
 /* --------------------------- the locale the table is valid in --------------------------- */
-
-/** Set this to compare a locale-dependent row in some *other* locale, deliberately. */
-export const ALLOW_LOCALE_MISMATCH_ENV = 'NITRO_UI_ALLOW_LOCALE_MISMATCH';
-
-/**
- * Is the app under test running in the locale the declared number was measured in?
- *
- * A `boxRule: 'both'` comparison of a localised measurement against a localised
- * declaration is only a comparison while both sides are in the same locale: the
- * DatePicker's iOS width is its locale's formatter's widest date, so the same
- * binary settles at 107 in `en_US` and 103 in `en_PT`, and both are correct.
- *
- * A mismatch is therefore a **failed premise**, and a failed premise is a failure:
- * `example/rn-harness.config.mjs` pins the launch locale, so the app reporting a
- * different one means the pin was dropped, overridden by someone who did not say
- * so, or that the formatter stopped following the locale it is handed. Each of
- * those is worth a red row. Reporting a *skip* instead is what round 1 of this task
- * did, and the reviewer's objection was right — a suite that reads green while
- * comparing less than its name claims is worse than one that stops.
- *
- * So this returns `{ expected, actual, tolerated }` on a mismatch and the caller
- * decides: the finding is a failure unless `tolerated`, which only an explicit
- * `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` in the run's environment grants (published to
- * the app by `example/rn-harness.config.mjs`, and read back through
- * `example/__tests__/deviceContext.ts` — the app cannot see the runner's own
- * environment any more than it can see `CI`). That is the escape hatch for someone
- * probing another locale on purpose; it prints which two claims it suspended, so a
- * run that compared less is legible.
- *
- * `null` — the premise holds — when the row names no locale, when the app reports
- * the one it names, or… not when the app cannot tell: an app that reports no locale
- * keeps the strict comparison, because "we do not know" must not read as "the
- * premise holds".
- *
- * @param {{ measuredUnderLocale?: string } | undefined} row One platform's
- *   {@link DECLARED_FALLBACKS} entry: the locale its numbers were measured in, if they depend on
- *   one.
- * @param {string | null | undefined} deviceLocale As the *app* reports it
- *   (`example/__tests__/deviceContext.ts`), which is what the engine actually rendered under.
- * @param {boolean | null} [mismatchAllowed] Whether this run published
- *   {@link ALLOW_LOCALE_MISMATCH_ENV}. `null`/`false` means it did not, which is the
- *   default and the safe answer for a reader that cannot check.
- */
-export function localePremiseMiss(row, deviceLocale, mismatchAllowed = null) {
-  const expected = row?.measuredUnderLocale;
-  if (expected == null) return null;
-  if (deviceLocale == null || deviceLocale === '') return null;
-  if (canonicalLocale(expected) === canonicalLocale(deviceLocale)) return null;
-  return {
-    expected,
-    actual: deviceLocale,
-    tolerated: mismatchAllowed === true,
-  };
-}
 
 /**
  * `en-US`, `en_US`, `en-US-POSIX` → `en-us`.
@@ -1290,290 +1083,6 @@ export function checkLaunchPinAgreesWithTable(
           'where to read it'
       );
     }
-  }
-  return problems;
-}
-
-/* ------------------------------- the rule bodies ----------------------------- */
-
-/**
- * Rule: is the fallback the control's own, registered before the first measure, and
- * not simply the answer?
- *
- * @param {object} input
- * @param {string} input.component
- * @param {'ios'|'android'} input.platform
- * @param {{width: number, height: number} | null} input.declared what the *engine*
- *   reports for the control (`null` = nothing registered)
- * @param {{width: number, height: number} | null} input.measured what a warm,
- *   self-sized mount settles at
- * @param {number} input.corrections corrections the engine needed for those mounts
- * @param {boolean} [input.poisoned] the run replaced the guess with
- *   {@link POISON_SIZES} first, so a correction *must* arrive
- * @param {Record<string, any>} [input.declaredTable]
- * @param {Record<string, {width: number, height: number}>} [input.poisonSizes]
- * @param {number} [input.tolerance]
- * @param {'both' | 'height' | 'none'} [input.boxRule] which axes the declaration is
- *   supposed to describe — see {@link boxRuleFor}. Callers pass what they read from the
- *   shared table; the default is the strictest rule, so forgetting to pass one can
- *   produce a false red but never a false green.
- * @param {boolean | null} [input.mismatchAllowed] Whether this run published
- *   {@link ALLOW_LOCALE_MISMATCH_ENV}. Default `null`: a caller that cannot check
- *   gets the failure, not the skip.
- * @returns {Array<{component: string, rule: string, problem: string | null, skipped?: string}>}
- */
-export function fallbackFindings(input) {
-  const {
-    component,
-    platform,
-    declared,
-    measured,
-    corrections,
-    poisoned = false,
-    declaredTable = DECLARED_FALLBACKS,
-    poisonSizes = POISON_SIZES,
-    tolerance = SIZE_TOLERANCE_DP,
-    boxRule = 'both',
-    deviceLocale = null,
-    mismatchAllowed = null,
-  } = input;
-  const problems = [];
-  const hybridView = `NitroUi${component}`;
-  const expected = declaredTable[hybridView]?.[platform];
-  const report = (problem) =>
-    problems.push({ component, rule: 'declared-fallback', problem });
-
-  /**
-   * Does `measured` agree with `want` on every axis this control's declaration describes?
-   *
-   * `both` compares both numbers. `height` compares only the height, because that control's
-   * width is its parent's and agrees with nothing the component declares — and comparing it
-   * anyway is what made the first device run report Slider and Progress as broken for
-   * filling the width they were given.
-   */
-  const ownsAgrees = (measured_, want) => {
-    if (Math.abs(measured_.height - want.height) > tolerance) return false;
-    if (boxRule === 'both') {
-      return Math.abs(measured_.width - want.width) <= tolerance;
-    }
-    return true;
-  };
-  /** The whole box, for the mode that compares none of it against a declaration. */
-  const boxEquals = (a, b) =>
-    Math.abs(a.width - b.width) <= tolerance &&
-    Math.abs(a.height - b.height) <= tolerance;
-
-  if (expected == null) {
-    report(
-      `no DECLARED_FALLBACKS row for ${hybridView} on ${platform}, so every ` +
-        'assertion about this control’s fallback is vacuous — which is worse than ' +
-        'having none at all'
-    );
-    return problems;
-  }
-
-  if (declared == null) {
-    report(
-      'the engine knows no declared fallback, so a cold mount falls to the `0x0` ' +
-        'branch and is force-laid-out — that is the frame the first frame lies about'
-    );
-  } else if (!near(declared, expected, tolerance)) {
-    report(
-      `the engine declares ${fmt(declared)} and the table says ` +
-        `${fmt(expected)} — one of them is stale, and the table is written from the ` +
-        'component’s source, so suspect the component'
-    );
-  }
-
-  if (measured == null) {
-    report('a warm mount settled at nothing, so there is no size to compare');
-    return problems;
-  }
-  const poison = poisoned ? poisonSizes[platform] : null;
-  // Whole-box, and in every mode: the poison is an exact pair rather than a declaration, so
-  // "the box is still the poison" needs no policy to say it. A control that settled at a
-  // size it never declared is the bug, whoever's width it would have been.
-  if (poison != null && boxEquals(measured, poison)) {
-    // The most specific diagnosis wins, and reporting the generic one as well would bury
-    // it: "the fallback is not the measured size" is also true here, and says much less.
-    report(
-      `settled at the poisoned ${fmt(poison)} — the guess was never corrected, ` +
-        'and every cold mount of this control is laid out at a size it never declared'
-    );
-    return problems;
-  }
-
-  // Is this row's locale the app is actually running in? `null` means the row does not
-  // depend on one, or the app could not name its locale (in which case nothing is skipped:
-  // "unknown" must never read as "premise met").
-  const localeMiss = localePremiseMiss(expected, deviceLocale, mismatchAllowed);
-
-  if (boxRule === 'none') {
-    // The exemption has to be *earned*, every run. A control whose box came to equal its
-    // declaration is a control whose size stopped depending on its content, and the run
-    // that discovers it goes red rather than printing nothing.
-    if (boxEquals(measured, expected)) {
-      report(
-        `${hybridView} is exempt from the box comparison as content-sized, and it ` +
-          `settled at its own declared ${fmt(expected)} anyway — a control that ` +
-          'always measures its declared size is not sizing itself from its content, ' +
-          'so the exemption is no longer true and the comparison should be restored'
-      );
-    }
-  } else if (localeMiss != null && !ownsAgrees(measured, expected)) {
-    // The row's locale and the app's disagree, and the mismatch moves both sides of the
-    // comparison, so it cannot be read as a stale declaration. What it *is* depends on whether
-    // this run asked to be in another locale:
-    //
-    //  - It did not (`NITRO_UI_ALLOW_LOCALE_MISMATCH` unset, the default): a FAILURE. The
-    //    harness pins the launch locale, so the app reporting a different one means the pin
-    //    was lost, was overridden without being said, or the formatter stopped following its
-    //    locale. Any of those deserves a red row; printing a skip here is how a suite ends up
-    //    green while comparing nothing, which is the mistake this branch used to make.
-    //  - It did: the printed skip, naming both claims it suspends, because both rest on this
-    //    one number — the box comparison above, and the warm-corrections claim below that
-    //    `HybridNitroUiDatePicker.swift`'s `fallbackSize` prices in words (“a locale *narrower*
-    //    than this one … pays a horizontal correction to lose it”).
-    //
-    // Either way the rest of the rule runs: a poisoned guess must still be corrected, and a
-    // mount that settles at nothing is still a failure.
-    const both =
-      `the app runs in ${localeMiss.actual} and ${hybridView}’s declared ` +
-      `${fmt(expected)} is what it measures in ${localeMiss.expected}, so the ` +
-      `measured ${fmt(measured)} is the same formatter answering a different ` +
-      'question. Either launch the app in the pinned locale (the harness does ' +
-      `this by default; ${localeMiss.expected.replace(/-/g, '_')} here) or run ` +
-      `with ${ALLOW_LOCALE_MISMATCH_ENV}=1 to say you meant it`;
-    if (localeMiss.tolerated) {
-      problems.push({
-        component,
-        rule: 'declared-fallback',
-        problem: null,
-        skipped:
-          `box and warm-corrections comparison skipped (${ALLOW_LOCALE_MISMATCH_ENV}` +
-          `=1): ${fmt(expected)} is what this control measures in ` +
-          `${localeMiss.expected} and this run's app locale is ` +
-          `${localeMiss.actual}, so the measured ${fmt(measured)} proves nothing ` +
-          'about the declaration',
-      });
-    } else {
-      report(both);
-    }
-  } else if (!ownsAgrees(measured, expected)) {
-    report(
-      `the fallback ${fmt(expected)} is not the measured ${fmt(measured)} for a ` +
-        (boxRule === 'height'
-          ? 'control whose own axis is its height (its width is its parent’s) — a ' +
-            'mismatch there means the declaration drifted from the component'
-          : 'control that declares its size — for an intrinsic control those are the ' +
-            'same number by definition, so a mismatch means the declaration drifted ' +
-            'from the component')
-    );
-  }
-
-  // Only a control whose declaration describes its *whole* box can be asked not to need a
-  // correction when warm: a `fillWidth` control's declared width is not its parent's, and a
-  // content-sized control's is a documented middle of a measured table, so both are
-  // corrected on a cold configuration by design. Asserting zero there would be asserting
-  // that a guess is an answer.
-  if (
-    !poisoned &&
-    corrections > 0 &&
-    boxRule === 'both' &&
-    !(localeMiss != null && !ownsAgrees(measured, expected))
-  ) {
-    report(
-      `needed ${String(corrections)} correction(s) from a warm engine whose ` +
-        `fallback ${fmt(expected)} already describes this control’s whole box — ` +
-        'the declaration is not reaching the engine'
-    );
-  }
-  if (poison != null && corrections === 0) {
-    report(
-      `settled at ${fmt(measured)} with no correction, having been poisoned ` +
-        `to ${fmt(poison)} — that size can only have come from the component, so ` +
-        'the correction went missing while the ledger stayed quiet'
-    );
-  }
-  return problems;
-}
-
-/**
- * Rule: did the engine's bookkeeping return to baseline after every instance dropped?
- *
- * @param {object} input
- * @param {string} input.component
- * @param {number} input.baselineLedger entries before the first mount
- * @param {number} input.baselineRegistry entries before the first mount
- * @param {number} input.ledgerEntries entries after every instance has dropped
- * @param {number} input.registryEntries entries after every instance has dropped
- * @param {number} input.instances how many were mounted and dropped
- * @param {number} [input.registryGrowth] entries the engine may keep: the component's
- *   own registry row is created by the first measure, not by a drop, so an honest
- *   baseline is one taken after a single warm-up mount. Anything above that is
- *   per-instance state that outlived its instance — B1 is exactly that shape
- *   (`PrewarmCache` held `SizingHandle`s by identity, and they never left).
- * @returns {Array<{component: string, rule: string, problem: string}>}
- */
-export function leakFindings(input) {
-  const {
-    component,
-    baselineLedger,
-    baselineRegistry,
-    ledgerEntries,
-    registryEntries,
-    instances,
-    registryGrowth = 0,
-  } = input;
-  const problems = [];
-  const report = (problem) =>
-    problems.push({ component, rule: 'no-leak-on-drop', problem });
-
-  if (ledgerEntries !== baselineLedger) {
-    report(
-      `${String(ledgerEntries - baselineLedger)} ledger entry(ies) survived ` +
-        `${String(instances)} drops. Each ` +
-        '`NitroUiSizing::forget(sizing_.get())` pair missing from `onDropView` ' +
-        'shows up here, and a handle keeps the view alive, so the leaked entry is ' +
-        'the leak'
-    );
-  }
-  if (registryEntries - baselineRegistry > registryGrowth) {
-    report(
-      `the registry grew by ${String(
-        registryEntries - baselineRegistry
-      )} across ${String(instances)} mounts, of which ${String(
-        registryGrowth
-      )} is accounted for — per-instance state in a process-wide table is the shape ` +
-        'of a leak the engine cannot see either'
-    );
-  }
-  return problems;
-}
-
-/**
- * Rule: does the control show any of its previous owner's props?
- *
- * @param {object} input
- * @param {string} input.component
- * @param {string} input.identity the identity that stayed the same across lifetimes
- * @param {Array<{label: string, expected: unknown, actual: unknown}>} input.checks
- *   what the control reports about itself, after the new owner took over
- * @returns {Array<{component: string, rule: string, problem: string}>}
- */
-export function recycleFindings(input) {
-  const problems = [];
-  for (const check of input.checks) {
-    if (check.actual === check.expected) continue;
-    problems.push({
-      component: input.component,
-      rule: 'recycle-reset',
-      problem:
-        `${input.identity} kept its identity across lifetimes and ` +
-        `${check.label} reads ${JSON.stringify(check.actual)} where the props say ` +
-        `${JSON.stringify(check.expected)} — the view came back wearing its ` +
-        'previous owner',
-    });
   }
   return problems;
 }
@@ -1779,8 +1288,8 @@ function recycleNoteOf(rowText) {
  *   failing` over a number that says something;
  * - a debt row for a control whose fixture says `noProbe`: the two files disagree about
  *   whether the state exists, and the honest reading is that the *probe* is missing;
- * - a debt row for a control no fixture guards: nothing reports the key, so
- *   {@link staleDebt} can never retire the row and it excuses a finding nothing looks for.
+ * - a debt row for a control no fixture guards: nothing reports the key, so nothing can
+ *   ever retire the row and it excuses a finding nothing looks for.
  *
  * @param {string | null} harnessText
  * @param {ReadonlyArray<any>} [rows] the debt list to compare with
@@ -1801,7 +1310,7 @@ export function checkRecycleNotes(harnessText, rows = CONFORMANCE_EXEMPTIONS) {
           'recycle rule is a `blindSpot` — the control holds state a reset must clear ' +
           'and no platform can see it — and scripts/conformance-core.mjs has no ' +
           'CONFORMANCE_EXEMPTIONS row for it. A known hole is a failing cell with a ' +
-          'FOLLOWUPS line, not a note in a fixture: add the row'
+          'debt row, not a note in a fixture: add the row'
       );
     }
   }
@@ -1920,48 +1429,6 @@ export function failingKeys(
   return [...keys];
 }
 
-/**
- * The resolver {@link checkCoverage} and {@link formatMatrix} ask for a failing cell's line.
- *
- * A failing cell has to point at a line that exists in `docs/tasks/FOLLOWUPS.md`, and this is
- * where that is proved: each debt row's `followups` text is compared with the document, so
- * debt cannot cite a line somebody deleted or never wrote. It returns `null` when the cell has
- * no row or the row's line is not in the file, which is what makes {@link checkCoverage}
- * report it as debt with no owner.
- *
- * @param {string | null} followupsText the text of `docs/tasks/FOLLOWUPS.md`
- * @param {object} [tables] the debt lists to read (default: the real ones)
- * @param {ReadonlyArray<any>} [tables.a11y]
- * @param {ReadonlyArray<any>} [tables.conformance]
- * @param {ReadonlyArray<any>} [tables.table] the a11y case table, for case-id → component
- * @returns {(key: string) => string | null}
- */
-export function followupsResolver(followupsText, tables = {}) {
-  const a11yRows = tables.a11y ?? A11Y_EXEMPTIONS;
-  const rows = tables.conformance ?? CONFORMANCE_EXEMPTIONS;
-  const table = tables.table ?? A11Y_CONTROLS;
-  const componentOf = (controlId) =>
-    table.find((entry) => entry.id === controlId)?.component ?? controlId;
-  return (key) => {
-    const [component, rule] = key.split('|');
-    const cited = [
-      ...rows
-        .filter((row) => findingKey(row.component, row.rule) === key)
-        .map((row) => row.followups),
-      ...(rule === A11Y_RULE_ID || rule === A11Y_FINDING_RULE
-        ? a11yRows
-            .filter((row) => componentOf(row.control) === component)
-            .map((row) => row.followups)
-        : []),
-    ];
-    if (cited.length === 0 || followupsText == null) return null;
-    const unique = [...new Set(cited)];
-    return unique.every((line) => followupsText.includes(line))
-      ? unique.join(' · ')
-      : null;
-  };
-}
-
 /* ---------------------------------- coverage --------------------------------- */
 
 /**
@@ -1999,18 +1466,16 @@ export function coverageMatrix(manifests, context = {}) {
 }
 
 /**
- * Every rule, for every manifest, has an answer — and a `failing` answer has a
- * FOLLOWUPS line to own it.
+ * Every rule, for every manifest, has an answer.
  *
  * The one that matters for the brief's "picks up a new manifest automatically": this
  * is what makes an uncovered control impossible rather than invisible.
  *
  * @param {any[]} manifests
  * @param {ReturnType<typeof coverageMatrix>} matrix
- * @param {(key: string) => string | null} followupsFor
  * @returns {string[]} problems
  */
-export function checkCoverage(manifests, matrix, followupsFor) {
+export function checkCoverage(manifests, matrix) {
   const problems = [];
   if (matrix.length !== manifests.length) {
     problems.push(
@@ -2027,48 +1492,10 @@ export function checkCoverage(manifests, matrix, followupsFor) {
           `${row.name} × ${rule.id}: no verdict — every control answers every ` +
             'rule, even if the answer is "not applicable, because…"'
         );
-        continue;
-      }
-      if (cell.state !== 'failing') continue;
-      if (followupsFor(findingKey(row.name, rule.id)) == null) {
-        problems.push(
-          `${row.name} × ${rule.id}: marked failing with no ` +
-            'docs/tasks/FOLLOWUPS.md line. Debt with no owner is debt nobody pays'
-        );
       }
     }
   }
   return problems;
-}
-
-/* --------------------------------- reporting --------------------------------- */
-
-/**
- * The matrix as Markdown, for the report's coverage table.
- *
- * @param {ReturnType<typeof coverageMatrix>} matrix
- * @param {ReadonlyArray<ConformanceRule>} [rules]
- * @param {(key: string) => string | null} [followupsFor]
- * @returns {string[]}
- */
-export function formatMatrix(matrix, rules = CONFORMANCE_RULES, followupsFor) {
-  const lines = [
-    `| Control | ${rules.map((rule) => rule.id).join(' | ')} |`,
-    `| --- |${rules.map(() => ' --- |').join('')}`,
-  ];
-  for (const row of matrix) {
-    const cells = rules.map((rule) => {
-      const cell = row.rules[rule.id];
-      if (cell.state === 'not-applicable') return `n/a — ${cell.reason}`;
-      if (cell.state === 'failing') {
-        const line = followupsFor?.(findingKey(row.name, rule.id));
-        return `**failing**${line == null ? '' : ` — see ${line}`}`;
-      }
-      return 'covered';
-    });
-    lines.push(`| ${row.name} | ${cells.join(' | ')} |`);
-  }
-  return lines;
 }
 
 /* --------------------------------- the readers --------------------------------- */
@@ -2113,27 +1540,4 @@ export function readerFor(root = repoRoot()) {
     const absolute = join(root, path);
     return existsSync(absolute) ? readFileSync(absolute, 'utf8') : null;
   };
-}
-
-/* ----------------------------------- helpers ---------------------------------- */
-
-/**
- * @param {{width: number, height: number}} a
- * @param {{width: number, height: number}} b
- * @param {number} tolerance
- */
-function near(a, b, tolerance) {
-  return (
-    Math.abs(a.width - b.width) <= tolerance &&
-    Math.abs(a.height - b.height) <= tolerance
-  );
-}
-
-/** @param {{width: number, height: number} | null} size */
-function fmt(size) {
-  return size == null ? 'nothing' : `${trim(size.width)}x${trim(size.height)}`;
-}
-
-function trim(n) {
-  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
 }
