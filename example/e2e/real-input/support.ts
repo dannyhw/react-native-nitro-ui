@@ -124,6 +124,22 @@ export async function openScreen(screen: Screen, tab: string): Promise<void> {
 const CONTENT_STEP = 0.54;
 
 /**
+ * Where across the window a content drag travels, as a fraction of its width.
+ *
+ * The middle is where a page's content is, which is the problem: a hosted Compose
+ * `Slider` owns the horizontal gesture and is wide enough to lie across the middle
+ * of the Host screen, so a "scroll" drag that crosses it is answered by the slider
+ * and the page never moves — measured here as six `onSlidingStart` events and one
+ * screen that would not scroll. A drag that moved nothing therefore travels the
+ * page's own padding on the next try, a column no control draws into; and if that
+ * is swallowed too, the right-hand gutter gets the last attempt.
+ */
+const DRAG_COLUMNS = [0.5, 0.03, 0.97];
+
+/** Which of those columns the next content drag will use. */
+let dragColumn = 0;
+
+/**
  * Down-drags taken since the page last started at the top.
  *
  * A screen's list is composed lazily: a row that has been scrolled past is not
@@ -138,6 +154,7 @@ let downDrags = 0;
 /** Forget any scrolling this test has done (the next screen starts at the top). */
 export function resetScrollCount(): void {
   downDrags = 0;
+  dragColumn = 0;
 }
 
 /**
@@ -240,16 +257,22 @@ export async function reveal(
       downDrags += 1;
     }
     const after = await boxOf(locator);
-    stuck =
-      box != null && after != null && Math.abs(after.y - box.y) <= 2
-        ? stuck + 1
-        : 0;
+    if (box != null && after != null && Math.abs(after.y - box.y) <= 2) {
+      stuck += 1;
+      // Something between the finger and the list took that drag, so the next one
+      // travels a column that control does not own.
+      if (stuck === 1 && dragColumn === 0) dragColumn = 1;
+      else if (stuck === 3 && dragColumn === 1) dragColumn = 2;
+    } else {
+      stuck = 0;
+    }
   }
   const missing = await countUnshown(reads);
   throw new Error(
     `real-input: the control was never in the tappable band, from the top of ` +
-      `the screen down through ${String(swipes)} drags; its box now reads ` +
-      `${JSON.stringify(await boxOf(locator))}` +
+      `the screen down through ${String(swipes)} drags along content column ` +
+      `${String(Math.round((DRAG_COLUMNS[dragColumn] ?? 0.5) * 100))}%; its box ` +
+      `now reads ${JSON.stringify(await boxOf(locator))}` +
       (reads.length > 0
         ? `, and ${String(missing)} of the ${String(reads.length)} nodes this ` +
           `test still has to read is off screen.`
@@ -367,7 +390,8 @@ async function dragContent(screen: Screen, up: boolean): Promise<void> {
   if (content == null) {
     throw new Error('real-input: the content view has no box to scroll along.');
   }
-  const x = content.x + content.width / 2;
+  const column = DRAG_COLUMNS[dragColumn] ?? 0.5;
+  const x = content.x + content.width * column;
   const half = CONTENT_STEP / 2;
   const from = content.y + content.height * (up ? 0.5 + half : 0.5 - half);
   const to = content.y + content.height * (up ? 0.5 - half : 0.5 + half);
