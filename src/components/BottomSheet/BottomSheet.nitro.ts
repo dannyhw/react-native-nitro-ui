@@ -5,16 +5,8 @@ import type {
 } from 'react-native-nitro-modules';
 
 /**
- * One detent of a sheet, as the native side sees it.
- *
- * The public `BottomSheetDetent` (`BottomSheet.tsx`) is a union of strings and
- * objects; the wrapper flattens every member into this one struct, because
- * nitrogen has no tagged unions and every member of a struct that crosses the
- * bridge is required (the rule `NitroUiDialogAction` follows).
- *
- * `kind` is a `string` rather than a union because nitrogen has no string-literal
- * unions; the wrapper never sends anything but `'fit'`, `'medium'`, `'large'`,
- * `'height'` or `'fraction'`.
+ * One detent of a sheet, flattened from the public `BottomSheetDetent` union:
+ * nitrogen has no tagged unions and no string-literal unions.
  */
 export interface NitroUiSheetDetent {
   /** `'fit'`, `'medium'`, `'large'`, `'height'` or `'fraction'`. */
@@ -27,31 +19,24 @@ export interface NitroUiSheetDetent {
 }
 
 /**
- * Native props of the `NitroUiBottomSheet` Hybrid View (G14, DECISIONS D33/D35).
+ * Native props of the `NitroUiBottomSheet` Hybrid View.
  *
- * No member is optional (DECISIONS D7 / nitro#1184) except the callbacks (D7b):
- * the wrapper always sends every prop, with `null` for "not set".
+ * No prop is optional except the callbacks: a removed prop arrives as `null`,
+ * which crashes an optional one (nitro#1184). The wrapper always sends every prop.
  *
- * A sheet is **not self-sizing** (`sizing: null` in `component.json`): the
- * platform lays out the presented window. The view React Native lays out is the
- * *content's* box: native reports the size the sheet gives its content
- * (`onContentBox`), the wrapper writes it into the node's `style`, and Yoga lays
- * the React Native children out at the sheet's width. The children are mounted
- * into this view, and this view is moved into the sheet while it is up.
+ * This view is the content's box, not the sheet: native reports the size the
+ * sheet gives its content (`onContentBox`), the wrapper writes it into `style`,
+ * and the view is moved into the sheet while it is up.
  *
- * Whether the sheet is up is a controlled value behind the event-count
- * handshake (`docs/architecture/core.md` §4), exactly as a dialog's is.
- *
- * Setters must not interpret one prop against another (Nitro does not order
- * props inside a batch - core.md §3), so everything is stored raw and the
- * presentation is reconciled once, in `afterUpdate()`.
+ * Nitro does not order props inside a batch, so setters store raw values and
+ * the presentation is reconciled once, in `afterUpdate()`.
  */
 export interface NitroUiBottomSheetProps extends HybridViewProps {
   /** The JS copy of `isPresented`: what React asked for. */
   presented: boolean;
   /**
-   * The last event count JS has fully processed (core.md §4). Native only
-   * accepts a `presented` write once it has seen this many of its own events.
+   * The last event count JS has fully processed. Native accepts a `presented`
+   * write only once it has seen this many of its own events.
    */
   mostRecentEventCount: number;
   /**
@@ -61,32 +46,26 @@ export interface NitroUiBottomSheetProps extends HybridViewProps {
   detents: NitroUiSheetDetent[];
   /** Whether a swipe down, a tap outside or the back gesture closes the sheet. */
   dismissible: boolean;
-  /** Whether the platform's grabber (iOS) or drag handle (Android) is drawn. */
   showsGrabber: boolean;
   /** The sheet's top corner radius in points, or `null` for the platform's. */
   cornerRadius: number | null;
   /** RN-processed (`processColor`) ARGB colour of the sheet, or `null`. */
   containerColor: number | null;
   /**
-   * The sheet's accessibility name (Q5 C7), or `null`. Not RN's
-   * `accessibilityLabel`: that one would name the content's box in the app's
-   * own tree, which is not where the sheet is.
+   * The sheet's accessibility name, or `null`. Not `accessibilityLabel`, which
+   * would name the content's box in the app's own tree rather than the sheet.
    */
   label: string | null;
-  /**
-   * Forwarded so tests and a11y tools can find the sheet: the presented sheet
-   * gets `<testID>-sheet`.
-   */
+  /** The presented sheet gets `<testID>-sheet`. */
   testID: string | null;
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
   /**
-   * Called on every native open or close, with native's event count (the
-   * wrapper echoes it back as `mostRecentEventCount`). Not called for a change
-   * React asked for.
+   * Called on every native open or close, with native's event count. Not called
+   * for a change React asked for.
    *
-   * Callback props are the exception to the no-optional rule (D7b). The wrapper
-   * always sends one.
+   * Callbacks are the exception to the no-optional rule: Nitro only unwraps a
+   * callback prop whose type is a plain function. The wrapper always sends one.
    */
   onPresentedChange?: (presented: boolean, eventCount: number) => void;
   /**
@@ -95,16 +74,12 @@ export interface NitroUiBottomSheetProps extends HybridViewProps {
    */
   onDetentChange?: (index: number) => void;
   /**
-   * Nothing is up any more, so the content the wrapper mounted for the sheet can
-   * go. `ended` is true when a presentation really ended - the sheet was up and is
-   * gone, whoever closed it - and false when React withdrew a sheet that was not
-   * up (never shown yet, or already gone while React still said `true`).
+   * Nothing is up any more, so the wrapper can unmount the sheet's content.
+   * `ended` is true when a presentation really ended, and false when React
+   * withdrew a sheet that was not up (never shown, or already gone).
    *
-   * Sent once per presentation that ends, and once more for a `presented = false`
-   * that finds nothing on screen after React had asked for the sheet, so the
-   * wrapper's unmount never depends on the order JS runs this and the parent's own
-   * re-render in: a wrapper that still says `presented` simply mounts the content
-   * again in the same render.
+   * Sent once per presentation that ends, and also for a `presented = false`
+   * that finds nothing on screen after React had asked for the sheet.
    */
   onDismissed?: (ended: boolean) => void;
   /**
@@ -116,27 +91,24 @@ export interface NitroUiBottomSheetProps extends HybridViewProps {
 
 export interface NitroUiBottomSheetMethods extends HybridViewMethods {
   /**
-   * TEMPORARY, test-only: what this sheet is showing, as one `;`-separated line
-   * of `key=value` pairs, snapshotted on the UI thread and read from here without
-   * waiting for it (JS never blocks on main).
+   * Test-only: what this sheet is showing, as one `;`-separated line of
+   * `key=value` pairs. Reads a snapshot, so it never waits for the UI thread.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestStateReport(): string;
   /**
-   * TEMPORARY, test-only: dismiss the sheet the way a user does (a swipe, a tap
-   * outside, back), through the same path - so it emits
-   * `onPresentedChange(false)`, and does nothing while `dismissible` is false.
+   * Test-only: dismiss the sheet the way a user does, so it emits
+   * `onPresentedChange(false)` and does nothing while `dismissible` is false.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestDismiss(): void;
   /**
-   * TEMPORARY, test-only: move the sheet to the detent at `index` the way a drag
-   * does, through the platform's own delegate path, so it reports
-   * `onDetentChange(index)`.
+   * Test-only: move the sheet to the detent at `index` the way a drag does, so it
+   * reports `onDetentChange(index)`.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestSelectDetent(index: number): void;
 }
@@ -144,9 +116,8 @@ export interface NitroUiBottomSheetMethods extends HybridViewMethods {
 /**
  * The Hybrid View React renders as `NitroUiBottomSheet`.
  *
- * @internal v0.1 does not expose Hybrid Views or their settable props publicly
- * (DECISIONS D14): it is exported for this repo's example, harness, bench and
- * smoke apps, and for the typed `hybridRef` handle, and is not semver surface.
+ * @internal Not public and not semver surface: exported for this repo's example,
+ * tests and benchmarks, and for the typed `hybridRef` handle.
  */
 export type NitroUiBottomSheet = HybridView<
   NitroUiBottomSheetProps,

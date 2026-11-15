@@ -19,11 +19,7 @@ import {
   type NitroUiTextFieldHandle,
 } from './NativeNitroUiTextField';
 
-/**
- * The two keyboard types, published from `TextField` because that is where they
- * started; `SearchField` takes the same two props and the same
- * {@link ../../core/keyboard} module declares them.
- */
+/** The keyboard option types, shared with `SearchField`. */
 export type {
   TextFieldAutoCapitalize,
   TextFieldKeyboardType,
@@ -54,8 +50,7 @@ export interface TextFieldHandle {
 export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
   /**
    * The text. Pass it to control the field; leave it `undefined` for an
-   * uncontrolled one (native then owns the text, and typing costs no React
-   * render).
+   * uncontrolled one, where typing causes no React render.
    */
   value?: string | undefined;
   /** Initial text of an uncontrolled field. Default: `''`. */
@@ -109,12 +104,10 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
   /** `focus()` and `blur()`; see {@link TextFieldHandle}. */
   ref?: Ref<TextFieldHandle> | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for this library's own tests and
+   * benchmarks.
    *
-   * @internal Not app API (DECISIONS D14). The shape is the handle
-   * `NitroUiTextFieldHandle` in `NativeNitroUiTextField.ts`, written inline
-   * (as `Switch.tsx` does) so api-extractor does not demand that an internal
-   * native type be exported.
+   * @internal Not app API.
    */
   hybridRef?:
     | ((view: {
@@ -149,7 +142,7 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`).
+   * Instance id for native performance marks.
    *
    * @internal Benchmark and diagnostics only - not app API.
    */
@@ -177,36 +170,23 @@ function resolveMaxLength(maxLength: number | null | undefined): number | null {
 }
 
 /**
- * The size configuration of one field, as the sizing engine sees it
- * (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
+ * The sizing key of one field.
  *
- * - **Single-line**: `''`. The height is the font's line, whatever the text,
- *   width, keyboard or placeholder, and the width is the box (`fillWidth`). So
- *   every single-line field is one configuration - the default one, which is
- *   what `prewarm(['NitroUiTextField'])` warms.
- * - **Multi-line**: its height is its *content's* at its *width*, so no two
- *   fields may share an entry: one entry holds one height, and the engine
- *   corrects every instance laid out under a key with the size one of them
- *   reports (sizing.md §2). The text cannot be the key - it would add an entry
- *   per keystroke to a cache that is never evicted (Q2 §6) - so the key is the
- *   instance: `m|<sizingId>`, one entry that the field's own reports keep
- *   current as it grows. The width is not in it either. A width change is a
- *   bounds change, which re-measures and reports by itself; putting the width
- *   in the key would need an `onLayout` render per mount and would re-key a
- *   laid-out field into a configuration the engine has never seen, which draws
- *   the declared one-line height again before the correction (G13 report).
+ * - Single-line: `''`. The height is the font's line whatever the text, and the
+ *   width is the box, so every single-line field shares one entry.
+ * - Multi-line: `m|<sizingId>`, one entry per instance, because the height
+ *   depends on the content and the width. The text is not in the key (it would
+ *   add an entry per keystroke to a cache that is never evicted), and neither
+ *   is the width: a width change already re-measures.
  */
 function sizingVariantFor(multiline: boolean, sizingId: number): string {
   return multiline ? `m|${String(sizingId)}` : '';
 }
 
-/**
- * What a `fillWidth` control is laid out with before any `style`: the cross
- * axis is the one it wants filled (`Slider.tsx`'s `FILL_WIDTH_BASE_STYLE`).
- */
+/** The field is as wide as its box; `alignSelf` decides the cross-axis size. */
 const FILL_WIDTH_BASE_STYLE = { alignSelf: 'stretch' } as const;
 
-/** The handlers a field installs for callbacks the app did not pass (D7b). */
+/** Sent when the app passes no `onSubmitEditing`: the callback prop is always sent. */
 function onSubmitNotProvided(_text: string): void {
   // Intentionally empty: the caller asked for nothing.
 }
@@ -251,22 +231,14 @@ export function TextField({
   const controlled = useControlled(value, defaultValue, onChangeText);
   const sizingId = useSizingId();
 
-  // The native view, for `focus()`/`blur()`. Nitro calls `hybridRef` once per
-  // mount with that mount's view, so the ref always holds the live one. The
-  // callback is always sent: the `ref` needs it whether or not the app (well,
-  // this repo's harness) passed a `hybridRef` of its own.
-  //
-  // The view arrives *after* the parent's effects have run: `hybridRef` reaches JS
-  // on a later turn than the commit that mounted the field. So a `focus()` or
-  // `blur()` asked for before then - `useEffect(() => ref.current?.focus(), [])`,
-  // the way to focus a field on mount - is held here, the newest ask winning, and
-  // run as soon as the view is handed over.
+  // The native view, for `focus()`/`blur()`. `hybridRef` reaches JS on a later
+  // turn than the commit that mounted the field, after the parent's effects have
+  // run. A `focus()` or `blur()` asked for before then is held, the newest ask
+  // winning, and run when the view arrives.
   const nativeView = useRef<NitroUiTextFieldHandle | null>(null);
   const pendingFocus = useRef<'focus' | 'blur' | null>(null);
-  // Whether this field is still mounted. Nitro can hand `hybridRef` to JS after the
-  // unmount - React has run its cleanups by then, and the native view it names may
-  // already be recycled into another field - so a queued ask is dropped at the
-  // unmount and a late `hybridRef` is dropped here rather than acted upon.
+  // Nitro can hand `hybridRef` over after the unmount, when the native view may
+  // already be recycled into another field, so a late one is dropped.
   const mounted = useRef(true);
   const hybridRefCallback = useStableCallback(
     (view: NitroUiTextFieldHandle) => {
@@ -297,11 +269,10 @@ export function TextField({
     []
   );
 
-  // A layout effect, so a parent's layout effect that focuses the field (they run
-  // after their children's) finds it mounted - also when StrictMode or `<Activity>`
-  // runs the cleanups and then the effects again. The native view is kept across
-  // that: Nitro hands `hybridRef` over once per native view, not once per effect
-  // run, and `mounted` alone keeps an unmounted field from acting on it.
+  // A layout effect, so a parent's layout effect that focuses the field (parents
+  // run after children) finds it mounted, also when StrictMode or `<Activity>`
+  // re-runs effects. The native view is kept across that: Nitro hands over
+  // `hybridRef` once per native view, not once per effect run.
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -310,8 +281,7 @@ export function TextField({
     };
   }, []);
 
-  // One native callback for both edges, split here, and always sent (D7b).
-  // `useStableCallback` keeps one identity and calls the newest closure.
+  // One native callback for both edges, split here and always sent.
   const focusChange = useStableCallback((focused: boolean) => {
     if (focused) onFocus?.();
     else onBlur?.();

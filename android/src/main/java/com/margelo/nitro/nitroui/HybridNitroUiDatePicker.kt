@@ -91,102 +91,43 @@ import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-/*
- * The DatePicker component: Material 3's date and time pickers on the core runtime.
- *
- * The structure is the Switch's (`HybridNitroUiSwitch.kt`) - a user-editable value
- * behind the event-count handshake - plus the Button's sizing story
- * (`HybridNitroUiButton.kt`) because the `compact` field's width comes from what it
- * renders, and one thing no shipped component has: a *dialog*. That difference
- * shapes three decisions in this file, all of them the same decision seen from
- * different angles - the mount must own the presentation:
- *
- *  1. The dialog is composed from `model.presented`, inside the host's own
- *     composition. Compose's `Dialog` opens a window and closes it when the
- *     composition that asked for it is disposed, and `NitroComposeHost.drop()`
- *     disposes the composition (`core.md` section 6) - so a dialog cannot outlive
- *     the mount that opened it, which is the B1 class of bug
- *     (`docs/tasks/B1-android-mount-oom.report.md`, lessons in
- *     `docs/tasks/G6-picker.md`). Nothing registers with a table that survives a
- *     drop: not a `DialogManager`, not a listener on the activity.
- *  2. `wheel` has no Material 3 equivalent, so it renders the inline picker
- *     (`docs/components/date-picker.md`). A wheel is an iOS control; inventing one
- *     here would mean drawing a picker instead of hosting the platform's.
- *  3. `datetime` is two Material 3 dialogs - a date one, then a time one - because
- *     Material 3 has no combined control, only the two.
- *
- * Dates cross the bridge as ms since the epoch, an *absolute instant*, and Material
- * 3's `DatePickerState` speaks **UTC midnight of the selected day**. The two
- * conversions live in [DatePickerModel] next to the clamp, because both are the
- * "what does this number mean" question and that question is answered in one place
- * here (see [toUtcMidnightOfLocalDay]).
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * manager resolves the implementation through a wildcard import of exactly that
- * package. Core helpers live in `...nitroui.core`.
- */
+// Material 3's date and time pickers. Must stay in this package: the generated manager
+// finds the implementation through a wildcard import of it.
 
-/** State of one DatePicker. See [NitroUiModel] for the shape this has to have. */
 internal class DatePickerModel : NitroUiModel() {
   /**
-   * The selected instant the composable renders, in ms since the epoch.
-   *
-   * A mirror of [state]'s `displayed`, observed because writing the handshake is
-   * invisible to Compose - `NitroUiControlledValue` is plain state, and only a write
-   * to snapshot state reaches the UI (the Switch and SegmentedControl do the same).
+   * The selected instant in ms since the epoch: [state]'s `displayed`, mirrored into snapshot
+   * state because the handshake is plain state that Compose does not observe.
    */
   var displayed by mutableStateOf(0.0)
 
   /**
-   * A request to roll the `wheel` + `time` drums to a pair, from `nuiTestSelect`.
-   *
-   * The same shape as `HybridNitroUiPicker`'s `wheelRequest`, for the same reason: the
-   * hook arrives on a UI-thread post and the drums live in the composition, so the hook
-   * leaves a request for the composition to turn into an animated scroll. What it must
-   * not do is write the model directly - a pick on this variant *is* a roll that comes
-   * to rest, and a hook that skips the roll never exercises the roll.
+   * A request from the test hook to roll the time wheels. The wheels live in the
+   * composition, so the hook leaves a request and the composition turns it into a scroll.
    */
   var timeWheelRequest by mutableStateOf<TimeWheelRequest?>(null)
 
-  /** `!disabled`, spelled positively where a composable wants it. */
   var enabled by mutableStateOf(true)
 
   /** ARGB `processColor` int, or `null` for the scheme's own colours. */
   var tintColor by mutableStateOf<Int?>(null)
 
-  /** `accessibilityLabel`, read by the composable so it can go on the control. */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
   /**
-   * Whether the `compact` field's dialog is open.
-   *
-   * Observed (it is what composes the dialog) *and* readable from JS through
-   * `nuiTestStateReport`, because "the dialog closed when the view went away" has to
-   * be a structural assertion rather than a screenshot. Every write goes through
-   * [setPresented], which is also why the property is read-only: Kotlin would give a
-   * `var presented` a `setPresented` of its own, and the two would clash.
+   * Whether the `compact` field's dialog is open. Read-only because every write goes through
+   * [setPresented], and a `var` would generate a clashing setter.
    */
   val presented: Boolean
     get() = presentedSnapshot
 
   private var presentedSnapshot by mutableStateOf(false)
 
-  /**
-   * The size configuration React sent. The sizing engine reads the key out of Fabric
-   * state itself; the host only needs to hear that it changed (see
-   * [NitroComposeHost.noteSizingKeyChanged]).
-   */
   var sizingKey = ""
 
   /**
-   * Event-count handshake, over the selected instant.
-   *
-   * A `Double` rather than a `Long` because the bridge has no 64-bit integer prop
-   * type that both platforms agree on, and a `Double` is what the handshake stores
-   * *raw*: `js` cannot be clamped in the setter, because the bounds it belongs to can
-   * arrive in the same batch after it (`docs/architecture/core.md` section 3).
-   * `afterUpdate()` clamps both `js` and `displayed`, so everything the composable
-   * reads is already in range. Not observed: it drives [displayed].
+   * Event-count handshake over the selected instant. Stores what React sent raw: it cannot be
+   * clamped in the setter, because the bounds may arrive later in the same batch. Not observed.
    */
   val state = NitroUiControlledValue<Double>(0.0)
 
@@ -195,70 +136,34 @@ internal class DatePickerModel : NitroUiModel() {
 
   var didApplyDefault = false
 
-  /**
-   * `'date'`, `'time'` or `'datetime'`. Size-affecting, so it is in `nuiSizingKey`.
-   *
-   * Observed, and not only because it is in the size key: it is what the field
-   * formats and which picker the inline variant builds, and a `mode` change is a
-   * props change on the *same* mount - `DatePicker.tsx` keys the native view on
-   * `variant`, not `mode`. As plain state it would be read once and never again, and
-   * the control would go on showing a date field after being asked for a clock.
-   */
+  /** `'date'`, `'time'` or `'datetime'`. Observed: it can change on a live mount. */
   var mode by mutableStateOf("date")
 
-  /**
-   * `'compact'`, `'inline'` or `'wheel'`. The most size-affecting prop here, and the
-   * one that is *not* observed - because it is the one that cannot change in place:
-   * `DatePicker.tsx` keys the native view on it, so a variant change is a new mount
-   * with a new model, a new `nuiSizingId`, and the policy chosen at `init`. Reading it
-   * once per composition is therefore reading it once per mount.
-   */
+  /** `'compact'`, `'inline'` or `'wheel'`. Not observed: JS remounts the view when it changes. */
   var variant = "compact"
 
-  /**
-   * Lowest selectable instant, or `null` for "no lower bound" (`null` on the wire).
-   *
-   * Observed along with [maximum]: both are read by the inline picker and by the
-   * dialog, as the calendar's year range and as its `SelectableDates`, so a range
-   * React widens or narrows has to reach a picker that is already on screen.
-   */
+  /** Lowest selectable instant, or `null` for no lower bound. */
   var minimum: Double? by mutableStateOf(null)
 
   /** Highest selectable instant, or `null` for "no upper bound". */
   var maximum: Double? by mutableStateOf(null)
 
-  /** `onValueChange`, as Nitro delivered it. */
   var onChange: ((Double, Double) -> Unit)? = null
 
-  // The test report. `nuiTestStateReport()` may be called from the JS thread, so the
-  // answer is a string written under a lock rather than two live reads: the main
-  // thread is never blocked for JS, and JS never blocks for it.
+  // The test report can be read from the JS thread, so it is a string written under a lock.
   private val reportLock = Any()
 
   private var report = "0|0"
 
-  /**
-   * The pair [publishReport] last formatted, so an unchanged batch skips the string
-   * build. Every mutation path calls it, including the ones that cannot change
-   * anything, and a benchmark sends many value writes.
-   */
+  /** What [publishReport] last formatted, so an unchanged batch builds no string. */
   private var publishedDisplayed = 0.0
 
   private var publishedPresented = false
 
   /**
-   * The composed calendar's own reading of itself, for [readReport].
-   *
-   * [displayed] and [presented] describe the *model*. A Material 3 calendar owns two
-   * facts only it knows: which month it is showing, and whether it kept the selection
-   * it was handed (`DatePickerStateImpl` stores `null` for a year outside its
-   * `yearRange`, so "the model has a value" and "the calendar shows a day" can
-   * disagree). [syncDatePicker] publishes both while a calendar is composed, which is
-   * what lets the harness see a calendar that opens on the wrong month or loses its
-   * day - neither of which the model's own pair can show.
-   *
-   * [NO_CALENDAR] in both means this mount has no calendar on screen: a `compact`
-   * field with its dialog closed, or the `time` mode's clock.
+   * What the composed calendar says about itself: the month it shows, and whether it kept
+   * its selection (Material stores `null` for a year outside its range). [NO_CALENDAR] while
+   * no calendar is on screen.
    */
   private var calendarMonthUtcMillis: Long = NO_CALENDAR
 
@@ -299,66 +204,31 @@ internal class DatePickerModel : NitroUiModel() {
     private const val NO_BUILT_BOUND = -2L
 
     /**
-     * How many presentations this process has open right now.
-     *
-     * Process-wide rather than per mount, because the property it guards is "no
-     * presentation outlives the mount that opened it" - and a mount that has been
-     * dropped has nothing left to ask. [DatePickerHost.Presentation] counts itself in
-     * a `DisposableEffect`, so the number only returns to zero when the *composition*
-     * that opened the dialog went away: closing the dialog, dropping the view and
-     * disposing the composition each take their own path, and a leak on any of them
-     * leaves the count above zero for a fresh mount to read.
+     * Dialogs open in this process right now. Process-wide, because a dropped mount cannot
+     * report its own leak.
      */
     val livePresentations = AtomicInteger(0)
   }
 
   /**
-   * How many Material 3 calendar states this mount has built - the last field of
-   * [readReport].
-   *
-   * A rebuild is what a bounds change costs a calendar (see the `key(...)` at each
-   * `rememberDatePickerState` call site): the page the user turned to and an open
-   * dialog's provisional pick go with it. That is the right price for a *day* of
-   * movement in a bound and the wrong price for a millisecond of it, and the only
-   * honest way to say which one a re-render cost is to count them. Not observed state
-   * on purpose: nothing may recompose because a counter moved, and the counter is
-   * incremented from inside a `key` block, which runs during composition.
+   * How many Material 3 calendar states this mount has built. A bounds change rebuilds the
+   * calendar, losing the page the user turned to. Not observed: it is incremented during
+   * composition.
    */
   private val controlBuilds = AtomicInteger(0)
 
-  /**
-   * The control last counted, by identity. A rebuild is a *new* state object; a
-   * recomposition of the one already there is not, and Compose may run a composition
-   * more than once - so the count is keyed on the object rather than on how often a
-   * block ran. Written from the main thread only, like the composition itself.
-   */
+  /** The control last counted, by identity: Compose may run a composition more than once. */
   private var countedControl: Any? = null
 
-  /**
-   * The bounds the calendar on screen was built with, as the last two fields of
-   * [readReport].
-   *
-   * Recorded where the build is counted, because that is where a calendar is built:
-   * the `key(...)` block runs exactly when the `key` produced a new slot, so the
-   * bounds read there are the ones the new state was handed. iOS publishes the same
-   * pair from the control's own appearance
-   * (`HybridNitroUiDatePicker.swift`, `noteControlBuilt(minimum:maximum:)`), which is
-   * what lets one harness test assert "the identity's bounds reached the live
-   * control" on both platforms.
-   */
+  /** The bounds the calendar on screen was built with. */
   private var builtMinimum: Double? = null
   private var builtMaximum: Double? = null
 
-  /** One platform control built (see [controlBuilds]); counted once per control. */
   fun noteControlBuild(control: Any) {
     if (countedControl !== control) {
       countedControl = control
       controlBuilds.incrementAndGet()
-      // Under [reportLock], because that is the lock [readReport] takes to print the
-      // pair: the two fields are one statement about one control, and writing them
-      // unguarded would let a reader see the new minimum with the old maximum. The
-      // harness polls, so the race it prevents is not one a test would trip often -
-      // which is exactly why it costs a lock rather than a comment saying "careful".
+      // Under the lock [readReport] takes, so a reader never sees one new bound with one old.
       synchronized(reportLock) {
         builtMinimum = minimum
         builtMaximum = maximum
@@ -369,17 +239,9 @@ internal class DatePickerModel : NitroUiModel() {
   // MARK: - Bounds
 
   /**
-   * [millis] inside `[minimum, maximum]`, with either bound possibly absent.
-   *
-   * Runs in `afterUpdate()` (never in a prop setter: value and bounds arrive in one
-   * batch in unspecified order) and on every user selection, so a day cell the
-   * calendar should not have offered, or a dial turned past the bound, is clamped
-   * natively and the event JS gets is already legal - the JS wrapper clamps the same
-   * way, and both have to agree exactly.
-   *
-   * Inverted bounds (`minimum > maximum`) make the lower one win: it is the bound the
-   * caller wrote first in the common `minimumDate=a maximumDate=b` mistake, and the
-   * iOS side collapses its `ClosedRange` to the same answer.
+   * [millis] inside `[minimum, maximum]`. Called from `afterUpdate()`, never a prop setter:
+   * value and bounds arrive in one batch in no particular order. With inverted bounds the
+   * minimum wins. The JS wrapper clamps the same way.
    */
   fun clamp(millis: Double): Double {
     if (!millis.isFinite()) {
@@ -391,19 +253,11 @@ internal class DatePickerModel : NitroUiModel() {
     return value
   }
 
-  /** [clamp] for a number that is not a date at all - `NaN` means "not a date". */
   fun clampOrNull(millis: Double?): Double? = millis?.let { clamp(it) }
 
   // MARK: - Presentation
 
-  /**
-   * Open or close the `compact` field's dialog.
-   *
-   * Every write goes through here - the press, `onDismissRequest` (outside tap and
-   * the platform back gesture), `reset()`, `onDropView()`, the `disabled` write in
-   * [afterUpdate] and the dialog subtree's `onDispose` - because the flag has to
-   * describe reality for [readReport] to be worth testing with.
-   */
+  /** The one writer of the dialog's open flag, so the test report always matches reality. */
   fun setPresented(next: Boolean) {
     if (next == presented) {
       return
@@ -415,25 +269,12 @@ internal class DatePickerModel : NitroUiModel() {
   // MARK: - Interaction
 
   /**
-   * The user picked [millis] - through a day cell, a dial, or a simulated selection.
-   *
-   * Optimistic (`core.md` section 4): [displayed] moves now, so there is no visual
-   * latency while React round-trips, and `(millis, eventCount)` goes out under a
-   * fresh count. A write React sends later either lands on the next `afterUpdate()`
-   * (accepted) or the handshake reverts `displayed`, which is the snap-back.
-   *
-   * A selection that does not move the displayed instant reports nothing, which is
-   * what keeps the two platforms emitting the same events: iOS's `DatePicker` binding
-   * only writes when the date changes, while Material 3 hands a click handler that
-   * fires for every day cell including the selected one. It is also what makes a
-   * rejected change *observable*: once the revert has landed, tapping the same day
-   * again must report nothing.
+   * The user picked [millis]. Optimistic: [displayed] moves before React has seen the event.
+   * A pick that does not move the displayed instant reports nothing; Material calls its click
+   * handler for the selected day too.
    */
   fun applyUserSelection(millis: Double) {
-    // A disabled control is inert. The composable also blocks input
-    // ([nuiBlockInput] for the two picker variants, and Material 3's own disabled
-    // button for `compact`), but `nuiTestSelect` does not go through the view, and
-    // "disabled emits nothing" is only assertable if this path agrees.
+    // The composable blocks input too, but the test hook does not go through the view.
     if (!enabled) {
       return
     }
@@ -449,7 +290,6 @@ internal class DatePickerModel : NitroUiModel() {
 
   // MARK: - Reports
 
-  /** Snapshot [displayed] and [presented] for [readReport]. */
   fun publishReport() {
     val shown = displayed
     val open = presented
@@ -463,13 +303,7 @@ internal class DatePickerModel : NitroUiModel() {
     }
   }
 
-  /**
-   * Publish what the composed calendar is showing (see [calendarMonthUtcMillis]).
-   *
-   * Idempotent, like [publishReport]: the effect that calls it re-runs whenever the
-   * calendar's month or selection changes, and a string build per recomposition is
-   * exactly the per-render work the perf contract forbids.
-   */
+  /** Idempotent: the effect that calls it re-runs whenever the month or selection changes. */
   fun publishCalendar(monthUtcMillis: Long, hasSelection: Boolean) {
     val selection = if (hasSelection) 1L else 0L
     synchronized(reportLock) {
@@ -481,7 +315,6 @@ internal class DatePickerModel : NitroUiModel() {
     }
   }
 
-  /** The calendar this mount composed is gone; the two calendar fields say so. */
   fun clearCalendar() {
     synchronized(reportLock) {
       calendarMonthUtcMillis = NO_CALENDAR
@@ -490,24 +323,12 @@ internal class DatePickerModel : NitroUiModel() {
   }
 
   /**
-   * The last published report, as
-   * `"<displayed ms>|<presented>|<calendar month>|<calendar has selection>|<live presentations>|<calendar builds>|<built minimum>|<built maximum>"`.
-   * Safe from any thread.
-   *
-   * The first two fields are published (they are model state); the calendar pair is
-   * published by the calendar's own effect; the presentation count is read live,
-   * because it is process-wide state that this mount does not own; the build count is
-   * read live too, because the point of reading it is to compare it before and after a
-   * re-render. The last pair is what the calendar on screen was *built* with
-   * (see [noteControlBuild]) - `-1` for "no calendar built yet", `-2` for "that bound
-   * is unset" - so the same harness assertion about identity can be made on both
-   * platforms.
+   * `<displayed ms>|<presented>|<calendar month>|<calendar has selection>|<live
+   * presentations>|<calendar builds>|<built minimum>|<built maximum>`. Safe from any thread.
    */
   fun readReport(): String =
     synchronized(reportLock) {
-      // -1 on both fields for "no control built yet", exactly as iOS spells it, and
-      // -2 for one bound the app never set. The two cannot be told apart from the
-      // bounds alone (both are `null` there), so the build count decides.
+      // `-1` on both for no control built yet; `-2` for a bound the app never set.
       val built = controlBuilds.get() > 0
       "$report|$calendarMonthUtcMillis|$calendarHasSelection|${livePresentations.get()}|${controlBuilds.get()}|${
         if (built) builtMinimum?.toLong() ?: NO_BUILT_BOUND else NO_BUILT_CONTROL
@@ -517,13 +338,8 @@ internal class DatePickerModel : NitroUiModel() {
   // MARK: - Material 3's calendar arithmetic
 
   /**
-   * UTC midnight of the *local* day [millis] falls on.
-   *
-   * Material 3's `DatePickerState.selectedDateMillis` is documented as "UTC
-   * midnight", deliberately: a calendar cell is a day, and a day belongs to a time
-   * zone. Storing the local day as UTC midnight is what stops the picker from
-   * deciding the day for itself - handing it a local instant would make it read the
-   * day in UTC, which is the previous or next day for half the planet.
+   * UTC midnight of the local day [millis] falls on. Material 3's `DatePickerState` stores a
+   * day as UTC midnight; handed a local instant it would read the day in UTC.
    */
   fun toUtcMidnightOfLocalDay(millis: Double): Long {
     val local = Calendar.getInstance().apply { timeInMillis = millis.toLong() }
@@ -534,13 +350,8 @@ internal class DatePickerModel : NitroUiModel() {
   }
 
   /**
-   * The instant of the day `utcMidnightMillis` names, at the time of day [millis]
-   * already had.
-   *
-   * The other half of the round trip, and the reason a pick preserves the clock:
-   * [Calendar.set] on the year/month/day keeps `HOUR`/`MINUTE`/`SECOND` as wall-clock
-   * values and recomputes the offset, so crossing a DST boundary keeps the time the
-   * user sees rather than the instant - which is what a calendar cell means.
+   * The day `utcMidnightMillis` names, at the wall-clock time [millis] already had.
+   * [Calendar.set] keeps the wall-clock fields, so the time shown survives a DST boundary.
    */
   fun fromUtcMidnightKeepingTimeOfDay(utcMidnightMillis: Long, millis: Double): Double {
     val utc = utcCalendar().apply { timeInMillis = utcMidnightMillis }
@@ -555,15 +366,7 @@ internal class DatePickerModel : NitroUiModel() {
     return local.timeInMillis.toDouble()
   }
 
-  /**
-   * UTC midnight of the first day of the *local* month [millis] falls in.
-   *
-   * `DatePickerState` asks for the displayed month, not the displayed day, and both
-   * `initialDisplayedMonthMillis` and the `displayedMonthMillis` setter mean "the
-   * month starting at this instant". Handing them the day itself works (Material 3
-   * truncates it) but says something imprecise, and the day-of-month is exactly the
-   * part a page-turn is not supposed to care about.
-   */
+  /** UTC midnight of the first day of the local month [millis] falls in. */
   fun toUtcMonthStartOfLocalDay(millis: Double): Long {
     val local = Calendar.getInstance().apply { timeInMillis = millis.toLong() }
     return utcCalendar().apply {
@@ -589,9 +392,8 @@ internal class DatePickerModel : NitroUiModel() {
   private fun utcCalendar(): Calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
 
   /**
-   * The instant of local wall-clock fields, with the day clamped to what that month
-   * actually has. Used only by `nuiTestSelect`; see the spec for why fields the mode
-   * does not show keep the displayed value.
+   * Test-only: the instant of local wall-clock fields. Fields the mode does not show keep
+   * the displayed value.
    */
   fun resolveTestSelection(
     year: Double,
@@ -610,10 +412,8 @@ internal class DatePickerModel : NitroUiModel() {
       }
       if (day.isFinite()) {
         val requested = day.toInt().coerceAtLeast(1)
-        // A day the target month does not have becomes its last day rather than
-        // rolling into the next month, which is what `java.time` and iOS's
-        // `DateComponents` both do. `getActualMaximum` reads the *current* year and
-        // month, so both sets above have to happen first.
+        // A day the month does not have becomes its last day. `getActualMaximum` reads the
+        // current year and month, so both sets above must come first.
         calendar.set(Calendar.DAY_OF_MONTH, requested.coerceAtMost(calendar.getActualMaximum(Calendar.DAY_OF_MONTH)))
       }
     }
@@ -624,9 +424,7 @@ internal class DatePickerModel : NitroUiModel() {
       if (minute.isFinite()) {
         calendar.set(Calendar.MINUTE, minute.toInt().coerceIn(0, 59))
       }
-      // The dial's own round trip: `fromTimeOfDay` is what the time dialog's OK
-      // button calls, so a simulated time pick lands on the instant a real one does
-      // (both pin the second and the millisecond, which the dial's fields do not carry).
+      // The same conversion the time dialog's OK button uses; it zeroes seconds and millis.
       calendar.timeInMillis = fromTimeOfDay(
         calendar.get(Calendar.HOUR_OF_DAY),
         calendar.get(Calendar.MINUTE),
@@ -634,19 +432,10 @@ internal class DatePickerModel : NitroUiModel() {
       ).toLong()
     }
     if (mode != "time") {
-      // And the day cell's. A real tap hands Material 3 the *local day as the calendar
-      // stores it* - UTC midnight - and the control's own conversion turns it back into
-      // an instant that keeps the clock. Going through those two functions is what makes
-      // `round-trips an instant across a DST boundary` price the conversions rather than
-      // the arithmetic in this seam: a `toUtcMidnightOfLocalDay` that stopped converting
-      // reads the day back as the *UTC* day, so the instant comes back one day off for
-      // any value whose local day is not its UTC day - an instant in the first hour of a
-      // day in a positive-offset zone, which is what the DST test picks.
+      // The same two conversions a real tap on a day cell goes through.
       calendar.timeInMillis = fromUtcMidnightKeepingTimeOfDay(
         toUtcMidnightOfLocalDay(calendar.timeInMillis.toDouble()),
-        // The clock the caller assembled above, not the one the control was showing:
-        // in `datetime` the hour and minute were just written into `calendar`, and this
-        // is the step that only moves the *day*.
+        // The clock assembled above, not the one the control was showing.
         calendar.timeInMillis.toDouble(),
       ).toLong()
     }
@@ -655,39 +444,14 @@ internal class DatePickerModel : NitroUiModel() {
 }
 
 /**
- * The `compact` field's text, and the string it must be wide enough for.
- *
- * The width must not depend on the *value*: `nuiSizingKey` is `"<variant>|<mode>"`
- * (`sizingVariantFor` in `DatePicker.tsx`), and two pickers that share a key have to
- * want the same box. If the width came from the displayed date, "Mar 5" and
- * "December 28, 2288" would share a key and each first instance would report a size
- * that corrects the other's box - a layout ping-pong. So the field is as wide as the
- * *widest* string its mode can produce, and [probe] is that string: the composable
- * lays it out invisibly and the real value on top of it, which makes the answer
- * locale- and font-scale-correct without this file measuring text at all (Compose's
- * own measure pass then reports the size, which is why Android needs no width cache).
- *
- * Which candidate is widest is a question about *pixels*, so it is answered by
- * measuring ([WIDEST_MEASURE]) rather than by comparing the strings: `maxOf` over
- * the formatted strings themselves compares them lexicographically, and in a
- * `.MEDIUM` date format a one-digit day sorts *after* a two-digit one, so the
- * alphabetical winner (`Sep 8, 2288`) is a character narrower than the dates people
- * have - `Oct 25, 2026` did not fit the width its own probe selected.
- *
- * Keyed by `(mode, locale)` and process-wide, because a hosted control is its own
- * composition and `remember` cannot share anything between controls
- * (`core.md` "Shared objects"). Dynamic Type is *not* in the key on purpose: it
- * changes what the probe needs to be *in pixels*, not which characters are the
- * widest, and the pixels are Compose's problem. That still holds now that the
- * ranking measures: this object takes the *identity* of the widest string from the
- * measurement and never a size. A text width is a sum of glyph advances times the
- * text size and [TextPaint]'s tracking is in em, so the order is the same at every
- * font scale - only the pixels move, and Compose still produces those.
+ * The `compact` field's text, and the widest text its mode can produce. The field is sized
+ * for the widest text, laid out invisibly, because the sizing key does not include the
+ * value. Candidates are ranked by measured width, not string comparison. Process-wide,
+ * keyed by (mode, locale): hosted controls are separate compositions.
  */
 private object DatePickerFieldText {
   private val cache = HashMap<String, Pair<DateFormat, String>>()
 
-  /** The field's text for [millis]. */
   fun format(
     mode: String,
     millis: Double,
@@ -696,8 +460,6 @@ private object DatePickerFieldText {
   /** The widest text this mode can produce, in the same format as [format]. */
   fun probe(mode: String): String = entry(mode).second
 
-  /** Forget everything. Nothing calls it today - a locale change makes a new key -
-   * but the cache is process-wide and this is the handle for whoever needs it. */
   @Synchronized
   fun invalidate() {
     cache.clear()
@@ -718,9 +480,7 @@ private object DatePickerFieldText {
           }
         formatter.format(calendar.time)
       }.maxBy { text -> WIDEST_MEASURE.measureText(text) }
-    // The cache is bounded by the handful of modes and locales one app renders; the
-    // cap is what stops a control that renders under many `LocaleList`s from growing
-    // it for the life of the process.
+    // Bounded, so rendering under many locales cannot grow it for the life of the process.
     if (cache.size >= MAX_ENTRIES) {
       cache.clear()
     }
@@ -742,31 +502,20 @@ private object DatePickerFieldText {
   private const val MAX_ENTRIES = 32
 
   /**
-   * The instrument that picks the widest candidate: the field's own text style
-   * (`labelLarge` is 14 sp Medium with 0.05 em tracking) at an arbitrary size,
-   * because only the *order* of the candidates is read from it.
-   *
-   * No width measured here reaches the layout - the composable lays the winning
-   * string out and Compose's measure pass turns it into pixels at the user's font
-   * scale, which is why this cache holds a string and not a size.
+   * Ranks the candidates in the field's own text style. Only the order is used; Compose
+   * measures the winning string at the user's font scale.
    */
   private val WIDEST_MEASURE =
     TextPaint().apply {
       textSize = 40f
       letterSpacing = 0.05f
-      // The face `labelLarge`'s Medium weight resolves to under the default font
-      // family. The weight only matters insofar as it can change which candidate is
-      // widest; nothing here decides how wide anything is drawn.
+      // The face `labelLarge`'s Medium weight resolves to with the default font family.
       typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
 
   /**
-   * The dates whose formatting is widest: every digit at its widest form, every month
-   * name in the locale rather than the one that *looks* longest in English, and both
-   * AM/PM halves. Not a guess at "a long date" - the same set iOS measures, so the
-   * two platforms agree about what "fits" means.
-   *
-   * `year, month(1-based), day, hour, minute`.
+   * Candidates for the widest formatting: every month, a one- and a two-digit day, and hours
+   * on both sides of noon. Each is `year, month (1-based), day, hour, minute`.
    */
   private val PROBES: Array<IntArray> =
     Array(12 * 2 * 5) { index ->
@@ -779,26 +528,10 @@ private object DatePickerFieldText {
 
 
 /**
- * The dates a [androidx.compose.material3.DatePicker] may offer, from this control's
- * bounds.
- *
- * Material 3 enforces a range in two places and only one of them is exact:
- * `DatePickerState.yearRange` limits where the *calendar can navigate* (whole years),
- * while `SelectableDates.isSelectableDate` decides whether one day is tappable. Both
- * are needed - a `minimumDate` in the middle of a month has to grey that month's
- * earlier days, and a `maximumDate` in February has to stop the year picker in
- * January.
- *
- * Material 3 hands UTC midnights here, so the comparison is against the UTC midnight
- * of the *local* bound: the same conversion the picker's own `initialDateMillis`
- * uses, so "the 14th" means the same day to the calendar, to this class and to the
- * user.
- *
- * The state reads this object once, at construction: `DatePickerState` exposes it as a
- * read-only property, so new bounds reach a mounted calendar by rebuilding the state
- * (see the `key(...)` in [InlinePicker]) rather than by swapping the object here. The
- * caller still `remember`s the instance per `(min, max)` so a recomposition with the
- * same bounds is not a reason to build a new calendar.
+ * Material 3 enforces a range in two places: `yearRange` limits navigation to whole years,
+ * and this decides whether one day can be picked. It is handed UTC midnights, so the bounds
+ * are UTC midnights of the local bound days. `DatePickerState` reads it once, at
+ * construction, so new bounds mean a new state.
  */
 private class BoundsSelectableDates(
   private val minUtcMidnight: Long?,
@@ -808,12 +541,7 @@ private class BoundsSelectableDates(
     (minUtcMidnight == null || utcTimeMillis >= minUtcMidnight) &&
       (maxUtcMidnight == null || utcTimeMillis <= maxUtcMidnight)
 
-  /**
-   * A year is reachable when it is not entirely outside the bounds. Only the bound's
-   * year number matters here, read in the local zone - a bound at 23:00 UTC on
-   * 31 December still names the year that day is in where the user is, which is what
-   * a year list shows.
-   */
+  /** A year is reachable unless it is entirely outside the bounds, read in the local zone. */
   override fun isSelectableYear(year: Int): Boolean {
     val minYear = minUtcMidnight?.let { localYear(it) }
     val maxYear = maxUtcMidnight?.let { localYear(it) }
@@ -825,22 +553,9 @@ private class BoundsSelectableDates(
 }
 
 /**
- * The library's tint as a [ColorScheme].
- *
- * Material 3's date and time pickers have no per-instance colour argument meaning "the
- * accent": `DatePickerColors` and `TimePickerColors` are 20-odd-role objects that a
- * tint would have to fill role by role, and every one of those roles is derived from
- * the *scheme's* `primary` in the first place. So a tint is a scheme with a different
- * `primary` - which is also the one-role trade this library already makes for the
- * Switch (`checkedTrackColor`), the Button (`containerColor`) and the SegmentedControl
- * (the selected segment).
- *
- * Process-wide and keyed, because a hosted control is its own composition and `remember`
- * cannot share anything between controls (`core.md` "Shared objects"). The shape is
- * [SegmentedColorsCache]'s: one scheme at a time (identity is the key because identity
- * is what the caller compares), a bounded tinted set, and a scheme change drops
- * everything. `ColorScheme.copy` is 29 fields, so an untinted control must never reach
- * this: it gets the caller's own instance back.
+ * The tint as a [ColorScheme] with a different `primary`: Material's pickers derive their
+ * many colour roles from it and take no single accent colour. Cached per (scheme, tint),
+ * process-wide, because hosted controls are separate compositions.
  */
 private object TintedSchemeCache {
   private const val MAX_TINTED_ENTRIES = 24
@@ -872,7 +587,7 @@ private object TintedSchemeCache {
     entries[tint] = value
   }
 
-  /** Drop what a different scheme invalidates. Called with the lock held. */
+  /** Called with the lock held. */
   private fun adopt(scheme: ColorScheme) {
     if (this.scheme === scheme) {
       return
@@ -898,28 +613,9 @@ private fun tintedScheme(
 }
 
 /**
- * The label, the value and the disabled state - on the node the user is actually on.
- *
- * `core.md` §3 "testID and accessibility" bans putting `contentDescription` on a
- * container: TalkBack then stops at the box *and* at the control inside it, and the
- * control - the thing the date is in - arrives nameless. So this goes on the
- * `OutlinedButton`, the `DatePicker` or the `TimePicker` itself, and the container
- * carries no semantics at all. `stateDescription` carries the formatted value: with a
- * `contentDescription` set, TalkBack reads that as the node's name instead of the
- * button's own text, and without it the field would announce "Departure, button" and
- * never the day (the same bug M3 found on iOS, seen from Android).
- *
- * A *disabled* calendar is the second half of the same complaint. Material 3's
- * `DatePicker` and `TimePicker` take no `enabled` - the calendar is a layout, not a
- * control - so a plain `disabled()` on a container left every day cell of a disabled
- * picker offered to TalkBack as an enabled button, activatable, while "disabled" was
- * announced on a node the user was not on. Here the disabled state replaces the
- * subtree's semantics with one disabled node ([clearAndSetSemantics]) and swallows the
- * gestures ([nuiBlockInput]) so a tap cannot move a selection at all. Two things still
- * make `disabled` honest underneath: [DatePickerModel.applyUserSelection] refuses to
- * emit while disabled, and [syncDatePicker]/[syncTimePicker] write the model's value
- * back into the picker, so a selection that did arrive is put back by the same
- * recomposition rather than left painted.
+ * The label, value and disabled state go on the control itself, never its container: a
+ * described container is a second TalkBack stop and leaves the control unnamed. The value
+ * is in `stateDescription`, because a `contentDescription` replaces the button's own text.
  */
 private fun Modifier.nuiFieldSemantics(
   label: String?,
@@ -932,7 +628,10 @@ private fun Modifier.nuiFieldSemantics(
     if (!enabled) disabled()
   }
 
-/** [nuiFieldSemantics] for the two picker variants, which also have to stop being usable. */
+/**
+ * Material's `DatePicker` and `TimePicker` take no `enabled`, so a disabled one has its
+ * subtree's semantics replaced by one disabled node and its gestures blocked.
+ */
 private fun Modifier.nuiControlSemantics(
   label: String?,
   value: String,
@@ -948,14 +647,7 @@ private fun Modifier.nuiControlSemantics(
     }
   }
 
-/**
- * Swallow every gesture over this node at the [PointerEventPass.Initial] pass, so
- * nothing below it sees a touch.
- *
- * `Initial`, not `Main`, because that is the pass a parent is guaranteed to see before
- * its children do: consuming here means the day cells and the clock's dial never get
- * the event, rather than getting it and having it taken back.
- */
+/** Consumes every gesture in the `Initial` pass, which a parent sees before its children. */
 private fun Modifier.nuiBlockInput(): Modifier =
   pointerInput(Unit) {
     awaitEachGesture {
@@ -967,72 +659,37 @@ private fun Modifier.nuiBlockInput(): Modifier =
     }
   }
 
-/** The disabled *look*. The announcement is [nuiControlSemantics]'s job, not this one's. */
+/** The disabled look only; [nuiControlSemantics] announces it. */
 private fun Modifier.nuiDisabledLook(enabled: Boolean): Modifier =
   if (enabled) this else alpha(DISABLED_ALPHA)
 
 private const val DISABLED_ALPHA = 0.38f
 
 /**
- * The narrowest box in which the inline calendar keeps Material's 48 dp interactive
- * minimum rather than asking for its 40 dp day cell.
- *
- * 360 dp is not a taste number: it is what Material's own calendar wants at the 48 dp
- * token — seven weekday columns spread evenly, plus the 12 dp the grid keeps at each
- * edge — so it is exactly the width at which keeping 48 dp stops being possible. At or
- * above it the default is provided untouched; below it the calendar would otherwise take
- * the shortfall out of the columns on the right. See [DatePickerHost.InlinePicker] and
- * `docs/components/date-picker.md`.
+ * The narrowest box in which Material's calendar keeps its 48 dp interactive minimum:
+ * seven columns plus 12 dp at each edge.
  */
 private val CALENDAR_WIDE_MIN_DP = 360.dp
 
-/**
- * The control's host: [NitroComposeHost] plus this component's composable.
- *
- * [Component] is fixed for the lifetime of the view, which is why it lives in a subclass
- * rather than being handed in as a lambda - there is no `setContent` anywhere in this
- * library after construction.
- */
 private class DatePickerHost(
   context: ThemedReactContext,
   activity: Activity?,
   model: DatePickerModel,
 ) : NitroComposeHost<DatePickerModel>(context, activity, model) {
-  /**
-   * A `<Host>` composes this control, dialog and all (H2b).
-   *
-   * The allowlist line the other controls have, with the matching JS row in
-   * `src/components/Host/HostChildren.ts`. A Material 3 dialog is a window, and a
-   * window is what a Host was said not to be able to own. What decides it is *which
-   * composition* composes the `Dialog`, because that composition is what closes the
-   * window: composed by the Host, the dialog goes away with the Host's disposal - the
-   * same rule that keeps an unhosted dialog from outliving its mount (`onDropView`),
-   * with the Host's composition standing in for the control's own.
-   * `example/__tests__/HostPopups.harness.tsx` measures it rather than reasoning it.
-   */
+  /** A `<Host>` may compose this control: whichever composition shows a dialog closes it. */
   override val isHostable: Boolean
     get() = true
 
   /**
-   * Whether this device shows clocks in 24-hour time.
-   *
-   * Read once from the context this host belongs to: it is a device setting rather
-   * than a prop, and Material 3's `TimePickerState` only accepts it at construction.
-   * Flipping the system setting under a mounted picker therefore leaves a clock face
-   * in the old convention until the picker is next built, which is the same class of
-   * gap as a locale change (see `docs/components/date-picker.md`, Environment).
+   * A device setting, read once: Material's `TimePickerState` only accepts it at
+   * construction, so a change reaches a mounted picker when it is next built.
    */
   private val twentyFourHour: Boolean = android.text.format.DateFormat.is24HourFormat(context)
 
   /**
-   * The `wheel` + `time` drums while that composition holds them, and null at every
-   * other moment of this view's life; [timeActive] is whether a finger is on the wheel
-   * or one of its drums is still turning.
-   *
-   * Back-references, written from the composition and cleared with the mount, because
-   * the props pass has to be able to move a state object that lives in a slot table -
-   * `HybridNitroUiPicker`'s `wheelState`/`wheelActive` are the same pair for the same
-   * reason, and [seatTimeDrumsFromModel] is its `syncWheelRow`.
+   * The time wheels' states while they are composed, else `null`, and whether a finger is on
+   * a wheel or one is still turning. Back-references written from the composition, so the
+   * props pass can move the wheels.
    */
   var timeHourDrum: ScrollFieldState? = null
   var timeMinuteDrum: ScrollFieldState? = null
@@ -1040,68 +697,28 @@ private class DatePickerHost(
   var timeActive: State<Boolean>? = null
 
   /**
-   * The wheel's own [CoroutineScope], for the same reason as the drum states above: the
-   * only call that reliably *moves* a drum is the pager's own `scrollToOption`, and that
-   * is a `suspend` function, so a props pass needs a scope to launch it on.
-   *
-   * [ScrollFieldState.selectedOption] looks like the non-suspending road - its setter is
-   * `PagerState.requestScrollToPage`, and the Picker's drum does use it - and on this
-   * control it was not enough: measured on `nitroui_b`, a batch asked the hour drum to go
-   * from 2 to 9, the write landed, and the next rest read the drum back on 2, because a
-   * pending `requestScrollToPage` is consumed by the pager's own next measure and the
-   * wheel's three pagers had no reason to remeasure. `scrollToOption` scrolls now, on the
-   * caller's coroutine, which is what a snap-back needs.
+   * The composition's scope, for the props pass. Writing `selectedOption` only requests a
+   * scroll that the pager applies at its next measure, which may never come; the suspending
+   * `scrollToOption` scrolls at once.
    */
   var timeDrumScope: CoroutineScope? = null
 
   /**
-   * One drum movement at a time, for every road that moves one.
-   *
-   * A seat and a roll are the same act on the same three pagers, and the order between
-   * them is the whole rule: a roll asked for one frame after a refused pick has to start
-   * from where the app *is*, not from where the drums have not yet been moved to. Without
-   * this the two raced and the loser decided what the next event was - measured on
-   * `nitroui_b`, a seat launched from a props pass was still scrolling when the next roll
-   * began, so that roll found the drums already on its own target, never scrolled, never
-   * rested, and reported nothing at all.
-   *
-   * Held by the composition's own seat, by the props pass's seat, by a roll and by a
-   * rest's tail - each of which launches on a scope that dies with the composition, so a
-   * lock is never left held. [ScrollFieldState] offers no queue of its own.
+   * One wheel movement at a time. A programmatic move and a roll act on the same pagers, and
+   * a roll must start from where the previous move ended. `ScrollFieldState` has no queue.
    */
   val timeDrumMutex = Mutex()
 
   /**
-   * The wheel's own-write guard - the pair the drums were last *put on* - held by the
-   * composition and reached from here for the same reason as the drums themselves.
-   *
-   * A seat that moves the drums has to move this with them, and the harness case that
-   * caught it is the second roll of a refused time: the props pass wrote the parent's
-   * pair into the drums and left the guard on the refused one, so the roll back to that
-   * pair rested on what the guard called a pick the control had just made, and sent
-   * nothing. A rest is only a pick when it is not standing where it was put.
+   * The hour and minute the wheels were last moved to programmatically. A rest on that pair
+   * is not a pick, so every programmatic move must update it.
    */
   var timePushed: MutableState<Pair<Int, Int>>? = null
 
   /**
-   * Put the drums on the instant this control shows, if they are not on it already.
-   *
-   * [afterUpdate] calls this for a batch that *moved* [DatePickerModel.displayed], and
-   * only for one. The reason is the race `docs/components/picker.md` records and
-   * `syncTimeWheel`'s own `LaunchedEffect` loses: a refused pick writes the new instant
-   * and then the parent's back inside one frame, the composition only ever *sees* the
-   * parent's, the key never changes, and the effect never runs - so the drums stay on
-   * the refused pair, and the next rest reads a pair the control does not hold and
-   * reports nothing at all. The composition cannot see that write; the props pass is
-   * where the write happens.
-   *
-   * Refused while [timeActive] holds, and refused for a batch that left the instant
-   * alone, because writing a drum that is moving is `requestScrollToPage`: it stops the
-   * scroll in progress and snaps home, which would cancel a roll the user is having and
-   * report nothing. The seat then belongs to the rest that roll arrives at - whose tail
-   * already puts the drums on `displayed` - or to the next batch after it.
-   *
-   * A no-op when no wheel is composed, which is every other variant and mode.
+   * Moves the wheels to the instant the control shows. Called from `afterUpdate()` because a
+   * refused pick writes the instant and back within one frame, which an effect keyed on the
+   * value never sees. Skipped while a wheel is touched or turning: it would cancel the roll.
    */
   fun seatTimeDrumsFromModel() {
     val scope = timeDrumScope ?: return
@@ -1115,8 +732,7 @@ private class DatePickerHost(
     }
     scope.launch {
       timeDrumMutex.withLock {
-        // Again, on the far side of the lock: a roll can have started while this waited
-        // behind it, and a roll is exactly what this must not interrupt.
+        // Checked again inside the lock: a roll can have started while this waited.
         if (active?.value == true) {
           return@withLock
         }
@@ -1140,18 +756,12 @@ private class DatePickerHost(
     val enabled = model.enabled
     val variant = model.variant
 
-    // One `Box` for the whole control, because `NitroUiMeasuredRoot` measures
-    // `measurables.firstOrNull()`: a second root measurable would make the size the
-    // engine is told depend on which child Compose visited first. A `Dialog` is not a
-    // measurable - it is a separate window - so it can live in this Box, and living
-    // here is the point: it is composed by *this* composition, so the composition
-    // disposal in `NitroComposeHost.drop()` closes it with the mount.
+    // One root `Box`: the host measures only the first root measurable. A `Dialog` is a
+    // separate window, not a measurable, and composing it here means disposing this
+    // composition closes it.
     MaterialTheme(colorScheme = tintedScheme(scheme, tint)) {
       Box(
-        // The container carries no semantics: a `contentDescription` here would be a
-        // TalkBack stop of its own, in front of the control that has the date
-        // (`core.md` §3, and the reason `model.accessibilityLabel` is applied one level
-        // down, on the button or the picker, instead).
+        // No semantics on the container: it would be a TalkBack stop in front of the control.
         modifier = Modifier.nuiDisabledLook(enabled),
       ) {
         if (variant == "inline" || variant == "wheel") {
@@ -1175,13 +785,9 @@ private class DatePickerHost(
     val formatted = DatePickerFieldText.format(mode, model.displayed)
     OutlinedButton(
       onClick = {
-        // The same entry point `nuiTestPresent()` uses, so a harness press and a real
-        // one are one code path.
         model.setPresented(true)
       },
-      // A disabled M3 button greys its own content and stops calling `onClick`, so the
-      // dialog cannot be opened from a disabled field at all - the same rule iOS's
-      // `.disabled(_:)` applies to the field's button.
+      // A disabled Material button stops calling `onClick`, so the dialog cannot open.
       enabled = model.enabled,
       modifier = Modifier.nuiFieldSemantics(
         label = model.accessibilityLabel,
@@ -1189,18 +795,9 @@ private class DatePickerHost(
         enabled = model.enabled,
       ),
     ) {
-      // The probe: this mode's widest possible text, laid out invisibly. It is what
-      // makes the button as wide as any value it could show, so two pickers sharing an
-      // `nuiSizingKey` cannot correct each other's box (see [DatePickerFieldText]).
-      // Done with layout rather than a `TextMeasurer`, which is why it is automatically
-      // right for the current locale *and* font scale and needs no size cache.
-      //
-      // `clearAndSetSemantics {}` empties the node: without it TalkBack reads the probe
-      // as well, and the field announces a date nobody picked.
-      // `Box` rather than the button's own `Row`: a `Row` would place the two texts
-      // side by side and make the field as wide as probe *plus* value. Stacked, the
-      // field is as wide as the wider of the two - which is the probe for every date
-      // this mode can show.
+      // The mode's widest text, laid out invisibly, so the button is as wide as any value
+      // it can show. Its semantics are cleared so TalkBack does not read it. A `Box`, not
+      // the button's `Row`, so the two texts stack instead of adding their widths.
       Box {
         Text(
           text = DatePickerFieldText.probe(mode),
@@ -1214,16 +811,7 @@ private class DatePickerHost(
           text = formatted,
           style = MaterialTheme.typography.labelLarge,
           maxLines = 1,
-          // Asks the `Box` for its own width as well, so the field is
-          // `max(probe, value)` instead of exactly the probe. While the probe really
-          // is the widest string the mode can produce the two agree and the value
-          // cannot move the box; when a probe under-estimates - a locale this file has
-          // not met, an era designator, a five-digit year - the cost is a field a few
-          // dp too wide for one measure rather than a date the user cannot read.
-          // `DatePicker.harness.tsx`'s "gives two compact pickers one box" test keeps
-          // that honest: a narrow date and a wide date share one sizing key and must
-          // get one box, so a value that moves the box because the probe is short
-          // fails there.
+          // If the probe under-estimates, the value widens the box rather than being cut off.
           overflow = TextOverflow.Ellipsis,
         )
       }
@@ -1231,25 +819,8 @@ private class DatePickerHost(
   }
 
   /**
-   * The `wheel` variant of `mode="time"`: one `ScrollField` drum per field, in the row a
-   * wheel is.
-   *
-   * Why the drums are drawn here instead of by `TimeScroll`, and what the settle costs, is
-   * in [syncTimeWheel]. What matters here is that the *rows* are Material's own drum rows
-   * ([NuiWheelRow], the same one a Picker's wheel paints), that the drums are named by
-  * Material's own localised `m3c_time_picker_hour_selection`/`_minute_selection` rather
-  * than invented ones, so a screen reader hears the same words it hears from a stock wheel
-  * in every locale. The AM/PM column has no Material description to borrow - Material's own
-  * meridiem control is a toggle, with a toggle's description - so it is named by the two
-  * Material-spelled values it holds. And that the drums share the box rather than overflow
-  * it: `weight(1f, fill = false)` up front and a width cap after it means a wheel in a
-  * 320 dp box gets three narrower drums instead of a column the caller cannot see.
-   *
-   * The height is this widget's own claim, stated rather than asked for: a drum is a pager
-   * and a pager fills whatever height it is offered, which under this component's
-   * `fillWidth` question (the box's width, an unbounded height) would be as tall as the
-   * screen. Three rows of 40 dp with the middle one snapped, measured against the box the
-   * harness reports - and above the 48 dp an interactive thing must offer a finger.
+   * The `wheel` variant of `mode="time"`: one `ScrollField` per field. The wheels share the
+   * box's width, and the height is stated because a pager fills whatever height it is given.
    */
   @Composable
   private fun TimeWheel(
@@ -1262,19 +833,13 @@ private class DatePickerHost(
   ) {
     val colors = nuiWheelColors(model.tintColor)
     val enabled = model.enabled
-    // Material's own words for its own columns, from the same `m3c_` resources the rest of
-    // this file reaches into for the picker dialogs. Hardcoding "Select hour" would speak
-    // English to a German screen reader; the resources are what a stock wheel says.
+    // Material's own localised strings for the hour and minute columns.
     val hourDrumLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_hour_selection)
     val minuteDrumLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_minute_selection)
     val amLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_am)
     val pmLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_pm)
-    // The columns in the digits the device's locale writes. Material's drum rows use its own
-    // `toLocalString`, which is `internal` to the artifact, so the wheel asks for the same
-    // thing directly: a `NumberFormat` for the composition's locale with a minimum digit count.
-    // That is what puts Arabic-Indic digits in a wheel on an Arabic device, where Latin ones
-    // would disagree with every other number on the screen. Keyed on the composition's
-    // language tag, which is the fact a wheel's columns would be stale about.
+    // Digits in the composition's locale: Material's own formatter for wheel rows is
+    // internal, so a `NumberFormat` does the same.
     val localeTag = LocalLocale.current.toLanguageTag()
     val (padded, plain) =
       remember(localeTag) {
@@ -1300,24 +865,19 @@ private class DatePickerHost(
             value = DatePickerFieldText.format("time", model.displayed),
             enabled = enabled,
           )
-          // The drums live inside this node, and a page that swallows their drags is a wheel
-          // that cannot be rolled. See [nuiOwnVerticalDrags], which also keeps the touch flag
-          // the settle is armed by.
+          // Inside React Native's scroll container the page would otherwise intercept the drags.
           .nuiOwnVerticalDrags(enabled, touching),
       horizontalArrangement = Arrangement.spacedBy(TimeWheelGap, Alignment.CenterHorizontally),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       TimeWheelDrum(
-        // `fill = false`, so the cap below is the cap: with `fill = true` the row would
-        // force the drum to its whole share and a wheel in a wide box would paint a 190 dp
-        // hour column instead of the 100 dp column a wheel has.
+        // `fill = false`, so a wheel in a wide box stays at most the capped width.
         modifier = Modifier.weight(1f, fill = false).widthIn(max = TimeWheelDrumWidth).height(TimeWheelHeight),
         state = hourState,
         label = hourDrumLabel,
         colors = colors,
         enabled = enabled,
-        // 00..23 in 24-hour form; 12, 1, ... 11 in 12-hour form, unpadded because "01
-        // o'clock" reads like a date and it is iOS's 12-hour wheel that spells it that way.
+        // 00..23 in 24-hour form; 12, 1, ... 11, unpadded, in 12-hour form.
         text = { index ->
           if (twentyFourHour) {
             padded.format(index.toLong())
@@ -1340,8 +900,7 @@ private class DatePickerHost(
         TimeWheelDrum(
           modifier = Modifier.weight(1f, fill = false).widthIn(max = TimeWheelDrumWidth).height(TimeWheelHeight),
           state = periodState,
-          // The column has no description of its own in Material's strings - its stock
-          // control is a toggle, not a drum - so it is named by the two values it holds.
+          // Material has no description for this column, so it is named by its two values.
           label = "$amLabel/$pmLabel",
           colors = colors,
           enabled = enabled,
@@ -1367,8 +926,7 @@ private class DatePickerHost(
       modifier = modifier,
       enabled = enabled,
       colors = colors,
-      // The spoken row and the painted row are one function, which is the pair that makes
-      // "the row shown is the value reported" a fact rather than a hope.
+      // The spoken row and the painted row come from one function.
       fieldAccessibilityDescription = { index -> text(index) },
       interactionSource = null,
       field = { index, selected, rowEnabled ->
@@ -1394,16 +952,9 @@ private class DatePickerHost(
       val hour = fields.get(Calendar.HOUR_OF_DAY)
       val minute = fields.get(Calendar.MINUTE)
       if (model.variant == "wheel") {
-        // The wheel and the clock are the same control with the same two fields, drawn two
-        // ways, and the 12/24-hour convention comes from the device either way
-        // ([twentyFourHour]). What differs is where the value lives: the clock is a
-        // `TimePickerState` Material both writes and reads, and the wheel is a row of
-        // drums whose states have to belong to *this* composable, because the settle is
-        // read off a drum's own scroll flag (see [syncTimeWheel]).
-        //
-        // The hour column is 0..23 or - on a 12-hour device - 12 o'clock followed by
-        // 1..11, whose index is the hour modulo 12, with an AM/PM column beside it for the
-        // other half. Three columns of a wheel is also what iOS's time wheel draws.
+        // The wheel states belong to this composable, because the pick is read from their
+        // own scroll flags. On a 12-hour device the hour column is 12, 1..11 (the hour
+        // modulo 12) with an AM/PM column beside it.
         val hourState =
           rememberScrollFieldState(
             itemCount = if (twentyFourHour) 24 else 12,
@@ -1416,14 +967,10 @@ private class DatePickerHost(
           } else {
             rememberScrollFieldState(itemCount = 2, index = if (hour >= 12) 1 else 0)
           }
-        // Is a finger on the wheel? [nuiOwnVerticalDrags] awaits the down and the up anyway,
-        // so it keeps this; the settle needs it because a roll does not end when the finger
-        // leaves - the drum is still coasting then - and cannot end at all after it has.
+        // True while a finger is on a wheel; a roll is not over until it is false.
         val touching = remember { mutableStateOf(false) }
-        // "Active" for [nuiReportAtWheelRest]: a finger on the wheel, or any drum of it
-        // still turning. A `derivedStateOf` read only by the settle's flow, so a drum
-        // starting or stopping recomposes no part of the wheel - the one variant of this
-        // component that is already redrawing a pager on every row it crosses.
+        // A finger on a wheel, or any wheel still turning. A `derivedStateOf` read only from
+        // a flow, so a wheel starting or stopping recomposes nothing.
         val active =
           remember(hourState, minuteState, periodState, touching) {
             derivedStateOf {
@@ -1433,11 +980,8 @@ private class DatePickerHost(
                 touching.value
             }
           }
-        // The host's back-references, taken in the composition rather than in an effect:
-        // `afterUpdate` can land before the next frame has run any effect of this mount,
-        // and the drums it has to reach exist only in a slot table. See
-        // [DatePickerHost.seatTimeDrumsFromModel] for what it uses them for, and
-        // `HybridNitroUiPicker`'s wheel for the same two lines.
+        // Set in `remember`, not in an effect: `afterUpdate` can run before any effect of
+        // this mount has.
         remember(hourState, minuteState, periodState) {
           this@DatePickerHost.timeHourDrum = hourState
           this@DatePickerHost.timeMinuteDrum = minuteState
@@ -1446,11 +990,7 @@ private class DatePickerHost(
         remember(active) {
           this@DatePickerHost.timeActive = active
         }
-        // [syncTimePicker]'s own-write guard, for the same reason: comparing the drums
-        // against `model.displayed` prices a model-driven write as a pick whenever the
-        // instant is a frame behind, so the pair written *into* the drums is remembered
-        // beside the write. Beside the write, and beside the drums on the host: any road
-        // that moves a drum moves this too, and the props pass is one of them.
+        // The pair last written into the wheels, so a rest on it is not taken for a pick.
         val pushed = remember(model) { mutableStateOf(timeOfDayOf(model, shown)) }
         remember(pushed) {
           this@DatePickerHost.timePushed = pushed
@@ -1485,8 +1025,7 @@ private class DatePickerHost(
             initialMinute = minute,
             is24Hour = twentyFourHour,
           )
-        // The dial commits a value when the finger leaves it, so it needs the same rules
-        // read from a different trigger than the drums do.
+        // The clock dial commits a value when the finger leaves it.
         syncTimePicker(model, state)
         TimePicker(
           state = state,
@@ -1501,95 +1040,31 @@ private class DatePickerHost(
       val yearRange = remember(model.minimum, model.maximum, shown) { model.dateYearRange() }
       val selectable = model.rememberSelectableDates()
       val shownDayUtcMidnight = model.toUtcMidnightOfLocalDay(shown)
-      // The bounds reach the calendar by *rebuilding* it. `rememberDatePickerState`
-      // keeps what it was handed - it stores its arguments in a `rememberSaveable`
-      // with no keys, and the public `DatePickerState` exposes `yearRange` and
-      // `selectableDates` as read-only properties (the setter for the latter is only
-      // on the internal `BaseDatePickerStateImpl`) - so React widening the range has
-      // to produce a new state, which is what `key` does. The key is the pair of
-      // keys the state consumes: the `SelectableDates` built from the bounds and the
-      // navigable year range. Both are *day*-granular - `selectable` is `remember`ed on
-      // the bounds' UTC-midnight days, `yearRange` is a pair of years - which is exactly
-      // how far a bound reaches this calendar, so a real change to
-      // `minimumDate`/`maximumDate` costs the calendar its scroll position: the honest
-      // trade, because a calendar offering days this control would clamp away is not the
-      // same calendar. Keying the raw bound instants instead costs a rebuild on *every*
-      // parent render for the `minimumDate={new Date()}` idiom the docs lead with, which
-      // throws away the page the user turned to and an open dialog's provisional pick.
+      // New bounds reach the calendar by rebuilding its state: `rememberDatePickerState`
+      // keeps the arguments it was first given. The key is day-granular, so a bound that
+      // moves by milliseconds on every render (`minimumDate={new Date()}`) rebuilds nothing.
       val state = key(selectable, yearRange) {
         rememberDatePickerState(
           initialSelectedDateMillis = shownDayUtcMidnight,
-          // Named, because the second positional argument is *not* a minimum: it is
-          // `initialDisplayedMonthMillis`, and leaving it `null` makes Material 3
-          // open the calendar on *today's* month - a July value on an October page,
-          // with the selected day off-screen.
+          // Named: left `null`, Material opens the calendar on today's month, with the
+          // selected day off-screen.
           initialDisplayedMonthMillis = model.toUtcMonthStartOfLocalDay(shown),
           yearRange = yearRange,
           selectableDates = selectable,
         ).also { model.noteControlBuild(it) }
       }
       syncDatePicker(model, state)
-      // No mode toggle: it switches the calendar to a *text entry* form, which is a
-      // second control nobody asked for, and for the `wheel` variant - "the picker, not
-      // a dialog" - one whose keyboard would take over the screen. The calendar is what
-      // this variant means.
-      //
-      // Material 3's calendar lays its seven weekday columns out with
-      // `Arrangement.SpaceEvenly` and gives each cell
-      // `sizeIn(minWidth = 40.dp).size(LocalMinimumInteractiveComponentSize)`, so at
-      // Material's 48 dp interactive default the grid wants 7 × 48 + 2 × 12 = 360 dp. A
-      // narrower box does not get a narrower calendar: `Modifier.size` *enforces* its
-      // incoming maximum, so the columns past the squeeze simply lose width. Measured at
-      // a 320 dp box before any of this, the header columns were 126 px six times and
-      // then 20 px (Saturday at 7.6 dp), and the day rows below them 126 px six times and
-      // then 73 px - the clipping `docs/images/components/date-picker-android.png` used to
-      // show.
-      //
-      // So the calendar asks for the 40 dp token its own cell is built around
-      // (`DateContainerWidth`) - but only in a box too narrow for 48 dp, which is what
-      // [BoxWithConstraints] below is for: the value a `CompositionLocalProvider` hands
-      // down has to exist at composition time, while an `onSizeChanged` read is a
-      // measure-pass value, and writing one to state from a measure block marks this node
-      // measure-dirty (the loop `NitroComposeHost` warns about in its own measure block).
-      // At [CALENDAR_WIDE_MIN_DP] and above the inherited value is re-provided untouched,
-      // so a full-width phone keeps Material's 48 dp targets. Below 7 × 40 + 2 × 12 =
-      // 304 dp the calendar still cannot fit and is not made to pretend otherwise: the
-      // header of a 240 dp box measures five 40 dp columns, a 15.6 dp sliver, and no
-      // seventh column at all.
-      //
-      // What the narrow branch gives up is 8 dp of touch-target padding, on the day cells
-      // *and* on the month's prev/next buttons and year toggle, which read the same local
-      // and cannot be held at 48 dp from here. 40 dp is above WCAG 2.2 AA's 24 px minimum
-      // and below Material's recommended 48 dp; it is not padding that was being delivered
-      // at that width anyway - a squeezed cell was neither 48 dp nor 40 dp, which is the
-      // whole bug - and it is the shape iOS's inline calendar has there
-      // (`date-picker-ios.png` puts its seven columns on a 42.8 pt pitch in its 320 pt
-      // box). `docs/components/date-picker.md` states the rule, and `real-input:android`
-      // measures one narrow and one wide calendar on every run.
-      //
-      // No modifier, deliberately: `BoxWithConstraints` with none forwards the incoming
-      // constraints to its content with only the minimums cleared and reports the
-      // content's own size, so the host measures the calendar's size as it always did. A
-      // `fillMaxWidth()` here would not throw under the host's unbounded-parent arm -
-      // `fillMaxWidth` is a no-op when the incoming maximum is infinite - but it would make
-      // the box the thing that decides this node's width wherever the parent *is* bounded,
-      // and the width the host reports has to stay the calendar's own. What the wrapper
-      // costs one recomposition of *this lambda* per measure pass - `BoxWithConstraints`
-      // re-runs its content to re-derive the constraints, so `narrow` is recomputed from two
-      // constraint fields - and nothing more. The calendar under it is called with the same
-      // state it had, in the same slot, so it is not rebuilt: see the single
-      // `CompositionLocalProvider` below, which is what keeps it that way across this
-      // threshold. `DatePicker.harness.tsx`'s "lays each variant out at the size the
-      // control measured" is the test that says the height report and the engine's
-      // corrections survived it.
+      // No mode toggle: it would switch the calendar to a text-entry form.
+      // Material's calendar sizes each day cell to the minimum interactive size (48 dp), so
+      // it needs 360 dp; in a narrower box the last columns are squeezed, so it is given
+      // 40 dp there. `BoxWithConstraints` has no modifier, so the measured size stays the
+      // calendar's own.
       BoxWithConstraints {
         val narrow =
           constraints.hasBoundedWidth &&
             with(LocalDensity.current) { constraints.maxWidth.toDp() < CALENDAR_WIDE_MIN_DP }
-        // One call site for one calendar: an `if`/`else` around the picker would put it in
-        // two composition slots, and the sizing engine's own passes move a mounted control
-        // across this very threshold (the provisional fallback box is narrower than the
-        // corrected one), which would rebuild the calendar the user is looking at.
+        // One call site: an `if`/`else` around the picker would put it in two composition
+        // slots, and crossing the width threshold would rebuild the calendar.
         CompositionLocalProvider(
           LocalMinimumInteractiveComponentSize provides
             if (narrow) 40.dp else LocalMinimumInteractiveComponentSize.current,
@@ -1600,7 +1075,6 @@ private class DatePickerHost(
     }
   }
 
-  /** The calendar itself, so the two branches above differ only in what they provide. */
   @Composable
   private fun InlineCalendar(
     model: DatePickerModel,
@@ -1626,48 +1100,17 @@ private class DatePickerHost(
   ) {
     val wantsDate = mode != "time"
     val wantsTime = mode != "date"
-    // Which of the two dialogs is up, for `datetime`: exactly one at a time, because
-    // Material 3 has no combined control. The step resets with the dialog, since
-    // `remember` lives inside the `if (presented)` subtree that disposal destroys.
+    // `datetime` shows one dialog at a time: Material 3 has no combined control.
     var step by remember(wantsDate, wantsTime) { mutableStateOf(if (wantsDate) Step.Date else Step.Time) }
 
-    // Count this presentation for as long as the *composition* that opened it lives.
-    // `onDispose` runs when the subtree leaves the composition - the dialog closed, the
-    // view dropped (`NitroComposeHost.drop()` disposes), or the host recycled - so the
-    // process-wide count returns to zero exactly when nothing of this presentation is
-    // left. `DatePickerModel.livePresentations` says why the count is process-wide:
-    // the dropped mount has nothing left to report, so `presents nothing after the
-    // mount that opened it is gone` reads it through a fresh instance instead.
+    // Counted for as long as the composition that opened the dialog lives.
     DisposableEffect(Unit) {
       DatePickerModel.livePresentations.incrementAndGet()
       onDispose {
         DatePickerModel.livePresentations.decrementAndGet()
-        // Take the open flag down with the window (`MenuWitness` in
-        // `HybridNitroUiPicker` writes `model.expanded` for the same reason, and says so).
-        // Disposal is not only what a close does. Three teardowns reach here with no
-        // dismissal in them: the child leaves the Host's list, `display: 'none'` on it
-        // (`isHiddenByReact`, which composes no child at all), and the child's row being
-        // *moved by layout* - which takes its group out and recomposes it somewhere else.
-        // Nothing else clears the flag on those paths: `setVisibility` only tells the
-        // Host its drawn content moved. Without the write, the flag outlives the window,
-        // and the case that shows the child again composes a dialog over the screen with
-        // nobody having asked for it - with no provisional selection left, because
-        // `rememberDatePickerState` lives inside the subtree that died.
-        //
-        // The third of them is what this line *changes* rather than reports, and it was
-        // measured both ways: without the write, a hosted dialog whose row moved read
-        // `presented=1` with `live=1`, a dialog still open for a row that had moved -
-        // the stale-window bug this release fixed for menus. With it, the dialog follows
-        // its row, so `docs/components/host.md` can state one rule for both popup
-        // controls. The harness reads the flag and the count, never the dialog's rect,
-        // so "over the wrong place" is argued from the menu case and not measured here.
-        // A change that moves nothing - a sibling's own identity, say - leaves
-        // this group alone, so the dialog is not closed by it either (both halves gated
-        // in `example/__tests__/HostPopups.harness.tsx`).
-        //
-        // A no-op on every path that already closed the dialog: dismiss, OK, `disable`,
-        // `onDropView` and `reset` all call `setPresented(false)` first, and it returns
-        // early when the flag already says `false`.
+        // Clear the open flag with the window. Disposal also happens without a dismissal:
+        // a hosted child that is removed, hidden with `display: 'none'`, or moved by layout.
+        // Without this the flag outlives the window and the dialog reopens unasked.
         model.setPresented(false)
       }
     }
@@ -1675,35 +1118,22 @@ private class DatePickerHost(
     if (step == Step.Date) {
       val yearRange = remember(model.minimum, model.maximum, model.displayed) { model.dateYearRange() }
       val selectable = model.rememberSelectableDates()
-      // Day-granular, for the same reason as the inline calendar's: keying the raw
-      // bound instants makes every parent render a rebuild, and inside an open dialog
-      // a rebuild discards the selection the user has provisionally made.
+      // Day-granular: a rebuild inside an open dialog discards the provisional selection.
       val state = key(selectable, yearRange) {
         rememberDatePickerState(
           initialSelectedDateMillis = model.toUtcMidnightOfLocalDay(model.displayed),
-          // Named, and the dialog needs it most: with the second argument positional
-          // this dialog opened on *today's* month (or the minimum's), so the day the
-          // field was showing was usually not on the page the user was offered.
+          // Named: left `null`, the dialog opens on today's month.
           initialDisplayedMonthMillis = model.toUtcMonthStartOfLocalDay(model.displayed),
           yearRange = yearRange,
           selectableDates = selectable,
         ).also { model.noteControlBuild(it) }
       }
-      // The dialog's *selection* stays provisional until OK, so nothing here syncs it
-      // back into the model; what it does publish is the page and whether a day is lit,
-      // so `nuiTestStateReport` can see a dialog opened on the wrong month.
+      // The dialog's selection is provisional until OK, so it is not synced into the model.
       publishCalendarFacts(model, state)
-      // ...and the model's value reaches the dialog in one direction only. The
-      // provisional pick belongs to the user, so an open dialog never *emits*; a value
-      // React sends while it is up is a different thing, and it moves the dialog's page
-      // and lit day with it (the G5 follow-up, fixed here because H2b made the hosted
-      // case observable - `docs/tasks/FOLLOWUPS.md`).
+      // A value React sends while the dialog is open moves its page and selected day.
       followValueInDialog(model, state)
       DatePickerDialog(
-        // Outside tap, the platform back gesture and the back *button* all land here:
-        // `DialogProperties` defaults dismiss on both, which is the brief's "the app's
-        // back gesture dismisses it", and it is the same entry point a dismiss button
-        // uses. Nothing here has to own the window to close it.
+        // Called for an outside tap and for Back.
         onDismissRequest = { model.setPresented(false) },
         confirmButton = {
           TextButton(
@@ -1717,9 +1147,7 @@ private class DatePickerHost(
                 },
               )
               if (wantsTime) {
-                // `datetime`: the date is committed *first*, so a time dialog that the
-                // user then dismisses still left a committed date - the same thing iOS's
-                // single combined control does when the popover closes.
+                // The date is committed first, so dismissing the time dialog keeps it.
                 step = Step.Time
               } else {
                 model.setPresented(false)
@@ -1740,7 +1168,6 @@ private class DatePickerHost(
         initialMinute = fields.get(Calendar.MINUTE),
         is24Hour = twentyFourHour,
       )
-      // [followValueInDialog] for the dial: the same one-directional rule.
       followTimeValueInDialog(model, state)
       TimePickerDialog(
         onDismissRequest = { model.setPresented(false) },
@@ -1766,38 +1193,8 @@ private class DatePickerHost(
 }
 
 /**
- * Keep Material 3's calendar selection and the model's date equal, in both directions.
- *
- * The direction that matters is model → picker. Material 3's `DatePickerState` owns its
- * selection and *keeps* it: `rememberDatePickerState` does not re-read
- * `initialDateMillis` after construction, so a value React sends later - or a change JS
- * rejected, which is the whole content of the controlled-rejection test - would leave
- * the calendar on a day the control does not have. The model decides what is selected,
- * so the model writes it here.
- *
- * The other direction turns a tap into an event. An inline picker has no confirm
- * button, so the calendar moving *is* the pick; iOS's graphical `DatePicker` writes its
- * binding on the same tap, which is the behaviour this matches. A selection the model
- * did not take (disabled, or a clamp back onto the same instant) is written back into
- * the state at the end, which is what makes the picker inert rather than lying.
- *
- * The two effects cannot loop: each writes only when the value it is about to write
- * differs from what it just read, so the second effect sees `next == displayed` and
- * stops.
- */
-/**
- * Publish the two facts a composed Material 3 calendar owns (see
- * [DatePickerModel.publishCalendar]) for as long as it is composed.
- *
- * Both are `mutableStateOf`-backed properties of the state, so reading them here
- * subscribes: a page turned under a finger re-publishes, and the harness can see a
- * month that never followed the value - which the model's own pair cannot show.
- *
- * Read-only on purpose, and used by both calendars this component composes: the inline
- * picker (through [syncDatePicker], which *also* syncs) and the `compact` dialog (which
- * must not sync - its selection is provisional until OK). Without the dialog half, the
- * case the screenshot got wrong - a dialog open on the wrong month - would be exactly
- * the one the report could not see.
+ * Publishes the month a composed calendar shows and whether it has a selection. Read-only:
+ * the dialog uses it too, and the dialog's selection must not be synced.
  */
 @Composable
 private fun publishCalendarFacts(model: DatePickerModel, state: DatePickerState) {
@@ -1818,15 +1215,9 @@ private fun syncDatePicker(
 ) {
   publishCalendarFacts(model, state)
   val shown = model.displayed
-  // The day the *model* last wrote into the state, written next to that write.
-  //
-  // `LaunchedEffect(selected)` below has to tell a user's tap from the model's own
-  // write, and the instant it used to compare against - `model.displayed` - can be a
-  // frame behind the day it pushed: the frame that moves the value writes the new day,
-  // and a read-back that then prices the *old* instant against the *new* day calls
-  // the model's own page change a pick, and the control emits the instant it was just
-  // given. A day compared against the day that was written is the same decision
-  // without the race, because both sides of it are written in one synchronous block.
+  // `DatePickerState` keeps its own selection after construction, so the model writes
+  // its value into it. A tap is told from the model's own write by `pushed`: the day
+  // the model last wrote, set in the same block as the write.
   val pushed = remember(state) { mutableStateOf(state.selectedDateMillis) }
   LaunchedEffect(shown) {
     val wanted = model.toUtcMidnightOfLocalDay(shown)
@@ -1834,11 +1225,7 @@ private fun syncDatePicker(
       pushed.value = wanted
       state.selectedDateMillis = wanted
     }
-    // ...and the *page* moves with it. `initialDisplayedMonthMillis` is read once at
-    // construction, so without this a programmatic value - the example screen's
-    // "Reset to 2026-01-01", or a parent refusing a pick - selects a day on a page the
-    // user is not looking at. An inline picker's scroll back to a rejected day is the
-    // same write.
+    // The page too: the initial month is read only at construction.
     val wantedMonth = model.toUtcMonthStartOfLocalDay(shown)
     if (state.displayedMonthMillis != wantedMonth) {
       state.displayedMonthMillis = wantedMonth
@@ -1851,12 +1238,8 @@ private fun syncDatePicker(
       model.applyUserSelection(model.fromUtcMidnightKeepingTimeOfDay(picked, model.displayed))
     }
     val wanted = model.toUtcMidnightOfLocalDay(model.displayed)
-    // Record the day the state holds *whether or not* this block had to write it. A
-    // pick the model accepted needs no write, so writing only inside the `if` left
-    // `pushed` on the day before the tap - and the next tap, back onto that day, then
-    // read as the model's own write: nothing was emitted, and the calendar snapped
-    // forward again under the finger. The race the guard exists for stays closed
-    // because `pushed` is still set before every write this control makes.
+    // Record the day the state holds even when no write is needed, so the next tap back
+    // onto the previous day is not taken for the model's own write.
     pushed.value = wanted
     if (state.selectedDateMillis != wanted) {
       state.selectedDateMillis = wanted
@@ -1864,17 +1247,7 @@ private fun syncDatePicker(
   }
 }
 
-/**
- * One drum's width, at its widest: the drum `TimeScroll` lays out on `nitroui_b`
- * (hour drum 263 px at 2.625 x = 100 dp), kept because it is the width the rows of this
- * library's other wheel were measured at too, and because a drum is a *column* - 100 dp
- * shows the centre row's two digits with room for the type to grow into the centre size.
- *
- * It is a maximum, not a demand: `weight(1f, fill = false)` shares whatever box the caller
- * gave the control, so a wheel in a 320 dp box gets three narrower drums rather than a
- * wheel wider than its box and a clipped column. `docs/components/date-picker.md` quotes
- * the box the harness measures.
- */
+/** A maximum: the wheels share whatever width the box has. */
 private val TimeWheelDrumWidth = 100.dp
 
 /** The wheel's height - three rows of 40 dp, the middle one snapped. */
@@ -1883,11 +1256,7 @@ private val TimeWheelHeight = 120.dp
 /** The gutter between drums, so the centre band of one does not read as the other's. */
 private val TimeWheelGap = 16.dp
 
-/**
- * One request to roll the time wheel to [hour]:[minute], tagged with the [serial] that
- * makes it this request rather than a repeat of the last one. See
- * [DatePickerModel.timeWheelRequest].
- */
+/** [serial] makes a repeated request for the same time a new request. */
 internal class TimeWheelRequest(
   val hour: Int,
   val minute: Int,
@@ -1895,27 +1264,9 @@ internal class TimeWheelRequest(
 )
 
 /**
- * The `wheel`'s drums, held by *this* composable rather than by a Material widget.
- *
- * `TimeScroll` is 1.5's wheel, and it is the obvious thing to draw - which is what G29 did
- * first, and then could not make it report. A wheel's value commits on a *settle*, and
- * [nuiReportAtWheelRest] needs the drum's own scroll flag to know when one has happened;
- * `TimeScrollImpl` (read from the artifact's sources, 1.5.0-beta02) builds its two
- * `ScrollFieldState`s privately and hands the caller only a `TimePickerState`, which is a
- * pair of ints and says nothing about whether a drum is still turning. Nothing else on the
- * widget says so either - a `Pager` dispatches no nested scroll or fling to its ancestors,
- * and the drums' states are `internal` to Material - so from outside, "the wheel has
- * stopped" is not a fact that exists, and the only trigger left is a clock. That is the
- * 180 ms window this file used to keep, and on a loaded box one real fling crossed rows
- * slowly enough for the window to expire twice, so the same roll reported two changes.
- *
- * So the wheel is built out of the same public primitive `TimeScroll` is built from -
- * `ScrollField`, with Material's own `m3c_time_picker_*` descriptions for the drums - and
- * the drum states are this file's to read. The widget is Material's drum with an hour
- * column, a minute column, and on a 12-hour device an AM/PM column, which is the shape
- * iOS's wheel has had all along; the *behaviour* - one roll, one rest, one event - is now
- * the same rule [com.margelo.nitro.nitroui.HybridNitroUiPicker]'s wheel runs on, from the
- * same helper.
+ * Built from `ScrollField` rather than Material's `TimeScroll`, which keeps its wheel
+ * states private: a wheel's value is read when it comes to rest, and only the wheel's own
+ * scroll flag says when that is.
  */
 @Composable
 private fun syncTimeWheel(
@@ -1930,17 +1281,8 @@ private fun syncTimeWheel(
   pushed: MutableState<Pair<Int, Int>>,
 ) {
   val shown = model.displayed
-  // The value the app holds moves the drums - the direction that answers a new `value`.
-  // Instant, never animated: a new time has to be on the centre line before the user looks
-  // at it, and this write must not start a scroll that could be read as the user's (it
-  // cannot - the rest it causes reads back the value just written, which the guard below
-  // refuses - but an instant snap does not even open the question).
-  //
-  // It keeps its hands off while a roll is in progress, on the same rule as
-  // [DatePickerHost.seatTimeDrumsFromModel] below: moving a drum that is turning cancels
-  // the roll, and a roll that never rests reports nothing. What it also cannot see is the
-  // revert of a pick this control just refused, which is why that one is the props pass's
-  // job - see the race `docs/components/picker.md` records.
+  // The value the app holds moves the wheels, instantly. Not while a roll is in
+  // progress: moving a turning wheel cancels the roll, which then reports nothing.
   LaunchedEffect(shown, hourState, minuteState, periodState) {
     drumMutex.withLock {
       if (active.value) {
@@ -1956,33 +1298,17 @@ private fun syncTimeWheel(
       )
     }
   }
-  // A request from `nuiTestSelect`: this variant has no row to press, so the hook asks
-  // for the roll a pick here *is* - the drums turning and coming to rest - and the rest
-  // below emits, exactly as a finger's does.
-  //
-  // The request is spent by *serial*, and the field is cleared only once the roll is over.
-  // This effect is keyed on [DatePickerModel.timeWheelRequest] itself, so writing that
-  // field from inside the body re-keys the effect while its own three scrolls are still
-  // running and Compose cancels them with it - which is how a drum asked for 14:05 reports
-  // 05:08 instead: the hour drum's animation dies two rows in, the minute drum keeps
-  // coasting, and the rest reads whichever pair they happened to stop on. A remembered
-  // serial says "this request has been read" without touching a key, which is the guard
-  // the clear was reaching for: a new drum state object (`options`-sized change while this
-  // roll is still coasting) recomposes the effect without scrolling it a second time.
-  // Clearing after the joins cancels nothing - the body has already run.
+  // A request from the test hook. Consumed by serial, and the field is cleared only
+  // after the roll: writing it here would re-key this effect and cancel its scrolls.
   val request = model.timeWheelRequest
   var readRequestSerial by remember { mutableStateOf(0) }
   LaunchedEffect(hourState, minuteState, periodState, request) {
     if (request != null && request.serial > readRequestSerial) {
       readRequestSerial = request.serial
-      // The lock is the handshake with a seat: a props batch that reverted the instant
-      // launches its own scroll, and this roll has to wait for it and start from where the
-      // drums then are. Overtaking it is what made the second roll of a refused time
-      // report nothing - see [DatePickerHost.timeDrumMutex].
+      // Wait for any programmatic move in progress, and start from where it ends.
       drumMutex.withLock {
-        // All three at once. `active` is the drums' *or*, so starting them one after
-        // another would leave a frame in which none of them is scrolling - a rest, in the
-        // middle of a roll, and an event for a pair the user is not standing on.
+        // All three at once: started one after another, there would be a frame in which
+        // none is scrolling, which reads as a rest.
         val hour =
           launch {
             hourState.animateScrollToOption(
@@ -2003,20 +1329,15 @@ private fun syncTimeWheel(
       }
     }
   }
-  // One report per rest, on the rule the Picker's drum shares: a finger on the wheel or a
-  // drum still turning is "active", and the pair the drums stand for when neither is true
-  // any more is the roll. `applyUserSelection` is the same gate every other Android pick
-  // goes through, so a refused pair is not reported and a roll onto the shown time is not
-  // either - and the write-back below is what puts a refused pair off the drums, on the
-  // widget's own road home rather than a repaint from here.
+  // One report per rest. A pair the model refuses is not reported, and the wheels are
+  // moved back to the value the model holds.
   nuiReportAtWheelRest(active) {
     val rolled = readTimeDrums(twentyFourHour, hourState, minuteState, periodState)
     if (rolled != pushed.value) {
       model.applyUserSelection(model.fromTimeOfDay(rolled.first, rolled.second, model.displayed))
     }
     val wanted = timeOfDayOf(model, model.displayed)
-    // Now, not from inside the lock: the guard answers the rest that has just happened,
-    // and the seat below only has to keep the drums where it already says they are.
+    // Before the lock: this answers the rest that has just happened.
     pushed.value = wanted
     scope.launch {
       drumMutex.withLock {
@@ -2036,10 +1357,8 @@ private fun timeOfDayOf(
 }
 
 /**
- * The hour-of-day and minute the drums are standing for.
- *
- * In 12-hour form the hour column is 12 o'clock followed by 1..11, so its index *is* the
- * hour modulo 12 and the AM/PM column carries the other half; 0 is midnight and 12 is noon.
+ * In 12-hour form the hour column's index is the hour modulo 12 and the AM/PM column
+ * carries the other half; 0 is midnight and 12 is noon.
  */
 private fun readTimeDrums(
   twentyFourHour: Boolean,
@@ -2058,23 +1377,9 @@ private fun readTimeDrums(
 }
 
 /**
- * Put the drums on an hour of day and a minute, leaving alone any drum already there.
- *
- * Both halves of a drum move: the [ScrollFieldState.selectedOption] write, which is what
- * the Picker's drum does, and the pager's own instant `scrollToOption` after it.
- *
- * The write alone was measured not to be enough on these three pagers: its setter is a
- * `requestScrollToPage`, a *pending* scroll that the pager consumes on its own next
- * measure, and a drum whose value nobody is reading has no reason to remeasure - the
- * getter says the drum is seated while the pager underneath it is still standing on the
- * refused pair, and a roll asked for afterwards finds its own target there and never
- * scrolls. `scrollToOption` scrolls on the caller's coroutine instead of asking for one,
- * which is what a snap-back needs to be over before the user looks at it. It is the
- * non-animated form, so a seat never looks like a roll, and the rest it causes reads back
- * the pair just written - which every caller's own-write guard already refuses to report.
- *
- * Callers hold [DatePickerHost.timeDrumMutex]: this is the one place a drum moves, and
- * the one place [DatePickerHost.timePushed] is written by something other than a rest.
+ * Moves the wheels to an hour and minute, leaving alone any already there. Writing
+ * `selectedOption` alone only requests a scroll the pager applies at its next measure, so
+ * the instant `scrollToOption` follows it. Callers hold [DatePickerHost.timeDrumMutex].
  */
 private suspend fun seatTimeDrums(
   twentyFourHour: Boolean,
@@ -2102,20 +1407,14 @@ private suspend fun seatTimeDrums(
   }
 }
 
-/**
- * [syncDatePicker] for Material 3's clock, which stores hour and minute instead of a day.
- *
- * See [syncTimeWheel] for the wheel, which needs the same rules on a different trigger.
- */
+/** Keeps Material 3's clock and the model's time equal, in both directions. */
 @Composable
 private fun syncTimePicker(
   model: DatePickerModel,
   state: TimePickerState,
 ) {
   val shown = model.displayed
-  // `syncDatePicker`'s own-write guard, in the clock's two fields: comparing the dial
-  // against `model.displayed` prices a model-driven write as a pick when the instant is
-  // a frame behind, so the pair written to the state is remembered next to the write.
+  // The pair last written into the state, so the model's own write is not taken for a pick.
   val pushed = remember(state) {
     mutableStateOf(Pair(state.hour, state.minute))
   }
@@ -2134,11 +1433,10 @@ private fun syncTimePicker(
     if (hour != pushed.value.first || minute != pushed.value.second) {
       model.applyUserSelection(model.fromTimeOfDay(hour, minute, model.displayed))
     }
-    // Same snap-back: a pick the model refused must not stay painted on the dial.
+    // A pick the model refused must not stay on the dial.
     val fields = model.localFields(model.displayed)
     val wanted = Pair(fields.get(Calendar.HOUR_OF_DAY), fields.get(Calendar.MINUTE))
-    // Recorded unconditionally, exactly as in `syncDatePicker`: a dial returned by
-    // hand to the hour it started on is a pick, not the model's own write.
+    // Recorded even when no write is needed, as for the calendar.
     pushed.value = wanted
     if (state.hour != wanted.first || state.minute != wanted.second) {
       state.hour = wanted.first
@@ -2148,21 +1446,8 @@ private fun syncTimePicker(
 }
 
 /**
- * [syncDatePicker]'s model -> dialog half, for a dialog whose selection is provisional.
- *
- * The half, not the whole: an open Material 3 dialog does not emit while the user turns
- * its calendar, so the second effect of [syncDatePicker] - the one that reads a changed
- * state back as a pick - would turn every provisional tap into an event and break the
- * confirm-button contract the dialog exists for. What stays is the direction that was
- * missing: a value React writes *while the dialog is open* now moves the dialog's day
- * and page, instead of the dialog sitting on a date the control no longer has until it
- * is closed.
- *
- * A user's provisional pick does not move `model.displayed` - only OK does - so the two
- * writers cannot race: this fires when React changes the value, and a provisional tap
- * is not such a change. `DatePickerState` keeps what it was handed
- * (`rememberDatePickerState` does not re-read its arguments), which is exactly why the
- * write has to be made here rather than at construction.
+ * Model to dialog only. A dialog's selection is provisional until OK, so it is never read
+ * back as a pick, but a value React sends while it is open moves its day and page.
  */
 @Composable
 private fun followValueInDialog(
@@ -2201,15 +1486,9 @@ private fun followTimeValueInDialog(
 }
 
 /**
- * Material 3's navigable year range for this control's bounds.
- *
- * Material 3's own default (1900-2100) applies where a bound is absent, widened to
- * include the year being displayed: a calendar whose range excludes the day it should
- * show cannot show it - the state clamps its selection into the range, so a
- * `defaultValue` of 2300 with no `maximumDate` would otherwise open on a month with
- * nothing selected. Documented as a platform gap in `docs/components/date-picker.md`:
- * unlike SwiftUI, whose picker scrolls to any instant, Material 3's calendar can only
- * be navigated inside a range, and "no bounds" means *this* range on Android.
+ * Material 3's calendar can only be navigated inside a year range. Its default (1900-2100)
+ * applies where a bound is absent, widened to include the displayed year, because a
+ * calendar cannot show a selection outside its range.
  */
 internal fun DatePickerModel.dateYearRange(): IntRange {
   val start = minOf(minimum?.let { localFields(it).get(Calendar.YEAR) } ?: DEFAULT_YEAR_START, localFields(displayed).get(Calendar.YEAR))
@@ -2217,14 +1496,7 @@ internal fun DatePickerModel.dateYearRange(): IntRange {
   return start..end
 }
 
-/**
- * Material 3's `SelectableDates` for this control's bounds, stable while the bounds are.
- *
- * `remember`ed so a recomposition with unchanged bounds is not a reason to allocate a
- * new one. It is *not* what makes new bounds reach a mounted calendar - the state reads
- * it once, so that is the `key(...)` at each call site of
- * [androidx.compose.material3.rememberDatePickerState]'s job.
- */
+/** `remember`ed per bound day, so a recomposition with unchanged bounds allocates nothing. */
 @Composable
 private fun DatePickerModel.rememberSelectableDates(): SelectableDates =
   remember(
@@ -2240,62 +1512,33 @@ private fun DatePickerModel.rememberSelectableDates(): SelectableDates =
 private const val DEFAULT_YEAR_START = 1900
 private const val DEFAULT_YEAR_END = 2100
 
-/** The Hybrid View React renders as `NitroUiDatePicker`. */
 class HybridNitroUiDatePicker(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiDatePickerSpec(), RecyclableView {
   private val model = DatePickerModel()
 
-  /** Where [runOnUi] sends work that is not already on the UI thread. */
   private val mainHandler = Handler(Looper.getMainLooper())
   private val host = DatePickerHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
   init {
-    // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
-    // `compact` - the default - is intrinsic. The `variant` setter moves this for the
-    // two picker variants, and the JS wrapper remounts on a variant change so the
-    // policy is a property of the mount, not of prop order.
+    // `compact`, the default, is intrinsic; the `variant` setter changes the policy.
     host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
-    // The backstop: `NitroUiDeclaredFallbacks` registers this at startup, which is the
-    // point that matters (see its doc comment).
+    // A backstop: fallbacks are normally declared at package init.
     declareFallback()
   }
 
   companion object {
-    /**
-     * This component's name in the sizing engine: `HybridNitroUiDatePickerComponentName`
-     * in the generated C++, and `getName()` in the generated manager.
-     */
+    /** Must match the name in the generated C++ and in the generated manager's `getName()`. */
     private const val SIZING_COMPONENT_NAME = "NitroUiDatePicker"
 
     /**
-     * The size to lay a DatePicker out with before anything has been measured, in dp.
-     *
-     * One pair for a component with six configurations, because the engine's fallback is
-     * keyed by component alone: this is the most common one - a `compact` `date` field -
-     * and every other configuration is a first instance of *its own* configuration that
-     * gets corrected the turn it measures (`docs/architecture/sizing.md` section 9).
-     *
-     * Measured on `nitroui_t02` (420 dpi, API 35, `en-US` - the emulator's default)
-     * for `variant = "compact"`, `mode = "date"`: the compact field's box is
-     * **131.05 x 48 dp**. `131.0` is within the engine's 0.5 dp epsilon
-     * (`NitroUiSizingEngine.hpp`'s `kEpsilon`), so a cold `compact` `date` mount is
-     * laid out at its own size and pays no correction (D17); the old `150 x 40` was
-     * 8 dp short vertically, so every cold compact field on Android corrected on its
-     * second frame.
-     *
-     * The 48 dp is not the button's own height (Material 3 draws a 40 dp outline) but
-     * the 48 dp minimum interactive size M3 puts under it - the same reason stock
-     * `Switch` and `Button` boxes are 48 tall here. The width is the widest `date`
-     * string this locale's formatter can produce (see `DatePickerFieldText`), so it
-     * moves with the locale - a locale with a longer format costs one horizontal
-     * correction on that configuration's first instance, which is the documented
-     * trade of a key that excludes the value.
+     * The size used before anything has been measured, in dp: a `compact` `date` field. The
+     * height is Material's 48 dp minimum touch target. Fallbacks are keyed by component, so
+     * the other configurations are corrected after their first measure.
      */
     private const val FALLBACK_WIDTH_DP = 131.0
     private const val FALLBACK_HEIGHT_DP = 48.0
@@ -2303,13 +1546,8 @@ class HybridNitroUiDatePicker(
     private val fallbackDeclared = AtomicBoolean(false)
 
     /**
-     * One JNI call per process, before the first DatePicker can be measured.
-     *
-     * Called from `NitroUiDeclaredFallbacks.registerAll()` at package init - a Fabric
-     * measure can happen before this class has ever been instantiated, so a fallback
-     * declared from `init` is one measure too late for the first instance (T14) - and
-     * from `init` as the backstop. The two calls land on different threads, hence the
-     * atomic.
+     * One JNI call per process. Called at package init, because Fabric can measure before this
+     * class is first instantiated, and from `init` as a backstop, on a different thread.
      */
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
@@ -2330,15 +1568,11 @@ class HybridNitroUiDatePicker(
   override var valueMillis: Variant_NullType_Double
     get() =
       model.state.js?.let {
-        // The *clamped* instant, not the number React sent - same as Slider's `value`
-        // and SegmentedControl's `selectedIndex`, and what makes a value the bounds
-        // rejected visible to a test instead of readable as if it were live.
+        // The clamped instant, not the number React sent.
         Variant_NullType_Double.Second(model.clamp(it))
       } ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // Not visual on its own: `displayed` only follows once the event count says JS has
-      // caught up, and the instant only means something against the bounds, which can be
-      // in this same batch. Both happen in `afterUpdate()`.
+      // `afterUpdate()` applies it: the bounds may arrive later in the same batch.
       model.state.js = next.asSecondOrNull()
     }
 
@@ -2362,10 +1596,7 @@ class HybridNitroUiDatePicker(
         return
       }
       model.mode = next
-      // A time field is not the same width as a date field, and Material 3's clock is
-      // not the same height as its calendar. Compose notices the recomposition and its
-      // own measure pass reports the new size (sizing.md section 5), so Android needs no
-      // explicit "the size may have moved" call - unlike iOS, which has to ask.
+      // Changes the size; Compose's own measure pass reports it.
       host.markDirty()
     }
 
@@ -2377,9 +1608,7 @@ class HybridNitroUiDatePicker(
       }
       model.variant = next
       host.markDirty()
-      // The biggest size change this component can make - a 40 dp field versus a
-      // ~400 dp calendar - and it also changes *how* the size is decided, which is what
-      // Progress does per `variant` and Slider does statically.
+      // The sizing policy follows the variant: the field is intrinsic, the pickers fill the width.
       host.sizingPolicy =
         if (next == "compact") {
           NitroUiSizing.POLICY_INTRINSIC
@@ -2397,9 +1626,7 @@ class HybridNitroUiDatePicker(
       if (raw == model.minimum) {
         return
       }
-      // Repaints (Material 3 greys the days it is told are unselectable) and can move the
-      // displayed instant, which `afterUpdate()` applies. Not a size change: the
-      // calendar's shape does not depend on the range.
+      // Can move the displayed instant, which `afterUpdate()` applies. Not a size change.
       model.minimum = raw
       host.markDirty()
     }
@@ -2434,9 +1661,8 @@ class HybridNitroUiDatePicker(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double. Going via
-      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an opaque
-      // colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      // `processColor` hands back the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, so an opaque colour would become `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.tintColor) {
         return
@@ -2449,8 +1675,7 @@ class HybridNitroUiDatePicker(
     get() =
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
-    // Same as RN's own `BaseViewManager.setTestID`: the tag is what
-    // `findNodeByName`/testID matchers read on Android.
+    // The view tag is what testID matchers read.
     set(next) {
       host.tag = next.asSecondOrNull()
     }
@@ -2464,8 +1689,7 @@ class HybridNitroUiDatePicker(
       if (label == model.accessibilityLabel) {
         return
       }
-      // Rendered, not bookkeeping: the label goes on the control's semantics node, so it
-      // needs a commit or a late-set label never reaches TalkBack.
+      // The label is on the control's semantics node, so a change needs a commit.
       model.accessibilityLabel = label
       host.markDirty()
     }
@@ -2489,11 +1713,7 @@ class HybridNitroUiDatePicker(
         return
       }
       model.sizingKey = next
-      // The engine has no answer for a key it has not seen, so it lays this out at the
-      // declared fallback; the new configuration may measure exactly what the old one
-      // did, and that is the size the host's dedupe would swallow the correcting report
-      // against (review F1). Guarded, because React re-sends an unchanged key on every
-      // render and the reset costs a measure.
+      // A new key needs a fresh measure and a report, even if the size is unchanged.
       host.noteSizingKeyChanged()
     }
 
@@ -2514,13 +1734,9 @@ class HybridNitroUiDatePicker(
   override fun afterUpdate() {
     val minimum = model.minimum
     val maximum = model.maximum
-    // The instant this control was showing when the batch arrived, for the same reason
-    // the Picker takes it: only a batch that *moves* it has a row to put on a drum.
+    // Only a batch that moves the shown instant may move the time wheels.
     val shownBefore = model.displayed
-    // The value, the default and the two bounds can all land in one batch in any order,
-    // so none of them is interpreted until the batch is complete - an instant outside the
-    // range only means something once the range it belongs to is known (core.md section
-    // 3, and Slider's `value` does the same thing against its range).
+    // The props of one batch arrive in any order, so they are interpreted here.
     model.state.js?.let { js ->
       val clamped = model.clamp(js)
       if (clamped != js) {
@@ -2536,79 +1752,45 @@ class HybridNitroUiDatePicker(
         host.markDirty()
       }
     }
-    // The event-count handshake decides whether React's instant wins over what the user
-    // just picked - including a change JS rejected (core.md section 4).
+    // The handshake decides whether React's instant wins over what the user just picked.
     if (model.state.reconcile()) {
       model.displayed = model.clamp(model.state.displayed)
       host.markDirty()
     }
-    // Bounds that arrived *after* the displayed instant can leave it outside them. The
-    // same clamp, and idempotent, so an instant that is already legal comes back
-    // unchanged - which is why this runs on every batch without knowing which prop moved.
+    // Bounds that arrived after the displayed instant can leave it outside them.
     val shown = model.clamp(model.state.displayed)
     if (shown != model.displayed) {
       model.state.displayed = shown
       model.displayed = shown
       host.markDirty()
     }
-    // A control that has been disabled does not keep a dialog on screen (H2b; the G5
-    // review's recommendation for this exact path). Its picks were already refused -
-    // `applyUserSelection` is inert while disabled - but a window that offers a list
-    // which answers nothing is the half-open state that report named.
-    //
-    // It lives here because this is the only route to it: [disabled] moves
-    // `model.enabled` and nothing else, and there is no JS prop for the open flag -
-    // `presented` is written by a press, a dismissal or a teardown, never by a props
-    // batch - so this line cannot be replaced by an ordering between two writes. The
-    // Picker keeps the same rule in its `disabled` setter
-    // (`HybridNitroUiPicker.disabled`); this control cannot, and the difference is
-    // visible at the harness: stubbing this line out turns "closes when the control is
-    // disabled while the dialog is open" red, where the Picker's copy of it does not.
+    // A disabled control keeps no dialog open. Done here because the `disabled` setter
+    // only changes `enabled`, and no prop carries the open flag.
     if (!model.enabled && model.presented) {
       model.setPresented(false)
     }
-    // The drums follow an instant they were not part of choosing, and only such one -
-    // see [DatePickerHost.seatTimeDrumsFromModel] for the race that makes this the
-    // props pass's job, and for the batch and the roll it must keep its hands off.
+    // The wheels are not painted from `displayed`, so they have to be told.
     if (model.displayed != shownBefore) {
       host.seatTimeDrumsFromModel()
     }
-    // A batch can move the displayed instant without any rendered change (React
-    // confirming what native already picked), and the report must not go stale; the call
-    // itself costs two comparisons when nothing moved.
+    // A batch can move the displayed instant with no rendered change; keep the report current.
     model.publishReport()
     host.commit()
   }
 
   override fun prepareForRecycle() {
     host.tag = null
-    // The drums belonged to the composition that is about to go, and a recycled host
-    // that still held them could write a pager nothing is drawing.
+    // The wheel states belonged to the composition that is ending.
     host.timeHourDrum = null
     host.timeMinuteDrum = null
     host.timePeriodDrum = null
     host.timeActive = null
     host.timeDrumScope = null
     host.timePushed = null
-    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
-    // marked the recycle: clearing it here would hide that mark.
-    // Back to the policy the reset variant implies, and it has to be said here rather
-    // than left to the `variant` setter below. The setter compares against
-    // `model.variant`, and `host.prepareForRecycle()` is about to put that back to
-    // `compact`, so a next mount that wants the default variant is "no change" and
-    // returns before touching the policy - which is how an `inline` previous owner
-    // (a `fillWidth` control) left the next one's `compact` field sized to its box:
-    // `DatePicker.harness.tsx` · G5 saw a 131.05 dp field laid out at the row's
-    // 411.43 dp. iOS says the same line in `HybridNitroUiDatePicker.prepareForRecycle`,
-    // and `HybridNitroUiPicker`/`HybridNitroUiProgress` say it here; only this control
-    // was missing it, which is why the bug showed on Android alone.
+    // Reset the policy here: the `variant` setter returns early when the next mount asks
+    // for the default variant, which the model reset below restores.
     host.sizingPolicy = NitroUiSizing.POLICY_INTRINSIC
-    // The dialog first, before anything else: `host.prepareForRecycle()` resets the model
-    // (which clears `presented`, and a `Dialog` that stops being composed closes its
-    // window), and the next mount must not inherit an open dialog - or, worse, the
-    // *previous* mount's, if something kept the composition alive past this call.
-    // Not cleared here: `host.prepareForRecycle()` releases the sizing instance (which
-    // needs the id to tell the engine), and `onDropView` has already run.
+    // Resets the model, which closes an open dialog, and releases the sizing instance.
     host.prepareForRecycle()
   }
 
@@ -2620,30 +1802,20 @@ class HybridNitroUiDatePicker(
     host.timeActive = null
     host.timeDrumScope = null
     host.timePushed = null
-    // The other half of the leak rule, and the reason `presented` is composed rather than
-    // tracked: `drop()` disposes the composition, and a `Dialog` composed by a disposed
-    // composition is gone with it. Nothing of this mount survives in a window, a listener
-    // list or a `DialogManager` (`docs/tasks/B1-android-mount-oom.report.md`).
+    // `drop()` disposes the composition, and a `Dialog` it composed closes with it.
     model.setPresented(false)
     host.drop()
   }
 
   // MARK: - Methods
 
-  /**
-   * The size Compose measured for this control, from the host's cache. Never calls into
-   * Compose, so it is safe on the JS thread (core.md section 5).
-   */
+  /** The size Compose measured, from the host's cache. Safe on the JS thread. */
   override fun measureContent(): NitroUiDatePickerSize {
     val size = host.contentSize ?: return NitroUiDatePickerSize(0.0, 0.0)
     return NitroUiDatePickerSize(size.width, size.height)
   }
 
-  /**
-   * Drive one selection through the real interaction pipeline. Test-only; see the spec's
-   * doc comment for why it exists (a calendar cell in a dialog is a *separate window*, so
-   * the harness's window-level touch dispatch cannot reach it).
-   */
+  /** Test-only: one selection through the real interaction path. */
   override fun nuiTestSelect(
     year: Double,
     month: Double,
@@ -2651,19 +1823,12 @@ class HybridNitroUiDatePicker(
     hour: Double,
     minute: Double,
   ) {
-    // Props arrive on the UI thread and a `hybridRef` call can arrive on the JS thread;
-    // the model is UI-thread state, so hop when needed - and run inline when this call is
-    // already where the model lives, rather than paying for a queue round trip the perf
-    // contract forbids. Never `sync`: JS must not wait on the UI thread.
+    // The model is UI-thread state: run inline when already there, post otherwise. Never
+    // wait: JS must not block on the UI thread.
     runOnUi {
       val target = model.resolveTestSelection(year, month, day, hour, minute)
-      // The time wheel has no row to press and no dial to turn: a pick on this variant
-      // *is* its drums rolling and resting, so the hook asks the composition for that
-      // roll and lets the rest at the end of it emit, exactly as
-      // `HybridNitroUiPicker`'s `nuiTestSelect` does for its drum. Every other variant
-      // (the calendar, the clock, the dialog's halves) applies its selection the way its
-      // own widget does. Either way the event comes from [DatePickerModel.applyUserSelection]
-      // at a rest, never from here.
+      // The time wheel has nothing to press: the hook asks for a roll, and the rest at
+      // its end emits.
       if (model.mode == "time" && model.variant == "wheel" && model.enabled) {
         val pair = timeOfDayOf(model, target)
         timeWheelRequestSerial += 1
@@ -2674,7 +1839,6 @@ class HybridNitroUiDatePicker(
     }
   }
 
-  /** Counts `nuiTestSelect` rolls for this mount; see [DatePickerModel.timeWheelRequest]. */
   private var timeWheelRequestSerial = 0
 
   /** Open the `compact` field's dialog, through the same entry point the press uses. */
@@ -2682,7 +1846,7 @@ class HybridNitroUiDatePicker(
     runOnUi { performTestPresent() }
   }
 
-  /** `(displayed, presented)` as one lock-guarded line - the only way JS sees the picker. */
+  /** Safe from any thread. */
   override fun nuiTestStateReport(): String = model.readReport()
 
   /** Run [action] on this view's UI thread, now if already there, queued otherwise. */
@@ -2695,8 +1859,7 @@ class HybridNitroUiDatePicker(
   }
 
   private fun performTestPresent() {
-    // The two picker variants present nothing, and a disabled field cannot be pressed, so
-    // both are no-ops - which is also what makes "disabled does not open" a test.
+    // Only an enabled `compact` field has a dialog to open.
     if (!model.enabled || model.variant != "compact") {
       return
     }

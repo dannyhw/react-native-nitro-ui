@@ -1,18 +1,3 @@
-/**
- * The CocoaPods stamp must not be able to churn.
- *
- * `Podfile.lock` ends with `COCOAPODS: <version>`, which `pod install` rewrites
- * to whichever CocoaPods is on `PATH`. Four tasks (R1, C1, G5, G6) each ended up
- * hand-restoring that one trailer because their machine ran 1.15.2 against a
- * lock recorded at 1.17.0 - a tracked file left dirty by a tool version, which
- * also trips the bench's dirty-tree guard. These are the tests for the single
- * entry point that replaced the bare `pod install` calls, with no pods involved:
- * a stamp-only diff has to be undone, and a *real* lock change has to survive.
- *
- * The "survive" half matters as much as the "undo" half: silently restoring the
- * trailer after a genuine dependency change would hide it from review.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import {

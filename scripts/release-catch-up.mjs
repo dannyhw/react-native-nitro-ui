@@ -1,31 +1,14 @@
 #!/usr/bin/env node
-// Creates the `vX.Y.Z` tag and GitHub release for a version that is already live.
-//
-// Nothing creates the tag at publish time, because publishing is not automated: the
-// package's trusted publisher allows staged publishing only (DECISIONS D28), so the
-// release job stages a tarball and a human approves it on npm. While it is staged the
-// version is not live, and a tag at that moment points at a release that does not
-// exist yet. Changesets cannot do this either: with `.` in `workspaces` it names tags
-// `react-native-nitro-ui@0.1.1` rather than `v0.1.1`.
-//
-// So this keys on state, not on "did my run publish": when `package.json`'s version is
-// on the registry and no `vX.Y.Z` release exists, create it at the commit that bumped
-// the version, with that version's `CHANGELOG.md` section as the notes. Every branch
-// is a no-op once the work is done, so the scheduled run and a manual one are safe.
-//
-// It only handles the version currently in `package.json`; a release missed further
-// back is created by hand with `gh release create`.
+// Creates the `vX.Y.Z` tag and GitHub release for the version in `package.json` once it is
+// live on npm and has no release yet. A no-op otherwise, so it is safe to run on a schedule.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { realpathSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
 /**
- * This file's path when Node was asked to run it, otherwise null. Read from
- * `argv` rather than `import.meta` so the module stays importable: Jest
- * transpiles to CommonJS, where `import.meta` is a syntax error. Comparing
- * realpathed paths also avoids the percent-encoding trap that comparing against
- * `file://` + argv[1] falls into.
+ * This file's path when Node was asked to run it, otherwise null. Read from `argv` because
+ * Jest transpiles to CommonJS, where `import.meta` is a syntax error.
  */
 function entryPath() {
   const entry = process.argv[1];

@@ -6,22 +6,10 @@
  *   node scripts/patch-harness-android.mjs           # rewrite the patch
  *   node scripts/patch-harness-android.mjs --check    # fail if it is stale
  *
- * Why it exists: a patch file is a hand-written diff, and the day someone edits
- * it by hand it stops matching the module that renders it - which is the drift
- * `scripts/__tests__/emulator-launch.test.js` exists to catch. Catching it is
- * half the job; the other half is not asking a human to recompute hunk offsets.
- *
- * How it gets upstream's own text: it reverses the patch that is currently on
- * disk out of the installed file (`git apply -R`), which leaves the pristine
- * module, then replaces the three known upstream fragments with what
- * `scripts/emulator-launch.mjs` renders now and diffs the pair. So the only
- * upstream text this script knows by heart is what it has to match against, and
- * if upstream changes one of those fragments it says so instead of producing a
- * patch that `bun install` would reject.
- *
- * After rewriting the patch, run `bun install` so `node_modules` matches it. The
- * drift test checks both the patch text and the installed file, so a stale
- * `node_modules` does not hide.
+ * It reverses the patch on disk out of the installed file to recover upstream's
+ * text, replaces the known upstream fragments with what
+ * `scripts/emulator-launch.mjs` renders, and diffs the pair. Run `bun install`
+ * afterwards so `node_modules` matches the new patch.
  */
 
 import fs from 'node:fs';
@@ -112,13 +100,9 @@ function blobHash(content) {
 }
 
 /**
- * The pristine module: the installed file with the applied patch reversed.
- *
- * Which patch was applied is not always the one on disk - regenerating the patch
- * is exactly the moment they differ, because `bun install` has not run yet. So
- * it tries the file on disk, then the committed one, and reports both failures.
- * `node_modules` is a build product of the patch that was in the tree when
- * `bun install` ran, and the committed one is what that almost always is.
+ * The pristine module: the installed file with the applied patch reversed. The
+ * applied patch is not always the one on disk (regenerating is when they
+ * differ), so the file on disk is tried first, then the committed one.
  *
  * @param {{installedPath: string, candidates: Array<{label: string, text: string}>}} options
  * @returns {string} pristine text
@@ -239,9 +223,8 @@ function main(argv) {
   const nodeModules = path.join(repoRoot, 'node_modules');
   const installedPath = path.join(nodeModules, PACKAGE, TARGET);
   if (!fs.existsSync(installedPath)) {
-    // No install to recover upstream's text from. `check` still has a job it can
-    // do without one - the patch must contain what the module renders - and the
-    // drift test does that, so staying quiet here cannot hide a real problem.
+    // No install to recover upstream's text from. The drift test still checks
+    // the patch text, so staying quiet here hides nothing.
     process.stdout.write(
       `patch-harness-android: ${PACKAGE} is not installed, so nothing to ` +
         `${check ? 'check' : 'regenerate'} (run \`bun install\`).\n`

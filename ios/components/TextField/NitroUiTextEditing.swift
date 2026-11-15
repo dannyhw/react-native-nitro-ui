@@ -1,26 +1,5 @@
-//
-//  NitroUiTextEditing.swift
-//  react-native-nitro-ui
-//
-//  The text machinery that is not a control and not a Hybrid View, shared by
-//  `TextField` and `SearchField` so the two cannot drift (DECISIONS D38 item 2).
-//
-//  Three things live here, because each is a rule that belongs to "a UIKit field
-//  driven by the controlled-value handshake" rather than to one component:
-//
-//  - ``NitroUiTextTraits``: how RN's names become UIKit's, and the one font every
-//    field uses.
-//  - ``NitroUiTextControl``: what a field must be for the handshake to drive it, plus
-//    the bodies of the delegate methods both controls forward here - `maxLength`,
-//    the Return key and the clear button.
-//  - ``NitroUiTextOwner``: the three rules of `docs/architecture/core.md` §4 as UIKit
-//    applies them - decide a pending `value` write, write it into the control, and
-//    report a user edit. One implementation, which both Hybrid Views get by
-//    conforming; each supplies only its own host plumbing.
-//
-//  `NitroUiTextLimit` itself stays in `NitroUiTextLimit.swift`, where the
-//  Foundation-only rule it implements can be compiled and tested on the host.
-//
+// The text handling shared by `TextField` and `SearchField`: trait mapping, the delegate
+// logic both controls forward here, and the controlled-value write and report rules.
 
 import UIKit
 
@@ -49,12 +28,8 @@ enum NitroUiTextTraits {
     }
   }
 
-  /// The RN spelling of a keyboard a control is *configured with* — the read-back
-  /// side of ``keyboardType(_:)``, for a test that has to prove the prop reached the
-  /// field rather than only reached the model. `.numbersAndPunctuation` is how
-  /// `"numeric"` arrives, so it goes back out under that name; a keyboard UIKit
-  /// offers that no prop asks for (`.asciiCapable`, say) reads back as
-  /// `"default"`, which is what the mapping would have chosen for it.
+  /// The React Native name of a keyboard type, the reverse of `keyboardType(_:)`. A
+  /// keyboard no prop asks for reads back as `"default"`.
   static func name(of keyboard: UIKeyboardType) -> String {
     switch keyboard {
     case .numberPad, .asciiCapableNumberPad: return "number-pad"
@@ -67,7 +42,7 @@ enum NitroUiTextTraits {
     }
   }
 
-  /// The read-back side of ``autocapitalization(_:)``.
+  /// The reverse of `autocapitalization(_:)`.
   static func name(of capitalization: UITextAutocapitalizationType) -> String {
     switch capitalization {
     case .words: return "words"
@@ -77,8 +52,7 @@ enum NitroUiTextTraits {
     }
   }
 
-  /// The read-back side of `autoCorrect`: only `.no` refuses it — `.default` is the
-  /// system's own answer, which is what `true` asks for.
+  /// Only `.no` turns autocorrect off; `.default` is what `true` asks for.
   static func autoCorrect(_ correction: UITextAutocorrectionType) -> Bool {
     correction != .no
   }
@@ -94,8 +68,7 @@ enum NitroUiTextTraits {
     }
   }
 
-  /// The platform body font, following Dynamic Type - the size every other
-  /// control's label follows, which is what the environment epoch re-measures for.
+  /// The platform body font, following Dynamic Type.
   static var font: UIFont { UIFont.preferredFont(forTextStyle: .body) }
 
   /// The input traits both controls take from the model, resolved once.
@@ -114,8 +87,7 @@ enum NitroUiTextTraits {
     }
   }
 
-  /// Whether a composition is open: the `markedTextRange` check RN makes before it
-  /// compares or replaces text (`RCTTextInputComponentView.mm:873-905`).
+  /// Whether an IME composition is open (marked text exists).
   static func composing(_ input: UITextInput) -> Bool {
     input.markedTextRange != nil
   }
@@ -133,7 +105,7 @@ protocol NitroUiTextControl: UIView {
   func nuiSetText(_ text: String)
   /// Re-apply the model's configuration (never its text).
   func nuiApply()
-  /// What `nuiTestSetMarkedText` does: open, update or (`''`) commit a composition.
+  /// Test hook: open, update or (`''`) commit a composition.
   func nuiSetMarkedText(_ text: String)
   /// The model being driven - the limit, the editability and the callbacks live there.
   var nuiModel: TextFieldModel { get }
@@ -144,14 +116,12 @@ protocol NitroUiTextControl: UIView {
 }
 
 extension NitroUiTextControl {
-  /// The body of `textField(_:shouldChangeCharactersIn:replacementString:)` and
-  /// `textView(_:shouldChangeTextIn:replacementText:)` - `maxLength`, applied as React
-  /// Native applies it: the *inserted* text is cut to what still fits, never the end
-  /// of the field, and never inside a composed character.
+  /// The body of both controls' "should change characters" delegate methods. Applies
+  /// `maxLength` as React Native does: the inserted text is cut to what still fits, never
+  /// the end of the field, and never inside a composed character.
   ///
-  /// Returns whether UIKit may apply the edit itself. When only part of it fits the
-  /// part that fits is applied here, at the caret UIKit asked for, and reported as the
-  /// edit it is.
+  /// Returns whether UIKit may apply the edit itself. When only part of it fits, that part
+  /// is applied here and reported as an edit.
   func nuiShouldChangeCharacters(in range: NSRange, replacement: String) -> Bool {
     let model = nuiModel
     // While a composition is open the IME owns the text: refusing or trimming a
@@ -174,26 +144,23 @@ extension NitroUiTextControl {
     return false
   }
 
-  /// The body of the Return key: React Native's default for a single-line field
-  /// (`submitBehavior` 'blurAndSubmit') - report the submit, then give focus up.
+  /// The Return key on a single-line field: report the submit, then give up focus, as
+  /// React Native does by default.
   func nuiSubmitFromReturn() {
     nuiModel.owner?.submitted(nuiText)
     _ = resignFirstResponder()
   }
 
-  /// The clear button, which both controls have: a field that is not editable takes
-  /// no edits, so it takes no clear either. Each platform's own control then reports
-  /// the cleared text through its normal edit path, which is what makes the clear an
-  /// edit like any other.
+  /// A field that is not editable takes no clear either.
   var nuiAllowsClear: Bool {
     nuiModel.editable
   }
 
-  /// The `markedText` test seam, identical on both controls.
+  /// Test hook for marked text.
   func nuiSetMarkedText(_ marked: String) {
     guard let input = self as? UITextInput else { return }
     if marked == "\u{18}" {
-      // CANCEL: what Backspace through a whole composition does - no marked text, then
+      // CANCEL: what backspacing through a whole composition does. No marked text, then
       // the session ends with nothing to commit.
       input.setMarkedText("", selectedRange: NSRange(location: 0, length: 0))
       input.unmarkText()
@@ -210,8 +177,8 @@ extension NitroUiTextControl {
 
 // MARK: - The Hybrid View's half
 
-/// What the field reports to. Both text Hybrid Views conform, and the shared
-/// implementations below are the whole of the write/report logic.
+/// What the field reports to. Both text Hybrid Views conform and share the implementations
+/// below.
 protocol NitroUiTextOwner: AnyObject {
   /// The model this view drives.
   var nuiTextModel: TextFieldModel { get }
@@ -224,7 +191,7 @@ protocol NitroUiTextOwner: AnyObject {
   func focusMoved(_ focused: Bool)
   /// The Return key was pressed, with the text the field holds.
   func submitted(_ text: String)
-  /// Republish the harness snapshot.
+  /// Republish the test snapshot.
   func publishState()
 }
 
@@ -237,8 +204,8 @@ extension NitroUiTextOwner {
     let composing = model.control?.nuiComposing ?? false
     guard let js = model.state.js, js != model.state.displayed else { return }
     if composing {
-      // Q2 §2.2: a write under an open composition would destroy it. Held back, not
-      // queued: `userEdited` decides it again when the composition ends.
+      // A write under an open composition would destroy it. Held back, not queued:
+      // `userEdited` decides it again when the composition ends.
       model.lastWrite = "composing"
     } else if model.state.reconcile() {
       model.lastWrite = "applied"
@@ -257,13 +224,11 @@ extension NitroUiTextOwner {
     }
   }
 
-  /// The user changed the text. Native owns it, counts it and emits it - once a
-  /// composition has committed, not at each of its steps (marked text belongs to the
-  /// IME until then; Android differs, see `docs/components/text-field.md`).
+  /// The user changed the text. Emitted once a composition has committed, not at each of
+  /// its steps: marked text belongs to the IME until then.
   ///
   /// The edit that ends a composition also settles a `value` write the composition held
-  /// back, whatever the text it leaves: a composition the user deleted puts back text
-  /// native already counted, so no edit and no commit would ever decide it again.
+  /// back, even if the text is unchanged: otherwise nothing would decide that write again.
   func userEdited(_ control: NitroUiTextControl) {
     nitroUiAssertMainThread()
     let composing = control.nuiComposing
@@ -275,10 +240,9 @@ extension NitroUiTextOwner {
     }
     var text = control.nuiText
     if let limit = model.maxLength, (text as NSString).length > limit {
-      // A backstop for text that got past the delegate's cut - a composition's commit, or
-      // `insertText`. It cuts the *edit*, not the field: what the user typed takes the room
-      // the cap still has wherever they put it, and the text around it keeps its place.
-      // Cutting the tail instead lost the words on either side of a mid-field commit.
+      // A backstop for text that got past the delegate's cut (a composition's commit, or
+      // `insertText`). It cuts the edit, not the tail of the field, so the text around a
+      // mid-field insertion keeps its place.
       let kept = NitroUiCommitDelta.clamped(
         displayed: model.state.displayed.string,
         incoming: text,
@@ -293,8 +257,7 @@ extension NitroUiTextOwner {
     if next != model.state.displayed {
       let eventCount = model.state.user(next)
       if model.multiline {
-        // Auto-grow: the text can now be another number of lines, and nothing else
-        // will re-measure - no bounds change, no prop. Measures now and reports.
+        // The text can now be another number of lines, and nothing else will re-measure.
         nuiInvalidateTextSize()
       }
       publishState()

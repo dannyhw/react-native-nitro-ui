@@ -1,12 +1,7 @@
 /**
- * The Node the device gates need, checked where they start.
- *
- * `react-native-harness` collects a `.harness.tsx` file by transforming it with
- * Jest on the host. On Node 25 and 26 that transform dies with
- * `Must use import to load ES Module … react-native/index.js`, which reads like
- * a bug in the test file rather than in the runtime - G1 lost time to it
- * (docs/tasks/G1-slider.report.md). `.nvmrc` pins the version this repo actually
- * runs the gates on, so the entry points say that up front instead.
+ * The Node the device gates need, checked where they start. On Node 25 and 26
+ * react-native-harness's host-side Jest transform dies with `Must use import to
+ * load ES Module … react-native/index.js`.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -15,10 +10,9 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-/** Major versions the device gates are known to run on. */
 const SUPPORTED_MAJORS = new Set([22, 23, 24]);
 
-/** The Node 22 floor (22.11) the device gates are known to run on. */
+/** The Node 22 floor (22.11). */
 const MIN_MINOR_FOR_22 = 11;
 
 /**
@@ -44,15 +38,13 @@ export function isSupportedNodeVersion(version) {
 }
 
 /**
- * Marks a process that already re-executed itself (see
- * `reexecUnderPinnedNode`), so a machine whose fnm default is the wrong Node
- * cannot loop: the second process refuses instead of re-execing again.
+ * Marks a process that already re-executed itself, so a machine whose fnm
+ * default is the wrong Node refuses instead of looping.
  */
 export const REEXEC_FLAG = 'NITRO_UI_NODE_REEXEC';
 
 /**
- * The pinned version in `.nvmrc`, read rather than duplicated so this message
- * cannot drift from the pin.
+ * The pinned version in `.nvmrc`.
  *
  * @returns {string | null}
  */
@@ -85,8 +77,8 @@ export function assertSupportedNode({
   version = process.versions.node,
   isBun = process.versions.bun != null,
 }) {
-  // Bun runs the repo's scripts and reports its own Node compatibility version,
-  // so only the runtime that actually transforms the tests decides (below).
+  // Bun reports its own Node compatibility version; only the runtime that
+  // transforms the tests decides.
   if (isBun) return;
   if (isSupportedNodeVersion(version)) return;
 
@@ -104,8 +96,7 @@ export function assertSupportedNode({
 
 /**
  * The `fnm exec --using` argument for `.nvmrc`: the major, so a machine with
- * 24.18 rather than 24.22.1 still gets a run instead of an error. `fnm exec
- * --using 24` is also what the briefs and CONTRIBUTING tell people to type.
+ * a different 24.x still gets a run instead of an error.
  *
  * @returns {string | null}
  */
@@ -117,28 +108,22 @@ export function pinnedNodeMajor() {
 
 /**
  * Restart this process under the `.nvmrc` Node when the running one is not a
- * version the gates work on, instead of refusing a device run over a shell
- * default. Silent when the runtime is already fine, so entry points call it
- * unconditionally on line 1.
+ * version the gates work on. Silent when the runtime is already fine.
  *
- * Only a process that *is* the gate may call this (a `node script.mjs` entry
- * point, or a wrapper that starts one): it re-runs `process.argv` from scratch,
- * so anything the current process already did happens twice otherwise.
+ * Only an entry point may call this: it re-runs `process.argv` from scratch, so
+ * anything the current process already did would happen twice.
  *
- * `fnm` is looked up on `PATH`, never sourced: a login shell's `fnm env` would
- * mean running a shell profile from a script.
+ * `fnm` is looked up on `PATH`, never sourced through a shell profile.
  *
  * @param {object} options
  * @param {string} options.command What is starting, for the refusal message.
  * @param {string[]} [options.argv] `process.argv` to re-run.
  * @param {NodeJS.ProcessEnv} [options.env] Environment to hand over.
- * @param {string} [options.currentVersion] `process.versions.node`, injectable so
- *   a machine without the pinned toolchain can be described here.
+ * @param {string} [options.currentVersion] `process.versions.node`.
  * @param {((file: string, args: string[], options: object) => { status: number | null, error?: Error, signal?: string | null, stdout?: string })} [options.spawn]
  * @returns {{ ran: false } | { ran: true, exitCode: number }} `ran` is false
  *   when there was nothing to re-exec (right Node) or the pinned toolchain could
- *   not be proven (no `fnm`, fnm has no such version, fnm could not start) - in
- *   every one of those the caller still gets `assertSupportedNode`, which refuses.
+ *   not be proven (no `fnm`, fnm has no such version, fnm could not start).
  *   `ran: true` means the gate ran under the pinned runtime and this is its exit
  *   code.
  */
@@ -150,8 +135,7 @@ export function reexecUnderPinnedNode({
   currentVersion = process.versions.node,
 }) {
   if (isSupportedNodeVersion(currentVersion)) return { ran: false };
-  // Already tried: the re-exec'd process is on the wrong Node too (an fnm
-  // install without the pinned version). Refusing is the useful answer.
+  // Already tried: the re-exec'd process is on the wrong Node too.
   if (env[REEXEC_FLAG] === '1') return { ran: false };
   const major = pinnedNodeMajor();
   if (major == null) return { ran: false };
@@ -159,11 +143,8 @@ export function reexecUnderPinnedNode({
   const [, script, ...rest] = argv;
   if (script == null) return { ran: false };
 
-  // Ask fnm which node it would run before handing the gate over to it.
-  // `fnm exec --using 24` on a machine with no node@24 exits 1 having started
-  // nothing, and this used to report that as a re-exec (review N1): the gate
-  // printed "re-ran under Node 24" while nothing had run. A toolchain that
-  // cannot start is a refusal, not a run.
+  // Ask fnm which node it would run first: `fnm exec --using 24` on a machine
+  // with no node@24 exits 1 having started nothing.
   const probe = spawn(
     'fnm',
     ['exec', '--using', major, '--', 'node', '--version'],
@@ -172,9 +153,6 @@ export function reexecUnderPinnedNode({
   const pinned = pinnedVersion() ?? major;
   const found = String(probe?.stdout ?? '').trim();
   if (probe?.error == null && probe?.status !== 0) {
-    // fnm is installed and says it has no such version. Say that, with the fix,
-    // instead of starting a command that cannot run and calling its exit code a
-    // gate result.
     const complaint =
       String(probe.stderr ?? '')
         .split('\n')
@@ -190,7 +168,6 @@ export function reexecUnderPinnedNode({
     probe?.status === 0 &&
     !found.startsWith(`v${major}.`)
   ) {
-    // fnm switched into something, just not the version .nvmrc names.
     process.stderr.write(
       `${command}: fnm exec --using ${major} reported ` +
         `${found || '(no version)'}, not the pinned ${pinned}. Refusing to run ` +
@@ -210,8 +187,7 @@ export function reexecUnderPinnedNode({
     }
   );
 
-  // No fnm on this machine (a CI runner, a fresh box): the caller's
-  // `assertSupportedNode` prints the instructions instead of a silent no-op.
+  // No fnm on this machine: the caller's `assertSupportedNode` refuses instead.
   if (result.error != null) {
     process.stderr.write(
       `${command}: could not re-exec under Node ${major} (fnm: ${String(result.error.message)}); continuing with this runtime.\n`
@@ -219,10 +195,6 @@ export function reexecUnderPinnedNode({
     return { ran: false };
   }
 
-  // fnm ran something. Only its exit status says whether that was the gate, so
-  // report the status instead of a success the process never earned: an fnm that
-  // refused to start the command exits non-zero, and a caller that treated this
-  // as "re-ran" would print instructions nobody followed.
   process.stderr.write(
     `${command}: ` +
       (result.status === 0
@@ -237,12 +209,11 @@ export function reexecUnderPinnedNode({
 
 /**
  * The entry-point form: re-exec under the pinned Node if needed and exit with
- * the child's status, or - when that is not possible - throw the refusal so a
- * gate never runs on a runtime that cannot produce evidence.
+ * the child's status, or throw the refusal when that is not possible.
  *
  * Pass `entryUrl` (`import.meta.url`) from a script that could also be imported:
- * restarting `process.argv` from a module another process is already running
- * would run that process twice, so an imported module only asserts.
+ * an imported module only asserts, because re-running `process.argv` would run
+ * the importing process twice.
  *
  * @param {object} options
  * @param {string} options.command

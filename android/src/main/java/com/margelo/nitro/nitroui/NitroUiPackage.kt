@@ -26,22 +26,9 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiButtonGroupManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiListItemManager
 
 /**
- * The React package of `react-native-nitro-ui`.
- *
- * It declares no modules of its own: our HybridObjects are implemented in C++
- * and registered by Nitro's autolinking
- * (nitrogen/generated/android/nitrouiOnLoad.cpp). What it does declare is view
- * managers, which Fabric needs before any Nitro Hybrid View can be created.
- * Autolinking instantiates this type, and loading it is what pulls
- * `libnitroui.so` - and with it the Hybrid Object registrations - into the app
- * process.
- *
- * Wording note: consumer autolinkers (Expo SDK 58's `androidResolver`, and the
- * same family of regexes in the RN CLI) detect this type's name by regex over
- * the raw file text, matching the first Kotlin declaration of a ReactPackage
- * subtype in prose or in code. A declaration-shaped sentence above the real
- * declaration here hijacks the detected name, and every consumer build then
- * fails with "cannot find symbol" on a word from the prose.
+ * The React package: registers the view managers, and loading it pulls in `libnitroui.so`.
+ * Write no declaration-shaped sentence above the declaration: autolinkers find this type's
+ * name by regex over the raw file text and would pick up the prose instead.
  */
 class NitroUiPackage : BaseReactPackage() {
   override fun getModule(
@@ -73,40 +60,22 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiStepperManager(),
     HybridNitroUiButtonGroupManager(),
     HybridNitroUiListItemManager(),
-    // Not the generated `HybridNitroUiHostManager`: a Hybrid View is a leaf, so
-    // nitrogen emits a `SimpleViewManager` for it, and a container needs the
-    // `IViewGroupManager` half. See `NitroUiHostViewManager`.
+    // Hand-written managers: these views hold React Native children, and nitrogen only
+    // generates a leaf `SimpleViewManager`.
     NitroUiHostViewManager(),
-    // The BottomSheet's React Native children are mounted into the sheet's window, so
-    // it needs the `IViewGroupManager` half too: its manifest names this class
-    // (`androidViewManager`), and the registry checks it is registered here instead of
-    // the generated manager. See `NitroUiBottomSheetViewManager`.
     NitroUiBottomSheetViewManager(),
-    // A ContextMenu is a `View` around React Native children, styled like one: its
-    // manager is a `ReactViewManager` that keeps the menu's 0 x 0 compose host out of
-    // Fabric's child indices. See `NitroUiContextMenuViewManager`.
     NitroUiContextMenuViewManager(),
-    // A Form's React Native children *are* its content — sections in the Form, rows in the
-    // Section — so all three views need the `IViewGroupManager` half. The Section's manager
-    // also keeps that section's one Compose layer out of Fabric's child indices, the way the
-    // ContextMenu's does. See `NitroUiFormViewManager`.
     NitroUiFormViewManager(),
     NitroUiFormSectionViewManager(),
     NitroUiFormRowViewManager(),
-    // A Popover's React Native children are mounted into the popup's window, so it needs
-    // the `IViewGroupManager` half as a sheet does: its manifest names this class
-    // (`androidViewManager`), and the registry checks it is registered here instead of the
-    // generated manager. See `NitroUiPopoverViewManager`.
     NitroUiPopoverViewManager(),
   )
 
   companion object {
     init {
       nitrouiOnLoad.initializeNative()
-      // After `initializeNative()`, because a declared fallback is a JNI call.
-      // Both lines run before Fabric is handed any view manager from this
-      // package, so the sizing engine knows every component's declared size
-      // before its first measure (`NitroUiDeclaredFallbacks`, T14).
+      // After `initializeNative()`: declaring a fallback is a JNI call. Both run before Fabric
+      // gets a view manager, so every declared size is known before the first measure.
       NitroUiDeclaredFallbacks.registerAll()
     }
   }

@@ -1,23 +1,3 @@
-/**
- * The lockfile must follow the release it belongs to.
- *
- * `example/ios/Podfile.lock` sat on `NitroUi (0.2.0)` through the whole 0.3.x line,
- * so every iOS build rewrote a tracked file: the tree looked dirty forever, and the
- * `app.stamp` a device gate had just recorded was invalidated by the build that
- * produced it. The guard is cheap enough to sit inside `bun run check`, which means
- * it runs on Linux CI where CocoaPods does not exist - so it can only compare the
- * version, and the *repair* has to be a step that runs real CocoaPods.
- *
- * Two traps here are worth the fixtures:
- *
- *   - the lock names the same pod three times, and the other two shapes look like a
- *     version to a careless regex (`- NitroUi (from \`../..\`)` in DEPENDENCIES:).
- *     A guard that reads *that* as the version never fires, which is worse than no
- *     guard: it is a green light nobody earned.
- *   - a refresh that leaves `pod install`'s other writes in the tree publishes them:
- *     the changesets action commits every changed and untracked file it can find.
- */
-
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
@@ -53,10 +33,8 @@ const root = resolve(process.cwd());
 const SCRIPT = resolve(root, 'scripts', 'sync-example-lock.mjs');
 
 /**
- * A lock with the four places a real one names this pod.
- *
- * The version is 0.4.1 - not the 0.3.x currently in the repo - so a reader that
- * returned the repo's own version, or a constant, cannot pass.
+ * A lock with the four places a real one names this pod. The version is not the
+ * repo's own, so a reader that returned that, or a constant, cannot pass.
  */
 const LOCK = `PODS:
   - boost (1.84.0)
@@ -91,11 +69,8 @@ const lockAt = (version) =>
   LOCK.replace('- NitroUi (0.4.1):', `- NitroUi (${version}):`);
 
 /**
- * What a *clean* release refresh writes: NitroUi's version, NitroUi's checksum, and
+ * What a clean release refresh writes: NitroUi's version, NitroUi's checksum, and
  * the trailer of the machine that ran it. Nothing else.
- *
- * Derived from `LOCK` rather than retyped, so the churn guard's allowance is tested
- * against a file that differs from the original in exactly the lines it claims to.
  */
 const CLEAN_REFRESHED_LOCK = lockAt('0.5.0')
   .replace(
@@ -116,11 +91,8 @@ describe('reading the locked version', () => {
   });
 
   it('ignores DEPENDENCIES:, EXTERNAL SOURCES: and SPEC CHECKSUMS:', () => {
-    // Each of these names `NitroUi` with a parenthesised or colon-terminated suffix.
-    // A match that is not scoped to the PODS: section picks one of them up: the
-    // ``from `../..` `` reading is the dangerous one, because it is a string that
-    // will never equal a version, so the guard would fail on every commit *including*
-    // a correct one - or, compared with the same wrong reading, never fire at all.
+    // Each of these sections names `NitroUi` with a parenthesised or
+    // colon-terminated suffix, which a match not scoped to PODS: would pick up.
     const withoutPods = LOCK.replace(/^PODS:$[\s\S]*?^\n/gm, '');
     expect(lockedVersion(withoutPods)).toBe(NO_LOCK_ENTRY);
     // The sub-spec `NitroUi/Core` is a different pod name and must not be read as ours.
@@ -147,13 +119,8 @@ describe('reading the locked version', () => {
 
 describe('reading the tree well enough to attribute a change', () => {
   /**
-   * A throwaway repository, driven by the real git.
-   *
-   * This is not paranoia about mocking: the bug this catches was a flag that does not
-   * exist (`git status --name-only`), which made the reader return null, which the
-   * script reported as "git did not answer" while still exiting 0 and leaving a pod
-   * user's `.xcode.env.local` in a tree the release job then commits. Only the real
-   * binary knows a flag is bogus.
+   * A throwaway repository, driven by the real git: only the real binary knows
+   * when a flag does not exist.
    */
   function scratchRepo() {
     const dir = mkdtempSync(join(tmpdir(), 'nitro-ui-lock-tree-'));
@@ -194,8 +161,7 @@ describe('reading the tree well enough to attribute a change', () => {
       'example/ios/AppDelegate.swift',
       'src/index.ts',
     ]);
-    // The ignored file must not appear: `--exclude-standard` is what stops this
-    // command deleting (or reporting) somebody's `Pods/`.
+    // The ignored file must not appear: `--exclude-standard` keeps `Pods/` out.
     expect(state.untracked).toEqual(['example/ios/.xcode.env.local']);
   });
 
@@ -205,8 +171,6 @@ describe('reading the tree well enough to attribute a change', () => {
   });
 
   it('comes back null when git cannot answer, rather than an empty clean tree', () => {
-    // The distinction the caller acts on: "nothing is dirty" and "I could not tell"
-    // must not collapse into the same value, because one of them authorises deleting.
     expect(readTreeState(() => null)).toBeNull();
     expect(
       readTreeState((args) => (args[0] === 'status' ? null : 'whatever\n'))
@@ -237,8 +201,7 @@ describe('the check that runs inside `check`', () => {
     expect(problem).toContain('NitroUi (0.4.1)');
     expect(problem).toContain('0.5.0');
     expect(problem).toContain('node scripts/sync-example-lock.mjs --fix');
-    // The other audience: a release whose CI did not refresh it must not be told to
-    // install pods on Linux.
+    // A release run must not be told to install pods on Linux.
     expect(problem).toContain('release.yml');
     expect(problem).toContain('macOS');
   });
@@ -263,8 +226,6 @@ describe('the check that runs inside `check`', () => {
   });
 
   it('does not call a stale lock an absent one', () => {
-    // The distinction the reader acts on: "run the sync script" vs "the file is the
-    // wrong shape, read the diff".
     const stale = lockSyncProblem({
       manifestVersion: '0.5.0',
       lockText: lockAt('0.4.1'),
@@ -279,12 +240,9 @@ describe('undoing what a lock refresh also wrote', () => {
     tracked: [],
     untracked: [],
   };
-  // The names are the real by-products: `project.pbxproj` is modified on every
-  // install (the Podfile's `post_install` strips the machine-local ccache keys out of
-  // it), and a developer's breakpoint list is untracked and *not* ignored, which is
-  // what makes it a leak - the changesets action commits every untracked non-ignored
-  // file it finds. `.xcode.env.local`, by contrast, is gitignored, so it can never
-  // reach this list at all (proved over a real git above).
+  // The real by-products of an install: `project.pbxproj` is modified every time,
+  // and a developer's breakpoint list is untracked and not ignored, so the
+  // changesets action would commit it.
   const after = {
     tracked: [
       'example/ios/Podfile.lock',
@@ -309,8 +267,7 @@ describe('undoing what a lock refresh also wrote', () => {
   });
 
   it('never restores outside the example’s iOS directory', () => {
-    // A release refresh is not allowed to revert a library source, however it came to
-    // be modified: `src/index.ts` is in `after` above and must not be in the output.
+    // `src/index.ts` is in `after` above and must not be in the output.
     const out = sideEffectsToUndo({ before, after });
     expect(out.restore).not.toContain('src/index.ts');
     expect(out.remove).not.toContain('notes.md');
@@ -337,8 +294,6 @@ describe('undoing what a lock refresh also wrote', () => {
   });
 
   it('touches nothing when git did not answer', () => {
-    // "I could not tell" must not become "I cleaned it up": deleting an untracked file
-    // that predates this run is data loss.
     expect(sideEffectsToUndo({ before: null, after })).toEqual({
       restore: [],
       remove: [],
@@ -383,14 +338,9 @@ describe('keeping the CocoaPods trailer out of a release commit', () => {
 
 describe('the two things a refresh must never do', () => {
   /**
-   * A scratch checkout, driven by the real git and a fake CocoaPods.
-   *
-   * The `--fix` glue (restore, trailer-keep, churn guard) had no automated test:
-   * removing the `git restore` *and* the trailer-keep together left all 23 tests
-   * green, and the bug that started this whole item - a `git` flag that does not
-   * exist - lived in exactly this layer. So the fake pod is a shell script that
-   * rewrites the lock the way a real install does (version, checksum, trailer, and
-   * some churn), and everything else is real: a git repo, a working tree, files.
+   * A scratch checkout, driven by the real git and a fake CocoaPods: a shell
+   * script that rewrites the lock the way a real install does (version, checksum,
+   * trailer, and some churn).
    */
   function scratchCheckout({ version = '0.4.1' } = {}) {
     const dir = mkdtempSync(join(tmpdir(), 'nitro-ui-lock-sync-'));
@@ -405,9 +355,8 @@ describe('the two things a refresh must never do', () => {
     at(['config', 'commit.gpgsign', 'false']);
     mkdirSync(join(dir, 'example/ios'), { recursive: true });
     mkdirSync(join(dir, 'scripts'), { recursive: true });
-    // The CLI under test, copied rather than symlinked so it computes its own repo
-    // root as this scratch tree. A stub here would make a failed import look like a
-    // refusal, which is the exact confusion this fixture must not allow.
+    // The CLI under test, copied so it computes its own repo root as this
+    // scratch tree.
     for (const name of [
       'sync-example-lock.mjs',
       'example-lock-core.mjs',
@@ -438,11 +387,10 @@ describe('the two things a refresh must never do', () => {
     at(['add', '.']);
     at(['commit', '-qm', 'seed']);
 
-    // The fake pod: `--version` answers with the pinned version, `install` copies in
-    // a lock that bumps NitroUi's version *and* its checksum, moves the trailer,
-    // rewrites the project file, and leaves a new stray behind. The two candidate
-    // locks are written here so the shell script itself stays a fixture and not a
-    // test: `FAKE_POD_EXTRA_CHURN` picks the one that also rewrites React-Core.
+    // The fake pod: `--version` answers with the pinned version, and `install`
+    // copies in a lock that bumps NitroUi's version and checksum, moves the
+    // trailer, rewrites the project file and leaves a new stray behind.
+    // `FAKE_POD_EXTRA_CHURN` picks the lock with a second pod's checksum changed.
     writeFileSync(join(dir, 'pod-writes-clean.lock'), CLEAN_REFRESHED_LOCK);
     writeFileSync(join(dir, 'pod-writes-churn.lock'), CHURNED_REFRESHED_LOCK);
     const fakePod = join(dir, 'fake-pod.sh');
@@ -508,11 +456,8 @@ exit 0
       read: (rel) => readFileSync(join(dir, rel), 'utf8'),
       exists: (rel) => existsSync(join(dir, rel)),
       /**
-       * What the script left dirty, restricted to the tree it was asked to fix.
-       *
-       * The scratch repo also holds this test's own fixtures - the fake pod and its
-       * two candidate locks - which are untracked by design. Listing them would say
-       * nothing about the script's hygiene and would bury the one line that does.
+       * What the script left dirty, restricted to the tree it was asked to fix:
+       * this test's own fixtures are untracked by design.
        */
       dirty: () =>
         at([
@@ -535,15 +480,9 @@ exit 0
           },
         }),
       /**
-       * The same, running the *copy* of the CLI that lives in this checkout.
-       *
-       * `status` runs this repository's real script with its root redirected, which
-       * is right for everything that finds the tree through
-       * `NITRO_UI_LOCK_SYNC_ROOT`. But `pod-install.mjs` decides which lock its
-       * serialisation contract is about from its own location on disk, and through
-       * the real script that is the real `example/ios/Podfile.lock` - so the
-       * contract would decline to apply here, and a test about it would be silently
-       * about nothing. The copy computes its own root, which is this scratch tree.
+       * The same, running the copy of the CLI that lives in this checkout. The
+       * copy's `pod-install.mjs` computes its root from its own location, so its
+       * serialisation contract applies to this scratch tree's lock.
        */
       statusLocal: (args = ['--fix'], env = {}) =>
         spawnSync(
@@ -564,15 +503,9 @@ exit 0
           }
         ),
       /**
-       * Runs a small module against the copied `pod-install.mjs` in this checkout.
-       *
-       * Some properties belong to the module rather than to the CLI - which
-       * directory the probe asks from, what a hanging `pod` costs, what a
-       * generated consumer app is told - and the only way to see them is to call
-       * the exported function. It runs as a child process, not a dynamic import,
-       * because `pod-install.mjs` resolves its own repo root from `import.meta.url`
-       * and jest transforms that away; a child gets the real thing, which is the
-       * difference between testing the module and testing a stub of it.
+       * Runs a small module against the copied `pod-install.mjs` in this checkout,
+       * as a child process: `pod-install.mjs` resolves its repo root from
+       * `import.meta.url`, which jest transforms away.
        */
       driver: (source, { env = {}, timeout = 120_000 } = {}) => {
         const file = join(
@@ -588,13 +521,9 @@ exit 0
         });
       },
       /**
-       * Runs a whole `&&` chain - a real `package.json` script - in this checkout.
-       *
-       * `node` is spelled out to `process.execPath` so the chain does not depend on
-       * jest's own PATH; the structure of the command is otherwise byte-for-byte,
-       * which is the thing under test. A fake `changeset` on PATH is the witness: it
-       * records only that it was invoked, because what is asserted here is *when* the
-       * release path stops, not what changeset does to a manifest.
+       * Runs a whole `&&` chain, a real `package.json` script, in this checkout.
+       * `node` is spelled out as `process.execPath`, and a fake `changeset` on
+       * PATH records that it was invoked.
        */
       runRelease: (command, env = {}) =>
         spawnSync(
@@ -643,10 +572,8 @@ exit 0
   });
 
   it('refuses a lock whose diff is bigger than the release', () => {
-    // The same fake pod, but it also rewrote React-Core's checksum: a runner on a
-    // different gem set or Xcode. That lock would pass the version check and be
-    // committed green, then the next maintainer's `pod install` would write it back -
-    // item 2's own bug, back quietly.
+    // The same fake pod, but it also rewrote another pod's checksum, as a runner
+    // on a different gem set or Xcode would.
     const repo = scratchCheckout();
     const out = repo.status(['--fix'], { FAKE_POD_EXTRA_CHURN: 'churn' });
     expect(out.status).toBe(1);
@@ -657,13 +584,10 @@ exit 0
   });
 
   it('asks the probe from the directory the install will run in (M2)', () => {
-    // The probe has to be asked *here*, not from a scratch directory, for two
-    // reasons that both end in a wrong answer about the machine: a
-    // `COCOAPODS_BIN='bundle exec pod'` can only answer from under the directory
-    // holding its Gemfile (used by scripts/smoke/rn-cli.sh), and a .ruby-version
-    // next to the app selects the Ruby - so the json - that the install will
-    // really use. The fake pod records $PWD, and refuses to answer at all from a
-    // directory with no Podfile, so a probe run somewhere else cannot pass.
+    // A `COCOAPODS_BIN='bundle exec pod'` can only answer from under the
+    // directory holding its Gemfile, and a .ruby-version next to the app selects
+    // the Ruby the install will use. The fake pod records $PWD and refuses to
+    // answer from a directory with no Podfile.
     const repo = scratchCheckout();
     const recorded = join(repo.dir, 'probe-cwd');
     const { status, stdout } = repo.driver(
@@ -676,7 +600,6 @@ process.stdout.write('STYLE ' + style + ' CMD ' + cmd.join(' ') + '\\n');
     );
     expect(status).toBe(0);
     expect(stdout).toContain('STYLE compact');
-    // The exact directory, not merely a directory that happens to hold a Podfile.
     // realpath on both sides: a shell sets $PWD through /var -> /private/var.
     expect(realpathSync(readFileSync(recorded, 'utf8').trim())).toBe(
       realpathSync(join(repo.dir, 'example/ios'))
@@ -684,10 +607,8 @@ process.stdout.write('STYLE ' + style + ' CMD ' + cmd.join(' ') + '\\n');
   });
 
   it('refuses when the probe errors, even though it printed a compact-looking spec (N2)', () => {
-    // The exit status is the whole guard here. This fake pod prints a spec that
-    // reads as compact and then exits 1, which is what a `pod` that dies halfway
-    // through looks like: trusting stdout would call a broken machine a good one,
-    // and the release would proceed and churn.
+    // The fake pod prints a spec that reads as compact and then exits 1, as a
+    // `pod` that dies halfway would.
     const repo = scratchCheckout();
     const out = repo.status(['--fix'], { FAKE_POD_IPC_FAILS: '1' });
     expect(out.status).toBe(1);
@@ -699,14 +620,8 @@ process.stdout.write('STYLE ' + style + ' CMD ' + cmd.join(' ') + '\\n');
   });
 
   it('gives up on a probe that hangs rather than waiting for the job (N6)', () => {
-    // Two things have to be true: the probe must not wait forever, and the
-    // budget it waits for has to be a stated number. The mechanism is exercised
-    // with a pod that never exits - remove the `timeout` from the spawn and this
-    // hangs until the child's own timeout, which is the same failure preflight
-    // has on a real runner (a `pod` that prompts, a job that burns its 30
-    // minutes). The budget is asserted as an export so changing 60 s is a line in
-    // the diff; the call below injects a short one because a unit test should not
-    // pay 60 s to learn the same fact.
+    // The pod never exits. The default budget is asserted as an export, and the
+    // call below injects a short one so the test does not wait 60 s.
     const repo = scratchCheckout();
     const hang = join(repo.dir, 'hanging-pod.sh');
     // `exec` so the shell is replaced by sleep: spawnSync's timeout signals the
@@ -733,30 +648,23 @@ process.stdout.write('STYLE ' + style + ' BUDGET ' + PROBE_TIMEOUT_MS + '\\n');
     expect(status).toBe(0);
     expect(stdout).toContain('STYLE null');
     expect(stdout).toContain('BUDGET 60000');
-    // Both bounds matter. The lower says the probe really did wait on a slow
-    // answer and was cut off - without it, a command that failed instantly would
-    // look identical and the timeout would be untested. The upper says it did not
-    // wait for the sleep.
+    // The lower bound says the probe really waited and was cut off. The upper
+    // says it did not wait for the sleep.
     const elapsed = Date.now() - start;
     expect(elapsed).toBeGreaterThanOrEqual(1400);
     expect(elapsed).toBeLessThan(30_000);
 
-    // And the default really is threaded into the spawn, not just exported:
-    // wiring, checked at the source because the only other way to see it is to
-    // pay the 60 s. Removing `timeout:` from the options is what N6 is about.
+    // The default is threaded into the spawn, checked at the source because the
+    // only other way to see it is to wait 60 s.
     const src = readFileSync(resolve(root, 'scripts/pod-install.mjs'), 'utf8');
     expect(src).toMatch(/timeout: timeoutMs \?\? PROBE_TIMEOUT_MS/);
   });
 
   it('says nothing about example/ios/Podfile.lock when installing some other app (N3)', () => {
-    // scripts/smoke/*.sh installs *generated consumer apps* through this same
-    // module. Their lock has never been compared with anything, so a warning
-    // that "installing here would rewrite example/ios/Podfile.lock across almost
-    // every pod" is about a file that app's author is not writing, and the
-    // serialisation contract is not theirs to satisfy. The scratch tree holds
-    // its own copy of pod-install.mjs, so its REPO_LOCK is its own
-    // example/ios/Podfile.lock and the contract does apply there - which is what
-    // makes the consumer half below a real difference rather than a tautology.
+    // scripts/smoke/*.sh installs generated consumer apps through this module,
+    // and the serialisation contract is about this repo's lock, not theirs. The
+    // scratch tree's copy of pod-install.mjs treats its own
+    // example/ios/Podfile.lock as the governed one.
     const repo = scratchCheckout();
     const { status, stdout, stderr } = repo.driver(
       `import { installPods } from './scripts/pod-install.mjs';
@@ -768,8 +676,8 @@ writeFileSync(dir + '/Podfile.lock', 'PODS:\\n  - SomePod (1.0.0):\\n\\nCOCOAPOD
 const { status } = installPods({ dir, strict: true });
 process.stdout.write('STATUS ' + status + '\\n');
 `,
-      // An expanded-style pod: the thing that would refuse, if the contract
-      // applied to this app. It must not even be asked about this lock.
+      // An expanded-style pod, which would be refused if the contract applied
+      // to this app.
       { env: { FAKE_POD_JSON_STYLE: 'expanded' } }
     );
     expect(status).toBe(0);
@@ -777,10 +685,8 @@ process.stdout.write('STATUS ' + status + '\\n');
     expect(stdout + stderr).not.toContain('SPEC CHECKSUMS');
     expect(stdout + stderr).not.toContain('Podfile.lock was written');
 
-    // The control: the same fake pod, the same expanded style, the same module -
-    // only the directory is the governed one. Without this, "said nothing" would
-    // be indistinguishable from a probe that never runs, and the test above would
-    // pass even if the whole serialisation check had been deleted.
+    // The control: the same fake pod and style, in the governed directory.
+    // Without it, "said nothing" could mean the probe never runs.
     const governedRun = repo.driver(
       `import { installPods } from './scripts/pod-install.mjs';
 const dir = new URL('./example/ios', import.meta.url).pathname;
@@ -794,11 +700,8 @@ process.stdout.write('STATUS ' + status + '\\n');
   });
 
   it('asks the machine once per --fix, not once per stage (N6)', () => {
-    // `--fix` measures the serialiser in order to refuse before it touches the
-    // tree, and then has to act on that same answer. Asking twice is not just a
-    // wasted third of a second: the two answers could disagree, and the run would
-    // have refused on one and installed on the other. The fake pod counts the
-    // times it is asked, so this is a count and not a reading of the log.
+    // Two probes could disagree, and the run would refuse on one answer and
+    // install on the other. The fake pod counts the times it is asked.
     const repo = scratchCheckout();
     const log = join(repo.dir, 'probe-log');
     const out = repo.statusLocal(['--fix'], { FAKE_POD_PROBE_LOG: log });
@@ -817,13 +720,9 @@ process.stdout.write('STATUS ' + status + '\\n');
   });
 
   it('refuses a refresh on a machine whose json gem would rewrite every checksum', () => {
-    // X13 end to end. The same fake pod, answering the serialisation probe the way
-    // a `json` gem before 2.8.0 does. Its lock would otherwise pass the churn
-    // guard unchanged - the guard compares NitroUi's two lines, and json's
-    // whitespace moves the *other* 95 pods, which this fake does not rewrite. So
-    // only the probe can stop it, and the refusal has to name the mechanism
-    // rather than the "could not be read" fallback, or a broken probe would look
-    // like the guard working.
+    // The fake pod answers the serialisation probe the way a `json` gem before
+    // 2.8.0 does. Its lock would pass the churn guard, so only the probe can stop
+    // it, and the refusal has to name the mechanism.
     const repo = scratchCheckout();
     const out = repo.status(['--fix'], { FAKE_POD_JSON_STYLE: 'expanded' });
     expect(out.status).toBe(1);
@@ -835,11 +734,8 @@ process.stdout.write('STATUS ' + status + '\\n');
   });
 
   it('refuses at preflight on that machine, before `changeset version` runs', () => {
-    // Same machine, same command, one stage earlier: `release:version` asks the
-    // serialisation question in `--preflight`, so a preview on a runner with the
-    // wrong gem leaves no half-versioned tree behind. The witness is what makes
-    // this more than the test above - `--fix` refusing after the bump is the
-    // failure X9 was about.
+    // `release:version` asks the serialisation question in `--preflight`, so a
+    // runner with the wrong gem leaves no half-versioned tree behind.
     const releaseCommand = JSON.parse(
       readFileSync(resolve(root, 'package.json'), 'utf8')
     ).scripts['release:version'];
@@ -855,13 +751,9 @@ process.stdout.write('STATUS ' + status + '\\n');
   });
 
   it('refuses the install itself when it is asked to be strict', () => {
-    // The last of the three places, and the one the two above never reach:
-    // `--fix` and `--preflight` both ask before they get here, so a mutation that
-    // makes `installPods` warn and carry on stays green under them. It matters on
-    // its own terms - this is the only refusal between a caller that did not ask
-    // first and a rewritten lock - so it is tested against the module directly.
-    // The fake pod *would* have written a lock here: without the strict return,
-    // the lock assertion below goes red on the content, not on the exit code.
+    // Tested against the module directly: `--fix` and `--preflight` both ask
+    // before they reach `installPods`, so its own refusal is not exercised
+    // through them.
     const repo = scratchCheckout();
     const driver = join(repo.dir, 'strict-driver.mjs');
     writeFileSync(
@@ -893,8 +785,6 @@ process.stdout.write('STATUS ' + status + '\\n');
   });
 
   it('refuses up front when CocoaPods is missing, without touching the tree', () => {
-    // The second-best refusal: `--fix` called on its own, after something already
-    // bumped the version. It cannot undo that, so it names the way out.
     const repo = scratchCheckout();
     const out = repo.status(['--fix'], { COCOAPODS_BIN: '/nonexistent/pod' });
     expect(out.status).toBe(1);
@@ -905,11 +795,8 @@ process.stdout.write('STATUS ' + status + '\\n');
   });
 
   it('refuses before `changeset version` runs at all, on the real release command', () => {
-    // M1, end to end. The tests above can show that each stage refuses; only running
-    // the actual `release:version` string can show that the refusal comes *first*. The
-    // fake `changeset` on PATH is the witness: if it is ever invoked it leaves a
-    // marker, so this fails if the guard is moved after the bump, removed, or made to
-    // exit 0. `--fix`'s refusal is the same shape, one stage later.
+    // The fake `changeset` on PATH leaves a marker if it is ever invoked, which
+    // shows the refusal comes before the version bump.
     const releaseCommand = JSON.parse(
       readFileSync(resolve(root, 'package.json'), 'utf8')
     ).scripts['release:version'];
@@ -924,9 +811,8 @@ process.stdout.write('STATUS ' + status + '\\n');
     expect(withoutPods.read('example/ios/Podfile.lock')).toBe(LOCK);
     expect(withoutPods.dirty()).toBe('');
 
-    // The control: the same command, with a CocoaPods that works, gets all the way
-    // through. Without this, "the witness never ran" would be indistinguishable from a
-    // broken fixture, and the refusal above would prove nothing.
+    // The control: the same command with a working CocoaPods gets all the way
+    // through.
     const withPods = scratchCheckout({ witness: true });
     const ran = withPods.runRelease(releaseCommand);
     expect(ran.status).toBe(0);
@@ -938,12 +824,8 @@ process.stdout.write('STATUS ' + status + '\\n');
 });
 
 /**
- * The CLI, run against this repository.
- *
- * Two things here can only be checked end to end: that `check` mode never reaches for
- * CocoaPods (a Linux runner has none), and that the guard is *green on main* - a
- * guard that ships red is a guard nobody runs. Both are about the real files, so this
- * uses the real tree rather than a copy.
+ * The CLI, run against this repository: `check` mode must never reach for
+ * CocoaPods, and the committed lock must pass.
  */
 describe('node scripts/sync-example-lock.mjs', () => {
   const cli = (args = [], env = {}) =>
@@ -977,12 +859,9 @@ describe('node scripts/sync-example-lock.mjs', () => {
     expect(pkg.scripts['lock:check']).toBe(
       'node scripts/sync-example-lock.mjs'
     );
-    // X10: `check` is a runner now, so the ordering is asserted against the graph
-    // it runs.
     const names = CHECK_STEPS.map((step) => step.name);
     expect(names).toContain('lock:check');
-    // A version mismatch costs a string compare, not a ten-minute `prepare`:
-    // `prepare` waits for the cheap guard, so a stale lock never starts a build.
+    // `prepare` waits for the cheap check, so a stale lock never starts a build.
     expect(names.indexOf('lock:check')).toBeLessThan(names.indexOf('prepare'));
     const prepare = CHECK_STEPS.find((step) => step.name === 'prepare');
     expect(prepare.needs).toContain('lock:check');
@@ -1012,9 +891,6 @@ describe('node scripts/sync-example-lock.mjs', () => {
 
 /**
  * The body of one job, so a step can be asserted about the job it belongs to.
- *
- * The same helper `changesets.test.js` uses; duplicated rather than imported because
- * a test module is not a library, and the two files assert about different workflows.
  */
 function job(workflow, name) {
   const header = `\n  ${name}:\n`;

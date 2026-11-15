@@ -1,46 +1,9 @@
 #!/usr/bin/env node
+// The consumer smoke app's ready line: one `name=WxH` box per control, each greater than zero.
 //
-// The consumer smoke app's ready line: the contract, as pure functions.
+//   NITRO_UI_SMOKE_READY switch=30x20 slider=310x20 button=88x36 progress=310x4
 //
-// `scripts/smoke/App.tsx` used to signal readiness with a bare
-// `NITRO_UI_SMOKE_READY`, which proved that the bundle loaded, the core
-// answered and nothing crashed - and nothing about the controls actually
-// being laid out. A control that mounted but never got a box (a sizing
-// regression, a hosting change, a `measureContent()` that returns 0) turned the
-// screen red and passed. R2 recorded that as a follow-up; this is the assertion.
-//
-// The app now prints the box each control was laid out with, and this file owns
-// the shape of that line, used by BOTH platform paths in `common.sh`:
-//
-//   NITRO_UI_SMOKE_READY switch=30x20 slider=310x20 button=88x36 progress=310x4 segmented-control=214x32 date-picker=138x34
-//
-// Nine entries today: the eight controls plus `host`, the shared `<Host>`
-// container with two Switches inside it. The hosted Switches are deliberately
-// not in the list — a hosted control is drawn by the Host's composition and its
-// own RN view is laid out at nothing (docs/components/host.md, Sizing), so the
-// container's box is the one that means something.
-//
-// A box is a number, not necessarily an integer: `onLayout` reports the layout
-// metrics Fabric computed, and those are fractional as a rule - dp scaled by the
-// display density on Android, font metrics on iOS. The first device run of this
-// gate printed `switch=52.19047546386719x48` (Android) and
-// `button=61x34.333343505859375` (iOS); an integer-only contract called both
-// runs a failure while every control had a box. So the number grammar is
-// `digits[.digits]`, and the unit fixtures include the fractional form precisely
-// because integer fixtures cannot catch that mistake.
-//
-// Why a module and not shell: the assertion is the gate, it has to be the same
-// on iOS and Android, and it has to be demonstrable without a device - see
-// `scripts/__tests__/smoke-ready-line.test.js`. Like `scripts/bench/lib.mjs`,
-// this file holds the logic and no CLI, so jest can import it (`ready-line.mjs`
-// is the command both platform paths call).
-//
-// `App.tsx` is copied into a generated consumer app, so it cannot import this
-// file; the control list there is a deliberate copy. Both copies are generated
-// from the same manifests by one `bun run registry` run, so they agree as sets by
-// construction - and the ready line is keyed by control name, so the order the two
-// lists happen to be in is not part of the contract. What the test below asserts is
-// the shape both sides agree on.
+// A box may be fractional (`52.19x48`): layout metrics are scaled by the display density.
 
 /** Every control the library exports, in the order the app renders them. */
 export const SMOKE_CONTROLS = Object.freeze([

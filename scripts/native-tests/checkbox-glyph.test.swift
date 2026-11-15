@@ -1,21 +1,3 @@
-//
-//  checkbox-glyph.test.swift
-//
-//  Host-side vectors for the iOS Checkbox's glyph rule (see
-//  ios/components/Checkbox/NitroUiCheckboxGlyph.swift): which style a name means,
-//  which SF Symbol each of its states draws, and which of the two colours draws it.
-//
-//  Here rather than only on a device because the table has six answers and a device
-//  run sees the one combination it mounted, and because the two rules worth proving
-//  are the ones no fixture produces on demand: `checked` outranking `indeterminate`
-//  (the state an app reaches by leaving its third-state prop set after a tap, which
-//  is exactly the case `docs/components/checkbox.md` warns callers about), and the
-//  two glyph styles agreeing about *colour* while disagreeing about shape - the pair
-//  that keeps one table honest about two shapes.
-//
-//  There is no Kotlin twin: Android ignores `iosStyle` (`HybridNitroUiCheckbox.kt`),
-//  so the table is one platform's and says so.
-//
 import Foundation
 
 /// `@main` because `swiftc` only allows top-level statements in a file named
@@ -38,7 +20,6 @@ struct CheckboxGlyphTest {
     check(actual == expected, "\(what): \"\(sent)\" -> \(actual.rawValue), want \(expected.rawValue)")
   }
 
-  /// The glyph one state draws, spelled `symbol(filled)` for the log, or `none`.
   private static func drawn(_ style: NitroUiCheckboxStyle, _ checked: Bool, _ indeterminate: Bool) -> String {
     guard let glyph = NitroUiCheckboxGlyphs.glyph(style: style, checked: checked, indeterminate: indeterminate) else {
       return "none"
@@ -60,7 +41,6 @@ struct CheckboxGlyphTest {
   static func main() {
     print("NitroUiCheckboxGlyph")
 
-    // The three names DECISIONS D47 item 2 settles, and the default.
     checkStyle("circle", .circle, "the default is the circle")
     checkStyle("square", .square, "the square is the square")
     checkStyle("switch", .toggle, "switch is the old look")
@@ -70,12 +50,10 @@ struct CheckboxGlyphTest {
     checkStyle("toggle", .circle, "the Swift case name is not the prop's word")
     checkStyle("square ", .circle, "a trailing space is not a style")
 
-    // Which question the hybrid view asks: `'switch'` draws nothing of ours.
     check(NitroUiCheckboxStyle.circle.drawsGlyph, "the circle draws a glyph")
     check(NitroUiCheckboxStyle.square.drawsGlyph, "the square draws a glyph")
     check(!NitroUiCheckboxStyle.toggle.drawsGlyph, "the switch draws no glyph of ours")
 
-    // The table: D47 item 1's two pairs, and item 3's dash.
     checkDrawn(.circle, false, false, "circle(secondary)", "an unchecked circle is the empty box")
     checkDrawn(.circle, true, false, "checkmark.circle.fill(accent)", "a checked circle is the check mark")
     checkDrawn(.circle, false, true, "minus.circle.fill(accent)", "the third state is the dash")
@@ -83,22 +61,16 @@ struct CheckboxGlyphTest {
     checkDrawn(.square, true, false, "checkmark.square.fill(accent)", "a checked square is the check mark")
     checkDrawn(.square, false, true, "minus.square.fill(accent)", "the third state of the square is the dash")
 
-    // `checked` outranks `indeterminate`, which is Android's rule and the one a caller
-    // reaches by leaving `indeterminate` set after a tap. If the dash won, the same
-    // props would draw a check mark on Android and a dash here.
+    // `checked` outranks `indeterminate`, as on Android, so the same props draw the
+    // same mark on both platforms.
     checkDrawn(.circle, true, true, "checkmark.circle.fill(accent)", "a checked indeterminate box is a check mark")
     checkDrawn(.square, true, true, "checkmark.square.fill(accent)", "and so is the square's")
 
-    // The switch look draws nothing here - SwiftUI's `.switch` style draws all of it,
-    // which is what makes it "today's look, unchanged".
+    // SwiftUI's `.switch` toggle style draws the whole switch look itself.
     for (checked, indeterminate) in [(false, false), (true, false), (false, true), (true, true)] {
       checkDrawn(.toggle, checked, indeterminate, "none", "the switch draws nothing for checked=\(checked) indeterminate=\(indeterminate)")
     }
 
-    // Checked and unchecked have to be *different* pictures in both glyph styles: this
-    // is the claim `Checkbox.harness.tsx` makes on the device by reading the symbol
-    // name back, and it is worth one line here because the pair the content draws and
-    // the pair a test compares are the same two strings.
     for style in [NitroUiCheckboxStyle.circle, .square] {
       let off = NitroUiCheckboxGlyphs.glyph(style: style, checked: false, indeterminate: false)
       let on = NitroUiCheckboxGlyphs.glyph(style: style, checked: true, indeterminate: false)
@@ -111,10 +83,6 @@ struct CheckboxGlyphTest {
             "\(style.rawValue): a state is a filled symbol")
     }
 
-    // The two glyph styles agree about colour and disagree only about shape: one table
-    // covers both. They do not share a *box* - the device measures the circle row 26 pt
-    // tall and the square row 24 pt - so `iosStyle` stays in the iOS sizing key, which
-    // is `Checkbox.harness.tsx`'s business and not this one.
     for (checked, indeterminate) in [(false, false), (true, false), (false, true), (true, true)] {
       let circle = NitroUiCheckboxGlyphs.glyph(style: .circle, checked: checked, indeterminate: indeterminate)
       let square = NitroUiCheckboxGlyphs.glyph(style: .square, checked: checked, indeterminate: indeterminate)
@@ -123,8 +91,6 @@ struct CheckboxGlyphTest {
       check(circle?.symbol.count == square?.symbol.count, "checked=\(checked) indeterminate=\(indeterminate): the two names are one shape apart")
     }
 
-    // The value a reader is handed: only the third state overrides the Toggle's own,
-    // and it says Android's word for it so one sentence describes both platforms.
     check(NitroUiCheckboxGlyphs.accessibilityValue(checked: false, indeterminate: true) == "mixed",
           "the dash is announced as mixed")
     check(NitroUiCheckboxGlyphs.accessibilityValue(checked: false, indeterminate: false) == nil,

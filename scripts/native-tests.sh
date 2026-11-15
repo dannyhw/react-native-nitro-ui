@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
-# Host-side native unit tests (bun run test:native).
-#
-# These compile the shipping core headers/sources with the host toolchain and run
-# them as plain binaries - no simulator, no Gradle, no app. They exist because the
-# parts of the core that must never be wrong (the D1 clock base, the perf ring, the
-# event-count handshake) are pure logic that an on-device test would only catch by
-# accident, and because all three are duplicated across C++/Swift/Kotlin.
-#
-# Android's Kotlin twin of the handshake is a JVM unit test instead, because that
-# is where Kotlin compiles here: `bun run test:native:android`.
+# Host-side native unit tests (bun run test:native): compiles the shipping core sources with
+# the host toolchain and runs them as plain binaries. No simulator, no Gradle, no app.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,17 +25,9 @@ run_case() {
   status=1
 }
 
-# The B1 guard: the sizing state-update callback must capture its size by value
-# (scripts/check-sizing-capture.sh explains why that is a grep and not a test).
 run_case "sizing state-update captures by value" \
   bash "$ROOT/scripts/check-sizing-capture.sh"
 
-# Review T14/1: Android's flush registers a pre-draw listener, which is a request
-# to be consulted at the next draw and not a request for one - so it must ask for
-# the draw too, or a size measured against a window that has stopped drawing (an
-# RN `Modal`) stays queued. The reason is the same as B1's: the race is between
-# a report and a window's last traversal, and no on-device test can produce it
-# on demand. See scripts/check-sizing-flush-draw-request.sh.
 run_case "sizing flush requests its draw" \
   bash "$ROOT/scripts/check-sizing-flush-draw-request.sh"
 
@@ -67,10 +51,7 @@ run_case "handshake.test (Swift)" \
       -o '$OUT/handshake' && '$OUT/handshake'
   "
 
-# The intrinsic-sizing engine: cache, ledger and push decisions (T11). It links
-# the shipping C++ unchanged - `measureContent` is allowed to be a pure C++
-# lookup (core-architecture §1.4), which is what makes it testable here instead
-# of only on a device.
+# The intrinsic-sizing engine: cache, ledger and push decisions.
 run_case "sizing.test (C++)" \
   bash -c "
     clang++ -std=c++20 -Wall -Werror \
@@ -80,10 +61,7 @@ run_case "sizing.test (C++)" \
       '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing' && '$OUT/sizing'
   "
 
-# The Slider's value rule: clamping, step snapping and the float tidying that
-# keeps native's displayed value bit-for-bit equal to React's. Same reason the
-# handshake is here rather than only on a device - it is pure arithmetic that an
-# on-device test would only catch by accident, and it is duplicated in Kotlin.
+# The Slider's value rule: clamping, step snapping and float tidying.
 run_case "slider-value.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -92,12 +70,7 @@ run_case "slider-value.test (Swift)" \
       -o '$OUT/slider-value' && '$OUT/slider-value'
   "
 
-# The iOS Picker's variant rule (G26): `radio` is Android's control, so on this
-# platform it resolves to the menu (DECISIONS D38 item 4). It is a host test because
-# the device cannot reach it - `Picker.tsx` resolves the variant per platform before
-# the prop is sent, so the native guard only ever runs for a caller that bypassed the
-# wrapper. The Kotlin twin is `PickerModelTest.theVariantResolvesToTheThreeControls
-# ThisComponentHas`, and the two answers differ by design.
+# The iOS Picker's variant rule: `radio` is Android's control and resolves to the menu here.
 run_case "picker-variant.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -106,14 +79,7 @@ run_case "picker-variant.test (Swift)" \
       -o '$OUT/picker-variant' && '$OUT/picker-variant'
   "
 
-# The iOS Checkbox's glyph table (G31, DECISIONS D47): which style a name means, and
-# which SF Symbol each of its states draws. It is a host test because the table has six
-# answers and a device run sees the one combination it mounted - and because the two
-# rules worth holding down are states no fixture produces on demand: `checked`
-# outranking `indeterminate` (the state an app reaches by leaving its third-state prop
-# set after a tap) and the two glyph styles agreeing about colour while disagreeing
-# about shape, which is what keeps one table honest about two shapes. There is no Kotlin twin:
-# Android ignores `iosStyle`, and both Android gates say so.
+# The iOS Checkbox's glyph table: which style a name means, and which SF Symbol each state draws.
 run_case "checkbox-glyph.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -122,10 +88,7 @@ run_case "checkbox-glyph.test (Swift)" \
       -o '$OUT/checkbox-glyph' && '$OUT/checkbox-glyph'
   "
 
-# The TextField's `maxLength` cut and text equality (G13). The delegate's cut keeps
-# the part of an *inserted* text that fits; for typing at the end of the text the
-# post-edit backstop gives the same answer, so only mid-text vectors - which no
-# on-device typing test produces - can tell a broken cut from a working one.
+# The TextField's `maxLength` cut and text equality, including insertions in mid-text.
 run_case "text-limit.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -134,13 +97,7 @@ run_case "text-limit.test (Swift)" \
       -o '$OUT/text-limit' && '$OUT/text-limit'
   "
 
-# The number behind a Form's `measure()` correction (G24, D45 item 3): what the
-# shadow node reads out of `nuiContentOffsetY`. It lives here because the interesting
-# inputs - a shadow tree that has not been told yet, an explicit `null`, a NaN - are the
-# ones an on-device test cannot produce on demand, and all three fail silently: a
-# correction of 0 is indistinguishable on screen from a Form that is not scrolled. The
-# arithmetic is the whole file; the Fabric types around it are why the shadow node
-# itself cannot compile here (see the header).
+# What a Form's shadow node reads out of `nuiContentOffsetY`, including unset, null and NaN.
 run_case "scroll-offset.test (C++)" \
   bash -c "
     clang++ -std=c++20 -Wall -Werror \
@@ -150,11 +107,7 @@ run_case "scroll-offset.test (C++)" \
       '$ROOT/scripts/native-tests/scroll-offset.test.cpp' -o '$OUT/scroll-offset' && '$OUT/scroll-offset'
   "
 
-# The Stepper's Binding rule (G25): what a write from SwiftUI's control is allowed to
-# do with its own stride. The bug this holds down is invisible to a stepped range —
-# which is every on-device tap the suite can cheaply make — and shows only on a range
-# that does not end on a step, where SwiftUI supplies a stride of 1 and the control has
-# to refuse the destination while taking the direction.
+# The Stepper's binding rule: what a write from SwiftUI's control may do with its own stride.
 run_case "stepper-binding.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -164,13 +117,7 @@ run_case "stepper-binding.test (Swift)" \
       -o '$OUT/stepper-binding' && '$OUT/stepper-binding'
   "
 
-# How far a finger may travel over a pressable row before the row stops calling the
-# touch its own press (G30 for ListItem, X32 for the Form's cell, which had the same
-# recogniser written without the check). The device half is real-input's drag-from-a-row
-# check; what lives here is the geometry — the slop, the box, and a flick that comes back
-# — at inputs no device run can cheaply aim at, and the failure is one a screen cannot
-# show: a row that fires while the list scrolls is *also* what a green 10-tap press count
-# looks like.
+# How far a finger may travel over a pressable row before the touch stops being a press.
 run_case "press-travel.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -179,18 +126,8 @@ run_case "press-travel.test (Swift)" \
       -o '$OUT/press-travel' && '$OUT/press-travel'
   "
 
-# The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
-# reads agree" wait that `RealInputTests.measure` runs before it prints a control's
-# boxes. It is here rather than only on a device because the three things worth
-# proving are a stuck loop, a wait that chases the answer it wants, and a tree that
-# never holds still - none of which a device run produces on demand, and all of
-# which would turn an accessibility rule into a coin flip. It compiles the shipping
-# UI-test file itself, so the host proves the code that runs on the simulator.
-# The same shape of wait, for the two gestures X34 item 4 un-fixed: a tab-bar scroll that
-# dragged eight times and decided on one read of a moving frame, and a popover anchor tapped
-# three times without asking whether a popover was already up. What is proved here is the press
-# count and the bound - a device can show the flake, but it cannot be asked to reproduce it on
-# demand, and a wait that silently stops at one read is exactly what a device run hides.
+# The UI tests' bounded gesture waits (a tab-bar scroll, a popover anchor tap). Compiles the
+# shipping UI-test file itself, so the host proves the code that runs on the simulator.
 run_case "gesture-settlement.test (Swift)" \
   bash -c "
     swiftc -Onone \
@@ -199,11 +136,8 @@ run_case "gesture-settlement.test (Swift)" \
       -o '$OUT/gesture-settlement' && '$OUT/gesture-settlement'
   "
 
-# The UI-test target's own sources, parsed on the host. `-frontend -parse` resolves no
-# imports and needs no simulator, so it costs about a second - which is the point. The
-# file no host test compiles is exactly where a mangled quote hides, and the only other
-# compiler that looks at it is a device build: four minutes, one Metro start and one
-# app stamp later. A syntax error should cost a second here, not a gate.
+# The UI-test target's sources, parsed only: `-frontend -parse` resolves no imports and needs
+# no simulator, so a syntax error costs about a second instead of a device build.
 run_case "ui-test sources parse (Swift)" \
   bash -c "
     xcrun swiftc -frontend -parse \
@@ -220,20 +154,8 @@ run_case "a11y-frame-stability.test (Swift)" \
       -o '$OUT/a11y-frame-stability' && '$OUT/a11y-frame-stability'
   "
 
-# The same test again under the sanitizers, because the properties worth checking
-# here are lifetime and UB rather than arithmetic: a correction is handed to a
-# push that may run it later, and the engine's maps are walked while being
-# mutated (`forget`, a re-entrant `measure` from a push, and the expired registry
-# sweep - and the sweep is only really covered because
-# `testExpiredStatesAreSweptWithoutForget` measures its dead instances under a key
-# nothing reports, the only way to arrive here with entries left to walk. Review
-# F1 found a use-after-free in exactly that sweep, hidden until the test reached
-# it.)
-# The suite is milliseconds of work, so this costs seconds and stays in the gate.
-#
-# Leak checking is off deliberately: the engine is a leaked singleton on purpose
-# (review N3 - the run-loop observer outlives static destruction), so a leak
-# report would be a false positive by design.
+# The sizing test again under the sanitizers: its risks are lifetime and UB, not arithmetic.
+# Leak checking is off because the engine is a deliberately leaked singleton.
 run_case "sizing.test (C++ / ASan + UBSan)" \
   bash -c "
     ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \
@@ -245,10 +167,7 @@ run_case "sizing.test (C++ / ASan + UBSan)" \
       '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing-asan' && '$OUT/sizing-asan'
   "
 
-# The scroll-offset reader again under the sanitizers, for the same rule that every C++
-# unit test here runs twice. There is no allocation to corrupt in it, so this is the cheap
-# half of the guarantee - UBSan is the one with something to say about a NaN or an
-# infinity being read out of a shadow node's props.
+# The scroll-offset test again under the sanitizers.
 run_case "scroll-offset.test (C++ / ASan + UBSan)" \
   bash -c "
     ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \

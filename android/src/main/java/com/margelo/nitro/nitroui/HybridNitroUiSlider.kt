@@ -53,25 +53,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/*
- * The Slider component: Material 3 `Slider` on the core runtime, with the drag
- * owned natively. The value rules are in `NitroUiSliderValue.kt`; everything here
- * is about *when* a value is reported.
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * `HybridNitroUiSliderManager` resolves `HybridNitroUiSlider` through a wildcard
- * import of exactly that package. Core helpers live in `...nitroui.core`.
- */
+// The Slider component: Material 3 `Slider` with the drag owned natively. Must stay in
+// this package, which the generated view manager imports with a wildcard.
 
 /**
- * The frame ticker one Slider's drag borrows: at most one emitted
- * `onValueChange` per frame (`docs/architecture/core.md` §11).
- *
- * An interface for two reasons. The probe has to be able to say whether a pump
- * outlived its drag, which [ChoreographerFramePump.isArmed] answers and nothing
- * in the event stream can - a pump with nothing pending emits nothing while it
- * ticks - and `SliderModelTest` has to drive a drag without a `Choreographer`,
- * which does not exist on the JVM.
+ * The frame ticker a drag uses, so at most one `onValueChange` is emitted per frame. An
+ * interface so that JVM tests can drive a drag without a `Choreographer`.
  */
 internal interface NitroUiFramePump {
   /** Ask for the next frame. Calling it twice is one callback, not two. */
@@ -86,16 +73,7 @@ internal interface NitroUiFramePump {
   val isArmed: Boolean
 }
 
-/**
- * The Android pump: a `Choreographer` frame callback, which is one-shot - so a
- * drag re-posts it per sample ([SliderModel.dragTo]) and it goes away when the
- * samples do.
- *
- * [isArmed] is the pump's own lifecycle rather than a peek at the looper's queue:
- * between one callback firing and the next sample re-posting it, nothing is
- * queued, but the drag is still being served - and the question the probe exists
- * to answer is "did this outlive its drag", which reads the same either way.
- */
+/** A `Choreographer` frame callback is one-shot, so a drag re-posts it on every sample. */
 internal class ChoreographerFramePump : NitroUiFramePump {
   private val frameCallback = Choreographer.FrameCallback { onFrame?.invoke() }
 
@@ -120,32 +98,22 @@ internal class ChoreographerFramePump : NitroUiFramePump {
   }
 }
 
-/** State of one Slider. See [NitroUiModel] for the shape this has to have. */
 internal class SliderModel(
   private val pump: NitroUiFramePump = ChoreographerFramePump(),
 ) : NitroUiModel() {
-  /** What the Slider shows. Snapshot-observed, so writing it recomposes. */
   var displayed by mutableStateOf(0.0)
 
-  /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
   /** ARGB `processColor` int of the thumb and filled track, or `null` for the scheme's. */
   var tintColor by mutableStateOf<Int?>(null)
 
-  /** `accessibilityLabel`, read by the composable - see the a11y rule in `docs/architecture/core.md`. */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /**
-   * The range and step, observed: unlike a Switch's props these decide what the
-   * control *is* (how far the thumb travels, whether it clicks), so a change has
-   * to recompose it. Read together, in the one composable that draws the track.
-   */
   var minimumValue by mutableStateOf(0.0)
   var maximumValue by mutableStateOf(1.0)
   var step by mutableStateOf(0.0)
 
-  /** The size configuration React sent. Nothing native reads it. */
   var sizingKey = ""
 
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
@@ -158,22 +126,14 @@ internal class SliderModel(
   var onSlidingStart: ((Double, Double) -> Unit)? = null
   var onSlidingComplete: ((Double, Double) -> Unit)? = null
 
-  // The un-emitted drag sample is NitroUiControlledValue.unreported - part of the
-  // handshake itself rather than a Slider field, so "a React write may not
-  // overtake a sample JS has not been told about" is one rule for every control
-  // (core.md §4, §11). It stays unobserved because nothing renders it: what the
-  // composable reads is [displayed], which [dragTo] also writes at sample time.
+  // The un-emitted drag sample lives in `state.unreported`, so a React write cannot
+  // overtake it.
 
-  /** Whether a drag is in flight. */
   var dragging = false
 
   /**
-   * Bumped whenever an in-flight drag is abandoned, so work queued for that drag can
-   * recognise itself and stop. A real touch stream cannot outlive its view;
-   * [nuiTestDrag] queues its moves on the main looper and `prepareForRecycle`/
-   * `onDropView` may run before every one of them lands, which would otherwise hand
-   * the next owner of this instance somebody else's drag - the exact bug
-   * [prepareForRecycle] exists to prevent.
+   * Bumped when a drag is abandoned, so work queued for it (the test drag's posted moves)
+   * can tell that it is stale and stop.
    */
   var dragGeneration = 0
     private set
@@ -181,19 +141,12 @@ internal class SliderModel(
   /** Made once: [dragTo] hands it to the pump on every sample. */
   private val onFrame: () -> Unit = { deliverUnreported() }
 
-  /** The value rule of [NitroUiSliderValue], applied to this Slider's range. */
   fun quantize(raw: Double): Double =
     NitroUiSliderValue.quantize(raw, minimumValue, maximumValue, step)
 
   /**
-   * How many in-between tick marks M3's `steps` should draw, or 0 to hand the
-   * range to the control continuous.
-   *
-   * Material 3 counts *stops between the endpoints*, so a range of n whole steps
-   * has n - 1 of them, and it only draws the endpoints as stops when the range
-   * ends on a step - the same condition iOS checks before handing SwiftUI a
-   * `step:`. A range that does not end on one stays continuous here and is
-   * quantised by [quantize], which keeps `maximumValue` reachable.
+   * The `steps` to give Material: stops between the endpoints, so n whole steps is n - 1.
+   * 0 (continuous) when the range does not end on a step; [quantize] then applies the step.
    */
   fun steppedTicks(): Int {
     val division = NitroUiSliderValue.division(minimumValue, maximumValue, step) ?: return 0
@@ -203,51 +156,16 @@ internal class SliderModel(
     return maxOf(0, division.wholeSteps.toInt() - 1)
   }
 
-  /** The next legal value above (or below) the one on screen. */
   fun stepped(
     from: Double,
     up: Boolean,
   ): Double = NitroUiSliderValue.stepped(from, up, minimumValue, maximumValue, step)
 
   /**
-   * A screen reader asked for a value *toward* [target] - one gesture's worth of
-   * callbacks (start, one change, complete), because an app cannot tell an
-   * increment from a thumb release and must not have to.
-   *
-   * [publishedProgress] is the progress this control's semantics node was showing when
-   * the reader acted, and the direction is decided against *it* rather than against
-   * [displayed]. The two numbers come from different moments and agree only while the
-   * accessibility tree is up to date: [target] is what the platform computed from
-   * `ProgressBarRangeInfo`, which composition writes and Compose republishes once the
-   * snapshot holding the new [displayed] is applied — one frame later. Weigh a target
-   * built from the old progress against the new value and the reader's “up” reads as a
-   * move the other way. On `0..12 step 3`, whose stride is one whole step, a tree one
-   * press behind sends 3 to a model already at 3 — a press that does nothing at all —
-   * and a tree two presses behind sends 3 to a model holding 6 — a press that goes back
-   * down, which is the recurring `expected [3, 6, 3] to deeply equal [3, 6, 9]`
-   * (`docs/tasks/FOLLOWUPS.md:56`; `expected [3, 6, 9, 6]` is the same fault two steps
-   * further along one walk). The destination stays native's; the direction belongs to
-   * whoever pressed, and they were shown [publishedProgress].
-   *
-   * The comparison is made in the space the reader was shown: [publishedProgress] goes
-   * through the `Float` the semantics node carries the progress in, because that is the
-   * number the target was computed from. See [asPublishedProgress].
-   *
-   * Only the *direction* comes from the platform. The destination is [stepped],
-   * and that is the fix: M3's own action moves by a twentieth of the range, which
-   * on a range that does not end on a step - `0..10 step 3`, the docs' own
-   * example - quantises back to where it started, so the action reports success
-   * and the thumb never moves while a start/change/complete triple is emitted for
-   * nothing.
-   *
-   * The drag is opened and closed here rather than left to Compose: nothing
-   * promises that an a11y write arrives with the pair of gesture callbacks a
-   * finger produces, and on iOS a write that opened a drag without a matching end
-   * left the frame pump running for the life of the view.
-   *
-   * Returns whether anything moved. At a bound there is no next value, and
-   * emitting a triple for a value that did not change is the bug above wearing a
-   * different hat.
+   * A screen reader's adjust action. Only the direction is taken from [target], against
+   * [publishedProgress]: the semantics node can be a frame behind [displayed]. The
+   * destination is [stepped], because Material's stride of a twentieth of the range can
+   * quantise back to the start. Emits start, change and complete; returns whether it moved.
    */
   fun accessibilityStepToward(
     target: Double,
@@ -269,14 +187,8 @@ internal class SliderModel(
       return false
     }
     if (dragging) {
-      // A finger is on the track. Its drag is the gesture in progress, and a
-      // second one would report a complete for a thumb the user is still holding
-      // ([endDrag] is the only thing that emits one, and [beginDrag] is
-      // idempotent, so a step here that ran the pair would *end* the finger's
-      // drag rather than make its own). The step is a sample of the drag that is
-      // already open: the value moves at once, its change reaches JS on the drag's
-      // next frame like any other sample, and the gesture edges stay with the
-      // finger.
+      // A finger already owns the open drag. Make this a sample of it: a second begin/end
+      // pair would report a complete while the thumb is still held.
       dragTo(to)
       return true
     }
@@ -286,61 +198,24 @@ internal class SliderModel(
     return true
   }
 
-  /**
-   * [displayed] as a reader is given it: through the `Float` the semantics node carries
-   * the progress in (`SliderTrack` publishes `ProgressBarRangeInfo(displayed.toFloat(), …)`).
-   *
-   * Not a curiosity, and not new here — it is the half of X21's rule that the round-trip
-   * was left out of. A `setProgress` target arrives as a `Float` computed from the
-   * progress this node published, so comparing it with the `Double` the model holds
-   * compares two different numbers on any grid whose stops are not exact in binary:
-   * 0.3 through a `Float` and back is 0.30000001192092896, which read against 0.3 is
-   * "higher than where you are", and 0.7 comes back as 0.699999988079071, which is
-   * *lower* — so a reader asking for the value it can already read is a step, up or
-   * down depending on how the rounding fell. A narrow window over a large offset (an
-   * epoch-milliseconds Slider is the everyday shape) makes that every press rather than
-   * an edge case: a Float at 1e9 is 64 apart, the reader's stride is smaller than that,
-   * and its destination lands back on the published float — up asked, previous value
-   * answered, on the platform path, every time (X33; X32's
-   * `StepperModel.publishedProgress` is the same one round-trip for the same reason).
-   *
-   * The round-trip can only ever change the *equality* branch, which is what makes it
-   * safe: a target a float can stride differs from the published float by at least one
-   * `stride`, and a real reader's stride is never below the float's own spacing except
-   * by landing on it exactly — which is the case this exists to refuse.
-   */
+  // The semantics node publishes progress as a `Float`, and the reader's target is computed
+  // from that. Compare in the same space: 0.3 through a `Float` is 0.30000001, which
+  // against the `Double` 0.3 would read as a step up.
   private fun asPublishedProgress(
     displayed: Double,
   ): Double = displayed.toFloat().toDouble()
 
-  /** Whether the frame pump is alive. Readable from any thread. */
   val isFramePumpArmed: Boolean
     get() = pump.isArmed
 
-  /**
-   * What the last a11y step probe did, as one line. The probe cannot answer
-   * synchronously - it has to run on the UI thread, and a Nitro method may not
-   * block for it - so it writes what happened here and JS reads it back, hence
-   * `@Volatile`.
-   */
+  // Written on the UI thread by the test probe and read from JS, hence `@Volatile`.
   @Volatile var accessibilityStepReport: String = ""
 
-  /**
-   * How many a11y step probes have reported, used to number their reports.
-   *
-   * Written on the UI thread, which is the only thread a probe runs on (the seam
-   * may not block for it), and read only to format the string above.
-   */
   var accessibilityStepCount = 0
 
   /**
-   * A drag began, and reports the value it began from.
-   *
-   * Two things open a drag: [sliderPressWatcher] when a finger goes down on the
-   * control - a touch owns a gesture whether or not it ever moves the thumb - and
-   * [dragTo] for a value that arrives without one, which is how a hardware-keyboard
-   * arrow step and anything else that writes a value without a touch still get the
-   * gesture's opening callback.
+   * Opens a drag and reports the value it began from. Called on touch-down, and by [dragTo]
+   * for a value that arrives without a touch (a keyboard step).
    */
   fun beginDrag() {
     if (dragging) {
@@ -351,18 +226,8 @@ internal class SliderModel(
     onSlidingStart?.invoke(displayed, state.nativeEvents.toDouble())
   }
 
-  /**
-   * The finger moved. Displays at once, emits on the next frame.
-   *
-   * [displayed] is written here rather than at delivery so the thumb is under the
-   * finger with no extra frame of latency, and so the quantised value - not the
-   * raw position the control passed in, which has been through a float - is what
-   * the next recomposition reads back.
-   */
+  /** Displays the quantised value at once; the change is emitted on the next frame. */
   fun dragTo(raw: Double) {
-    // The value can arrive with no finger on the control (a keyboard step), so a
-    // drag opens here too. A touch opened its own in [sliderPressWatcher], and
-    // [beginDrag] is guarded, so the two are one start and not two.
     if (!dragging) {
       beginDrag()
     }
@@ -373,14 +238,8 @@ internal class SliderModel(
   }
 
   /**
-   * The finger lifted. The final value always reaches JS.
-   *
-   * Idempotent, and the guard is the event contract: only a drag that started may
-   * end, so a late end after a [cancelDrag] cannot deliver a complete to the next
-   * owner of a recycled instance. Three things call it, and the first two of them
-   * race by design: Material 3 calls its `onValueChangeFinished` for both a tap and
-   * a drag, and [sliderPressWatcher] calls it when the finger leaves, which is what
-   * reports the end of a touch that never reached the control's own gesture.
+   * Ends the drag and delivers the final value. Idempotent: Material's
+   * `onValueChangeFinished` and the press watcher can both call it for one gesture.
    */
   fun endDrag() {
     if (!dragging) {
@@ -392,11 +251,7 @@ internal class SliderModel(
     onSlidingComplete?.invoke(displayed, state.nativeEvents.toDouble())
   }
 
-  /**
-   * Abandon an in-flight drag without reporting it: the view is being recycled or
-   * dropped, and a callback delivered to whoever owned this instance before is a
-   * callback delivered to the wrong app.
-   */
+  /** Abandons a drag without reporting it: the view is being recycled or dropped. */
   fun cancelDrag() {
     state.unreported = null
     dragging = false
@@ -412,24 +267,12 @@ internal class SliderModel(
     pump.stop()
   }
 
-  /**
-   * The frame tick: one event for everything the finger did since the last one.
-   *
-   * The callback removes itself when it runs, so this is a heartbeat only while a
-   * drag keeps sampling. It writes [state] and calls into JS, and writes no
-   * observed state: [displayed] already holds this value, written when the finger
-   * moved, and it can only hold it because no React write was applied in the
-   * meantime - [NitroUiControlledValue.unreported] refuses those. Calling
-   * `Snapshot.sendApplyNotifications()` here would be wrong twice over - it
-   * belongs to the props path ([NitroComposeHost.commit]), and there is nothing
-   * in this batch for anyone to see.
-   */
+  // The frame tick: one event for everything since the last one. Writes no observed state
+  // ([displayed] was written at sample time), so no apply notification is needed.
   private fun deliverUnreported() {
     val value = state.unreported ?: return
     state.unreported = null
-    // Exactly once per emitted event: this is what increments `nativeEvents`, and
-    // JS echoes the count back, so an increment nobody emitted would leave the
-    // handshake permanently behind and freeze every later `value` write.
+    // `user()` increments the event count JS echoes back, so call it once per emitted event.
     val eventCount = state.user(value)
     onChange?.invoke(value, eventCount.toDouble())
   }
@@ -458,25 +301,10 @@ internal class SliderModel(
 }
 
 /**
- * The Slider's host: [NitroComposeHost] plus this component's composable.
- *
- * [Component] is fixed for the lifetime of the view, which is why it lives in a
- * subclass rather than being handed in as a lambda.
- */
-/**
- * The library's `SliderColors`, so a tinted Slider costs one object per
- * (colour scheme, tint) instead of one per recomposition.
- *
- * A copy of `SwitchColorsCache` for the rule main added to
- * `docs/architecture/core.md` ("Shared objects"): a hosted control is its own
- * composition, so `remember` shares nothing between controls, and
- * `SliderDefaults.colors(...)` is a factory that builds a fresh object per call -
- * once per recomposition per mounted Slider, on the UI thread, in the middle of
- * what D15 measures. `SliderColors` is an interface in Material 3 1.4 with no
- * `equals`, so there is not even a cheap comparison to fall back on.
+ * Slider colours per (colour scheme, tint). Process-wide because every hosted control is
+ * its own composition, and `SliderDefaults.colors(...)` builds a new object per call.
  */
 private object SliderColorsCache {
-  /** Tints to remember before starting over. See the Switch's cache. */
   private const val MAX_TINTED_ENTRIES = 8
 
   private var scheme: ColorScheme? = null
@@ -510,7 +338,7 @@ private object SliderColorsCache {
     entries[tint] = colors
   }
 
-  /** Drop what a different scheme invalidates. Called with the lock held. */
+  // Call with the lock held.
   private fun adopt(scheme: ColorScheme) {
     if (this.scheme === scheme) {
       return
@@ -521,11 +349,6 @@ private object SliderColorsCache {
   }
 }
 
-/**
- * The Slider's colours for [tint] (an ARGB int, or `null` for the scheme's own),
- * served by [SliderColorsCache]; the Switch's copy of this reasoning is in
- * `HybridNitroUiSwitch.kt`, including why the composable call stays on the miss.
- */
 @Composable
 private fun sliderColors(tint: Int?): SliderColors {
   val scheme = MaterialTheme.colorScheme
@@ -549,24 +372,11 @@ private class SliderHost(
   activity: Activity?,
   model: SliderModel,
 ) : NitroComposeHost<SliderModel>(context, activity, model) {
-  /** The platform's own answer to "can a reader receive events right now?". */
   private val systemAccessibility =
     context.getSystemService(AccessibilityManager::class.java)
 
-  /**
-   * Hand an accessibility event to the platform only when it can accept one.
-   *
-   * [HybridNitroUiSlider.nuiTestAccessibilityStep] asks Compose to build its
-   * semantics tree with no reader connected - that is how a harness reaches the
-   * action a reader would use. Compose then announces every later semantics
-   * change up this view's parent chain, and [AccessibilityManager] answers an
-   * announcement it has no recipient for with
-   * `IllegalStateException: Accessibility off. Did you forget to check that?`
-   * rather than with a refusal, which takes the app down mid-test. Refusing here
-   * is the outcome the platform was reaching anyway - no reader, no recipient -
-   * without the exception, and it is inert when a reader really is connected,
-   * because then the check passes and [super] runs.
-   */
+  // The accessibility test probe turns Compose semantics on with no reader connected, and
+  // `AccessibilityManager` throws for an event sent while accessibility is off.
   override fun requestSendAccessibilityEvent(
     child: View,
     event: AccessibilityEvent,
@@ -577,22 +387,13 @@ private class SliderHost(
     return super.requestSendAccessibilityEvent(child, event)
   }
 
-  /**
-   * A `<Host>` composes this control (H2a).
-   *
-   * The same allowlist line the Switch has (`HybridNitroUiSwitch.kt`), with the
-   * matching JS row in `src/components/Host/HostChildren.ts`. What the gesture costs
-   * inside a shared composition is measured, not assumed: `docs/components/host.md`.
-   */
   override val isHostable: Boolean
     get() = true
 
   @Composable
   override fun Component(model: SliderModel) {
-    // Everything that decides what the control *is* is read in [SliderTrack],
-    // including the value a drag moves, so a drag frame invalidates one
-    // composable rather than everything around it (`docs/architecture/core.md`,
-    // §11 Recomposition scoping).
+    // The dragged value is read only inside [SliderTrack], so a drag frame recomposes
+    // just that composable.
     SliderTrack(
       model = model,
       enabled = model.enabled,
@@ -601,10 +402,6 @@ private class SliderHost(
   }
 }
 
-/**
- * The one composable that reads the value a drag moves. Everything else in this
- * component reads props that only change at the ends of a gesture.
- */
 @Composable
 private fun SliderTrack(
   model: SliderModel,
@@ -615,37 +412,15 @@ private fun SliderTrack(
   val label = model.accessibilityLabel
   val range = trackRange(model.minimumValue, model.maximumValue)
   val ticks = model.steppedTicks()
-  // The state-based overload (material3 1.5 deprecates the value-based one), set up
-  // exactly as that deprecated overload did internally, so nothing a user can see or
-  // a test can read moves: one `SliderState` per (steps, range) - not
-  // `rememberSliderState`, which never re-keys, so a new `step` or range prop would
-  // keep the old track - and the displayed value written into it on every
-  // composition, which is what makes the Slider follow the model.
-  //
-  // It is made *here* rather than inside the `Box` because the watcher on the `Box`'s
-  // modifier has to read it: a modifier is built before its content lambda runs, so a
-  // state created in the content would not exist yet. It is also what says whether
-  // Material 3 has taken a touch as a drag - see [sliderPressWatcher].
+  // One `SliderState` per (steps, range): `rememberSliderState` never re-keys, so it would
+  // keep the old track after a `step` or range change. Created here, not inside the `Box`,
+  // because the press watcher on the `Box`'s modifier reads it.
   val sliderState = remember(ticks, range) { SliderState(displayed.toFloat(), ticks, range) }
   sliderState.value = displayed.toFloat()
-  // One accessibility node, whose progress action belongs to native.
-  //
-  // `clearAndSetSemantics` rather than an extra `semantics { }` beside M3's own:
-  // M3's `sliderSemantics` publishes a `setProgress` that moves by a twentieth of
-  // the range, and two nodes offering that action on one control is an
-  // ambiguity - plus, on a range that does not end on a step, M3's version
-  // quantises back to where it started (`SliderModel.accessibilityStepToward`).
-  // Clearing the subtree leaves exactly one node, publishing exactly one rule.
-  //
-  // It has to *say* what it is, too. M3's Slider (1.4 and 1.5) publishes a `setProgress`,
-  // a `contentDescription` and a percentage `stateDescription`, but no progress
-  // range - so clearing takes away the action and leaves the range to be stated
-  // here. The range is what the accessibility delegate reads to decide where a
-  // scroll forward lands (`performActionHelper` divides it into strides), so it
-  // has to be this Slider's real range and current value.
+  // One accessibility node whose progress action is native's. Material's own `setProgress`
+  // would be a second node with a different rule. Material publishes no progress range,
+  // and the accessibility delegate needs one to compute a scroll target, so it is stated.
   Box(
-    // The watcher is on the control's own box, so the gesture it reports is exactly
-    // the box the control draws - 48 dp of touch target included.
     modifier =
       Modifier.sliderPressWatcher(
         model = model,
@@ -657,19 +432,12 @@ private fun SliderTrack(
             contentDescription = label
           }
           progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
-          // The direction is decided against the progress *this* node publishes - the
-          // number the accessibility delegate built its target from, in the Float it
-          // publishes it in - because a press can reach the model before Compose has
-          // republished it. See [SliderModel.accessibilityStepToward] and
-          // [SliderModel.asPublishedProgress].
+          // Compare against the progress this node published: a press can arrive before
+          // Compose republishes it.
           setProgress { target ->
             model.accessibilityStepToward(target.toDouble(), publishedProgress = displayed)
           }
-          // M3's `sliderSemantics` is where `disabled()` lived, and the line above
-          // clears that subtree, so a disabled Slider has to restate it. Without it
-          // TalkBack reads an inert control - the action is refused - as a live,
-          // adjustable one. iOS marks the same element `.notEnabled`
-          // (`HybridNitroUiSlider.swift`).
+          // The clear also removed Material's `disabled()`, so restate it.
           if (!enabled) {
             disabled()
           }
@@ -679,12 +447,7 @@ private fun SliderTrack(
       state = sliderState,
       onValueChange = { position -> model.dragTo(position.toDouble()) },
       enabled = enabled,
-      // The end of the control's own gesture - and, for any drag it takes, the *only*
-      // end: Material 3 reaches here from the coroutine that drains its drag channel,
-      // so it is the one callback that is guaranteed to run after the last value of
-      // the gesture. The watcher opened the drag when the finger went down, so this
-      // closes a touch whether or not its value moved, and [SliderModel.endDrag]
-      // reports exactly once however many of them arrive.
+      // Material calls this after the last value of a gesture it took, tap or drag.
       onValueChangeFinished = { model.endDrag() },
       colors = colors,
     )
@@ -692,42 +455,10 @@ private fun SliderTrack(
 }
 
 /**
- * Watch the control's own touch stream, so a gesture is reported for a touch that
- * never moves the thumb.
- *
- * `onSlidingStart` used to come from the first value change, because Material 3 has
- * no drag-start callback. The cost was the touch that changes nothing: M3's tap path
- * only calls `onValueChange` when the value it computed differs
- * (`SliderState.dispatchRawDeltaInternal`), so a tap on the thumb - the most obvious
- * thing a person can do to a Slider - reported neither a start nor an end, since the
- * end was guarded on a drag having started.
- *
- * The observer is the control's own pointer input, which is the one signal that says
- * "a finger is on this control" without waiting for a value:
- *
- * - the down is read on [PointerEventPass.Initial], the pass before the one Material
- *   3 handles its tap and drag in, so no `onValueChange` can be emitted for a gesture
- *   whose start has not been emitted yet;
- * - the up is read on [PointerEventPass.Final], the pass after the one Material 3
- *   handles its gesture in - which makes the watcher the *first* of the two to see a
- *   release, not the last: Material 3 does not act on what it reads, it queues it.
- *   See the release below, and `docs/components/slider.md`.
- * - nothing is consumed: this observes the stream, it does not join the gesture.
- *
- * A touch that never reaches the control's own gesture - a scroll that takes the
- * stream over, or an `ACTION_CANCEL` - is closed here too: foundation answers both by
- * delivering the pointer as raised, so [awaitPointerEvent] reports it and an app told
- * `onSlidingStart` gets the `onSlidingComplete` it is owed. A *cancelled coroutine*
- * (the composition going away) is [SliderModel.cancelDrag]'s business and reports
- * nothing, which is also why this does not need a `finally`.
- *
- * The interaction source was the other candidate, and it is what the two signals
- * beside it are not: `DragInteraction.Start` and `SliderState.isDragging` both appear
- * only once a drag passes the touch slop (Material 3's tap path emits a press and
- * sets no drag state), so neither can report a touch-down; `PressInteraction.Press`
- * can, but it reaches an observer through a collector coroutine, so its order
- * against the control's own end callback is a dispatcher detail - and a start that
- * arrives after its end leaves a drag open for the life of the instance.
+ * Reports a gesture for every touch, including one that never moves the thumb: Material
+ * has no drag-start callback and calls `onValueChange` only when the value changes. The
+ * down is read on the Initial pass, before Material handles it; the up on the Final pass.
+ * Nothing is consumed.
  */
 @Composable
 private fun Modifier.sliderPressWatcher(
@@ -736,82 +467,38 @@ private fun Modifier.sliderPressWatcher(
   enabled: Boolean,
 ): Modifier {
   if (!enabled) {
-    // A disabled control takes no gestures, and Material 3 removes its own tap and
-    // drag modifiers for exactly that reason. A watcher left installed would report
-    // a start for a touch the control refuses. It is also taken away mid-drag, which
-    // cancels the loop below before any release reaches it, so the drag left open is
-    // closed by `afterUpdate` - the only place that still knows the control went
-    // inert.
+    // Material removes its own gesture modifiers when disabled. Removing this one mid-drag
+    // cancels the loop below, so `afterUpdate` closes that drag.
     return this
   }
-  // `remember(ticks, range)` in [SliderTrack] hands back a fresh [SliderState] when a
-  // `step` or range prop moves, while the block below is keyed on `model` and keeps
-  // running through that. Read whichever instance is current.
+  // [SliderTrack] makes a new `SliderState` when the step or range changes; read the
+  // current one.
   val latestState = rememberUpdatedState(state)
-  // Cancels with the composition, which is the same rule the loop follows: a
-  // composition that goes away reports nothing (see [SliderModel.cancelDrag]).
   val scope = rememberCoroutineScope()
   // `model` never changes for the life of the view, so the block is installed once.
   return this.pointerInput(model) {
     awaitEachGesture {
       try {
         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        // A finger is on the control. That is the gesture, whether or not the thumb
-        // ever moves: `onSlidingStart` opens here and nothing else opens a touch.
         model.beginDrag()
         var pointersDown = true
         while (pointersDown) {
           val event = awaitPointerEvent(PointerEventPass.Final)
-          // Every pointer is up, not merely the first one: a second finger joining
-          // and leaving does not end the gesture the first one opened, and a stream
-          // that still has a finger in it is not a release.
+          // Until every pointer is up: a second finger joining and leaving does not end
+          // the gesture.
           pointersDown = event.changes.fastAny { change -> change.pressed }
         }
-        // The finger left - and the last thing it did may not have happened yet.
-        //
-        // Material 3 does not apply what it reads. Foundation's `DragGestureNode`
-        // writes `DragStarted`, `DragDelta` and `DragStopped` into an unlimited
-        // channel as the events pass through, and a coroutine on the UI dispatcher
-        // drains that channel *after* the pointer pass has finished. So the `Final`
-        // pass that ends this loop runs before every one of them: at the release,
-        // `isDragging` is still true (only the drained `DragStopped` clears it) and
-        // the value carried by the batch that carried the release has not been
-        // applied. Ending the drag here would report the complete before the last
-        // change - and then the delta arriving behind it would find no drag open,
-        // `dragTo` would call `beginDrag` again, and one gesture would read back
-        // `start, change, complete, start, change, complete`.
-        //
-        // So a drag Material 3 has taken, it ends. Its `onDragStopped` (material3
-        // 1.5) is `setDragging(false)` followed by `onValueChangeFinished()`, both
-        // from that drained coroutine - the value first, the end second, which is the
-        // only order an app can rely on. `processDragCancel` reaches the same end, so
-        // a stream a parent takes over mid-drag is closed too.
-        //
-        // `isDragging == false` at this point means either that Material 3 never took
-        // the touch (a tap on the thumb, which its own tap handler has already ended
-        // synchronously in the `Main` pass) or that the touch slop was crossed in the
-        // very batch that carried the release, where the whole queue - `DragStarted`
-        // included - is still unwritten. The two are indistinguishable from here, so
-        // the end is *launched* rather than called: on plain `Dispatchers.Main`, never
-        // `.immediate`, which would run it inline and lose the race all over again. A
-        // plain dispatch lands behind every coroutine foundation has already queued,
-        // Material 3's drain among them. [SliderModel.endDrag] is idempotent, so it
-        // reports only in the case where nobody else did.
+        // Material queues drag events and applies them after this pointer pass, so the last
+        // value may not have been applied yet. A drag Material took is ended by its own
+        // `onValueChangeFinished`. Otherwise the end is dispatched (not `.immediate`) so it
+        // lands behind anything Material has queued; `endDrag` is idempotent.
         if (!latestState.value.isDragging) {
           scope.launch(Dispatchers.Main) { model.endDrag() }
         }
       } catch (taken: GestureCancellationException) {
-        // Not how a parent takes the stream over: foundation answers a hand-over and an
-        // `ACTION_CANCEL` alike with a synthetic event whose pointers are raised, on
-        // all three passes, which the loop above reads as a release and closes the
-        // gesture normally. This is for what is left - a gesture cancelled from inside
-        // the pointer-input machinery rather than reported as lifted - and it is here so
-        // that a control which has reported a start can never leave it open. The
-        // exception is rethrown because [awaitEachGesture] owns recovering the stream.
-        // A cancelled *composition* cancels this coroutine from outside, which no path
-        // here reports on: `prepareForRecycle`/`onDropView` cancel the drag themselves
-        // and report nothing, because a callback into whatever is mounted next is not
-        // ours to send.
+        // A takeover by a parent or an `ACTION_CANCEL` arrives as a release and is handled
+        // above. This is a cancellation from inside pointer input: close the reported
+        // gesture, and rethrow because `awaitEachGesture` recovers the stream.
         model.endDrag()
         throw taken
       }
@@ -819,14 +506,7 @@ private fun Modifier.sliderPressWatcher(
   }
 }
 
-/**
- * The range to hand M3, as a valid non-empty float range.
- *
- * Material 3 divides by the width of this range, so an empty one would put NaN in
- * the thumb offset, and an inverted one is app data rather than a crash. Such a
- * range has one value - the minimum, which stays inside what is passed either
- * way - so the thumb sits at an end and every interaction lands back on it.
- */
+/** A valid, non-empty range: Material divides by its width, and an empty one gives NaN. */
 private fun trackRange(
   minimum: Double,
   maximum: Double,
@@ -846,7 +526,6 @@ private fun trackRange(
   return if (widened.isFinite()) low..widened else 0f..1f
 }
 
-/** The Hybrid View React renders as `NitroUiSlider`. */
 class HybridNitroUiSlider(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiSliderSpec(), RecyclableView {
@@ -854,59 +533,29 @@ class HybridNitroUiSlider(
   private val model = SliderModel()
   private val host = SliderHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
   init {
     host.wantsContentSize = true
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
-    // The backstop; `NitroUiDeclaredFallbacks` registers this at startup. A cold
-    // first Slider with no declared fallback is laid out 0 tall (T14, D17).
+    // A backstop: the fallback is normally declared at startup, before any view exists.
     declareFallback()
   }
 
   companion object {
-    /** This component's name in the sizing engine. */
+    // Must match the component name in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiSlider"
 
-    /**
-     * The size to lay a Slider out with before anything has been measured, in dp.
-     *
-     * Under a finite parent only the height is really ours: for a `fillWidth`
-     * control the shadow node replaces the width with the Yoga box's whenever that
-     * box is finite (`cpp/NitroUiIntrinsic.hpp:208`).
-     *
-     * The width is not a placeholder, though, because an unbounded parent is the one
-     * case where nothing replaces it - and since F3 nothing files a measured width
-     * into a `fillWidth` entry either, so a Slider in a horizontal scroller draws at
-     * this width on every frame, not "until its own measurement arrives". That is
-     * the case `docs/components/slider.md` documents and
-     * `hands an unbounded parent its declared width, not another instance's box`
-     * asserts; declare the width you want such a Slider to be (sizing.md SS5).
-     *
-     * The height is measured on the task's emulator, not read out of the spec
-     * (DECISIONS D14): Material 3's `Slider` measures **48 dp** tall as Compose
-     * lays it out here - the visible track is a few dp of that, and the rest is
-     * `minimumInteractiveComponentSize`, Material's 48 dp touch target, which the
-     * control includes in its own size. A box any smaller clips the thumb.
-     *
-     * 48 is also the number the harness asserts (`Slider.harness.tsx`'s
-     * `EXPECTED_HEIGHT`), and the first build of this component declared 40 -
-     * which the old clamped measurement could not contradict, because a box 40 dp
-     * tall reports 40 dp back. See `NitroUiMeasuredRoot`: the height has to be
-     * measured free for the declared number to be checkable at all.
-     */
+    // The size before anything is measured, in dp. Material's `Slider` measures 48 dp tall
+    // (its touch target). The width is used only under an unbounded parent, where it is
+    // the width the Slider draws at.
     private const val FALLBACK_WIDTH_DP = 328.0
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 
-    /**
-     * One JNI call per process. See `HybridNitroUiSwitch.declareFallback` for why
-     * this is called from `NitroUiDeclaredFallbacks` at package init rather than
-     * only from here, and for the atomic.
-     */
+    // Called at package init, before Fabric can measure, and again from `init`.
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
         return
@@ -928,8 +577,7 @@ class HybridNitroUiSlider(
       model.state.js?.let { Variant_NullType_Double.Second(it) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // Not visual on its own: `displayed` only follows once the event count says
-      // JS has caught up. See `afterUpdate()`.
+      // Not visual by itself: `displayed` follows in `afterUpdate()`, once JS has caught up.
       model.state.js = next.asSecondOrNull()
     }
 
@@ -938,9 +586,7 @@ class HybridNitroUiSlider(
       model.defaultValue?.let { Variant_NullType_Double.Second(it) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // Stored raw. `afterUpdate()` is where it becomes a value, because the range
-      // it has to be quantised against may arrive in the same batch, and Nitro
-      // does not order props inside one.
+      // Stored raw: the range to quantise against may arrive in the same batch, in any order.
       model.defaultValue = next.asSecondOrNull()
     }
 
@@ -997,9 +643,8 @@ class HybridNitroUiSlider(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double. Going via
-      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an
-      // opaque colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      // `processColor` passes the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, turning an opaque colour into `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.tintColor) {
         return
@@ -1053,8 +698,6 @@ class HybridNitroUiSlider(
       host.sizingInstanceId = if (next.isFinite()) next.toLong() else NitroUiSizing.NO_INSTANCE
     }
 
-  // The three callbacks are one contract, so they are wired the same way: store,
-  // never mark dirty, and never read back - a callback is not state.
   override var onValueChange: ((Double, Double) -> Unit)?
     get() = model.onChange
     set(next) {
@@ -1076,11 +719,7 @@ class HybridNitroUiSlider(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // `value`, `defaultValue`, `minimumValue`, `maximumValue` and `step` can all
-    // land in one batch, in any order, so none of them is interpreted until the
-    // batch is complete. A `value` of 0.3 is only a legal number once the range it
-    // belongs to is known - reading it in the `value` setter would mean quantising
-    // against last batch's range.
+    // Value, range and step can arrive in one batch in any order, so quantise only here.
     model.state.js?.let { js ->
       val quantised = model.quantize(js)
       if (quantised != js) {
@@ -1096,30 +735,19 @@ class HybridNitroUiSlider(
         host.markDirty()
       }
     }
-    // The handshake decides whether React's write wins over what the user just
-    // dragged to - which mid-drag it legitimately does not (§11).
     if (model.state.reconcile()) {
       model.displayed = model.state.displayed
       host.markDirty()
     }
-    // A range or step that moved under an existing value can leave the shown value
-    // outside it. The same rule, and idempotent, so a value that is already legal
-    // - including one a drag is holding - comes back unchanged.
+    // A range or step change can leave the shown value outside the range.
     val shown = model.quantize(model.state.displayed)
     if (shown != model.state.displayed) {
       model.state.displayed = shown
       model.displayed = shown
       host.markDirty()
     }
-    // A control that goes inert mid-drag has to close that drag itself, because
-    // nothing else can: `enabled == false` removes this component's watcher and
-    // Material 3's tap and drag modifiers with it, and removing a `pointerInput`
-    // cancels its loop with a plain cancellation - no release, no `onValueChangeFinished`
-    // either, since a detached `DraggableNode` returns from `onDragStopped` before
-    // reaching it. The drag would stay open, the frame pump would stay armed, and the
-    // next gesture after a re-enable would report a complete with no start behind it.
-    // Last in the batch so an app is told the value before the end, and reported -
-    // not cancelled - because the app asked for this and is still there to hear it.
+    // Disabling removes the gesture modifiers, which cancels an open drag without any end
+    // callback. Close it here, last, so the app hears the value before the end.
     if (!model.enabled && model.dragging) {
       model.endDrag()
     }
@@ -1128,11 +756,7 @@ class HybridNitroUiSlider(
 
   override fun prepareForRecycle() {
     host.tag = null
-    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
-    // marked the recycle: clearing it here would hide that mark.
-    // [SliderModel.reset] cancels the drag first: a recycled row that resumes
-    // somebody else's drag is a real bug, and the frame callback would still be
-    // posted to emit it.
+    // The host clears the perf id itself, after marking; the model's reset cancels any drag.
     host.prepareForRecycle()
   }
 
@@ -1146,26 +770,14 @@ class HybridNitroUiSlider(
 
   // MARK: - Methods
 
-  /**
-   * The size Compose measured for this Slider at the width Yoga gave it, in dp.
-   * Never calls into Compose, so it is safe on the JS thread (§1.4).
-   */
+  // Reads the host's cached size and never calls into Compose, so it is safe on the JS thread.
   override fun measureContent(): NitroUiSliderSize {
     val size = host.contentSize ?: return NitroUiSliderSize(0.0, 0.0)
     return NitroUiSliderSize(size.width, size.height)
   }
 
-  /**
-   * Drive one drag through the real interaction pipeline. Test-only; see the spec's
-   * doc comment for why it exists.
-   *
-   * `msPerStep` 0 runs every move in **one** main-thread turn, so no frame passes
-   * between them and no frame callback can run: a pipeline that emitted per move
-   * would report [steps] events here and reports one. With a positive `msPerStep`
-   * each move waits its turn on the looper, frames pass between them, and the same
-   * pipeline reports several - which is what stops the first case from passing for
-   * the wrong reason.
-   */
+  // Test-only. `msPerStep` 0 runs every move in one main-thread turn, so no frame can
+  // pass between them; a positive value lets frames pass between moves.
   override fun nuiTestDrag(
     to: Double,
     steps: Double,
@@ -1181,10 +793,7 @@ class HybridNitroUiSlider(
     steps: Int,
     msPerStep: Double,
   ) {
-    // A disabled control is inert: M3 does not call `onValueChange`, so a simulated
-    // drag must not either. Skipping here is what lets the harness assert "disabled
-    // emits nothing" at all, since the harness has no drag synthesiser to make the
-    // control itself move.
+    // Material does not call `onValueChange` when disabled, so a simulated drag must not either.
     if (!model.enabled) {
       return
     }
@@ -1224,19 +833,9 @@ class HybridNitroUiSlider(
     }
   }
 
-  /**
-   * Perform the platform's own adjust action on the node this control publishes:
-   * the `SetProgress` semantics action an a11y service reaches through
-   * `ACTION_SCROLL_FORWARD`/`BACKWARD`, with the target the Compose accessibility
-   * delegate computes for that gesture - the current progress plus or minus a
-   * twentieth of the published range. Test-only; see the spec's doc comment.
-   *
-   * There is deliberately **no fallback**: with no node offering the action, this
-   * does nothing and says so in the report. Calling
-   * [SliderModel.accessibilityStepToward] directly would move the value either way
-   * and prove nothing about the path TalkBack actually takes, which is the thing
-   * under test.
-   */
+  // Test-only. Performs the `SetProgress` action on the published node with the target the
+  // accessibility delegate would compute. No fallback: calling the model directly would
+  // not test the path TalkBack takes.
   override fun nuiTestAccessibilityStep(
     direction: Double,
   ) {
@@ -1250,20 +849,11 @@ class HybridNitroUiSlider(
 
   override fun nuiTestFramePumpArmed(): Boolean = model.isFramePumpArmed
 
-  /**
-   * What the last [runTestPointerStream] did. Written on the main thread and read by
-   * a synchronous Nitro call that may land on any other, hence the volatile.
-   */
+  // Written on the main thread, read by a Nitro call on any thread.
   @Volatile
   private var pointerStreamReport = "no pointer stream injected yet"
 
-  /**
-   * Counts the reports the probe has written, so the harness can wait for *this*
-   * stream rather than for the report to be non-empty. The same stream injected twice
-   * answers with a byte-identical line otherwise, and "has it changed yet?" is the only
-   * question a caller that posted the injection can ask (`reportAccessibilityStep`
-   * numbers its reports for the same reason).
-   */
+  // Numbers the reports, so a caller can tell a new report from an identical earlier one.
   private var pointerStreamCount = 0
 
   override fun nuiTestPointerStream(mode: Double) {
@@ -1274,30 +864,13 @@ class HybridNitroUiSlider(
 
   override fun nuiTestPointerStreamReport(): String = pointerStreamReport
 
-  /**
-   * Dispatch one canned pointer stream through this control's own view, so a test can
-   * say **which turn of the main looper** each event lands in.
-   *
-   * That is the whole reason this exists and the harness' press cannot stand in for
-   * it: `View.post` puts one Runnable in the queue per event, so a stream built that
-   * way always gives the app a turn between the last MOVE and the UP. A real finger
-   * on a busy frame does not - the batch that carries the release can carry a MOVE
-   * too, and Material 3 reads that delta into a channel it drains *later*. Which of
-   * the two callbacks wins the race is invisible from outside, and it is the contract
-   * of `onSlidingComplete`: an app told a drag ended must be able to read the value
-   * the drag ended on.
-   *
-   * The events go to `host.dispatchTouchEvent`, the same entry point the window uses,
-   * so the stream passes through the FrameLayout into the Compose view exactly as a
-   * finger's does. Nothing here calls into `SliderModel`: a probe that drove the model
-   * would test the probe (`nuiTestDrag` already does that, and says so).
-   */
+  // Test-only. Dispatches a canned pointer stream through the host view, controlling which
+  // main-looper turn each event lands in: a real release can share a batch with a MOVE,
+  // which per-event posting can never reproduce.
   private fun runTestPointerStream(mode: Int) {
     val width = host.width
     val height = host.height
     if (width <= 0 || height <= 0) {
-      // Without a laid-out view there is no point to touch, and the failure would
-      // otherwise look identical to a control that ignored the stream.
       pointerStreamReport =
         "#${++pointerStreamCount} mode=$mode: nothing to touch (${width}x$height)"
       return
@@ -1308,19 +881,13 @@ class HybridNitroUiSlider(
     val midY = height / 2f
     var dispatched = 0
 
-    // One post is one turn of the looper; the batches below put two events inside a
-    // single Runnable, which is the shape being asked about. Each turn re-checks the
-    // generation, so a test that unmounts mid-stream does not leave events arriving
-    // at whatever instance is mounted next.
+    // One post is one looper turn. Each turn re-checks the generation, in case the view
+    // was recycled.
     val turn: (() -> Unit) -> Unit = { body -> handler.post(Runnable { body() }) }
     val send = { action: Int, xs: FloatArray, pointerIndex: Int ->
       if (model.dragGeneration == generation) {
-        // The pointer arrays, not the `float[]` convenience overload: this one says
-        // what each pointer *is*, which is the only way a stream with two fingers in
-        // it says which of them a `POINTER_DOWN`/`POINTER_UP` is about. Position is
-        // identity here, and that matches what the batches below assume - the second
-        // finger is always the last entry, and the events after it leaves carry only
-        // the first.
+        // The pointer-array overload, because it identifies each pointer; the second
+        // finger is the last entry.
         val properties =
           Array(xs.size) { index ->
             MotionEvent.PointerProperties().apply {
@@ -1391,11 +958,7 @@ class HybridNitroUiSlider(
         }
       }
       3 -> {
-        // The harder shape: the touch slop is crossed in the very batch that carries
-        // the release, so at the moment the watcher reads the finger up, everything
-        // Material 3 would do with this gesture - `DragStarted` first - is still
-        // unwritten in its channel. One start and one complete, or the deferral in
-        // [sliderPressWatcher] is not deferring far enough.
+        // The touch slop is crossed in the same batch as the release.
         turn {
           send(MotionEvent.ACTION_DOWN, floatArrayOf(at(0.30)), 0)
           send(MotionEvent.ACTION_MOVE, floatArrayOf(at(0.55)), 0)
@@ -1428,35 +991,23 @@ class HybridNitroUiSlider(
   }
 
   private fun runTestAccessibilityStep(up: Boolean) {
-    // A hosted control's semantics live in the *Host's* Compose view (that is what a
-    // Host is), so the search starts at the view that owns the composition rather than
-    // at this one. Without this the probe answers "no Compose root" for a control that
-    // is composed perfectly well - and the answer would be a lie about the control.
+    // A hosted control's semantics live in the Host's Compose view, so search from there.
     val compositionOwner = if (host.isHostedByParent) host.parent as? View else null
     val root = findComposeRoot(compositionOwner ?: host)
     if (root == null) {
       reportAccessibilityStep("no Compose root (RootForTest) under the host")
       return
     }
-    // Compose builds its semantics tree only while an accessibility service is
-    // connected, and a harness run has none. This is how Compose's own tests ask
-    // for the tree; it stays on for this view afterwards, which a test-only seam
-    // may do. It has to come first: the owner is a field that only exists once
-    // semantics are enabled, so reading it before this reads null.
+    // Compose builds semantics only while an accessibility service is connected. Must come
+    // first: the semantics owner is null until semantics are enabled.
     root.forceAccessibilityForTesting(true)
-    // Declared non-null, nullable in fact - the field behind it is null until
-    // semantics exist - so it is read into a nullable val rather than compared.
+    // Declared non-null, but null until semantics exist.
     val owner: SemanticsOwner? = root.semanticsOwner
     if (owner == null) {
       reportAccessibilityStep("no SemanticsOwner, even after forcing accessibility on")
       return
     }
-    // The merged tree, because that is the tree a reader is given: a node whose
-    // subtree was cleared by `clearAndSetSemantics` is a merging boundary, so the
-    // merged walk stops at ours and never shows the wrapped M3 `Slider`'s own node.
-    // The unmerged walk shows both - two nodes publishing `SetProgress`, only one
-    // of them carrying this control's rule - which is exactly the ambiguity the
-    // check below reports when it appears.
+    // The merged tree is what a reader sees: `clearAndSetSemantics` hides Material's own node.
     val nodes = owner.getAllSemanticsNodes(mergingEnabled = true)
     val candidates = nodes.filter { it.config.contains(SemanticsActions.SetProgress) }
     val node = candidates.firstOrNull()
@@ -1468,19 +1019,10 @@ class HybridNitroUiSlider(
       return
     }
     if (candidates.size > 1) {
-      // Two nodes offering one action is the ambiguity `clearAndSetSemantics`
-      // exists to remove; saying so here is what stops a passing test from hiding
-      // a control whose *other* action is the wrong rule. Inside a Host this can also
-      // mean what it says literally: two hosted Sliders share one semantics tree, and
-      // the probe cannot tell them apart from the tree, so it refuses to guess.
+      // Inside a Host, two Sliders share one semantics tree and cannot be told apart here.
       reportAccessibilityStep("ambiguous: ${candidates.size} nodes publish SetProgress")
       return
     }
-    // Whether the node the reader is handed carries the `Disabled` flag. `SliderTrack`
-    // owns this via `if (!enabled) disabled()`; `clearAndSetSemantics` clears M3's own
-    // `sliderSemantics` (where that flag used to come from), so this is the one place
-    // the harness can see whether a disabled Slider still tells a reader it is
-    // disabled rather than looking like a live, adjustable control.
     val nodeDisabled = node.config.contains(SemanticsProperties.Disabled)
     val range = node.config.getOrElseNullable(SemanticsProperties.ProgressBarRangeInfo) { null }
     if (range == null) {
@@ -1496,10 +1038,7 @@ class HybridNitroUiSlider(
       )
       return
     }
-    // The delegate's own stride for a scroll forward/back, from
-    // `performActionHelper`: the range divided by the tick count plus the two
-    // ends, or into twenty when there are no ticks. Sent from the progress the
-    // node publishes - the delegate's start, not the model's.
+    // The delegate's stride for a scroll: the range over (ticks + 1), or over 20 without ticks.
     val width = range.range.endInclusive - range.range.start
     val stride =
       if (range.steps > 0) {
@@ -1518,20 +1057,12 @@ class HybridNitroUiSlider(
   }
 
   private fun reportAccessibilityStep(report: String) {
-    // The counter makes every report a new string. Without it, two steps that do
-    // the same thing - the no-op at a bound, or a step on a one-value range - are
-    // byte-identical, and a harness waiting for "the report changed" cannot tell
-    // "the probe ran and nothing moved" from "the probe has not run yet".
+    // Numbered, so two identical outcomes still produce different report strings.
     model.accessibilityStepCount += 1
     model.accessibilityStepReport = "#${model.accessibilityStepCount} $report"
   }
 
-  /**
-   * The Compose view under [root], found as [RootForTest] rather than as
-   * `AndroidComposeView`: that class is internal to Compose's own module, so the
-   * public interface it implements is the only legal handle on it - which is also
-   * the one that carries [RootForTest.getSemanticsOwner].
-   */
+  // `AndroidComposeView` is internal; `RootForTest` is the public interface it implements.
   private fun findComposeRoot(root: View): RootForTest? {
     val queue = ArrayDeque<View>()
     queue.add(root)

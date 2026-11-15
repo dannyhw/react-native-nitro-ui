@@ -17,45 +17,41 @@ type HybridRefHandler = (view: NitroUiContextMenuHandle) => void;
 /**
  * The read side of the native ContextMenu - what a `hybridRef` callback gets.
  *
- * Read-only for the reason every handle here is (DECISIONS D14). The methods are the
- * test seams of `ContextMenu.nitro.ts`; each hops to the UI thread itself, and the
- * report reads a published snapshot, so none of them blocks JS.
+ * Read-only: a prop written from JS never commits. The methods are test seams;
+ * each hops to the UI thread itself, and the report reads a published snapshot,
+ * so none of them blocks JS.
  *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
+ * @internal Hybrid View types are not published; this alias exists so
  * `hybridRef` can be typed for this repo's harness and benchmarks.
  */
 export interface NitroUiContextMenuHandle {
-  /** Whether the menu is refused. */
   readonly disabled: boolean;
-  /** The header React sent, or `null`. */
   readonly title: string | null;
-  /** The preview radius React sent, or `null`. */
   readonly previewCornerRadius: number | null;
-  /** Test-only - see `NitroUiContextMenuMethods.nuiTestSelectRow`. @internal */
+  /** Test-only. @internal */
   nuiTestSelectRow(id: string): void;
-  /** Test-only - see `NitroUiContextMenuMethods.nuiTestMenuProbe`. @internal */
+  /** Test-only. @internal */
   nuiTestMenuProbe(): void;
   /**
-   * Test-only - see `NitroUiContextMenuMethods.nuiTestMenuPixelProbe`. @internal
-   * Samples the open menu's window; `no popup` / `no pixels` are the refusals.
+   * Test-only: samples the open menu's window for `color`; `no popup` and
+   * `no pixels` are the refusals. @internal
    */
   nuiTestMenuPixelProbe(color: number): void;
   /** Test-only - what that probe found. @internal */
   nuiTestMenuPixelReport(): string;
-  /** Test-only - see `NitroUiContextMenuMethods.nuiTestContextMenuReport`. @internal */
+  /** Test-only. @internal */
   nuiTestContextMenuReport(): string;
-  /** Test-only - see `NitroUiContextMenuMethods.nuiTestA11yLongClick`. @internal */
+  /** Test-only. @internal */
   nuiTestA11yLongClick(): void;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with callbacks
- * in Nitro's `{ f: … }` wrapper (DECISIONS D7, D7b). `ContextMenu.tsx` is the
- * friendly API.
+ * Props of the raw host component: every spec prop, always sent, with callbacks
+ * in Nitro's `{ f: … }` wrapper.
  *
- * Unlike a leaf control's, these sit *beside* React Native's own `ViewProps` rather
- * than replacing any of them: `testID`, `style` and the accessibility props are the
- * wrapper's own, because the wrapper is the view React Native styles.
+ * Unlike a leaf control's, these sit beside React Native's own `ViewProps`
+ * rather than replacing any: `testID`, `style` and the accessibility props are
+ * the wrapper's own, because the wrapper is the view React Native styles.
  */
 export interface NativeNitroUiContextMenuProps extends HybridViewProps {
   rows: NitroUiMenuRow[];
@@ -70,8 +66,8 @@ export interface NativeNitroUiContextMenuProps extends HybridViewProps {
 }
 
 /**
- * The host component for the `NitroUiContextMenu` Hybrid View. Only the props type is
- * corrected here, as for every other control (`NativeNitroUiMenu.ts`).
+ * The host component for the `NitroUiContextMenu` Hybrid View. The cast corrects
+ * only the props type.
  */
 export const NativeNitroUiContextMenu = getHostComponent<
   NativeNitroUiContextMenuProps,

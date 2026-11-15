@@ -1,8 +1,3 @@
-// Releases are cut by Changesets (DESIGN.md D27) and staged on npm (D28). These
-// assertions keep that setup honest: the workspaces that must never be versioned
-// or published stay excluded, the changelog stays in the shape the release notes
-// are read out of, and the workflows keep the rights they need and no more than
-// that.
 import { describe, expect, it } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -99,11 +94,9 @@ function changelogWith(headings) {
 }
 
 /**
- * The changelog invariant the release notes depend on: `0.1.0` stays the last
- * version heading, and above it every heading is a version, newest first —
- * because Changesets prepends, and the catch-up job reads a version's section
- * out of this file. Returns what is wrong, so a test can assert `[]` and see the
- * reason when it is not.
+ * `0.1.0` stays the last version heading, and above it every heading is a
+ * version, newest first: Changesets prepends, and the catch-up job reads a
+ * version's section out of this file. Returns what is wrong.
  */
 function changelogProblems(changelog) {
   const headings = changelogHeadings(changelog);
@@ -133,10 +126,6 @@ function changelogProblems(changelog) {
 
 describe('publishing', () => {
   it('has no way to publish from the repo', () => {
-    // Publishing is not a thing a checkout can do: CI stages, and a person
-    // approves on npmjs.com. `changeset publish` would try `npm publish`, which
-    // the trusted publisher rejects, and `npm stage publish` needs an
-    // identity a contributor's laptop must not carry.
     expect(pkg.scripts['release:publish']).toBeUndefined();
     const forbidden = /\bchangeset (publish|tag|release)\b/;
     for (const [name, script] of Object.entries(pkg.scripts)) {
@@ -160,38 +149,28 @@ describe('changesets configuration', () => {
   it('versions from main and publishes publicly', () => {
     expect(config.baseBranch).toBe('main');
     expect(config.access).toBe('public');
-    // Changesets writes package.json and CHANGELOG.md, and `bun run format`
-    // checks them afterwards: `prettier` makes it run this repo's prettier with
-    // this repo's config instead of its own defaults.
+    // `prettier` makes Changesets format what it writes with this repo's
+    // prettier and config instead of its own defaults.
     expect(config.format).toBe('prettier');
   });
 
   it('writes the changelog without needing a GitHub token', () => {
-    // @changesets/changelog-github refuses to run at all when GITHUB_TOKEN is
-    // missing. Inside Actions the action exports one, so it would work there —
-    // but it would make `bun run release:version` un-runnable on a laptop, and
-    // a changelog generator is not worth a token on the release path. The cost:
-    // entries carry a plain short sha, which GitHub links in a release body and
-    // not in a rendered CHANGELOG.md.
+    // @changesets/changelog-github refuses to run without GITHUB_TOKEN, which
+    // would make `bun run release:version` impossible to run locally.
     expect(config.changelog).toBe('@changesets/changelog-git');
     expect(pkg.devDependencies['@changesets/changelog-github']).toBeUndefined();
   });
 
   it('lists the library itself as a workspace, which is what makes it versionable', () => {
-    // Changesets only versions packages inside the workspace globs; the root
-    // package.json is only reported by @manypkg/get-packages when `.` is one of
-    // them. Drop the entry and `changeset version` fails with "not in the
-    // workspace" — see the R6 report. It is also why Changesets would name its
-    // tags `react-native-nitro-ui@0.1.1`: with `.` present, manypkg reports the
-    // tool as `bun`, and only `root` gets a plain `vX.Y.Z`.
+    // Changesets only versions packages inside the workspace globs, and the
+    // root package.json is only one of them when `.` is listed.
     expect(pkg.workspaces[0]).toBe('.');
     expect(pkg.devDependencies['@changesets/cli']).toMatch(/^\^3/);
   });
 
   it('ignores every workspace that is not the published package', () => {
-    // `.` is the library itself (see the workspace test above); everything else
-    // in `workspaces` must be excluded from versioning by name. Being `private`
-    // only stops the publish — Changesets would still bump and tag it.
+    // Being `private` only stops the publish: Changesets would still bump and
+    // tag a workspace that is not ignored by name.
     const workspaceDirs = pkg.workspaces.filter((dir) => dir !== '.');
     expect(workspaceDirs.length).toBeGreaterThan(0);
     expect(pkg.workspaces).toContain('.');
@@ -205,7 +184,6 @@ describe('changesets configuration', () => {
     }
     expect([...config.ignore].sort()).toEqual(ignored.sort());
 
-    // Belt and braces: private packages are neither versioned nor tagged.
     expect(config.privatePackages).toEqual({ version: false, tag: false });
   });
 });
@@ -216,11 +194,6 @@ describe('changelog shape', () => {
   });
 
   it('accepts what the first Version Packages merge will write', () => {
-    // The old guard asserted 0.1.0 was the *first* heading and the only one, so
-    // the first version Changesets ever cut — `## 0.1.1` above `## 0.1.0` —
-    // would have failed `bun run check` and blocked the release forever. Nothing
-    // runs on that pull request (it is opened with GITHUB_TOKEN), so the post-
-    // merge release run is its only gate, and it has to accept this.
     expect(
       changelogProblems(changelogWith(['0.1.1', '0.1.0 — 2026-10-26']))
     ).toEqual([]);
@@ -232,8 +205,6 @@ describe('changelog shape', () => {
   });
 
   it('rejects a changelog that has lost the order the notes are read from', () => {
-    // Oldest on top: the catch-up job would still find the section, but every
-    // reader would take the wrong entry for the current release.
     expect(
       changelogProblems(changelogWith(['0.1.0 — 2026-10-26', '0.1.1']))
     ).toEqual([expect.stringContaining('must be 0.1.0')]);
@@ -317,8 +288,6 @@ describe('release workflow', () => {
     const stage = job(releaseWorkflow, 'stage');
     expect(stage).toMatch(/npm stage publish/);
     expect(stage).not.toMatch(/\bnpm publish\b/);
-    // State, not memory: already live means nothing to do, and npm's own
-    // "already known" answer is a success rather than a red run.
     expect(stage).toMatch(/npm view "\$PACKAGE@\$VERSION" version/);
     expect(stage).toMatch(/npm stage list/);
     expect(stage).toMatch(

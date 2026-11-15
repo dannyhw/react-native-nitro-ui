@@ -1,28 +1,5 @@
-//
-//  NitroUiIntrinsic.hpp
-//  react-native-nitro-ui
-//
-//  The Fabric half of intrinsic sizing (docs/architecture/sizing.md; design in
-//  docs/research/core-architecture.md §1.3).
-//
-//  `scripts/patch-nitrogen.mjs` swaps three generated aliases for these types:
-//
-//      using HybridXState               = nitroui::IntrinsicViewState<HybridXProps>;
-//      using HybridXShadowNode          = nitroui::IntrinsicShadowNode<Name, HybridXProps>;
-//      using HybridXComponentDescriptor = nitroui::IntrinsicComponentDescriptor<HybridXShadowNode>;
-//
-//  and adds one `bind(...)` line to the generated iOS `.mm` and Kotlin manager so
-//  each mounted instance's Fabric `State` reaches the sizing engine.
-//
-//  The rules this file exists to enforce:
-//   - `measureContent` is a pure C++ lookup - it never calls into SwiftUI or
-//     Compose, and never blocks (§1.4: a sync hop to main from a layout pass
-//     running under the commit lock deadlocks).
-//   - the *real* size is measured on the UI thread and pushed into state by the
-//     engine; this file only provides the typed push and the state to carry it.
-//   - Nitro's prop parsing and its `hasSameProps` identity optimisation are kept
-//     exactly as generated.
-//
+// The Fabric half of intrinsic sizing: the state, shadow node and component descriptor that
+// `scripts/patch-nitrogen.mjs` swaps in for the generated ones.
 
 #pragma once
 
@@ -45,9 +22,7 @@
 
 namespace margelo::nitro::nitroui {
 
-  // Not every translation unit that includes this has it (a generated file does,
-  // our own JNI door does not), and this is the same thing Nitro's own headers
-  // do - `react::` is a subnamespace of `facebook::`.
+  // Not every translation unit that includes this header already has it.
   using namespace facebook;
 
   using react::EventQueue;
@@ -60,11 +35,7 @@ namespace margelo::nitro::nitroui {
 
   // MARK: - State
 
-  /**
-   * Replaces `nitro::ViewPropsHolderState<TProps>`: the same props carrier
-   * (Android still hands it to the generated JNI state updater, which only ever
-   * calls `getProps()`), plus the size native measured for one configuration.
-   */
+  /// Nitro's props carrier plus the size native measured for one configuration.
   template <typename TProps>
   struct IntrinsicViewState final {
   public:
@@ -81,8 +52,7 @@ namespace margelo::nitro::nitroui {
       return _props;
     }
 
-    /// What native pushed, and the configuration it belongs to. Default-
-    /// constructed means "never measured" (`measured.valid() == false`).
+    /// Default-constructed means "never measured" (`measured.valid() == false`).
     NitroUiMeasuredSize measured{};
 
   public:
@@ -180,7 +150,6 @@ namespace margelo::nitro::nitroui {
    public:
     using Base::Base;
 
-    /// The props this node was generated for.
     using ConcreteProps = TProps;
 
     /// The descriptor registers the sizing binding under this name.
@@ -197,6 +166,8 @@ namespace margelo::nitro::nitroui {
 
     // MARK: LayoutableShadowNode
 
+    // A pure C++ lookup. It must never call into SwiftUI or Compose, or block: a sync hop to
+    // main from a layout pass running under the commit lock deadlocks.
     Size measureContent(const LayoutContext& /* layoutContext */, const LayoutConstraints& layoutConstraints) const override {
       const auto& props = this->getConcreteProps();
       NitroUiMeasuredSize measured = NitroUiSizingEngine::shared().measure(Name,
@@ -214,26 +185,16 @@ namespace margelo::nitro::nitroui {
 
    protected:
     /**
-     * Re-measure when the configuration or the pushed size changed, and not when
-     * a Switch was merely toggled. Without this, every props update would dirty
-     * Yoga's measurement of every instance (`YogaLayoutableShadowNode` returns
-     * `true` by default) and throw away the cached answer.
+     * Re-measure when the configuration or the pushed size changed, not on every props
+     * update: the default returns `true`, which throws away Yoga's cached measurement.
      *
-     * One prop turn is exempt: an instance the engine has already corrected
-     * (FIX2, D20, review S1 against `requiresFreshMeasure`). The correction commits
-     * as a new `State`, but React builds its next props clone without `.state` and
-     * copies the state of *its own* revision - the one made before the correction -
-     * which still carries the old size in both its Yoga measurement cache and its
-     * `layoutMetrics_`. RN would normally heal that through `progressState`, and our
-     * `adopt` defeats it: it mints a fresh, never-obsolete `State` on every props
-     * change, so the stale one is committed as the family's most recent. A clean
-     * clone is therefore committed at the superseded size with `measureContent`
-     * never reached to notice. Trusting React's revision there is what put a
-     * controlled Switch's `Toggle` outside the window (T15 Finding 1).
+     * An instance the engine has already corrected is the exception. React clones its own
+     * revision, made before the correction, and `adopt` commits that stale state as the most
+     * recent, so without a fresh measure the clone is laid out at the superseded size.
      */
     bool shouldNewRevisionDirtyMeasurement(const ShadowNode& /*sourceShadowNode*/, const ShadowNodeFragment& fragment) const override {
       if (fragment.state != nullptr) {
-        // Native pushed a size into state - that is the whole point.
+        // Native pushed a size into state.
         return true;
       }
       if (fragment.props == nullptr) {
@@ -241,16 +202,8 @@ namespace margelo::nitro::nitroui {
         // invalidates its own measure cache when the constraints move.
         return false;
       }
-      /**
-       * `YogaLayoutableShadowNode::completeClone` passes `*this` as the source
-       * node, so the node cannot be compared with itself (review S1). What is
-       * different is `fragment.props` versus the props the *state* still carries:
-       * `adopt` - which rebuilds the state from the new props - runs after this, so
-       * the state is still the previous one here.
-       */
-      // `StateData::getProps()` is typed as the base `Props`, so it needs the same
-      // narrowing cast nitrogen's own generated state updater uses: the state of
-      // this node always carries this component's props.
+      // The source node is `*this` here, so compare the incoming props with the ones the state
+      // still carries: `adopt` rebuilds the state only after this runs.
       const auto previous = std::static_pointer_cast<const ConcreteProps>(
           this->getStateData().getProps());
       const auto incoming =
@@ -268,36 +221,24 @@ namespace margelo::nitro::nitroui {
   // MARK: - Push
 
   /**
-   * The one place that writes a measured size into Fabric state.
-   *
-   * It re-reads the *most recent* state data inside the update callback, so a
-   * props update that raced this push is never rolled back (R9), and returns
-   * `nullptr` - cancelling the commit entirely - when the size already matches.
+   * The one place that writes a measured size into Fabric state. It re-reads the most recent
+   * state data inside the update callback, so a props update that raced this push is never
+   * rolled back, and returns `nullptr` (no commit) when the size already matches.
    */
   template <typename TShadowNode>
   inline void pushMeasuredSize(const NitroUiStateRef& state, const NitroUiMeasuredSize& measured, bool immediate) {
     using ConcreteState = typename TShadowNode::ConcreteState;
     using StateData = typename TShadowNode::ConcreteStateData;
 
-    // Narrow through `react::State`, which is what the engine was handed: it
-    // stores the state type-erased, so a `static_pointer_cast` straight from
-    // `const void` to the derived type would only work by accident of the base
-    // class layout (review N1).
+    // The engine stores the state type-erased from `react::State`, so cast back through it:
+    // a cast straight from `const void` to the derived type is right only by accident of layout.
     const auto asState = std::static_pointer_cast<const State>(state);
     const auto concrete = std::static_pointer_cast<const ConcreteState>(asState);
     if (concrete == nullptr) {
       return;
     }
-    /**
-     * `measured` is captured **by value**.
-     *
-     * RN documents the callback as able to run "from any thread any moment later"
-     * (`ConcreteState.h`), and for `Asynchronous` it *always* does: it runs on the
-     * JS thread after the sizing engine's `applyReports` has returned and freed the
-     * vector this size lives in. A `[&measured]` capture is a use-after-free on
-     * every correction past the immediate budget - 198 of 200 in a cold batch -
-     * that ASan sees and production only sometimes does (review B1).
-     */
+    // `measured` is captured by value: an `Asynchronous` update runs later on the JS thread,
+    // after the caller has freed the vector this size lives in.
     concrete->updateState(
         [measured](const StateData& oldData) -> react::StateData::Shared {
           if (oldData.measured.nearlyEquals(measured)) {
@@ -340,31 +281,19 @@ namespace margelo::nitro::nitroui {
                                                    state);
   }
 
-  /**
-   * The one conversion the platform glue needs: a Fabric `State` into the
-   * engine's type-erased handle. Used by the `bind` line
-   * `scripts/patch-nitrogen.mjs` adds to the generated iOS `.mm` and to the
-   * Android JNI unwrap.
-   */
+  /// Converts a Fabric `State` into the engine's type-erased handle.
   inline NitroUiStateRef eraseFabricState(const std::shared_ptr<const State>& state) {
-    // An implicit upcast: the engine only ever holds this to keep the `State`
-    // alive and to hand the pointer back to `pushMeasuredSize`, which casts it
-    // back to the concrete type.
+    // The engine holds this only to keep the `State` alive and to hand it back to
+    // `pushMeasuredSize`, which casts it back to the concrete type.
     return NitroUiStateRef{state};
   }
 
   // MARK: - Component descriptor
 
   /**
-   * `nitro::ViewComponentDescriptor` with the measured size carried across the
-   * state rebuild that a props update causes, on both platforms.
-   *
-   * Carrying it is the whole reason this exists: without it, the size native
-   * pushed would be dropped by the next props update and the control would jump
-   * back to the fallback. Running `adopt` on iOS too (not just Android, where
-   * Nitro needs it for prop delivery) is what lets `bindMeasuredInstance` read
-   * the instance id out of state on both platforms - RN's own
-   * `TextInputComponentDescriptor::adopt` does the same thing on both.
+   * `nitro::ViewComponentDescriptor` that carries the measured size across the state rebuild
+   * a props update causes; without that the control would jump back to its fallback size.
+   * `adopt` runs on iOS too, so `bindMeasuredInstance` can read the instance id from state.
    */
   template <typename TShadowNode>
   class IntrinsicComponentDescriptor final: public react::ConcreteComponentDescriptor<TShadowNode> {
@@ -384,10 +313,7 @@ namespace margelo::nitro::nitroui {
     }
 
    public:
-    /**
-     * A faster path for cloning props - identical to Nitro's, which reuses the
-     * caching copy constructor on the generated `Props`.
-     */
+    /// Identical to Nitro's: reuses the caching copy constructor on the generated `Props`.
     std::shared_ptr<const react::Props> cloneProps(const react::PropsParserContext& context, const std::shared_ptr<const react::Props>& props,
                                                    react::RawProps rawProps) const override {
       rawProps.parse(this->rawPropsParser_);
@@ -398,8 +324,7 @@ namespace margelo::nitro::nitroui {
       Base::adopt(shadowNode);
 
       auto& node = static_cast<TShadowNode&>(shadowNode);
-      // Start from the stable shared pointer stored by ShadowNode (the same
-      // dance Nitro does, for the same reason).
+      // Start from the stable shared pointer stored by ShadowNode.
       auto constBaseProps = node.getProps();
       auto constProps = std::static_pointer_cast<const Props>(constBaseProps);
       const StateData& previous = node.getStateData();

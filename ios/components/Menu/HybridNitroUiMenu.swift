@@ -1,25 +1,12 @@
-//
-//  HybridNitroUiMenu.swift
-//  react-native-nitro-ui
-//
-//  The Menu component: SwiftUI `Menu` on the core runtime, with a trigger that is
-//  a Button (`docs/tasks/Q1-menu-design.md` §2, amended by DECISIONS D29).
-//
-//  Structure is Button's - one model, one `NitroUIContent`, one host that is never
-//  recreated - and what is new here is that the control *presents* something, so
-//  the host needs containment (Picker's reasoning,
-//  `ios/components/Picker/HybridNitroUiPicker.swift:279-284`).
-//
+// The Menu component: SwiftUI's `Menu` with a Button-styled trigger. The control presents
+// something, so its host needs view-controller containment.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// What one row of the flattened `group` is.
-///
-/// The wrapper sends one ordered array (`Menu.tsx`'s `flattenGroup`): a submenu's
-/// items and a section's rows follow their parent and name it in `parentId`. The
-/// depth cap is one level (D29), so this is a two-level shape and not a tree.
+/// The wrapper sends one flat, ordered array: a submenu's items and a section's rows follow
+/// their parent and name it in `parentId`. Nesting is one level deep.
 enum MenuRowKind: String {
   case action
   case submenu
@@ -32,7 +19,7 @@ struct MenuActionItem {
   let title: String
   let disabled: Bool
   let destructive: Bool
-  /// A symbol name already checked to resolve, like Button's (`nil` renders no icon).
+  /// A symbol name already checked to resolve; `nil` renders no icon.
   let systemImage: String?
   /// The row's second line (`UIAction.subtitle`), or `nil` for none.
   let subtitle: String?
@@ -62,12 +49,8 @@ enum MenuTopEntry {
   case section(MenuSectionItem)
 }
 
-/// The wrapper's flat array, as a shape the content can draw without re-walking it.
-///
-/// Done once in the `rows` setter rather than in `body`: the array's identity only
-/// changes when the described menu changes (the wrapper caches it), but a commit can
-/// rebuild the view any time, and a re-parse per render would be work the model can
-/// do once.
+/// Parses the wrapper's flat array once, in the `rows` setter rather than in `body`, which
+/// can run on any commit.
 func parseMenuRows(_ rows: [NitroUiMenuRow]) -> [MenuTopEntry] {
   var children: [String: [MenuActionItem]] = [:]
   var top: [MenuTopEntry] = []
@@ -78,8 +61,7 @@ func parseMenuRows(_ rows: [NitroUiMenuRow]) -> [MenuTopEntry] {
       title: row.title,
       disabled: row.disabled,
       destructive: row.destructive,
-      // Same rule as Button's `systemImage`: a name that does not resolve would
-      // draw the missing-symbol placeholder and say nothing useful to VoiceOver.
+      // A name that does not resolve would draw the missing-symbol placeholder.
       systemImage: row.systemImage?
         .asType(String.self)
         .flatMap { UIImage(systemName: $0) == nil ? nil : $0 },
@@ -125,16 +107,14 @@ func parseMenuRows(_ rows: [NitroUiMenuRow]) -> [MenuTopEntry] {
         )
       )
     case .none:
-      // An unknown kind is a row the wrapper does not build. Say nothing and draw
-      // nothing rather than guess: a row that renders as the wrong thing is worse
-      // than a missing one, and the wrapper is the only writer.
+      // An unknown kind draws nothing: a row rendered as the wrong thing is worse than a
+      // missing one.
       break
     }
   }
   return top
 }
 
-/// State of one Menu. See ``NitroUiModel`` for why this is not `@Published`.
 final class MenuModel: NitroUiModel {
   var title: String = ""
   var variant: ButtonVariant = .filled
@@ -142,8 +122,7 @@ final class MenuModel: NitroUiModel {
   var disabled = false
   var tint: UIColor?
   var systemImage: String?
-  /// The Android icon string React sent. Stored, never drawn — see
-  /// ``HybridNitroUiMenu/androidIcon``.
+  /// The Android icon string. Stored, never drawn.
   var androidIcon: String?
   /// The items as React sent them, kept so the `rows` prop reads back what was set.
   var rawRows: [NitroUiMenuRow] = []
@@ -154,15 +133,14 @@ final class MenuModel: NitroUiModel {
   var testID: String?
   var accessibilityLabel: String?
   var sizingKey = ""
-  /// The picked row's id. A press is a gesture, not a value React owns, so there is
-  /// no handshake here - Button's reasoning (`HybridNitroUiButton.swift:139-142`).
+  /// Receives the picked row's id.
   var onSelect: ((String) -> Void)?
-  /// iOS never calls these two; see ``HybridNitroUiMenu/onOpen``.
+  /// Never called on iOS: SwiftUI's `Menu` does not report when it opens or closes.
   var onOpen: (() -> Void)?
   var onClose: (() -> Void)?
   var primaryAction: (() -> Void)?
 
-  /// How many rows a pick can name, for `nuiTestMenuReport()`.
+  /// How many rows a pick can name.
   var actionableRowCount: Int {
     var count = 0
     for entry in entries {
@@ -196,14 +174,8 @@ final class MenuModel: NitroUiModel {
     return nil
   }
 
-  /// A row was picked, however it was picked.
-  ///
-  /// A disabled row cannot be pressed, and a menu reports a pick and forgets it:
-  /// there is no value to store, so nothing else happens here. Nothing else happens
-  /// *after* here either, which is the other half of DECISIONS D32's order rule: on
-  /// Android `applyPick` reports the choice and then closes the popup, because the
-  /// close is a thing that happens there. On iOS we own no presentation, so `onClose`
-  /// never fires and there is no close to order the pick against.
+  /// A disabled row cannot be picked. A menu has no value to store, so a pick is only
+  /// reported.
   func applyPick(_ id: String) {
     guard let row = actionableRow(id: id), !row.disabled else { return }
     onSelect?(row.id)
@@ -214,9 +186,7 @@ final class MenuModel: NitroUiModel {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct MenuContent: NitroUIContent {
-  /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: MenuModel
 
   init(model: MenuModel) {
@@ -225,10 +195,7 @@ struct MenuContent: NitroUIContent {
 
   var body: some View {
     styledMenu
-      // `.menuIndicator(.hidden)` is iOS 15 (SwiftUI.swiftinterface:25910), which the
-      // pod's 15.1 floor already satisfies, so it needs no gate. Without it the
-      // trigger draws the system's chevron, and a Button-sized trigger with a
-      // chevron in it is not the box `docs/components/button.md` measures.
+      // Without this the trigger draws the system's chevron and is no longer a Button's size.
       .menuIndicator(.hidden)
       .controlSize(model.scale.controlSize)
       .disabled(model.disabled)
@@ -236,22 +203,11 @@ struct MenuContent: NitroUIContent {
       .modifier(OptionalMenuAccessibility(label: model.accessibilityLabel))
   }
 
-  /// The trigger with Button's chrome, one branch per variant.
+  /// The trigger with Button's styling, one branch per variant.
   ///
-  /// `.menuStyle(.button)` makes the label a button, but the *style* of that button
-  /// is a separate environment value: without a `.buttonStyle` the trigger is the
-  /// automatic (borderless) style, and the measured box is the title's text box -
-  /// 53.33 x 20.33 pt for a medium `filled` "Variant" on iPhone 17, against Button's
-  /// 61.0 x 34.3 for "Cancel" (`docs/components/button.md`). The whole sizing story of
-  /// this control is that its box is a Button's box, so the same per-variant style
-  /// Button picks is applied here, in Button's shape: the switch carries the style
-  /// and everything shared stays outside it, so a variant change costs one style.
-  ///
-  /// The rows are unaffected: the menu's content is presented by the system, which
-  /// draws its own rows rather than the SwiftUI buttons they are written as - and
-  /// that claim is a reading, not a measurement, because no touch this environment
-  /// can inject opens a SwiftUI `Menu` (`docs/tasks/G2-button.report.md` measured that
-  /// for every Button style). It is on G7b's real-input list to confirm visually.
+  /// `.menuStyle(.button)` makes the label a button, but that button's style is a separate
+  /// environment value: without a `.buttonStyle` it is borderless and the box is only the
+  /// title's text. The system draws the menu's rows itself, so the style does not reach them.
   @ViewBuilder private var styledMenu: some View {
     switch model.variant {
     case .filled:
@@ -273,18 +229,9 @@ struct MenuContent: NitroUIContent {
     }
   }
 
-  /// The `Menu` itself, in the one branch its caller asked for.
-  ///
-  /// `primaryAction` is a different `init` and therefore a different view structure,
-  /// so it is a branch rather than a runtime value - the same reason `PickerContent`
-  /// has two (`ios/components/Picker/HybridNitroUiPicker.swift:131-137`). Both
-  /// branches keep their structural identity, so a commit inside one is a diff
-  /// rather than a rebuild.
-  ///
-  /// `.menuStyle(.button)` is iOS 16 (`SwiftUI.swiftinterface:11175`), above the
-  /// 15.1 floor, so it is gated: below it the trigger is SwiftUI's default menu
-  /// look. `Menu(content:label:primaryAction:)` is iOS 15
-  /// (`:8776-8791`), under the floor, so it needs no gate of its own.
+  /// `primaryAction` is a different `init` and so a different view structure, hence a branch
+  /// rather than a runtime value. `.menuStyle(.button)` is iOS 16; below it the trigger has
+  /// SwiftUI's default menu look.
   @ViewBuilder private var menu: some View {
     if model.hasPrimaryAction, let primaryAction = model.primaryAction {
       if #available(iOS 16.0, *) {
@@ -303,12 +250,7 @@ struct MenuContent: NitroUIContent {
     }
   }
 
-  /// The trigger's label: Button's label composition.
-  ///
-  /// Copied rather than shared because Button keeps its label private inside
-  /// `ButtonContent`, and the alternative is a `Menu` whose trigger is a *different*
-  /// view from a Button's - which is the one thing this control's sizing story
-  /// cannot survive (`docs/components/menu.md`: the box is a Button's box).
+  /// The same label composition as Button's, so the trigger measures as a Button does.
   private func trigger() -> some View {
     Group {
       if let systemImage = model.systemImage {
@@ -325,20 +267,15 @@ struct MenuContent: NitroUIContent {
     }
   }
 
-  /// The rows, in the order the wrapper sent them.
-  ///
-  /// `id: \.offset`, like `PickerContent`: a row id is unique within a menu, but an
-  /// `id:` that is a caller's string would make a re-ordered list a rebuilt list,
-  /// and a duplicate id would be a broken `ForEach` rather than two rows.
+  /// `id: \.offset`: keyed by the caller's ids, a re-ordered list would be rebuilt and a
+  /// duplicate id would break the `ForEach`.
   private func rows() -> some View {
     ForEach(Array(model.entries.enumerated()), id: \.offset) { _, entry in
       switch entry {
       case .action(let item):
         rowButton(item)
       case .submenu(let submenu):
-        // The nesting D29 keeps on iOS: a second-level `Menu`, whose own content
-        // builder is a plain `ForEach` because the depth cap says there is nothing
-        // third-level to draw.
+        // Nesting is one level deep, so a submenu's content is a plain `ForEach`.
         Menu {
           ForEach(Array(submenu.items.enumerated()), id: \.offset) { _, item in
             rowButton(item)
@@ -351,16 +288,9 @@ struct MenuContent: NitroUIContent {
           }
         }
       case .section(let section):
-        // `Section` is what renders as a menu group: SwiftUI turns it into an
-        // inline `UIMenu`, which UIKit sets off from its neighbours with a
-        // separator, so a section with no title needs no header at all to read as
-        // a group break.
-        //
-        // It must not be *given* one. Until G9 the untitled branch passed
-        // `Divider()` as the header, and SwiftUI built that section as an inline
-        // `UIMenu` with no children: every row of an untitled group was missing
-        // from the menu on iOS, while the model, `rows` and Android all had them
-        // (`docs/tasks/G9-ios-menu-untitled-group.report.md`).
+        // SwiftUI turns a `Section` into an inline `UIMenu`, which UIKit already separates
+        // from its neighbours. An untitled section must get no header at all: given a
+        // `Divider()` as its header, SwiftUI builds an inline menu with no children.
         if let title = section.title {
           Section(header: Text(title)) {
             ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
@@ -378,16 +308,9 @@ struct MenuContent: NitroUIContent {
     }
   }
 
-  /// One pickable row.
-  ///
-  /// `role: .destructive` is iOS's own red-and-warning treatment; the pick goes
-  /// through the model so a test press and a real one cannot diverge.
-  ///
-  /// A row with a `checked` is a `Toggle`, which is what SwiftUI turns into a menu
-  /// action with a state (`UIAction.state`, the leading check). Its binding reads the
-  /// prop and a flip is a pick: the menu has no value, so the check is whatever the app
-  /// sends next, never a state of ours. A `Toggle` takes no role, so a checkable row is
-  /// not drawn destructive on iOS (`docs/components/menu.md`, Limits).
+  /// A row with a `checked` is a `Toggle`, which SwiftUI turns into a menu action with a
+  /// check. Its binding reads the prop and a flip is a pick; the app sends the next
+  /// `checked`. A `Toggle` takes no role, so a checkable row is never drawn destructive.
   @ViewBuilder
   private func rowButton(_ item: MenuActionItem) -> some View {
     if let checked = item.checked {
@@ -408,8 +331,7 @@ struct MenuContent: NitroUIContent {
     }
   }
 
-  /// A row's label: the title, then the subtitle as a second `Text`, which SwiftUI
-  /// turns into the menu action's `subtitle`; inside a `Label` when it has a symbol.
+  /// The subtitle is a second `Text`, which SwiftUI turns into the menu action's `subtitle`.
   @ViewBuilder
   private func rowLabel(_ item: MenuActionItem) -> some View {
     if let systemImage = item.systemImage {
@@ -433,7 +355,7 @@ struct MenuContent: NitroUIContent {
 
 }
 
-/// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
+/// `.tint()` has no "unset" form, so it is applied only when a colour is set.
 private struct OptionalMenuTint: ViewModifier {
   let color: UIColor?
 
@@ -446,10 +368,9 @@ private struct OptionalMenuTint: ViewModifier {
   }
 }
 
-/// An empty `accessibilityLabel(_:)` would silence the trigger's own label - which
-/// is its title - so it is applied only when set. `testID` deliberately does *not*
-/// go in here: RN already puts it on the component view, and putting it on the
-/// SwiftUI element too would make the view match a testID query twice.
+/// An empty `accessibilityLabel(_:)` would silence the trigger's own label (its title), so
+/// it is applied only when set. `testID` is not applied here: React Native already puts it
+/// on the component view, and a second copy would match a testID query twice.
 private struct OptionalMenuAccessibility: ViewModifier {
   let label: String?
 
@@ -462,64 +383,34 @@ private struct OptionalMenuAccessibility: ViewModifier {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiMenu`.
 final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   private let host: NitroSwiftUIHost<MenuContent>
 
-  /// This component's name in the sizing engine: `HybridNitroUiMenuComponentName`
-  /// in the generated C++, and `getName()` in the generated Kotlin.
+  /// Must match the component name in the generated C++ and Kotlin.
   private static let sizingComponentName = "NitroUiMenu"
 
-  /// The size to lay a Menu out with before anything has been measured, in points.
-  ///
-  /// One pair for the component, which is what the engine can hold
-  /// (`docs/architecture/sizing.md` §9), and the trigger is a Button, so the honest
-  /// number is the Button's: this OS's medium filled button with a six-letter title.
-  /// It is *not* Button's own declared pair (77 x 35) on purpose - the two controls
-  /// have to be told apart by a harness that reads a fallback rather than a name, and
-  /// `docs/tasks/X4-conformance.md` requires a declared fallback that differs from the
-  /// size the fixture measures. Menu's own measured medium/"Menu" box is what goes
-  /// here once the harness has measured it; see `docs/components/menu.md` Sizing.
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, fallbackSize.width, fallbackSize.height, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process (the
-  /// static above is lazy and thread-safe, so repeat calls cost nothing).
-  ///
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
-  /// matters: Fabric measures a Menu's shadow node before it creates any Menu view,
-  /// so a fallback declared from `init` is one measure too late for the first
-  /// instance (T14). `init` still calls it, as the backstop.
+  /// Registers the fallback once per process. Called at startup, because Fabric measures a
+  /// Menu's shadow node before it creates any Menu view; `init` calls it as a backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
 
-  /// The declared fallback - see ``declaresFallback``.
-  ///
-  /// Button-sized, because the trigger *is* a Button's box, and deliberately not any
-  /// fixture's measured size: a fallback equal to the answer hides a correction that
-  /// never arrived (X4's rule 1, and the reason `Menu.harness.tsx` keeps this pair as
-  /// `DECLARED_FALLBACK` and asserts against it). Button declares 77×35 here and
-  /// measures about 61×34 (`docs/components/button.md`), so this is the same
-  /// neighbourhood, not a second guess of it (D17).
+  /// In points. Button-sized, because the trigger is a Button's box.
   private static let fallbackSize = (width: 74.0, height: 38.0)
 
-  /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: MenuModel())
     super.init()
-    // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
     host.sizingPolicy = .intrinsic
-    // A Menu presents something, so its hosting controller needs a view controller
-    // to present from - Picker's reason, and the reason Button's `false` is wrong
-    // here (`docs/tasks/Q1-menu-design.md` §2).
+    // A Menu presents something, so its hosting controller needs a view controller to
+    // present from.
     host.needsContainment = true
-    // The backstop: startup normally registers this through
-    // ``NitroUiDeclaredFallbacks`` long before one can be measured, and a host built
-    // without that table still gets its fallback here.
     Self.declareFallback()
   }
 
@@ -568,17 +459,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     set {
       guard newValue != model.disabled else { return }
       model.disabled = newValue
-      // Repaints only: a disabled control is the same size.
-      //
-      // D29 asks a `disabled` that arrives while the menu is open to close it. On iOS
-      // we cannot honour that *and* report it: SwiftUI owns the open state of its own
-      // `Menu`, `.disabled(true)` on it is not documented to dismiss an open menu, and
-      // we have no signal telling us one is open to act on - the same limit that makes
-      // `onOpen`/`onClose` Android-only here. Android, where the popup is our window,
-      // both closes it and says so; the harness gates that side. The limit documented
-      // here is the one `docs/components/menu.md` records under "Limits" ("A `disabled`
-      // that arrives while the menu is open closes it on Android only"), which is what
-      // this comment defers to.
+      // Repaints only: a disabled control is the same size. On iOS this does not close an
+      // open menu: SwiftUI owns its `Menu`'s open state and gives no signal that one is open.
       host.markDirty()
     }
   }
@@ -586,18 +468,12 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   var rows: [NitroUiMenuRow] {
     get { model.rawRows }
     set {
-      // No guard here, unlike the string props: the generated struct has a C++
-      // `operator==` that Swift cannot see, so comparing the array in Swift would
-      // mean walking it by hand on every commit. The guard is one level up -
-      // `ReactProp<std::vector<NitroUiMenuRow>>::hasSameValue`
-      // (`HybridNitroUiMenuComponent.hpp:76`) compares the converted values and does
-      // not call this setter when nothing moved, which is also what makes the parse
-      // below cheap rather than per-frame.
+      // No equality guard: the generated struct's `operator==` is C++ and invisible to Swift.
+      // Nitro compares the converted values first and does not call this setter when nothing
+      // changed.
       model.rawRows = newValue
       model.entries = parseMenuRows(newValue)
-      // The items live in a popup: a different menu is the same trigger box, so
-      // this marks dirty and never asks for a measure. `group` is out of the sizing
-      // key for the same reason (Q1 §5).
+      // The items live in a popup, so the trigger's size does not change.
       host.markDirty()
     }
   }
@@ -620,21 +496,14 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     set {
       let next = newValue.asType(String.self)
       guard next != model.systemImage else { return }
-      // Only a name that resolves to a symbol reaches the content (Button's rule).
+      // Only a name that resolves to a symbol reaches the content.
       model.systemImage = next.flatMap { UIImage(systemName: $0) == nil ? nil : $0 }
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
     }
   }
 
-  /// Accepted and ignored, exactly as `Button` does it: `androidIcon` names an
-  /// Android drawable, and iOS draws `systemImage` instead.
-  ///
-  /// Stored rather than dropped so `hybridRef` can read back what React sent, and
-  /// because the prop is always sent (nitro#1184), so the native side has to hold
-  /// whatever it is handed. No `markDirty()`: nothing observes it, and a Menu's
-  /// trigger must not pay for a render — or a size report — because of a string this
-  /// platform never draws.
+  /// Android only. Stored so the getter answers, without `markDirty()`: nothing draws it.
   var androidIcon: Variant_NullType_String {
     get { model.androidIcon.map { .second($0) } ?? .first(.null) }
     set { model.androidIcon = newValue.asType(String.self) }
@@ -645,8 +514,7 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     set {
       guard newValue != model.hasPrimaryAction else { return }
       model.hasPrimaryAction = newValue
-      // A different `init` is a different view structure, so it is a commit - and a
-      // trigger that acts instead of opening is still the same box.
+      // A different `init` is a different view structure, but the same box.
       host.markDirty()
     }
   }
@@ -654,10 +522,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: `testID` is an RN base prop too, and
-      // `RCTViewComponentView` already puts it on the component view as
-      // `accessibilityIdentifier`. It stays in the spec because Android needs it as
-      // a `tag`.
+      // Nothing to apply: React Native already puts `testID` on the component view as
+      // `accessibilityIdentifier`.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -668,8 +534,7 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
       return .second(label)
     }
     set {
-      // Rendered, not bookkeeping: the label is on the SwiftUI element, so it needs
-      // a commit or a late-set label never reaches VoiceOver.
+      // The label is on the SwiftUI element, so it needs a commit to reach VoiceOver.
       let next = newValue.asType(String.self)
       guard next != model.accessibilityLabel else { return }
       model.accessibilityLabel = next
@@ -690,9 +555,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     set {
       guard newValue != model.sizingKey else { return }
       model.sizingKey = newValue
-      // Button's reason: the engine has no answer for a key it has not seen, so it
-      // lays this out at the declared fallback, and the new configuration may measure
-      // exactly what the old one did (review F1).
+      // A new key may measure exactly what the old one did, and the host would drop that
+      // report as a duplicate.
       host.noteSizingKeyChanged()
     }
   }
@@ -707,33 +571,16 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     set { model.onSelect = newValue }
   }
 
-  /// Whether the menu opened. **Never called on iOS**, and DECISIONS D32 rules that
-  /// this is the shipped behaviour rather than a gap.
-  ///
-  /// SwiftUI's `Menu` has no expansion binding in the iPhoneOS 27.0 SDK - `Menu`'s
-  /// inits take `content`, `label` and `primaryAction` (`SwiftUI.swiftinterface:8767`
-  /// and `:8778`), and `isExpanded:` exists on `Section`, `DisclosureGroup` and table
-  /// rows but not on `Menu`. The menu is also presented by the system rather than by
-  /// our hosting controller, so there is no window of ours to notice. Nothing here can
-  /// see an open, so nothing here can report one; storing the callback is all this
-  /// does. Android's popup is our own window and does call it.
-  ///
-  /// **One alternative was tried and measured (G7b, item 6): `.onAppear`/`.onDisappear`
-  /// on the menu's content.** `MenuContent.rows()` grew a
-  /// `.background(Color.clear.onAppear{}.onDisappear{})` sentinel, and the real-input
-  /// case drove it - open, tap a disabled row, dismiss, reopen, pick. The echo came back
-  /// `open > select bravo`: **one** `open` for two presentations and **no** `close` at
-  /// all, not even when the pick took the menu down. The content's identity survives the
-  /// presentation, so appear is a once-only signal and disappear is not a signal - a
-  /// pair that would report an open that never happened to an app already showing a
-  /// closed menu. Do not try this again on iOS 27; an expansion binding, if SwiftUI ever
-  /// ships one for `Menu`, is the only thing that could replace the Android-only ruling.
+  /// Never called on iOS. SwiftUI's `Menu` has no expansion binding, and the system presents
+  /// the menu outside our hosting controller, so nothing here can see it open.
+  /// `.onAppear`/`.onDisappear` on the menu's content do not work either: the content's
+  /// identity survives the presentation, so appear fires once and disappear never.
   var onOpen: (() -> Void)? {
     get { model.onOpen }
     set { model.onOpen = newValue }
   }
 
-  /// Whether the menu closed. **Never called on iOS** - see ``onOpen``.
+  /// Never called on iOS, like `onOpen`.
   var onClose: (() -> Void)? {
     get { model.onClose }
     set { model.onClose = newValue }
@@ -747,8 +594,6 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // No controlled value, so nothing to reconcile: one commit per React commit
-    // (`docs/architecture/core.md` §12).
     host.commit()
   }
 
@@ -785,10 +630,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
 
   // MARK: - Methods
 
-  /// The size SwiftUI wants for this Menu, from the host's cache.
-  ///
-  /// Never touches the main thread: this can be called from JS, and SwiftUI may only
-  /// be measured on main (core-architecture §1.4).
+  /// Reads the host's cache: this can be called from JS, and SwiftUI may only be measured
+  /// on main.
   func measureContent() throws -> NitroUiMenuSize {
     guard let size = host.contentSize else {
       return NitroUiMenuSize(width: 0, height: 0)
@@ -796,14 +639,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     return NitroUiMenuSize(width: Double(size.width), height: Double(size.height))
   }
 
-  /// Press one row by id, from a test.
-  ///
-  /// Test-only; see the spec for why it exists - the harness's touch injector reaches
-  /// the app window, and an iOS menu is presented by the system outside it. Hops to
-  /// the main thread because JS calls it and a real press runs on the UI thread
-  /// (core.md §5), and the hop is what keeps the timing of a real pick rather than
-  /// flattening it. A disabled row, a submenu, a section and an unknown id all report
-  /// nothing, exactly as a real press of them would.
+  /// Test-only: picks one row by id, because an iOS menu is presented by the system outside
+  /// the app window, where injected touches do not reach. Runs on main, as a real pick does.
   func nuiTestSelectRow(id: String) throws {
     let model = host.model
     let run = { model.applyPick(id) }
@@ -814,45 +651,22 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     }
   }
 
-  /// What the menu and its anchor are, as this host can see them.
-  ///
-  /// Test-only; see the spec for the format. iOS has no popup of its own to measure -
-  /// SwiftUI hands the menu to the system's presentation - so `expanded`, `live`,
-  /// `anchor` and `menu` answer `-1`, "not measurable here", rather than a `0` that
-  /// would read as "checked, and none left behind". `rows` is the one field that *is*
-  /// knowable here, because the items are data we were handed rather than a window we
-  /// cannot see, so it answers the model's count. Picker says the same about its menu
-  /// (`HybridNitroUiPicker.swift:555-565`). `drawn` is the other half: what UIKit
-  /// actually built from those rows, as ``nuiTestMenuProbe()`` last read it.
-  ///
-  /// `split`, `leading` and `trailing` (E3) answer `-1` too, and for the same reason
-  /// stated twice above: iOS has no second hit target to measure. A `primaryAction`
-  /// here is a *gesture* on one button - tap acts, long-press opens - so "did the
-  /// composition draw a split trigger" is not a question this platform can answer, and
-  /// `split=0` would claim a layout iOS chose. Android answers all three for real
-  /// (`MenuSplitButton.kt`), which is what the harness compares against.
+  /// Test-only. iOS hands the menu to the system's presentation, and a `primaryAction` is a
+  /// gesture on one button, so the popup and split-trigger fields answer `-1` ("not
+  /// measurable here"). `rows` is the model's count, and `drawn` is what
+  /// `nuiTestMenuProbe()` last read from UIKit.
   func nuiTestMenuReport() throws -> String {
     return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1"
       + ";rows=\(host.model.actionableRowCount);drawn=\(readDrawn())"
       + ";split=-1;leading=-1,-1,-1,-1;trailing=-1,-1,-1,-1"
-      // Android's field, answered `-` here: no row tinted a glyph because iOS draws
-      // `systemImage` and has no Android glyph to tint. Same reason `nuiTestMenuReport`
-      // answers `-1` for the split fields - one shape for both platforms.
+      // Android's field: iOS has no Android glyph to tint, so it answers `-`.
       + ";iconTints=-"
   }
 
-  /// Open the menu, copy the tree UIKit built for it, and close it - from a test.
-  ///
-  /// Test-only; see the spec. `rows` above counts the model, which is what we
-  /// *asked* SwiftUI to draw, and G9 is the case where the two differed: an untitled
-  /// section was in the model and missing from the menu. What a person sees is the
-  /// `UIMenu` SwiftUI hands the trigger's `UIButton`, and SwiftUI only fills it in
-  /// when the menu is presented (it reads empty on a trigger nobody has opened), so
-  /// the probe presents it - the same `performPrimaryAction()` a tap on a
-  /// menu-as-primary-action button runs - reads it, and dismisses it in one
-  /// main-thread turn. Hops to main because JS calls it; the answer is left for
-  /// ``nuiTestMenuReport()`` under ``drawnLock`` rather than returned, so JS never
-  /// waits on the main thread.
+  /// Test-only: opens the menu, copies the tree UIKit built for it, and closes it, in one
+  /// main-thread turn. SwiftUI only fills in the trigger's `UIMenu` when the menu is
+  /// presented. The answer is stored for `nuiTestMenuReport()` rather than returned, so JS
+  /// never waits on the main thread.
   func nuiTestMenuProbe() throws {
     let run = { [weak self] in
       guard let self else { return }
@@ -867,15 +681,12 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
 
   // MARK: - Pixel probes (test-only)
 
-  /// How many probes were asked for, so a harness can tell its own answer from the
-  /// previous control's. The pair's shape is Button's (`HybridNitroUiButton.swift`).
   private let probesLock = NSLock()
   private var triggerProbes = 0
   private var menuProbes = 0
 
-  /// Counts the probe and answers nothing - iOS has no Android glyph in its trigger to
-  /// sample. Button's `no pixels`, which the harness's probe helper treats as a hard
-  /// failure rather than an answer.
+  /// iOS has no Android icon glyph in its trigger to sample, so the report says `no pixels`,
+  /// which the tests treat as a failure.
   func nuiTestPixelProbe(color: Double) throws {
     probesLock.lock()
     triggerProbes += 1
@@ -889,10 +700,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     return "n=\(probes) no pixels platform=ios"
   }
 
-  /// Counts the probe and answers nothing. The rows are UIKit's: a SwiftUI `Menu` is
-  /// presented by the system in a window this process cannot rasterise into a bitmap,
-  /// so there is nothing here to sample even when a menu is open - which is why this
-  /// says `no pixels` rather than Android's `no popup`.
+  /// The system presents the menu in a window this process cannot rasterise, so there is
+  /// nothing to sample and the report says `no pixels`.
   func nuiTestMenuPixelProbe(color: Double) throws {
     probesLock.lock()
     menuProbes += 1
@@ -926,9 +735,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   /// What UIKit holds for this trigger, as the spec's `drawn` tree, or `-1`.
   private func probeDrawnMenu() -> String {
     nitroUiAssertMainThread()
-    // A trigger with a `primaryAction` acts on a tap rather than opening, and a
-    // disabled one does nothing: pressing either would not read the menu, and the
-    // first would report a press nobody made.
+    // A trigger with a `primaryAction` acts on a tap rather than opening, and a disabled one
+    // does nothing.
     guard #available(iOS 17.4, *), !model.hasPrimaryAction, !model.disabled,
       let button = Self.menuButton(in: host), button.showsMenuAsPrimaryAction
     else { return "-1" }
@@ -938,10 +746,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     return tree
   }
 
-  /// The trigger's `UIButton`: the one view under the host that carries a menu.
-  ///
-  /// Matched by public API only - a `UIButton` whose `menu` is set - rather than by
-  /// SwiftUI's own class name, which is not ours to depend on.
+  /// The trigger's `UIButton`, matched by public API (a button whose `menu` is set) rather
+  /// than by SwiftUI's private class name.
   private static func menuButton(in view: UIView) -> UIButton? {
     if let button = view as? UIButton, button.menu != nil { return button }
     for child in view.subviews {
@@ -950,9 +756,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     return nil
   }
 
-  /// The spec's `drawn` notation for one level of a `UIMenu`.
-  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before it there
-  /// is nothing to read, and the mark is left off.
+  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before that the mark
+  /// is left off.
   private static func subtitleMark(_ action: UIAction) -> String {
     guard #available(iOS 16.0, *), let subtitle = action.subtitle, !subtitle.isEmpty
     else { return "" }

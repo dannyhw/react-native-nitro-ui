@@ -1,40 +1,10 @@
-//
-//  HybridNitroUiButtonGroup.swift
-//  react-native-nitro-ui
-//
-//  The ButtonGroup component: a row of commands, optionally with independent
-//  toggles, that moves the items it cannot fit into an overflow menu
-//  (`docs/tasks/Q9-buttongroup-iconbutton-design.report.md` Appendix B, DECISIONS D42).
-//
-//  iOS has half the control natively and none of the other half:
-//
-//  - **`appearance: 'connected'` is `ControlGroup`.** Measured (Appendix A): on
-//    iOS 27.0 it draws the connected capsule row an app would otherwise hand-roll,
-//    one `button` per item, and it *ignores* `variant`, `size` and `tintColor`
-//    (`.controlSize` and `.tint` leave the probe row at 174.00 x 31.00). It also
-//    draws no on state for a `Toggle`, so a group that contains a toggle falls back
-//    to the standard row (D42 item 2) rather than shipping a toggle that looks off
-//    while it is on.
-//  - **`appearance: 'standard'` is a row of bordered controls** — the same
-//    `Button`/`Toggle` styles the Button and Switch components already draw, at the
-//    34.33 pt Appendix A measured for three of them.
-//  - **Overflow is ours.** `ControlGroup` has none of its own (measured: six items
-//    measure 396 pt inside a 369 pt box and draw outside it on both sides), so the
-//    row is `ViewThatFits` over "all items", "n-1 items + a `Menu`", … — with the
-//    `Menu` **beside** the group, because inside the group its segment is disabled
-//    (Appendix A). On iOS 15 there is no `ViewThatFits`: every item draws and the
-//    row clips to the box.
-//
-//  The value half is a *set*: ``ButtonGroupCheckedSet`` is the event-count handshake
-//  (`docs/architecture/core.md` §4) for many toggles at once, which is why it is not
-//  a ``NitroUiControlledValue``.
-//
+// The ButtonGroup component: a row of commands, optionally with independent toggles, that moves the
+// items it cannot fit into an overflow menu.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// How the items sit together.
 enum ButtonGroupAppearance: String {
   /// 8 pt of space; each item keeps its own capsule.
   case standard
@@ -44,35 +14,31 @@ enum ButtonGroupAppearance: String {
 
 /// Which half of an item's label the group draws.
 enum ButtonGroupLabelStyle: String {
-  /// iOS connected: icons only when the item has an icon (measured). Elsewhere: icon and title.
+  /// In a connected group: icons only when the item has an icon. Elsewhere: icon and title.
   case automatic
   case titleOnly
   case iconOnly
   case titleAndIcon
 }
 
-/// One item, as the composition draws it.
-///
-/// Parsed once per props batch by ``parseButtonGroupItems(_:)``, like Menu's rows: the
-/// wire struct is a C++-backed type whose accessors convert on every read, so the
-/// content must not walk it per render.
+/// One item, as the content draws it. Parsed once per props batch: the wire struct is a C++-backed
+/// type whose accessors convert on every read, so the content must not walk it per render.
 struct ButtonGroupItemState: Equatable {
   let id: String
   let title: String
-  /// A symbol name that resolved to a real SF Symbol (Button's rule), or `nil`.
+  /// A symbol name that resolved to a real SF Symbol, or `nil`.
   let systemImage: String?
   let disabled: Bool
   let toggle: Bool
 }
 
-/// The wire's struct array, parsed for the content to read.
 func parseButtonGroupItems(_ items: [NitroUiButtonGroupItem]) -> [ButtonGroupItemState] {
   items.map { item in
     ButtonGroupItemState(
       id: item.id,
       title: item.title,
-      // Same rule as Button's and Menu's: a name that does not resolve would draw the
-      // missing-symbol placeholder and say nothing useful to VoiceOver.
+      // A name that does not resolve would draw the missing-symbol placeholder and say nothing
+      // useful to VoiceOver.
       systemImage: item.systemImage?
         .asType(String.self)
         .flatMap { UIImage(systemName: $0) == nil ? nil : $0 },
@@ -82,19 +48,11 @@ func parseButtonGroupItems(_ items: [NitroUiButtonGroupItem]) -> [ButtonGroupIte
   }
 }
 
-/// The event-count handshake for a *set* of toggles (core.md §4).
-///
-/// The single-value twin is ``NitroUiControlledValue``; it cannot serve here because
-/// the control owns a set that several items move independently:
-///
-/// - ``js`` is the whole checked set React sent, and only for the ids in
-///   ``controlled`` — ids outside it are uncontrolled and no write may move them,
-///   which is what lets controlled and uncontrolled items share one group;
-/// - a write is stale while `jsEvents < nativeEvents`, exactly as in the single case,
-///   so a flip JS refused (the next render's set unchanged) reverts instead of
-///   stranding the item;
-/// - one counter for the whole group, not one per item: per-item counts would let one
-///   item's stale write be accepted on the strength of another item's event.
+/// The event-count handshake for a set of toggles. `js` is the whole checked set React sent, but a
+/// write only moves the ids in `controlled`, so controlled and uncontrolled items can share a
+/// group. A write is stale while `jsEvents < nativeEvents`. One counter for the whole group:
+/// per-item counts would let one item's stale write be accepted on the strength of another item's
+/// event.
 struct ButtonGroupCheckedSet {
   /// What the row shows. A set of item ids.
   var displayed: Set<String> = []
@@ -115,10 +73,8 @@ struct ButtonGroupCheckedSet {
     return (next, nativeEvents)
   }
 
-  /// Apply a pending React write. Returns whether ``displayed`` changed.
-  ///
-  /// Only the ``controlled`` ids move: an uncontrolled item the user has flipped keeps
-  /// its state through a write, which is the whole point of sending ``controlled``.
+  /// Apply a pending React write. Returns whether `displayed` changed. Only the `controlled` ids
+  /// move: an uncontrolled item the user has flipped keeps its state.
   mutating func reconcile() -> Bool {
     guard let pending = js, jsEvents >= nativeEvents else { return false }
     let next = displayed.subtracting(controlled).union(pending.intersection(controlled))
@@ -128,12 +84,9 @@ struct ButtonGroupCheckedSet {
   }
 }
 
-/// State of one ButtonGroup. See ``NitroUiModel`` for why this is not `@Published`.
 final class ButtonGroupModel: NitroUiModel {
-  /// The items, in render order. Rendered, so a new list is a new layout.
-  ///
-  /// Republishes ``checkedReport`` because that string names the checked ids *in this
-  /// order*: an items write can change the answer without changing ``displayed``.
+  /// The items, in render order. Republishes the checked report, which lists the checked ids in
+  /// this order.
   var items: [ButtonGroupItemState] = [] {
     didSet { publishChecked() }
   }
@@ -144,29 +97,22 @@ final class ButtonGroupModel: NitroUiModel {
   var disabled = false
   var tint: UIColor?
   var accessibilityLabel: String?
-  /// What a reader is told the "More" control is. Android ignores it (Material has its
-  /// own localised label and tooltip); it is iOS's, because iOS draws the control.
+  /// The accessibility name of the "More" control. iOS only: Android uses Material's own localised
+  /// label.
   var overflowAccessibilityLabel: String?
   var testID: String?
 
-  /// The checked set on display. Written by the handshake and by a flip.
-  ///
-  /// Every write republishes ``checkedReport`` — see the race note there. The writes are
-  /// the five places that move the set: `toggle`, `applyDefaults`, `pruneChecked`,
-  /// `afterUpdate`'s reconcile and `resetAll`; a `didSet` is what stops the sixth one
-  /// from being missed.
+  /// The checked set on display. Every write republishes the checked report, which is why this is a
+  /// `didSet`.
   var displayed: Set<String> = [] {
     didSet { publishChecked() }
   }
-  /// The handshake.
   var state = ButtonGroupCheckedSet()
   /// The ids whose `defaultChecked` has already been applied, so it is applied once.
   private var seeded: Set<String> = []
 
-  /// Seed the uncontrolled toggles, once per id.
-  ///
-  /// Re-applying the seed on every batch would let any re-render undo the tap that
-  /// just happened — the same one-shot guard `Switch`'s `defaultChecked` has.
+  /// Seed the uncontrolled toggles, once per id: re-applying the seed on every batch would let any
+  /// re-render undo a tap.
   func applyDefaults(_ ids: [String]) {
     for id in ids where !seeded.contains(id) {
       seeded.insert(id)
@@ -195,13 +141,9 @@ final class ButtonGroupModel: NitroUiModel {
 
   // MARK: - The one press path
 
-  /// One press of item `id`, through the path a tap takes.
-  ///
-  /// The content's `Button` action, its `Toggle` binding and `nuiTestPressItem` all
-  /// call this, so a harness tap and a real one cannot disagree about what pressing an
-  /// item means (Chip's and IconButton's shape). Refused while the group or the item is
-  /// disabled, as the control refuses the tap — from the row or from the overflow menu
-  /// alike, because both arrive here.
+  /// One press of item `id`. The content's `Button` action, its `Toggle` binding and the test hook
+  /// all call this, from the row or from the overflow menu. Refused while the group or the item is
+  /// disabled.
   func press(_ id: String) {
     guard !disabled, let item = items.first(where: { $0.id == id }), !item.disabled else {
       return
@@ -213,8 +155,8 @@ final class ButtonGroupModel: NitroUiModel {
     }
   }
 
-  /// The user's flip of one toggle: paint the new state *before* React has seen the
-  /// event (§4), and emit the count that lets a refused change be snapped back.
+  /// The user's flip of one toggle: paint the new state before React has seen the event, and emit
+  /// the count that lets a refused change be snapped back.
   func toggle(_ id: String) {
     guard !disabled else { return }
     let next = state.user(id)
@@ -229,32 +171,20 @@ final class ButtonGroupModel: NitroUiModel {
   /// The last row probe's answer:
   /// `visible=<n>;overflow=<0|1>;row=<controlGroup|standard|none>;shown=<ids|none>`.
   private var rowReport = "visible=none;overflow=none;row=none;shown=none"
-  /// The checked half of ``stateReport()``, published rather than read.
-  ///
-  /// ``stateReport()`` is a synchronous call *from the JS thread*, while ``displayed``
-  /// and ``items`` are main-thread state — reading them there races the storage of a
-  /// `Set`. Chip's answer is the one used here: every write publishes the one string the
-  /// report needs, and the report reads only published strings, all under one lock.
+  /// The checked half of `stateReport()`, published on every write. `stateReport()` is called
+  /// synchronously from the JS thread, while `displayed` and `items` are main-thread state, so the
+  /// report reads only strings published under the lock.
   private var checkedReport = "none"
-  /// The last accessibility probe's answer.
   private var accessibilityReport = "none"
   /// How many probes have answered, so a test can tell its own from the previous one's.
   private var probes = 0
-  /// Whether the row composed an overflow control, and how many items it drew. `-1`
-  /// means the body has not laid anything out yet.
-  ///
-  /// Written by the placement witness in the content — the one place that knows which
-  /// `ViewThatFits` candidate was *laid out*, which is the only honest answer to "did
-  /// this item overflow?". `ViewThatFits` measures every candidate, so "the body ran"
-  /// says nothing; only the winner is placed. Plain storage behind a lock, never
-  /// `@Published`: publishing from the body would ask for the recomposition that has
-  /// just happened.
+  /// Whether the row composed an overflow control, and how many items it drew; `-1` before the
+  /// first layout. Written by the placement witness, the only place that knows which `ViewThatFits`
+  /// candidate was laid out: `ViewThatFits` measures every candidate but places only the winner.
+  /// Never `@Published`: publishing from the body would ask for the update that has just happened.
   private var placedVisible = -1
   private var placedOverflow = false
-  /// Which row the placed candidate drew — `controlGroup` or `standard`. D42 item 2 is a
-  /// decision about the *row*, so the witness has to say which row a given width got;
-  /// without it a group whose trailing toggle overflowed could look like a connected row
-  /// that is 31 pt tall at one width and 34.33 pt at another, all under one sizing key.
+  /// Which row the placed candidate drew: `controlGroup` or `standard`.
   private var placedRow = "none"
 
   /// Record what the row laid out. Safe from any thread.
@@ -282,8 +212,8 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// Publish the checked half of ``stateReport()``. Called on the thread that wrote
-  /// ``displayed`` or ``items`` — always the main thread — never from the report itself.
+  /// Publish the checked half of `stateReport()`. Called on the main thread, where `displayed` and
+  /// `items` are written.
   private func publishChecked() {
     let shown =
       displayed.isEmpty
@@ -302,17 +232,9 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// What the control is showing, as one line. Safe from any thread.
-  ///
-  /// `checked` is the published half of what the row shows, so it is a reading of the
-  /// hosted control rather than an echo of a prop, and it never touches main-thread
-  /// storage from here (see ``checkedReport``). `visible`/`overflow`/`row` are the last
-  /// ``publishRowReport(order:)``. `menu` is the field Android answers with
-  /// `open`/`closed` from Material's own menu state; iOS has no way to read a presented
-  /// `Menu` before iOS 18's `isExpanded` and the deployment target is 15.1, so here it
-  /// answers whether the row *composes* the control at all — the form D29's rule takes
-  /// on this platform, because a disabled group composes none and `docs/components/
-  /// button-group.md` says so.
+  /// What the control is showing, as one line. Safe from any thread. `menu` says whether the row
+  /// composes the overflow control: a presented SwiftUI `Menu` cannot be read before iOS 18's
+  /// `isExpanded`.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
@@ -321,7 +243,6 @@ final class ButtonGroupModel: NitroUiModel {
       + "probes=\(probes);a11y=\(accessibilityReport)"
   }
 
-  /// Forget everything, for recycling.
   func resetAll() {
     items = []
     appearance = .standard
@@ -351,15 +272,9 @@ final class ButtonGroupModel: NitroUiModel {
   }
 }
 
-/// The group's own placement witness, so the row can report what it *laid out*.
-///
-/// Transparent on purpose: ``sizeThatFits(proposal:subviews:cache:)`` forwards the
-/// proposal to the one subview and returns its answer, and
-/// ``placeSubviews(in:proposal:subviews:cache:)`` places it at the bounds it was given.
-/// The only thing it adds is the `onPlace` call — which runs for the placed candidate
-/// and for none of the candidates `ViewThatFits` measured and dropped. A wrapper that
-/// resized anything would put itself between the host's `fillWidth` measure and the row
-/// (`docs/architecture/sizing.md` §5), which is what it must not do.
+/// Reports which `ViewThatFits` candidate was laid out: `onPlace` runs for the placed candidate and
+/// for none of the ones measured and dropped. Otherwise transparent: it forwards the proposal to
+/// its one subview and places it at the bounds given, so it does not affect measurement.
 @available(iOS 16.0, *)
 private struct PlacementWitness: Layout {
   let onPlace: () -> Void
@@ -383,17 +298,14 @@ private struct PlacementWitness: Layout {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct ButtonGroupContent: NitroUIContent {
-  /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: ButtonGroupModel
 
   init(model: ButtonGroupModel) {
     self.model = model
   }
 
-  /// 8 pt — the gap Appendix A measured for the row of bordered buttons this control's
-  /// `standard` appearance is, and `HStack`'s own default at this control size.
+  /// `HStack`'s own default at this control size.
   private static let spacing: CGFloat = 8
 
   var body: some View {
@@ -402,11 +314,9 @@ struct ButtonGroupContent: NitroUIContent {
       // An empty group is an empty row: nothing to draw, nothing to name.
       return AnyView(EmptyView())
     }
-    // D42 item 2 is decided once, for the whole group, from *every* item: a trailing
-    // toggle that a narrow box pushes into the overflow must not leave that candidate
-    // drawing `ControlGroup` while the same group at a wide box draws the standard row.
-    // One sizing key cannot carry two heights (31 pt and 34.33 pt), and the key does not
-    // hold the box's width, so the choice may not depend on the width.
+    // Decided once for the whole group, from every item, never per candidate: `ControlGroup` and
+    // the standard row are different heights, and one sizing key cannot carry two, so the choice
+    // must not depend on the width.
     let useControlGroup =
       model.appearance == .connected && !items.contains(where: \.toggle)
     if #available(iOS 16.0, *) {
@@ -417,13 +327,9 @@ struct ButtonGroupContent: NitroUIContent {
 
   // MARK: - The row, iOS 16+ (with overflow)
 
-  /// `ViewThatFits` over "all items", then "k items + a `Menu` with the rest" for
-  /// k = n-1 … 1, each candidate wrapped in a ``PlacementWitness`` so the harness can
-  /// read which one was laid out (Appendix B3).
-  ///
-  /// The candidates go widest first, which is what makes `ViewThatFits` pick the most
-  /// items that fit rather than the fewest. A one-item group has no narrower candidate,
-  /// so it is one candidate and never a `Menu`.
+  /// `ViewThatFits` over "all items", then "k items + a `Menu` with the rest" for k = n-1 … 1.
+  /// Widest first, so `ViewThatFits` picks the most items that fit. `ControlGroup` has no overflow
+  /// of its own.
   @available(iOS 16.0, *)
   private func overflowingRow(
     _ items: [ButtonGroupItemState],
@@ -456,9 +362,7 @@ struct ButtonGroupContent: NitroUIContent {
     useControlGroup: Bool
   ) -> some View {
     PlacementWitness(
-      // What the row *composed*, not what the candidate asked for: a disabled group
-      // composes no overflow control at all (D29), and saying "this candidate carries
-      // overflow items" would report a control that is not on screen.
+      // What the row composed: a disabled group composes no overflow control.
       onPlace: {
         model.recordPlacement(
           visible: items.count,
@@ -469,10 +373,8 @@ struct ButtonGroupContent: NitroUIContent {
     ) {
       HStack(spacing: ButtonGroupContent.spacing) {
         row(items, useControlGroup: useControlGroup)
-        // D29's rule on this platform: a group that answers nothing cannot own a live
-        // popup. Android can dismiss its own window (`model.menuState?.dismiss()`);
-        // here the control is taken out of the row instead, so it cannot be opened and
-        // cannot keep offering rows for a disabled group.
+        // A disabled group must not own a live popup, so the overflow control is left out of the
+        // row.
         if !overflow.isEmpty, !model.disabled {
           overflowMenu(overflow)
         }
@@ -482,17 +384,12 @@ struct ButtonGroupContent: NitroUIContent {
 
   // MARK: - The row, iOS 15 (no `ViewThatFits`, so no overflow)
 
-  /// Every item, clipped to the box.
-  ///
-  /// Documented in `docs/components/button-group.md`: iOS 15 has no `ViewThatFits`, and
-  /// drawing everything and clipping beats drawing outside the box, which is what the
-  /// six-item probe in Appendix A did (396 pt of content in a 369 pt box).
+  /// Every item, clipped to the box: iOS 15 has no `ViewThatFits`, and clipping beats drawing
+  /// outside the box.
   private func clippedRow(
     _ items: [ButtonGroupItemState],
     useControlGroup: Bool
   ) -> some View {
-    // The reading is direct here: with no candidates there is one row, and it drew
-    // every item.
     model.recordPlacement(
       visible: items.count,
       overflow: false,
@@ -507,18 +404,9 @@ struct ButtonGroupContent: NitroUIContent {
     )
   }
 
-  /// The group itself: `ControlGroup` when ``ButtonGroupContent/body`` decided the group
-  /// may draw one, the plain row otherwise.
-  ///
-  /// The toggle rule is D42 item 2, and it is measured, not guessed: three
-  /// `Toggle(.button)`s inside a `ControlGroup` draw **no on state** — on and off are
-  /// the same pixels (Appendix A). A group whose items include a toggle therefore draws
-  /// the standard row, so the toggle has a state to show, and the docs say so instead
-  /// of shipping a control that lies.
-  ///
-  /// The decision arrives already made, from every item in the group rather than from
-  /// the slice this candidate draws: a candidate's slice is what a narrow box overflowed,
-  /// and an overflowed toggle is still a toggle the control owns.
+  /// The group itself: `ControlGroup` or the plain row. A `Toggle(.button)` inside a `ControlGroup`
+  /// draws no on state (on and off are the same pixels), so a group that contains a toggle draws
+  /// the standard row.
   @ViewBuilder
   private func row(
     _ items: [ButtonGroupItemState],
@@ -562,14 +450,9 @@ struct ButtonGroupContent: NitroUIContent {
     }
   }
 
-  /// The item's label: a `Label` whose style is the `labelStyle` prop.
-  ///
-  /// `automatic` is iOS's own answer, and the two appearances disagree — a connected
-  /// group with `Label`s drops the titles (measured: 116.33 pt of icons where the text
-  /// row is 174.00 pt), while a standard row draws both. So `automatic` means
-  /// `.iconOnly` inside a `ControlGroup` when the item has a glyph, and `.titleAndIcon`
-  /// everywhere else. An item with no glyph always draws its title: an `iconOnly` item
-  /// with nothing to draw would be an empty, nameless control.
+  /// The item's label. `automatic` means `.iconOnly` inside a `ControlGroup` when the item has a
+  /// glyph (a connected group drops titles anyway) and `.titleAndIcon` everywhere else. An item
+  /// with no glyph always draws its title.
   @ViewBuilder private func itemLabel(
     _ item: ButtonGroupItemState,
     inControlGroup: Bool
@@ -587,7 +470,6 @@ struct ButtonGroupContent: NitroUIContent {
     }
   }
 
-  /// The `labelStyle` to apply, after `automatic` is resolved.
   private func resolvedLabelStyle(inControlGroup: Bool) -> some LabelStyle {
     switch model.labelStyle {
     case .titleOnly:
@@ -597,29 +479,22 @@ struct ButtonGroupContent: NitroUIContent {
     case .titleAndIcon:
       return AnyLabelStyle(.titleAndIcon)
     case .automatic:
-      // The two branches are different `LabelStyle` types, which is the whole reason
-      // this helper returns an erased style rather than the style itself.
+      // The branches are different `LabelStyle` types, hence the erased style.
       return inControlGroup ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon)
     }
   }
 
   // MARK: - The overflow control
 
-  /// The "More" `Menu`, composed **beside** the group, never inside it.
-  ///
-  /// Measured (Appendix A): as a segment *inside* a `ControlGroup` it draws disabled —
-  /// accessibility says so and a tap does nothing, containment or not. Beside the group
-  /// it opens, and it is the host's `needsContainment = true` that lets it present from
-  /// a view with no view-controller parent of its own (Menu's rule,
-  /// `ios/core/NitroSwiftUIHost.swift`).
+  /// The "More" `Menu`, composed beside the group, never inside it: as a segment inside a
+  /// `ControlGroup` it draws disabled and a tap does nothing. The host's `needsContainment` is what
+  /// lets it present.
   private func overflowMenu(_ items: [ButtonGroupItemState]) -> some View {
     Menu {
       ForEach(items, id: \.id) { item in
         if item.toggle {
-          // A `Toggle` inside a `Menu` is SwiftUI's checkable row, so a toggle item
-          // stays a toggle item when it overflows: same handshake, same
-          // `onCheckedChange`, same answer to "does the item at the end of the row
-          // still work".
+          // A `Toggle` inside a `Menu` is SwiftUI's checkable row, so a toggle item stays a toggle
+          // when it overflows.
           Toggle(isOn: toggleBinding(item)) {
             Text(item.title)
           }
@@ -637,9 +512,8 @@ struct ButtonGroupContent: NitroUIContent {
     .disabled(model.disabled)
   }
 
-  /// The binding a toggle reads and writes. The setter ignores what SwiftUI asked for
-  /// and goes through ``ButtonGroupModel/toggle(_:)``, because the control — not the
-  /// binding — owns the new state and the event that reports it.
+  /// The binding a toggle reads and writes. The setter ignores the value SwiftUI asked for: the
+  /// model owns the new state and the event that reports it.
   private func toggleBinding(_ item: ButtonGroupItemState) -> Binding<Bool> {
     Binding(
       get: { model.displayed.contains(item.id) },
@@ -648,9 +522,8 @@ struct ButtonGroupContent: NitroUIContent {
   }
 }
 
-/// `labelStyle(_:)` takes a concrete `LabelStyle`, so the switch picks the branch — the
-/// same reason ``ButtonContent`` switches on `buttonStyle`. Without it the four styles
-/// would be four copies of the item's label.
+/// `labelStyle(_:)` takes a concrete `LabelStyle`; this erases it so one label can take any of the
+/// four.
 private struct AnyLabelStyle: LabelStyle {
   private let apply: @MainActor (LabelStyleConfiguration) -> AnyView
 
@@ -663,23 +536,18 @@ private struct AnyLabelStyle: LabelStyle {
   }
 }
 
-/// The variant's button style, one branch per variant — ``ButtonVariant`` again, so a
-/// group's item and a lone Button cannot drift apart on which Material role an iOS name
-/// means (`docs/components/button.md` carries the table).
+/// The variant's button style, one branch per variant.
 private struct ItemButtonStyle: ViewModifier {
   let variant: ButtonVariant
 
   func body(content: Content) -> some View {
     switch variant {
     case .filled, .elevated:
-      // iOS has no elevated style; Button maps `elevated` to the prominent one, and a
-      // group's item follows its own control.
+      // iOS has no elevated style; the prominent one is the nearest.
       content.buttonStyle(.borderedProminent)
     case .tonal, .outlined:
-      // No outlined style either: `.bordered` is the nearest. Button strokes a hairline
-      // for `outlined` on its own; a group does not, because a row of four stroked
-      // capsules reads as four borders where Button reads as one outlined control —
-      // documented in `docs/components/button-group.md` rather than faked in.
+      // No outlined style either: `.bordered` is the nearest. No hairline stroke is added: a row of
+      // stroked capsules reads as several borders.
       content.buttonStyle(.bordered)
     case .text:
       content.buttonStyle(.borderless)
@@ -687,11 +555,8 @@ private struct ItemButtonStyle: ViewModifier {
   }
 }
 
-/// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
-///
-/// `nil` is also what a `ControlGroup` gets: a connected row ignores `.tint` entirely
-/// (measured: `.tint(.red)` leaves the probe row at 174.00 x 31.00), so passing it would
-/// only make the prop look honoured.
+/// `.tint()` has no "unset" form, so it is applied only when set. A `ControlGroup` gets `nil`: a
+/// connected row ignores `.tint` entirely.
 private struct OptionalItemTint: ViewModifier {
   let color: UIColor?
 
@@ -704,13 +569,9 @@ private struct OptionalItemTint: ViewModifier {
   }
 }
 
-/// The group's name goes on the row, so a reader can step over it as one thing while the
-/// items stay reachable inside it (`.contain`, not `.combine` — an item that could not
-/// be focused is a row that cannot be used).
-///
-/// An empty `accessibilityLabel(_:)` would silence the items' own names, so it is applied
-/// only when set — Button's and SegmentedControl's rule. `testID` deliberately does not
-/// go in here: RN already puts it on the component view.
+/// The group's name goes on the row with `.contain`, so a reader can step over the group while the
+/// items stay reachable inside it. An empty `accessibilityLabel(_:)` would silence the items' own
+/// names, so it is applied only when set.
 private struct OptionalGroupAccessibility: ViewModifier {
   let label: String?
 
@@ -723,27 +584,19 @@ private struct OptionalGroupAccessibility: ViewModifier {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiButtonGroup`.
 final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ButtonGroupContent>
 
   /// The seed waiting for the batch it belongs to.
   private var pendingDefaults: [String]?
 
-  /// This component's name in the sizing engine: `HybridNitroUiButtonGroupComponentName`
-  /// in the generated C++, and `getName()` in the generated Kotlin.
+  /// This component's name in the sizing engine. Must match `HybridNitroUiButtonGroupComponentName`
+  /// in the generated C++ and `getName()` in the generated Kotlin.
   private static let sizingComponentName = "NitroUiButtonGroup"
 
-  /// The size to lay a ButtonGroup out with before anything has been measured, in
-  /// points: the `medium` rung's *standard* row, measured 34.33 pt for three items in
-  /// Appendix A and rounded up to 34.4 so a cold first frame is never a tenth of a
-  /// point short of the control it is laying out (D17).
-  ///
-  /// Only the height matters: a `fillWidth` entry files the height alone, and a wrong
-  /// height moves every row on a cold first frame. The conformance rule measures the
-  /// default configuration and compares, and `ButtonGroup.harness.tsx` measures from a
-  /// *poisoned* fallback (height 99) so a failed correction cannot hide. The connected
-  /// track is 31 pt (Appendix A), which is one cold configuration corrected once.
+  /// The size to lay a ButtonGroup out with before anything has been measured, in points: the
+  /// `medium` standard row (34.33 pt, rounded up). Only the height matters for a `fillWidth`
+  /// control. The connected track is 31 pt and is corrected on its first measure.
   private static let fallbackSize = (width: 300.0, height: 34.4)
 
   private static let declaresFallback: Bool = {
@@ -751,32 +604,24 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process (the
-  /// static above is lazy and thread-safe, so repeat calls cost nothing).
-  ///
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that matters:
-  /// Fabric measures a shadow node before it creates any view, so a fallback declared
-  /// from `init` is one measure too late for the first instance (T14). `init` still
-  /// calls it, as the backstop.
+  /// Hand this control's declared size to the sizing engine, once per process. Called at startup,
+  /// because Fabric measures a shadow node before it creates the view; `init` calls it again as a
+  /// backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
 
-  /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: ButtonGroupModel())
     super.init()
-    // The width is the box's, because overflow can only be decided at the width the row
-    // is given: an `intrinsic` group would be measured unbounded, would never overflow,
-    // and would then be clamped by Yoga into a box it draws outside of (Appendix A
-    // measured 396 pt of content in a 369 pt box). The height is measured and pushed.
+    // The width is the box's, because overflow can only be decided at the width the row is given:
+    // measured unbounded, the row would never overflow and would draw outside its box.
     host.wantsContentSize = true
     host.sizingPolicy = .fillWidth
-    // The overflow `Menu` presents a view controller of its own, and a hosted control
-    // has no parent to present from — Menu's and Picker's rule.
+    // The overflow `Menu` presents a view controller, and a hosted control has no parent to present
+    // from without containment.
     host.needsContainment = true
-    // The backstop: startup normally registers this through
-    // ``NitroUiDeclaredFallbacks`` long before one can be measured.
+    // Backstop: startup normally registers this before one can be measured.
     Self.declareFallback()
   }
 
@@ -784,7 +629,6 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     return host
   }
 
-  /// The model, through the host that owns it (one owner, no second reference).
   private var model: ButtonGroupModel { host.model }
 
   // MARK: - Props
@@ -792,18 +636,15 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
 
   var items: [NitroUiButtonGroupItem] {
     get {
-      // Rebuilt as wire structs. Like Menu's `rows`, no `==` guard is possible on the
-      // wire type (its C++ `operator==` is invisible to Swift); the guard lives one
-      // level up in `ReactProp<std::vector<NitroUiButtonGroupItem>>::hasSameValue`,
-      // which is also what keeps the parse below off the per-frame path.
+      // Rebuilt as wire structs. The wire type has no `==` visible to Swift; unchanged props are
+      // filtered out earlier, in the generated C++ (`hasSameValue`).
       model.items.map { item in
         NitroUiButtonGroupItem(
           id: item.id,
           title: item.title,
           systemImage: item.systemImage.map { Variant_NullType_String.second($0) }
             ?? .first(NullType.null),
-          // Never drawn on iOS and never answered from iOS: the platform has no SF
-          // Symbols and no drawable names, so the round trip is `null`.
+          // Android-only; iOS never reads or returns it.
           androidIcon: .first(NullType.null),
           disabled: item.disabled,
           toggle: item.toggle
@@ -817,8 +658,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
       }
       model.items = parsed
       host.markDirty()
-      // The row *is* the size: a different item list is a different height, and no
-      // bounds or trait change is coming to say so (sizing.md §5's SwiftUI half).
+      // A different item list can be a different height, and no bounds or trait change will say so.
       host.noteContentSizeMayHaveChanged()
     }
   }
@@ -830,8 +670,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
         return
       }
       model.appearance = next
-      // The connected track and the bordered row are different heights (31 pt versus
-      // 34.33 pt, measured), so this moves the size, not just the pixels.
+      // The connected track and the bordered row are different heights (31 pt and 34.33 pt), so
+      // this changes the size, not just the pixels.
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
     }
@@ -842,8 +682,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     set {
       guard let next = ButtonVariant(rawValue: newValue), next != model.variant else { return }
       model.variant = next
-      // `.bordered` and `.borderedProminent` are the same shape and padding and
-      // `.borderless` is shorter, so a variant change can move the row.
+      // `.borderless` is shorter than the bordered styles, so a variant change can change the row's
+      // height.
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
     }
@@ -866,8 +706,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
         return
       }
       model.labelStyle = next
-      // Whether a title is drawn moves the row's width, and a title is taller than a
-      // glyph alone at some rungs, so the height is asked again.
+      // Whether a title is drawn changes the row's width, and at some sizes its height.
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
     }
@@ -878,8 +717,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     set {
       guard newValue != model.disabled else { return }
       model.disabled = newValue
-      // Repaints only: a disabled row is the same size. It also drops the overflow
-      // control, which is this platform's half of D29 — see `candidate(items:overflow:)`.
+      // Repaints only: a disabled row is the same size. It also drops the overflow control.
       host.markDirty()
     }
   }
@@ -900,8 +738,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   var checkedIds: [String] {
     get { model.state.js.map { Array($0) } ?? [] }
     set {
-      // Not visual on its own: `displayed` follows in `afterUpdate()`, once the event
-      // count says JS has caught up (§4).
+      // Not visual on its own: `displayed` follows in `afterUpdate()`, once the event count says JS
+      // has caught up.
       model.state.js = Set(newValue)
     }
   }
@@ -914,8 +752,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   var defaultCheckedIds: [String] {
     get { [] }
     set {
-      // Stored raw: applied in `afterUpdate()`, where the items it names exist
-      // (core.md §3 — Nitro does not order props inside a batch).
+      // Stored raw and applied in `afterUpdate()`, where the items it names exist: props in a batch
+      // arrive in no particular order.
       pendingDefaults = newValue
     }
   }
@@ -930,8 +768,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     set {
       let next = newValue.asType(String.self)
       guard next != model.overflowAccessibilityLabel else { return }
-      // Rendered: it is the "More" button's name, which iOS draws (Android uses
-      // Material's own localised string and ignores it).
+      // Rendered: it is the "More" button's name.
       model.overflowAccessibilityLabel = next
       host.markDirty()
     }
@@ -950,9 +787,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: `testID` is an RN base prop too, and
-      // `RCTViewComponentView` already puts it on the component view. It stays in the
-      // spec because Android needs it as a `tag`.
+      // Nothing to apply: `RCTViewComponentView` already puts `testID` on the component view. It is
+      // in the spec because Android needs it.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -970,9 +806,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     set {
       guard newValue != model.sizingKey else { return }
       model.sizingKey = newValue
-      // The engine has no answer for a key it has not seen, so it lays this out at the
-      // declared fallback; the new configuration may measure exactly what the old one
-      // did, and that is the size the host's dedupe would swallow (review F1).
+      // A new configuration may measure the same size as the old one, and the host must not dedupe
+      // that report away.
       host.noteSizingKeyChanged()
     }
   }
@@ -995,15 +830,14 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // An item that left the list must not stay checked, and the seed needs the items it
-    // names — which is why neither half is interpreted in a setter (core.md §3).
+    // An item that left the list must not stay checked, and the seed needs the items it names, so
+    // neither is interpreted in a setter.
     model.pruneChecked()
     if let defaults = pendingDefaults {
       model.applyDefaults(defaults)
       pendingDefaults = nil
     }
-    // The handshake: whether React's set wins over what the user just did, a refused
-    // flip included (§4).
+    // The handshake: whether React's set wins over what the user just did, a refused flip included.
     if model.state.reconcile() {
       model.displayed = model.state.displayed
       host.markDirty()
@@ -1012,11 +846,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   }
 
   func prepareForRecycle() {
-    // The full reset the brief asks for: a recycled control that still held its previous
-    // owner's items, checked set, event counts or seed would show them before its first
-    // prop (core.md §6). The `seeded` set is the quiet one — a surviving entry makes the
-    // next owner's `defaultCheckedIds` a no-op, which no screen can show and the
-    // harness's recycle probe is written to catch.
+    // A full reset, including the `seeded` set: a surviving entry would make the next owner's
+    // `defaultCheckedIds` a no-op.
     model.resetAll()
     pendingDefaults = nil
     host.prepareForRecycle()
@@ -1030,7 +861,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
 
   // MARK: - Methods
 
-  /// The size SwiftUI measured, from the host's cache. Safe on the JS thread (§1.4).
+  /// The size SwiftUI measured, from the host's cache. Safe on the JS thread.
   func measureContent() throws -> NitroUiButtonGroupSize {
     guard let size = host.contentSize else {
       return NitroUiButtonGroupSize(width: 0, height: 0)
@@ -1049,17 +880,9 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     }
   }
 
-  /// Open the overflow menu the way the indicator's own tap does — which iOS cannot do.
-  ///
-  /// A SwiftUI `Menu` expands from a gesture, and the programmatic half (`isExpanded`) is
-  /// iOS 18 while the deployment target is 15.1. So this answers "nothing happened" rather
-  /// than putting a number in the witness that no user action caused: D29's open/close
-  /// pair is proved where Material owns the menu state (the harness, Android), and on iOS
-  /// it is proved one level down — `real-input:ios` taps the real indicator, disables the
-  /// group from the screen, and reads the overflow rows gone.
+  /// Does nothing on iOS: a SwiftUI `Menu` opens from a gesture, and the programmatic `isExpanded`
+  /// needs iOS 18.
   func nuiTestOpenOverflow() throws {
-    // Deliberately empty. See the doc comment: a fake `menu=open` here would make the
-    // harness's D29 assertion read as if it had opened a menu on iOS too.
   }
 
   /// Read what the row laid out, on the main thread. Returns at once.
@@ -1067,11 +890,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     let host = self.host
     let model = self.model
     let report = {
-      // Lay the row out before answering. The placement record is written by
-      // `placeSubviews`, so a probe that only reads the record answers with whatever
-      // layout the host last happened to do — and a host that has been recycled into a
-      // new mount has no reason to have laid anything out yet, where it would answer
-      // "nothing" about a row that is on screen.
+      // Lay the row out before answering: the placement record is written during layout, and a
+      // recycled host may not have laid out its new mount yet.
       host.setNeedsLayout()
       host.layoutIfNeeded()
       model.publishRowReport(order: model.items.map(\.id))
@@ -1083,11 +903,8 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     }
   }
 
-  /// iOS has no node to read in-process: the hosting view answers
-  /// `accessibilityElements == []` to anything that is not an accessibility client
-  /// (measured in `HybridNitroUiSlider.swift`). Saying so is the answer; the labels are
-  /// XCUITest's to read, in `real-input:ios`. No UI is touched, so there is nothing to
-  /// hop for.
+  /// Records `unavailable`: a SwiftUI hosting view answers `accessibilityElements == []` to
+  /// anything that is not an accessibility client, so there is nothing to read in-process.
   func nuiTestProbeAccessibility() throws {
     model.publishAccessibilityReport("unavailable")
   }

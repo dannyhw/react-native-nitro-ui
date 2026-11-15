@@ -7,225 +7,95 @@ import type {
 import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 
 /**
- * Native props of the `NitroUiSlider` Hybrid View.
+ * No prop is optional: Fabric sends `null` for a removed prop, which crashes
+ * an optional one (nitro#1184). Callbacks are the exception: Nitro only
+ * accepts a callback prop typed as a function, never `fn | null`.
  *
- * Same rules as every other component (DECISIONS D7/D7b): value props are
- * `T | null` and the JS wrapper (`Slider.tsx`) always sends all of them;
- * callbacks are `fn?`, because Nitro only unwraps its `{ f: … }` wrapper for a
- * prop whose type *is* a function.
- *
- * The three callbacks are one contract, not three independent ones - see
- * `docs/architecture/core.md` §11:
- * - `onSlidingStart` fires once when a drag begins, with the value it began at;
- * - `onValueChange` fires **at most once per frame** during the drag, coalesced
- *   to the newest value the finger reached (native samples touch events faster
- *   than the display draws them);
- * - `onSlidingComplete` fires once at release and always carries the final
- *   value, even when the last frame already emitted it.
- * The `eventCount` argument is native's own change counter; the JS wrapper
- * echoes the newest one back as `mostRecentEventCount` (the event-count
- * handshake, §4). `onSlidingStart`/`onSlidingComplete` report the count as it
- * stands - they change nothing, so they do not increment it.
+ * Each callback's `eventCount` is native's change counter. `onSlidingStart`
+ * and `onSlidingComplete` report it as it stands and do not increment it.
  */
 export interface NitroUiSliderProps
   extends HybridViewProps, NitroUiIntrinsicProps {
-  /**
-   * Controlled value, or `null` for an uncontrolled Slider - in which case
-   * native keeps the displayed value and `defaultValue` seeded it.
-   */
+  /** `null` while uncontrolled: native then keeps the displayed value. */
   value: number | null;
-  /** Initial value of an uncontrolled Slider; ignored while `value` is set. */
   defaultValue: number | null;
-  /**
-   * The last event count JS has fully processed. Native only accepts a `value`
-   * write once it has seen at least that many of its own events, which is what
-   * lets a drag win while JS lags and a rejected change still revert (§4).
-   */
+  /** Native ignores a `value` sent with a count behind its own. */
   mostRecentEventCount: number;
-  /** Lower bound of the range. Default `0`. */
   minimumValue: number;
-  /** Upper bound of the range. Default `1`. */
   maximumValue: number;
   /**
-   * Increment the value snaps to, in the Slider's own units. `0` means
-   * continuous (the default). A value larger than the range, or a range that is
-   * not a whole number of steps, still quantises - to the nearest multiple of
-   * `step` measured from `minimumValue`, with the maximum always reachable.
+   * `0` means continuous. Otherwise values snap to the nearest multiple of
+   * `step` from `minimumValue`, and the maximum is always reachable.
    */
   step: number;
-  /** Disable interaction (and show the disabled style). */
   disabled: boolean;
-  /**
-   * RN-processed (`processColor`) ARGB colour for the filled track and thumb, or
-   * `null` for the platform default: SwiftUI `.tint()` / M3 slider colours.
-   */
+  /** A `processColor` ARGB int, or `null` for the platform default. */
   tintColor: number | null;
-  /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
-  /** Accessibility label of the control itself. */
   accessibilityLabel: string | null;
-  /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
-  /** During a drag, once per frame at most. */
+  /** At most once per frame during a drag, with the newest value reached. */
   onValueChange?: (value: number, eventCount: number) => void;
-  /** When a drag begins, with the value it began at. */
+  /** Once when a drag begins, with the value it began at. */
   onSlidingStart?: (value: number, eventCount: number) => void;
-  /** At release, always with the final value. */
+  /** Once at release, always with the final value. */
   onSlidingComplete?: (value: number, eventCount: number) => void;
 }
 
 export interface NitroUiSliderMethods extends HybridViewMethods {
-  /**
-   * The size of the hosted control, as measured on the UI thread during the last
-   * layout/commit. For a `fillWidth` control this is the height the control
-   * wants *at the width Yoga gave it*, plus that width.
-   */
+  /** The height the control wants at the width Yoga gave it, and that width. */
   measureContent(): NitroUiSliderSize;
 
   /**
-   * TEMPORARY, test-only: drive one drag through the real interaction pipeline
-   * (the same entry points a touch stream uses), so a harness can assert the
-   * frame coalescing, the quantisation and the three-callback contract without a
-   * touch synthesiser. `react-native-harness` can synthesise a tap but not a
-   * drag, and the platform controls need a drag to change value on iOS.
-   *
-   * The drag begins on the value the control *displays* - touching down on the
-   * thumb, not on a point of the track - which is what makes it a real test of
-   * the handshake: after a change JS rejected, the value it starts from is the
-   * evidence of what native is showing. It then moves to `to`, which is
-   * quantised like any other value, and ends.
-   *
-   * With `msPerStep` 0 every move lands in **one** main-thread turn - which is
-   * the point, because a pipeline that emitted per move would then emit `steps`
-   * times where this one emits once. With a positive `msPerStep` each move waits
-   * that long, so the coalescer gets several frames.
-   *
-   * Returns nothing; observe the drag through the three callbacks.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can drag.
+   * @internal Test-only: drags from the displayed value to `to` in `steps`
+   * moves. With `msPerStep` 0 every move lands in one main-thread turn.
    */
   nuiTestDrag(to: number, steps: number, msPerStep: number): void;
 
   /**
-   * TEMPORARY, test-only: perform one accessibility increment (`direction` > 0)
-   * or decrement (`direction` < 0) through the **platform's** a11y action, not by
-   * calling the component's step rule.
-   *
-   * On iOS that is `accessibilityIncrement()` / `accessibilityDecrement()` - the
-   * selector VoiceOver performs on an adjustable element - invoked on the hosted
-   * element the control vends. On Android it is the `SetProgress` semantics
-   * action, performed on the node M3 publishes, with the target an a11y service
-   * sends for a scroll forward/back on a progress node: one twentieth of the range
-   * away from the current value. The action is the real one either way; the
-   * stride is only what the seam supplies, because the rule under test is
-   * directional and must not depend on the size of the step.
-   *
-   * Observe the result through the three callbacks, as with `nuiTestDrag`, and
-   * read ``nuiTestAccessibilityStepReport`` for whether the platform action was
-   * found at all - a value that did not move is otherwise ambiguous between
-   * "the control has no adjustable action" and "it has one and it is wrong".
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can drive a
-   * screen reader.
+   * @internal Test-only: performs the platform's accessibility increment
+   * (`direction` > 0) or decrement (`direction` < 0) on the hosted control.
    */
   nuiTestAccessibilityStep(direction: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last ``nuiTestAccessibilityStep`` did, as one
-   * short line - the class and traits of the element the platform action was
-   * performed on, or a dump of the hosted subtree when no adjustable element was
-   * found.
-   *
-   * It is a separate method because the action has to run on the platform's UI
-   * thread, and a synchronous Nitro method may not block for it
-   * (`ios/core/NitroUiMainThread.swift`: never `main.sync`). The action stores a
-   * one-line report on the main thread; this reads it from any thread.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Test-only: what the last `nuiTestAccessibilityStep` acted on.
+   * Separate because the step runs on the UI thread, which a Nitro method
+   * must not block for.
    */
   nuiTestAccessibilityStepReport(): string;
 
   /**
-   * TEMPORARY, test-only: whether this control's frame pump is armed - a
-   * `CADisplayLink` scheduled on iOS, a `Choreographer` callback posted on
-   * Android. "Armed" means started for a drag and not stopped: iOS keeps one link
-   * alive for a whole drag, while Android's callback is one-shot and re-posts
-   * itself per sample, so only this says whether either is still alive.
-   *
-   * Nothing else can see a pump that outlived its drag: it emits nothing once
-   * nothing is pending, so a leak is invisible in the event stream while it burns
-   * a frame callback 60 times a second for the life of the view.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Test-only: whether the drag's frame pump is still running (a
+   * `CADisplayLink` on iOS, a `Choreographer` callback on Android).
    */
   nuiTestFramePumpArmed(): boolean;
 
   /**
-   * TEMPORARY, test-only: inject a pointer stream through the platform's own touch
-   * entry point (Android `View.dispatchTouchEvent`), so a harness can put a MOVE
-   * and the release in **one** main-thread turn.
-   *
-   * `react-native-harness` presses and holds; `adb shell input swipe` waits for
-   * every event it injects. Neither can produce the shape a real finger produces
-   * on a busy frame — the last batched MOVE and the UP dispatched together, with
-   * Material 3's drag channel still holding the delta it read from that batch. The
-   * order those two land in *is* the contract of `onSlidingComplete`: an app told
-   * a drag ended must be able to read the value the drag ended on.
-   *
-   * `mode` picks the stream, and every one of them is a rule the docs state:
-   * - `0` — DOWN, three MOVEs, then the final MOVE and the UP in one turn. One
-   *   gesture: `start`, the changes, `complete`. A second `start` means the end
-   *   was reported before the last delta had been applied.
-   * - `1` — DOWN, then `ACTION_CANCEL`. A stream a parent takes over still owes
-   *   the app its `complete`: an app told `onSlidingStart` is owed one.
-   * - `2` — a second finger joins and leaves. Still exactly one gesture, because
-   *   the touch that opened it is one touch.
-   * - `3` — the press, the move that crosses the touch slop **and** the release all
-   *   in one turn, so everything the platform would do with the gesture is still
-   *   queued when the release is read. One start and one complete as well: an end
-   *   that is only correct when the move arrived a turn earlier is not correct.
-   *
-   * Posted to the platform UI thread, like `nuiTestDrag`. Observe the three
-   * callbacks, and read ``nuiTestPointerStreamReport`` for whether there was a
-   * laid-out view to dispatch to — a stream that reached nothing looks exactly
-   * like a control that reported nothing.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can inject a
-   * pointer stream.
+   * @internal Test-only: injects a pointer stream through the platform's
+   * touch entry point (Android `View.dispatchTouchEvent`). `mode`:
+   * - `0`: DOWN, three MOVEs, then the final MOVE and the UP in one turn;
+   * - `1`: DOWN, then `ACTION_CANCEL`;
+   * - `2`: a second finger joins and leaves;
+   * - `3`: the press, a move past the touch slop and the release in one turn.
+   * Each is one gesture: one `onSlidingStart` and one `onSlidingComplete`.
    */
   nuiTestPointerStream(mode: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last ``nuiTestPointerStream`` did, as one short
-   * line — the event count it dispatched, or why it dispatched none.
-   *
-   * Separate for the same reason as ``nuiTestAccessibilityStepReport``: the
-   * injection belongs to the platform UI thread, and a synchronous Nitro method
-   * may not block for it.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Test-only: how many events the last `nuiTestPointerStream`
+   * dispatched, or why it dispatched none.
    */
   nuiTestPointerStreamReport(): string;
 }
 
-/**
- * A size in platform units (iOS points / Android density-independent pixels).
- *
- * @internal Only reachable through a Hybrid View, which v0.1 does not expose
- * publicly (DECISIONS D14).
- */
+/** @internal In platform units (iOS points, Android dp). */
 export interface NitroUiSliderSize {
   width: number;
   height: number;
 }
 
-/**
- * The Hybrid View behind the `Slider` wrapper.
- *
- * @internal v0.1 does not expose Hybrid Views or their settable props publicly
- * (DECISIONS D14): it is exported for this repo's example, harness, bench and
- * smoke apps, and for the typed `hybridRef` handle, and is not semver surface.
- */
+/** @internal Exported for this repo's apps and tests; not semver surface. */
 export type NitroUiSlider = HybridView<
   NitroUiSliderProps,
   NitroUiSliderMethods

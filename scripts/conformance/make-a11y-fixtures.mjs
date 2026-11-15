@@ -1,18 +1,14 @@
 #!/usr/bin/env node
 /**
- * Build the a11y rule's test fixtures out of *real* dumps.
+ * Builds the a11y rule's test fixtures from real `uiautomator` dumps of the example app
+ * running on the device `ANDROID_SERIAL` names.
  *
- * Run once, on a machine with the example app on a device, to (re)generate
- * `scripts/__tests__/fixtures/a11y/*.xml`. Committed because the rule's whole claim is
- * about which node carries a name, and a fixture typed by hand would be the rule
- * asserting an imagined tree — the failure mode AGENTS.md calls out ("test fixtures must
- * not coincide with the right answer", and here, must not be *invented*).
+ * Usage: make-a11y-fixtures.mjs [outDir] [--only <id>[,<id>…]]
+ *   outDir   where the `.xml` files go (default `scripts/__tests__/fixtures/a11y`)
+ *   --only   refresh only the named controls' fixtures
  *
- * What is kept per control is the named node and its real ancestors (and, for a group
- * case, the actable nodes inside its box), verbatim: the same
- * attribute strings, in the same document order, so `parseHierarchy` sees a subtree of
- * the dump rather than a paraphrase of it. Nodes are dropped only when their box does not
- * contain the named node — the parts of the tree a rule about one control cannot see.
+ * Each fixture keeps the named node, its ancestors and, for a group, the actable nodes inside
+ * its box, verbatim and in document order.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -24,15 +20,6 @@ const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
 
 const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
 
-/**
- * `--only <id>[,<id>…]` refreshes one control's fixture.
- *
- * Regenerating the whole set is the right thing after a change that could move any
- * control's tree, and the wrong thing when one control is new: the committed fixtures are
- * the measured basis for rules this task did not touch, and rewriting all of them makes a
- * later diff impossible to read. The tab walk still starts from the top, so the
- * horizontal tab strip is searched in order exactly as a full run does.
- */
 const onlyAt = process.argv.indexOf('--only');
 const only =
   onlyAt >= 0 && process.argv[onlyAt + 1] != null
@@ -101,7 +88,6 @@ function scrollToTop() {
   sleep(500);
 }
 
-/** Whether a dumped node reports an action a person could take. */
 function actable(node) {
   return (
     node.clickable === 'true' ||
@@ -110,12 +96,7 @@ function actable(node) {
   );
 }
 
-/**
- * The named node's real ancestors, in document order, plus the named node itself.
- *
- * `parseHierarchy` is flat, so containment is computed from the boxes: an ancestor's box
- * is the only thing that proves it wraps the child in a dump.
- */
+// `parseHierarchy` returns a flat list, so ancestry is derived from box containment.
 function subtree(xml, label) {
   const nodes = parseHierarchy(xml);
   const named = nodes.find(
@@ -131,11 +112,8 @@ function subtree(xml, label) {
     (node) =>
       node === named ||
       inside(node, named) ||
-      // A `role: 'container'` case is graded on what its box *contains*
-      // (`hasActableMembers` in `a11y.mjs`), and a group's members are siblings of the
-      // merged node rather than children of it — ancestry alone would drop the very items
-      // the rule asks about. Only the actable ones are kept, so a container's fixture
-      // stays as small as every other control's.
+      // A group's members are siblings of the merged node, not children of it, so the
+      // actable nodes inside its box are kept as well.
       (node !== named && inside(named, node) && actable(node))
   );
   const raw = [...xml.matchAll(/<node\b[^>]*?\/?>/g)];
@@ -153,16 +131,8 @@ function subtree(xml, label) {
   };
 }
 
-/**
- * The tab bar's node for `label`, scrolling the strip sideways until it shows.
- *
- * The bar is a horizontal scroller and the app now has more tabs than fit one
- * screen, so a control added late can sit off-screen at every vertical scroll
- * position: looking at one dump only was fine while the tabs fitted, and started
- * to answer "no <screen> tab" for the tail of the list once they did not. The strip
- * keeps its own scroll position between screens, and the controls are visited in
- * tab order, so this walks forward rather than hunting.
- */
+// The tab bar scrolls sideways and keeps its position between screens. Controls are visited
+// in tab order, so swiping forward until the tab shows is enough.
 function findTab(label) {
   for (let attempt = 0; attempt < 14; attempt += 1) {
     const tab = parseHierarchy(dump()).find(

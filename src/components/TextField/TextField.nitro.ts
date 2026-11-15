@@ -8,206 +8,119 @@ import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 import type { NitroUiSize } from '../Switch/Switch.nitro';
 
 /**
- * Native props of the `NitroUiTextField` Hybrid View.
+ * No prop is optional: Fabric sends `null` for a removed prop, which crashes
+ * an optional one (nitro#1184). Callbacks are the exception: Nitro only
+ * accepts a callback prop typed as a function, never `fn | null`.
  *
- * Same rules as every other component (DECISIONS D7/D7b): value props are
- * `T | null` or a plain value the wrapper always sends, and callbacks are
- * `fn?`, because Nitro only unwraps its `{ f: … }` wrapper for a prop whose
- * type *is* a function. `TextField.tsx` is the friendly API.
- *
- * iOS hosts a `UITextField` (a `UITextView` when `multiline`), not SwiftUI's
- * `TextField` (D34): only UIKit can see marked text, and the controlled-value
- * guard below needs to. Android hosts `BasicTextField(TextFieldState)`
- * (Q2's answer 1).
- *
- * The text is a controlled value on the event-count handshake
- * (`docs/architecture/core.md` §4) with one text-specific rule on top: a
- * `value` write that arrives while an IME composition is open (iOS
- * `markedTextRange`, Android `TextFieldState.composition`) is **dropped**, not
- * applied, because replacing the text under a composition destroys it. Like
- * every other refused write it is a drop rather than a queue: the next commit
- * decides again.
+ * A `value` write that arrives during an IME composition is dropped, because
+ * replacing the text under a composition destroys it. iOS hosts UIKit's
+ * `UITextField` / `UITextView`, not SwiftUI's `TextField`: only UIKit can see
+ * marked text.
  */
 export interface NitroUiTextFieldProps
   extends HybridViewProps, NitroUiIntrinsicProps {
-  /**
-   * Controlled text, or `null` for an uncontrolled field - native then keeps
-   * the text the user typed, and `defaultValue` seeded it.
-   */
+  /** `null` while uncontrolled: native then keeps the text the user typed. */
   value: string | null;
-  /** Initial text of an uncontrolled field; ignored while `value` is set. */
   defaultValue: string | null;
-  /**
-   * The last event count JS has fully processed (core-architecture §4). Native
-   * only applies a `value` write once it has seen at least this many of its
-   * own events, which is what makes a rejected edit revert.
-   */
+  /** Native ignores a `value` sent with a count behind its own. */
   mostRecentEventCount: number;
-  /** Text shown while the field is empty, or `null` for none. */
   placeholder: string | null;
   /**
-   * `false`: one line, Return submits (`UITextField` / single-line
-   * `BasicTextField`). `true`: wraps and grows with its content, Return inserts
-   * a newline (`UITextView` / multi-line `BasicTextField`).
+   * `false`: one line, Return submits. `true`: wraps and grows with its
+   * content, Return inserts a newline.
    */
   multiline: boolean;
   /**
    * `'default' | 'number-pad' | 'decimal-pad' | 'numeric' | 'email-address' |
-   * 'phone-pad' | 'url'`, RN's spellings. Anything else is `'default'`.
+   * 'phone-pad' | 'url'`. Anything else is `'default'`.
    */
   keyboardType: string;
   /** `'none' | 'sentences' | 'words' | 'characters'`. */
   autoCapitalize: string;
-  /** Whether the keyboard may autocorrect. */
   autoCorrect: boolean;
-  /** Obscure the text. Single-line only: ignored while `multiline`. */
+  /** Single-line only: ignored while `multiline`. */
   secureTextEntry: boolean;
   /**
-   * The longest text the field accepts, in UTF-16 code units (JavaScript's
-   * `string.length`, as RN counts it), or `null` for no limit. Enforced
-   * natively, never by cutting a grapheme cluster in half, and not while a
-   * composition is open.
+   * In UTF-16 code units (`string.length`), or `null` for no limit. Never
+   * splits a grapheme cluster, and is not enforced during an IME composition.
    */
   maxLength: number | null;
-  /**
-   * `'default' | 'done' | 'go' | 'next' | 'search' | 'send'`: the Return key's
-   * label. Single-line only.
-   */
+  /** `'default' | 'done' | 'go' | 'next' | 'search' | 'send'`; single-line. */
   returnKeyType: string;
   /** `false`: the field shows its text and takes no focus and no input. */
   editable: boolean;
-  /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
-  /** Accessibility label of the field itself. */
   accessibilityLabel: string | null;
-  /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
   /**
-   * Called on every edit the user makes, with the text native now displays
-   * and native's event count (the wrapper echoes it as `mostRecentEventCount`).
-   * Not called for a `value` write, and not for each step of an open
-   * composition on iOS - only once its text is in the field.
+   * Called for every user edit. On iOS, not for each step of an open
+   * composition: only once its text is in the field.
    */
   onValueChange?: (value: string, eventCount: number) => void;
   /**
-   * The field gained (`true`) or lost (`false`) focus. One callback for both
-   * edges, so the native names stay clear of the base view's own `onFocus` /
-   * `onBlur` events (`BaseViewEventEmitter`); the wrapper splits it.
+   * One callback for focus and blur, so its name cannot collide with the base
+   * view's own `onFocus` / `onBlur` events.
    */
   onFocusChange?: (focused: boolean) => void;
-  /** Return was pressed on a single-line field, with the text it holds. */
+  /** Return on a single-line field, with the text it holds. */
   onSubmitEditing?: (text: string) => void;
 }
 
-/**
- * What a TextField reports about itself, for this repo's harness.
- *
- * @internal Not app API (DECISIONS D14).
- */
+/** @internal The native field's state as applied, for tests. */
 export interface NitroUiTextFieldTestState {
-  /** The text the native control holds right now. */
   text: string;
-  /** Whether the control is first responder / holds Compose focus. */
   focused: boolean;
-  /** Whether an IME composition (marked text) is open. */
   composing: boolean;
-  /** Native's event count (`NitroUiControlledValue.nativeEvents`). */
   nativeEvents: number;
-  /** The echo native has seen (`NitroUiControlledValue.jsEvents`). */
+  /** The `mostRecentEventCount` native has seen. */
   jsEvents: number;
-  /**
-   * What happened to the last `value` write that differed from the text:
-   * `applied`, `stale` (JS had not seen the newest edit), `composing`
-   * (dropped under an open composition) or `none`.
-   */
+  /** The last `value` write: `applied`, `stale`, `composing` or `none`. */
   lastWrite: string;
-  /** Whether the control accepts input (`editable`, as applied). */
   editable: boolean;
-  /** Whether the hosted control is the multi-line one. */
   multiline: boolean;
-  /** Whether the text is drawn obscured. */
   secure: boolean;
-  /** The keyboard type as applied (RN spelling). */
   keyboardType: string;
-  /** The Return key as applied (RN spelling). */
   returnKeyType: string;
-  /** The capitalisation as applied (RN spelling). */
   autoCapitalize: string;
-  /** Autocorrect as applied. */
   autoCorrect: boolean;
-  /** `maxLength` as applied, or `-1` for none. */
+  /** `-1` for none. */
   maxLength: number;
-  /** The placeholder the control shows, or `''`. */
+  /** `''` for none. */
   placeholder: string;
-  /** The accessibility label on the control itself, or `''`. */
+  /** `''` for none. */
   accessibilityLabel: string;
 }
 
 export interface NitroUiTextFieldMethods extends HybridViewMethods {
-  /**
-   * The size of the hosted control, as measured on the UI thread during the
-   * last layout/commit. Reads a cache, so it is safe from the JS thread.
-   */
+  /** Reads a cached size; safe to call from the JS thread. */
   measureContent(): NitroUiSize;
-  /**
-   * Give the field focus (and the keyboard). Hops to the UI thread and
-   * returns at once; `onFocusChange(true)` says when it landed. Does nothing
-   * on a field that is not `editable`.
-   */
+  /** Returns at once; `onFocusChange(true)` says when focus landed. */
   focus(): void;
-  /** Take focus away from the field. Hops to the UI thread, returns at once. */
   blur(): void;
-  /**
-   * TEMPORARY, test-only: the control's own state, snapshotted on the UI
-   * thread after every change and read from here under a lock, so JS never
-   * waits for the main thread.
-   *
-   * @internal Not app API (DECISIONS D14).
-   */
+  /** @internal Test-only. Reads a snapshot; never waits for the UI thread. */
   nuiTestState(): NitroUiTextFieldTestState;
   /**
-   * TEMPORARY, test-only (iOS): open an IME composition with `text` as its
-   * marked text, through `UITextInput.setMarkedText(_:selectedRange:)` - the
-   * call a Japanese or Chinese keyboard makes. `''` commits it
-   * (`unmarkText()`). Needs a focused field. A no-op on Android, where no
-   * public API opens a composition outside an IME.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Test-only, iOS: opens an IME composition with `text` as its
+   * marked text; `''` commits it. Needs a focused field. No-op on Android,
+   * where no public API opens a composition outside an IME.
    */
   nuiTestSetMarkedText(text: string): void;
   /**
-   * TEMPORARY, test-only (iOS): delete the open composition the way a person does
-   * with Backspace on an IME keyboard - empty marked text, then `unmarkText()` - so the
-   * text goes back to what it was before the composition began. A no-op on Android
-   * (the example app's probe deletes one through the `InputConnection`).
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Test-only, iOS: deletes the open composition, restoring the
+   * text from before it began. No-op on Android.
    */
   nuiTestCancelMarkedText(): void;
   /**
-   * TEMPORARY, test-only (iOS): paste `text` at UTF-16 offset `at`, through
-   * `UIResponderStandardEditActions.paste(_:)` - the edit path that runs the field's
-   * `shouldChangeCharactersIn`, which `insertText` does not. Needs a focused
-   * single-line field. A no-op on Android.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Test-only, iOS: pastes `text` at UTF-16 offset `at` through the
+   * system paste action, which runs `shouldChangeCharactersIn` where
+   * `insertText` does not. Needs a focused single-line field.
    */
   nuiTestPaste(text: string, at: number): void;
-  /**
-   * TEMPORARY, test-only (task F6): `drops=<n> recycles=<m>` for this object,
-   * as `NitroUiSwitchMethods.nuiTestLifetimeReport` describes.
-   *
-   * @internal Not app API (DECISIONS D14).
-   */
+  /** @internal Test-only: `drops=<n> recycles=<m>` for this native object. */
   nuiTestLifetimeReport(): string;
 }
 
-/**
- * The Hybrid View behind the `TextField` wrapper.
- *
- * @internal Not semver surface (DECISIONS D14); exported for this repo's
- * example, harness and bench apps.
- */
+/** @internal Exported for this repo's apps and tests; not semver surface. */
 export type NitroUiTextField = HybridView<
   NitroUiTextFieldProps,
   NitroUiTextFieldMethods

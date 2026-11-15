@@ -1,22 +1,3 @@
-/**
- * Do the workflows still say what CI has to do?
- *
- * `main` was red for about seven hours on 31 Oct and nobody noticed, and the
- * reasons were all in YAML: a depth-1 checkout for a job that reads an earlier
- * commit (`96ad69c`), and a concurrency group that cancelled a push to `main`
- * with the next push to `main`, so a sha can land with no conclusion at all (F4).
- * None of it is visible from `bun run check`, because nothing here ran the
- * workflows.
- *
- * So this reads them as data and asks the questions the failures actually turned
- * on - parsed YAML rather than a grep, so a reformat cannot hide a hole and a
- * reword cannot make a guard pass by not matching anything. The
- * `callstackincubator/react-native-harness` pin is checked against the CLI this
- * repo installs, because the action's first step refuses a project whose CLI
- * predates its own `harness ci` interface: that is a red job with a one-line
- * cause nobody reads.
- */
-
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -29,10 +10,6 @@ const root = process.cwd();
 const workflowDir = path.join(root, '.github', 'workflows');
 
 /**
- * Parsed YAML for one workflow file (or a composite action, by repo-relative
- * path). A parse failure names the file, because a guard that cannot read its
- * subject is worse than no guard: it would pass on a file renamed away.
- *
  * @param {string} file `ci.yml`, or a repo-relative path
  * @returns {any}
  */
@@ -56,27 +33,9 @@ function triggers(file) {
 }
 
 /**
- * A small evaluator for the subset of Actions expression syntax these workflows
- * use, so the guards can ask what an expression **decides** instead of matching
- * its text.
- *
- * Why this exists: both of F4's concurrency findings were invisible to a text
- * check. Round 1's `if: inputs.package-manager-cache` mentions the input, so a
- * guard that asked only "does the `if` name it?" passed while the release job
- * restored a cache - composite inputs always arrive as strings, and any
- * non-falsy string is true. And `cancel-in-progress: false` reads as "main is
- * safe" while GitHub's one-running-plus-one-pending-per-group rule still drops a
- * queued commit's run. The only test that can catch either is one that evaluates
- * the expression with the values the runner would pass, using Actions' own
- * coercion: the falsy set is `false`, `0`, `-0`, `''`, `null`; `==`/`!=` are
- * loose and case-insensitive on strings; `&&`/`||` return an operand, not a
- * boolean. Unsupported syntax throws rather than being guessed at, so the guard
- * cannot go quietly blind.
- *
- * Supported: `${{ … }}` interpolation inside text, `'string'` and number
- * literals, dotted context access (`github.ref`, `inputs.x`,
- * `steps.id.outputs.name`, `needs.job.outputs.x`), `==` `!=` `<` `<=` `>` `>=`,
- * `&&`, `||`, and parentheses.
+ * Evaluates the subset of Actions expression syntax these workflows use, with
+ * Actions' own coercion, so a test can ask what an expression decides.
+ * Unsupported syntax throws.
  *
  * @param {string} source raw YAML value, with or without `${{ … }}`
  * @param {object} ctx the contexts the expression may read
@@ -291,9 +250,8 @@ function toNumber(value) {
 }
 
 /**
- * Verbatim from the expression docs: the falsy set is `false`, `0`, `-0`, `''`,
- * `null`; every other value is truthy - which is exactly why the string `'false'`
- * is not the boolean, and the whole of review item 1.
+ * Actions' falsy set is `false`, `0`, `-0`, `''` and `null`. Every other value
+ * is truthy, including the string `'false'`.
  *
  * @param {unknown} value
  * @returns {boolean}
@@ -328,10 +286,9 @@ function stringify(value) {
  */
 function cancelsFor(value, ref) {
   if (typeof value === 'boolean') return value;
-  // `cancel-in-progress` is a boolean-typed key, so the runner evaluates the
-  // expression rather than stringifying it into text: parse it directly (going
-  // through `evaluate`'s interpolation would turn `false` into the string
-  // 'false', which is truthy - the exact trap this round is about).
+  // `cancel-in-progress` is boolean-typed, so the runner evaluates the
+  // expression. Interpolating it into text would turn `false` into the truthy
+  // string 'false'.
   return isActionsTruthy(parseExpression(inner(value), { github: { ref } }));
 }
 
@@ -419,45 +376,30 @@ describe('CI keeps every push to main to a conclusion', () => {
   });
 
   it('does not cancel an in-progress run of main', () => {
-    // The incident: several pushes to `main` today ended `cancelled`, so the
-    // newest commit had no CI result at all, during the same window main was
-    // red. A superseded *feature* run is worth cancelling; a superseded main run
-    // is the only record that main is green, and the release workflow reads main.
     const value = readYaml('ci.yml').concurrency['cancel-in-progress'];
     expect(cancelsFor(value, 'refs/heads/main')).toBe(false);
   });
 
   it('still cancels a superseded run on a pull request or feature branch', () => {
-    // The other half, so the fix is not "stop cancelling": every branch push used
-    // to queue behind every other, and 20-minute jobs on stale commits is what a
-    // concurrency group exists to prevent.
     const value = readYaml('ci.yml').concurrency['cancel-in-progress'];
     expect(cancelsFor(value, 'refs/pull/9/merge')).toBe(true);
     expect(cancelsFor(value, 'refs/heads/task/F4-ci-green')).toBe(true);
   });
 
   it('gives every push to main its own concurrency group', () => {
-    // `cancel-in-progress: false` is only half the rule. GitHub keeps **one
-    // running and one pending run per group**, and a newly queued run replaces
-    // whatever was pending - a dropped run gets no conclusion at all, which is
-    // the exact thing this task exists to prevent. So three quick merges on one
-    // branch-level group meant A running, B pending, C arrives, B vanishes. Each
-    // commit to `main` now names its own group, and nothing can be displaced.
+    // GitHub keeps one running and one pending run per group, and a newly queued
+    // run replaces the pending one, which then never gets a conclusion.
     const group = readYaml('ci.yml').concurrency.group;
     const first = groupFor(group, { ref: 'refs/heads/main', sha: 'aaa1111' });
     const second = groupFor(group, { ref: 'refs/heads/main', sha: 'bbb2222' });
     expect(first).not.toBe(second);
-    // Still one group per workflow per commit: not a group per run attempt, which
-    // would stop a re-run of the same sha joining its own group.
+    // A re-run of the same sha joins the same group.
     expect(groupFor(group, { ref: 'refs/heads/main', sha: 'aaa1111' })).toBe(
       first
     );
   });
 
   it('still puts every push to one pull request in the same group', () => {
-    // The other half: on a PR the whole point is that the newest push takes over,
-    // so a branch's pushes must keep sharing a group. If they did not, three
-    // pushes would run three 20-minute suites against the same branch.
     const group = readYaml('ci.yml').concurrency.group;
     expect(groupFor(group, { ref: 'refs/pull/9/merge', sha: 'ccc3333' })).toBe(
       groupFor(group, { ref: 'refs/pull/9/merge', sha: 'ddd4444' })
@@ -467,7 +409,6 @@ describe('CI keeps every push to main to a conclusion', () => {
     ).toBe(
       groupFor(group, { ref: 'refs/heads/task/F4-ci-green', sha: 'fff6666' })
     );
-    // And the two refs must not share a group with each other, or with main.
     const distinct = new Set([
       groupFor(group, { ref: 'refs/pull/9/merge', sha: 'ccc3333' }),
       groupFor(group, { ref: 'refs/heads/task/F4-ci-green', sha: 'eee5555' }),
@@ -477,14 +418,6 @@ describe('CI keeps every push to main to a conclusion', () => {
   });
 
   it('loses no commit when three land on main while the first is still running', () => {
-    // The queue model GitHub's own docs describe, applied to the real group
-    // expression: one run executes and one waits per group, and a run that is
-    // displaced from the pending slot finishes with no conclusion.
-    //
-    // `concurrency.cancels` says whether a displaced run is *cancelled* by the
-    // newcomer or simply dropped from the queue; either way it has no result, so
-    // both are counted as lost here. What the test measures is how many of the
-    // three pushes end with a conclusion.
     const ci = readYaml('ci.yml').concurrency;
     const pushes = [
       { ref: 'refs/heads/main', sha: 'aaa1111' },
@@ -503,10 +436,6 @@ describe('CI keeps every push to main to a conclusion', () => {
   });
 
   it('and the model says the branch-level group did lose one (so the test can fail)', () => {
-    // The same queue with the group round 1 shipped (`<workflow>-<ref>`): this is
-    // the red proof for the case above, kept as a case so the model cannot be
-    // quietly wrong about GitHub's rule - if someone "fixes" the model to lose
-    // nothing here, the assertion below is where it surfaces.
     const runs = ['aaa1111', 'bbb2222', 'ccc3333'].map((sha) => ({
       event: { ref: 'refs/heads/main', sha },
       group: 'ci.yml-refs/heads/main',
@@ -519,9 +448,6 @@ describe('CI keeps every push to main to a conclusion', () => {
   /**
    * GitHub's per-group queue: one running, one pending, a third arrival displaces
    * the pending run, and a displaced run never produces a conclusion.
-   *
-   * Runs arrive in order; the first is still running when the rest arrive, which is
-   * the situation that bit `main` on 31 Oct.
    *
    * @param {Array<{group: string, conclude: boolean, event: object}>} runs
    * @returns {Array<{group: string, conclude: boolean, event: object}>} the same
@@ -548,8 +474,6 @@ describe('CI keeps every push to main to a conclusion', () => {
   it('the release workflows still refuse to cancel a run that may be staging', () => {
     for (const file of ['release.yml', 'release-tag.yml']) {
       const value = readYaml(file).concurrency['cancel-in-progress'];
-      // A truthy-but-not-`true` value (`'false'`, an expression) is not the same
-      // answer to GitHub, so this is an exact check on purpose.
       expect(value).toBe(false);
     }
   });
@@ -557,10 +481,6 @@ describe('CI keeps every push to main to a conclusion', () => {
 
 describe('CI jobs that need history get it', () => {
   it('every job that runs `check` or the catch-up script fetches the full history', () => {
-    // `96ad69c` fixed this for the jobs that run `check`: the bench-deps tests
-    // then read `bun.lock` at an earlier commit (that read is gone), and `HEAD~5`
-    // does not exist in a depth-1 checkout. The rule is per job, so a job added
-    // tomorrow is covered by the rule rather than by someone remembering the reason.
     const commandsNeedingHistory = ['bun run check', 'release-catch-up.mjs'];
     const problems = [];
     for (const file of ['ci.yml', 'release.yml', 'release-tag.yml']) {
@@ -602,16 +522,8 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
   }
 
   it('passes an absolute `app:` path, because the CLI only ever existsSync()es it', () => {
-    // Q4 row 55 filed this as "the action parsed an empty JSON input", read from
-    // a CI log. Reading the pinned `action.yml` (read-only, at 3e3e25b) says the
-    // real story: the JSON is `steps.load-config.outputs.config`, written by
-    // `harness ci load-config`, and that step imports `example/rn-harness.config
-    // .mjs` - whose stamp gate then refused, because the job had built an APK and
-    // the config had guessed iOS. The empty input is the consequence; a relative
-    // `app:` is the second half of the same bug, and it is what A2 lost three runs
-    // to: the platform resolves `HARNESS_APP_PATH` against `projectRoot`
-    // (`example/`), so a workflow-relative path names nothing, no app is ever
-    // installed, and the run aborts as an opaque `AbortError`.
+    // The harness resolves `HARNESS_APP_PATH` against `example/`, so a
+    // workflow-relative path names nothing and no app is installed.
     for (const jobId of ['harness-android', 'harness-ios']) {
       const app = String(harnessStep(jobId).with.app);
       expect(app).toMatch(/^\$\{\{ github\.workspace \}\}\//);
@@ -620,9 +532,7 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
   });
 
   it('the pinned action can talk to the CLI this repo installs', () => {
-    // The action's second step resolves `react-native-harness/package.json` and
-    // refuses a CLI without `harnessActionProtocol >= 1`. That is a red job whose
-    // entire cause is a pin out of sync with a dependency bump.
+    // The action's second step refuses a CLI without `harnessActionProtocol >= 1`.
     const pin = String(harnessStep('harness-android').uses).split('@').pop();
     expect(pin).toHaveLength(40);
     const cli = JSON.parse(
@@ -639,12 +549,8 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         fs.readFileSync(path.join(root, 'example', 'package.json'), 'utf8')
       ).dependencies['react-native-harness'];
     expect(declared).toBeDefined();
-    // The action runs `node -p require.resolve('react-native-harness/package
-    // .json', {paths:[process.cwd()]})` from `example/`, where bun's hoist puts
-    // the copy its devDependency names.
+    // The action resolves `react-native-harness/package.json` from `example/`.
     expect(cli.version).toBe(declared);
-    // Protocol 1 is the capability the pinned action requires (`REQUIRED_PROTOCOL
-    // = 1` in its `action.yml`); a CLI older than that fails in step two.
     expect(Number(cli.harnessActionProtocol ?? 0)).toBeGreaterThanOrEqual(1);
   });
 
@@ -652,9 +558,8 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     ['harness-android', 'build-app.mjs --platform android'],
     ['harness-ios', 'build-app.mjs --platform ios'],
   ])('%s builds its stamped app before the action runs', (jobId, command) => {
-    // rn-harness.config.mjs refuses an artifact it cannot prove was built from
-    // this tree, so a raw gradle/xcodebuild step builds the right binary and then
-    // fails its own gate (review S1).
+    // rn-harness.config.mjs refuses an app it cannot prove was built from this
+    // tree, so a raw gradle or xcodebuild step would fail the harness's own check.
     const job = readYaml('ci.yml').jobs[jobId];
     const run = (job.steps ?? [])
       .filter((step) => step.uses == null && step.run != null)
@@ -665,16 +570,6 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
 });
 
 describe('the AVD name CI prints is the name the harness boots', () => {
-  /**
-   * `scripts/ci-avd-name.mjs` exists because a workflow step cannot import the
-   * harness config, and it reads the config as *text* to stay honest about the
-   * default. That covers one of the three things `avd()` does: the other two are
-   * the `ANDROID_AVD` and `AVD` overrides, and a step that prints the default while
-   * the harness boots an override is not reporting what the job is doing. Every
-   * leased device on this repo's dev boxes sets `ANDROID_AVD`, which is how this
-   * was found: the diagnostics step looked in `~/.android/avd/nitroui.avd` for a
-   * run whose emulator lived in `nitroui_a.avd`.
-   */
   function avdName(env) {
     const ran = spawnSync(
       process.execPath,
@@ -697,13 +592,8 @@ describe('the AVD name CI prints is the name the harness boots', () => {
     expect(avdName({ ANDROID_AVD: 'lease-avd', AVD: 'avd-override' })).toBe(
       'lease-avd'
     );
-    /**
-     * An empty override is not a name. `set -a; . <(lease.mjs acquire)` style
-     * sourcing produces one, and the harness's own `??` treats `''` as a value — so
-     * this is the one place where the two are deliberately *not* identical, in the
-     * direction that keeps a report from printing a blank line and looking like a
-     * machine with no AVD in it.
-     */
+    // An empty override is not a name here. The harness's own `??` treats `''`
+    // as a value, so this is the one place the two differ.
     expect(avdName({ ANDROID_AVD: '', AVD: '' })).toBe(fallback);
   });
 });
@@ -723,15 +613,10 @@ describe('the release pipeline does not share machine state with a publish', () 
   }
 
   it('packs the publish artifact without a restored node_modules', () => {
-    // npm's own guidance, and the reason `stage` sets `package-manager-cache:
-    // false`. `pack` is the job that actually builds the tarball - `prepare` runs
-    // builder-bob and nitrogen through this `node_modules` - and a cache key is
-    // two lockfiles' hashes, not proof that the directory matches the sources
-    // being packed (R6 re-review N-1, row 53).
+    // A cache key is two lockfiles' hashes, not proof that `node_modules`
+    // matches the sources being packed.
     expect(setupWith('pack')).not.toBe(null);
     expect(setupWith('pack')['package-manager-cache']).toBe(false);
-    // …and the action has to honour it once the runner has stringified it. That
-    // half is asserted in the next case, which is where the bug actually lived.
     const action = readYaml('.github/actions/setup/action.yml');
     for (const step of cacheSteps(action)) {
       expect({
@@ -761,17 +646,13 @@ describe('the release pipeline does not share machine state with a publish', () 
     // A string default, not `true`: the runner stringifies the default the same
     // way it stringifies a caller's value, and the `if:` compares against `'false'`.
     expect(input.default).toBe('true');
-    // `type: boolean` is not a key a composite action input supports, so writing
-    // it promises a cast that never happens - the exact mistake that made the
-    // first version of this gate restore a cache in the release job.
+    // A composite action input has no `type:` key, so writing one promises a
+    // cast that never happens.
     expect(input.type).toBeUndefined();
 
     const steps = cacheSteps(action);
-    // Every cache step, evaluated with the input as the runner would pass it.
-    // `true` (the default) keeps caching; `'false'` turns both halves off; and an
-    // empty string - what a caller gets from an input it never declared - keeps
-    // caching rather than silently disabling it, because that is the bug-free
-    // direction of the two.
+    // `'false'` turns both cache steps off. The default and an empty string
+    // (what an undeclared input evaluates to) keep caching.
     const skippedWhenOff = steps
       .filter(
         (step) =>
@@ -780,8 +661,6 @@ describe('the release pipeline does not share machine state with a publish', () 
       )
       .map((step) => String(step.name));
     expect(skippedWhenOff).toEqual([]);
-    // And the save step still refuses to write when the restore hit, so the
-    // truthiness fix cannot have swallowed the original condition.
     const save = steps.find((step) => String(step.uses).includes('cache/save'));
     expect(
       runsStep(
@@ -821,15 +700,8 @@ describe('the release pipeline does not share machine state with a publish', () 
   });
 
   it('a staged-but-not-approved version is recognised from both npm wordings', () => {
-    // The E409 wording is what a re-run during the approval window actually
-    // prints (seen 2026-10-29 with 0.3.2); the older one is what an already-live
-    // version prints. Matching only the second makes every push during the window
-    // a red `Stage on npm` (R6 re-review N-3).
-    //
-    // The pattern is read out of the `grep -qiE '…'` that guards the branch, not
-    // out of the whole step body: the comment above that line *quotes* the E409
-    // wording, so a test searching the script would stay green with the guard
-    // reduced to one wording. That mutant is what found this.
+    // npm words a version that is staged and awaiting approval (E409)
+    // differently from one that is already live. The guard must match both.
     const script = (readYaml('release.yml').jobs.stage.steps ?? [])
       .filter((step) => step.run != null)
       .flatMap((step) => String(step.run).split('\n'))
@@ -856,18 +728,9 @@ describe('the release pipeline does not share machine state with a publish', () 
 
 describe('release-catch-up tags the commit that bumped the version', () => {
   /**
-   * R6's re-review N-2, run against a real scratch git repo: the version bump,
-   * then a dependency bump that leaves `package.json` at the same version.
-   * `release-catch-up.test.js` covers the walk over a mocked list of shas; this
-   * covers the git plumbing that walk is handed (`git log -- package.json`,
-   * `git show <sha>:package.json`) and the `--target` the script ends up asking
-   * `gh` for - which is where the wrong answer lived.
-   *
-   * `npm` and `gh` are stubbed on `PATH` so "the version is live" and "no release
-   * yet" are states this case sets rather than network calls. The script spawns
-   * argv arrays with no shell, so a stub is found through `PATH` and receives
-   * exactly the arguments it would in CI - which is also what lets this case read
-   * them back.
+   * Runs the script in a scratch git repo where a later commit touches
+   * `package.json` without moving the version. `npm` and `gh` are stubbed on
+   * `PATH`, so registry and release state are set here instead of fetched.
    */
   function runCatchUpTree() {
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'f4-catchup-'));
@@ -901,8 +764,7 @@ describe('release-catch-up tags the commit that bumped the version', () => {
       expect(git(['commit', '-qm', 'Version Packages']).status).toBe(0);
       const versionCommit = git(['rev-parse', 'HEAD']).stdout.trim();
 
-      // A later commit that touches package.json *without* moving the version:
-      // the exact thing that used to take the tag.
+      // A later commit that touches package.json without moving the version.
       writePackage({ version: '0.1.1', devDependencies: { eslint: '9.0.0' } });
       git(['add', 'package.json']);
       expect(git(['commit', '-qm', 'chore(deps): bump eslint']).status).toBe(0);

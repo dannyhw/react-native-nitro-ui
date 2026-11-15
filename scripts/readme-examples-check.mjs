@@ -1,20 +1,7 @@
 #!/usr/bin/env node
-// Gate: the TSX blocks in README.md are the code in example/src/readme-examples.tsx.
-//
-// README claims its examples compile (they are typechecked, because that file is
-// in the root tsconfig's `include`). That claim is only true while the two texts
-// agree, so this script compares them and fails when they do not:
-//
-//   - every ```tsx name=<region> block in README.md must equal the
-//     `// #region <region>` … `// #endregion` lines of the example file, and
-//   - every region in the example file must appear in the README (an example
-//     that only exists in code is a component the README never documents).
-//
-// Compared after trimming leading/trailing blank lines only, so the exact text
-// (indentation included) has to match. Prettier formats both sides with the same
-// parser and keeps the `tsx name=…` fence info, so a formatted tree is stable.
-//
-// Proven to fail by changing a prop in one side (see docs/tasks/R2-release-0.1.report.md).
+// Fails unless every ```tsx name=<region> block in README.md equals the
+// `// #region <region>` … `// #endregion` lines of
+// example/src/readme-examples.tsx, and every region there appears in the README.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

@@ -1,12 +1,8 @@
 import type { HybridObject } from 'react-native-nitro-modules';
 
 /**
- * The Android Material theme every nitro-ui control is drawn with (D39).
- *
- * Android-only and implemented in Kotlin: the setting is Compose snapshot state in
- * `core/NitroUiMaterialTheme.kt`, which every composition this library owns reads at
- * its root, so the setter has nothing to do in C++ and nothing at all on iOS. App code
- * reaches it through `setMaterialTheme` (`src/MaterialTheme.ts`), never directly.
+ * The Android Material theme every control is drawn with. Android only; app code
+ * sets it through `setMaterialTheme`, never directly.
  */
 export interface NitroUiMaterialTheme extends HybridObject<{
   android: 'kotlin';
@@ -19,8 +15,8 @@ export interface NitroUiMaterialTheme extends HybridObject<{
   expressive: boolean;
 
   /**
-   * Diagnostics for the harness: the setting, and how many theme roots have composed
-   * under each motion scheme since the process started -
+   * Test diagnostics: the setting, and how many theme roots have composed under
+   * each motion scheme since the process started, as
    * `setting=<expressive|baseline>;expressive=<n>;baseline=<n>;other=<n>`.
    */
   composedReport(): string;

@@ -1,18 +1,6 @@
 /**
- * Which task worktrees can be removed, decided from facts handed in.
- *
- * Every delegated task gets its own checkout, and a checkout with both apps built is
- * 10-18 GB. Nothing removed them after a merge, so on 2026-11-13 forty-seven of them
- * (450 GB) filled a disk and every device run on the machine died with ENOSPC.
- *
- * The rule is "nothing can be lost and nobody is using it": it is a task worktree, the
- * tree is clean, its branch has commits and they are merged into `main`, no live lease
- * belongs to its task, no process is running inside it, and it has been idle for
- * hours. Anything else is kept and the reason is printed, because a worktree this
- * refuses to remove is a decision for whoever owns the task.
- *
- * No process or filesystem access here: `scripts/worktrees.mjs` gathers the facts and
- * `scripts/__tests__/worktrees.test.js` proves the rule.
+ * Decides which task worktrees can be removed, from facts handed in. No process
+ * or filesystem access here: `scripts/worktrees.mjs` gathers the facts.
  */
 
 import { leaseIsLive } from './lease-core.mjs';
@@ -79,10 +67,6 @@ export function taskOfBranch(branch) {
 /**
  * The tasks holding a lease that has not run out, by the pool's own rule.
  *
- * `leaseIsLive` is imported rather than restated: it reads an ISO date as well as a
- * number, falls back to the default ttl, and counts an unreadable lease as alive,
- * because expiring one wrongly takes a device (here, a checkout) from a running task.
- *
  * @param {{task?: string}[]} leases
  * @param {number} nowMs
  * @returns {string[]}
@@ -100,15 +84,11 @@ export function liveLeaseTasks(leases, nowMs) {
  * Keep or remove one worktree. The first reason to keep it wins, and the order is
  * from "never" (the main checkout) to "not yet" (recent activity).
  *
- * Three of these exist because an earlier version removed live work in review:
- *
- * - `merged` means merged into `main`. A branch that is only pushed is a task in
- *   review, and its worktree is where the fix round will run.
+ * - `merged` means merged into `main`: a branch that is only pushed is in review.
  * - `branchMoved` is false for a worktree nothing has been committed in. Its head
- *   *is* a commit of `main`, so it reads as merged, and it is the checkout of a task
- *   that has only just started.
- * - `busyProcesses` is asked because a build or a gate writes ignored files for hours
- *   without touching git's own state, which is all `idleHours` can see.
+ *   is a commit of `main`, so it would otherwise read as merged.
+ * - `busyProcesses` covers a build or a gate, which writes ignored files for hours
+ *   without touching git's own state.
  *
  * @param {object} facts
  * @param {boolean} facts.isMain the clone's own checkout

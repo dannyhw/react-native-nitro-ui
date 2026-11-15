@@ -1,16 +1,6 @@
 /**
- * The CocoaPods-stamp logic, apart from the CLI that uses it.
- *
- * `pod-install.mjs` resolves repo paths through `import.meta`, and a module
- * containing `import.meta` cannot be evaluated by jest's CommonJS transform at
- * all - the same split `scripts/bench/render.mjs` documents against
- * `report.mjs`. So the decisions live here, where
- * `scripts/__tests__/pod-install.test.js` can test them without pods.
- *
- * The environment pins (`podInstallEnvironment`) live here for the same reason,
- * and because they answer a different question from the stamp: not "which pod
- * wrote this file" but "would a different machine have evaluated these
- * podspecs the same way". See the comment on that function.
+ * The CocoaPods decisions behind `pod-install.mjs`: the lock's version stamp and
+ * the environment a `pod install` runs in. No `import.meta`, so Jest can load it.
  */
 
 /**
@@ -97,34 +87,12 @@ export function choosePodCommand({ pin, probe, hasGemfile, override }) {
 }
 
 /**
- * The environment a `pod install` runs in, and the one thing about it this repo
- * cannot leave to the machine.
- *
- * Which `json` gem the Ruby behind `pod` loads decides the *bytes* CocoaPods
- * writes for every path-pod, so it decides every `SPEC CHECKSUMS` entry.
- * `Pod::Specification#checksum` is `Digest::SHA1.hexdigest(File.read(defined_in_file))`
- * (`cocoapods-core/specification.rb:690`), and for a pod pulled `from:` a path
- * `defined_in_file` is `Pods/Local Podspecs/<Name>.podspec.json` - a file
- * CocoaPods regenerates from the evaluated spec with
- * `Pod::Specification::JSONSupport#to_pretty_json`
- * (`cocoapods-core/specification/json.rb:18`), which is
- * `JSON.pretty_generate(spec.to_hash)`. `json` < 2.8 prints an empty array with
- * a blank line inside it; `json` >= 2.8 prints `[]` (`ruby/json` CHANGES.md,
- * 2.8.0: "`JSON.pretty_generate` no longer includes newlines inside empty object
- * and arrays"). So one dependency written without a version constraint -
- * `s.dependency 'React-cxxstableapi'` in `react-native/ReactCommon/callinvoker/`
- * `React-callinvoker.podspec:43`, which serialises as `"React-cxxstableapi": []` -
- * moves that pod's checksum by two bytes of whitespace. X13: the release run's
- * macOS runner resolved CocoaPods under Ruby 3.3.9 (json 2.7.2, expanded), the
- * maintainer Macs run it under Ruby 4.0.5 (json 2.18.0, compact), and 87 of the
- * lock's 96 checksums moved. Nothing about the release had changed.
- *
- * That is why the *formatting* is the contract and the version is only its
- * cause: `EXPECTED_EMPTY_ARRAY_STYLE` is what a machine is measured against, so
- * a Ruby upgrade that keeps `[]` compact is accepted and a Ruby whose json
- * changes again is caught, rather than this script trusting a version number.
- * `.github/workflows/release.yml` pins the gem itself, at
- * `PINNED_JSON_GEM`, so CI cannot be on the wrong side of the line at all.
+ * The `json` gem version `.github/workflows/release.yml` installs. Which `json`
+ * the Ruby behind `pod` loads decides every `SPEC CHECKSUMS` entry of a path pod:
+ * the checksum is the sha1 of the podspec JSON CocoaPods writes with
+ * `JSON.pretty_generate`, and `json` before 2.8 prints an empty array with a blank
+ * line inside it where 2.8 and later print `[]`. A machine is checked against the
+ * formatting (`EXPECTED_EMPTY_ARRAY_STYLE`), not against the version.
  */
 export const PINNED_JSON_GEM = '2.18.0';
 
@@ -132,11 +100,8 @@ export const PINNED_JSON_GEM = '2.18.0';
 export const EMPTY_ARRAY_COMPACT = 'compact';
 export const EMPTY_ARRAY_EXPANDED = 'expanded';
 /**
- * Some spacing this repo has never seen: `[ ]`, `[\n]`, `[\n\t]`. It is its own
- * answer rather than `null`, because `null` means "there was nothing to read"
- * and a machine that writes a *novel* shape is a fact about that machine - the
- * X13 lesson is that guessing about an unmeasured serialiser is what cost the
- * release. Both refuse; only the message differs.
+ * Any other spacing, such as `[ ]` or `[\n]`. Distinct from `null`, which means
+ * there was nothing to read. Both refuse.
  */
 export const EMPTY_ARRAY_OTHER = 'other';
 
@@ -145,13 +110,9 @@ export const EXPECTED_EMPTY_ARRAY_STYLE = EMPTY_ARRAY_COMPACT;
 
 /**
  * The podspec `scripts/pod-install.mjs` asks CocoaPods to re-serialise to find
- * out which style a machine writes.
- *
- * It is a real DSL podspec, not a `.podspec.json`, because the question is what
- * the *evaluation + serialisation* pipeline emits. The one dependency is
- * declared without a requirement, which is what produces the empty array
- * (`"react-native-nitro-ui": []`) - the two bytes everything turns on. It has no
- * `source_files`, so asking about it lays nothing down and compiles nothing.
+ * out which style a machine writes. Its one dependency has no version
+ * requirement, which is what produces the empty array, and it has no
+ * `source_files`, so asking about it compiles nothing.
  */
 export const SERIALISATION_CANARY_PODSPEC = `
 Pod::Spec.new do |s|
@@ -168,24 +129,10 @@ end
 `;
 
 /**
- * Which style a `pod ipc spec` answer shows, or null when it cannot be read.
- *
- * Deliberately a reading of the *answer*, not of `json --version` or
- * `ruby -v`: those say what the machine has, this says what it does, and the
- * failure that cost a release was a machine that had something nobody had
- * compared. Unreadable comes back null rather than as either style, so a probe
- * that could not run is never counted as agreement.
- *
- * It looks at *any* empty collection rather than at the canary's one dependency
- * by name, because the style is a property of the serialiser and not of the
- * spec - which is also what lets the same reader be pointed at a real stored
- * podspec to check the answer against something nobody authored.
- *
- * The compact case matches `[]` exactly, with no newline allowed inside (M1).
- * An earlier `/:\s*\[\s*\]/` let `[ ]`, `[\n]` and `[\n    ]` read as compact,
- * which is exactly backwards: agreement means the same *bytes*, and bytes are
- * what the checksum hashes. A shape that is neither of the two known ones is
- * `EMPTY_ARRAY_OTHER`, which refuses.
+ * Which style a `pod ipc spec` answer shows, or null when it cannot be read. It
+ * reads what the machine writes, not a version number, and looks at any empty
+ * collection because the style belongs to the serialiser. Compact means exactly
+ * `[]`: the checksum hashes bytes, so no other spacing counts as agreement.
  *
  * @param {string | null} specJson the `to_pretty_json` of some podspec
  * @returns {
@@ -197,16 +144,12 @@ end
  */
 export function emptyArrayStyleOf(specJson) {
   if (specJson == null) return null;
-  // json < 2.8.0 ("Always indent even if empty", ruby/json 2.7.0): the opener, a
-  // blank line, the closer. Tested first, because it is the answer that refuses
-  // an install and the one a false positive costs anything.
+  // json < 2.8.0: the opener, a blank line, the closer. Tested first, because
+  // it is the answer that refuses an install.
   if (/\[[ \t]*\n[ \t]*\n[ \t]*\]/.test(specJson)) return EMPTY_ARRAY_EXPANDED;
-  // json >= 2.8.0, byte for byte: `[]` on the line that opened it, nothing in
-  // between. Nothing else may read as agreement, because nothing else hashes the
-  // same - see the M1 note above.
+  // json >= 2.8.0: `[]` on the line that opened it, nothing in between.
   if (/:[ \t]*\[\]/.test(specJson)) return EMPTY_ARRAY_COMPACT;
-  // Any other spacing of an empty array: `[ ]`, `[\n]`, `[\n\t  ]`. Refuses, but
-  // says what it saw rather than reporting an unreadable probe.
+  // Any other spacing of an empty array: `[ ]`, `[\n]`, `[\n\t  ]`.
   if (/:[ \t]*\[[\s]*\]/.test(specJson)) return EMPTY_ARRAY_OTHER;
   return null;
 }
@@ -248,16 +191,11 @@ export function podSerialisationProblem({
 
 /**
  * The variables that decide how the example's pods get evaluated, and the value
- * `example/ios/Podfile.lock` was resolved with.
+ * `example/ios/Podfile.lock` was resolved with. Each is read by a podspec or by
+ * `react_native_pods.rb` before it settles anything the lock records.
  *
- * Each of these is read by a podspec or by `react_native_pods.rb` *before* it
- * settles anything the lock records, so a value carried in from a shell profile
- * or a runner image rewrites a large part of it - the same shape of failure as
- * the `json` one above, from a different variable. Every entry names the line
- * that reads it.
- *
- * `value: null` means "unset is the resolved state": the variable has no
- * default in React Native, and *any* value changes the evaluated spec.
+ * `value: null` means unset is the resolved state: the variable has no default in
+ * React Native, and any value changes the evaluated spec.
  */
 export const POD_INSTALL_CONTRACT = [
   {
@@ -328,36 +266,13 @@ export const POD_INSTALL_CONTRACT = [
  * The environment to hand a `pod install`, plus anything this machine disagrees
  * with the committed lock about.
  *
- * Two decisions, deliberately different:
+ * - A variable the caller has not set is written when the lock resolves it to its
+ *   documented default, so every machine agrees by construction.
+ * - A variable a person has set is kept and reported, never overridden.
  *
- * - A variable the lock resolves *unset or to its documented default* is
- *   **written**, when the caller has not set it. On a machine that matches the
- *   lock this changes nothing - React Native would have chosen the same value -
- *   which is what makes a CI run and a maintainer run agree by construction
- *   rather than by luck, and it states the contract in this repo instead of
- *   inheriting it from a gem's source.
- * - A variable a person *has* set is **kept and reported**, never overridden.
- *   `RCT_USE_PREBUILT_RNCORE=0` in a shell is somebody debugging a source
- *   build; silently clearing it would make `pod install` lie about what it was
- *   asked to do. What they get instead is the name, the line that reads it and
- *   the fact that their next lock diff will be large - with the churn guard in
- *   `sync-example-lock.mjs` as the backstop if they ignore it and are on the
- *   release path.
- *
- * Note what is deliberately *not* here: `CI`, which CocoaPods reads only for
- * interactivity and repo-update chatter (`UI.interactive?`) and which
- * `installPods` already defaults to 1 - it was a candidate for this bug and is
- * not it; and `NODE_BINARY`, which reaches podspecs only as the literal string
- * `$NODE_BINARY` inside a script phase, never expanded, so its value cannot
- * move a checksum.
- *
- * How each reader treats `NAME=` (set, but empty). Ruby has two answers and the
- * contract has both in it (N4): `ENV['X'] ? a : b` and `if ENV['X']` take the
- * truthy branch on an empty string, while `ENV['X'] != nil` and `ENV['X'] == '1'`
- * do not. So an empty value is *not* uniformly "unset" - `IS_REANIMATED_PROFILING=`
- * really does add `-DREANIMATED_PROFILING`, and `RCT_TESTONLY_RNCORE_VERSION=`
- * really does replace the version with the empty string. Each entry says which it
- * is in `emptyCountsAsSet`, taken from the line in its own `why`.
+ * `NAME=` (set but empty) is not uniformly "unset" in Ruby: `if ENV['X']` is true
+ * for an empty string and `ENV['X'] == '1'` is not. Each entry says which applies
+ * in `emptyCountsAsSet`.
  *
  * @param {Record<string, string | undefined>} env the caller's environment
  * @param {{ contract?: typeof POD_INSTALL_CONTRACT }} [options]

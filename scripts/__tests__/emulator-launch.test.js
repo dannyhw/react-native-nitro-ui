@@ -1,29 +1,3 @@
-/**
- * The emulator launch configuration has one source, and the accel check tells
- * the truth. Both are claims about a file in `node_modules`, which is exactly the
- * kind of claim that rots.
- *
- * Two things are tested, because they fail differently:
- *
- *   1. **The patch contains what this module renders.** The patch embeds the
- *      launch-args block and the accel parser verbatim, so the drift test reads
- *      the patch and requires each rendered block inside it, plus the three
- *      call-site lines, plus that upstream's old call is gone. Hand-edit the
- *      patch, or edit `scripts/emulator-launch.mjs` without regenerating it, and
- *      this goes red.
- *   2. **The installed module agrees with it.** Reading the patch alone would
- *      still pass when `bun install` has not run since it changed - which is the
- *      state a task actually works in - so the same blocks are required inside
- *      `node_modules/@react-native-harness/platform-android/dist/emulator-startup.js`,
- *      and that file's two functions are *executed* and compared against
- *      `emulatorLaunchArgs` / `accelerationUsable` over the same fixtures.
- *      Skipped, loudly, when the package is not installed.
- *
- * The accel fixtures are captured real outputs, including the "unusable" form
- * this machine cannot produce on its own, so the false-warning fix is proved
- * against both answers rather than the one the maintainer happens to have.
- */
-
 import { describe, expect, it } from '@jest/globals';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -59,13 +33,7 @@ const INSTALLED = join(
   'emulator-startup.js'
 );
 
-/**
- * The `+` lines of a patch, re-joined: the text the patched file has now.
- *
- * Compared against the rendered blocks rather than the whole patch, because the
- * patch's own `+`/`-` prefixes and hunk headers are patch-package's business and
- * re-flow when an unrelated line moves.
- */
+/** The `+` lines of a patch, re-joined: the text the patched file has now. */
 function addedTextFrom(patchText) {
   return patchText
     .split('\n')
@@ -75,15 +43,8 @@ function addedTextFrom(patchText) {
 }
 
 /**
- * The installed module's two functions, executable.
- *
- * Not `import()`: jest leaves `node_modules` untransformed (that is what
- * `transformIgnorePatterns` is for), and this file is ESM with bare-specifier
- * imports, so a dynamic import would fail for reasons that have nothing to do
- * with what is being tested. Dropping the three `import` lines and the `export`
- * keywords leaves a body that only *uses* those imports inside functions this
- * test never calls, so the two functions under test can be evaluated directly -
- * and they are the real installed code, not a copy of it.
+ * The installed module's two functions, evaluated from its source: jest leaves
+ * `node_modules` untransformed, so the ESM file cannot be imported.
  *
  * @returns {{getEmulatorStartupArgs: Function, isAccelerationUsable: Function}}
  */
@@ -94,12 +55,7 @@ function loadInstalledModule(env = process.env, platform = process.platform) {
     .join('\n')
     .replaceAll('export const', 'const')
     .replaceAll('export {', '// export {');
-  // The one place in this repo that evaluates a string, and it is a test reading the *installed*
-  // file: `import()` is unavailable under jest's CJS transform (node_modules is deliberately
-  // untransformed), and a copy of the module would test the copy rather than the patch.
-  // `process` is the caller's rather than the real one, because the GPU rule reads it: a test
-  // that could only ask about *this* machine could not prove what the patch does on a CI runner
-  // it has never been on.
+  // `process` is the caller's, so a test can ask what the patch does on another machine.
   // eslint-disable-next-line no-new-func
   const factory = new Function(
     'process',
@@ -142,9 +98,6 @@ describe('emulator launch args have one source', () => {
   it('boots on host GPU rendering where the machine can host-render', () => {
     expect(HARNESS_GPU_MODE).toBe('host');
     expect(SOFTWARE_GPU_MODE).toBe('swiftshader_indirect');
-    // The machine is named, not assumed: `check` runs on `ubuntu-latest` in CI,
-    // where the rule answers `swiftshader_indirect`, and this file used to read
-    // `host` out of the argv of the box that happened to run it.
     expect(
       emulatorLaunchArgs({
         avd: 'nitroui_a',
@@ -179,9 +132,6 @@ describe('emulator launch args have one source', () => {
       '-no-boot-anim',
       '-no-metrics',
     ]);
-    // Same argv on every axis but that one, on a runner with nothing to
-    // host-render on. Written out rather than derived from the row above, so the
-    // two cannot agree with each other by accident.
     expect(
       emulatorLaunchArgs({
         avd: 'nitroui_a',
@@ -218,16 +168,11 @@ describe('emulator launch args have one source', () => {
   });
 
   it('refuses a port the emulator could not take, rather than booting anywhere', () => {
-    // X11 review N2. The name of this case used to be a promise the code did not keep: an
-    // un-takeable port was *dropped*, so the emulator booted on the lowest free console port -
-    // exactly the failure `-port` exists to prevent, and the reason a leased AVD ends up on a
-    // serial nobody exported. A mistake in devices.json has to stop the boot.
     for (const port of [5575, '5575', 5000, 6000, '5574x', -5574]) {
       expect(() => emulatorLaunchArgs({ avd: 'a', port })).toThrow(
         /not a console port/
       );
     }
-    // An *absent* port is the legitimate no-flag case: upstream, and every run outside a lease.
     for (const port of [null, undefined, '']) {
       expect(emulatorLaunchArgs({ avd: 'a', port })).not.toContain('-port');
     }
@@ -241,7 +186,6 @@ describe('emulator launch args have one source', () => {
   it('puts the rendered accel block and its call-site lines in the patch', () => {
     expect(added).toContain(harnessAccelBlock());
     for (const line of harnessAccelCallerLines()) expect(added).toContain(line);
-    // Upstream's one-argument call is the bug: it cannot see the exit status.
     expect(added).not.toContain(HARNESS_ACCEL_CALLER_BEFORE);
   });
 
@@ -261,8 +205,6 @@ describe('the installed harness module agrees with this file', () => {
   const maybe = installed ? it : it.skip;
 
   if (!installed) {
-    // Loud in the test name rather than a silent pass: a skip nobody notices is
-    // how a guard becomes decoration.
     it('SKIPPED: node_modules is not installed, so the installed module was not checked', () => {
       expect(installed).toBe(false);
     });
@@ -276,18 +218,6 @@ describe('the installed harness module agrees with this file', () => {
   });
 
   maybe('chooses the GPU mode by what the machine has, on both sides', () => {
-    // The rule F8 added, proved on machines this run is not on. The Android harness
-    // job died twice with `The platform did not become ready within 900000ms` and an
-    // emulator still alive at cleanup (runs 41230848294, 41234953779): this repo
-    // boots `-gpu host` where upstream ships software rendering, and a hosted Linux
-    // runner has no display server to bind a GL context to. The emulator does not
-    // fail fast about that, so the only symptom was a boot that never finished.
-    //
-    // Each row is the environment as that machine has it, the mode it must get, and
-    // why. The patch's rendered expression and `emulatorGpuModeForHost` are both
-    // evaluated against every row, so neither half can drift from the other, and the
-    // expected mode is written out rather than derived, so a rule that always said
-    // `host` cannot pass by agreeing with itself.
     const fixtures = [
       [
         'GitHub hosted Linux runner (headless)',
@@ -355,8 +285,6 @@ describe('the installed harness module agrees with this file', () => {
           gpuMode: want,
         }),
       });
-      // And the Node-side rule the pool and real-input use agrees with the patch, on
-      // the same fixtures rather than on this machine's own environment.
       expect({
         machine: what,
         pooled: emulatorGpuModeForHost({ env, platform: host.platform }),
@@ -365,24 +293,17 @@ describe('the installed harness module agrees with this file', () => {
   });
 
   it('renders the GPU rule into the patch as an expression, not a copy', () => {
-    // The patch has to evaluate the rule, not carry a constant: `harnessLaunchBlock`
-    // once hardcoded `host`, which is exactly what made the hosted Android job the
-    // only Android run in the repo that could not boot.
     const block = harnessLaunchBlock();
     expect(block).toContain(`'${HARNESS_GPU_MODE}'`);
     expect(block).toContain(`'${SOFTWARE_GPU_MODE}'`);
     for (const name of DISPLAY_SERVER_ENV_VARS) {
       expect(block).toContain(`'${name}'`);
     }
-    // The old shape: a constant with no branch. If it comes back, the mode is decided
-    // by the file again rather than by the machine.
+    // A constant fallback with no branch would ignore the machine.
     expect(block).not.toMatch(new RegExp(`\\|\\| '${HARNESS_GPU_MODE}'`));
   });
 
   it('names the headless case in the block that decides it', () => {
-    // The comment is part of the guard: a reader inside node_modules is the one who
-    // has to know why this differs from upstream, and the symptom (a boot that never
-    // finishes) points at nothing without it.
     expect(harnessLaunchBlock()).toContain('never finishes booting');
   });
 
@@ -415,9 +336,6 @@ describe('the installed harness module agrees with this file', () => {
           })
         );
       }
-      // An un-takeable port refuses in both implementations, and the patch's own words are the
-      // reason: a harness that quietly dropped `-port` would boot the leased AVD on some other
-      // serial (N2), so this is the same rule on both sides of the drift test.
       for (const port of ['5575', '5000']) {
         process.env.EMULATOR_PORT = port;
         expect(() =>
@@ -427,7 +345,6 @@ describe('the installed harness module agrees with this file', () => {
           /not a console port/
         );
       }
-      // And the override reaches it - the one axis the A/B measurement moves.
       process.env.EMULATOR_PORT = '5574';
       process.env[EMULATOR_GPU_ENV] = SOFTWARE_GPU_MODE;
       expect(
@@ -470,8 +387,6 @@ describe('the installed harness module agrees with this file', () => {
 
 describe('accelerationUsable', () => {
   it('accepts this machine output, which upstream called unusable', () => {
-    // The regression: upstream's phrase test returned false for exactly this, so
-    // every run warned about software emulation while using Hypervisor.Framework.
     expect(ACCEL_USABLE_CAPTURED).not.toContain('is installed and usable');
     expect(accelerationUsable({ output: ACCEL_USABLE_CAPTURED })).toBe(true);
     expect(
@@ -487,7 +402,6 @@ describe('accelerationUsable', () => {
   });
 
   it('trusts a non-zero exit over confident-sounding output', () => {
-    // A check that exits 1 has said no; the text is only its reason.
     expect(
       accelerationUsable({
         output: 'Hardware acceleration (KVM) is installed and usable',
@@ -509,8 +423,7 @@ describe('accelerationUsable', () => {
   });
 
   it('reads a failure phrase before a success phrase', () => {
-    // The captured unusable output contains "usable" inside "not usable"; a
-    // success-first match would call it accelerated - the bug's exact shape.
+    // "not usable" contains "usable", so a success-first match would get this wrong.
     expect(ACCEL_UNUSABLE_CAPTURED.toLowerCase()).toContain('usable');
     expect(accelerationUsable({ output: ACCEL_UNUSABLE_CAPTURED })).toBe(false);
   });

@@ -1,48 +1,17 @@
 #!/usr/bin/env node
 /**
- * `bun run task-ready` — the bar a round has to clear before it hands in.
- *
- * AGENTS.md defines the definition of done in prose: `check` passes, the gates are green,
- * the report's table is the generated one, no invented files. Prose is what reviews find
- * later, and a review finding is the 44 % of implementer time `PROCESS-review-2026-10-26.md`
- * §1 measures. This is the same list as a command, run by the implementer instead of by the
- * reviewer.
- *
- * ## What it checks, and why each one is here
- *
- * 1. `registry:check` — the branch's control set and the generated registry agree. Called
- *    rather than reimplemented: the generator is the only thing that knows what it generates.
- * 2. Conformance coverage — every manifest has a case in the suite. The same functions
- *    `component-coverage.test.js` runs, so the two cannot disagree about the bar.
- * 3. `TODO` / `FIXME` in a declared fallback or inside a generated region — a decision
- *    nobody made, or one the next `regen` will overwrite.
- * 4. Every backticked repo path in the report exists at HEAD, unless the branch's diff adds
- *    or deletes it. X3's first report cited files that were never in the tree.
- * 5. `gate.mjs need --for review` is satisfied, run as a subprocess so the answer comes
- *    from the ledger rather than from a reimplementation of what a stage needs.
- * 6. The report's gate table matches `gate.mjs table` for this code tree — a stale row is a
- *    claim, the ledger row is evidence.
- *
- * ## What it deliberately does not do
- *
- * It does not run anything: no builds, no gates, no `check`. Those take minutes and belong
- * to `gate.mjs`, whose ledger is what #5 and #6 read. This is the last thing you run, not a
- * replacement for the things before it.
- *
- * It reports every problem rather than the first one, because the point is to hand in once.
- *
- * And a check it could not run is a problem, not a note: a scan blocked by git state (no
- * merge-base to diff, `git ls-tree` refusing) reads zero files, which prints exactly like a
- * scan that read a thousand and found nothing. `unscannedProblem` is how each one says so.
- *
- * ## Usage
+ * `bun run task-ready`: checks that a task branch is ready to hand in. It runs
+ * no builds or gates, and reports every problem instead of the first one.
  *
  *   bun run task-ready                # task id from the branch name
  *   node scripts/task-ready.mjs --task X4
  *   node scripts/task-ready.mjs --task X4 --only coverage,report
  *
- * `--only` runs a subset, for a round that is iterating on one thing; the full list is the
- * bar, and `--only` says so on the last line so a partial pass cannot be read as a pass.
+ * Checks: the generated registry is current, every manifest has conformance
+ * coverage, no `TODO`/`FIXME` sits in a declared fallback or a generated
+ * region, every repo path the report cites exists at HEAD, `gate.mjs need
+ * --for review` is satisfied, and the report's gate table matches
+ * `gate.mjs table`. `--only` runs a subset and says so on the last line.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -107,7 +76,7 @@ function branchTask() {
   return taskFromBranchName(git(['rev-parse', '--abbrev-ref', 'HEAD'], ''));
 }
 
-/** The task id: `--task` wins; otherwise the leading id of the branch name (X30 item 4). */
+/** The task id: `--task` wins; otherwise the leading id of the branch name. */
 function taskId(branch) {
   const explicit = arg('--task');
   if (explicit != null) return explicit;
@@ -115,13 +84,8 @@ function taskId(branch) {
 }
 
 /**
- * The report files in `docs/tasks`, as names.
- *
- * `reportCandidates`' third rule is "`<ID>-*.report.md`, when one matches", and every
- * report in this repo is spelled that way — so the rule needs the directory. An
- * unreadable `docs/tasks` returns nothing rather than throwing: the two exact names are
- * still asked for, and a report that cannot be found is a failure either way, never a
- * pass. What it must not do is invent a match.
+ * The report file names in the tasks directory. An unreadable directory
+ * returns nothing.
  */
 function taskReportNames() {
   try {
@@ -166,10 +130,8 @@ const wantsReport = only.some(
   (name) => name === 'report-paths' || name === 'report-table'
 );
 if (wantsReport && id == null) {
-  // Two ids is a different answer from none: `task/G25-G26-merge` names its tasks
-  // plainly, and reading the first one (what round 1 did) checks G25's report, prints
-  // "ready", and says nothing about G26 — a merge half-checked is the false green this
-  // command exists to refuse. So it asks, and the runner answers twice: once per task.
+  // Two ids is a different answer from none: a merge branch names both of its
+  // tasks, and checking only the first would call half a merge ready.
   const bothIds = taskIdsFromBranch(branch);
   console.error(
     bothIds.length > 1
@@ -185,13 +147,7 @@ if (wantsReport && id == null) {
   );
   process.exit(2);
 }
-/**
- * The report to check: whichever candidate exists.
- *
- * `reportCandidates` explains why there is more than one spelling; `reportPathProblems`
- * names every candidate when none of them is there, so a missing report is still an
- * unambiguous failure rather than a guess.
- */
+/** The report to check: whichever candidate exists. */
 const taskReports = taskReportNames();
 const slugMatches = slugReportNames(id, taskReports);
 const candidates = reportCandidates(id, branch, taskReports);
@@ -256,11 +212,6 @@ function skipped() {
 
 /**
  * `node scripts/gen-registry.mjs --check`, with its own output as the message.
- *
- * The generator is the only thing that knows which files it writes and what it writes in
- * them, so this shells out rather than importing `regionsFor` and comparing by hand — an
- * implementation that drifted from the generator would report a green registry on a tree
- * that cannot build.
  */
 function runGenerator() {
   const result = spawnSync(
@@ -299,19 +250,14 @@ function coverageProblems() {
 }
 
 /**
- * The TODO scan, over what the branch touched.
- *
- * Three sources, the same three `gate.mjs` reads, because a round is usually part-committed:
- * committed diff, unstaged edits, untracked new files. An untracked generated file with a
- * `TODO` in it is exactly the thing worth catching before it is committed.
+ * The TODO scan over what the branch touched: the committed diff, unstaged
+ * edits and untracked files.
  */
 function markerProblems() {
   const base = git(['merge-base', 'main', 'HEAD'], null);
   if (base == null) {
-    // A problem, not a note (X4 review N8). As a note this printed and the run still said
-    // `ready`, which is the one outcome the tool exists to refuse: the scan read zero files
-    // and reported zero markers, and the two are indistinguishable in its output. Whether a
-    // branch has no merge-base is not something this can fix, so the line says what to pass.
+    // A problem, not a note: a scan that read zero files prints the same as one
+    // that read them all and found nothing.
     return unscannedProblem(
       'the TODO scan',
       'no merge-base with `main`',
@@ -340,9 +286,8 @@ function reportPathProblems() {
   const text = read(reportPath);
   if (text == null) {
     if (slugMatches.length > 1) {
-      // Not the same complaint as "no report". The file is there — several of them are,
-      // and the id alone cannot say which one this round wrote. Naming every match is
-      // the whole fix: the reader sees the two candidates and which one to rename.
+      // Several reports match the id, and the id alone cannot say which one
+      // this branch wrote.
       return [
         `${slugMatches.length} reports start with \`docs/tasks/${id}-\` (` +
           `${slugMatches.map((name) => `docs/tasks/${name}`).join(', ')}), and none is ` +
@@ -356,11 +301,8 @@ function reportPathProblems() {
         'before a round is handed in, and the two report checks below depend on it',
     ];
   }
-  // `ls-tree -r HEAD`, not `ls-files` (X4 review N7). `ls-files` reads the *index*, so a
-  // `git add` of a file that is not in any commit makes its citations pass a check whose own
-  // sentence says "exists at HEAD" — and the report is reviewed from HEAD, where the file is
-  // not. The index is also dirty in the middle of a round in exactly the way that flatters:
-  // half-staged work-in-progress files exist for the scan and not for the reviewer.
+  // `ls-tree -r HEAD`, not `ls-files`: the index also lists staged files that
+  // are in no commit, and the report is read against HEAD.
   const listing = git(['ls-tree', '-r', '--name-only', 'HEAD', '--'], null);
   if (listing == null) {
     return unscannedProblem(

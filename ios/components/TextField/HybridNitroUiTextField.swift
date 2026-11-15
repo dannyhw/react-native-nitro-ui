@@ -1,43 +1,16 @@
-//
-//  HybridNitroUiTextField.swift
-//  react-native-nitro-ui
-//
-//  The TextField component (G13): a UIKit `UITextField` - a `UITextView` when
-//  `multiline` - hosted through a `UIViewRepresentable` in the core SwiftUI host
-//  (DECISIONS D34). SwiftUI's own `TextField` cannot tell anybody that a
-//  composition is open, and the controlled-value guard below has to know.
-//
-//  The host is the shipped `NitroSwiftUIHost` because everything around the field
-//  is the shipped machinery: one hosting controller per view, never re-rooted;
-//  the sizing reports; perf marks; the recycle counters. What the representable
-//  adds is a UIKit control whose text is *not* SwiftUI state: SwiftUI builds it
-//  once per shape (`makeUIView`), and `updateUIView` only re-applies the
-//  configuration. The text moves through two explicit paths instead - the
-//  user's edits up (`userEdited`), React's writes down (`syncText`) - so no
-//  SwiftUI update can ever write over what a person is typing.
-//
+// The TextField component: a UIKit `UITextField` (a `UITextView` when `multiline`) hosted through a
+// `UIViewRepresentable`, because SwiftUI's own `TextField` cannot report an open composition.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-// `NitroUiText` and `NitroUiTextLimit` live in `NitroUiTextLimit.swift`: Foundation
-// only, so `scripts/native-tests/text-limit.test.swift` compiles them on the host.
-//
-// The `NitroUiTextControl` protocol, `NitroUiTextTraits` and the shared half of the
-// Hybrid View (``NitroUiTextOwner``) live in `NitroUiTextEditing.swift`, because
-// `SearchField` drives the same rules with a different control and the two must not be
-// able to drift (DECISIONS D38 item 2).
-
 // MARK: - Model
 
-/// State of one TextField. See ``NitroUiModel`` for why this is not `@Published`.
 final class TextFieldModel: NitroUiModel {
-  /// The text, on the shipped handshake.
-  ///
-  /// `unreported` is never set: it exists for values sampled faster than frames (a
-  /// drag), and a field's edits are discrete. Setting it per keystroke would make a
-  /// fast typist's writes permanently stale (Q2 §2.4).
+  /// The text, behind the event-count handshake. `unreported` is never set: it is for values
+  /// sampled faster than frames (a drag), and per keystroke it would make a fast typist's writes
+  /// permanently stale.
   var state = NitroUiControlledValue<NitroUiText>(displayed: NitroUiText(""))
   var defaultValue: String?
   var didApplyDefault = false
@@ -68,9 +41,8 @@ final class TextFieldModel: NitroUiModel {
 
   /// The live UIKit control. Weak: the SwiftUI representable owns it.
   weak var control: NitroUiTextControl?
-  /// Where the control reports to. Weak: the Hybrid View owns the host, which owns
-  /// this model. The protocol so that a SearchField can drive the same model
-  /// (`NitroUiTextEditing.swift`).
+  /// Where the control reports to. Weak: the Hybrid View owns the host, which owns this model. A
+  /// protocol, so that SearchField can drive the same model.
   weak var owner: (any NitroUiTextOwner)?
 
   override init() {
@@ -85,8 +57,7 @@ final class TextFieldModel: NitroUiModel {
 
 /// The single-line control: a `UITextField`, undecorated like RN's `TextInput`.
 final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTextControl {
-  /// Strong: the model never holds the control strongly (`TextFieldModel.control`
-  /// is weak), so there is no cycle, and a callback during teardown still has one.
+  /// Strong: `TextFieldModel.control` is weak, so there is no cycle.
   private let model: TextFieldModel
   /// Keeps our own writes from re-entering `editingChanged` as user edits.
   private var applying = false
@@ -134,10 +105,9 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
   }
 
   func nuiApply() {
-    // A `UITextInputTraits` setter does not reach a keyboard that is already up: the
-    // keyboard reads the traits when it attaches. So only what changed is written, and
-    // a change to a focused field reloads its input views, as RN does
-    // (`RCTTextInputComponentView.mm`, `updateProps`).
+    // A `UITextInputTraits` setter does not reach a keyboard that is already up: the keyboard reads
+    // the traits when it attaches. So only what changed is written, and a change on a focused field
+    // reloads its input views.
     let traits = NitroUiTextTraits.Resolved(model)
     var traitsChanged = false
     if keyboardType != traits.keyboard { keyboardType = traits.keyboard; traitsChanged = true }
@@ -152,9 +122,8 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
     if isSecureTextEntry != model.secureApplied {
       isSecureTextEntry = model.secureApplied
       traitsChanged = true
-      // Toggling secure entry on a field that has text leaves it drawn with the
-      // previous mode's glyph metrics and caret; writing the text again redraws it, as
-      // RN does (`RCTUITextField.mm`, `setSecureTextEntry:`).
+      // Toggling secure entry on a field that has text leaves it drawn with the previous mode's
+      // glyph metrics and caret; writing the text again redraws it.
       let original = attributedText
       applying = true
       attributedText = NSAttributedString()
@@ -177,9 +146,9 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
     }
   }
 
-  /// `editable == false` takes no focus from any route - a tap, `focus()`, VoiceOver.
-  /// `isEnabled` alone is not enough: a touch delivered straight to a disabled field
-  /// still makes it first responder (measured with the harness's synthesized tap).
+  /// `editable == false` takes no focus from any route: a tap, `focus()`, VoiceOver. `isEnabled`
+  /// alone is not enough: a touch delivered straight to a disabled field still makes it first
+  /// responder.
   override var canBecomeFirstResponder: Bool {
     model.editable && super.canBecomeFirstResponder
   }
@@ -283,7 +252,7 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
   }
 
   func nuiApply() {
-    // See ``NitroUiSingleLineField/nuiApply()`` for why a change reloads the keyboard.
+    // A trait change on a focused field reloads its input views (see `NitroUiSingleLineField`).
     let traits = NitroUiTextTraits.Resolved(model)
     var traitsChanged = false
     if keyboardType != traits.keyboard { keyboardType = traits.keyboard; traitsChanged = true }
@@ -324,7 +293,7 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
     }
   }
 
-  /// See ``NitroUiSingleLineField/canBecomeFirstResponder``.
+  /// `editable == false` takes no focus from any route.
   override var canBecomeFirstResponder: Bool {
     model.editable && super.canBecomeFirstResponder
   }
@@ -366,8 +335,9 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
 
 // MARK: - SwiftUI
 
-/// One representable per shape. Building one is `makeUIView`; every later SwiftUI
-/// update only re-applies configuration (`nuiApply`), never the text.
+/// One representable per shape. The control is built once in `makeUIView`; every later SwiftUI
+/// update only re-applies configuration (`nuiApply`), never the text, so it cannot overwrite what
+/// is being typed.
 private struct SingleLineBox: UIViewRepresentable {
   @ObservedObject var model: TextFieldModel
 
@@ -384,8 +354,8 @@ private struct SingleLineBox: UIViewRepresentable {
     uiView.nuiApply()
   }
 
-  /// The box's width, and the field's own line height: a single-line field's
-  /// height does not depend on its text or its width (`fillWidth`).
+  /// The box's width, and the field's own line height: a single-line field's height does not depend
+  /// on its text or its width.
   @available(iOS 16.0, *)
   func sizeThatFits(_ proposal: ProposedViewSize, uiView: NitroUiSingleLineField, context: Context) -> CGSize? {
     let height = ceil(uiView.intrinsicContentSize.height)
@@ -446,11 +416,9 @@ struct TextFieldContent: NitroUIContent {
 
 // MARK: - Hybrid View
 
-/// The Hybrid View React renders as `NitroUiTextField`.
 final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, NitroUiTextOwner {
   private let host: NitroSwiftUIHost<TextFieldContent>
 
-  /// This component's name in the sizing engine.
   private static let sizingComponentName = "NitroUiTextField"
 
   /// The declared fallback: one line of the body font, the height a single-line
@@ -611,9 +579,9 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
   var testID: Variant_NullType_String {
     get { .first(.null) }
     set {
-      // Nothing to apply, like Switch: RN already puts `testID` on the component
-      // view as `accessibilityIdentifier`, and a second copy on the control would
-      // make a testID query match twice.
+      // Nothing to apply: RN already puts `testID` on the component view as
+      // `accessibilityIdentifier`, and a second copy on the control would make a testID query match
+      // twice.
       _ = newValue
     }
   }
@@ -641,8 +609,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     set {
       guard newValue != model.sizingKey else { return }
       model.sizingKey = newValue
-      // Single-line and multi-line are two configurations. A mount's first key
-      // costs nothing here: the host only arms this once it has measured.
+      // Single-line and multi-line are two configurations.
       host.noteSizingKeyChanged()
     }
   }
@@ -668,8 +635,6 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
   }
 
   // MARK: - NitroUiTextOwner
-  // The half of the shared text logic (`NitroUiTextEditing.swift`) that is this
-  // view's own: which model it drives, and how a text change reaches its host.
 
   var nuiTextModel: TextFieldModel { model }
 
@@ -694,11 +659,8 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
   }
 
   func prepareForRecycle() {
-    // RN resigns first responder on recycle too (`RCTTextInputComponentView.mm:386-399`):
-    // a pooled field must not keep the keyboard, or report a blur to its next owner.
-    // Every callback goes first: resigning commits open marked text as an edit, and
-    // that edit belongs to nobody now. (`onDropView` clears them before this runs
-    // today; the order here does not depend on it.)
+    // A pooled field must not keep the keyboard or report a blur to its next owner. Callbacks go
+    // first, because resigning commits open marked text as an edit.
     model.onFocusChange = nil
     model.onChange = nil
     model.onSubmit = nil
@@ -723,8 +685,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     model.focused = false
     model.focusWhenReady = false
     model.wasComposing = false
-    // The control outlives the mount (the hosting controller is the expensive part
-    // the pool keeps), so its text goes with the model's.
+    // The control outlives the mount, so its text is reset with the model's.
     syncText()
     host.prepareForRecycle()
     publishState()
@@ -780,7 +741,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
 
   // MARK: - Methods
 
-  /// Never touches the main thread: a cached size, like every other control's.
+  /// A cached size: this can be called from the JS thread and must not touch SwiftUI.
   func measureContent() throws -> NitroUiSize {
     guard let size = host.contentSize else {
       return NitroUiSize(width: 0, height: 0)

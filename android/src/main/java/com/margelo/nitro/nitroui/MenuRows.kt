@@ -43,42 +43,25 @@ import com.margelo.nitro.nitroui.core.toRgbHex
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-/*
- * The menus of the three menu-shaped controls, on Material 3 Expressive (E2, DECISIONS
- * D40): `Menu` and `ContextMenu` share the popup, the groups and the rows (D36 item 4),
- * and `Picker` shares the check, the row shapes and the witness. Both menus draw the
- * same rows from the same array, so a change here is a change to both, and both
- * harness suites re-run for it.
- *
- * The popup is `DropdownMenuPopup`, Expressive's menu window: unlike the baseline
- * `DropdownMenu` it has no surface of its own. Each group is a `DropdownMenuGroup`
- * surface, spaced by `MenuDefaults.GroupSpacing`, and a group and a row take the corner
- * shapes `MenuDefaults.groupShape`/`itemShape` give their place in the list. That
- * spacing is what replaced the dividers between sections.
- */
+// The popup, groups and rows shared by Menu and ContextMenu (and, in part, Picker). The
+// popup is Material 3 Expressive's `DropdownMenuPopup`, which has no surface of its own.
 
-/** One pickable row, as the popup draws it. */
 internal data class MenuActionItem(
   val id: String,
   val title: String,
   val disabled: Boolean,
   val destructive: Boolean,
-  /** The row's second line, or `null` for none. */
   val subtitle: String? = null,
   /** `null` for a plain row; otherwise a checkable row, and whether it is checked. */
   val checked: Boolean? = null,
   /**
-   * The row's `androidIcon` as the wrapper sent it - a drawable name or a `url:` string
-   * (`NitroUiIconSource`) - or `null`.
-   *
-   * The wire string, never the artwork: artwork arrives, sometimes late, and this data
-   * class is compared by value and `remember`ed as a list key. [MenuRowIcons] turns it
-   * into what the row draws.
+   * The wire string (a drawable name or a `url:` string), never the artwork: this class is
+   * compared by value and used as a `remember` key. [MenuRowIcons] resolves it.
    */
   val androidIcon: String? = null,
 )
 
-/** A row that opens a second level - which on Android does not: see [MenuModel.entries]. */
+/** Drawn inline on Android, as a titled group. */
 internal data class MenuSubmenuItem(
   val id: String,
   val title: String,
@@ -92,7 +75,6 @@ internal data class MenuSectionItem(
   val items: List<MenuActionItem>,
 )
 
-/** What the popup draws, in order. */
 internal sealed class MenuEntry {
   data class Action(
     val item: MenuActionItem,
@@ -108,15 +90,8 @@ internal sealed class MenuEntry {
 }
 
 /**
- * The wrapper's flat array, as the rows the popup draws.
- *
- * `actions` first, then `sections`, with each parent's children following it and
- * naming it in `parentId` - the shape `Menu.tsx`'s `flattenGroup` sends. A submenu
- * becomes a group titled with its own title, its items inline (D29); a section becomes
- * a group with its title, or an untitled group when it has none ([menuGroupsOf]). An unknown `parentId`
- * reads as a top-level row rather than being dropped, and an unknown `kind` draws
- * nothing - the wrapper is the only writer, so either is a bug, and a row that draws
- * as the wrong thing hides a bug better than a missing one does.
+ * Children name their parent in `parentId` and are drawn by it. A submenu becomes a group
+ * titled with its own title; an unknown `kind` draws nothing.
  */
 internal fun parseMenuRows(rows: Array<NitroUiMenuRow>): List<MenuEntry> {
   val children = HashMap<String, MutableList<MenuActionItem>>()
@@ -180,12 +155,8 @@ internal data class MenuGroupItem(
 )
 
 /**
- * The entries as Material groups, in order.
- *
- * Top-level actions next to each other share one untitled group; a submenu (inline on
- * Android, D29) and a section are each a group of their own, titled when they have a
- * title. A group with neither a title nor a row draws nothing: before E2 that was a
- * bare divider, and an empty surface would be a box with nothing in it.
+ * Adjacent top-level actions share one untitled group; each submenu and section is its own.
+ * A group with neither a title nor a row is dropped.
  */
 internal fun menuGroupsOf(entries: List<MenuEntry>): List<MenuGroupItem> {
   val groups = ArrayList<MenuGroupItem>()
@@ -222,42 +193,16 @@ internal fun menuGroupsOf(entries: List<MenuEntry>): List<MenuGroupItem> {
 }
 
 /**
- * The rows' `androidIcon`s, resolved, for one menu.
- *
- * The Button and Menu's trigger each have one [NitroUiIconSlot]; a menu has one per
- * row, and this holds them, keyed by row id — the id the row is picked by, unique
- * across the menu, and the only thing here a re-ordered list keeps stable.
- *
- * [apply] runs from `afterUpdate()` with the array the wrapper sent, and it is the
- * *only* place artwork is resolved: a resource lookup reads a `synchronized` table and a
- * dev-server file opens a socket, so neither belongs in a prop setter or in a
- * composition (AGENTS' perf contract).
- *
- * A re-sent menu — the same rows, the same order, which is what every unrelated prop
- * batch hands `afterUpdate()` — is what makes two rules load-bearing here, and both
- * belong to someone else, which is why this class keeps no guard of its own.
- * [NitroUiIconSlot.resolve] compares the source it already holds, so re-applying an
- * unchanged menu asks the resource table nothing; and [slots] is `mutableStateOf`, whose
- * structural-equality policy drops a write of an equal map, so reusing each row's slot
- * instance below means an unchanged menu writes no state and recomposes nothing. Both
- * are asserted by `MenuRowIconsTest`, and a guard duplicated here would be a second
- * cache to invalidate — the stale half of which is exactly how a recycled view ends up
- * with no icons at all.
- *
- * A row that stops existing has its slot [reset][NitroUiIconSlot.reset] rather than
- * dropped: a file load its owner started is still in flight, and bumping the
- * generation is what retires it. The same class answers for `Menu` and for
- * `ContextMenu`, because both draw [MenuRow].
+ * One [NitroUiIconSlot] per row, keyed by row id. [apply] runs from `afterUpdate()`, the
+ * only place artwork may be resolved: a lookup can take a lock or open a socket. A removed
+ * row's slot is reset, which retires a file load still in flight.
  */
 internal class MenuRowIcons {
   /** What the composition draws, per row id. Observed: a late file lands in it. */
   var slots by mutableStateOf<Map<String, NitroUiIconSlot>>(emptyMap())
     private set
 
-  /**
-   * Resolve the rows' icons against [artwork], where [items] is every row's
-   * `(id, androidIcon)` pair in menu order.
-   */
+  /** [items] is every row's `(id, androidIcon)` pair in menu order. */
   fun apply(
     items: List<Pair<String, String?>>,
     artwork: NitroUiIconArtwork,
@@ -267,8 +212,8 @@ internal class MenuRowIcons {
       if (raw == null) {
         continue
       }
-      // A row that keeps its icon keeps its slot, and with it its loaded artwork, so a
-      // re-sent menu draws its glyphs in the first frame rather than after a reload.
+      // A row keeps its slot and its loaded artwork, so an unchanged menu writes an equal
+      // map, which `mutableStateOf` drops without recomposing.
       val slot = next.getOrPut(id) { slots[id] ?: NitroUiIconSlot() }
       slot.resolve(raw, artwork)
     }
@@ -280,28 +225,17 @@ internal class MenuRowIcons {
     slots = next
   }
 
-  /** What the row named [id] draws beside its title. Read in composition. */
   fun contentOf(
     id: String,
   ): NitroUiIconContent = slots[id]?.content ?: NitroUiIconContent.Absent
 
   /**
-   * What each row that drew a glyph tinted it with, `<id>#<RRGGBB>` in row order.
-   *
-   * Test-only, and it exists because the harness has no other way to name the colour:
-   * Material's leading-icon colour comes from the device's dynamic palette on Android
-   * 12+, so a test cannot write the RGB down. [MenuRow] records it *as it draws*, from
-   * the same `LocalContentColor` the glyph is tinted with, and
-   * `nuiTestMenuPixelProbe` then samples for exactly that - which is what makes the
-   * answer "these pixels of this colour are on screen" rather than an echo of a prop.
-   *
-   * A plain map, written on the UI thread inside composition and read from whichever
-   * thread Nitro answers on: a stale read is a test polling once more, never a wrong
-   * answer, and nothing may recompose because a test reading moved.
+   * Test-only: `<id>#<RRGGBB>` for each row that drew a glyph. Material's icon colour comes
+   * from the device's dynamic palette, so a test has to ask what was drawn. Written on the UI
+   * thread in composition and read from any thread.
    */
   private val tints = ConcurrentHashMap<String, String>()
 
-  /** Record that the row named [id] tinted its glyph with [tint]. */
   fun noteTint(
     id: String,
     tint: ComposeColor,
@@ -309,7 +243,7 @@ internal class MenuRowIcons {
     tints[id] = tint.toRgbHex()
   }
 
-  /** [tints], in the order the rows were first drawn. `-` when no row has drawn one. */
+  /** `-` when no row has drawn a glyph. */
   fun tintsReport(): String =
     if (tints.isEmpty()) {
       "-"
@@ -317,7 +251,6 @@ internal class MenuRowIcons {
       tints.entries.joinToString(",") { (id, hex) -> "$id#$hex" }
     }
 
-  /** Hand these rows to the next owner of the view. */
   fun reset() {
     for (slot in slots.values) {
       slot.reset()
@@ -328,24 +261,15 @@ internal class MenuRowIcons {
 }
 
 /**
- * The `androidIcon` a row draws, sized for Material's own leading-icon slot.
- *
- * The lambda is passed to Material only when the row has something to draw: a
- * `leadingIcon` that is non-null but empty still takes the 20 dp
- * (`SegmentedMenuTokens.ItemLeadingIconSize`) and moves the label, which is precisely
- * what a name that does not resolve must not do. The checkable row gets the same
- * treatment in [MenuRow]'s `leadingIcon`, where the check keeps the slot when it is on.
+ * Pass this to Material only when the row has something to draw: a non-null but empty
+ * `leadingIcon` still takes its slot and moves the label.
  */
 @Composable
 internal fun MenuRowIcon(content: NitroUiIconContent) {
   NitroUiIconSlotGlyph(content, MenuDefaults.LeadingIconSize)
 }
 
-/**
- * The leading check of a checked menu row and of Picker's selected row, at Material's
- * leading-icon size: Google's Material Symbols `check` (`nitroui_check`,
- * `core/NitroUiIcons.kt`), parsed once per process. One lambda for the process.
- */
+/** The leading check of a checked row, shared with Picker. One lambda for the process. */
 internal val MenuLeadingCheck: @Composable () -> Unit = {
   Icon(
     imageVector = nitroUiIcon(R.drawable.nitroui_check),
@@ -354,33 +278,15 @@ internal val MenuLeadingCheck: @Composable () -> Unit = {
   )
 }
 
-/** Test tags the `drawn` witness reads a group and a label by ([describeMenuSemantics]). */
+/** Test tags that [describeMenuSemantics] finds groups and labels by. */
 internal const val MENU_GROUP_TAG = "nitroui.menu.group"
 internal const val MENU_GROUP_LABEL_TAG = "nitroui.menu.group.label"
 internal const val MENU_TITLE_TAG = "nitroui.menu.title"
 
 /**
- * One pickable row of the list.
- *
- * A plain row is Expressive's `DropdownMenuItem` with the shape of its place in the
- * group; a row with a `checked` is `CheckableDropdownMenuItem`, which draws a checked
- * row selected, with the leading check, and says `Role.Checkbox` plus `selected` to a
- * screen reader. Either way a press is a pick - [onPick] - and never a local toggle: the
- * menu has no value, so the check is whatever the app sends next.
- *
- * [icon] answers what this row's `androidIcon` resolved to, and a row with something to
- * draw hands Material a `leadingIcon` and takes Material's slot, colour and gap; a row
- * without one hands it `null` and is laid out exactly as it was before the prop
- * existed. On a checkable row the check keeps the slot when the row is checked -
- * Material's own `checkedLeadingIcon` - because the check is what the row means, and
- * the glyph is what an unchecked one shows.
- *
- * Both icon parameters are defaulted, and that is the whole point: the caller that has a
- * glyph hands over the resolved content plus [onIconTint] to hear what colour it drew
- * with, and a caller that composes this row with a slot it already holds - ButtonGroup's
- * overflow rows, one `NitroUiIconContent` per item - compiles and draws without either.
- * Taking a whole `MenuRowIcons` here instead made this row unusable outside the two menus
- * that own one, for no reason a caller can see.
+ * One pickable row. A press is always a pick, never a local toggle: the menu holds no value,
+ * so a row's check is whatever the app sends next. On a checkable row the check replaces
+ * [icon] while the row is checked.
  */
 @Composable
 internal fun MenuRow(
@@ -398,10 +304,8 @@ internal fun MenuRow(
       text = item.title,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
-      // Destructive rows are the scheme's error colour. Set on the text rather than
-      // through `MenuDefaults.itemColors()`, which Q1 §4 names as a per-recomposition
-      // allocation; `Color.Unspecified` for a disabled row keeps Material's own
-      // disabled treatment.
+      // Set on the text rather than through `MenuDefaults.itemColors()`, which allocates on
+      // every recomposition. `Unspecified` keeps Material's own disabled colour.
       color =
         if (item.destructive && enabled) {
           MaterialTheme.colorScheme.error
@@ -419,20 +323,13 @@ internal fun MenuRow(
     }
   val shapes = MenuDefaults.itemShape(index, count)
   val checked = item.checked
-  // `icon` arrives as a parameter and must be read outside the lambda either way: the
-  // slot either exists for this row's layout or it does not, and `Absent` - the answer
-  // for "no icon", for a name the resource table does not know, and for a file that
-  // failed to load - has to reach `leadingIcon` as `null`, which is the row's no-icon
-  // self down to the last dp.
+  // `Absent` must reach Material as a `null` slot, or the empty slot still moves the label.
   val leadingIcon: (@Composable () -> Unit)? =
     if (icon == NitroUiIconContent.Absent) {
       null
     } else {
       {
-        // What the row tinted its glyph with, reported as it draws: the harness cannot
-        // name this device's dynamic Material palette, so it asks the row and then
-        // samples for that colour (`nuiTestMenuReport`'s `iconTints=`). A caller with no
-        // interest in the colour passes nothing.
+        // Reported as it draws, for tests: the colour comes from the device's dynamic palette.
         onIconTint?.invoke(LocalContentColor.current)
         MenuRowIcon(icon)
       }
@@ -460,12 +357,7 @@ internal fun MenuRow(
   }
 }
 
-/**
- * A group's label - or, tagged [MENU_TITLE_TAG], the menu's own title: drawn, a heading
- * to a screen reader, and deliberately not a row, because a row that does nothing reads
- * as a bug to the person using one. `DropdownMenuGroupLabel` caps it at the width a row
- * stops at (280 dp), so a long title cannot stretch the list.
- */
+/** A group's label or the menu's title: a heading to a screen reader, and not a row. */
 @Composable
 private fun MenuGroupLabel(
   title: String,
@@ -484,19 +376,9 @@ private fun MenuGroupLabel(
 }
 
 /**
- * The menu's groups, in order: each [MenuGroupItem] is a `DropdownMenuGroup`, spaced by
- * `MenuDefaults.GroupSpacing` and shaped by its place in the list. [menuTitle] (a
- * ContextMenu's) is the first group's top label.
- *
  * Scrolls when the groups are taller than the window: `DropdownMenuPopup`'s column does
- * not scroll by itself, unlike the baseline `DropdownMenu`.
- *
- * [onRowsComposed] hears how many pickable rows *this* composition drew, published after
- * the composition rather than written during it: the witness for a `group` that changed
- * while the menu was open.
- *
- * [icons] is the popup's rows' resolved `androidIcon`s - the caller's model owns it,
- * because the slots have to outlive a recomposition and be retired by a recycle.
+ * not scroll by itself. [menuTitle] is the first group's top label. [onRowsComposed] hears,
+ * after each composition, how many pickable rows it drew.
  */
 @Composable
 internal fun MenuGroups(
@@ -544,12 +426,7 @@ internal fun MenuGroups(
   SideEffect { onRowsComposed(pickableRows) }
 }
 
-/**
- * The menu window both menus open: Expressive's `DropdownMenuPopup`, placed by
- * `MenuDefaults.rememberDropdownMenuPopupPositionProvider` against the layout it is
- * composed in - the trigger's box for a Menu, a zero-size box at the finger for a
- * ContextMenu - with the [MenuWitness] first inside it.
- */
+/** The menu window both menus open, with the [MenuWitness] first inside it. */
 @Composable
 internal fun NitroUiMenuPopup(
   expanded: Boolean,
@@ -571,27 +448,17 @@ internal fun NitroUiMenuPopup(
 }
 
 /**
- * Whether any harness has asked a menu-shaped control for its report in this process.
- *
- * The `drawn` reading walks the popup's semantics tree on each layout of the popup's
- * window, which an app never needs: it is switched on by the first report or probe
- * call, so an app that never calls a test seam never pays for it.
+ * Set by the first test report or probe call. Until then the popup's semantics tree is not
+ * walked on each layout, so an app never pays for it.
  */
 internal object MenuDrawnWitness {
   @Volatile var wanted = false
 }
 
 /**
- * The open menu as its own semantics tree says it is - the rows a screen reader and
- * `uiautomator` reach - in `Menu.nitro.ts`'s `drawn` notation, or `null` when [view] is
- * not a composition root.
- *
- * Read from the *merged* tree, as TalkBack reads it: a row is a node with a click
- * action, its title the first text and its subtitle the second (`@`); `+` is a row that
- * says `selected` with `Role.Checkbox` or `Role.RadioButton`, `=` a checkbox row that is
- * not selected, `~` a disabled row. A group is `(<label>:<rows>)` and a menu's own title
- * `#<title>`. Destructive is only a colour, nothing in the tree, so Android never writes
- * `!`.
+ * The open menu as its merged semantics tree, or `null` when [view] is not a composition
+ * root. A row is `title[@subtitle]`, with `+` selected, `=` an unselected checkbox and `~`
+ * disabled; a group is `(<label>:<rows>)` and the menu's title `#<title>`.
  */
 internal fun describeMenuSemantics(view: View): String? {
   val owner = (view as? RootForTest)?.semanticsOwner ?: return null
@@ -654,12 +521,7 @@ private fun describeRow(node: SemanticsNode): String {
   return out.toString()
 }
 
-/**
- * What a popup's witness reports to: the owning control's model.
- *
- * Menu and ContextMenu keep their popup geometry in their own models, so the witness
- * talks to this rather than to either of them.
- */
+/** What a popup's witness reports to: the owning control's model. */
 internal interface MenuWitnessSink {
   /** How many of this control's popups the process has composed right now. */
   val livePopups: AtomicInteger
@@ -681,11 +543,7 @@ internal interface MenuWitnessSink {
   /** The popup left the composition: an `expanded` flag must not outlive it. */
   fun menuLeftComposition()
 
-  /**
-   * What the open popup's semantics tree holds, in `drawn` notation
-   * ([describeMenuSemantics]); read on each layout of the popup's window once a harness
-   * has asked ([MenuDrawnWitness]). Kept after the popup closes, like iOS's probe answer.
-   */
+  /** The open popup's semantics tree ([describeMenuSemantics]). Kept after the popup closes. */
   fun noteMenuDrawn(tree: String)
 }
 
@@ -701,14 +559,9 @@ internal fun refreshMenuDrawn(
 }
 
 /**
- * The popup's own witness, composed only while the menu is open, and first inside it:
- * it reads `LocalView`, which inside a `DropdownMenu`'s content is the *popup's* view.
- *
- * The three jobs are `PickerHost.MenuWitness`'s, unchanged: prove there is a menu
- * ([MenuWitnessSink.livePopups], process-wide, so a mount dropped mid-menu cannot hide a
- * leak), say where its window is, and make sure `expanded` does not survive a popup that
- * already left the composition. The last one is why a hosted Menu that leaves and
- * re-enters its Host's child list does not open a window nobody asked for.
+ * Composed first inside the open popup, where `LocalView` is the popup's own view. Counts
+ * live popups, reports the window's frame, and tells the sink when the popup leaves the
+ * composition so `expanded` cannot outlive it.
  */
 @Composable
 internal fun MenuWitness(sink: MenuWitnessSink) {

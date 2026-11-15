@@ -8,40 +8,19 @@ import {
 } from '../components/ButtonGroup/ButtonGroup';
 import { resetButtonGroupWarningsForTests } from '../components/ButtonGroup/ButtonGroup';
 
-/**
- * Wrapper-level tests for the two ButtonGroup rules a device cannot see (G20).
- *
- * The first is the sizing **key**. It is the cache key: two groups that build the
- * same string share one cached size for the life of the process
- * (`docs/architecture/sizing.md`, DECISIONS D16), and a ButtonGroup's key carries a
- * field per item because the items *are* the row. Appendix B7's red proof for this
- * line is the quiet one — drop `androidIcon` from the key and an icon that arrives
- * with a bundled asset shares one cache entry with the same row without it, so the
- * box either waits for a glyph that never comes or keeps a slot it no longer draws.
- * The second half of that proof is escaping: a title containing `|` must not be able
- * to push a field into the key that the caller never passed.
- *
- * The second rule is the *shape of the wire*: every field of every item is always
- * sent (D7 / nitro#1184), the controlled checked set names only the items whose
- * `checked` is a boolean, and `defaultCheckedIds` only the uncontrolled ones. Those
- * three arrays are what the native set handshake (`ButtonGroupCheckedSet`)
- * reconciles, and a device test can only see what they add up to.
- */
 const ITEMS: ButtonGroupItem[] = [
   { id: 'copy', title: 'Copy', systemImage: 'doc.on.doc', androidIcon: 'copy' },
   { id: 'paste', title: 'Paste' },
 ];
 
 beforeEach(() => {
-  // `useSizingId` asks native for an instance id; the root mock keeps a registry of
-  // fakes for exactly that.
+  // `useSizingId` asks the native core for an instance id.
   nitroUiHybridObjects.NitroUiCore = () => ({
     nextSizingId: () => 1,
   });
   resetButtonGroupWarningsForTests();
 });
 
-/** The props the wrapper gave the native view with `testID`. */
 function nativeProps(
   view: RenderResult,
   testId: string
@@ -85,7 +64,6 @@ describe('ButtonGroup - sizing key', () => {
       'standard|filled|medium|automatic|2|a|Paste|||a|Copy|doc.on.doc|copy'
     );
 
-    // Each field on its own, against the same two-item row.
     const mutations: [string, ButtonGroupItem[], string][] = [
       ['title', [{ ...ITEMS[0]!, title: 'Duplicate' }, ITEMS[1]!], 'Duplicate'],
       [
@@ -110,9 +88,6 @@ describe('ButtonGroup - sizing key', () => {
   });
 
   it('cannot be forged by a separator inside a free-form field', async () => {
-    // Without escaping, a title of `a|b` reads as the two fields `a` and `b`, and
-    // lands on the same key as a title of `a` with a `systemImage` of `b` — one
-    // cache entry for two rows that draw at different widths.
     const forged = await render(
       <ButtonGroup items={[{ id: 'x', title: 'a|b' }]} testID="forged" />
     );
@@ -155,7 +130,6 @@ describe('ButtonGroup - sizing key', () => {
         />
       </>
     );
-    // Same row, same height: `checked`, `disabled` and `tintColor` paint.
     expect(keyOf(view, 'two')).toBe(keyOf(view, 'one'));
   });
 
@@ -191,7 +165,6 @@ describe('ButtonGroup - the wire', () => {
         toggle: false,
       },
     ]);
-    // A missing prop would leave a recycled view showing the previous mount's row.
     expect(nativeProps(view, 'group').checkedIds).toEqual([]);
     expect(nativeProps(view, 'group').controlledIds).toEqual([]);
     expect(nativeProps(view, 'group').defaultCheckedIds).toEqual([]);
@@ -216,17 +189,12 @@ describe('ButtonGroup - the wire', () => {
       />
     );
     const props = nativeProps(view, 'group');
-    // `underline` is uncontrolled: native keeps its state and no JS write may move
-    // it, which is the reason `controlledIds` is sent at all.
     expect(props.checkedIds).toEqual(['bold']);
     expect(props.controlledIds).toEqual(['bold', 'italic']);
     expect(props.defaultCheckedIds).toEqual(['underline']);
   });
 
   it('says uncontrolled with an empty controlledIds, not with a missing prop', async () => {
-    // The wire prop cannot be absent (D7 / nitro#1184), so "uncontrolled" is said by
-    // `controlledIds` being empty rather than by a missing `checkedIds`: with no id a
-    // write may move, native's own set is the only word on the row.
     const view = await render(
       <ButtonGroup
         items={[
@@ -259,10 +227,7 @@ describe('ButtonGroup - the wire', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]?.[0])).toContain('duplicate');
     warn.mockClear();
-    // A second mount of the same bug is silent: the guard is per process, like
-    // `warnAndroidIconName`'s, because a per-render warning on a list screen is a
-    // warning nobody reads. `resetButtonGroupWarningsForTests` is how a test that
-    // needs to see it again gets to see it.
+    // The warning is once per process, so a second mount is silent.
     await render(<ButtonGroup items={items} testID="group" />);
     expect(warn).not.toHaveBeenCalled();
     resetButtonGroupWarningsForTests();

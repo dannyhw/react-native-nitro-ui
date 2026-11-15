@@ -1,17 +1,3 @@
-/**
- * When the watchdog speaks.
- *
- * Two ways to fail, and both have happened here. A watch that reports every tick is
- * noise and gets deleted (38 firings, 0 findings, removed after 19 hours). A watch
- * that reports once and never again is one missed message away from a 34-hour stall.
- * So the cases are about *change*: silent on a healthy first run, one line when a
- * state moves, silent while it stays, a reminder for an alert that outlives
- * `REMIND_AFTER_HOURS`, and one line when it recovers.
- *
- * The clock is a number handed in. Times are chosen on both sides of the reminder
- * (5 h and 7 h against 6 h) so a comparison written the wrong way round goes red.
- */
-
 import { afterAll, describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -58,7 +44,6 @@ describe('diffSnapshot', () => {
     expect(second.lines[0]).toContain('WARN  disk: 30 GB free');
     const third = diffSnapshot(second.snapshot, [diskFact(29)], T0 + 2 * HOUR);
     expect(third.lines).toEqual([]);
-    // "Since" is when it went wrong, not when it was last looked at.
     expect(third.snapshot.facts.disk.since).toBe(T0 + HOUR);
   });
 
@@ -78,7 +63,6 @@ describe('diffSnapshot', () => {
     expect(late.lines).toEqual([
       `ALERT disk: still, ${REMIND_AFTER_HOURS + 1} h on. 3 GB free. Run \`node scripts/worktrees.mjs --prune\`.`,
     ]);
-    // The reminder restarts the interval; the next tick is quiet again.
     const after = diffSnapshot(
       late.snapshot,
       [diskFact(3)],
@@ -114,7 +98,7 @@ describe('diffSnapshot', () => {
     ]);
     const bad = diffSnapshot(null, [red], T0);
     expect(bad.lines).toEqual(['ALERT ci: red on main: CI (abcdef12)']);
-    // No network this tick: `ciFact(null)` is null and the caller drops it.
+    // No network this tick, so there is no CI fact at all.
     const blind = diffSnapshot(bad.snapshot, [], T0 + HOUR);
     expect(blind.lines).toEqual([]);
     expect(blind.snapshot.facts.ci).toMatchObject({
@@ -164,9 +148,7 @@ describe('diffSnapshot', () => {
   });
 
   it('is not woken by an orchestrator that is merely busy or idle', () => {
-    // The state for a healthy orchestrator is one word whatever it is doing. Passing
-    // "idle" and "working" as two states made every flip a message, and the message
-    // woke the orchestrator, which flipped it again.
+    // A healthy orchestrator's state is one word whatever it is doing.
     const alive = (text) => parseFactArgument(`orchestrator=ok:alive:${text}`);
     const first = diffSnapshot(null, [alive('idle')], T0);
     const second = diffSnapshot(first.snapshot, [alive('working')], T0 + HOUR);
@@ -265,8 +247,7 @@ describe('the facts', () => {
   });
 
   it('leases: reads a hand-edited lease the way the pool does', () => {
-    // An ISO date is a date and a missing ttl is the default four hours. The first
-    // version called the second "expired and never released" one minute in.
+    // An ISO date is a date, and a missing ttl is the default four hours.
     const iso = {
       id: 'iso',
       acquiredAt: new Date(T0).toISOString(),
@@ -398,14 +379,8 @@ describe('renderStatus', () => {
   });
 });
 
-/* ------------------------------ the real command ----------------------------- */
-
-/**
- * `scripts/watchdog.mjs` itself: what it writes, when it exits 10, and that `--status`
- * remembers nothing. GitHub and npm are replaced by stubs that fail, which is also
- * the "no network" case: those facts are skipped, and the local ones (disk,
- * worktrees, leases) still answer.
- */
+// GitHub and npm are replaced by stubs that fail, which is also the "no network"
+// case: those facts are skipped and the local ones still answer.
 describe('watchdog.mjs, end to end', () => {
   const CLI = path.join(process.cwd(), 'scripts', 'watchdog.mjs');
   const cleanup = [];
@@ -447,7 +422,6 @@ describe('watchdog.mjs, end to end', () => {
     expect(first.stdout).toContain(
       'ALERT orchestrator: no turn started for 3 h'
     );
-    // The stubbed GitHub and npm could not be asked, so they are simply absent.
     for (const absent of [' ci:', ' npm:', ' issues:', ' prs:']) {
       expect(first.stdout).not.toContain(absent);
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Consumer smoke test: fresh Expo app (SDK=$SDK, default 58), installed with
 # npm from the packed tarball, Release build, launched, ready line + screenshot.
-# PLATFORM=ios|android|both. See docs/research/setup-decisions.md §2/§4.
+# PLATFORM=ios|android|both.
 SCRIPT_NAME=expo.sh
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

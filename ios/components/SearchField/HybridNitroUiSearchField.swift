@@ -1,41 +1,6 @@
-//
-//  HybridNitroUiSearchField.swift
-//  react-native-nitro-ui
-//
-//  The SearchField component (G17): UIKit's `UISearchTextField` - the field
-//  `UISearchBar` itself vends - hosted through a `UIViewRepresentable` in the core
-//  SwiftUI host, exactly like TextField's single-line control (DECISIONS D34/D38).
-//
-//  A `UISearchTextField` *is* a `UITextField`, so everything the controlled value
-//  needs is already there: `markedTextRange` for the composition guard, the
-//  delegate's `shouldChangeCharactersIn` for `maxLength`, `editingChanged` for the
-//  report, and a clear button of UIKit's own. `NitroUiTextEditing.swift` holds the
-//  bodies both controls run, and `TextFieldModel` is the same model, so the only
-//  thing this file decides is what a *search* field looks like: one line, the Search
-//  key, a clear button while editing, and no placeholder
-//  nobody asked for — UIKit sets none on the bare field (it draws "Search" only inside
-//  a search bar), so the default is read back from the control at init and stays empty
-//  today; `docs/components/search-field.md` carries the claim the harness asserts.
-//
-//  The three keyboard props are TextField's, applied through the same
-//  `NitroUiTextTraits.Resolved` resolver, and their defaults are what v1 fixed them
-//  to (`applySearchPresets()`), which is why an app that passes none gets the field it
-//  always got. A change while the field is focused reloads the open keyboard, because
-//  a `UITextInputTraits` setter does not reach one that is already up.
-//
-//  It is its own Hybrid View rather than `variant="search"` on TextField because a
-//  declared fallback is keyed by component (docs/architecture/sizing.md §5): as a
-//  variant, every cold SearchField would lay out at TextField's line height for one
-//  frame and then correct - a jump at the top of a search screen, the one place
-//  users look first.
-//
-//  Why not `UISearchBar`: it is the *delegate* of its own text field and reports
-//  through `UISearchBarDelegate`, so the delegate path above would be rewritten
-//  rather than reused, and its extras are a bar's chrome (Cancel, scope buttons, bar
-//  padding). Its `searchTextField` is this same class, so the field is identical.
-//  Why not SwiftUI: it has no standalone search field - `searchable` is a modifier
-//  that needs a navigation container.
-//
+// The SearchField component: UIKit's `UISearchTextField` hosted through a `UIViewRepresentable`. It
+// shares TextField's model and editing logic, and is a separate Hybrid View because a declared
+// sizing fallback is keyed by component.
 
 import NitroModules
 import SwiftUI
@@ -43,18 +8,13 @@ import UIKit
 
 // MARK: - The control
 
-/// The control: a `UISearchTextField`, configured as a search field and driven by the
-/// same model as TextField.
 final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, NitroUiTextControl {
-  /// Strong: the model never holds the control strongly (`TextFieldModel.control` is
-  /// weak), so there is no cycle, and a callback during teardown still has one.
+  /// Strong: `TextFieldModel.control` is weak, so there is no cycle.
   private let model: TextFieldModel
   /// Keeps our own writes from re-entering `editingChanged` as user edits.
   private var applying = false
-  /// UIKit's own placeholder for this class, read once at init: a `null` placeholder
-  /// means "yours", and a recycled field must not keep the previous row's prompt.
-  /// Declared with a value because Swift's phase 1 wants every stored property set
-  /// before `super.init`, and UIKit's own prompt only exists once the control does.
+  /// UIKit's own placeholder for this class, read once at init: a `null` placeholder prop restores
+  /// it, so a recycled field does not keep the previous row's prompt.
   private var defaultPlaceholder: String?
 
   init(model: TextFieldModel) {
@@ -101,9 +61,8 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
   }
 
   func nuiApply() {
-    // See `NitroUiSingleLineField.nuiApply()` for why a change to a focused field has
-    // to reload its input views: a `UITextInputTraits` setter does not reach a keyboard
-    // that is already up.
+    // A `UITextInputTraits` setter does not reach a keyboard that is already up, so a change on a
+    // focused field reloads its input views.
     let traits = NitroUiTextTraits.Resolved(model)
     var traitsChanged = false
     if keyboardType != traits.keyboard { keyboardType = traits.keyboard; traitsChanged = true }
@@ -113,15 +72,13 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
     }
     if autocorrectionType != traits.correction { autocorrectionType = traits.correction; traitsChanged = true }
     if spellCheckingType != traits.spelling { spellCheckingType = traits.spelling; traitsChanged = true }
-    // Always the Search key, and never on an empty field: `enablesReturnKeyAutomatically`
-    // is what makes "an empty query cannot submit" true on iOS, so that Android's
-    // empty-text guard is a rule and not a coincidence of two platform defaults.
+    // `enablesReturnKeyAutomatically` disables the Search key on an empty field, so an empty query
+    // cannot be submitted from the keyboard.
     let returnKey = NitroUiTextTraits.returnKey(model.returnKeyType)
     if returnKeyType != returnKey { returnKeyType = returnKey; traitsChanged = true }
     if !enablesReturnKeyAutomatically { enablesReturnKeyAutomatically = true; traitsChanged = true }
     if traitsChanged, isFirstResponder { reloadInputViews() }
-    // The clear button, stated rather than inherited: it is the component's one
-    // affordance, and a default that changes with the OS would change the component.
+    // Set explicitly, so the clear button does not depend on an OS default.
     if clearButtonMode != .whileEditing { clearButtonMode = .whileEditing }
     let shown = model.placeholder ?? defaultPlaceholder
     if placeholder != shown { placeholder = shown }
@@ -144,29 +101,20 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
     }
   }
 
-  /// `editable == false` takes no focus from any route - a tap, `focus()`, VoiceOver.
-  /// `isEnabled` alone is not enough (measured with TextField's synthesized tap).
+  /// `editable == false` takes no focus from any route: a tap, `focus()`, VoiceOver. `isEnabled`
+  /// alone is not enough.
   override var canBecomeFirstResponder: Bool {
     model.editable && super.canBecomeFirstResponder
   }
 
-  /// The Search key's route, run by hand the way `nuiRunClear` runs the clear button's:
-  /// the field's own `textFieldShouldReturn`, which is the method both the keyboard's
-  /// Search key and a hardware Return reach.
-  ///
-  /// This used to read `enablesReturnKeyAutomatically` (UIKit disables the key on an
-  /// empty field, so the *key* is inert) and then call `nuiSubmitFromReturn` straight
-  /// past the delegate. That made the harness assert UIKit's disabled key rather than
-  /// this control's own rule, and a hardware Return - which ignores the disabled key and
-  /// lands in `textFieldShouldReturn` anyway - submitted an empty query unnoticed.
+  /// Runs the Return key's route by hand: `textFieldShouldReturn`, which both the keyboard's Search
+  /// key and a hardware Return reach.
   func nuiRunReturnKey() {
     _ = textFieldShouldReturn(self)
   }
 
-  /// The clear button's route, run by hand: UIKit asks the delegate, empties the field,
-  /// and sends `editingChanged` - which is what makes a clear an edit like any other.
-  /// `clearButton?.sendActions(for:)` is the other way to say it, and does not reach a
-  /// button that is hidden because the field is not editing.
+  /// Runs the clear button's route by hand: ask the delegate, empty the field, send
+  /// `editingChanged`, so a clear is an edit like any other.
   func nuiRunClear() {
     guard nuiAllowsClear, !nuiText.isEmpty else { return }
     if !textFieldShouldClear(self) { return }
@@ -207,9 +155,8 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
   }
 
   func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-    // The real Return-key path. `enablesReturnKeyAutomatically` disables the key on an
-    // empty field, but a hardware Return reaches this delegate anyway, and an empty query
-    // never submits - the same rule Android's `onSearch` guard states.
+    // `enablesReturnKeyAutomatically` disables the key on an empty field, but a hardware Return
+    // reaches this delegate anyway. An empty query never submits.
     guard !nuiText.isEmpty else { return false }
     nuiSubmitFromReturn()
     return false
@@ -222,9 +169,8 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
 
 // MARK: - SwiftUI
 
-/// One representable per shape - and there is one shape: a search field is always one
-/// line. Building it is `makeUIView`; every later SwiftUI update only re-applies
-/// configuration (`nuiApply`), never the text.
+/// Built once in `makeUIView`; every later SwiftUI update only re-applies configuration
+/// (`nuiApply`), never the text.
 private struct SearchBox: UIViewRepresentable {
   @ObservedObject var model: TextFieldModel
 
@@ -241,9 +187,8 @@ private struct SearchBox: UIViewRepresentable {
     uiView.nuiApply()
   }
 
-  /// The box's width, and the field's own height: a search field's height does not
-  /// depend on its text, its width or its placeholder (`fillWidth`), which is why its
-  /// sizing key is a constant and its declared fallback can be one number per OS.
+  /// The box's width and the field's own height, which does not depend on its text, width or
+  /// placeholder.
   @available(iOS 16.0, *)
   func sizeThatFits(_ proposal: ProposedViewSize, uiView: NitroUiSearchTextField, context: Context) -> CGSize? {
     let height = ceil(uiView.intrinsicContentSize.height)
@@ -255,7 +200,6 @@ private struct SearchBox: UIViewRepresentable {
   }
 }
 
-/// The SwiftUI half.
 struct SearchFieldContent: NitroUIContent {
   @ObservedObject private var model: TextFieldModel
 
@@ -270,22 +214,13 @@ struct SearchFieldContent: NitroUIContent {
 
 // MARK: - Hybrid View
 
-/// The Hybrid View React renders as `NitroUiSearchField`.
 final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableView, NitroUiTextOwner {
   private let host: NitroSwiftUIHost<SearchFieldContent>
 
-  /// This component's name in the sizing engine.
   private static let sizingComponentName = "NitroUiSearchField"
 
-  /// The declared fallback: the height `UISearchTextField` measures at the body font
-  /// (28 pt on iOS 27 — the Conformance rule measures it, `box=420.0x28.0` on the iPhone
-  /// Air simulator this repo runs its gates on, which is also the height UIKit gives the
-  /// field inside its own search bar), and the width a field gets under a parent that
-  /// does not give it one (a row with no `flex`), where `fillWidth` draws the width.
-  ///
-  /// TextField's one line is 22 pt, so the two differ by design: a SearchField that
-  /// reused TextField's declaration would be a SearchField that composed TextField's
-  /// control, and `SearchField.harness.tsx` has an assertion against exactly that.
+  /// The declared fallback: the height `UISearchTextField` measures at the body font (28 pt on iOS
+  /// 27), and the width a field gets under a parent that does not give it one.
   private static let fallbackSize = (width: 200.0, height: 28.0)
 
   private static let declaresFallback: Bool = {
@@ -293,8 +228,8 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process.
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup; `init` is the backstop.
+  /// Hand this control's declared size to the sizing engine, once per process. Called at startup;
+  /// `init` is the backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
@@ -328,15 +263,9 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     return host.model
   }
 
-  /// The traits a search field fixes or defaults, as the model's own values - so the
-  /// shared trait resolver (`NitroUiTextTraits.Resolved`) stays the one thing that
-  /// decides what the control is configured with.
-  ///
-  /// `returnKeyType`, `multiline` and `secureTextEntry` have no prop and cannot move
-  /// (D38 item 2). The other three are a search field's *defaults*: they are what v1
-  /// fixed them to, so a field whose app passes no keyboard prop is configured
-  /// exactly as it was, and this is also what a recycled field comes back with
-  /// (`prepareForRecycle`) rather than `TextFieldModel`'s own text-field defaults.
+  /// The traits a search field fixes (`returnKeyType`, `multiline`, `secureTextEntry`) or defaults,
+  /// written into the model that is shared with TextField. Also what a recycled field comes back
+  /// with.
   private func applySearchPresets() {
     model.returnKeyType = "search"
     model.keyboardType = "default"
@@ -390,8 +319,6 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   var keyboardType: String {
     get { model.keyboardType }
     set {
-      // TextField's setter, verbatim: store, mark dirty, let `nuiApply()` decide what
-      // the control does with it - including reloading a keyboard that is already up.
       guard newValue != model.keyboardType else { return }
       model.keyboardType = newValue
       host.markDirty()
@@ -436,9 +363,9 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   var testID: Variant_NullType_String {
     get { .first(.null) }
     set {
-      // Nothing to apply, like TextField: RN already puts `testID` on the component
-      // view as `accessibilityIdentifier`, and a second copy on the control would
-      // make a testID query match twice.
+      // Nothing to apply: RN already puts `testID` on the component view as
+      // `accessibilityIdentifier`, and a second copy on the control would make a testID query match
+      // twice.
       _ = newValue
     }
   }
@@ -492,8 +419,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   }
 
   // MARK: - NitroUiTextOwner
-  // The host plumbing the shared text logic needs (`NitroUiTextEditing.swift`). A
-  // search field never grows with its text, so neither hook is a remeasure.
+  // A search field never grows with its text, so neither hook remeasures.
 
   var nuiTextModel: TextFieldModel { model }
 
@@ -505,10 +431,8 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     // Unreachable: `model.multiline` is fixed to `false` by `applySearchPresets()`.
   }
 
-  /// The field gained or lost focus. `model.focused` is the guard against a second
-  /// `onFocusChange` for one edge: UIKit can report `editingDidEnd` for a field that
-  /// never began (a resign on a field that was not first responder), and a wrapper that
-  /// saw two begins and one end counts a blur that never happened.
+  /// The field gained or lost focus. The `model.focused` guard stops a second `onFocusChange` for
+  /// one edge: UIKit can report `editingDidEnd` for a field that never began editing.
   func focusMoved(_ focused: Bool) {
     nitroUiAssertMainThread()
     guard model.focused != focused else { return }
@@ -531,9 +455,8 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   }
 
   func prepareForRecycle() {
-    // TextField's rule: a pooled field must not keep the keyboard, or report a blur to
-    // its next owner. Every callback goes first, because resigning commits open marked
-    // text as an edit and that edit belongs to nobody now.
+    // A pooled field must not keep the keyboard or report a blur to its next owner. Callbacks go
+    // first, because resigning commits open marked text as an edit.
     model.onFocusChange = nil
     model.onChange = nil
     model.onSubmit = nil
@@ -555,13 +478,10 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     // Back to a search field's own traits: the model is shared with TextField, and its
     // defaults are a text field's.
     applySearchPresets()
-    // What the reset left the keyboard as, read off the model after the fact: the harness
-    // cannot read between this and the next owner's first prop write, which would mask a
-    // reset that kept the previous owner's keyboard.
+    // Test read-out of the keyboard the reset left, taken here because the next owner's props
+    // overwrite it.
     resetKeyboard = "\(model.keyboardType)/\(model.autoCapitalize)/\(model.autoCorrect)"
-    // The control outlives the mount (the hosting controller is the expensive part the
-    // pool keeps), so its text and its placeholder go with the model's - the
-    // placeholder returns to UIKit's own, whatever the previous row asked for.
+    // The control outlives the mount, so its text and placeholder are reset with the model's.
     syncText()
     (model.control as? NitroUiSearchTextField)?.nuiApply()
     host.prepareForRecycle()
@@ -589,15 +509,12 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
       lastWrite: model.lastWrite,
       editable: model.editable,
       maxLength: Double(model.maxLength ?? -1),
-      // What the control shows, so a recycle that forgot UIKit's own prompt is visible:
-      // `nil` in the model means "the platform's", and that is what the control reports.
+      // Read from the control, so a recycle that kept the previous placeholder is visible.
       placeholder: control?.placeholder ?? "",
       accessibilityLabel: control?.accessibilityLabel ?? "",
       returnKeyType: model.returnKeyType,
-      // The three keyboard traits read back from the control, not from the model, so
-      // what JS sees is what UIKit was told (`nuiApply()` is what writes them, and a
-      // prop that never reached the field is visible here). With no control built yet
-      // the model's own value is the honest answer: it is what `nuiApply()` will apply.
+      // Read back from the control, not the model, so this is what UIKit was told. Before the
+      // control exists, the model's value is what will be applied.
       keyboardType: control.map { NitroUiTextTraits.name(of: $0.keyboardType) }
         ?? model.keyboardType,
       autoCapitalize: control.map { NitroUiTextTraits.name(of: $0.autocapitalizationType) }
@@ -615,7 +532,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
 
   // MARK: - Methods
 
-  /// Never touches the main thread: a cached size, like every other control's.
+  /// A cached size: this can be called from the JS thread and must not touch SwiftUI.
   func measureContent() throws -> NitroUiSize {
     guard let size = host.contentSize else {
       return NitroUiSize(width: 0, height: 0)
@@ -663,8 +580,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   func nuiTestSubmit() throws {
     DispatchQueue.main.async { [weak self] in
       guard let self, let field = self.model.control as? NitroUiSearchTextField else { return }
-      // The delegate method itself, guard included, so an empty field reports nothing
-      // here either - and reports it for the same reason a real Return would.
+      // The delegate method itself, guard included, so an empty field submits nothing.
       field.nuiRunReturnKey()
       self.publishState()
     }

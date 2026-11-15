@@ -11,33 +11,18 @@ import com.margelo.nitro.R.id.associated_hybrid_view_tag
 import com.margelo.nitro.nitroui.views.HybridNitroUiContextMenuStateUpdater
 
 /**
- * The Fabric view manager of `NitroUiContextMenu` - hand-written, and registered instead
- * of the generated `HybridNitroUiContextMenuManager` (`component.json`'s
- * `androidViewManager`; the registry checks `NitroUiPackage` registers this one).
- *
- * **Why `ReactViewManager`:** a ContextMenu replaces a `View` around existing content, so
- * it has to style like one. Nitrogen emits a `SimpleViewManager`, which has no
- * `IViewGroupManager` half for the children and only `BaseViewManager`'s props, whose
- * border-radius setters just log. RN's own `ReactViewManager` is `open`, so the wrapper
- * takes every prop RN's `View` takes. Otherwise this is the generated manager's body, as
- * `NitroUiBottomSheetViewManager` is: one Hybrid per view, Nitro's props applied through
- * the generated state updater in one batch, recycling set up because the Hybrid is a
- * `RecyclableView`.
- *
- * **The children:** Fabric's indices are the React Native children's. The menu's compose
- * host is the wrapper's last child and is hidden from [getChildCount], [getChildAt] and the
- * removals, so an insert at `n` lands before it and an unmount never takes it.
+ * Registered in place of the generated manager. It extends `ReactViewManager` so the wrapper
+ * takes every style prop a `View` takes. The menu's compose host is the wrapper's last child
+ * and is hidden from Fabric's child indices.
  */
 internal class NitroUiContextMenuViewManager : ReactViewManager() {
-  /** The View and its last state snapshot, as the generated managers keep them. */
   private class HybridViewHolder(
     val hybridView: HybridNitroUiContextMenu,
     var lastState: StateWrapper? = null,
   )
 
   init {
-    // The generated manager's rule. `ReactViewManager` only turns recycling on for its own
-    // class, never a subclass, so this is not a second call.
+    // `ReactViewManager` turns recycling on only for its own class, never a subclass.
     super.setupViewRecycling()
   }
 
@@ -75,14 +60,10 @@ internal class NitroUiContextMenuViewManager : ReactViewManager() {
     reactContext: ThemedReactContext,
     view: ReactViewGroup,
   ): ReactViewGroup? {
-    // `ReactViewManager`'s half resets the `View` (background, borders, pointer events)
-    // and removes every child - the compose host too - so the host is put back after it.
+    // The superclass removes every child, the compose host included; it is put back below.
     val prepared = super.prepareToRecycleView(reactContext, view) ?: return null
-    // React Native's reset clears the label's *tag* and leaves the view's own
-    // `contentDescription` and `importantForAccessibility` as the last owner set them, and
-    // `updateViewContentDescription` only ever writes a non-empty description - so a wrapper
-    // recycled into an owner with no label would still be announced by the old one
-    // (measured: real input's a11y sweep found "Message from Grace" on `ctx-outer`).
+    // React Native's reset leaves `contentDescription` and `importantForAccessibility` as the
+    // last owner set them, so a recycled wrapper would be announced with the old label.
     prepared.contentDescription = null
     prepared.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     val holder = holder(prepared) ?: return null
@@ -92,10 +73,7 @@ internal class NitroUiContextMenuViewManager : ReactViewManager() {
     return prepared
   }
 
-  /**
-   * Refused, with a dev warning (Q6 Appendix C1): the clipping list would have to keep out
-   * of the compose host's way, and a context-menu wrapper is not a scroll container.
-   */
+  /** Ignored with a warning: a context-menu wrapper is not a scroll container. */
   override fun setRemoveClippedSubviews(
     view: ReactViewGroup,
     removeClippedSubviews: Boolean,

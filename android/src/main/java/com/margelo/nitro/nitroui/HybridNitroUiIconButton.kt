@@ -49,31 +49,10 @@ import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
-/*
- * The IconButton component: Material 3's four icon buttons and their four toggle
- * forms, on the core runtime.
- *
- * Two siblings meet here, because that is what the control is
- * (`docs/tasks/Q9-buttongroup-iconbutton-design.report.md` C4): the press form is
- * Button's (`HybridNitroUiButton.kt`: a control whose *size* comes from its props,
- * a glyph drawn through G19's path) and the toggle form is Chip's
- * (`HybridNitroUiChip.kt`: the event-count handshake, and a semantics node a test
- * can read). What is new is the size ladder: a rung here is one of Material's own
- * `IconButtonDefaults` container tokens, so the numbers are Material's and not
- * this file's - the same rule D43 spells out for the glyphs.
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * manager resolves the implementation through a wildcard import of exactly that
- * package. Core helpers live in `...nitroui.core`.
- */
+// Material 3's four icon buttons and their four toggle forms. Must stay in this package:
+// the generated manager finds the implementation through a wildcard import of it.
 
-/**
- * The four looks, named after the M3 components they are (`IconButton` /
- * `FilledIconButton` / `FilledTonalIconButton` / `OutlinedIconButton`).
- *
- * `tintRole` is Button's rule: a tint replaces the container where there is one,
- * and the label where the container is transparent by design.
- */
+/** A tint replaces the container where the look has one, and the icon where it does not. */
 internal enum class IconButtonVariant(
   val wireName: String,
   val tintsContainer: Boolean,
@@ -90,14 +69,7 @@ internal enum class IconButtonVariant(
   }
 }
 
-/**
- * The five rungs, and which M3 icon-button tokens the container, the glyph and the
- * corner are read from.
- *
- * The names are the library's, the numbers are Material's (D42 item 4): this
- * ladder's rungs *are* Material's XS / S / M / L / XL icon-button tokens, which is
- * how `Button`'s ladder and this one agree on what `large` means.
- */
+/** The five sizes. They are Material's XS, S, M, L and XL icon-button tokens. */
 internal enum class IconButtonScale(val wireName: String) {
   Small("small"),
   Medium("medium"),
@@ -112,16 +84,8 @@ internal enum class IconButtonScale(val wireName: String) {
   }
 
   /**
-   * The container token: what the control's own box is asked to be.
-   *
-   * A `DpSize`, not a square - Material's own table gives each rung a height and
-   * then three widths for it (`Q9` C4's table), so `narrow` costs width and never
-   * height. `docs/components/icon-button.md` prints the measured grid.
-   *
-   * It has to be asked for on the control's own modifier: each of the eight
-   * composables below already applies `IconButtonDefaults.smallContainerSize()` to
-   * its own Box, and a size asked for inside that is coerced into it. See
-   * [Component]'s `controlModifier`.
+   * Must be applied on the control's own modifier: each Material icon button already sizes
+   * its own box with the small token, and a size requested inside that is coerced into it.
    */
   @Composable
   fun containerSize(width: IconButtonWidth): DpSize =
@@ -133,7 +97,6 @@ internal enum class IconButtonScale(val wireName: String) {
       XXLarge -> IconButtonDefaults.extraLargeContainerSize(width.option)
     }
 
-  /** The glyph token for the rung - the ladder sizes the art, never the file. */
   fun iconSize(): Dp =
     when (this) {
       Small -> IconButtonDefaults.extraSmallIconSize
@@ -143,7 +106,6 @@ internal enum class IconButtonScale(val wireName: String) {
       XXLarge -> IconButtonDefaults.extraLargeIconSize
     }
 
-  /** The resting corner, for `shape="round"`. */
   @Composable
   fun roundShape(): Shape =
     when (this) {
@@ -154,7 +116,6 @@ internal enum class IconButtonScale(val wireName: String) {
       XXLarge -> IconButtonDefaults.extraLargeRoundShape
     }
 
-  /** The resting corner, for `shape="square"`. */
   @Composable
   fun squareShape(): Shape =
     when (this) {
@@ -165,7 +126,6 @@ internal enum class IconButtonScale(val wireName: String) {
       XXLarge -> IconButtonDefaults.extraLargeSquareShape
     }
 
-  /** The corner the control morphs to while pressed - the theme's, not this file's. */
   @Composable
   fun pressedShape(): Shape =
     when (this) {
@@ -176,7 +136,6 @@ internal enum class IconButtonScale(val wireName: String) {
       XXLarge -> IconButtonDefaults.extraLargePressedShape
     }
 
-  /** The corner a *selected* toggle draws with - Material's Expressive answer. */
   @Composable
   fun selectedShape(round: Boolean): Shape =
     when (this) {
@@ -188,13 +147,7 @@ internal enum class IconButtonScale(val wireName: String) {
     }
 }
 
-/**
- * Material's three width options for a rung.
- *
- * `width` is part of the size configuration on both platforms and *acts* on one:
- * iOS has no counterpart (`HybridNitroUiIconButton.swift`), and the docs page says
- * so where the ladder is documented.
- */
+/** Material's three width options for a size. Android only. */
 internal enum class IconButtonWidth(val wireName: String) {
   Narrow("narrow"),
   Uniform("uniform"),
@@ -215,7 +168,6 @@ internal enum class IconButtonWidth(val wireName: String) {
       }
 }
 
-/** The corner vocabulary, shared with `Button.shape`. */
 internal enum class IconButtonCorner(val wireName: String) {
   Round("round"),
   Square("square"),
@@ -227,65 +179,47 @@ internal enum class IconButtonCorner(val wireName: String) {
   }
 }
 
-/** What one IconButton is showing. */
 internal class IconButtonModel : NitroUiModel() {
   /** The control's only name, put on the button's own node (never the container). */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /** Which M3 component to compose. */
   var variant by mutableStateOf(IconButtonVariant.Standard)
 
-  /** What a toggle shows. Snapshot-observed, so writing it recomposes. */
   var displayed by mutableStateOf(false)
 
   /**
-   * Whether the control is a toggle at all. Observed: it decides which composable is
-   * composed. Written from `defaultChecked != null` in `afterUpdate()`, never by a
-   * prop setter, so that the form can be switched off as well as on.
+   * Whether the control is a toggle. Set from `defaultChecked != null` in `afterUpdate()`,
+   * never by a prop setter, so the form can be switched off as well as on.
    */
   var isToggle by mutableStateOf(false)
 
-  /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
-  /** The rung. Observed: it is the box and the glyph size. */
   var scale by mutableStateOf(IconButtonScale.Medium)
 
-  /** The width option. Observed: on Android it is half the box. */
   var width by mutableStateOf(IconButtonWidth.Uniform)
 
-  /** The corner. Observed: a paint, so nothing measures it. */
   var corner by mutableStateOf(IconButtonCorner.Round)
 
   /** The tint (`processColor`'s ARGB int), or `null` for the scheme's own roles. */
   var tintColor by mutableStateOf<Int?>(null)
 
-  /**
-   * The SF Symbol name. Ignored on Android, as a Button's is: each platform draws
-   * its own glyph and a caller names both on one control.
-   */
+  /** The SF Symbol name. Stored for the getter; Android draws [androidIcon]. */
   var systemImage: String? = null
 
   /** Stored, not observed: [androidIconContent] is what draws, and it is observed. */
   var androidIcon: String? = null
 
-  /**
-   * Everything derived from [androidIcon], on G19's slot: the same rules as the
-   * Button's (resolve from `afterUpdate`, a file reserves its slot before it
-   * arrives, a recycled control cannot be painted by its previous owner's load).
-   */
   val iconSlot = NitroUiIconSlot()
 
   /** What the composition draws. Observed, through [iconSlot]. */
   val androidIconContent: NitroUiIconContent
     get() = iconSlot.content
 
-  /** Apply [androidIcon] if it is not what [androidIconContent] already is. */
   fun resolveAndroidIcon(artwork: NitroUiIconArtwork) {
     iconSlot.resolve(androidIcon, artwork)
   }
 
-  /** The size configuration React sent; the engine reads it out of Fabric state. */
   var sizingKey = ""
 
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
@@ -297,13 +231,12 @@ internal class IconButtonModel : NitroUiModel() {
   var onCheckedChange: ((Boolean, Double) -> Unit)? = null
   var onPress: (() -> Unit)? = null
 
-  /** Test-only read-outs (`nuiTestStateReport`), behind one lock. */
+  /** Test-only read-outs, behind one lock. */
   private val reportLock = Any()
   private var drawn = "none"
   private var probes = 0
   private var accessibilityReport = "none"
 
-  /** Record what the composable was handed. Plain storage, never observed. */
   fun recordDrawn(value: String) {
     synchronized(reportLock) { drawn = value }
   }
@@ -315,28 +248,22 @@ internal class IconButtonModel : NitroUiModel() {
     }
   }
 
-  /** `displayed=<0|1|none>;probes=<n>;a11y=<...>`. Safe from any thread. */
+  /** Safe from any thread. */
   fun stateReport(): String =
     synchronized(reportLock) { "displayed=$drawn;probes=$probes;a11y=$accessibilityReport" }
 
   /**
-   * What the last `nuiTestPixelProbe` saw, as one line, or empty before the first.
-   *
-   * Plain rather than observed - nothing may recompose because a test reading
-   * moved - and stored behind a lock because the probe is posted to the main thread
-   * while `nuiTestPixelReport` answers from whichever thread Nitro called it on
-   * (Button's shape, including the `n=` prefix that lets a harness tell its own
-   * answer from the previous control's).
+   * What the last pixel probe saw, prefixed `n=<count>`. Not observed. Locked because the
+   * probe runs on the main thread and the report is read from any thread.
    */
   var pixelReport = ""
     private set
 
   private val pixelReportLock = Any()
 
-  /** How many probes have reported, under [pixelReportLock]. */
   private var pixelProbes = 0
 
-  /** Store what a probe found, numbered. Safe from any thread. */
+  /** Safe from any thread. */
   fun publishPixelReport(report: String) {
     synchronized(pixelReportLock) {
       pixelProbes += 1
@@ -344,7 +271,6 @@ internal class IconButtonModel : NitroUiModel() {
     }
   }
 
-  /** The last published probe, or empty before the first one. */
   fun readPixelReport(): String {
     synchronized(pixelReportLock) { return pixelReport }
   }
@@ -361,8 +287,7 @@ internal class IconButtonModel : NitroUiModel() {
     tintColor = null
     systemImage = null
     androidIcon = null
-    // The reset the brief asks for: a recycled control that still held its
-    // previous owner's parsed glyph would draw it before the new one resolved.
+    // A recycled control must not draw its previous owner's glyph.
     iconSlot.reset()
     sizingKey = ""
     state.displayed = false
@@ -386,18 +311,13 @@ internal class IconButtonModel : NitroUiModel() {
 }
 
 /**
- * The colours of one variant, served by a per-scheme cache.
- *
- * The untinted path is already memoised inside Material (a no-argument
- * `*IconButtonColors()` reads a cached field), so the only allocation here is ours:
- * the tinted set, which without a cache is one object per recomposition on the path
- * the `update` bench scenario exercises. `docs/architecture/core.md` ("Shared
- * objects") is why it is a cache and not a `remember`: a hosted control is its own
- * composition, so nothing is shared between two of them.
+ * One colour set per (scheme, variant, tint). Material already caches the untinted set;
+ * the tinted one would otherwise be built on every recomposition, and `remember` cannot
+ * share it between hosted controls, which are separate compositions.
  */
 private class VariantColorCache<Value : Any> {
   private companion object {
-    /** Tinted sets to remember before starting over (Button's cap, Button's reason). */
+    /** The tinted sets are cleared when they reach this many. */
     const val MAX_TINTED_ENTRIES = 24
 
     const val VARIANTS = 4
@@ -446,7 +366,7 @@ private class VariantColorCache<Value : Any> {
     entries[key(variant, tint)] = colors
   }
 
-  /** Drop what a different scheme invalidates. Called with the lock held. */
+  /** Called with the lock held. */
   private fun adopt(scheme: ColorScheme) {
     if (this.scheme === scheme) {
       return
@@ -462,15 +382,7 @@ private class VariantColorCache<Value : Any> {
 private val PressColors = VariantColorCache<IconButtonColors>()
 private val ToggleColors = VariantColorCache<IconToggleButtonColors>()
 
-/**
- * The press form's colours for [tint] (an ARGB int, or `null` for the scheme's).
- *
- * `internal` and not `private` because the Stepper composes its two halves out of
- * them (`HybridNitroUiStepper.kt`): Android has no stepper control (D38 item 1), and
- * that brief says the composition reuses IconButton's colours, container and touch
- * target rather than carrying a second copy of them - a second copy is two controls
- * that drift, which is also why [iconButtonShapes] is shared.
- */
+/** [tint] is an ARGB int, or `null` for the scheme's colours. Shared with the Stepper. */
 @Composable
 internal fun iconButtonColors(
   variant: IconButtonVariant,
@@ -498,7 +410,6 @@ internal fun iconButtonColors(
   return built
 }
 
-/** The toggle form's colours, including the *checked* pair a toggle needs. */
 @Composable
 private fun iconToggleColors(
   variant: IconButtonVariant,
@@ -518,8 +429,7 @@ private fun iconToggleColors(
     if (color == null) {
       base
     } else if (variant.tintsContainer) {
-      // Both containers: a tinted toggle that went back to the scheme's colour the
-      // moment it was switched on would read as two different controls.
+      // Both containers, so a tinted toggle keeps its tint when it is switched on.
       base.copy(containerColor = color, checkedContainerColor = color)
     } else {
       base.copy(contentColor = color, checkedContentColor = color)
@@ -529,12 +439,8 @@ private fun iconToggleColors(
 }
 
 /**
- * The corners of one rung, cached per (motion scheme, rung, corner, form).
- *
- * `shapes()` and `toggleableShapes()` are composable reads of the theme that build
- * two `Shape` objects and a holder each time; Button caches its shapes for the same
- * reason (`ButtonShapesCache`), and a screen of icon buttons recomposes all of them
- * on every theme touch.
+ * The shapes of one size, cached per (motion scheme, size, corner, form): Material builds
+ * new `Shape` objects on every call.
  */
 private object IconButtonShapeCache {
   private var motion: MotionScheme? = null
@@ -575,10 +481,7 @@ private object IconButtonShapeCache {
   }
 }
 
-/**
- * The press form's `shapes` overload for the rung and corner. Shared with the Stepper
- * for [iconButtonColors]'s reason.
- */
+/** Shared with the Stepper. */
 @Composable
 internal fun iconButtonShapes(
   scale: IconButtonScale,
@@ -595,7 +498,6 @@ internal fun iconButtonShapes(
   return built
 }
 
-/** The toggle form's `shapes` overload, which also carries the selected corner. */
 @Composable
 private fun iconToggleShapes(
   scale: IconButtonScale,
@@ -614,12 +516,7 @@ private fun iconToggleShapes(
   return built
 }
 
-/**
- * The `outlined` variant's hairline, in the control's own tint if it has one.
- *
- * The *width* always comes from Material's own default border, so a tinted outline
- * is one colour different from an untinted one and nothing else.
- */
+/** The outlined variant's border in the control's tint. The width stays Material's own. */
 @Composable
 private fun outlinedBorder(
   variant: IconButtonVariant,
@@ -641,16 +538,9 @@ private fun outlinedBorder(
 }
 
 /**
- * The chain one icon-button half is laid out with: the platform's minimum interactive
- * size *outside* the rung's container token, in that order.
- *
- * The order is not a style choice. `Modifier.size(40.dp)
- * .minimumInteractiveComponentSize()` cannot grow past what the child asked for, so a
- * 40 dp container swapped this way stops being a 48 dp touch target.
- *
- * Shared with the Stepper (`HybridNitroUiStepper.kt`), whose Android half is two of
- * these - Material has no stepper control (D38 item 1), and its brief asks for
- * IconButton's container, colours and touch target rather than a second copy.
+ * The minimum interactive size outside the container token, in that order. Swapped,
+ * `size` would stop a 40 dp container growing into a 48 dp touch target. Shared with the
+ * Stepper.
  */
 @Composable
 internal fun nitroUiIconButtonContainer(
@@ -659,11 +549,7 @@ internal fun nitroUiIconButtonContainer(
   leading: Modifier = Modifier,
 ): Modifier = leading.minimumInteractiveComponentSize().size(scale.containerSize(width))
 
-/**
- * The hairline width Material strokes an outlined icon button with, used only when
- * Material's own default border cannot be read - which it can, in practice, so this
- * is a fall-back for an API change rather than a number the control draws with.
- */
+/** Used only if Material's own default border cannot be read. */
 private val NITRO_UI_OUTLINED_BORDER_WIDTH = 1.dp
 
 private class IconButtonHost(
@@ -671,14 +557,11 @@ private class IconButtonHost(
   activity: Activity?,
   model: IconButtonModel,
 ) : NitroComposeHost<IconButtonModel>(context, activity, model) {
-  /** The platform's own answer to "can a reader receive events right now?". */
   private val systemAccessibility = context.getSystemService(AccessibilityManager::class.java)
 
   /**
-   * Hand an accessibility event to the platform only when it can accept one - the
-   * Chip and Slider hosts' guard, for their reason: `nuiTestProbeAccessibility`
-   * forces Compose's semantics on with no reader connected, and an announcement
-   * with no recipient throws `Accessibility off. Did you forget to check that?`.
+   * The platform throws when sent an accessibility event while no service is enabled, which
+   * happens once the test probe has forced Compose semantics on.
    */
   override fun requestSendAccessibilityEvent(
     child: View,
@@ -690,11 +573,7 @@ private class IconButtonHost(
     return super.requestSendAccessibilityEvent(child, event)
   }
 
-  /**
-   * One press, through the path a tap takes - M3's `onClick`/`onCheckedChange`, and
-   * the `nuiTestPress` harness hook - so the two cannot disagree about what a press
-   * means. Refused while disabled, as M3 refuses the tap.
-   */
+  /** One press, by the path a tap takes. Ignored while disabled. */
   fun press() {
     if (!model.enabled) {
       return
@@ -706,14 +585,7 @@ private class IconButtonHost(
     }
   }
 
-  /**
-   * The user's flip. Native is optimistic: show the new value now, before React has
-   * seen the event, so there is no visual latency (§4).
-   *
-   * No size-report hold (Chip has one): a selected icon button changes its corner,
-   * its colours and its border, and none of those is a layout input - which is what
-   * `IconButtonsKeepOneBoxAcrossStates` measures rather than assumes.
-   */
+  /** Optimistic: shows the new value before React has seen the event. */
   fun toggleTo(requested: Boolean) {
     if (!model.enabled) {
       return
@@ -728,14 +600,10 @@ private class IconButtonHost(
     val variant = model.variant
     val toggle = model.isToggle
     val selected = model.displayed
-    // The reading `nuiTestStateReport()` answers with: taken where the control is
-    // drawn, so it is what the control is handed rather than what React sent.
     model.recordDrawn(if (toggle) (if (selected) "1" else "0") else "none")
     val label = model.accessibilityLabel
-    // The name goes on the control, which is the node TalkBack focuses. On the
-    // container instead, the empty box becomes a second focus stop and the button
-    // announces itself nameless - which for this control is fatal, since a name is
-    // all it has.
+    // The name goes on the control, the node TalkBack focuses. On the container it would
+    // add a second focus stop and leave the button unnamed.
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
     val enabled = model.enabled
@@ -743,24 +611,10 @@ private class IconButtonHost(
     val scale = model.scale
     val corner = model.corner
     val glyphSize = scale.iconSize()
-    // The rung goes on the *control's* modifier, not inside its content, and that
-    // placement is not a style choice: each of these eight composables builds its Box
-    // as `modifier.minimumInteractiveComponentSize().size(IconButtonDefaults.
-    // smallContainerSize())` (read off the artifact's bytecode), so a container asked
-    // for *inside* the content is measured under the `small` token's constraints —
-    // and `Modifier.size` coerces into the constraints it is given, so all five rungs
-    // come back 48 x 48. The first device run measured exactly that:
-    // `small narrow=48.00x48.00 … xxlarge wide=48.00x48.00`.
-    //
-    // The caller's modifier is the outermost of the chain, so the order inside it
-    // stays Material's own: the minimum interactive size *outside* the container
-    // token, so a 40 dp control is still a 48 dp target while the painted container
-    // stays the token. Swapping the two would clip the target — `Modifier.size(40.dp)
-    // .minimumInteractiveComponentSize()` cannot grow past what the child asked for.
+    // The size goes on the control's modifier, not inside its content: Material sizes its
+    // own box with the small token, and a size requested inside that is coerced into it.
     val controlModifier = nitroUiIconButtonContainer(scale, model.width, labelModifier)
     val content: @Composable () -> Unit = {
-      // The glyph alone: the composable's own Box centres its content, and the
-      // container's size and shape are the composable's business now.
       NitroUiIconGlyph(
         painter = rememberIconPainter(model.androidIconContent),
         size = glyphSize,
@@ -864,7 +718,6 @@ private class IconButtonHost(
   }
 }
 
-/** The Hybrid View React renders as `NitroUiIconButton`. */
 class HybridNitroUiIconButton(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiIconButtonSpec(),
@@ -872,14 +725,9 @@ class HybridNitroUiIconButton(
   private val model = IconButtonModel()
   private val host = IconButtonHost(reactContext, reactContext.currentActivity, model)
 
-  /**
-   * The control's half of icon resolution: the app's resources and the shared file
-   * cache, bound to this control's `Context`. Held rather than built per commit -
-   * a prop commit is not a place to allocate (G19's rule).
-   */
+  /** Resolves icons against the app's resources. Held, so a prop commit allocates nothing. */
   private val iconArtwork = NitroUiAppIconArtwork(reactContext)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
@@ -890,22 +738,18 @@ class HybridNitroUiIconButton(
   }
 
   companion object {
-    /** This component's name in the sizing engine (`getName()` in the generated manager). */
+    /** Must match `getName()` in the generated manager. */
     private const val SIZING_COMPONENT_NAME = "NitroUiIconButton"
 
     /**
-     * The size to lay an IconButton out with before anything has been measured, in
-     * dp: Material's `MinimumInteractiveComponentSize` (48 dp), which is the laid-out
-     * box of the two smallest rungs at any width and of a `large` control's narrow
-     * option. It is *not* the smallest container - the container is the rung's token,
-     * and Material puts a 48 dp target around anything smaller - and a fallback
-     * smaller than the target costs every row on a cold first frame.
+     * The size used before anything has been measured, in dp: Material's 48 dp minimum touch
+     * target, which is the laid-out box of the smaller sizes.
      */
     private const val FALLBACK_SIZE_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 
-    /** One `JNI` call per process; `NitroUiDeclaredFallbacks` calls it at package init. */
+    /** One JNI call per process. */
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
         return
@@ -929,8 +773,6 @@ class HybridNitroUiIconButton(
         return
       }
       model.accessibilityLabel = next
-      // Rendered (it is the node's name), and never a measure: an empty name is
-      // still the same box.
       host.markDirty()
     }
 
@@ -952,9 +794,8 @@ class HybridNitroUiIconButton(
       if (name == model.androidIcon) {
         return
       }
-      // Only stored: resolving a resource reads a `synchronized` table and a file
-      // load opens a socket, and a setter may run for every prop of the commit.
-      // `afterUpdate()` resolves it once (G19's rule).
+      // Only stored: resolving can take a lock or open a socket, so `afterUpdate()` does it
+      // once per commit.
       model.androidIcon = name
     }
 
@@ -976,9 +817,7 @@ class HybridNitroUiIconButton(
       if (value == model.scale) {
         return
       }
-      // The rung is the box. Compose observes it and its own measure pass reports
-      // the new size, so no extra "the size may have moved" call is needed here
-      // (sizing.md §5 - the difference from the iOS half).
+      // Compose's own measure pass reports the new size.
       model.scale = value
       host.markDirty()
     }
@@ -1024,9 +863,8 @@ class HybridNitroUiIconButton(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double; going via
-      // `toLong()` keeps the bit pattern (D10), which `Double.toInt()` would
-      // saturate for an opaque colour above `Int.MAX_VALUE` (Button's note).
+      // `processColor` hands back the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, so an opaque colour would become `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.tintColor) {
         return
@@ -1041,10 +879,7 @@ class HybridNitroUiIconButton(
         ?: Variant_Boolean_NullType.Second(NullType.NULL)
     set(next) {
       val value = next.asFirstOrNull()
-      // Not visual on its own: `displayed` follows once the event count says JS has
-      // caught up. See `afterUpdate()`. Not a form signal either: `afterUpdate()`
-      // re-reads the form from `defaultChecked` on every batch, which is the only
-      // reading that also says the caller has *stopped* using the toggle form.
+      // `displayed` follows in `afterUpdate()`, once the event count says JS has caught up.
       model.state.js = value
     }
 
@@ -1055,9 +890,7 @@ class HybridNitroUiIconButton(
     set(next) {
       val seed = next.asFirstOrNull()
       model.defaultChecked = seed
-      // The form itself is decided in `afterUpdate()`, from this value: a `null`
-      // here is the signal that the caller has stopped using the toggle form, and
-      // only `afterUpdate()` can act on it without racing the other setter.
+      // `afterUpdate()` decides the form from this value; `null` means the press form.
       if (model.state.js != null || model.didApplyDefault || seed == null) {
         return
       }
@@ -1079,8 +912,7 @@ class HybridNitroUiIconButton(
     get() =
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
-    // The host's tag, which is what RN's testID matchers read on Android - Button's
-    // answer, and the reason the prop exists on this platform at all.
+    // The view tag is what testID matchers read.
     set(next) {
       host.tag = next.asSecondOrNull()
     }
@@ -1105,8 +937,7 @@ class HybridNitroUiIconButton(
         return
       }
       model.sizingKey = next
-      // A new configuration may measure what the old one did; the host must not
-      // swallow that report against its dedupe.
+      // A new key needs a fresh measure and a report, even if the size is unchanged.
       host.noteSizingKeyChanged()
     }
 
@@ -1132,32 +963,16 @@ class HybridNitroUiIconButton(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The icon first, if it changed: a resource resolved here is drawn in this
-    // commit, and a file that has to be read reserves its slot in this commit and
-    // fills it later (G19's rule, and AGENTS' perf contract).
+    // The icon first: a resource is drawn in this commit, and a file reserves its slot.
     model.resolveAndroidIcon(iconArtwork)
-    // The form, re-read every batch.
-    //
-    // `defaultChecked` is non-null exactly when the wrapper is in the toggle form
-    // (`IconButton.tsx`: `defaultChecked={isToggle ? controlled.defaultValue :
-    // null}`, and `useControlled` answers a `Boolean` for `defaultValue` in that
-    // form, never `null`), so it is a signal that goes both ways. Reading it here
-    // rather than latching `isToggle = true` in a setter is what makes the form
-    // *switchable off*: a control that used `onCheckedChange` and now passes only
-    // `onPress` has to compose a press button again, and a latch could only ever
-    // answer "still a toggle". `prepareForRecycle` is not the other half of that
-    // story - a form flip is one prop update on a live view.
-    //
-    // It is observed, so writing it recomposes: the two forms are different
-    // composables, and the wrapper puts the form in the size configuration for the
-    // same reason.
+    // The form is re-read every batch: `defaultChecked` is non-null exactly when the
+    // wrapper is in the toggle form. A flag latched in a setter could never switch the
+    // form off again.
     val isToggle = model.defaultChecked != null
     if (isToggle != model.isToggle) {
       model.isToggle = isToggle
       if (!isToggle) {
-        // The value half belongs to the toggle form. Leaving a selection behind
-        // would let a control that returns to the toggle form show a value its
-        // previous toggle left there.
+        // The value belongs to the toggle form; clear it so a later toggle starts clean.
         model.state.displayed = false
         model.state.js = null
         model.state.nativeEvents = 0
@@ -1167,9 +982,8 @@ class HybridNitroUiIconButton(
       }
       host.markDirty()
     }
-    // The handshake decides whether React's `checked` wins over what the user just
-    // did - including a flip JS refused (§4). The press form has no value to
-    // reconcile, so this is a no-op there.
+    // The handshake decides whether React's `checked` wins over what the user just did.
+    // A no-op for the press form, which has no value.
     if (model.state.reconcile()) {
       model.displayed = model.state.displayed
       host.markDirty()
@@ -1179,9 +993,7 @@ class HybridNitroUiIconButton(
 
   override fun prepareForRecycle() {
     host.tag = null
-    // The composition does not survive a recycle (core.md §6), and
-    // `host.prepareForRecycle()` resets the model - including the resolved icon -
-    // and releases the sizing instance.
+    // The composition does not survive a recycle; this also resets the model and the icon.
     host.prepareForRecycle()
   }
 
@@ -1193,33 +1005,25 @@ class HybridNitroUiIconButton(
 
   // MARK: - Methods
 
-  /** The size Compose measured, from the host's cache. Safe on the JS thread (§1.4). */
+  /** The size Compose measured, from the host's cache. Safe on the JS thread. */
   override fun measureContent(): NitroUiIconButtonSize {
     val size = host.contentSize ?: return NitroUiIconButtonSize(0.0, 0.0)
     return NitroUiIconButtonSize(size.width, size.height)
   }
 
-  /** Press through the tap's path, on the UI thread (see the spec). Returns at once. */
+  /** Posts to the UI thread and returns at once. */
   override fun nuiTestPress() {
     Handler(Looper.getMainLooper()).post { host.press() }
   }
 
-  /** Read the control's semantics node on the UI thread (see the spec). Returns at once. */
+  /** Posts to the UI thread and returns at once. */
   override fun nuiTestProbeAccessibility() {
     Handler(Looper.getMainLooper()).post { model.recordAccessibility(describeAccessibility()) }
   }
 
   override fun nuiTestStateReport(): String = model.stateReport()
 
-  /**
-   * The merged node a reader is handed for this control, as one line - Chip's shape,
-   * so the harness reads one format from either control:
-   * `role=<role>,selected=<bool|none>,toggle=<state|none>,disabled=<bool>,clickable=<bool>,label=<text>`.
-   *
-   * This is how "a toggle's checked state reads in the accessibility tree" is
-   * proved on Android: the node is the one M3 gives the toggle, and `ToggleableState`
-   * is what TalkBack turns into "selected"/"not selected".
-   */
+  /** The merged semantics node for this control, as one line. Forces semantics on first. */
   private fun describeAccessibility(): String {
     val root = findComposeRoot(host) ?: return "no Compose root"
     root.forceAccessibilityForTesting(true)
@@ -1248,7 +1052,7 @@ class HybridNitroUiIconButton(
       "clickable=${config.contains(SemanticsActions.OnClick)},label=$label"
   }
 
-  /** The Compose view under [root], as [RootForTest] (the Slider's helper). */
+  /** The Compose view under [root]: `AndroidComposeView` implements [RootForTest]. */
   private fun findComposeRoot(root: View): RootForTest? {
     val queue = ArrayDeque<View>()
     queue.add(root)
@@ -1268,14 +1072,7 @@ class HybridNitroUiIconButton(
 
   // MARK: - Pixel probe
 
-  /**
-   * Ask whether [color] is among the pixels this control draws, on the UI thread.
-   * Returns at once; the answer is for [nuiTestPixelReport].
-   *
-   * Android is the platform with something to sample: it draws `androidIcon`, and
-   * "the glyph is drawn, at this rung, in the control's content colour" is a drawing
-   * contract no prop echo answers (G19's Button probe is the sampler).
-   */
+  /** Samples the control's pixels on the UI thread and returns at once. */
   override fun nuiTestPixelProbe(color: Double) {
     val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
     if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -1285,6 +1082,5 @@ class HybridNitroUiIconButton(
     }
   }
 
-  /** The last probe's line - see [IconButtonModel.pixelReport]. */
   override fun nuiTestPixelReport(): String = model.readPixelReport()
 }

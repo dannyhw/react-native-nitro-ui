@@ -17,43 +17,38 @@ import type { ButtonShape } from '../Button/Button';
 import { NativeNitroUiIconButton } from './NativeNitroUiIconButton';
 
 /**
- * The four icon-button styles, named after the Material 3 components they are
+ * The four icon-button styles, named after the Material 3 components
  * (`IconButton` / `FilledIconButton` / `FilledTonalIconButton` /
  * `OutlinedIconButton`).
  *
- * `standard` is Material's bare icon button: no container, just the glyph. The
- * iOS mapping is in `docs/components/icon-button.md` — iOS has four button
- * styles and four icon-button looks, and they do not line up one to one.
+ * `standard` is Material's bare icon button: no container, just the icon. iOS
+ * draws its closest native style for each; the two sets do not line up one to
+ * one.
  */
 export type IconButtonVariant = 'standard' | 'filled' | 'tonal' | 'outlined';
 
 /**
- * The control's size: the same shared ladder as `ButtonSize` (D42 item 4), so one
- * word means the same rung on both components.
+ * The control's size. The values are `ButtonSize`'s, so one word means the same
+ * size on both components.
  *
- * On Android a rung *is* Material's own icon-button size token, so in Material's
- * language `small`=XS, `medium`=S, `large`=M, `xlarge`=L, `xxlarge`=XL. On iOS the
- * rung picks a `.controlSize`; `docs/components/icon-button.md` prints the
- * measured box on each platform.
+ * On Android each value is one of Material's icon-button sizes: `small`=XS,
+ * `medium`=S, `large`=M, `xlarge`=L, `xxlarge`=XL. On iOS it picks a control
+ * size.
  */
 export type IconButtonSize =
   'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
 
 /**
- * How wide the control is for its rung — Material's three width options.
+ * How wide the control is for its size: Material's three width options.
  *
- * **Android only.** iOS has no counterpart: its icon-button box is the symbol
- * plus the style's own padding, and nothing makes it wider or narrower while
- * keeping it the same height. The option is accepted and ignored there, and it is
- * part of the size configuration on both platforms so neither can cache the
- * other's box.
+ * **Android only.** iOS has no counterpart, so the option is accepted and
+ * ignored there.
  */
 export type IconButtonWidth = 'narrow' | 'uniform' | 'wide';
 
 /**
- * The corner, shared with `ButtonShape`: `'round'` is each platform's own default,
- * `'square'` is the nearest corner that platform has. One vocabulary for the two
- * components, so a `Button` and an `IconButton` side by side take the same word.
+ * The corner, shared with `ButtonShape`: `'round'` is each platform's default,
+ * `'square'` is the nearest corner that platform has.
  */
 export type IconButtonShape = ButtonShape;
 
@@ -76,8 +71,8 @@ const SHAPES: readonly ButtonShape[] = ['round', 'square'];
 /**
  * Props of {@link IconButton}.
  *
- * There are no children and no text: the glyph is the whole control, which is why
- * {@link accessibilityLabel} is the one prop this component requires.
+ * There are no children and no text: the icon is the whole control, which is why
+ * {@link accessibilityLabel} is required.
  */
 export interface IconButtonProps extends ViewProps {
   /**
@@ -90,41 +85,31 @@ export interface IconButtonProps extends ViewProps {
   /**
    * SF Symbol name. **iOS only** — Android has no SF Symbols, so the prop is
    * accepted there and draws nothing; name the drawable in {@link androidIcon} and
-   * each platform takes its own (the Button convention).
-   *
-   * The symbol is part of the control's width on iOS, so it is part of the size
-   * configuration.
+   * each platform takes its own.
    */
   systemImage?: string | undefined;
   /**
-   * The glyph on Android: a vector drawable the app owns, passed as a Metro asset
+   * The icon on Android: a vector drawable the app owns, passed as a Metro asset
    * (`androidIcon={require('./icons/share.xml')}`) or, for an app that already
    * ships drawables, as its Android resource name (`'share'`). **Android only** —
    * iOS draws {@link systemImage} and ignores this.
    *
-   * Metro carries the file, so there is no setup step, and the glyph's *size*
-   * comes from {@link size} rather than from the file, which is why the box is
-   * right before the bytes arrive. Artwork that cannot be resolved draws nothing.
-   * `docs/components/button.md`, "Android icons", covers formats, sources and the
-   * resource shrinker.
+   * An asset needs no setup step. The icon's size comes from {@link size}, never
+   * from the file. Artwork that cannot be resolved draws nothing.
    */
   androidIcon?: AndroidIconProp | undefined;
   /** Called once per tap on the press form. Nothing fires while `disabled`. */
   onPress?: (() => void) | undefined;
   /** Visual style. Default: `'standard'`. */
   variant?: IconButtonVariant | undefined;
-  /** Control size — the shared ladder. Default: `'medium'`. */
+  /** Control size. Default: `'medium'`. */
   size?: IconButtonSize | undefined;
   /**
-   * Width for the rung. **Android only** (see {@link IconButtonWidth}).
+   * Width for the size. **Android only** (see {@link IconButtonWidth}).
    * Default: `'uniform'`.
    */
   width?: IconButtonWidth | undefined;
-  /**
-   * Corner: `'round'` (the default), `'square'`, or `null` for the default. It
-   * repaints the control and does not resize it, so it is not part of the size
-   * configuration.
-   */
+  /** Corner: `'round'` (the default) or `'square'`. `null` means the default. */
   shape?: ButtonShape | null | undefined;
   /**
    * The toggle form's selection. Pass it to control the toggle; leave it
@@ -151,15 +136,11 @@ export interface IconButtonProps extends ViewProps {
    */
   tintColor?: ColorValue | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for this library's own tests and
+   * benchmarks.
    *
-   * @internal Not app API (DECISIONS D14): props must flow through React, so a
-   * direct write here runs the native setter off the UI thread and never commits.
-   * The callback runs once, when the view mounts.
-   *
-   * The shape is written inline rather than named for Button's reason: naming it
-   * would make api-extractor demand that a hidden native type be exported from the
-   * entry point.
+   * @internal Not app API. A write through this handle bypasses React and never
+   * commits. The callback runs once, when the view mounts.
    */
   hybridRef?:
     | ((view: {
@@ -183,8 +164,7 @@ export interface IconButtonProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`). Benchmark
-   * only; `null` turns marks off for this view.
+   * Instance id for native performance marks; `null` turns them off for this view.
    *
    * @internal Benchmark and diagnostics only - not app API.
    */
@@ -192,18 +172,17 @@ export interface IconButtonProps extends ViewProps {
 }
 
 /**
- * What an IconButton does when the caller passed no `onPress`: Button's rule —
- * the callback prop is always sent, so a recycled view cannot keep the previous
- * mount's handler (Nitro treats `undefined` as "unset").
+ * Sent when the caller passes no `onPress`. The callback prop is always sent:
+ * Nitro treats `undefined` as "unset", so a recycled view would otherwise keep
+ * the previous mount's handler.
  */
 function onPressNotProvided(): void {
   // Intentionally empty: the caller asked for nothing.
 }
 
 /**
- * The separator between the fields of an IconButton's `nuiSizingKey`, and the
- * escape that keeps a free-form value from forging one — Button's rule
- * (`\` -> `\\`, `|` -> `\|`).
+ * Separates the fields of an IconButton's `nuiSizingKey`. Free-form values are
+ * escaped so they cannot contain a bare separator.
  */
 const FIELD_SEPARATOR = '|';
 
@@ -213,28 +192,15 @@ function escapeField(value: string): string {
 }
 
 /**
- * The size configuration of one IconButton, as the sizing engine sees it:
+ * The key two IconButtons share when they are the same size:
  * `variant|size|width|form|systemImage|androidIcon`.
  *
- * - `size` and `width` are the box on Android (Material's container tokens), and
- *   `size` is the box on iOS;
- * - `variant` changes the style, and on iOS the style's own padding;
- * - `form` is `press` or `toggle`, which of the two native controls this is. Not
- *   the *value* — see `checked` below — the form, and it is in the key because on
- *   iOS the two forms are two controls with two boxes: the same `tonal`/`large`
- *   configuration measured 31.67 × 30.00 pt as a `Button` and 41.67 × 30.00 pt as a
- *   `Toggle(.button)` in the first device run, and one cached size cannot be both.
- *   Android composes the same container for the two and is unaffected; it shares the
- *   field because the platforms read one key.
- * - `systemImage` is iOS's width — symbols differ, so the symbol is in the key;
- *   `androidIcon` cannot change an Android box (the glyph is sized by the rung),
- *   and it is here so both platforms read one key (Q9 C4);
- * - `checked`, `disabled` and `tintColor` repaint, they do not resize: measured on
- *   both platforms — a toggle's two states are one box, which is why no toggle has
- *   to re-key (`Chip.harness.tsx` measures the Android filter chip that *does*, and
- *   `icon-button` is not that control);
- * - `shape` repaints; the environment (text size, density, OS control size) is
- *   folded in by native through the epoch.
+ * `form` is `press` or `toggle`: on iOS those are two controls (`Button` and
+ * `Toggle(.button)`) with different boxes for the same configuration. The symbol
+ * sets the width on iOS. `width` and `androidIcon` cannot change an iOS or an
+ * Android box respectively, and are here so both platforms read one key.
+ * `checked`, `disabled`, `tintColor` and `shape` only repaint, and text size and
+ * density are tracked natively.
  */
 function sizingVariantFor(
   variant: IconButtonVariant,
@@ -254,24 +220,20 @@ function sizingVariantFor(
   ].join(FIELD_SEPARATOR);
 }
 
-/** Resolve a caller's variant, defaulting anything unrecognised to `'standard'`. */
 function resolveVariant(
   variant: IconButtonVariant | undefined
 ): IconButtonVariant {
   return variant != null && VARIANTS.includes(variant) ? variant : 'standard';
 }
 
-/** Resolve a caller's size, defaulting anything unrecognised to `'medium'`. */
 function resolveSize(size: IconButtonSize | undefined): IconButtonSize {
   return size != null && SIZES.includes(size) ? size : 'medium';
 }
 
-/** Resolve a caller's width, defaulting anything unrecognised to `'uniform'`. */
 function resolveWidth(width: IconButtonWidth | undefined): IconButtonWidth {
   return width != null && WIDTHS.includes(width) ? width : 'uniform';
 }
 
-/** Resolve a caller's corner: `null`/`undefined` and anything unrecognised are `'round'`. */
 function resolveShape(shape: ButtonShape | null | undefined): ButtonShape {
   return shape != null && SHAPES.includes(shape) ? shape : 'round';
 }
@@ -279,13 +241,8 @@ function resolveShape(shape: ButtonShape | null | undefined): ButtonShape {
 const warnedEmptyLabel = { done: false };
 
 /**
- * Say once, in development, that an IconButton was given no name.
- *
- * Only for a control that actually has no name: the warning describes a mistake,
- * and a screen of named buttons is not one. Once per process rather than once per
- * render: ten unnamed buttons are one mistake, and a warning per render on a list
- * is a warning people learn to ignore. The type requires the prop; this catches
- * `accessibilityLabel=""`, which the type cannot.
+ * Warns once per process, in development, about an empty `accessibilityLabel`.
+ * The type requires the prop but cannot reject `""`.
  */
 function warnAboutEmptyLabel(accessibilityLabel: string): void {
   if (!__DEV__ || warnedEmptyLabel.done || accessibilityLabel !== '') {
@@ -328,9 +285,7 @@ export function resetIconButtonWarningsForTests(): void {
  * />
  * ```
  *
- * The box is measured, not declared: the first IconButton of a configuration is
- * laid out at a fallback and corrected the turn it measures
- * (`docs/architecture/sizing.md`).
+ * It sizes itself to its icon, variant, size and width.
  */
 export function IconButton({
   accessibilityLabel,
@@ -355,11 +310,11 @@ export function IconButton({
   const selfSizingBaseStyle = useSelfSizingBaseStyle();
   warnAboutEmptyLabel(accessibilityLabel);
 
-  // One string for native whichever form the caller used, resolved before the size
-  // configuration below: the two spellings of one icon must not be two
-  // configurations. Button's rules, including which answers are *not* name-checked
-  // and why (`Button.tsx` states them).
+  // Resolved before the sizing key so both spellings of one icon (an asset or a
+  // name) share one key.
   const resolvedAndroidIcon = resolveAndroidIcon(androidIcon);
+  // Neither a URL nor a valid resource name is most likely a typo, and native
+  // would draw nothing without saying why.
   if (
     resolvedAndroidIcon != null &&
     androidIconUrl(resolvedAndroidIcon) == null &&
@@ -374,15 +329,8 @@ export function IconButton({
   const resolvedShape = resolveShape(shape);
   const processedTint = useProcessedColor(tintColor);
 
-  // The toggle form is on the event-count handshake (core.md §4). `useControlled`
-  // answers `value: null` while uncontrolled, which is also the signal native needs
-  // for "no selection" — but the *press* form must not look like an uncontrolled
-  // toggle, so `isToggle` is what native is told and the value only flows in the
-  // toggle form.
-  // `defaultChecked` is read *raw*, with no destructuring default: a default of
-  // `false` here would make this true for every IconButton, and the press form
-  // would send a toggle's props and compose a toggle. The form is what the caller
-  // wrote, not what this function defaults.
+  // The form is what the caller wrote. `defaultChecked` has no destructuring
+  // default: a default of `false` would make every IconButton a toggle.
   const isToggle =
     checked !== undefined ||
     defaultChecked !== undefined ||
@@ -393,17 +341,11 @@ export function IconButton({
     onCheckedChange
   );
 
-  // Always a function, so the callback prop is always sent - see
-  // `onPressNotProvided`, and the cast is Button's (`useStableCallback` answers
-  // `null` only when handed no handler, and a null callback prop is what D7b
-  // forbids on a mounted view).
+  // Always a function, so the callback prop is always sent. The cast is safe:
+  // `useStableCallback` returns `null` only when it is handed no handler.
   const pressCallback = useStableCallback(
     onPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
-  // `useControlled` hands back the Nitro-wrapped half of the handshake, and it is
-  // always a function: the press form never calls it, because native composes a
-  // Button there and has nothing to report, and D7b wants a callback that is never
-  // absent between two commits.
   const hybridRefCallback = useStableCallback(hybridRef);
   const sizingId = useSizingId();
 
@@ -419,9 +361,8 @@ export function IconButton({
       shape={resolvedShape}
       disabled={disabled}
       tintColor={processedTint}
-      // An uncontrolled toggle is seeded through `defaultChecked`; a press button
-      // sends `null` for both so native composes a Button, not a Toggle, and has no
-      // selection to display.
+      // A press button sends `null` for both, so native composes a Button and not
+      // a Toggle. An uncontrolled toggle is seeded through `defaultChecked`.
       checked={isToggle ? controlled.value : null}
       defaultChecked={isToggle ? controlled.defaultValue : null}
       mostRecentEventCount={controlled.mostRecentEventCount}

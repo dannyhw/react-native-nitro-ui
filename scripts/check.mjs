@@ -1,39 +1,20 @@
 #!/usr/bin/env node
 /**
- * `bun run check`, run as a dependency graph instead of one `&&` chain.
+ * `bun run check`, run as a dependency graph (`scripts/check-steps.mjs`).
  *
  *   bun run check               the graph, as many steps at once as the machine fits
  *   bun run check -- --jobs 1   the same steps, one at a time
  *
- * The steps are the seventeen the old chain ran and no more. What changed is *when*
- * they run: `scripts/check-steps.mjs` says what each step needs and what it writes,
- * so independent work overlaps and the parts that touch the same output do not.
- *
- * Output rules, in the order the brief asked for them:
- *
- *   - a step's log is buffered and printed **whole**, never interleaved with
- *     another's;
- *   - one line per step gives name, status and duration, printed the moment the
- *     step ends, so the run is legible while it is going on;
- *   - the logs themselves go out in *declared step order* as they become
- *     available. That is a deliberate half-step away from "in completion order":
- *     `bun run check` prints several Jest summaries, and the ledger quotes the
- *     first one in the log - the unit-test run, not whichever Jest happened to
- *     finish first (X2 review M3). Ordering the flush by the step list keeps that
- *     deterministic, and the live summary lines above it keep a long first step
- *     from looking like a hang;
- *   - a failing step's full log is printed again at the end, because that is the
- *     one a person scrolls to.
+ * Each step's log is buffered and printed whole, in declared step order; a
+ * one-line summary is printed the moment a step ends, and a failing step's log
+ * is printed again at the end.
  *
  * Exit code is non-zero if any step failed. On the first failure no new step
- * starts, running ones are allowed to finish (their logs are still evidence), and
- * everything left is reported as skipped rather than silently missing.
+ * starts, running ones finish, and the rest are reported as skipped.
  *
- * When `NITRO_UI_CHECK_STEPS_FILE` names a file (the gate ledger does, so
- * `gate.mjs check` can record per-step timings), the per-step results are written
- * there as JSON. The variable is removed from the children's environment: it means
- * "the ledger waiting above me", one level, not something a nested `bun run check`
- * should answer - the same rule `gate.mjs` applies to `NITRO_UI_GATE_LOG`.
+ * When `NITRO_UI_CHECK_STEPS_FILE` names a file, the per-step results are
+ * written there as JSON. The variable is removed from the children's
+ * environment so a nested `bun run check` does not answer it.
  */
 
 import { spawn } from 'node:child_process';
@@ -55,12 +36,10 @@ import {
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 
-/** Step durations are seconds with one decimal: enough to compare, no false precision. */
 function seconds(ms) {
   return `${(Number(ms) / 1000).toFixed(1)}s`;
 }
 
-/** @returns {number} this machine's core count (availability-aware where Node is new enough). */
 function coreCount() {
   return typeof os.availableParallelism === 'function'
     ? os.availableParallelism()
@@ -68,7 +47,6 @@ function coreCount() {
 }
 
 /**
- * The one-line summary for a finished step: name, status, duration.
  * @param {{name: string, status: string, durationMs: number, reason: string | null}} result
  */
 function summaryLine(result) {
@@ -87,8 +65,8 @@ function rule(text) {
 }
 
 /**
- * What `gate.mjs` reads back out of a check run: one entry per step, in declared
- * order, plus the totals. Versioned, because the ledger keeps it verbatim.
+ * One entry per step, in declared order, plus the totals. Versioned, because
+ * the gate ledger keeps it verbatim.
  *
  * @param {object} summary the result of `runCheckPlan`
  * @returns {{version: number, jobs: number, wallMs: number, steps: object[]}}
@@ -179,8 +157,6 @@ export async function main(argv = process.argv.slice(2), io = {}) {
             `${event.step.name} — ${result.status}, ${seconds(result.durationMs)}`
           )
         );
-        // A failing step's log comes last, once; printing it here too would only
-        // push the failure further up the page.
         if (result.status !== 'fail') out(result.log ?? '');
       }
     },
@@ -228,20 +204,13 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   return 0;
 }
 
-/** The children this run started, so a signal can reach them (see below). */
+/** The children this run started, so a signal can reach them. */
 const running = new Set();
 
 /**
- * Ctrl-C or a task runner's SIGTERM has to reach the steps, not just this process:
- * children left holding a checkout after the parent exits is how one machine ends
- * up with two checks in it. Forwarding gives each step its own cleanup.
- *
- * What it does *not* do is preserve the signal exit status. Installing a listener
- * replaces Node's default "die from this signal" behaviour, so once the last child
- * is reaped this process exits normally — status 0 or 1, never 130 — and a caller
- * that watched for "killed by SIGINT" would see a run that finished. That is the
- * trade for not orphaning a build; `gate.mjs` is the caller that cares and it
- * re-raises on itself after writing the ledger line (X10 review N6).
+ * Forwards Ctrl-C and SIGTERM to the steps so none is orphaned. Installing a
+ * listener replaces Node's "die from this signal" default, so this process then
+ * exits with status 0 or 1, never 130.
  */
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
@@ -256,11 +225,9 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 /**
- * Spawn one step, buffering its output so nothing interleaves.
- *
- * Both streams go into one list in arrival order, which is what a person reading a
- * serial run saw. Decoding once at the end is what keeps a multibyte character
- * split across two chunks from becoming mojibake in the log.
+ * Spawn one step, buffering its output so nothing interleaves. Both streams go
+ * into one list in arrival order and are decoded once at the end, so a
+ * multibyte character split across two chunks survives.
  *
  * @param {object} step
  * @param {NodeJS.ProcessEnv} env
@@ -318,12 +285,9 @@ export function runStep(step, env = process.env) {
 
 if (
   process.argv[1] != null &&
-  // The repo's idiom (`lease.mjs`, `pod-install.mjs`), not a `file://${path}` string: ESM URLs are
-  // percent-encoded and symlink-resolved, so a checkout path with a space, `%`, `#`, or one reached
-  // through a symlink (`/tmp` -> `/private/tmp`) never matched - `main()` silently did not run, the
-  // process exited 0 with no output, and `gate.mjs check` recorded that silence as a pass (M3).
-  // `realpathSync` so being invoked through a symlinked path is the same script; `existsSync`
-  // because realpathSync throws for a path that is gone.
+  // Compared as a real path turned into a URL: ESM URLs are percent-encoded and
+  // symlink-resolved, so a `file://${path}` string misses a path with a space or
+  // one reached through a symlink. `existsSync` because `realpathSync` throws.
   import.meta.url ===
     pathToFileURL(
       fs.existsSync(path.resolve(process.argv[1]))

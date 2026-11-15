@@ -1,17 +1,3 @@
-//
-//  text-limit.test.swift
-//
-//  Host-side vectors for the TextField's `maxLength` cut, its committed-composition
-//  backstop and its text equality
-//  (ios/components/TextField/NitroUiTextLimit.swift).
-//
-//  `fitting` is what `shouldChangeCharactersIn` / `shouldChangeTextIn` run for a
-//  keyboard's or a paste's edit: it keeps the part of the *inserted* text that fits,
-//  wherever the insertion is. `truncate` is the post-edit backstop, which only ever
-//  cuts the end. For typing at the end of the text the two give the same answer, so
-//  an on-device typing test cannot tell a broken `fitting` from a working one; the
-//  mid-text vectors here are the ones that can.
-//
 import Foundation
 
 @main
@@ -27,8 +13,6 @@ struct TextLimitTest {
     }
   }
 
-  /// `NitroUiCommitDelta.clamped` - what the iOS backstop runs when a field ends up past
-  /// the limit without the delegate's cut. Compared as UTF-16, like `checkFitting`.
   private static func checkClamped(
     _ displayed: String, _ incoming: String, _ limit: Int, _ expected: String, _ what: String
   ) {
@@ -36,8 +20,8 @@ struct TextLimitTest {
     check((got as NSString) == (expected as NSString), what + " -> \"" + got + "\"")
   }
 
-  /// `fitting`, compared as UTF-16 (JavaScript's view of the string) so a lone
-  /// surrogate can never compare equal to anything a test expects.
+  /// Compares as UTF-16, JavaScript's view of the string, so a lone surrogate
+  /// never equals an expected value.
   private static func checkFitting(
     _ current: String, _ location: Int, _ length: Int, _ replacement: String, _ limit: Int,
     _ expected: String?, _ what: String
@@ -54,7 +38,6 @@ struct TextLimitTest {
     check(same, "\(what) (got \(got.map { "\"\($0)\"" } ?? "nil"), want \(expected.map { "\"\($0)\"" } ?? "nil"))")
   }
 
-  /// The edit `fitting` allows, applied to `current` - what the field ends up showing.
   private static func applied(_ current: String, _ location: Int, _ length: Int, _ replacement: String, _ limit: Int) -> String? {
     guard let fit = NitroUiTextLimit.fitting(
       current: current, range: NSRange(location: location, length: length),
@@ -97,9 +80,7 @@ struct TextLimitTest {
     checkTruncate("x", 0, "", "limit 0 is empty")
 
     print("NitroUiCommitDelta.clamped")
-    // The field held `abcd`, the caret sat after the `a`, and the IME committed `かき`:
-    // the text the field shows is `aかきbcd`, and only the `かき` is the user's edit.
-    // Cutting the *field* here answers `aか` - the user's `bcd` is gone either way.
+    // `abcd` with the caret after the `a`, and the IME commits `かき`.
     checkClamped("abcd", "a\u{304B}\u{304D}bcd", 5, "a\u{304B}bcd",
       "a commit in the middle takes the room the cap has, and the text past it stays")
     checkClamped("abcd", "ab\u{304B}\u{304D}cd", 6, "ab\u{304B}\u{304D}cd",
@@ -108,15 +89,12 @@ struct TextLimitTest {
       "a ZWJ family that cannot fit is refused whole - never cut in half, never at the cost of the `cd`")
     checkClamped("abcd", "a\u{1F600}bcd", 5, "abcd",
       "an emoji that does not fit is refused, and nothing past it moves")
-    // A JS write put the field past the cap; the user's commit must not cut it down.
     checkClamped("abcdefgh", "abcdefgh\u{304B}", 5, "abcdefgh",
       "a field already past the cap refuses new text and keeps what JS wrote")
     checkClamped("abcdefgh", "abcdefg", 5, "abcdefg",
       "a deletion from text past the cap is left alone")
     checkClamped("abcd", "aXd", 3, "aXd",
       "a selection replaced with text that fits is taken")
-    // A refused edit is refused whole, deletion included: the keyboard path
-    // (`shouldChangeCharactersIn`) leaves the field as it was, and so must the backstop.
     checkClamped("abcd", "a\u{1F600}cd", 4, "abcd",
       "a selection replaced with an emoji that does not fit keeps the selected text")
     checkClamped("abcdefgh", "abXYdefgh", 5, "abcdefgh",
