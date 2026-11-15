@@ -21,7 +21,8 @@ import {
   machineLabelFromEnv,
   mintBaselineFileFor,
 } from '../bench/baseline.mjs';
-import { collectMachine } from '../bench/machine.mjs';
+import { installedDependenciesProblem } from '../bench/deps.mjs';
+import { collectMachine, runDependencies } from '../bench/machine.mjs';
 
 const LABEL = 'maintainer-mac-1';
 
@@ -105,5 +106,81 @@ describe('the label a run records', () => {
     expect(labelPreFlightProblem(['--update-baseline', '--force'])).toContain(
       'NITRO_UI_MACHINE_LABEL'
     );
+  });
+});
+
+/**
+ * The app versions a run records come from two places that can disagree: `bun.lock`
+ * (what this commit resolves) and `node_modules` (what was bundled). The fixture
+ * keeps them apart on purpose - a lock at 0.80.0 / 54.1.2 and an install at 0.79.9 /
+ * 54.0.0 - so a record that filled one side from the other is visible.
+ */
+describe('the app versions a run records', () => {
+  const FILES = {
+    // bun's own shape: trailing commas, which strict JSON refuses.
+    '/repo/bun.lock': [
+      '{',
+      '  "packages": {',
+      '    "react-native": ["react-native@0.80.0", {},],',
+      '    "@expo/ui": ["@expo/ui@54.1.2", {},],',
+      '  },',
+      '}',
+    ].join('\n'),
+    '/repo/bench/package.json': JSON.stringify({
+      dependencies: { 'react-native': '0.80.0', '@expo/ui': '^54.0.0' },
+    }),
+    '/repo/node_modules/react-native/package.json': JSON.stringify({
+      version: '0.79.9',
+    }),
+    '/repo/node_modules/@expo/ui/package.json': JSON.stringify({
+      version: '54.0.0',
+    }),
+  };
+  const read = (files) => (file) => {
+    if (!Object.hasOwn(files, file)) {
+      throw new Error(`ENOENT ${file}`);
+    }
+    return files[file];
+  };
+
+  it('records what the lock resolves beside what is installed', () => {
+    const recorded = runDependencies({
+      lockPath: '/repo/bun.lock',
+      nodeModulesDir: '/repo/node_modules',
+      read: read(FILES),
+    });
+    expect(recorded).toEqual({
+      reactNative: '0.80.0',
+      expoUi: '54.1.2',
+      installedReactNative: '0.79.9',
+      installedExpoUi: '54.0.0',
+      source: 'bun.lock in the working tree',
+    });
+    // The record is what `run.mjs` hands the stale-install check.
+    expect(
+      installedDependenciesProblem({
+        resolved: recorded,
+        installed: {
+          reactNative: recorded.installedReactNative,
+          expoUi: recorded.installedExpoUi,
+        },
+      })
+    ).toContain('react-native: installed 0.79.9, lock 0.80.0');
+  });
+
+  it('records nulls, not guesses, for a lock or an install it cannot read', () => {
+    expect(
+      runDependencies({
+        lockPath: '/repo/bun.lock',
+        nodeModulesDir: '/repo/node_modules',
+        read: read({}),
+      })
+    ).toEqual({
+      reactNative: null,
+      expoUi: null,
+      installedReactNative: null,
+      installedExpoUi: null,
+      source: 'bun.lock in the working tree',
+    });
   });
 });

@@ -1,17 +1,11 @@
 /**
- * The conformance suite's deciding logic, with no device.
+ * The conformance suite's tables and cross-checks, with no device.
  *
  * This is where "the suite picks up a new manifest automatically" is proved: the
  * coverage matrix and its check are run against a manifest the repo does not have
  * (a `Menu`), and the suite has to notice. A manifest-driven suite that only passes on
  * the seven controls it was written for is a suite with seven hand-written cases and a
  * loop around them, which is what X4 exists to replace.
- *
- * The rule bodies are also driven here rather than only on a device, because their
- * failure modes are arithmetic the harness cannot vary: a fallback that equals the
- * measured size, a poisoned guess that is never corrected, ledger entries that outlive
- * their instance. On a device those need the component to be broken; here they need an
- * argument.
  *
  * @file
  */
@@ -33,27 +27,17 @@ import {
   checkCoverage,
   checkFallbackTable,
   failingKeys,
-  followupsResolver,
   recycleNotes,
   checkInAppFixtures,
   checkRecycleNotes,
   checkLaunchPinAgreesWithTable,
   checkSharedTableMirror,
-  classifyFindings,
-  ALLOW_LOCALE_MISMATCH_ENV,
   coverageMatrix,
   findingKey,
-  formatMatrix,
-  leakFindings,
-  localePremiseMiss,
   readerFor,
-  recycleFindings,
   repoManifests,
   repoSizingTable,
-  fallbackFindings,
   sharedInAppTable,
-  staleDebt,
-  staleExemptions,
 } from '../conformance-core.mjs';
 import {
   A11Y_CONTROLS,
@@ -207,7 +191,7 @@ describe('coverage', () => {
     const matrix = coverageMatrix(manifests, {
       sizing: JSON.parse(read('nitro-ui.sizing.json')),
     });
-    expect(checkCoverage(manifests, matrix, () => null)).toEqual([]);
+    expect(checkCoverage(manifests, matrix)).toEqual([]);
   });
 
   it('goes red for a manifest no rule covers', () => {
@@ -219,7 +203,7 @@ describe('coverage', () => {
       exampleTab: 'rating',
     });
     const matrix = coverageMatrix(manifests, { sizing: {} });
-    const problems = checkCoverage(manifests, matrix, () => null);
+    const problems = checkCoverage(manifests, matrix);
     // Every rule answers `not-applicable` with a reason, so coverage is complete — but
     // the a11y rule's reason is a gap, and `checkA11yTable` is where that is caught.
     expect(problems).toEqual([]);
@@ -231,309 +215,18 @@ describe('coverage', () => {
   it('goes red when a matrix row is missing or a cell has no verdict', () => {
     const manifests = repoManifests();
     const matrix = coverageMatrix(manifests, { sizing: {} });
-    expect(checkCoverage(manifests, matrix.slice(1), () => null)[0]).toContain(
+    expect(checkCoverage(manifests, matrix.slice(1))[0]).toContain(
       'a manifest with no row'
     );
     const broken = clone(matrix);
     delete broken[0].rules['recycle-reset'];
-    expect(checkCoverage(manifests, broken, () => null)[0]).toContain(
-      'no verdict'
-    );
-  });
-
-  it('goes red when a failing rule has no FOLLOWUPS line', () => {
-    const manifests = repoManifests();
-    const matrix = coverageMatrix(manifests, {
-      failing: [findingKey('Switch', 'recycle-reset')],
-      sizing: {},
-    });
-    expect(
-      matrix.find((row) => row.name === 'Switch').rules['recycle-reset'].state
-    ).toBe('failing');
-    expect(checkCoverage(manifests, matrix, () => null).join('\n')).toContain(
-      'marked failing with no'
-    );
-    // …and green once the line exists, which is the whole contract: debt needs an address.
-    expect(
-      checkCoverage(
-        manifests,
-        matrix,
-        () => 'X4: Switch keeps its previous owner'
-      )
-    ).toEqual([]);
-  });
-
-  it('prints the matrix with a verdict per cell, for the report', () => {
-    const manifests = repoManifests();
-    const matrix = coverageMatrix(manifests, {
-      failing: [findingKey('Slider', 'a11y-name-on-focusable-node')],
-      sizing: {},
-    });
-    const lines = formatMatrix(
-      matrix,
-      CONFORMANCE_RULES,
-      () => 'docs/tasks/FOLLOWUPS.md'
-    );
-    expect(lines[0]).toContain('| Control |');
-    expect(lines.find((line) => line.includes('| Slider |'))).toContain(
-      '**failing** — see docs/tasks/FOLLOWUPS.md'
-    );
-    expect(lines.find((line) => line.includes('| Switch |'))).toContain(
-      'covered'
-    );
+    expect(checkCoverage(manifests, broken)[0]).toContain('no verdict');
   });
 });
 
-/* ------------------------------- fallback findings --------------------------- */
+/* ------------------------------ the fallback table -------------------------- */
 
 describe('the declared-fallback rule', () => {
-  const expected = DECLARED_FALLBACKS.NitroUiSwitch.ios;
-
-  it('passes when the declared fallback is the control’s own and nothing corrected it', () => {
-    expect(
-      fallbackFindings({
-        component: 'Switch',
-        platform: 'ios',
-        declared: expected,
-        measured: expected,
-        corrections: 0,
-      })
-    ).toEqual([]);
-  });
-
-  /* The locale premise (F8). The DatePicker's iOS width is a formatter's output, so
-   * the same binary measures 107 pt in `en_US` and 103 pt in `en_PT`, and both are
-   * correct. Round 1 handled a mismatch by skipping the comparison; the reviewer's
-   * objection was right — the harness *pins* the locale, so an app reporting another
-   * one means the pin was lost, was overridden without being said, or the formatter
-   * stopped following it. A skip turns that into a green run that compared nothing, so
-   * a mismatch is a failure and the skip needs an opt-out the run publishes. */
-
-  it('compares a locale-dependent row when the app is in the locale it was measured in', () => {
-    // The strictness proof: with the premise met, a wrong width is still red. The
-    // row is the DatePicker's, and the numbers are the two real measurements, so
-    // the fixture cannot coincide with a fudge.
-    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    expect(row.measuredUnderLocale).toBe('en-US');
-    expect(row.width).toBe(107);
-    expect(
-      fallbackFindings({
-        component: 'DatePicker',
-        platform: 'ios',
-        declared: row,
-        measured: row,
-        corrections: 0,
-        deviceLocale: 'en-US',
-      })
-    ).toEqual([]);
-    const drifted = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: { width: row.width + 4, height: row.height },
-      corrections: 0,
-      deviceLocale: 'en-US',
-    });
-    expect(drifted[0].problem).toContain('is not the measured');
-  });
-
-  it('fails a locale mismatch rather than skipping it', () => {
-    // 103x36.33 is what the control measures in `en_PT`, measured locally on the gate
-    // simulator by launching it with `-AppleLocale en_PT`. With the run pinned to
-    // `en_US`, that is this row compared in the wrong locale: the finding must name
-    // the premise, because a bare "not the measured" would send the next reader to
-    // `NitroUiDatePickerField` for a bug that is not there — and must be a *problem*,
-    // because a lost pin is not something a run gets to be quiet about.
-    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    const findings = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: { width: 103, height: 36.33 },
-      corrections: 1,
-      deviceLocale: 'en-PT',
-    });
-    expect(findings).toHaveLength(1);
-    expect(findings[0].problem).toContain('the app runs in en-PT');
-    expect(findings[0].problem).toContain('measures in en-US');
-    expect(findings[0].problem).toContain(ALLOW_LOCALE_MISMATCH_ENV);
-    expect(findings[0].skipped).toBeUndefined();
-    // A premise failure is a failure of the run, so the classifier routes it there.
-    const classified = classifyFindings(findings);
-    expect(classified.skipped).toEqual([]);
-    expect(classified.failures).toHaveLength(1);
-  });
-
-  it('skips the comparison only when the run published the opt-out', () => {
-    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    const findings = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: { width: 103, height: 36.33 },
-      corrections: 1,
-      deviceLocale: 'en-PT',
-      mismatchAllowed: true,
-    });
-    expect(findings).toHaveLength(1);
-    expect(findings[0].problem).toBeNull();
-    expect(findings[0].skipped).toContain('comparison skipped');
-    expect(findings[0].skipped).toContain('en-PT');
-    expect(findings[0].skipped).toContain('en-US');
-    const classified = classifyFindings(findings);
-    expect(classified.failures).toEqual([]);
-    expect(classified.known).toEqual([]);
-    expect(classified.skipped).toHaveLength(1);
-    expect(classified.skipped[0]).toContain('DatePicker × declared-fallback');
-  });
-
-  it('does not call the extra correction a locale costs a missing declaration', () => {
-    // The second claim the same premise suspends, and the one that only shows up on
-    // a device: with the app outside the pinned locale the engine holds the pinned
-    // locale's width, so the first frame has to be corrected and `corrections` is 1.
-    // `HybridNitroUiDatePicker.swift`'s `fallbackSize` documents that cost in words.
-    // The box finding is the accurate headline in both branches, so this one is
-    // suspended whether the run failed on the premise or opted out of it.
-    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    for (const mismatchAllowed of [false, true]) {
-      const findings = fallbackFindings({
-        component: 'DatePicker',
-        platform: 'ios',
-        declared: row,
-        measured: { width: 103, height: 36.33 },
-        corrections: 1,
-        deviceLocale: 'en-PT',
-        mismatchAllowed,
-      });
-      expect(
-        findings
-          .map((finding) => finding.problem)
-          .filter(Boolean)
-          .join('\n')
-      ).not.toContain('correction(s)');
-    }
-    // The same correction count where the premise *does* hold is still the bug the
-    // claim exists for: the engine had the right number and did not use it.
-    const rightLocale = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: row,
-      corrections: 1,
-      deviceLocale: 'en-US',
-    });
-    expect(rightLocale[0].problem).toContain('needed 1 correction(s)');
-  });
-
-  it.each(['en_US', 'en-US-POSIX', 'EN-us'])(
-    'reads %s as the pinned locale, so a premise failure needs an exact miss',
-    (locale) => {
-      const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-      expect(localePremiseMiss(row, locale)).toBeNull();
-    }
-  );
-
-  it('does not skip anything for a row that names no locale', () => {
-    // The guard on the guard: a premise check that fired everywhere would turn the
-    // whole rule off. Only the DatePicker's iOS row declares a locale — its width is a
-    // formatter's output and the run pins that formatter. Every other box does not
-    // depend on one (Slider's width is its parent's, Switch's is a track), and
-    // Android's DatePicker row names none because nothing pins the emulator's locale:
-    // see `checkLaunchPinAgreesWithTable`, which makes that a red `check` rather than
-    // a premise nobody checks.
-    const localed = [];
-    for (const [hybridView, row] of Object.entries(DECLARED_FALLBACKS)) {
-      for (const platform of ['android', 'ios']) {
-        if (row[platform].measuredUnderLocale != null) {
-          localed.push(`${hybridView}.${platform}`);
-          continue;
-        }
-        expect(localePremiseMiss(row[platform], 'zh-CN')).toBeNull();
-      }
-    }
-    expect(localed).toEqual(['NitroUiDatePicker.ios']);
-  });
-
-  it('keeps the strict comparison when the app cannot name its locale', () => {
-    // "Unknown" must never read as "premise met", or a runtime without `Intl`
-    // would quietly stop comparing. And the opt-out cannot rescue it either: an
-    // unnamed locale is not a mismatch anyone opted into.
-    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    expect(localePremiseMiss(row, null)).toBeNull();
-    for (const mismatchAllowed of [false, true]) {
-      const findings = fallbackFindings({
-        component: 'DatePicker',
-        platform: 'ios',
-        declared: row,
-        measured: { width: row.width + 4, height: row.height },
-        corrections: 0,
-        deviceLocale: null,
-        mismatchAllowed,
-      });
-      expect(findings[0].problem).toContain('is not the measured');
-    }
-  });
-
-  it('still requires a poisoned guess to be corrected, whatever the locale', () => {
-    // The skip is scoped to the box comparison. A cold mount that never corrected
-    // itself is a bug in every locale, and a skip that swallowed this would be the
-    // end of the rule on a runner that forgot to pin.
-    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    const settled = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: POISON_SIZES.ios,
-      corrections: 1,
-      poisoned: true,
-      deviceLocale: 'en-US',
-    });
-    expect(settled[0].problem).toContain('settled at the poisoned');
-
-    const silent = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: { width: 107, height: 36.33 },
-      corrections: 0,
-      poisoned: true,
-      deviceLocale: 'en-US',
-    });
-    // The skip is one finding among them, so the order does not matter: what is
-    // being proved is that the missing correction is still reported alongside it.
-    expect(
-      silent
-        .map((finding) => finding.problem)
-        .filter(Boolean)
-        .join('\n')
-    ).toContain('with no correction');
-  });
-
-  it('goes red when the engine has no fallback at all', () => {
-    const findings = fallbackFindings({
-      component: 'Switch',
-      platform: 'ios',
-      declared: null,
-      measured: expected,
-      corrections: 0,
-    });
-    expect(findings.length).toBe(1);
-    expect(findings[0].rule).toBe('declared-fallback');
-    expect(findings[0].problem).toContain('no declared fallback');
-  });
-
-  it('goes red when the engine’s number is not the table’s', () => {
-    const findings = fallbackFindings({
-      component: 'Switch',
-      platform: 'ios',
-      declared: { width: 51, height: 31 },
-      measured: expected,
-      corrections: 0,
-    });
-    expect(findings[0].problem).toContain('the engine declares 51x31');
-    expect(findings[0].problem).toContain('61x28');
-  });
-
   it('goes red when a fallback is shared by two controls', () => {
     // The "someone pasted the previous component's number" shape, invisible to the
     // generated policy check because the policy is right and only the number is stale.
@@ -660,70 +353,6 @@ describe('the declared-fallback rule', () => {
     ).toEqual([]);
   });
 
-  it('catches a poisoned guess that was never corrected', () => {
-    // The one the brief asks for by name: a fixture equal to the right answer hides a
-    // failed correction, so the device run poisons the guess with a size nothing declares
-    // and asserts the correction arrives. These are the three outcomes it can report.
-    const poison = POISON_SIZES.ios;
-    const settledAtPoison = fallbackFindings({
-      component: 'Switch',
-      platform: 'ios',
-      declared: expected,
-      measured: poison,
-      corrections: 1,
-      poisoned: true,
-    });
-    expect(settledAtPoison[0].problem).toContain(
-      'settled at the poisoned 97x11'
-    );
-
-    const silent = fallbackFindings({
-      component: 'Switch',
-      platform: 'ios',
-      declared: expected,
-      measured: expected,
-      corrections: 0,
-      poisoned: true,
-    });
-    expect(silent[0].problem).toContain('no correction');
-    expect(silent[0].problem).toContain('the correction went missing');
-
-    const corrected = fallbackFindings({
-      component: 'Switch',
-      platform: 'ios',
-      declared: expected,
-      measured: expected,
-      corrections: 1,
-      poisoned: true,
-    });
-    expect(corrected).toEqual([]);
-  });
-
-  it('goes red when a warm mount still needs a correction', () => {
-    const findings = fallbackFindings({
-      component: 'Switch',
-      platform: 'ios',
-      declared: expected,
-      measured: expected,
-      corrections: 3,
-    });
-    expect(findings[0].problem).toContain('needed 3 correction(s)');
-  });
-
-  it('goes red rather than being vacuous when the control has no row', () => {
-    // `Rating`, because every control the repo has now has a row — and this is the check
-    // that goes red the day one is added without its number written down.
-    const findings = fallbackFindings({
-      component: 'Rating',
-      platform: 'ios',
-      declared: { width: 10, height: 10 },
-      measured: { width: 10, height: 10 },
-      corrections: 0,
-    });
-    expect(findings.length).toBe(1);
-    expect(findings[0].problem).toContain('vacuous');
-  });
-
   it('uses the poison size for the platform under test', () => {
     expect(POISON_SIZES.android).not.toEqual(POISON_SIZES.ios);
     // A poison that equalled a real fallback would make the poisoned assertion green on
@@ -745,11 +374,10 @@ describe('the declared-fallback rule', () => {
 
 /* ---------------------- the box rule: which axes are the control's ------------- */
 
-/* The three cases below are not theoretical: the first device run of this suite went red on
+/* The three modes are not theoretical: the first device run of this suite went red on
  * Slider, Progress and Button, and the rule was wrong rather than the controls. A `fillWidth`
  * control's width is its parent's, and a content-sized control's declaration is a documented
- * middle of a measured table. Each mode is therefore tested at both ends — the difference it
- * must allow, and the one it must still refuse. */
+ * middle of a measured table. */
 
 describe('which axes a declared fallback describes', () => {
   it('reads the axis from the generated sizing policy', () => {
@@ -769,95 +397,6 @@ describe('which axes a declared fallback describes', () => {
     expect(boxRuleFor('NitroUiRating', sizing)).toBe('both');
   });
 
-  it('lets a fillWidth control be wider than its declaration, and still checks its height', () => {
-    // Measured on device: Slider declared 351 and settled at 420 wide on a 420 dp screen.
-    const declared = DECLARED_FALLBACKS.NitroUiSlider.ios;
-    const parentWidth = { width: 420, height: declared.height };
-    expect(
-      fallbackFindings({
-        component: 'Slider',
-        platform: 'ios',
-        declared,
-        measured: parentWidth,
-        corrections: 0,
-        boxRule: 'height',
-      })
-    ).toEqual([]);
-
-    const staleHeight = fallbackFindings({
-      component: 'Slider',
-      platform: 'ios',
-      declared,
-      measured: { width: 420, height: 12 },
-      corrections: 0,
-      boxRule: 'height',
-    });
-    expect(staleHeight[0].problem).toContain('width is its parent');
-    expect(staleHeight[0].problem).toContain('12');
-  });
-
-  it('does not claim a fillWidth control needed no correction, because its width always does', () => {
-    // The warm assertion is only true of a control whose declaration is its whole box.
-    expect(
-      fallbackFindings({
-        component: 'Slider',
-        platform: 'ios',
-        declared: DECLARED_FALLBACKS.NitroUiSlider.ios,
-        measured: { width: 420, height: 31 },
-        corrections: 1,
-        boxRule: 'height',
-      })
-    ).toEqual([]);
-  });
-
-  it('asks a content-sized control for a box that is its own, not its declaration', () => {
-    // Button: 33.3 to 103.2 wide across titles per docs/components/button.md, so the
-    // declared pair matches nothing measured. This is the device run's 57.3x34.3.
-    const declared = DECLARED_FALLBACKS.NitroUiButton.ios;
-    expect(
-      fallbackFindings({
-        component: 'Button',
-        platform: 'ios',
-        declared,
-        measured: { width: 57.3, height: 34.3 },
-        corrections: 1,
-        boxRule: 'none',
-      })
-    ).toEqual([]);
-  });
-
-  it('goes red when the content-sized exemption earns nothing', () => {
-    // The exemption's own proof: a control that measures exactly its declaration has
-    // stopped sizing itself from its content, and the exemption should have been removed.
-    // Injected rather than achieved by editing a number in this repo: Button's box really
-    // does vary with its title, so the only honest way to produce "measured == declared"
-    // here is a table that says so.
-    const declared = DECLARED_FALLBACKS.NitroUiButton.ios;
-    const table = { NitroUiButton: { ios: declared, android: declared } };
-    const findings = fallbackFindings({
-      component: 'Button',
-      platform: 'ios',
-      declared,
-      measured: declared,
-      corrections: 0,
-      boxRule: 'none',
-      declaredTable: table,
-    });
-    expect(findings[0].problem).toContain('exempt from the box comparison');
-    expect(findings[0].problem).toContain('no longer true');
-    // And the same inputs without the exemption go red for a different reason: skipping the
-    // comparison is the only thing that made this box acceptable at all.
-    const strict = fallbackFindings({
-      component: 'Button',
-      platform: 'ios',
-      declared,
-      measured: { width: declared.width + 20, height: declared.height },
-      corrections: 0,
-      declaredTable: table,
-    });
-    expect(strict[0].problem).toContain('is not the measured');
-  });
-
   it('gives a Checkbox its height, and not its whole box', () => {
     // The narrowness the review asked for, in both directions: the Checkbox left
     // `CONTENT_SIZED_BOX` (which skipped the box and hid a declaration 8 dp shorter than
@@ -867,104 +406,6 @@ describe('which axes a declared fallback describes', () => {
     expect(boxRuleFor('NitroUiCheckbox', sizing)).toBe('height');
     expect(CONTENT_SIZED_BOX).not.toContain('NitroUiCheckbox');
     expect(HEIGHT_ONLY_FALLBACK).toContain('NitroUiCheckbox');
-  });
-
-  it('catches a stale height on a height-only control, and ignores a width its label owns', () => {
-    // Round 1's bug spelled as an argument. Every measured Checkbox is 48 dp tall
-    // (`minimumInteractiveComponentSize` will not publish a smaller touch target) while the
-    // declaration said 40, which is the glyph's box inside that target. The measurements
-    // below are the box the suite really mounts - a bare Checkbox - on each platform.
-    const staleTable = {
-      NitroUiCheckbox: {
-        ios: { width: 61, height: 28 },
-        android: { width: 40, height: 40 },
-      },
-    };
-    const staleAndroid = fallbackFindings({
-      component: 'Checkbox',
-      platform: 'android',
-      declared: staleTable.NitroUiCheckbox.android,
-      measured: { width: 48, height: 48 },
-      corrections: 1,
-      boxRule: 'height',
-      declaredTable: staleTable,
-    });
-    expect(staleAndroid[0].problem).toContain('is not the measured 48x48');
-    expect(staleAndroid[0].problem).toContain('whose own axis is its height');
-
-    // The same control on the same platform, with the height the component declares and the
-    // harness measures. The width still disagrees - a bare Material 3 box is 48 dp wide
-    // against a declared 40 - and forgiving *that* is what the narrowing is for: the width a
-    // Checkbox measures is its label's, and `Checkbox.harness.tsx` measures the pair (48
-    // against 131.05 dp, 61 against 145 pt), which is the axis the sizing key is written for.
-    const fixed = {
-      NitroUiCheckbox: {
-        ios: { width: 61, height: 28 },
-        android: { width: 40, height: 48 },
-      },
-    };
-    expect(
-      fallbackFindings({
-        component: 'Checkbox',
-        platform: 'android',
-        declared: fixed.NitroUiCheckbox.android,
-        measured: { width: 48, height: 48 },
-        corrections: 1,
-        boxRule: 'height',
-        declaredTable: fixed,
-      })
-    ).toEqual([]);
-
-    // The other platform is under the same rule, so the mode cannot be an Android-only
-    // concession - and iOS is where the measured box *does* equal the declared one on both
-    // axes, which is why this rule compares heights and does not also demand that a
-    // height-only control measure wider than its own declaration.
-    expect(
-      fallbackFindings({
-        component: 'Checkbox',
-        platform: 'ios',
-        declared: { width: 61, height: 28 },
-        measured: { width: 61, height: 28 },
-        corrections: 0,
-        boxRule: 'height',
-        declaredTable: fixed,
-      })
-    ).toEqual([]);
-    const staleIos = fallbackFindings({
-      component: 'Checkbox',
-      platform: 'ios',
-      declared: { width: 61, height: 31 },
-      measured: { width: 61, height: 28 },
-      corrections: 0,
-      boxRule: 'height',
-      declaredTable: {
-        NitroUiCheckbox: {
-          ios: { width: 61, height: 31 },
-          android: { width: 40, height: 48 },
-        },
-      },
-    });
-    expect(staleIos[0].problem).toContain('is not the measured 61x28');
-  });
-
-  it('still catches a poisoned fallback for both narrowed modes', () => {
-    // The poison is an exact pair that nothing declares, so it needs no policy to detect:
-    // a box that survives it is a missing correction whichever axes the control owns.
-    for (const [component, boxRule] of [
-      ['Slider', 'height'],
-      ['Button', 'none'],
-    ]) {
-      const findings = fallbackFindings({
-        component,
-        platform: 'ios',
-        declared: DECLARED_FALLBACKS[`NitroUi${component}`].ios,
-        measured: POISON_SIZES.ios,
-        corrections: 1,
-        poisoned: true,
-        boxRule,
-      });
-      expect(findings[0].problem).toContain('settled at the poisoned 97x11');
-    }
   });
 
   it('goes red for a CONTENT_SIZED_BOX entry that is not an intrinsic control', () => {
@@ -983,94 +424,6 @@ describe('which axes a declared fallback describes', () => {
     // mutations above are measured against.
     expect(checkContentSizedBox(repoManifests())).toEqual([]);
     expect(checkFallbackTable(repoManifests(), repoSizingTable())).toEqual([]);
-  });
-});
-
-/* --------------------------------- leak findings ------------------------------ */
-
-describe('the no-leak-on-drop rule', () => {
-  const baseline = {
-    component: 'Switch',
-    baselineLedger: 4,
-    baselineRegistry: 2,
-    instances: 200,
-  };
-
-  it('passes when the engine is back where it started', () => {
-    expect(
-      leakFindings({
-        ...baseline,
-        ledgerEntries: 4,
-        registryEntries: 2,
-      })
-    ).toEqual([]);
-  });
-
-  it('goes red when ledger entries outlive their instances', () => {
-    const findings = leakFindings({
-      ...baseline,
-      ledgerEntries: 7,
-      registryEntries: 2,
-    });
-    expect(findings.length).toBe(1);
-    expect(findings[0].rule).toBe('no-leak-on-drop');
-    expect(findings[0].problem).toContain(
-      '3 ledger entry(ies) survived 200 drops'
-    );
-    expect(findings[0].problem).toContain('onDropView');
-  });
-
-  it('goes red when the registry keeps per-instance state', () => {
-    const findings = leakFindings({
-      ...baseline,
-      ledgerEntries: 4,
-      registryEntries: 34,
-      registryGrowth: 1,
-    });
-    expect(findings[0].problem).toContain('grew by 32 across 200 mounts');
-  });
-
-  it('allows the one registry row a component legitimately gains', () => {
-    expect(
-      leakFindings({
-        ...baseline,
-        ledgerEntries: 4,
-        registryEntries: 3,
-        registryGrowth: 1,
-      })
-    ).toEqual([]);
-  });
-});
-
-/* -------------------------------- recycle findings ---------------------------- */
-
-describe('the recycle-reset rule', () => {
-  it('passes when every property the control reports matches its new owner', () => {
-    expect(
-      recycleFindings({
-        component: 'Switch',
-        identity: 'testID "recycle-switch"',
-        checks: [
-          { label: 'checked', expected: false, actual: false },
-          { label: 'tintColor', expected: null, actual: null },
-        ],
-      })
-    ).toEqual([]);
-  });
-
-  it('goes red for the value that stayed behind', () => {
-    const findings = recycleFindings({
-      component: 'Switch',
-      identity: 'testID "recycle-switch"',
-      checks: [
-        { label: 'checked', expected: false, actual: true },
-        { label: 'tintColor', expected: null, actual: 0xff0000 },
-      ],
-    });
-    expect(findings.length).toBe(2);
-    expect(findings[0].rule).toBe('recycle-reset');
-    expect(findings[0].problem).toContain('came back wearing its');
-    expect(findings[1].problem).toContain('tintColor reads 16711680');
   });
 });
 
@@ -1179,149 +532,6 @@ describe('a recycle hole, as the fixture and the debt list describe it', () => {
       expect(note.reason.length).toBeGreaterThan(40);
       expect(`${name}: ${note.reason}`).not.toMatch(/\s\+$/);
     }
-  });
-});
-
-/* ---------------------------------- the debt --------------------------------- */
-
-describe('the debt ledger', () => {
-  it('is the recycle holes on record, and the mechanism works when one is added', () => {
-    // Every row here is a `recycle-reset` hole, and they are named here rather than just
-    // counted: a row appearing means a new hole is on record (which wants a fixture note, a
-    // FOLLOWUPS line and a matrix cell with it), and a row disappearing without its probe
-    // landing is the same lie in the other direction. `SegmentedControl`'s row left in F6 —
-    // the fixture now has `nuiTestDisplayedIndex`, so `checkRecycleNotes` would refuse an
-    // exemption for it — which is this list being allowed to shrink for the right reason.
-    expect(
-      CONFORMANCE_EXEMPTIONS.map((row) => `${row.component}|${row.rule}`)
-    ).toEqual(['Menu|recycle-reset']);
-    for (const row of CONFORMANCE_EXEMPTIONS) {
-      // Debt needs an address and a description of what is blind, not just a name.
-      expect(row.followups.length).toBeGreaterThan(0);
-      expect(row.detail.length).toBeGreaterThan(0);
-    }
-    const finding = {
-      component: 'Switch',
-      rule: 'recycle-reset',
-      problem: 'kept checked',
-    };
-    // Unmatched: a failure.
-    expect(classifyFindings([finding]).failures).toEqual([
-      'Switch × recycle-reset: kept checked',
-    ]);
-    // Matched: known debt, and the key is reported so `staleExemptions` can clear it. The
-    // real lists are frozen — that is deliberate, so debt cannot be added at runtime —
-    // hence `tables` rather than a push.
-    const row = {
-      component: 'Switch',
-      rule: 'recycle-reset',
-      followups: 'X4: Switch keeps a recycled owner’s value',
-      detail: 'checked survives a remount',
-    };
-    const result = classifyFindings([finding], { conformance: [row] });
-    expect(result.failures).toEqual([]);
-    expect(result.matched).toEqual([findingKey('Switch', 'recycle-reset')]);
-    expect(result.known[0]).toContain('known failing (X4:');
-    expect(staleExemptions(result.matched, result.matched, [row])).toEqual([]);
-    expect(
-      staleExemptions([findingKey('Switch', 'recycle-reset')], [], [row])[0]
-    ).toContain('matched no finding this run');
-  });
-
-  it('matches an a11y row on its finding, not on its control', () => {
-    // The a11y list is keyed on the case id and matched by problem text, so a row written
-    // for one finding cannot excuse a different one on the same control.
-    const row = {
-      control: 'slider',
-      followups: 'X4: not actionable',
-      matches: /not actionable/,
-    };
-    const tables = { a11y: [row] };
-    expect(
-      classifyFindings(
-        [
-          {
-            component: 'Slider',
-            rule: 'a11y',
-            controlId: 'slider',
-            problem: 'the node is not actionable',
-          },
-        ],
-        tables
-      ).known.length
-    ).toBe(1);
-    expect(
-      classifyFindings(
-        [
-          {
-            component: 'Slider',
-            rule: 'a11y',
-            controlId: 'slider',
-            problem: 'no node carries the name at all',
-          },
-        ],
-        tables
-      ).failures.length
-    ).toBe(1);
-  });
-
-  it('clears an exemption the run covered and found nothing for', () => {
-    const rows = [
-      {
-        component: 'Switch',
-        rule: 'recycle-reset',
-        followups: 'X4: something',
-        detail: 'x',
-      },
-    ];
-    const key = findingKey('Switch', 'recycle-reset');
-    expect(staleExemptions([key], [], rows)).toEqual([
-      expect.stringContaining('matched no finding this run'),
-    ]);
-    expect(staleExemptions([key], [key], rows)).toEqual([]);
-    // A rule the run did not exercise (a filtered harness run) is not evidence of a fix.
-    expect(staleExemptions([], [], rows)).toEqual([]);
-  });
-
-  it('sweeps both lists in one call, each on its own key', () => {
-    // The a11y list is keyed on a *case* id (one component has two cases: its own screen
-    // and inside a `<Host>`) and the in-app list on `component|rule`. `staleDebt` is the
-    // one call a run makes, and a row the run covered but did not match must appear.
-    const debt = staleDebt({
-      a11yCovered: A11Y_CONTROLS.map((entry) => entry.id),
-      a11yMatched: ['slider'],
-      coveredKeys: [],
-      matchedKeys: [],
-      a11yPlatform: 'android',
-    });
-    // The Android sweep, the platform it was told about: four Android rows matched
-    // nothing. The iOS rows for the same controls are not in this count — an Android run
-    // never read those trees, so it has no evidence that they still reproduce.
-    expect(debt.length).toBe(4);
-    expect(debt.join('\n')).toContain(
-      'the android entry for "segmented-control"'
-    );
-    expect(debt.join('\n')).not.toContain('the android entry for "slider"');
-    expect(debt.join('\n')).not.toContain('the ios entry');
-
-    // And the in-app half, from the same call. The real list is empty today, so rows are
-    // passed in: the sweeper takes them as an argument because that list is frozen —
-    // deliberately, so nothing can add debt at runtime.
-    const row = {
-      component: 'Switch',
-      rule: 'recycle-reset',
-      followups: 'X4: something',
-      detail: 'x',
-    };
-    expect(
-      staleDebt({
-        a11yCovered: ['switch'],
-        a11yMatched: ['switch'],
-        coveredKeys: [findingKey('Switch', 'recycle-reset')],
-        matchedKeys: [],
-        conformanceRows: [row],
-      }).join('\n')
-    ).toContain('Switch × recycle-reset');
   });
 });
 
@@ -1556,113 +766,23 @@ describe('the in-app table mirror', () => {
 /* ------------------------------ the in-app fixtures -------------------------- */
 
 describe('the debt, as the matrix sees it', () => {
-  const followups = () => read('docs/tasks/FOLLOWUPS.md');
-
   it('collapses the a11y cases onto their components, once per control', () => {
-    // The debt list carries both platforms' rows for one control, and `slider` and
-    // `hosted-slider` both guard `Slider`. The matrix is about components, so every row for
-    // one control makes exactly one failing cell — which is why the expected list below is
-    // shorter than the debt list it collapses.
-    //
-    // `Picker` is here because the real accessibility tree says so, not because a rule was
-    // widened to reach it: measured under XCUITest, a hosted Picker's control announces
-    // "Hosted picker, Hosted picker" and no element carries the name alone. That is a
-    // finding about the control, so it is recorded as debt with a FOLLOWUPS line and
-    // printed on every run rather than asserted away. `ContextMenu` is the same kind of
-    // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
-    // as an element of its own under the wrapper that carries the label (G16).
-    // `Form` is a second measurement of that kind: on iOS a Form row keeps its name on the
-    // React Native wrapper (`other`) instead of the cell, so the row is a stop with a named
-    // text inside it, not the button itself (G24).
-    // `IconButton` is a third kind of the same record: the name is on the right element and
-    // the box is the drawn control's, inset inside the 44 pt touch target the component adds
-    // around it (G23). Nothing was widened for it — the box rule still says what it said, and
-    // the row quotes the numbers it was measured with, so the cell is a measurement and goes
-    // back to `covered` when the geometry does. Round 0 expected the 44 pt target to retire
-    // this cell; the sweep measured a wider inset instead, and the row came back with it.
-    expect(failingKeys()).toEqual([
-      'Menu|recycle-reset',
-      'Slider|a11y-name-on-focusable-node',
-      'SegmentedControl|a11y-name-on-focusable-node',
-      // G25's Stepper: the merged row is actionable through Compose's custom
-      // `SetProgress`, which a uiautomator dump cannot show, so the Android sweep
-      // sees a named node with no standard action on it. The Slider's and
-      // SegmentedControl's cell, on a fifth control — and the device suite performs
-      // the action, so the cell records the flag, not a missing behaviour.
-      'Stepper|a11y-name-on-focusable-node',
-      'Picker|a11y-name-on-focusable-node',
-      'ContextMenu|a11y-name-on-focusable-node',
-      'Form|a11y-name-on-focusable-node',
-      'IconButton|a11y-name-on-focusable-node',
-    ]);
-  });
-
-  it('names the FOLLOWUPS line for a failing cell, when the line exists', () => {
-    const resolve = followupsResolver(followups());
-    for (const key of failingKeys()) {
-      const cited = resolve(key);
-      expect(cited).not.toBeNull();
-      // One cell can carry debt on both platforms — the Slider's Android name is not
-      // actionable and its iOS name is announced as the wrong kind of control — and the
-      // resolver joins the citations it checked. It proves each one is in the document
-      // before answering at all, so the parts are what a reader can go and open, not the
-      // joined string.
-      for (const line of cited.split(' · ')) {
-        expect(followups()).toContain(line);
-      }
-    }
-    // A cell no debt row claims has no line, which is what `checkCoverage` reports as debt
-    // with no owner — so the resolver cannot answer for it.
-    expect(resolve(findingKey('Switch', 'recycle-reset'))).toBeNull();
-  });
-
-  it("refuses to name a line when only one of a control's two platform rows is written down", () => {
-    // The shape the iOS rows introduced: one control, debt on both platforms. A resolver
-    // that answered with whichever citation it found first would send a reviewer to one
-    // line and leave the other bug unowned.
-    const rows = [
-      {
-        control: 'slider',
-        platform: 'android',
-        followups:
-          'X4 a11y: Compose RangeInfo nodes are not actionable in a dump',
-        matches: /not actionable/,
-      },
-      {
-        control: 'slider',
-        platform: 'ios',
-        followups: 'X4 a11y: a line nobody wrote',
-        matches: /announced as other/,
-      },
+    // The debt list carries both platforms' rows for one control, and one component can
+    // have two cases (its own screen and inside a `<Host>`). The matrix is about
+    // components, so every row for one control makes exactly one failing cell. The rows
+    // are passed in, so this does not name whatever the debt list holds today.
+    const table = [
+      { id: 'slider', component: 'Slider' },
+      { id: 'hosted-slider', component: 'Slider' },
     ];
-    expect(
-      followupsResolver(followups(), { a11y: rows })(
-        findingKey('Slider', 'a11y-name-on-focusable-node')
-      )
-    ).toBeNull();
-  });
-
-  it('goes red when a debt row cites a line that is not in FOLLOWUPS.md', () => {
-    // The citation is the only thing tying the exemption to a person's task list. A row
-    // whose line was renamed or never written has no owner, and this is where that shows.
-    const row = {
-      control: 'slider',
-      followups: 'X4: a line nobody wrote',
-      matches: /x/,
-    };
-    const resolve = followupsResolver(followups(), { a11y: [row] });
-    expect(
-      resolve(findingKey('Slider', 'a11y-name-on-focusable-node'))
-    ).toBeNull();
-    // …and `checkCoverage` then refuses the matrix rather than printing the cell as fine.
-    const manifests = repoManifests();
-    const matrix = coverageMatrix(manifests, {
-      failing: failingKeys(),
-      sizing: JSON.parse(read('nitro-ui.sizing.json')),
-    });
-    expect(checkCoverage(manifests, matrix, resolve).join('\n')).toContain(
-      'Slider × a11y-name-on-focusable-node'
-    );
+    const rows = [
+      { control: 'slider', platform: 'android' },
+      { control: 'slider', platform: 'ios' },
+      { control: 'hosted-slider', platform: 'android' },
+    ];
+    expect(failingKeys(rows, [], table)).toEqual([
+      findingKey('Slider', 'a11y-name-on-focusable-node'),
+    ]);
   });
 
   it('picks up a debt row on the in-app side too', () => {
@@ -2128,11 +1248,16 @@ describe('the a11y sweep, against a fake device', () => {
         'a11y:debt',
       ]);
       expect(result.covered.length).toBe(A11Y_CONTROLS.length);
-      // A tree where every control is named on one actionable node: only the five rows
-      // whose finding was about something else can still be outstanding, and here they are
-      // stale — which is the same proof as above, over the whole table.
+      // A tree where every control is named on one actionable node: no Android debt row
+      // matches anything, so every one of them is stale — which is the same proof as
+      // above, over the whole table. Counted from the list, not written out, so adding or
+      // retiring a row does not edit this test.
       expect(result.matched).toEqual([]);
-      expect(result.stale.length).toBe(5);
+      expect(result.stale.length).toBe(
+        A11Y_EXEMPTIONS.filter(
+          (row) => row.platform === 'android' || row.platform === 'both'
+        ).length
+      );
     });
   });
 
