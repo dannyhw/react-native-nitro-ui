@@ -39,6 +39,7 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
   // is aimed at between them and its row's travel is read off the tail.
   const row = screen.getByTestId('real-input-wheel-scroller-row');
   const tail = screen.getByTestId('real-input-wheel-scroller-tail');
+  const echo = screen.getByTestId('real-input-scroller-index');
   await reveal(screen, row);
   const rowBox = await boxOf(row);
   const atRest = await boxOf(tail);
@@ -61,7 +62,7 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
   await drag(screen, centre, { x: centre.x, y: centre.y - 220 });
   // A drum reports once it has settled on a row, not under the finger, so the roll
   // is awaited; reading the echo straight away races the snap.
-  await expect(index).not.toHaveText('-');
+  await expect(echo).not.toHaveText('-');
   const rolled = await textOf(screen, 'real-input-scroller-index');
   expect(
     rolled,
@@ -82,5 +83,5 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
   ).toBe(true);
   // And it stays where it was: a sideways gesture the drum kept would land on
   // another row, and the report arrives late rather than not at all.
-  await expect(index).toHaveText(rolled);
+  await expect(echo).toHaveText(rolled);
 });
