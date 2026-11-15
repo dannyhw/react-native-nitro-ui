@@ -163,8 +163,9 @@ function gatherFacts(nowMs) {
         '--limit',
         '100',
         '--json',
-        'number,title',
-      ])
+        'number,author',
+      ]),
+      json('gh', ['repo', 'view', '--json', 'owner'])?.owner?.login ?? null
     ),
     pullRequestsFact(
       prs == null

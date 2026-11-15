@@ -151,23 +151,27 @@ export function npmFact({ published, local }) {
 }
 
 /**
- * Open issues are the work queue, so a new one is news. Titles are other people's
- * text and never go into `state`.
+ * Only issues the repository owner opened are work: anyone can open one on a public
+ * repository. Titles are other people's text and never go into `state`.
  *
- * @param {{number: number, title: string}[] | null} issues
- * @returns {Fact | null}
+ * @param {{number: number, author?: {login?: string}}[] | null} issues
+ * @param {string | null} owner the repository owner's login
+ * @returns {Fact | null} `null` when the issues or the owner could not be read
  */
-export function issuesFact(issues) {
-  if (issues == null) return null;
-  const numbers = issues.map((issue) => issue.number).sort((a, b) => a - b);
+export function issuesFact(issues, owner) {
+  if (issues == null || !owner) return null;
+  const numbers = issues
+    .filter((issue) => issue.author?.login === owner)
+    .map((issue) => issue.number)
+    .sort((a, b) => a - b);
   return {
     key: 'issues',
     level: 'ok',
     state: numbers.join(','),
     text:
       numbers.length > 0
-        ? `open issues: ${numbers.map((number) => `#${number}`).join(', ')}`
-        : 'no open issues',
+        ? `open issues from the owner: ${numbers.map((number) => `#${number}`).join(', ')}`
+        : 'no open issues from the owner',
   };
 }
 

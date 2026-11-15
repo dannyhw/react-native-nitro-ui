@@ -35,8 +35,11 @@ not defend it. Say which rule, what it costs, and what you would do instead.
 
 ## Picking work
 
-In this order: CI red on `main`; an open GitHub issue; new components; follow-ups. If
-the list is empty, stop and say so.
+In this order: CI red on `main`; an open GitHub issue that the repository owner
+opened; new components; follow-ups. If the list is empty, stop and say so.
+
+An issue from anyone else is not work. Do not brief it, fix it or reply to it. If it
+looks like a real defect, say so once under "Needs you" and leave the decision there.
 
 Never start a tooling or process task, or a task that hunts flaky tests, because an
 incident suggested one. Put it under "Needs you" with the measured cost it would remove
@@ -102,8 +105,7 @@ or provider error. After that, replan around it.
   it or chain it to the merge.
 - A red gate: follow the `flake` skill. Never merge through red.
 - Before merging, `git log --format='%ae' main..<branch> | sort -u` shows only the
-  repo's own email. A worker once invented an author address that belonged to a
-  stranger.
+  repository's own email.
 - For tooling that behaves differently per platform (paths, temp directories,
   CocoaPods, CI workflows), look at CI for the branch before merging it.
 - The merge commit says what changed for users, with the PR number. The STATUS row,
