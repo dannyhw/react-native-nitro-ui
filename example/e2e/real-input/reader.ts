@@ -45,7 +45,7 @@ async function readState(node: Locator, state: NodeState): Promise<boolean> {
   } catch (error) {
     throw new Error(
       `a reader is told the node is ${state}; reading it back failed: ` +
-        String((error as Error)?.message ?? error),
+        String((error as Error)?.message ?? error)
     );
   }
 }
@@ -62,7 +62,7 @@ export async function actsOnOneNamedNode(
   options: {
     name: string;
     state?: NodeState;
-  },
+  }
 ): Promise<void> {
   const named = screen.getByLabel(options.name);
   const count = await named.count();
@@ -71,18 +71,18 @@ export async function actsOnOneNamedNode(
     `"${options.name}" is announced on ${String(count)} node(s); a person gets ` +
       (count === 0
         ? 'no node at all, so there is nothing to act on'
-        : 'more than one, which is the duplicate-node defect (G15 Android: a labelled checkbox was two nodes, one inert)'),
+        : 'more than one, which is the duplicate-node defect (G15 Android: a labelled checkbox was two nodes, one inert)')
   ).toBe(1);
   const box = await named.boundingBox();
   expect(
     box,
     `"${options.name}" has no box: a reader can stop on it but a finger cannot ` +
-      'reach it (G23 iOS: a VoiceOver element inset inside its own target)',
+      'reach it (G23 iOS: a VoiceOver element inset inside its own target)'
   ).not.toBeNull();
   if (box != null) {
     expect(
       box.width > 0 && box.height > 0,
-      `"${options.name}" is drawn at ${String(box.width)}x${String(box.height)}`,
+      `"${options.name}" is drawn at ${String(box.width)}x${String(box.height)}`
     ).toBe(true);
   }
   if (options.state != null) {
@@ -90,7 +90,7 @@ export async function actsOnOneNamedNode(
       await readState(named, options.state),
       `"${options.name}" does not report "${options.state}" on the node a person ` +
         'acts on — a name on one node and a state on another is the defect this ' +
-        'rule exists for',
+        'rule exists for'
     ).toBe(true);
   }
 }
@@ -105,13 +105,13 @@ export async function actsOnOneNamedNode(
 export async function nodeReports(
   screen: Screen,
   name: string,
-  state: NodeState,
+  state: NodeState
 ): Promise<void> {
   const named = screen.getByLabel(name);
   expect(
     await readState(named, state),
     `after the gesture, "${name}" does not report "${state}" on the node a person ` +
-      'acts on: the value moved somewhere the screen reader is not looking',
+      'acts on: the value moved somewhere the screen reader is not looking'
   ).toBe(true);
 }
 

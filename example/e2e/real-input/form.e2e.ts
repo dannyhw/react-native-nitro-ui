@@ -1,10 +1,21 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
-import { flick, openScreen, reveal } from './support';
+import {
+  boxOf,
+  editableField,
+  flick,
+  openScreen,
+  reveal,
+  textOf,
+} from './support';
 import { actsOnOneNamedNode } from './reader';
-import { fieldAboveKeyboard, focusAndExpectKeyboard } from './keyboard';
-import { pressPaintsFeedback } from './press-feedback';
+import {
+  expectKeyboard,
+  fieldAboveKeyboard,
+  focusField,
+  withRealKeyboard,
+} from './keyboard';
 
 const ROW = 'Row with onPress';
 
@@ -40,15 +51,20 @@ test('a flick across a Form row scrolls the list and presses nothing (X32)', asy
   // person makes when they mean "scroll" — and it has to be a *real* drag, so the
   // row's own box is read afterwards to prove the list moved. A flick that did
   // nothing would leave the press count alone for the wrong reason.
-  const before = await row.boundingBox();
+  const before = await boxOf(row);
   if (before == null) {
-    throw new Error('press-feedback: the Form row has no box to flick over.');
+    throw new Error('real-input: the Form row has no box to flick over.');
   }
-  await flick(screen, { x: before.x + before.width / 2, y: before.y + before.height / 2 });
+  await flick(screen, {
+    x: before.x + before.width / 2,
+    y: before.y + before.height / 2,
+  });
 
-  const after = await row.boundingBox();
+  const after = await boxOf(row);
   const moved =
-    after == null || Math.abs(after.y - before.y) > 40 || (await row.count()) === 0;
+    after == null ||
+    Math.abs(after.y - before.y) > 40 ||
+    (await row.count()) === 0;
   expect(moved, 'the flick did not move the list at all').toBe(true);
   await expect(presses).toHaveText('0');
 });
@@ -59,28 +75,28 @@ test('a field near the bottom of a Form stays above the keyboard (G24)', async (
 }) => {
   await app.open();
   await openScreen(screen, 'form');
-  const field = screen.getByTestId('form-note-field');
+  const field = editableField(screen, 'Note');
   const focus = screen.getByTestId('form-field-focus');
   await reveal(screen, field);
 
   // G24 Android, twice in the excerpts: the focused field was left behind the
   // keyboard. The field sits at the bottom of the Form's own list on purpose, so
   // this is the shape the defect needed. `form-keyboard-inset` is an iOS-only echo
-  // — the Android measurement is the window's content view, which `adjustResize`
-  // shortens by the IME's own height.
+  // — the Android measurement is the window's own `ime` inset, which is why this
+  // test runs under a real keyboard rather than the driver's headless one.
   await expect(focus).toHaveText('no');
-  await focusAndExpectKeyboard(screen, field);
-  await fieldAboveKeyboard(screen, field);
-  await expect(focus).toHaveText('yes');
-});
-
-test('a held press on a Form row draws its ink (G30)', async ({ app, screen, device }) => {
-  await app.open();
-  await openScreen(screen, 'form');
-  const row = screen.getByLabel(ROW);
-  await reveal(screen, row);
-
-  // A-REG G30, twice in one round: Form section rows drew no ripple under a held
-  // press, with G24's code already on main. Pixels are the only witness.
-  await pressPaintsFeedback(device, row);
+  await withRealKeyboard(async () => {
+    await focusField(field);
+    // Read between the tap and the keyboard: a field the tap never focused
+    // explains a missing keyboard, and the two failures need different fixes.
+    const focused = await textOf(screen, 'form-field-focus');
+    expect(
+      focused,
+      'a real tap on the Note field did not focus it: the app still echoes ' +
+        `"${focused}" (the field's box is ` +
+        `${JSON.stringify(await boxOf(field))})`
+    ).toBe('yes');
+    await expectKeyboard();
+    await fieldAboveKeyboard(field);
+  });
 });

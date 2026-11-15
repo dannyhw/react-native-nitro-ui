@@ -26,19 +26,19 @@ test('a real drag moves the Slider and the value JS echoes follows it', async ({
   const box = await track.boundingBox();
   if (box == null || !(await isInBand(screen, box))) {
     throw new Error(
-      `real-input: the Slider has no box to drag along; it reads ${JSON.stringify(box)}.`,
+      `real-input: the Slider has no box to drag along; it reads ${JSON.stringify(box)}.`
     );
   }
   const y = box.y + box.height / 2;
   await drag(
     screen,
     { x: box.x + box.width * 0.25, y },
-    { x: box.x + box.width * 0.8, y },
+    { x: box.x + box.width * 0.8, y }
   );
   const moved = await value.textContent();
   expect(
     Number(moved),
     `the dragged Slider echoed "${moved}" — a drag from 25% to 80% of the track ` +
-      'has to raise a value that started at 0.250',
+      'has to raise a value that started at 0.250'
   ).toBeGreaterThan(0.5);
 });

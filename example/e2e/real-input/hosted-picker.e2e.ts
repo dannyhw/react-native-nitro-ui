@@ -33,7 +33,7 @@ test('a hosted Picker opens its menu under the box the Host drew, and a row reac
       rowBox != null && rowBox.y > anchor.y,
       `the hosted Picker's menu opened above the row the Host drew (` +
         `row at ${String(Math.round(anchor.y))} px, "Alpha" at ` +
-        `${String(Math.round(rowBox?.y ?? 0))} px)`,
+        `${String(Math.round(rowBox?.y ?? 0))} px)`
     ).toBe(true);
   }
   await row.tap();

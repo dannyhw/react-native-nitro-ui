@@ -24,7 +24,10 @@ test('a real tap presses one item of a ButtonGroup and reports its id', async ({
   // the screen. Which item answered is the echo, not a count.
   await actsOnOneNamedNode(screen, { name: GROUP, state: 'enabled' });
   const copy = group.getByText('Copy');
-  expect(await copy.count(), 'the "Copy" item is not inside the named group').toBe(1);
+  expect(
+    await copy.count(),
+    'the "Copy" item is not inside the named group'
+  ).toBe(1);
   await expect(presses).toHaveText('0');
   await expect(pressed).toHaveText('none');
 

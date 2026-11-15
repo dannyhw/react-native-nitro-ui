@@ -7,7 +7,10 @@ import { pressPaintsFeedback } from './press-feedback';
 
 const NAME = 'Real-input item';
 
-test('a real tap on a ListItem fires its onPress once', async ({ app, screen }) => {
+test('a real tap on a ListItem fires its onPress once', async ({
+  app,
+  screen,
+}) => {
   await app.open();
   await openScreen(screen, 'listitem');
   const row = screen.getByLabel(NAME);
@@ -28,7 +31,11 @@ test('a real tap on a ListItem fires its onPress once', async ({ app, screen }) 
   await expect(last).toHaveText('real');
 });
 
-test('a held press on a ListItem draws its ink (G30)', async ({ app, screen, device }) => {
+test('a held press on a ListItem draws its ink (G30)', async ({
+  app,
+  screen,
+  device,
+}) => {
   await app.open();
   await openScreen(screen, 'listitem');
   const row = screen.getByLabel(NAME);
@@ -36,5 +43,24 @@ test('a held press on a ListItem draws its ink (G30)', async ({ app, screen, dev
 
   // A-DEV G30 Android: no press feedback drawn. The harness can assert that the
   // row's state changed; it cannot see that Material painted anything.
-  await pressPaintsFeedback(device, row);
+  await pressPaintsFeedback(screen, device, row);
+});
+
+test('a held press on an item inside a Form row draws the Form ink (G30)', async ({
+  app,
+  screen,
+  device,
+}) => {
+  await app.open();
+  await openScreen(screen, 'listitem');
+  const inForm = screen.getByLabel('Item inside a Form row');
+  await reveal(screen, inForm);
+
+  // A-REG G30 Android, twice: Form section rows drew no ripple ink under a held
+  // press while the library code that paints them was already on main. The leaf
+  // installs no indication of its own inside a row — the section owns the shape —
+  // so an item whose press never reaches the row presses in silence: the tap
+  // arrives, the echo moves, and the screen says nothing. Pixels are the only
+  // way to see that, and this is the row the defect was found on.
+  await pressPaintsFeedback(screen, device, inForm);
 });

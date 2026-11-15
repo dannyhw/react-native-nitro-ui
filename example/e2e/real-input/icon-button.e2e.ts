@@ -6,7 +6,10 @@ import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input icon button';
 
-test('a real tap on the icon Button reaches JS once', async ({ app, screen }) => {
+test('a real tap on the icon Button reaches JS once', async ({
+  app,
+  screen,
+}) => {
   await app.open();
   await openScreen(screen, 'iconbutton');
   const press = screen.getByLabel(NAME);

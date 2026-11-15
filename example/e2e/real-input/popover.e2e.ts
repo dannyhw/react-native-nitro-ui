@@ -2,7 +2,11 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
-import { fieldAboveKeyboard, focusAndExpectKeyboard } from './keyboard';
+import {
+  fieldAboveKeyboard,
+  focusAndExpectKeyboard,
+  withRealKeyboard,
+} from './keyboard';
 
 test('a real tap opens the popover and a Pressable inside it answers exactly once', async ({
   app,
@@ -26,7 +30,11 @@ test('a real tap opens the popover and a Pressable inside it answers exactly onc
   await popover.waitFor({ state: 'visible' });
   await popover.getByTestId('popover-short-inner-press').tap();
   await expect(presses).toHaveText('inner presses: 1');
-  await expect(log).toHaveText('press:popover-short');
+  // Contains, not equals: the tap also takes the popover away, and its dismiss
+  // lands in the same log line. Which events the popover announces in which order
+  // is `Popover.harness`'s claim; what only a device can say is that the press
+  // the finger made reached the control inside the window.
+  await expect(log).toContainText('press:popover-short');
 });
 
 test('a TextInput inside a popover stays above the keyboard (G22)', async ({
@@ -39,13 +47,15 @@ test('a TextInput inside a popover stays above the keyboard (G22)', async ({
   await reveal(screen, anchor);
 
   // G22 Android: the popup was placed under the keyboard, and then 43 px past it.
-  // The measurement is the app's own content view, which `adjustResize` shortens
-  // by exactly the keyboard's height, so "the field is above the keyboard" is a
-  // fact about the window rather than a guess about insets.
+  // The measurement is the window's own `ime` inset — the number the popup has to
+  // honour — read under a real keyboard, because the driver's headless IME shows
+  // no keyboard to be placed under.
   await anchor.tap();
   const popover = screen.getByTestId('popover-field-popover');
   await popover.waitFor({ state: 'visible' });
   const field = popover.getByTestId('popover-inner-field');
-  await focusAndExpectKeyboard(screen, field);
-  await fieldAboveKeyboard(screen, field);
+  await withRealKeyboard(async () => {
+    await focusAndExpectKeyboard(field);
+    await fieldAboveKeyboard(field);
+  });
 });

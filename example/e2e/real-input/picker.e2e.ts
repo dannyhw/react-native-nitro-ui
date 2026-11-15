@@ -40,7 +40,7 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
   const box = await drum.boundingBox();
   if (box == null || !(await isInBand(screen, box))) {
     throw new Error(
-      `real-input: the wheel in the scroller has no box to drag; it reads ${JSON.stringify(box)}.`,
+      `real-input: the wheel in the scroller has no box to drag; it reads ${JSON.stringify(box)}.`
     );
   }
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -56,7 +56,7 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
   expect(
     rolled,
     'a vertical drag rolled nothing: the scroller above the drum kept the ' +
-      'gesture, which is the G29 defect (a fling scrolled the page)',
+      'gesture, which is the G29 defect (a fling scrolled the page)'
   ).not.toBe('-');
 
   const afterRoll = await drum.boundingBox();
@@ -64,11 +64,7 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
     afterRoll,
     'the drum has no box to compare after the roll'
   ).not.toBeNull();
-  await drag(
-    screen,
-    centre,
-    { x: centre.x - 260, y: centre.y },
-  );
+  await drag(screen, centre, { x: centre.x - 260, y: centre.y });
   const afterSwipe = await drum.boundingBox();
   expect(
     afterSwipe != null &&
@@ -76,11 +72,11 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
       Math.abs(afterSwipe.x - afterRoll.x) > 20,
     `a sideways swipe left the scroller where it was: the drum kept a gesture ` +
       `that belongs to the row (box ${String(afterRoll?.x)} → ` +
-      `${String(afterSwipe?.x)} px)`,
+      `${String(afterSwipe?.x)} px)`
   ).toBe(true);
   const stillRolled = await index.textContent();
   expect(
     stillRolled,
-    'the sideways swipe also rolled the drum: it took the row\'s gesture'
+    "the sideways swipe also rolled the drum: it took the row's gesture"
   ).toBe(rolled);
 });

@@ -19,7 +19,7 @@ async function dismissPopup(
   app: App,
   screen: Screen,
   row: RegExp,
-  tries = 3,
+  tries = 3
 ): Promise<void> {
   const gone = screen.getByText(row);
   for (let press = 0; press < tries; press += 1) {
@@ -27,7 +27,7 @@ async function dismissPopup(
     await app.back();
   }
   throw new Error(
-    `real-input: the menu popup was still up after ${String(tries)} Backs.`,
+    `real-input: the menu popup was still up after ${String(tries)} Backs.`
   );
 }
 

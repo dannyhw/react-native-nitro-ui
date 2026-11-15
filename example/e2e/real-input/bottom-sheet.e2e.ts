@@ -23,7 +23,9 @@ test('a real tap opens the sheet, a Pressable inside it counts, and Back closes 
   const sheet = screen.getByTestId('sheet-fit-sheet');
   await sheet.waitFor({ state: 'visible' });
   await sheet.getByTestId('sheet-press').tap();
-  await expect(screen.getByTestId('sheet-presses')).toHaveText('Pressed 1 times');
+  await expect(screen.getByTestId('sheet-presses')).toHaveText(
+    'Pressed 1 times'
+  );
 
   await app.back();
   await sheet.waitFor({ state: 'detached' });

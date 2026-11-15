@@ -1,8 +1,12 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
-import { openScreen, reveal } from './support';
-import { fieldAboveKeyboard, focusAndExpectKeyboard } from './keyboard';
+import { editableField, openScreen, reveal } from './support';
+import {
+  fieldAboveKeyboard,
+  focusAndExpectKeyboard,
+  withRealKeyboard,
+} from './keyboard';
 
 const TYPING = 'Typing field';
 const FOCUS = 'Focus field';
@@ -13,7 +17,7 @@ test('real keystrokes reach the field and JS sees the text', async ({
 }) => {
   await app.open();
   await openScreen(screen, 'textfield');
-  const field = screen.getByLabel(TYPING);
+  const field = editableField(screen, TYPING);
   const echo = screen.getByTestId('text-typing-echo');
   await reveal(screen, field);
 
@@ -35,7 +39,7 @@ test('a real tap on a field brings up the real keyboard, and the field stays abo
 }) => {
   await app.open();
   await openScreen(screen, 'textfield');
-  const field = screen.getByLabel(FOCUS);
+  const field = editableField(screen, FOCUS);
   const echo = screen.getByTestId('text-focus-echo');
   await reveal(screen, field);
 
@@ -45,7 +49,9 @@ test('a real tap on a field brings up the real keyboard, and the field stays abo
   // keyboard that arrived over the field — the G24 defect, in another screen —
   // cannot pass by simply being present.
   await expect(echo).toHaveText('focus: 0 blur: 0 submitted: -');
-  await focusAndExpectKeyboard(screen, field);
-  await fieldAboveKeyboard(screen, field);
+  await withRealKeyboard(async () => {
+    await focusAndExpectKeyboard(field);
+    await fieldAboveKeyboard(field);
+  });
   await expect(echo).toContainText('focus: 1');
 });

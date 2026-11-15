@@ -27,7 +27,7 @@ test('a real tap on a hosted SegmentedControl picks the segment under the finger
   const box = await control.boundingBox();
   if (box == null || !(await isInBand(screen, box))) {
     throw new Error(
-      `real-input: the hosted Segmented has no box to aim at; it reads ${JSON.stringify(box)}.`,
+      `real-input: the hosted Segmented has no box to aim at; it reads ${JSON.stringify(box)}.`
     );
   }
   await screen.tapAt({ x: box.x + box.width * 0.5, y: box.y + box.height / 2 });

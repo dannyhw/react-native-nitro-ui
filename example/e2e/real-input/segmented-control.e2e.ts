@@ -6,7 +6,10 @@ import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input segmented control';
 
-test('a real tap selects the segment under the finger', async ({ app, screen }) => {
+test('a real tap selects the segment under the finger', async ({
+  app,
+  screen,
+}) => {
   await app.open();
   await openScreen(screen, 'segmented');
   const control = screen.getByLabel(NAME);
@@ -23,7 +26,7 @@ test('a real tap selects the segment under the finger', async ({ app, screen }) 
   const box = await control.boundingBox();
   if (box == null || !(await isInBand(screen, box))) {
     throw new Error(
-      `real-input: the SegmentedControl has no box to aim at; it reads ${JSON.stringify(box)}.`,
+      `real-input: the SegmentedControl has no box to aim at; it reads ${JSON.stringify(box)}.`
     );
   }
   await screen.tapAt({ x: box.x + box.width * 0.5, y: box.y + box.height / 2 });
