@@ -11,7 +11,7 @@ node scripts/gate.mjs real-input:android --control slider
 
 `scripts/real-input/android.mjs` owns the device, the stamped APK, Metro and the
 private agent-device daemon; this directory owns the checks. Nothing here drives a
-device outside the driver to *drive* it — no `adb input`, no `am` — and nothing
+device outside the driver to _drive_ it — no `adb input`, no `am` — and nothing
 here asks a model what to do next: `agent.act` and `agent.assert` are not used,
 because a gate that depends on a model is not a gate. `retries` is 0 — a flaky check
 is fixed or reported, never retried green.
@@ -41,7 +41,7 @@ which no harness test in `example/__tests__` covers:
    states the audit found on the wrong node (G15, G16, G23, G24, G31). An in-app
    query cannot see a hosted control's name at all: Compose publishes it on a
    `SemanticsNode`, not a `View`. Two readings, because the driver's snapshot
-   normalises the flags away: `reader.ts` asks whether the reader is *told* the
+   normalises the flags away: `reader.ts` asks whether the reader is _told_ the
    state, and `os-tree.ts` asks what the tree says on the node a finger lands on —
    `checked`, `enabled`, the selection of a group and the Android class a role
    reaches the tree as. `a11y-sweep.e2e.ts` then runs the whole
@@ -65,14 +65,14 @@ One `<control-id>.e2e.ts` per row of `scripts/real-input/controls.mjs` — the
 runner refuses a control with no file and a file with no control, so a control
 cannot leave the suite unnoticed. Shared parts:
 
-| File                | What it is                                                          |
-| ------------------- | ------------------------------------------------------------------- |
-| `support.ts`        | tab navigation, the tappable band, echo readers                     |
-| `reader.ts`         | the screen-reader rule and its known-debt rows                      |
-| `keyboard.ts`       | keyboard geometry, measured from the resized content view           |
-| `press-feedback.ts` | pixels of a held press                                              |
-| `os-tree.ts`        | the same tree with its flags on, and the rule applied to it           |
-| `device-read.ts`    | the device reads the driver will not make, on the leased serial         |
+| File                | What it is                                                      |
+| ------------------- | --------------------------------------------------------------- |
+| `support.ts`        | tab navigation, the tappable band, echo readers                 |
+| `reader.ts`         | the screen-reader rule and its known-debt rows                  |
+| `keyboard.ts`       | keyboard geometry, measured from the resized content view       |
+| `press-feedback.ts` | pixels of a held press                                          |
+| `os-tree.ts`        | the same tree with its flags on, and the rule applied to it     |
+| `device-read.ts`    | the device reads the driver will not make, on the leased serial |
 
 ## Reading a failure
 
