@@ -2630,8 +2630,8 @@ async function buttonGroupChecks(t) {
     itemChecked(TOGGLES, 'Italic'),
     'off'
   );
-  // 5. The disabled pair: the group that is disabled, and the group with one
-  //    disabled item. Both report into one counter the enabled items never touch.
+  // The disabled pair: the group that is disabled, and the group with one disabled
+  // item. Both report into one counter the enabled items never touch.
   t.log.note(
     `disabled item: enabled=${
       itemOf(DISABLED_ITEM, 'Cut')?.enabled
@@ -2660,10 +2660,11 @@ async function buttonGroupChecks(t) {
     '0'
   );
   t.log.checkEquals(
-    'and nothing else answered: the counters are where step 2 left them',
+    'and nothing else answered: no action item was tapped here, so the press count ' +
+      'never moved and the toggles have reported exactly one change each way',
     `${t.requireEcho(ECHO.buttonGroupPresses)} ` +
       `${t.requireEcho(ECHO.buttonGroupToggleEvents)}`,
-    '3 2'
+    '0 2'
   );
 }
 
