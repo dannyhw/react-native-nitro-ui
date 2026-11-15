@@ -2,6 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
+import { textAnnounces } from './reader';
 
 test('a real tap opens the dialog, an action is reported before the close, and Back is gone with it', async ({
   app,
@@ -22,6 +23,11 @@ test('a real tap opens the dialog, an action is reported before the close, and B
   await opener.tap();
   const dialog = screen.getByTestId('dialog-alert-dialog');
   await dialog.waitFor({ state: 'visible' });
+  // The words are a child of the row Compose merges the action into, and that
+  // child reads enabled whatever the action is: the disabled one is only disabled
+  // on the node a tap actually lands on.
+  textAnnounces('Locked action', { enabled: 'false' });
+  textAnnounces('Delete draft', { enabled: 'true' });
   await dialog.getByText('Delete draft').tap();
   await expect(log).toContainText('action:delete');
   await dialog.waitFor({ state: 'detached' });

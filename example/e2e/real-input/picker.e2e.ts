@@ -2,9 +2,16 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { boxOf, drag, openScreen, reveal, textOf } from './support';
-import { actsOnOneNamedNode } from './reader';
+import {
+  actsOnOneNamedNode,
+  groupAnnounces,
+  textAnnounces,
+  treeAnnounces,
+} from './reader';
 
 const NAME = 'Real-input picker';
+const RADIO = 'Real-input radio picker';
+const LOCKED = 'Real-input disabled picker';
 
 test('a real tap opens the Picker and a real tap on a row reports it', async ({
   app,
@@ -21,10 +28,41 @@ test('a real tap opens the Picker and a real tap on a row reports it', async ({
   // while open are the harness's: `Picker.harness` and `HostPopups`.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('-');
+  // The node carrying the name is the node a tap is aimed at, and it reaches the
+  // tree as a list of choices rather than as text.
+  treeAnnounces(NAME, { role: 'android.widget.Spinner' });
+  const locked = screen.getByLabel(LOCKED);
+  await reveal(screen, locked);
+  treeAnnounces(LOCKED, { enabled: 'false' });
 
   await trigger.tap();
   await screen.getByText('Quartz').tap();
   await expect(index).toHaveText('1');
+
+  // The `radio` variant on the same screen: rows are the control, so the group is
+  // asked for one radio node per option and exactly one option holding the
+  // selection, and the row the finger lands on is asked for its own state — the
+  // row's words are a child node that says 'enabled' and 'not selected' whichever
+  // row it belongs to.
+  const radio = screen.getByLabel(RADIO);
+  const radioIndex = screen.getByTestId('real-input-radio-index');
+  await reveal(screen, radio);
+  await expect(radioIndex).toHaveText('-');
+  groupAnnounces(RADIO, { role: 'android.widget.RadioButton', options: 3 });
+  const flint = screen.getByText('Flint');
+  textAnnounces('Flint', {
+    checked: 'off',
+    role: 'android.widget.RadioButton',
+    flag: 'checkable',
+  });
+  await flint.tap();
+  await expect(radioIndex).toHaveText('1');
+  textAnnounces('Flint', {
+    checked: 'on',
+    role: 'android.widget.RadioButton',
+    flag: 'checkable',
+  });
+  groupAnnounces(RADIO, { role: 'android.widget.RadioButton', options: 3 });
 });
 
 test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async ({

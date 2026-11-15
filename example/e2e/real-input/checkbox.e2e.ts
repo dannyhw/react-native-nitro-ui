@@ -2,7 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
-import { actsOnOneNamedNode } from './reader';
+import { actsOnOneNamedNode, treeAnnounces } from './reader';
 
 const NAME = 'Real-input checkbox';
 
@@ -22,7 +22,16 @@ test('a real tap on the Checkbox reaches JS, on one named node', async ({
   // tree a reader walks and did not prevent it.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('off');
+  treeAnnounces(NAME, { checked: 'off' });
 
   await box.tap();
   await expect(value).toHaveText('on');
+  treeAnnounces(NAME, { checked: 'on' });
+
+  // The tap that unchecks is the one that matters: a box that only ever asked for
+  // `true` lights the "on" echo all the same, and only the node back at `off` says
+  // a second press asked for `false`.
+  await box.tap();
+  await expect(value).toHaveText('off');
+  treeAnnounces(NAME, { checked: 'off' });
 });

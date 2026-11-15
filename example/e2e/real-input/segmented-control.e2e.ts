@@ -2,7 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { isInBand, openScreen, reveal } from './support';
-import { actsOnOneNamedNode } from './reader';
+import { actsOnOneNamedNode, groupAnnounces } from './reader';
 
 const NAME = 'Real-input segmented control';
 
@@ -22,6 +22,9 @@ test('a real tap selects the segment under the finger', async ({
   // a corner probe late and passed for the wrong reason).
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('-');
+  // One node per option, one radio role per option, one option holding the
+  // selection: what a TalkBack swipe through the group is offered.
+  groupAnnounces(NAME, { role: 'android.widget.RadioButton', options: 3 });
 
   const box = await control.boundingBox();
   if (box == null || !(await isInBand(screen, box))) {
@@ -31,4 +34,7 @@ test('a real tap selects the segment under the finger', async ({
   }
   await screen.tapAt({ x: box.x + box.width * 0.5, y: box.y + box.height / 2 });
   await expect(index).toHaveText('1');
+  // The selection moved onto the segment the finger is on, and off the two it
+  // was not — a group that left two rows claiming it tells nobody where they are.
+  groupAnnounces(NAME, { role: 'android.widget.RadioButton', options: 3 });
 });

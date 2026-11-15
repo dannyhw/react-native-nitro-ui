@@ -613,3 +613,63 @@ export async function flick(
 }
 
 export { expect };
+
+/**
+ * How far down the right-hand gutter a page scroll travels.
+ *
+ * Not the middle of the page: the sweep scrolls every screen in the app, and in
+ * the middle of some of them a Material control owns the vertical gesture — the
+ * DatePicker screen's own calendar scroller turns a month instead of moving the
+ * page. The 8 px gutter belongs to no control.
+ */
+const GUTTER_X = 8;
+
+/** The content view's box, which is the page a scroll may travel. */
+async function contentBox(screen: Screen): Promise<Box> {
+  const content = await screen.getByTestId(CONTENT_ROOT).boundingBox();
+  if (content == null) {
+    throw new Error(
+      'real-input: the content view has no box, so a page scroll has nowhere to start.'
+    );
+  }
+  return content;
+}
+
+/**
+ * Scroll the page by a number of pixels, down the gutter: positive travels
+ * towards the bottom of the list, negative back towards its top.
+ *
+ * Booked in the same counter as {@link drag}, because it is the same kind of travel
+ * and {@link pageToTop} has to be able to undo it.
+ */
+export async function pageScroll(
+  screen: Screen,
+  pixels: number
+): Promise<void> {
+  const content = await contentBox(screen);
+  const x = content.x + content.width - GUTTER_X;
+  const from = content.y + Math.round(content.height * 0.7);
+  const stride = Math.min(Math.abs(pixels), Math.round(content.height * 0.4));
+  const to = from + (pixels < 0 ? stride : -stride);
+  await screen.swipe({ from: { x, y: from }, to: { x, y: to }, duration: 400 });
+  if (pixels > 0) downDrags += 1;
+  if (pixels < 0) downDrags = Math.max(0, downDrags - 1);
+}
+
+/**
+ * Bring the page back to its top, at the cost of the scrolls this test did going
+ * down — and no more than that when it never went down at all.
+ *
+ * A screen that is already at its top answers a scroll with nothing moving, and
+ * paying for eight of those per case is eight reads a run does not need.
+ */
+export async function pageToTop(screen: Screen): Promise<void> {
+  const back = Math.ceil(downDrags * 1.5) + 1;
+  for (let attempt = 0; attempt < back; attempt += 1) {
+    await pageScroll(
+      screen,
+      -Math.round((await contentBox(screen)).height * 0.8)
+    );
+  }
+  downDrags = 0;
+}

@@ -14,17 +14,28 @@
  * (audit A.1: G15, G16, G23, G24, G31), every one of them a name on one node and
  * a state on another, or a duplicate of the same control.
  *
- * What this file deliberately does *not* assert: whether the named node is
- * marked actionable. `A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs` carries
- * five Android rows — slider, segmented-control, stepper, hosted-slider,
- * hosted-segmented — whose reason is that the merged control's `RangeInfo` node
- * is not marked clickable in a `uiautomator dump` while the control answers a
- * real touch. That is the table's own debt to renegotiate, and this brief does
- * not touch its contents. So the suite proves these five controls by *touching*
- * them (their own test file drags or taps them and reads the echo) and proves
- * their name, box and value here, and asks nothing of the actionable flag.
+ * The actionable flag is part of the rule, and the five controls whose Android
+ * node is not marked actionable (the `RangeInfo` and plain-`View` rows of
+ * `A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs`) are exempted *by that table*,
+ * one row at a time, so every other control keeps the claim and a row that stops
+ * matching goes red. The exemption is reported as a printed finding rather than
+ * silently dropped: an exempted control passes, and the line says it passes on the
+ * debt row, not on the tree.
+ *
+ * That is the rule the a11y sweep runs, read here at the moment a person is about
+ * to act — `ruleFindings` calls into `a11y.mjs` rather than restating it — so a
+ * slid or duplicated name is caught before the gesture that would otherwise have
+ * looked like the control's problem.
  */
 import { expect, type Locator, type Screen } from 'e2e';
+
+import {
+  factsForItem,
+  factsForText,
+  groupFacts,
+  ruleFindings,
+  screenReaderFacts,
+} from './os-tree';
 
 /** The state a reader is told about the node, read off that node. */
 export type NodeState = 'enabled' | 'disabled' | 'checked' | 'unchecked';
@@ -93,6 +104,19 @@ export async function actsOnOneNamedNode(
         'rule exists for'
     ).toBe(true);
   }
+
+  // The tree's own answer, which the driver's normalised snapshot cannot give: is
+  // the node carrying the name one a person can act on. Recorded debt prints;
+  // anything the exemption table does not name is a failure, which is what keeps
+  // the table from becoming a place findings move to.
+  const findings = ruleFindings(options.name);
+  for (const problem of findings.known) {
+    console.log(`    WARN recorded debt: ${problem}`);
+  }
+  expect(
+    findings.failures,
+    'the accessibility tree does not put this control where a person can act on it'
+  ).toEqual([]);
 }
 
 /**
@@ -116,3 +140,150 @@ export async function nodeReports(
 }
 
 export { expect };
+
+/**
+ * What the tree itself says about the node a person acts on.
+ *
+ * The reader-facing state above is read through the driver's normalised snapshot,
+ * which has no `checked`, `selected` or role on it — and the node carrying a hosted
+ * control's name is not the node carrying its state. So this is a second, separate
+ * claim: not "the reader is told the box is checked" but "the node that would
+ * receive the tap says checked", which is the half that caught a toggle whose value
+ * lived on a decoration node nobody could reach.
+ *
+ * A fact the tree cannot answer at all (`null`) is a failure, not a pass: a control
+ * that stopped publishing its state would otherwise answer "checked: on" with
+ * silence and read as a control that never claimed to be checked.
+ */
+export function treeAnnounces(
+  name: string,
+  expected: {
+    checked?: 'on' | 'off';
+    enabled?: 'true' | 'false';
+    role?: string;
+  }
+): void {
+  const facts = screenReaderFacts(name);
+  if (expected.checked != null) {
+    expect(
+      facts.checked,
+      `"${name}" is not "${expected.checked}" on the node that holds its state: ${facts.detail}`
+    ).toBe(expected.checked);
+  }
+  if (expected.enabled != null) {
+    expect(
+      facts.enabled,
+      `"${name}" is not enabled="${expected.enabled}" on the node a person can ` +
+        `press: ${facts.detail}`
+    ).toBe(expected.enabled);
+  }
+  if (expected.role != null) {
+    expect(
+      facts.roles,
+      `"${name}" offers ${JSON.stringify(facts.roles)} as its Android role, which ` +
+        `has no "${expected.role}" in it — a screen reader announces whatever class ` +
+        `the state landed on instead: ${facts.detail}`
+    ).toContain(expected.role);
+  }
+}
+
+/**
+ * A control that is a group of options, read one node per option.
+ *
+ * `role` is the Android class the option's role has to reach the tree as, and the
+ * counts are the claim: one node per option carrying the selection, one role node
+ * per option, and exactly one option holding it.
+ */
+export function groupAnnounces(
+  name: string,
+  options: { role: string; options: number }
+): void {
+  const facts = groupFacts(name, options.role);
+  expect(
+    facts.items.length,
+    `"${name}" publishes ${String(facts.items.length)} node(s) that carry a ` +
+      `selection for ${String(options.options)} options — a person who asks for ` +
+      'the next option gets an option that is not there'
+  ).toBe(options.options);
+  expect(
+    facts.roles.length,
+    `"${name}" publishes ${String(facts.roles.length)} "${options.role}" node(s) ` +
+      `for ${String(options.options)} options — the rest are announced as whatever ` +
+      'class they happen to be'
+  ).toBe(options.options);
+  expect(
+    facts.selected,
+    `"${name}" has ${String(facts.selected)} option(s) claiming the selection; ` +
+      'exactly one may, or a screen reader cannot say where the finger is'
+  ).toBe(1);
+}
+
+/**
+ * The same facts, for a control the tree names with words instead of a label.
+ *
+ * A dialog action and a radio row are Compose rows: the words are a child of the
+ * node holding the state, and that child reports the same thing whether the row is
+ * disabled or not. `flag` says which node is the row's — the clickable one for an
+ * action, the checkable one for a selectable row.
+ */
+export function textAnnounces(
+  text: string,
+  expected: {
+    checked?: 'on' | 'off';
+    enabled?: 'true' | 'false';
+    role?: string;
+    flag?: 'checkable' | 'clickable';
+  }
+): void {
+  const facts = factsForText(text, expected.flag ?? 'clickable');
+  const said = `the node behind "${text}"`;
+  if (expected.checked != null) {
+    expect(
+      facts.checked,
+      `${said} is not "${expected.checked}": ${facts.detail}`
+    ).toBe(expected.checked);
+  }
+  if (expected.enabled != null) {
+    expect(
+      facts.enabled,
+      `${said} is not enabled="${expected.enabled}" — a person is offered a ` +
+        `press here either way: ${facts.detail}`
+    ).toBe(expected.enabled);
+  }
+  if (expected.role != null) {
+    expect(
+      facts.role,
+      `${said} reaches the tree as "${String(facts.role)}", not as ` +
+        `"${expected.role}" — a screen reader announces the wrong kind of control ` +
+        `here: ${facts.detail}`
+    ).toBe(expected.role);
+  }
+}
+
+/**
+ * The same facts for one item inside a named group.
+ *
+ * A merged row draws the item's title as a node of its own that carries no state,
+ * so the title is only the place the search starts.
+ */
+export function itemAnnounces(
+  groupLabel: string,
+  title: string,
+  expected: { checked?: 'on' | 'off'; enabled?: 'true' | 'false' }
+): void {
+  const facts = factsForItem(groupLabel, title);
+  const said = `the "${title}" item of "${groupLabel}"`;
+  if (expected.checked != null) {
+    expect(
+      facts.checked,
+      `${said} is not "${expected.checked}" on its own node — the echo can say ` +
+        `anything while the tree says this: ${facts.detail}`
+    ).toBe(expected.checked);
+  }
+  if (expected.enabled != null) {
+    expect(
+      facts.enabled,
+      `${said} is not enabled="${expected.enabled}" on its own node: ${facts.detail}`
+    ).toBe(expected.enabled);
+  }
+}

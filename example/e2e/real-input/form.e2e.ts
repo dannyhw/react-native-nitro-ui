@@ -3,10 +3,12 @@ import { expect } from 'e2e';
 
 import {
   boxOf,
+  drag,
   editableField,
   flick,
   openScreen,
   reveal,
+  tapBand,
   textOf,
 } from './support';
 import { actsOnOneNamedNode } from './reader';
@@ -69,7 +71,7 @@ test('a flick across a Form row scrolls the list and presses nothing (X32)', asy
   await expect(presses).toHaveText('0');
 });
 
-test('a field near the bottom of a Form stays above the keyboard (G24)', async ({
+test('a field the keyboard would cover is moved clear of it (G24)', async ({
   app,
   screen,
 }) => {
@@ -77,18 +79,27 @@ test('a field near the bottom of a Form stays above the keyboard (G24)', async (
   await openScreen(screen, 'form');
   const field = editableField(screen, 'Note');
   const focus = screen.getByTestId('form-field-focus');
-  await reveal(screen, field);
+  await revealLowInPage(screen, field);
 
   // G24 Android, twice in the excerpts: the focused field was left behind the
-  // keyboard. The field sits at the bottom of the Form's own list on purpose, so
-  // this is the shape the defect needed. `form-keyboard-inset` is an iOS-only echo
-  // — the Android measurement is the window's own `ime` inset, which is why this
-  // test runs under a real keyboard rather than the driver's headless one.
+  // keyboard. The claim is only worth making about a field that had somewhere to be
+  // covered, so the row is parked in the bottom of the page first and the premise is
+  // asserted below: a check that measures avoidance where nothing was ever hidden
+  // passes without measuring anything.
+  //
+  // `form-keyboard-inset` is an iOS-only echo. The Android measurement is the
+  // window manager's own `ime` inset, which is why this runs under a real keyboard
+  // rather than the driver's headless one, and why the witness that anything moved is
+  // the field's own box rather than a number the Form reports.
+  const beforeFocus = await boxOf(field);
+  if (beforeFocus == null) {
+    throw new Error(
+      'real-input: the Note field has no box to place under a keyboard.'
+    );
+  }
   await expect(focus).toHaveText('no');
   await withRealKeyboard(async () => {
     await focusField(field);
-    // Read between the tap and the keyboard: a field the tap never focused
-    // explains a missing keyboard, and the two failures need different fixes.
     const focused = await textOf(screen, 'form-field-focus');
     expect(
       focused,
@@ -96,7 +107,43 @@ test('a field near the bottom of a Form stays above the keyboard (G24)', async (
         `"${focused}" (the field's box is ` +
         `${JSON.stringify(await boxOf(field))})`
     ).toBe('yes');
-    await expectKeyboard();
+    const { keyboardTop } = await expectKeyboard();
+    expect(
+      beforeFocus.y + beforeFocus.height,
+      `the premise of this check is missing: the field's bottom sat at ` +
+        `${String(Math.round(beforeFocus.y + beforeFocus.height))} px, above the ` +
+        `keyboard's top at ${String(Math.round(keyboardTop))} px, so nothing was ` +
+        'ever covered and "it stayed above the keyboard" would be true of a Form ' +
+        'that does nothing at all'
+    ).toBeGreaterThan(keyboardTop);
     await fieldAboveKeyboard(field);
   });
 });
+
+/**
+ * Park a control low in its page, where the keyboard will reach it.
+ *
+ * `reveal` puts a control in the middle of the tappable band, which is the right
+ * answer for a tap and the wrong one for an avoidance check: the band reaches the
+ * bottom of the content view, and a control parked near the middle of it is already
+ * clear of a keyboard that only occupies the bottom of the screen.
+ */
+async function revealLowInPage(
+  screen: Parameters<typeof reveal>[0],
+  locator: Parameters<typeof reveal>[1]
+): Promise<void> {
+  await reveal(screen, locator);
+  for (let nudge = 0; nudge < 6; nudge += 1) {
+    const box = await boxOf(locator);
+    const band = await tapBand(screen);
+    if (box == null) return;
+    if (box.y + box.height > band.top + (band.bottom - band.top) * 0.8) return;
+    // The finger travels down, which is what carries the row down towards the
+    // bottom edge; a fling would overshoot and lift it out of the band instead.
+    await drag(
+      screen,
+      { x: box.x + box.width / 2, y: box.y },
+      { x: box.x + box.width / 2, y: box.y + 160 }
+    );
+  }
+}

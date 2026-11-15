@@ -11,15 +11,17 @@ node scripts/gate.mjs real-input:android --control slider
 
 `scripts/real-input/android.mjs` owns the device, the stamped APK, Metro and the
 private agent-device daemon; this directory owns the checks. Nothing here drives a
-device outside the driver — no `adb input`, no `uiautomator`, no `am` — and nothing
+device outside the driver to *drive* it — no `adb input`, no `am` — and nothing
 here asks a model what to do next: `agent.act` and `agent.assert` are not used,
 because a gate that depends on a model is not a gate. `retries` is 0 — a flaky check
 is fixed or reported, never retried green.
 
-Two _reads_ do go straight to the device, both because the driver's own route
-cannot answer them, both named and explained in
-`example/e2e/real-input/device-read.ts`: the window manager's `ime` inset, and one
-frame of the screen taken while a finger is down.
+Four _reads_ do go straight to the device, each because the driver's own route
+cannot answer it, each named and explained in
+`example/e2e/real-input/device-read.ts`: the window manager's `ime` inset, one
+frame of the screen taken while a finger is down, the accessibility tree as
+`uiautomator dump` serves it, and the density a dp number has to be judged
+against.
 
 ## What a test asserts
 
@@ -38,7 +40,14 @@ which no harness test in `example/__tests__` covers:
 2. **The screen-reader tree** — `reader.ts`, used by the controls whose names and
    states the audit found on the wrong node (G15, G16, G23, G24, G31). An in-app
    query cannot see a hosted control's name at all: Compose publishes it on a
-   `SemanticsNode`, not a `View`.
+   `SemanticsNode`, not a `View`. Two readings, because the driver's snapshot
+   normalises the flags away: `reader.ts` asks whether the reader is *told* the
+   state, and `os-tree.ts` asks what the tree says on the node a finger lands on —
+   `checked`, `enabled`, the selection of a group and the Android class a role
+   reaches the tree as. `a11y-sweep.e2e.ts` then runs the whole
+   `A11Y_CONTROLS` table over that same tree, one case per control, at the end of
+   every run; `scripts/real-input/a11y-sweep.mjs` is the rule, unchanged from the
+   driver era, and a run that does not produce its sweep is a red gate.
 3. **Keyboard avoidance** — `keyboard.ts`, for the text controls (G24: a focused
    field left behind the keyboard; G22: a popup placed under it).
 4. **Drawn press feedback** — `press-feedback.ts` (G30: a Form row that drew no
@@ -62,11 +71,12 @@ cannot leave the suite unnoticed. Shared parts:
 | `reader.ts`         | the screen-reader rule and its known-debt rows                      |
 | `keyboard.ts`       | keyboard geometry, measured from the resized content view           |
 | `press-feedback.ts` | pixels of a held press                                              |
-| `device-read.ts`    | the two device reads the driver will not make, on the leased serial |
+| `os-tree.ts`        | the same tree with its flags on, and the rule applied to it           |
+| `device-read.ts`    | the device reads the driver will not make, on the leased serial         |
 
 ## Reading a failure
 
-`e2e` writes a trace per attempt under `.real-input/android/results/<test>/`, and
-the run's JSON report to `.real-input/android/report.json`; both are artifacts,
+`e2e` writes a trace per attempt under `example/e2e/.e2e/android/results/<test>/`,
+and the run's JSON report to `example/e2e/.e2e/android/report.json`; both are artifacts,
 not the ledger — `gate.mjs` is the record. The trace names the step, the box it
 asked for, and the screen as the driver read it at the moment it failed.

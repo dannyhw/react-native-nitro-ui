@@ -61,6 +61,24 @@ const E2E_DIR = 'example/e2e';
 const TEST_SUFFIX = '.e2e.ts';
 
 /**
+ * Suite files that are not one control's check, and so are not keyed to a control.
+ *
+ * `a11y-sweep` is the whole-table accessibility pass: it belongs to every control
+ * and to no single one, which is why it reports as auxiliary lines rather than as a
+ * control that could be marked missing, green or red on its own.
+ */
+const AUXILIARY_FILES = ['a11y-sweep'];
+
+/**
+ * Where the sweep writes what each of its cases saw.
+ *
+ * The suite hands the pass to `runA11ySweep`, which logs one line per control; this
+ * file owns the ledger, so the pass reports into a file and the lines land beside
+ * every control's own results instead of only inside the e2e reporter's output.
+ */
+const A11Y_SWEEP_FILE = 'a11y-sweep.json';
+
+/**
  * Where an e2e run writes, relative to `example/e2e`.
  *
  * e2e refuses an `--output` outside its own project root, so the report and the
@@ -369,6 +387,74 @@ function recordResults(suite, controls, report) {
 }
 
 /**
+ * What the a11y sweep saw, one ledger line per case.
+ *
+ * The pass runs over the whole table at the end of the suite, so its verdict cannot
+ * be folded into any control's: a failure there is about the tree rather than about
+ * a press, and sharing a control's line would misattribute it. The file is the
+ * suite's own summary of the pass; a run that did not write it did not run the pass.
+ *
+ * @param {Suite} suite
+ * @param {string} file where the suite was told to write the sweep's results
+ * @returns {boolean} whether every case answered the rule
+ */
+function recordA11ySweep(suite, file) {
+  if (!fs.existsSync(file)) {
+    suite
+      .beginAuxiliary('a11y-sweep', 'the a11y sweep runs over every control')
+      .check(
+        `the suite wrote no ${path.basename(file)}, so the a11y pass over the ` +
+          'accessibility tree never ran — the rule is unchecked, not passed',
+        false
+      );
+    return false;
+  }
+  /** @type {{cases?: any[], covered?: string[], stale?: string[]}} */
+  let seen = {};
+  try {
+    seen = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    console.error(`real-input: could not read ${file}: ${String(error)}`);
+    return false;
+  }
+  const cases = Array.isArray(seen.cases) ? seen.cases : [];
+  if (cases.length === 0) {
+    suite
+      .beginAuxiliary('a11y-sweep', 'the a11y sweep runs over every control')
+      .check('the a11y pass reported no cases, which is not a pass', false);
+    return false;
+  }
+  let failures = 0;
+  for (const entry of cases) {
+    // The pass names its own cases `a11y:<control>`, which is the id the old
+    // driver's log printed; adding a prefix here would print it twice.
+    const log = suite.beginAuxiliary(
+      String(entry.id ?? 'unknown'),
+      String(entry.title ?? 'a11y case')
+    );
+    for (const note of entry.notes ?? []) log.note(String(note));
+    for (const warning of entry.warns ?? []) log.warn(String(warning));
+    for (const failure of entry.failures ?? []) {
+      log.check(String(failure), false);
+      failures += 1;
+    }
+    if ((entry.failures ?? []).length === 0) {
+      log.check('the tree answers the a11y rule', true);
+    }
+  }
+  for (const stale of seen.stale ?? []) {
+    suite
+      .beginAuxiliary(
+        'a11y:debt',
+        'the a11y debt list still describes this code'
+      )
+      .check(String(stale), false);
+    failures += 1;
+  }
+  return failures === 0;
+}
+
+/**
  * Stop the private agent-device daemon this run started, if it is still up.
  *
  * The tool's own shutdown, against the state dir this run owns: leaving it
@@ -433,12 +519,32 @@ async function main() {
   const e2eDir = path.join(repoRoot(), E2E_DIR, 'real-input');
   const fileIds = suiteFiles(e2eDir);
   for (const id of fileIds) {
-    if (!REAL_INPUT_CONTROLS.some((control) => control.id === id)) {
-      throw new Error(
-        `real-input: ${E2E_DIR}/real-input/${id}${TEST_SUFFIX} names no control in ` +
-          'scripts/real-input/controls.mjs. Either add the control to the table ' +
-          '(and an iOS check for it) or delete the file.'
-      );
+    if (
+      AUXILIARY_FILES.includes(id) ||
+      REAL_INPUT_CONTROLS.some((control) => control.id === id)
+    ) {
+      continue;
+    }
+    throw new Error(
+      `real-input: ${E2E_DIR}/real-input/${id}${TEST_SUFFIX} names no control in ` +
+        'scripts/real-input/controls.mjs. Either add the control to the table ' +
+        '(and an iOS check for it) or delete the file.'
+    );
+  }
+  for (const id of AUXILIARY_FILES) {
+    if (!fileIds.includes(id)) {
+      // The sweep used to be a call inside the driver and vanished with it, which
+      // cost the a11y rule its device and left three documents describing a pass
+      // that no longer ran. A missing sweep is a red gate, never a quiet one.
+      suite
+        .beginAuxiliary('a11y-sweep', 'the a11y sweep runs over every control')
+        .check(
+          `real-input: ${E2E_DIR}/real-input/${id}${TEST_SUFFIX} does not exist, ` +
+            'so the a11y rule has no pass over the tree and the conformance rule ' +
+            '"named on the node a person can act on" is not being checked',
+          false
+        );
+      return suite.finish();
     }
   }
   const wanted = controls.filter((control) => fileIds.includes(control.id));
@@ -483,10 +589,17 @@ async function main() {
   try {
     installAndPoint({ adb: adbRun, apk, metroPort });
     const { status, report } = runE2E({
-      files: wanted.map((control) => `${control.id}${TEST_SUFFIX}`),
-      env,
+      files: [
+        ...wanted.map((control) => `${control.id}${TEST_SUFFIX}`),
+        ...AUXILIARY_FILES.map((id) => `${id}${TEST_SUFFIX}`),
+      ],
+      env: {
+        ...env,
+        NITRO_UI_A11Y_SWEEP_FILE: path.join(out, A11Y_SWEEP_FILE),
+      },
     });
-    const allPassed = recordResults(suite, wanted, report);
+    const sweepPassed = recordA11ySweep(suite, path.join(out, A11Y_SWEEP_FILE));
+    const allPassed = recordResults(suite, wanted, report) && sweepPassed;
     if (!allPassed && status === 0) {
       console.log(
         'real-input: e2e exited 0 but a control did not pass — trusting the report.'

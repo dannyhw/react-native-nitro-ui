@@ -2,7 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
-import { actsOnOneNamedNode } from './reader';
+import { actsOnOneNamedNode, treeAnnounces } from './reader';
 
 const NAME = 'Real-input chip';
 
@@ -19,7 +19,9 @@ test('a real tap on a filter Chip reaches JS', async ({ app, screen }) => {
   // ("reverts a toggle JS refused", "takes no toggle while disabled").
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('off');
+  treeAnnounces(NAME, { checked: 'off' });
 
   await chip.tap();
   await expect(value).toHaveText('on');
+  treeAnnounces(NAME, { checked: 'on' });
 });

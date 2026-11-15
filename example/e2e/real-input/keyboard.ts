@@ -20,7 +20,7 @@
  *    the edge comes from the window manager's `ime` `InsetsSource`: the number
  *    the library itself has to honour. Reading it is the job
  *    `scripts/real-input/ime-frame.mjs` was written for, and that file is kept
- *    for this one call (audit X35: the check e2e cannot express).
+ *    for this one call: e2e has no route to an `InsetsSource`.
  *
  * `ime-frame.mjs` answers `null` for "this dump never mentioned a visible
  * keyboard" and never for "the keyboard is at the top", and its sample goes into
@@ -141,6 +141,17 @@ export async function withRealKeyboard<T>(body: () => Promise<T>): Promise<T> {
     }
     if (previousIme !== ime && previousIme != null) selectIme(previousIme);
   }
+}
+
+/**
+ * The keyboard's top edge, in device px, right now.
+ *
+ * Exported because a placement check has to judge a *second* box against the same
+ * edge the field was measured against, and read it once: two reads of the window
+ * manager around one gesture can answer with two different keyboards.
+ */
+export function keyboardTop(): number {
+  return requireKeyboardTop('while the popup was being measured,');
 }
 
 /** The keyboard's top edge, failing with the dump's own IME lines. */
