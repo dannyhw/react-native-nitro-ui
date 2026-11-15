@@ -1,44 +1,9 @@
 import XCTest
 
-/// Real-input checks: taps and drags synthesised by iOS, asserted only through
-/// text the app renders on screen.
-///
-/// ## Why this exists
-///
-/// `react-native-harness` drives these controls through the library's own test
-/// hooks, so it proves that Nitro's plumbing works. It has never proved that a
-/// touch delivered by the operating system reaches a hosted SwiftUI control
-/// inside a React Native app - and that is a known failure class for
-/// SwiftUI-in-RN, where React Native's touch handler can swallow touches meant
-/// for a hosted view. G2 also found a SwiftUI `Button` that ignored the
-/// harness's HID-less touch entirely, and `agent-device` could not tap anything
-/// on the iOS 27 simulator. XCUITest synthesises events through the simulator's
-/// own event path, so they arrive the way a finger's do.
-///
-/// Every assertion reads an on-screen `Text` by its accessibility identifier:
-/// what a person sees and VoiceOver announces. Nothing here reaches for a test
-/// hook, a Nitro callback or an in-app tracer, and nothing here patches the
-/// library - if a control does not answer a real touch, the check says so.
-///
-/// ## Adding a control
-///
-/// Add one `testRealInput<Id>` method here, one entry in
-/// `scripts/real-input/controls.mjs`, and one check in
-/// `scripts/real-input/android.mjs`. `bun run test:real-input:ios` fails if the
-/// shared table lists a control with no matching method in this file (and if
-/// this file has a method the table does not know), so a control cannot quietly
-/// drop out of the suite.
-///
-/// ## How elements are found
-///
-/// By `testID`, which React Native writes onto the component view as
-/// `accessibilityIdentifier` - including for a hosted control, whose SwiftUI
-/// view sits inside that component view. (Android has to use
-/// `accessibilityLabel` there instead: Compose publishes its own accessibility
-/// node, and React Native stores `testID` as a view tag, which is not part of
-/// the accessibility tree. See `scripts/real-input/uiautomator.mjs`.)
+/// Real-input checks: taps and drags synthesised by iOS, asserted only through text the app
+/// renders on screen. Elements are found by `testID`, which React Native writes onto the
+/// component view as `accessibilityIdentifier`.
 final class RealInputTests: XCTestCase {
-  /// The example app's tabs.
   private enum Tab {
     static let switchTab = "tab-switch"
     static let sliderTab = "tab-slider"
@@ -64,7 +29,6 @@ final class RealInputTests: XCTestCase {
     static let listItemTab = "tab-listitem"
   }
 
-  /// The on-screen echoes the checks read (`testID`s from `example/src`).
   private enum Echo {
     static let switchValue = "switch-controlled-value"
     static let buttonCount = "real-input-count"
@@ -119,7 +83,6 @@ final class RealInputTests: XCTestCase {
     static let stepperRefusedLast = "real-input-stepper-refused-last"
     static let stepperRefusedEvents = "real-input-stepper-refused-events"
     static let stepperDisabledEvents = "real-input-stepper-disabled-events"
-    // The ListItem screen's counters - the same testIDs `scripts/real-input/screens.mjs` names.
     static let listItemPresses = "real-input-listitem-presses"
     static let listItemLast = "real-input-listitem-last"
     static let listItemDisabledEvents = "real-input-listitem-disabled-events"
@@ -153,7 +116,6 @@ final class RealInputTests: XCTestCase {
     static let searchFocus = "search-focus-echo"
     static let searchNumber = "search-number-echo"
     static let searchEmail = "search-email-echo"
-    // The Form screen's counters - the same testIDs `scripts/real-input/screens.mjs` names.
     static let formScreenEcho = "form-screen-echo"
     static let formRowPresses = "form-row-presses"
     static let formInnerPresses = "form-inner-presses"
@@ -166,90 +128,39 @@ final class RealInputTests: XCTestCase {
     static let formListGeometry = "form-list-geometry"
   }
 
-  /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
-  ///
-  /// None of the three appears anywhere else on that screen, which is what lets a
-  /// label match name one row of a menu instead of some other text on screen. The
-  /// longest one is also the growth proof: choosing it paints a title much wider
-  /// than the one the control was measured with.
+  /// The three titles of `real-input-picker`. None appears anywhere else on that screen, so a
+  /// label match names one menu row; the longest is much wider than the title the control starts
+  /// with.
   private enum Choice {
     static let first = "Onyx"
     static let second = "Quartz"
     static let longest = "A considerably longer mineral name"
   }
 
-  /// How far the Slider's thumb sits from each end of the track at the extremes,
-  /// as a fraction of the track. SwiftUI keeps about half a thumb's width clear
-  /// at each end - roughly 4% of this app's 388pt track - so pressing at the raw
-  /// value would land beside the thumb rather than on it near the ends.
+  /// SwiftUI keeps about half a thumb's width clear at each end of the Slider's track (about 4%
+  /// of it here), so near the ends a press at the raw value would land beside the thumb.
   fileprivate static let thumbInset: CGFloat = 0.04
 
-  /// How long a synthesized press is held, for every tap this suite delivers.
-  ///
-  /// Measured, not guessed: `docs/tasks/F1/dwell-probe.md` presses the Switch screen
-  /// at 0, 0.03, 0.05, 0.08, 0.12 and 0.15 s, twelve times each, calm and loaded, and
-  /// reads the control's own native `value:` as the witness. Delivery is 0/12 to 1/12
-  /// at zero dwell, 1/12 to 7/12 across 0.03-0.08 s, and 12/12 at 0.12 s and at 0.15 s.
-  ///
-  /// It stays at 0.15 s rather than dropping to the measured floor of 0.12 s for one
-  /// reason: nothing reliable exists below it, so the value is a choice inside a band
-  /// the product question decides (a person's quick tap is *inside* the dropped band -
-  /// see the report's Questions section), and 0.15 s is the value every green run of
-  /// this suite on this branch used. Shortening it is a one-line change the answer to
-  /// that question should drive, and the retry counts now printed in the gate log (F1
-  /// M2) will say immediately if it was the wrong one.
+  /// How long every synthesized press is held. Hosted controls drop most presses shorter than
+  /// about 0.12 s.
   fileprivate static let pressDwell: TimeInterval = 0.15
 
   /// A debug build loads its bundle from Metro, so the first render is not
   /// instant - especially on a machine running several tasks at once.
   private let firstRenderTimeout: TimeInterval = 120
-  /// How long a control gets to react to a gesture it should have answered.
   private let reactTimeout: TimeInterval = 8
 
-  /// How long a tab bar gets to bring a tab into the window (X34 item 4).
-  ///
-  /// Generous on purpose, and bounded on purpose too. A read of `XCUIElement.frame` is a round trip
-  /// into the test manager and costs seconds on a loaded box, and a drag is slower still, so the old
-  /// eight-drag loop could already spend tens of seconds here when it was healthy — the number was
-  /// never a time budget, it was a guess at a count. Sixty seconds is a bound a task can live inside
-  /// (it is less than two `reactTimeout`s of a suite that has fourteen tab navigations to make) and it
-  /// is the difference between "this case could not reach its tab" and "this run stopped waiting".
+  /// How long a tab bar gets to bring a tab into the window. A time budget rather than a drag
+  /// count: a frame read or a drag can each cost seconds on a loaded machine.
   private static let revealTabDeadlineMs = 60_000
 
   private var app: XCUIApplication!
 
   override func setUpWithError() throws {
     try super.setUpWithError()
-    // One fresh app per test method, so every counter starts at zero and a
-    // failure in one control cannot be explained away by the one before it.
+    // One fresh app per test method, so every counter starts at zero.
     continueAfterFailure = false
     app = XCUIApplication()
-    // The dwell probe's knobs (F7), forwarded to the app by name. A list rather
-    // than a chain of optionals: an earlier version of this block forwarded two of
-    // the three stall variables and not the third, and the result read as a clean
-    // "a busy main thread loses nothing" when in fact nothing had been stalled.
-    for key in [
-      "NUI_PROBE_UI",
-      "NUI_PROBE_ROWS",
-      "NUI_PROBE_STALL",
-      "NUI_PROBE_RESCUE",
-      "NUI_PROBE_WATCHDOG",
-    ] {
-      if let value = ProcessInfo.processInfo.environment[key] {
-        app.launchEnvironment[key] = value
-      }
-    }
-    if ProcessInfo.processInfo.environment["NUI_PROBE_UI"] != nil {
-      // The no-React-Native arm: the app built a probe window instead of a React
-      // Native one, so there is no tab bar to wait for. See `NitroUiProbe.swift`.
-      app.launch()
-      _ = try required(
-        "probe-button",
-        as: "the native probe's own button",
-        timeout: firstRenderTimeout
-      )
-      return
-    }
     app.launch()
     _ = try required(Tab.switchTab, as: "the example's tab bar", timeout: firstRenderTimeout)
   }
@@ -259,44 +170,15 @@ final class RealInputTests: XCTestCase {
     super.tearDown()
   }
 
-  /// The accessibility half of the suite: what a screen reader is told about each
-  /// control, read from the tree a screen reader walks.
-  ///
-  /// ## Why this is a real-input check and not an in-app one
-  ///
-  /// The in-app harness cannot answer the question at all, and on iOS it used to claim a
-  /// comparison that could not come out wrong. React Native copies an
-  /// `accessibilityLabel` prop onto its own component view (`RCTViewComponentView.mm:471`),
-  /// and the harness query finds a view by that same label (`ViewQueryHelper.mm:65`), so
-  /// the box it measured and the "labelled box" it measured were one and the same view —
-  /// `box == labelBox` for every control in its own log. The element *inside* the React
-  /// Native view, the one VoiceOver stops on, was never looked at from either side.
-  /// `uiautomator dump` is the accessibility tree on Android, and XCUITest walks it here.
-  ///
-  /// ## What this method does, and does not, decide
-  ///
-  /// It measures. One line per element per case, with the box React Native ended up with,
-  /// and `scripts/real-input/a11y.mjs` applies the rule to that — the same file the Android
-  /// sweep reads, so both platforms answer one rule out of one table (`A11Y_CONTROLS`),
-  /// and `scripts/__tests__/real-input-a11y.test.js` proves this file's case list has not
-  /// drifted from that table. Nothing here calls `XCTFail` for a failing case: a rule that
-  /// is decided in a log parser is a rule that can be shown red with a fixture, and the
-  /// one that decides a control's announcement has to be able to say *which* of its three
-  /// claims broke, in the same words on both platforms.
-  ///
-  /// The pass is its own method rather than a `testRealInput<Control>` on each control,
-  /// because it asserts nothing about behaviour: it needs no gestures, and a failure would
-  /// be blamed on whichever press sequence shared the case's log. It is selected by
-  /// `scripts/real-input/ios.mjs` the way `scripts/real-input/a11y-sweep.mjs` is run at the
-  /// end of the Android gate — after the controls, and reported as its own section, so the
-  /// control totals still mean "every control answered a real touch".
+  /// Prints what a screen reader is told about each control. It measures and never fails a
+  /// case: the runner's log parser applies the rule to the printed lines.
   func testRealInputA11y() throws {
     for one in A11yCase.all {
       do {
         try measure(one)
       } catch is RealInputCheckAborted {
-        // The runner reads the absence of a case's lines as a failure; aborting here keeps
-        // one screen that will not load from taking the other thirteen cases down with it.
+        // The runner reads a case with no lines as failed; continuing keeps one screen that
+        // will not load from stopping the other cases.
         continue
       } catch {
         print("real-input a11y case=\(one.id) | error | \(error)")
@@ -304,18 +186,8 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// The example's tab bar as touch targets: every tab, scrolled wholly into the window,
-  /// with the box a finger has to hit.
-  ///
-  /// It measures and does not decide, for the reason `testRealInputA11y` gives: the rule
-  /// (44 pt both ways, every tab `example/src/App.tsx` lists, each one reachable) lives in
-  /// `scripts/real-input/tab-targets.mjs`, which the Android suite decides from too, and
-  /// which `scripts/__tests__/real-input-tab-targets.test.js` proves red with fixtures. The
-  /// tabs are found by their `testID` prefix rather than listed here, so a tab the registry
-  /// adds is measured without an edit to this file, and a tab missing from the tree is
-  /// a tab the runner finds unmeasured.
-  ///
-  /// Each box is read until two consecutive reads agree (the reason is on `measure`).
+  /// Prints every tab's box once it is scrolled into the window; the runner's log parser
+  /// applies the size rule. Tabs are found by `testID` prefix rather than listed here.
   func testRealInputTabTargets() throws {
     let ids = app.descendants(matching: .any)
       .matching(NSPredicate(format: "identifier BEGINSWITH %@", "tab-"))
@@ -324,11 +196,7 @@ final class RealInputTests: XCTestCase {
     var seen = Set<String>()
     for id in ids where seen.insert(id).inserted {
       let tab = app.descendants(matching: .any)[id].firstMatch
-      // The word after `reached=` is part of the log format: `tab-targets.mjs` reads
-      // `reached=true|false` and nothing else, so the annotation below is load-bearing and
-      // `scripts/__tests__/real-input-tab-targets.test.js` asks for it by name. Inferred, this line
-      // printed the whole settlement outcome, the parser read no tab at all, and a passing pass
-      // reported 23 tabs as "never measured" (the real-input:ios run of 2026-11-13).
+      // The log parser reads `reached=true|false`, so this has to stay a `Bool`.
       let reached: Bool = revealTab(tab).satisfied
       var frame = tab.frame
       for _ in 0..<5 {
@@ -348,23 +216,12 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// One control's box, its tree, and the control's own name — as `a11y.mjs` expects.
-  ///
-  /// The tree is read until two consecutive reads agree (`A11yFrameStability`), not once. The
-  /// reason is measured, not theoretical: `a11y:switch` failed twice on maintainer-mac-1 with the
-  /// React Native wrapper's box at exactly ⅓ of the switch's own — every component divided by the
-  /// screen scale — and passed on a re-run of the same tree twenty minutes later. Deciding on a
-  /// single read of `XCUIElement.frame` reports whatever snapshot the test manager happened to be
-  /// holding. Agreement is with the previous read only: this never waits for the two boxes to
-  /// *match each other*, and a control whose boxes are stably wrong prints on the second read, the
-  /// finding intact.
+  /// Prints one control's box and tree. The tree is read until two consecutive reads agree: a
+  /// single read of `XCUIElement.frame` can return a stale snapshot.
   private func measure(_ one: A11yCase) throws {
     try goToTab(one.tab, showing: one.screenAnchor)
     bringIntoView(one.testId)
     let anchor = try required(one.testId, as: "the control \"\(one.testId)\"")
-    // One read is the wrapper plus its descendants, resolved afresh: the descendants query is
-    // re-run as well, so a subtree that gained or lost an element between reads is a disagreement
-    // the settle notices rather than a tree quietly measured twice in different shapes.
     func readCase() -> A11ySnapshot {
       A11ySnapshot(
         nodes: [A11yNode(element: anchor)]
@@ -381,15 +238,8 @@ final class RealInputTests: XCTestCase {
       confirmationNeeded: { $0.mergedChildrenInQuestion },
       read: readCase
     )
-    // Printed before the tree, so a reader sees the provenance of the boxes below it. The rule for
-    // *whether* to print is `A11yFrameStability.shouldReport`, next to the wait it describes, so the
-    // flap case below is proved on the host rather than by a device run that happens to be slow:
-    // two reads that agree add no line, which keeps fourteen healthy cases quiet and makes a line
-    // mean something. `firstAnchor*` is the box the old single-read pass would have decided on,
-    // which is the comparison worth having in a log: what one sample said, against what the settled
-    // tree says. An unsettled line says the comparison below rests on a tree that would not hold
-    // still - a measurement to discount, not a pass. `a11y.mjs` skips this line when it reads the
-    // elements, and reports it separately.
+    // Printed only when the reads disagreed. `firstAnchor*` is the box a single read would
+    // have reported.
     if A11yFrameStability.shouldReport(settled) {
       let firstBox = settled.first?.frames.first
       print(
@@ -404,10 +254,8 @@ final class RealInputTests: XCTestCase {
     }
     let nodes = settled.snapshot.nodes
     let anchorFrame = nodes[0].frame
-    // Key=value rather than one positional `|`-separated row, and the four frame numbers
-    // spelled out instead of interpolating a `CGRect`: Swift picks that description's shape
-    // and precision, and a parser that has to guess it is a parser that silently reads zero
-    // elements when the format moves. `a11y.mjs` reads these.
+    // The log parser reads these lines. The frame numbers are spelled out because the shape
+    // of a `CGRect`'s description is not ours to rely on.
     print(
       "real-input a11y case=\(one.id) kind=anchor id=\(one.testId) "
         + "x=\(anchorFrame.origin.x) y=\(anchorFrame.origin.y) "
@@ -416,9 +264,7 @@ final class RealInputTests: XCTestCase {
     )
     for node in nodes {
       print(
-        // The trait is quoted too: "segmented control" and "progress indicator" carry a
-        // space, and an unquoted one loses its second word — measured, which is how
-        // "announced as a segmented and not as a segmented control" reached a log.
+        // Quoted: a trait such as "segmented control" contains a space.
         "real-input a11y case=\(one.id) kind=node trait=\(quoted(node.traitName)) "
           + "enabled=\(node.enabled) hittable=\(node.hittable) "
           + "id=\(quoted(node.identifier)) label=\(quoted(node.label)) "
@@ -429,14 +275,8 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// Scroll until an element is inside the window, without failing when the screen will
-  /// not bring it in.
-  ///
-  /// Not `scrollIntoView`: that one fails a check whose control it could not reach, which
-  /// is right for a gesture about to be delivered and wrong here. An element React has
-  /// laid out below the fold still has an announcement to make, and the measurement is
-  /// honest where it is; what it cannot be is a scroll problem reported as a name missing.
-  /// Four steps is more than the deepest control on the Host screen needs.
+  /// Scrolls until an element is inside the window, without failing when the screen will not
+  /// bring it in: an element below the fold is still measured where it is.
   private func bringIntoView(_ identifier: String) {
     let node = app.descendants(matching: .any)[identifier].firstMatch
     guard node.exists else { return }
@@ -467,12 +307,8 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// The cases, in `A11Y_CONTROLS` order, with what this file needs to reach each one:
-  /// the `testID` to anchor on, the name to listen for, and the tab and echo that put the
-  /// control on screen. The names and ids belong to `scripts/real-input/a11y.mjs`, and
-  /// `scripts/__tests__/real-input-a11y.test.js` compares this list with that table so a
-  /// rename on one side is a failing test rather than a case that quietly measures a
-  /// control nobody asked about.
+  /// The cases, in the order of the shared table in `scripts/real-input/a11y.mjs`. A unit test
+  /// compares the two lists, so ids, testIDs and labels have to match that table.
   private struct A11yCase {
     let id: String
     let testId: String
@@ -537,42 +373,22 @@ final class RealInputTests: XCTestCase {
     ]
   }
 
-  /// One read of one control's whole tree — the snapshot the stability wait compares.
-  ///
-  /// Agreement is judged on `frames` **and** `identities`: the boxes in print order, and which
-  /// elements the tree actually holds. Boxes alone were not enough (X22) — React Native publishes
-  /// and withdraws a child accessibility element without moving a pixel, so two reads of two
-  /// different trees can agree on every frame and the pass prints whichever one it sampled. The
-  /// `context-menu` case read 5 elements on two branches and 3 on `main` on one simulator in one
-  /// day — byte-identical boxes, byte-identical component code — and 1 when it is the only case the
-  /// pass runs. Which other cases ran first is the only thing that changed.
-  ///
-  /// Everything else — `enabled`, `hittable`, the trait — is copied from whichever read settled,
-  /// and is deliberately not stability-checked: nothing has been observed to go wrong with them.
+  /// One read of one control's whole tree. Agreement is judged on frames and identities: React
+  /// Native can publish or withdraw a child accessibility element without moving a pixel.
   private struct A11ySnapshot {
     let nodes: [A11yNode]
 
     var frames: [CGRect] { nodes.map(\.frame) }
 
-    /// What the subtree contains: one string per element, trait + name + value. Not the box (that
-    /// is the frame question) and not deduplicated (the duplicates are what the sweep counts, so
-    /// `Grace Hopper` twice has to stay twice — see `A11yFrameStability.identitiesAgree`).
+    /// One string per element: trait, name and value. Not deduplicated, because the runner
+    /// counts duplicates.
     var identities: [String] {
       nodes.map { "\($0.traitName)|\($0.label)|\($0.valueText)" }
     }
 
-    /// Is this the shape where an accessibility **merge** is what a finding turns on?
-    ///
-    /// It is the shape `a11y:context-menu` exists to grade: the wrapper is a named element in its
-    /// own right and the tree *still* lists a differently named piece of text inside it. Either the
-    /// children really are stops of their own — the finding — or React Native has not finished
-    /// publishing the merged element, which is what the 4-stop reading looked like. A control whose
-    /// child text simply repeats its own name (`Button`, `Chip`, a Form row) is not in question:
-    /// merging it changes nothing about what is listed.
-    ///
-    /// Measured on today's example app, six of the pass's 22 cases answer yes (`picker`, `menu`,
-    /// `checkbox`, `hosted-picker`, `context-menu`, `form`), and each pays one extra read and one
-    /// window for it: ~+50 s on the whole a11y pass, against the 35-minute gate it sits inside.
+    /// True when the wrapper is a named element and the tree still lists differently named
+    /// text inside it: either the children are stops of their own, or React Native has not
+    /// finished publishing the merged element.
     var mergedChildrenInQuestion: Bool {
       guard let wrapper = nodes.first, !wrapper.label.isEmpty else { return false }
       return nodes.dropFirst().contains { node in
@@ -581,12 +397,8 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// One read of one accessibility element.
-  ///
-  /// Every property is a round trip to the test manager, so a check that reads the tree
-  /// twice sees the tree twice; this captures a subtree in one pass. The type is named the
-  /// way VoiceOver names it, because that word is what the rule asserts on and a raw enum
-  /// number in a log is a lookup table away from a wrong conclusion.
+  /// One read of one accessibility element. Every property is a round trip to the test
+  /// manager, so a subtree is captured in one pass.
   private struct A11yNode {
     let identifier: String
     let label: String
@@ -614,12 +426,8 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// An identifier, a name or a value, in quotes.
-  ///
-  /// All three can hold spaces — "Hosted switch 0" is the normal case — and the reader in
-  /// `scripts/real-input/a11y.mjs` splits on them, so an unquoted value would lose the
-  /// rest of the line. Quoting is the one shape that survives a label with a quote in it
-  /// too, because the escaping here is what `JSON.parse` on that end reads.
+  /// Quotes a value for the log. Names and values can hold spaces, and the log parser reads
+  /// the quoted form with `JSON.parse`.
   private func quoted(_ text: String) -> String {
     let escaped = text
       .replacingOccurrences(of: "\\", with: "\\\\")
@@ -627,24 +435,13 @@ final class RealInputTests: XCTestCase {
     return "\"\(escaped)\""
   }
 
-  /// An element type as the word a person hears, since VoiceOver says it before the
-  /// control's name. `.adjustable` is why this is a table and not a guess: the Slider vends
-  /// a `UIAccessibilityElement` whose only trait is `.adjustable`, and XCUITest reports
-  /// that element's type as `other` — measured, with its value alongside it, which is how
-  /// the rule tells it apart from a plain box that repeats a label.
+  /// An element type as the word VoiceOver says before the control's name.
   private static func traitName(_ elementType: XCUIElement.ElementType) -> String {
     switch elementType {
     case .button: return "button"
     case .slider: return "slider"
-    // `XCUIElementTypeSwitch` becomes the Swift case `switch`, which is a keyword, so it
-    // has to be written in backticks — the reason this table spells its names out rather
-    // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
     case .`switch`: return "switch"
     case .segmentedControl: return "segmented control"
-    // SearchField (G17): the first control in the table that is not one of the types
-    // this file was written for. Without the case the sweep printed the raw value —
-    // `announced as a type-45` — for a field XCUITest had already put in
-    // `app.searchFields`, so the failure was this table's, not the control's.
     case .searchField: return "search field"
     case .textField: return "text field"
     case .secureTextField: return "secure text field"
@@ -657,13 +454,6 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// A real tap must flip the hosted SwiftUI `Toggle` and bring the new value
-  /// back to React. The echo is React's own render, so it only changes if the
-  /// touch reached SwiftUI, SwiftUI told Nitro, and Nitro told JS.
-  ///
-  /// The tap is delivered twice, because a single change could also be an echo
-  /// that moved by itself: the control has to answer a second touch, the other
-  /// way, to have proved anything.
   func testRealInputSwitch() throws {
     try goToTab(Tab.switchTab, showing: Echo.switchValue)
     let control = try required("switch-controlled", as: "the controlled Switch")
@@ -687,10 +477,6 @@ final class RealInputTests: XCTestCase {
       "one real tap should flip the Switch, and React should render \"on\""
     )
 
-    // The second touch has to find the Switch where the app put it. A hosted
-    // control that leaves the row when its value changes cannot be tapped
-    // again, and that is worth naming instead of losing in a query error -
-    // `docs/tasks/T15-real-input.report.md` has the measurements.
     try assertStillInPlace("switch-controlled", startedAt: whereItStarted, after: "the first real tap")
 
     XCTAssertEqual(
@@ -706,43 +492,15 @@ final class RealInputTests: XCTestCase {
       "a second real tap should flip it back, so the check is not one fluke"
     )
 
-    // F7: the same screen, every press counted, no retries. See the phase's own
-    // comment for why this belongs to this check rather than to its own method.
     try assertBusyScreenDeliversEveryPress()
   }
 
-  /// Asserts that every press this suite delivers on the busy Switch screen arrives,
-  /// and calls it from `testRealInputSwitch`.
-  ///
-  /// `testRealInputSwitch` presses the same screen through `tapUntilValue`, which taps
-  /// up to three times and passes if any one of them lands. That is the right shape
-  /// for a functional check and the wrong shape for this question: F7 measured this
-  /// screen losing a 50 ms press roughly every time, so a check that taps until one
-  /// works cannot see a screen that drops most of what it is given. Here each press is
-  /// delivered once and has to count, which is the property the suite's press length
-  /// rests on — `pressDwell` is a value the probe measured arriving, and if that ever
-  /// stopped being true the suite would otherwise carry on passing by retrying its way
-  /// past a regression.
-  ///
-  /// The dwell is not a literal here. Inlining one would let this check drift from the
-  /// value every other press in the suite uses, and the two agreeing is the point: it
-  /// is `RealInputTests.pressDwell` that the probe measured, and `pressDwell` that
-  /// every other gesture in this file inherits.
-  ///
-  /// A phase of the Switch check rather than its own method because the runner's
-  /// coverage guard pairs every `testRealInput*` with a control row in
-  /// `scripts/real-input/controls.mjs`, and that table is generated from the component
-  /// manifests, so a check about a *screen* has no row to be paired with.
-  ///
-  /// - Note: Fails red if `pressDwell` is lowered into the band F7 measured as dropped,
-  ///   and red if the screen stops being the busy one. Both are shown in
-  ///   `docs/tasks/F7-quick-tap.report.md`'s red proofs; the second is the one that
-  ///   keeps this check honest, because a calm screen passes it for the wrong reason.
+  /// Every press on the busy Switch screen must arrive: each is delivered once, with no retry.
+  /// A phase of the Switch check rather than a method of its own, because the runner pairs
+  /// every `testRealInput*` method with a control and this check is about a screen.
   private func assertBusyScreenDeliversEveryPress() throws {
-    // Counted as Switch elements, not as testIDs beginning `switch-list-`. The
-    // distinction is what makes this a precondition at all: probe variant 6 mounts 200
-    // rows carrying exactly those testIDs and exactly zero Switches, so an ID count
-    // would have called that screen busy and let the guard measure 200 plain boxes.
+    // Counted as Switch elements rather than by testID, so a screen of plain boxes carrying
+    // the same testIDs does not pass for the busy one.
     let switches = app.descendants(matching: .switch).count
     XCTAssertGreaterThanOrEqual(
       switches,
@@ -756,14 +514,9 @@ final class RealInputTests: XCTestCase {
     let target = "switch-uncontrolled"
     var delivered = 0
     var unreadable = 0
-    // The dwell actually used, so a mutation of `pressOnce` cannot have the failure
-    // message go on quoting `pressDwell` and misreport what was pressed.
     var pressedAt: TimeInterval?
     for attempt in 1...Self.busyScreenPresses {
-      // A missing witness is a broken check, not a delivered press. `?? ""` here used to
-      // turn one into a delivery: the loop then compared `String?` against `""`, so a
-      // control that answered nothing at all satisfied "the value changed" twelve times
-      // and the guard passed on a screen where nothing was visible. Fail loudly instead.
+      // A missing reading is a broken check, not a delivered press.
       guard let before = nativeSwitchState(of: target) else {
         XCTFail(
           "\(target) published no switch value before press \(attempt) of "
@@ -773,10 +526,8 @@ final class RealInputTests: XCTestCase {
         )
         return
       }
-      // Delivered once, deliberately: `fingerTap` at the suite's dwell, no retry, no
-      // `tapUntilValue`. `scrollIntoView` is not called because this control sits at
-      // the top of the screen, above the list, and moving the page would change the
-      // hit-test workload this check exists to measure.
+      // No `scrollIntoView`: the control sits above the list, and moving the page would change
+      // the hit-test workload this check measures.
       guard let dwell = pressOnce(target) else {
         XCTFail(
           "\(target) could not be found before press \(attempt) of "
@@ -811,36 +562,18 @@ final class RealInputTests: XCTestCase {
         + "\(Self.busyScreenPresses) presses at \(pressedAtSeconds)s dwell. That is "
         + "the property every other tap in this file depends on; see "
         + "docs/tasks/F7-quick-tap.report.md for the measurements and "
-        + "docs/tasks/F1/dwell-probe.md for the tool that produced them."
+        + "docs/tasks/F1/dwell-probe.md for the study that made them (X37 "
+        + "removed the probe that wrote those lines; the reports are the record)."
     )
   }
 
-  /// How many mounted Switch elements make this "the busy screen", for the guard.
-  ///
-  /// The screen renders 200 rows plus the controls above them, so this is not the
-  /// interesting number; it is the guard's proof that it is not pressing a stripped
-  /// screen or a screen of plain boxes. It is not 200 because the tree exposes the
-  /// rows that are realised, and that count is not something a test should depend on.
-  /// It is well above the dozen-odd controls every other screen carries, which is
-  /// where F1 measured delivery already working at 30 ms.
+  /// Below the 200 rows the screen renders, because the tree exposes only the rows that are
+  /// realised, and well above the dozen or so controls every other screen carries.
   private static let busyScreenMinimumSwitches = 100
-  /// Presses the guard delivers. Twelve is what every F1 and F7 ladder cell used, so
-  /// a regression here can be compared with those tables press for press.
   private static let busyScreenPresses = 12
 
-  /// Delivers exactly one press, at the suite's dwell, and never a second one.
-  ///
-  /// Separate from `tap`/`tapUntilValue` because those exist to make a control answer;
-  /// this exists to count how often it does. A control that moved between the aim and
-  /// the press is the reason the element is looked up here rather than held across the
-  /// loop.
-  ///
-  /// Returns the dwell it pressed at rather than taking one silently from the call
-  /// site, so the guard's failure message can quote the length that was actually used:
-  /// the red proof for this check works by changing exactly that value, and a message
-  /// naming a constant the run did not press at would misreport the experiment.
-  /// Returns nil without pressing when the control cannot be found, which the guard
-  /// treats as a broken check rather than a dropped press.
+  /// Delivers exactly one press and returns the dwell it used, or nil without pressing when
+  /// the control cannot be found.
   private func pressOnce(_ identifier: String) -> TimeInterval? {
     guard let element = try? required(identifier, as: "the uncontrolled Switch") else {
       return nil
@@ -849,13 +582,6 @@ final class RealInputTests: XCTestCase {
     return RealInputTests.pressDwell
   }
 
-  /// What happened to one press, as read from the control's own value.
-  ///
-  /// Three states because two are not enough. `dropped` and `unreadable` look the same
-  /// to a boolean, and the difference is the whole reason the witness is the control's
-  /// native value: a control that has stopped publishing one reports every press as
-  /// "no change", which is a broken check, not a product bug. Collapsing them cost this
-  /// guard its first version, whose `?? ""` made a nil reading count as a delivery.
   private enum PressOutcome {
     /// The control's value moved away from where it started.
     case delivered
@@ -865,15 +591,9 @@ final class RealInputTests: XCTestCase {
     case unreadable
   }
 
-  /// Waits for the control's own value to move away from `before`.
-  ///
-  /// The window is the same short one the dwell probe uses: this measures whether the
-  /// touch reached the control, not whether React re-rendered, and a long window would
-  /// credit a press whose value arrived while the next was already being aimed.
-  ///
-  /// A reading of nil is never a change. The window ends `unreadable` only if *every*
-  /// reading was nil; a single real reading that matches `before` makes it `dropped`,
-  /// because then the control was answering and simply did not move.
+  /// Waits for the control's own value to move away from `before`. The window is short: it
+  /// measures whether the touch reached the control, not whether React re-rendered. A nil
+  /// reading is never a change; the outcome is `unreadable` only if every reading was nil.
   private func waitForNativeValueToChange(
     _ identifier: String,
     from before: String
@@ -892,567 +612,7 @@ final class RealInputTests: XCTestCase {
     return sawAnyReading ? .dropped : .unreadable
   }
 
-  /// Measures how long a synthesised press has to last before the busy Switch screen
-  /// delivers it, and prints the table.
-  ///
-  /// Not a check: nothing here asserts, and the suite's own coverage guard does not
-  /// see it, because its name does not start `testRealInput`. It exists because the
-  /// dwell `fingerTap` holds was justified by "a person's tap lasts tens of
-  /// milliseconds" while the value chosen was 150 ms and the only measurements were
-  /// 0 s (dropped) and 0.15 s (delivered). Whether a *human-scale* press is delivered
-  /// decides something this suite must not get wrong: if only a 150 ms press arrives,
-  /// a quick thumb on a real Switch in a busy list is dropped by the product, and no
-  /// test press should hide that.
-  ///
-  /// Run one dwell per launch, through the environment. Xcode forwards a variable to
-  /// the test runner when it is named `TEST_RUNNER_<NAME>` in its own environment, so
-  /// the probe reads `NUI_PROBE_DWELL` and is launched with:
-  ///
-  ///   TEST_RUNNER_NUI_PROBE_DWELL=0.05 TEST_RUNNER_NUI_PROBE_TAPS=12 \
-  ///     xcodebuild test-without-building \
-  ///       -only-testing:NitroUiExampleUITests/RealInputTests/testMeasureSwitchDwellDelivery ...
-  ///
-  /// `scripts/real-input/dwell-probe.mjs` does that for a ladder of dwells and writes
-  /// the table; `docs/tasks/F1/dwell-probe.md` is the last one it wrote.
-  ///
-  /// The witness is the control's own native `value:` - not an echo - because the
-  /// question is whether the touch reached the recogniser at all. Each dwell is
-  /// followed by the `js-toggle` row as a positive control: RN's own `Pressable`
-  /// taking the same press says the event path was alive for that launch, which is
-  /// what makes a run of drops a fact about the dwell rather than about a stalled app.
-  func testMeasureSwitchDwellDelivery() throws {
-    let env = ProcessInfo.processInfo.environment
-    // No default for the dwell: a probe that silently measures the wrong one is how
-    // a table of 0.00 s rows gets reported as a ladder.
-    guard let dwellText = env["NUI_PROBE_DWELL"], let dwell = Double(dwellText) else {
-      XCTFail(
-        "dwell-probe: NUI_PROBE_DWELL is not set to a number, so this run would press "
-          + "at some default dwell and print it as though it were the one asked for. "
-          + "Launch it as TEST_RUNNER_NUI_PROBE_DWELL=<seconds>."
-      )
-      return
-    }
-    let taps = env["NUI_PROBE_TAPS"].flatMap(Int.init) ?? 10
-    // Which control, and which screen it lives on. The busy/calm pair is the
-    // second half of the question: a dwell that arrives on a screen with a dozen
-    // controls and not on one with two hundred says the drop is about how much is
-    // mounted, not about the gesture alone - which changes what to do about it.
-    let target = env["NUI_PROBE_TARGET"] ?? "switch-uncontrolled"
-    let tab = env["NUI_PROBE_TAB"] ?? Tab.switchTab
-    let anchor = env["NUI_PROBE_ANCHOR"] ?? Echo.switchValue
-    // `native` (the default) reads the control's own `value:`; `echo:<testID>`
-    // reads a rendered text, for the controls that publish no value of their own -
-    // a Button's press count, a SegmentedControl's event count. Weaker, and named
-    // in the RESULT line so no one reads an echo row as a touch-only witness.
-    let witness = env["NUI_PROBE_WITNESS"] ?? "native"
-    let label = env["NUI_PROBE_LABEL"] ?? ""
-    // F7 measurement (a): press a fixed screen point with no accessibility lookup per
-    // press. See ``measureDeliveryWithoutLookups`` for what that settles and why the
-    // earlier shapes could not.
-    let noLookup = env["NUI_PROBE_NO_LOOKUP"] == "1"
-    // With `--no-lookup`, also ask XCTest not to wait for the app to be idle around
-    // each event. A separate flag because it is the second question: the first is
-    // whether the probe's own queries lose the press, the second whether XCTest's
-    // settle-before-posting does, and a cell that turned both off at once could not say
-    // which one changed the number.
-    let skipQuiescence = env["NUI_PROBE_SKIP_QUIESCENCE"] == "1"
-    let useEcho = witness.hasPrefix("echo:")
-    let echoID = useEcho ? String(witness.dropFirst("echo:".count)) : nil
-    // Where across the control to press, cycled one press per entry. A segmented
-    // control needs it: pressing the middle twice reports nothing the second time
-    // (that is the `Picker` binding's own rule), so only an alternating aim makes
-    // every press a fresh selection and the count a usable witness.
-    let fractions = (env["NUI_PROBE_FRACTIONS"] ?? "")
-      .split(separator: ",")
-      .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
-    // The no-React-Native arm (F7): the app launched a probe window instead of a
-    // React Native one, so there is no tab to visit and no `js-toggle` to press.
-    // The positive control there is the probe's own UIKit button.
-    let nativeOnly = env["NUI_PROBE_UI"] != nil
-    if nativeOnly {
-      // What the stall arm actually blocked for, read out of the app itself rather
-      // than assumed from the flag: a stall that never happened would otherwise be
-      // reported as "a busy main thread does not lose presses", which is the
-      // opposite fact. The probe window publishes it as an element's value.
-      let stallReport = echoText("probe-stall")
-      print(
-        "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) ui=\(env["NUI_PROBE_UI"] ?? "?") rows=\(env["NUI_PROBE_ROWS"] ?? "?") quiet=\(quiet) stall=\(env["NUI_PROBE_STALL"] ?? "-") \(stallReport.isEmpty ? "stall-report=-" : stallReport) label=\(label.isEmpty ? "-" : label)"
-      )
-      // Under a stall the arm is slow on purpose, so the witness has to be a count:
-      // a toggling value that is merely late to report is indistinguishable from one
-      // whose presses were lost, and the whole point of the arm is to tell those two
-      // apart. The probe window publishes its counters as plain numbers for this, and
-      // `--witness echo:<identifier>` picks any of them — which is how the rescue
-      // cell reads the recogniser's own firing count rather than the Toggle's state.
-      // Without a stall the original witnesses are kept, so the cells already
-      // measured stay comparable with this file's own earlier logs.
-      //
-      // The default counter follows the pressed control rather than being one
-      // constant, because that mistake was made and it produced a wrong result: an
-      // earlier `probe-inner-button` cell ran with no `--witness`, quietly read the
-      // *Toggle's* counter while pressing the *button*, and reported 0/12 for a
-      // control whose own counter said 12/12. Ask a control and it answers for
-      // itself, or the cell says nothing about the thing it pressed.
-      let counterForTarget: String? = {
-        if target == "probe-inner-button" {
-          return "probe-inner-count"
-        }
-        if target.hasPrefix("probe-toggle-") {
-          return "probe-toggle-count"
-        }
-        return nil
-      }()
-      let rowsReading: (String) -> String? = { _ in
-        if let echoID {
-          return self.publishedNumber(echoID)
-        }
-        if self.quiet, let counterForTarget {
-          return self.publishedNumber(counterForTarget)
-        }
-        return self.quiet
-          ? nil
-          : self.nativeSwitchState(of: target)
-      }
-      let buttonReading: (String) -> String? = quiet
-        ? { _ in self.publishedNumber("probe-button-count") }
-        : { element in
-            let node = self.app.descendants(matching: .any)[element].firstMatch
-            let shown = (node.value as? String) ?? ""
-            return shown.isEmpty ? nil : shown
-          }
-      let nativeDelivered = try measureDelivery(
-        target: target,
-        dwell: dwell,
-        taps: taps,
-        fractions: fractions,
-        reading: rowsReading
-      )
-      let positiveDelivered = try measureDelivery(
-        target: "probe-button",
-        dwell: dwell,
-        taps: quiet ? taps : 3,
-        fractions: fractions,
-        reading: buttonReading
-      )
-      print(
-        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(nativeDelivered)/\(taps) js-toggle=\(positiveDelivered)/\(quiet ? taps : 3)"
-      )
-      // Every counter the window publishes, read after the presses. One launch that
-      // reports them together is what turns "the recogniser fired" and "the control
-      // did not act" into one fact rather than two runs that have to be believed to
-      // agree; under a stall the two can only be compared if they were measured in
-      // the same launch, on the same frames, at the same block lengths.
-      let counters = [
-        "toggle-flips=\(publishedNumber("probe-toggle-count") ?? "?")",
-        "outer-button=\(publishedNumber("probe-button-count") ?? "?")",
-        "inner-button=\(publishedNumber("probe-inner-count") ?? "?")",
-        "recogniser=\(publishedNumber("probe-rescue-count") ?? "?")",
-      ]
-      print("real-input (ios): dwell-probe: counters \(counters.joined(separator: " "))")
-      return
-    }
-    try goToTab(tab, showing: anchor)
-    // The probe presses a control wherever it is now, and XCUITest taps a frame
-    // whether or not the screen can show it — so a control below the fold would be
-    // pressed in empty space and read as a lost touch. Same helper the suite's own
-    // checks use; it returns without scrolling when the control is already in the
-    // band a tap can land in, which is the case for every control at the top.
-    try scrollIntoView(target, as: "the control under the probe")
-    // The positive control lives on the Switch screen; on another tab, the check
-    // that the event path is alive is the screen's own anchor being there at all,
-    // which `goToTab` already proved by finding it.
-    let toggle = anchor == Echo.switchValue
-      ? try required("js-toggle", as: "the RN Pressable that flips the controlled Switch")
-      : nil
-    // A probe that cannot read its witness has not measured anything, and printing
-    // zeros for it would be worse than saying the witness is unreadable.
-    if !useEcho, nativeSwitchState(of: target) == nil {
-      XCTFail(
-        "dwell-probe: \(target) answers no native value, so delivery cannot be read "
-          + "from the control. The probe measures the touch, not React's render, and "
-          + "an echo would not tell a dropped press from a lost event. Pass "
-          + "NUI_PROBE_WITNESS=echo:<testID> to measure a rendered count instead."
-      )
-      return
-    }
-    // Which build of the busy screen Metro actually served. The mechanism matrix
-    // changes only JS, so a cell whose variant is not the one asked for would
-    // otherwise read as a result; this line is what lets it be thrown out.
-    let variant = echoText("probe-variant")
-    print(
-      "real-input (ios): dwell-probe: dwell=\(String(format: "%.2f", dwell))s taps=\(taps) target=\(target) tab=\(tab) witness=\(witness) quiet=\(quiet) label=\(label.isEmpty ? "-" : label) \(variant.isEmpty ? "variant=?" : variant)"
-    )
-
-    let noLookupReading: (String) -> String? = { identifier in
-      if let echoID {
-        let shown = self.echoText(echoID)
-        return shown.isEmpty ? nil : shown
-      }
-      _ = identifier
-      return self.nativeSwitchState(of: target)
-    }
-    // F7 measurement (a): the busy screen, the same press, and *no accessibility
-    // traffic of the probe's own* between presses, so that "a 50 ms press is lost" is
-    // separated from "the harness queried a two-hundred-control tree and waited for the
-    // app to settle immediately before pressing it". `--skip-quiescence` additionally
-    // asks XCTest not to wait for idle around the events at all.
-    if noLookup {
-      let skipped =
-        skipQuiescence
-        ? (skipQuiescenceChecksIfPossible() ?? "unavailable")
-        : "off"
-      // The aim comes from where the control is *now*, so this is after the scroll
-      // rather than at the top of the case. `scrollIntoView` returns without moving the
-      // page for a control already in the band a tap can land in, which is the case for
-      // every control at the top of this screen.
-      let frozen = try measureDeliveryWithoutLookups(
-        target: target,
-        dwell: dwell,
-        taps: taps,
-        reading: noLookupReading
-      )
-      // The idle wait's own footprint, so "XCTest still waits per event" is a measured
-      // number rather than a claim: a call that costs the dwell plus tens of
-      // milliseconds is XCTest settling the app before it posts the event, and the same
-      // cell with `--skip-quiescence` says what that wait was worth.
-      print(
-        "real-input (ios): dwell-probe: no-lookup shape skip-quiescence=\(skipped) call-ms \(describeTimings(frozen.pressMillis))"
-      )
-      // The positive control is pressed the same way or it proves nothing: a
-      // `probe-pressable` row that lands 12/12 *because it was resolved by identifier
-      // each press* would report a healthy launch while differing from the target in the
-      // one variable under test.
-      var controlDelivered = 0
-      var controlTaps = 0
-      if anchor == Echo.switchValue {
-        controlTaps = taps
-        controlDelivered = try measureDeliveryWithoutLookups(
-          target: "probe-pressable",
-          dwell: dwell,
-          taps: taps,
-          reading: { _ in
-            let shown = echoText("probe-press-events")
-            return shown.isEmpty ? nil : shown
-          }
-        ).delivered
-      }
-      print(
-        "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(frozen.delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
-      )
-      return
-    }
-
-    let delivered = try measureDelivery(
-      target: target,
-      dwell: dwell,
-      taps: taps,
-      fractions: fractions,
-      reading: { identifier in
-        if let echoID {
-          let shown = echoText(echoID)
-          return shown.isEmpty ? nil : shown
-        }
-        _ = identifier
-        return nativeSwitchState(of: target)
-      }
-    )
-
-    // Positive control, same launch, same press shape.
-    //
-    // The default shape presses `js-toggle`, which flips a boolean: three presses,
-    // each confirmed by the echo moving. The quiet shape cannot use it — an even
-    // number of flips looks like none when the witness is read once at the end — so
-    // there the control is `probe-pressable`, whose witness counts, pressed as many
-    // times as the target was. If that does not report every press, the launch was
-    // not healthy and the target's number says nothing.
-    var controlDelivered = 0
-    var controlTaps = 3
-    if let toggle {
-      if quiet {
-        controlTaps = taps
-        controlDelivered = try measureDelivery(
-          target: "probe-pressable",
-          dwell: dwell,
-          taps: taps,
-          fractions: [],
-          reading: { _ in
-            let shown = echoText("probe-press-events")
-            return shown.isEmpty ? nil : shown
-          }
-        )
-      } else {
-        for _ in 1...controlTaps {
-          let before = echoText(Echo.switchValue)
-          toggle.centre.fingerTap(duration: dwell)
-          let until = Date().addingTimeInterval(2)
-          while Date() < until {
-            if echoText(Echo.switchValue) != before {
-              controlDelivered += 1
-              break
-            }
-            Thread.sleep(forTimeInterval: 0.05)
-          }
-          Thread.sleep(forTimeInterval: 0.3)
-        }
-      }
-    }
-
-    print(
-      "real-input (ios): dwell-probe: RESULT target=\(target) dwell=\(String(format: "%.2f", dwell))s switch=\(delivered)/\(taps) js-toggle=\(controlDelivered)/\(controlTaps)"
-    )
-  }
-
-  /// Press one control `taps` times and report how many presses its witness says
-  /// arrived. Shared by the dwell probe's two arms (React Native's screen, and the
-  /// no-React-Native probe window) so the two are pressed identically and only the
-  /// app under the finger differs.
-  ///
-  /// Set by `NUI_PROBE_QUIET=1` to switch ``measureDelivery`` to the low-
-  /// interference shape described by ``measureDeliveryQuietly``.
-  private var quiet: Bool {
-    ProcessInfo.processInfo.environment["NUI_PROBE_QUIET"] == "1"
-  }
-
-  /// - Parameter reading: what the witness says right now, for one control. It is
-  ///   passed the identifier so the same closure can serve a control and the
-  ///   positive control.
-  private func measureDelivery(
-    target: String,
-    dwell: TimeInterval,
-    taps: Int,
-    fractions: [Double],
-    reading: (String) -> String?
-  ) throws -> Int {
-    if quiet {
-      return try measureDeliveryQuietly(
-        target: target,
-        dwell: dwell,
-        taps: taps,
-        fractions: fractions,
-        reading: reading
-      )
-    }
-    var delivered = 0
-    for index in 1...taps {
-      let before = reading(target)
-      // Re-aimed each press rather than pressing a coordinate held from the start:
-      // the app can lay the row out again while the probe runs, and a stale point
-      // would measure the empty space where the Switch used to be.
-      let element = try required(target, as: "the control under the probe")
-      if let fraction = fractions.isEmpty ? nil : fractions[(index - 1) % fractions.count] {
-        element
-          .atFraction(CGFloat(fraction))
-          .fingerTap(duration: dwell)
-      } else {
-        element.fingerTap(duration: dwell)
-      }
-      // "Delivered" is the witness moving. The wait is short on purpose: this
-      // measures the touch, not React's round trip, and a long window would credit
-      // a press whose value arrived while the next one was already aimed.
-      let until = Date().addingTimeInterval(1.5)
-      var moved = false
-      while Date() < until {
-        if reading(target) != before {
-          moved = true
-          break
-        }
-        Thread.sleep(forTimeInterval: 0.05)
-      }
-      if moved {
-        delivered += 1
-      }
-      print(
-        "real-input (ios): dwell-probe: tap \(index)/\(taps) \(before ?? "?") -> \(reading(target) ?? "?") delivered=\(moved)"
-      )
-      // Leave the app settled for the next press: an uncontrolled Toggle keeps its
-      // value, so a press that lands while the last one is still being painted would
-      // measure the app's queue rather than the gesture's shape.
-      Thread.sleep(forTimeInterval: 0.4)
-    }
-    return delivered
-  }
-
-  /// The same presses with the probe's own interference taken out of the run.
-  ///
-  /// The default loop above consults the witness up to thirty times per press, and
-  /// every consultation is an accessibility query that goes into the app under test
-  /// and is answered on its main thread. On a screen with two hundred mounted
-  /// controls that is a load the probe itself is imposing on the thing it is
-  /// measuring, and it is exactly the kind of thing that could turn "the press was
-  /// lost" into "the press was lost because I was asking too loudly".
-  ///
-  /// Here the probe reads the witness twice: once before the first press and once
-  /// after the last. A witness that counts (a rendered event count) then reports the
-  /// number of delivered presses directly, as a delta, with no polling at all and no
-  /// per-pass deadline that a slow-but-real delivery could miss. A witness that only
-  /// toggles can still say whether anything arrived, which is the weaker claim, and
-  /// is labelled as such by the caller passing a count witness whenever it has one.
-  ///
-  /// The trade is that this arm cannot say *which* press was lost, and it aims once
-  /// rather than re-aiming, so it is only valid while the control does not move.
-  private func measureDeliveryQuietly(
-    target: String,
-    dwell: TimeInterval,
-    taps: Int,
-    fractions: [Double],
-    reading: (String) -> String?
-  ) throws -> Int {
-    let before = reading(target)
-    let element = try required(target, as: "the control under the probe")
-    for index in 1...taps {
-      if let fraction = fractions.isEmpty ? nil : fractions[(index - 1) % fractions.count] {
-        element
-          .atFraction(CGFloat(fraction))
-          .fingerTap(duration: dwell)
-      } else {
-        element.fingerTap(duration: dwell)
-      }
-      print("real-input (ios): dwell-probe: quiet tap \(index)/\(taps) pressed")
-      Thread.sleep(forTimeInterval: 0.4)
-    }
-    // One read, after the last press has had time to be applied and rendered.
-    Thread.sleep(forTimeInterval: 1.0)
-    let after = reading(target)
-    print("real-input (ios): dwell-probe: quiet \(before ?? "?") -> \(after ?? "?")")
-    // A counting witness says exactly how many arrived.
-    if let start = Int(before ?? ""), let end = Int(after ?? "") {
-      return max(0, end - start)
-    }
-    // Anything else can only answer "did any of them land", and the caller's
-    // positive control is what keeps that honest.
-    return before == after ? 0 : 1
-  }
-
-  /// Turns off XCTest's own waiting-for-idle around each event, if it can.
-  ///
-  /// The point is to measure the harness rather than the app. `XCUIAutomation` posts
-  /// every event behind a pre-event quiescence check — `-[XCUIApplication
-  /// _waitForQuiescenceAsPreEvent:]`, which calls `-[XCUIApplicationProcess
-  /// waitForQuiescenceIncludingAnimationsIdle:isPreEvent:]` — and skips it only when
-  /// `-[XCUIApplicationProcess shouldSkipPreEventQuiescence]` says so, which returns bit 0
-  /// of that process's `_interactionOptions`. That bit is
-  /// `XCUIApplicationInteractionOptionSkipPreEventQuiescence`, and the only setter is
-  /// `-[XCUIApplication setCurrentInteractionOptions:]`, which forwards it to the current
-  /// process. Neither is declared in any header in this Xcode — the public
-  /// `XCUIApplication` has no interaction options at all.
-  ///
-  /// So this goes through key-value coding, which is the safe way to reach a scalar
-  /// setter that Swift cannot see: `setValue(_:forKey:)` finds that setter and unboxes the
-  /// number to `NSUInteger` itself, where `perform(_:)` would hand the callee a pointer
-  /// and let it read the low word as an integer. It is private API in a UI-test bundle,
-  /// behind an environment variable, and cannot be reached by a shipped target; and the
-  /// value is read back and printed, so if Apple renames it the cell reports
-  /// `skip-quiescence=unavailable` instead of pretending the wait was turned off.
-  ///
-  /// - Returns: what the app reports as its interaction options afterwards, or nil if the
-  ///   property is not there to set.
-  private func skipQuiescenceChecksIfPossible() -> String? {
-    let skipPreEvent = UInt(1 << 0)  // XCUIApplicationInteractionOptionSkipPreEventQuiescence
-    let skipPostEvent = UInt(1 << 1)  // XCUIApplicationInteractionOptionSkipPostEventQuiescence
-    let wanted = skipPreEvent | skipPostEvent
-    // Guarded by `responds(to:)` rather than left to key-value coding to report: an
-    // unknown key raises an Objective-C exception, which is a crash in this process, not
-    // a Swift error. If the selector is there, KVC finds that same accessor and unboxes
-    // the number to the scalar the setter wants.
-    let setter = NSSelectorFromString("setCurrentInteractionOptions:")
-    let getter = NSSelectorFromString("currentInteractionOptions")
-    guard app.responds(to: setter), app.responds(to: getter) else {
-      return nil
-    }
-    app.setValue(NSNumber(value: wanted), forKey: "currentInteractionOptions")
-    guard let back = app.value(forKey: "currentInteractionOptions") as? NSNumber else {
-      return nil
-    }
-    return back.uintValue == wanted ? "on(\(wanted))" : "refused(\(back.uintValue))"
-  }
-
-  /// end, with no accessibility lookup of the target between presses.
-  ///
-  /// This is F7 fix-round measurement (a), and it exists because every iOS number in
-  /// the report so far was produced by a loop that resolves the control by identifier
-  /// before each press. That resolution is an accessibility query into the app, answered
-  /// on the app's main thread, over a tree of two hundred controls — and XCTest
-  /// additionally waits for the app to go idle before it posts an event
-  /// (`-[XCUIApplication _waitForQuiescenceAsPreEvent:]`, which waits on
-  /// `-[XCUIApplicationProcess waitForQuiescenceIncludingAnimationsIdle:isPreEvent:]`,
-  /// both in `XCUIAutomation.framework`). So "the press was lost" has never been
-  /// separated from "the harness loaded the app's main thread immediately before
-  /// pressing it, and then waited for it to settle". Those two have completely
-  /// different answers about a real user's thumb, and no amount of quiet witness
-  /// reading separates them, because the lookup was never the witness — it was the aim.
-  ///
-  /// Here the aim is computed once: the target's frame centre, expressed as an offset
-  /// from the window's top-left, so each press re-resolves only the window (a
-  /// one-element query) rather than searching the tree for a control. The point is held
-  /// across the loop deliberately, which is also why this shape is only valid for a
-  /// control that does not move — a row that re-lays itself out mid-loop would be
-  /// pressed in the wrong place and read as another dropped press.
-  ///
-  /// What this arm cannot do is turn off XCTest's own per-event idle wait: the option
-  /// that skips it (`XCUIApplicationInteractionOptionSkipPreEventQuiescence`) is private
-  /// API with no public `XCUIApplication` surface in this Xcode, so the wait still
-  /// happens here. That is why the timings are measured and printed. A press whose
-  /// `press(forDuration:)` call takes far longer than the dwell did not fail to wait
-  /// for idle; it waited, and the number printed says how long, which is the difference
-  /// between "the idle wait is innocent" and "the idle wait never happened".
-  ///
-  /// - Returns: how many presses the witness says arrived, and the per-press wall-clock
-  ///   timings of the calls themselves.
-  private func measureDeliveryWithoutLookups(
-    target: String,
-    dwell: TimeInterval,
-    taps: Int,
-    reading: (String) -> String?
-  ) throws -> (delivered: Int, pressMillis: [Int]) {
-    let before = reading(target)
-    // Resolved exactly once, and only used to fix the point. After this line the
-    // element is dropped on purpose: holding it would let XCUITest re-query *it* on
-    // every press, which is the thing being taken out of the run.
-    let element = try required(target, as: "the control under the probe")
-    let window = app.windows.firstMatch
-    guard window.exists else {
-      XCTFail("dwell-probe: no window to aim from, so a fixed point cannot be computed")
-      return (0, [])
-    }
-    let targetFrame = element.frame
-    let windowFrame = window.frame
-    let aim = CGPoint(
-      x: targetFrame.midX - windowFrame.minX,
-      y: targetFrame.midY - windowFrame.minY
-    )
-    let frozen = window
-      .coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-      .withOffset(CGVector(dx: aim.x, dy: aim.y))
-    print(
-      "real-input (ios): dwell-probe: no-lookup aim x=\(String(format: "%.2f", aim.x)) y=\(String(format: "%.2f", aim.y)) (window \(String(format: "%.0f", windowFrame.width))x\(String(format: "%.0f", windowFrame.height)))"
-    )
-
-    var pressMillis: [Int] = []
-    for index in 1...taps {
-      let started = Date()
-      frozen.press(forDuration: dwell)
-      let elapsed = Int(Date().timeIntervalSince(started) * 1000)
-      pressMillis.append(elapsed)
-      print("real-input (ios): dwell-probe: no-lookup press \(index)/\(taps) call took \(elapsed)ms (dwell \(Int(dwell * 1000))ms)")
-      Thread.sleep(forTimeInterval: 0.4)
-    }
-    Thread.sleep(forTimeInterval: 1.0)
-    let after = reading(target)
-    print("real-input (ios): dwell-probe: no-lookup \(before ?? "?") -> \(after ?? "?")")
-    if let start = Int(before ?? ""), let end = Int(after ?? "") {
-      return (max(0, end - start), pressMillis)
-    }
-    return (before == after ? 0 : 1, pressMillis)
-  }
-
-  /// A real tap must toggle a Switch that sits inside a `<Host>`.
-  ///
-  /// On iOS a `<Host>` is the documented passthrough `View` while T17 runs, so this is
-  /// the regression the passthrough has to keep: the children of a Host are still
-  /// React Native's own views, laid out by React Native, and a finger's touch still
-  /// reaches them. On Android the same control has no view of its own and answers from
-  /// the Host's composition instead (`CHECKS['hosted-switch']`), which is why the check
-  /// is written twice rather than skipped - one contract, two mechanisms (D23).
+  /// On iOS a `<Host>` is a passthrough `View`: its children are still React Native's own views.
   func testRealInputHostedSwitch() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     let control = try required("host-switch-0", as: "the Switch inside the Host")
@@ -1491,8 +651,6 @@ final class RealInputTests: XCTestCase {
       "a second real tap should flip it back, so the check is not one fluke"
     )
 
-    // Two taps that each travelled the whole way: the screen counts the changes it
-    // accepted, so two taps must read as two changes and not as one lucky render.
     XCTAssertEqual(
       try read(Echo.hostEvents),
       "2",
@@ -1500,20 +658,6 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real tap must press the `Button` inside a Host, and a disabled one beside it
-  /// must stay unpressed.
-  ///
-  /// On iOS a Host is the documented passthrough (D23), so what this presses is the
-  /// same SwiftUI Button the unhosted `button` check presses, inside a plain React
-  /// Native container. That is a contract and not a skip: the app is promised one tree
-  /// to reason about, and this is the case that keeps that promise honest on the
-  /// platform that composes nothing. Android checks the other mechanism there — a
-  /// Button with no view of its own at all (`CHECKS['hosted-button']`).
-  ///
-  /// The counter is shared with the disabled Button and both are given `onPress`, so
-  /// the refusal means something: a library that let a disabled control answer would
-  /// move the number, and a screen that had stopped rendering is caught by the tap
-  /// that follows.
   func testRealInputHostedButton() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-button", as: "the Button inside the Host")
@@ -1559,15 +703,6 @@ final class RealInputTests: XCTestCase {
     XCTAssert(disabled.isHittable, "the disabled hosted Button should still be on screen")
   }
 
-  /// A real drag must move the `Slider` inside a Host, and the track it moves along
-  /// must be the Host's width rather than the Slider's own box.
-  ///
-  /// Same reasoning as the Button: on iOS this is the passthrough, so the check is
-  /// that the JSX a Host asks for renders and answers there, while Android reads the
-  /// same claim out of a shared Compose composition. The width half is the D24
-  /// `fillWidth` rule read through the frames React Native ends up with: on both
-  /// platforms a hosted child's frame is decorative, and here it happens to agree with
-  /// the drawing because a Slider fills whatever it is given.
   func testRealInputHostedSlider() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-slider", as: "the Slider inside the Host")
@@ -1580,8 +715,6 @@ final class RealInputTests: XCTestCase {
       "the hosted Slider should start where the screen says it does (echo: \(startEcho))"
     )
 
-    // A `fillWidth` control inside a Host has the Host's width, so it should read as a
-    // track: much wider than tall, and wider than the switch above it in the same box.
     let frame = control.frame
     XCTAssertGreaterThan(
       frame.width,
@@ -1608,25 +741,6 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Four kinds of control in one Host, each of which has to stay itself.
-  ///
-  /// A Host is a container, so the interesting question is not whether one control
-  /// answers - the checks above cover that - but whether a batch of different kinds
-  /// still behaves as five controls rather than one blob. Three things are read here,
-  /// all of them things a person or a screen reader would notice:
-  ///
-  /// 1. Every child is on screen, reachable, and in the order it was given.
-  /// 2. Each keeps its own sizing rule (D24): the linear controls are as wide as each
-  ///    other, the indicator is a small square, and none of them was stretched to match
-  ///    its neighbour.
-  /// 3. Pressing one child moves only what it owns: the Button in this Host moves the
-  ///    press count in the echo, and the switch and slider values beside it do not
-  ///    move. That is recomposition staying per-child rather than a whole-batch
-  ///    redraw, which is what a Host is supposed to preserve.
-  ///
-  /// Android reads the same three claims out of `uiautomator dump`, where the nodes
-  /// are Compose's own (`CHECKS['hosted-mixed']`); here they are the views React Native
-  /// lays out, because a Host is a passthrough on iOS.
   func testRealInputHostedMixed() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     let ids = [
@@ -1709,19 +823,6 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real tap must open the `DatePicker` inside a Host's presentation, and a real tap
-  /// on a day inside it must reach JS as a new instant.
-  ///
-  /// The Android case for this control is where the substance lives: a Compose dialog is
-  /// a window of the Host's own composition, and its OK, Cancel and Back presses cannot be
-  /// reached from the harness. On iOS a `<Host>` is the documented passthrough (D23), so
-  /// there is no separate window to inherit and this is the regression the passthrough has
-  /// to keep — the same JSX presenting the same calendar whether or not a `<Host>` is
-  /// wrapped around it, and the same two hops working: the field's button, then a day cell
-  /// inside the presentation, all the way back to React's controlled value.
-  ///
-  /// The day is chosen by the helper rather than named, for the reason `testRealInputDatePicker`
-  /// gives: picking the day the field already shows reports nothing by design.
   func testRealInputHostedDatePicker() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-datepicker", as: "the DatePicker inside the Host")
@@ -1754,24 +855,6 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real drag must move the thumb and report every phase.
-  ///
-  /// The phases Slider is uncontrolled and counts each callback separately, so a
-  /// missing `onSlidingStart` cannot hide behind an `onValueChange` that still
-  /// worked. The controlled Slider is dragged too: there the echo is React's own
-  /// state, so it proves the whole loop - touch → SwiftUI → Nitro → JS →
-  /// re-render → value back down to native - with nothing but a finger in it.
-  /// A real tap must select a segment of the `SegmentedControl` inside a Host.
-  ///
-  /// H2b's three popup-era controls are the first a Host has ever held that are not
-  /// `fillWidth`. On iOS a Host is the documented passthrough (D23), so this is the
-  /// same claim the `segmented` check makes one tab away - which is the point: the JSX
-  /// a Host asks for has to render and answer there too, or the passthrough is a story.
-  /// Android reads the identical claim out of a shared Compose composition.
-  ///
-  /// The echo is React's own render (`HostScreen`'s `popSegmented`), so it moves only if
-  /// the touch reached the control and JS accepted the new index. A second, different
-  /// segment is owed: a control that echoed once and froze would satisfy the first line.
   func testRealInputHostedSegmented() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-segmented", as: "the SegmentedControl inside the Host")
@@ -1812,17 +895,6 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real tap must open the `Picker` inside a Host, and a real tap on one of its rows
-  /// must reach JS.
-  ///
-  /// On Android this is the claim H2b exists to make (a Compose popup is a window of the
-  /// Host's own composition, opening under the row the Host drew). On iOS a Host is a
-  /// passthrough, so the menu is the one `testRealInputPicker` drives on its own tab -
-  /// and it has to be that here too: a `Picker` that loses its menu when the same JSX is
-  /// wrapped in a `<Host>` would be a passthrough that does not pass through.
-  ///
-  /// The three choices are `HostScreen`'s popup set. None of them appears anywhere else
-  /// on the screen, which is what lets a label match name a menu row.
   func testRealInputHostedPicker() throws {
     try goToTab(Tab.hostTab, showing: Echo.hostValue)
     try scrollIntoView("host-picker", as: "the Picker inside the Host")
@@ -1832,10 +904,7 @@ final class RealInputTests: XCTestCase {
       "the hosted Picker should show the index JS gave it"
     )
 
-    // 1. Opening. The rows exist only while the menu is open, which is also the witness
-    //    that the hosted anchor answered a real touch - so the press is repeated until
-    //    one is up, and "the anchor is deaf" stops being the first explanation offered
-    //    for a touch the simulator never delivered.
+    // The rows exist only while the menu is open, so the press is repeated until one is up.
     try tapUntilOption(
       "host-picker",
       as: "the Picker inside the Host",
@@ -1849,14 +918,11 @@ final class RealInputTests: XCTestCase {
       "opening a menu is not a choice - nothing may be reported until a row is tapped"
     )
 
-    // 2. The menu says which row it is showing: the mark is SwiftUI's own, so this is
-    //    what VoiceOver reads.
     XCTAssertTrue(
       optionRow("Beta").images.count > 0,
       "the current choice (\"Beta\") should carry the hosted menu's selection mark"
     )
 
-    // 3. Choosing something else.
     XCTAssertEqual(
       try tapOptionUntilValue(
         option: "Gamma",
@@ -1867,10 +933,8 @@ final class RealInputTests: XCTestCase {
       "2",
       "a real tap on a hosted menu row should reach JS as index 2"
     )
-    // The rows that are *not* the new choice can only exist while the menu is open. The
-    // chosen title stays after the pick, as the anchor's own text: measured, exactly one
-    // "Gamma" survives, and it is the anchor. Asking a closed menu for the title it is
-    // showing would read every closed menu as an open one.
+    // Waits on a row that is not the new choice: the chosen title stays on screen after the
+    // menu closes, as the anchor's own text.
     waitUntilOptionGone("Beta", "the hosted menu closing")
     XCTAssertEqual(
       optionLabels(containing: "Beta"),
@@ -1883,11 +947,7 @@ final class RealInputTests: XCTestCase {
       "the hosted anchor should show the choice that was just made"
     )
 
-    // 4. The way out that changes nothing: the row already chosen, which since the pick
-    //    above is Gamma rather than the row the menu first opened on. The menu closes
-    //    and no change is reported - the binding's own rule (G6), read here through a
-    //    Host. The witness that the menu reopened is a different row from the one being
-    //    tapped: while it is open both exist, and only one of them survives closing.
+    // Tapping the row already chosen closes the menu and reports no change.
     try tapUntilOption(
       "host-picker",
       as: "the Picker inside the Host",
@@ -1895,10 +955,8 @@ final class RealInputTests: XCTestCase {
       waitingFor: "the real tap that reopens the hosted menu"
     )
     _ = try waitForOption("Beta", "the hosted menu to reopen")
-    // The row tap here stays blind on purpose: its correct outcome is that *nothing*
-    // is reported, so there is no witness to wait for and a retry would press a
-    // closing menu a second time. What the helper above guarantees is only that the
-    // menu this tap lands in was really opened by a touch.
+    // Not retried: the correct outcome is that nothing is reported, so there is no state to
+    // wait on, and a second tap would press a closing menu.
     try waitForOption("Gamma", "the reopened hosted menu to list its current choice").fingerTap()
     _ = waitUntilOptionGone("Beta", "the hosted menu to close")
     XCTAssertEqual(
@@ -1918,8 +976,6 @@ final class RealInputTests: XCTestCase {
       "no gesture has happened yet, so no phase may be reported"
     )
 
-    // Half-way in: the thumb is exactly there for a Slider that starts at 0.5,
-    // and the thumb's inset cancels out at the centre of the track.
     phases.dragFromThumb(atValue: 0.5, toFraction: 0.9)
     _ = readUntil(Echo.sliderComplete) { $0 == "complete=1" }
     XCTAssertEqual(
@@ -1944,8 +1000,6 @@ final class RealInputTests: XCTestCase {
       "dragging right should land right of centre (echo: \(landedText))"
     )
 
-    // Back the other way, from wherever the first drag left the thumb - which is
-    // what the echo says, because that is what a person sees.
     phases.dragFromThumb(atValue: landed ?? 0.9, toFraction: 0.1)
     _ = readUntil(Echo.sliderComplete) { $0 == "complete=2" }
     XCTAssertEqual(
@@ -1973,16 +1027,6 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real tap must reach the hosted SwiftUI `Button`'s `onPress`, and a real
-  /// tap on a disabled one must not.
-  ///
-  /// This is the case the harness could never show: G2 found a SwiftUI `Button`
-  /// that ignored `react-native-harness`'s HID-less touch entirely, so the only
-  /// witness that counts is one the app renders after a touch that started
-  /// outside it. The two Buttons share one counter and both are given `onPress`,
-  /// so the disabled half says something: a library that let a disabled control
-  /// fire would move the number, and a counter that simply stopped rendering
-  /// would be caught by the tap that follows.
   func testRealInputButton() throws {
     try goToTab(Tab.buttonTab, showing: Echo.buttonCount)
     let control = try required("real-input-enabled", as: "the enabled Button")
@@ -2027,30 +1071,10 @@ final class RealInputTests: XCTestCase {
     XCTAssert(disabled.isHittable, "the disabled Button should still be on screen")
   }
 
-  /// A real tap must select the segment under the finger, and a selection the
-  /// app refuses must go back.
-  ///
-  /// The uncontrolled half is the plain claim: a touch at the middle of the
-  /// second segment makes React render `1`, and one at the first makes it render
-  /// `0`. Both echoes are React's own text, so they only move if the touch
-  /// reached SwiftUI's segmented `Picker`, SwiftUI told Nitro, and Nitro told JS.
-  ///
-  /// The controlled half is the harder one, and its witness is a count. The
-  /// parent keeps sending `selectedIndex={0}`, so after a tap on segment 2 the
-  /// control must snap back to segment 1 - and a snapshot of the screen cannot
-  /// prove that, because the screen looks identical before and after a snap. So
-  /// the check taps segment 2 *twice*: a control that had stayed on segment 2
-  /// would treat the second tap as a tap on the segment that is already chosen
-  /// and report nothing (that is the `Picker` binding's own rule, and the rule
-  /// Material 3's segment is given on Android). Two reported changes with the
-  /// parent's value never moving is therefore the snap-back.
   func testRealInputSegmentedControl() throws {
     try goToTab(Tab.segmentedTab, showing: Echo.segmentedIndex)
     let control = try required("real-input-segmented", as: "the uncontrolled SegmentedControl")
     let whereItStarted = control.frame
-    // A dash, not a `0`: the control is uncontrolled, so nothing has told JS its
-    // index and nothing should have. That is the claim worth making here, and the
-    // one both platforms can make the same way.
     XCTAssertEqual(
       try read(Echo.segmentedIndex),
       "-",
@@ -2058,8 +1082,7 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.segmentedEvents), "0", "no change should be reported before a touch")
 
-    // The three options are single digits, so the segments are the same width and
-    // the middle of the control is the middle segment on both platforms.
+    // The options are single digits, so the segments are the same width.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-segmented",
@@ -2076,8 +1099,6 @@ final class RealInputTests: XCTestCase {
 
     try assertStillInPlace("real-input-segmented", startedAt: whereItStarted, after: "the first real tap")
 
-    // A different segment, so a second change is owed: a control that reported the
-    // same index twice would also satisfy the line above by echoing once.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-segmented",
@@ -2092,7 +1113,6 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.segmentedEvents), "2", "two taps should report two changes")
 
-    // The refusing parent.
     XCTAssertEqual(
       try read(Echo.rejectValue),
       "0",
@@ -2118,8 +1138,8 @@ final class RealInputTests: XCTestCase {
       "the parent never accepted the change, so the index it sends is still 0"
     )
 
-    // The snap-back oracle, explained above: this tap can only be reported if the
-    // selection went back to the first segment.
+    // The parent keeps sending index 0, so a second tap on the same segment is reported only
+    // if the selection snapped back.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-segmented-reject",
@@ -2140,33 +1160,9 @@ final class RealInputTests: XCTestCase {
   }
 
 
-  /// A real tap must open the hosted SwiftUI `Picker`'s menu, and a real tap on a
-  /// row must bring the choice back to React.
-  ///
-  /// The claims here are the ones a test hook cannot make:
-  ///
-  ///  - Opening a menu reports no choice, and neither does tapping the row that is
-  ///    already chosen. Together those are the way out of a menu that changes
-  ///    nothing, which is what a person reaches for when they opened it by mistake.
-  ///  - The menu says which row is the current choice, in the way VoiceOver reads.
-  ///  - The box follows a title that no React render asked for. This picker is
-  ///    uncontrolled: choosing paints a wider title and re-renders nothing, so a
-  ///    frame that grew is the host's own measure signal (`core.md` §7) and one
-  ///    that did not is the bug a props-batched library ships.
-  ///  - A choice the parent refuses must go away. The echo cannot show that - the
-  ///    parent keeps sending index 0, so the screen looks the same before and after
-  ///    a snap - so the oracle is a *second* tap on the same row: it can only be a
-  ///    fresh choice if the refused one was rolled back.
-  ///
-  /// Measured on iPhone 17, because it decides every witness below: a `.menu`
-  /// Picker's list is presented inside the app's own window (one `Window`, an
-  /// `Other` over it), and its rows are SwiftUI's - `Cell` > `Button`, each labelled
-  /// with its option, the chosen one carrying a `checkmark` image. So rows are found
-  /// by the label a screen reader reads, not by `testID`, and "the menu is gone" is
-  /// "no element carries that row's text any more". A tap outside the list does not
-  /// close it: measured, a touch at the top of the screen falls through the overlay
-  /// and leaves the menu open, which is why the dismissal case here runs through a
-  /// row (`docs/tasks/G6-picker.report.md`).
+  /// A `.menu` Picker's list is presented inside the app's own window. Its rows are found by
+  /// label, the chosen one carries a `checkmark` image, and a tap outside the list does not
+  /// close it, so the menu is dismissed through a row.
   func testRealInputPicker() throws {
     try goToTab(Tab.pickerTab, showing: Echo.pickerIndex)
     let control = try required("real-input-picker", as: "the uncontrolled Picker")
@@ -2178,16 +1174,8 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.pickerEvents), "0", "no touch has happened yet, so no change may be reported")
 
-    // 0. The control for every claim made below about a presented menu.
-    //
-    //    Step 7 reads this screen's heartbeat while a menu is open, and that reading
-    //    is only evidence if the same screen is seen to beat when nothing is
-    //    presented. So watch it here, once, before anything is opened: it has to move
-    //    inside the window. (The first version of that reading took the anchor's
-    //    accessibility label, which says "Choice, Choice" whatever is selected - an
-    //    unfalsifiable witness this assertion is what keeps out. The second version
-    //    took a single pair of readings 4 s apart, which aliases with the 6 s
-    //    rotation - see `tickerBeat`.)
+    // The heartbeat is read again below while a menu is open. That reading only means
+    // something if the same screen is seen to beat with nothing presented.
     let beat = tickerBeat()
     print("real-input (ios): heartbeat with nothing presented: \(beat.readings)")
     XCTAssertTrue(
@@ -2195,9 +1183,7 @@ final class RealInputTests: XCTestCase {
       "the screen's own option ticker should repaint within 8s while nothing is presented (readings \(beat.readings)) - a heartbeat that does not beat here makes step 7's reading prove nothing"
     )
 
-    // 1. Opening. The rows exist only while the menu is open, which is also the
-    //    witness that the anchor answered a touch at all - so the press is repeated
-    //    until a row is up rather than asserted once and read as a deaf Picker.
+    // The rows exist only while the menu is open, so the press is repeated until one is up.
     try tapUntilOption(
       "real-input-picker",
       as: "the uncontrolled Picker",
@@ -2211,8 +1197,6 @@ final class RealInputTests: XCTestCase {
       "opening a menu is not a choice - nothing may be reported until a row is tapped"
     )
 
-    // 2. The menu says which row it is showing. The mark is the one SwiftUI puts on
-    //    the chosen row, so this is what VoiceOver reads, not a test-only attribute.
     XCTAssertTrue(
       optionRow(Choice.first).images.count > 0,
       "the current choice (\"\(Choice.first)\") should carry the menu's selection mark"
@@ -2223,23 +1207,14 @@ final class RealInputTests: XCTestCase {
       "a row that is not the choice should not carry it"
     )
 
-    // 3. The way out that changes nothing: tap the row that is already chosen. The
-    //    menu closes and no change is reported - the binding's own rule, and the
-    //    reason a person can leave a menu they opened by mistake.
-    //
-    //    The witness for *this* press is the menu going away, and it is a safe one to
-    //    retry: choosing the row that is already chosen reports nothing however often
-    //    it happens, so an attempt that follows a dropped tap cannot move the echo the
-    //    assertion below reads.
+    // Tapping the row already chosen closes the menu and reports no change, however often it
+    // happens, so this press is safe to retry.
     try pressUntil(
       named: "menu row \"\(Choice.first)\"",
       waitingFor: "the real tap on the row that was already chosen",
       press: { attempt in
-        // The first attempt insists the row is there, as this check always has. A
-        // later one does not: a row can legitimately have gone because the earlier
-        // tap *did* travel and the echo is merely slow, and pressing a menu that is
-        // on its way out would double-count a choice. Nothing to press, so just keep
-        // waiting for the value.
+        // On a retry the row may be gone because the earlier tap did land and the echo is
+        // slow. Pressing a menu on its way out would count a second choice.
         if attempt > 1 && !optionRow(Choice.first).exists {
           return
         }
@@ -2256,7 +1231,6 @@ final class RealInputTests: XCTestCase {
       "choosing the row that was already chosen reports nothing, and the anchor still shows what it started with"
     )
 
-    // 4. Choosing something else.
     try tapUntilOption(
       "real-input-picker",
       as: "the uncontrolled Picker",
@@ -2275,9 +1249,6 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.pickerEvents), "1", "one choice should report one change")
 
-    // 5. The box has to follow the title. React was never told the title changed, so
-    //    only the host's own re-measure can widen the frame - the one sizing signal
-    //    no props batch can carry.
     let after = try required("real-input-picker", as: "the uncontrolled Picker")
     XCTAssertTrue(after.isHittable, "the Picker should still be on screen after its own menu closed")
     let widthAfter = after.frame.width
@@ -2287,7 +1258,6 @@ final class RealInputTests: XCTestCase {
       "choosing a title much wider than the first should widen the control: it measured \(widthBefore) pt with \"\(Choice.first)\" and now paints \"\(Choice.longest)\" - a frame that did not grow means the host never re-measured an uncontrolled choice"
     )
 
-    // 6. A choice the parent refuses.
     XCTAssertEqual(
       try read(Echo.rejectValue),
       "0",
@@ -2315,14 +1285,9 @@ final class RealInputTests: XCTestCase {
       "the parent never accepted the change, so the index it sends is still 0"
     )
 
-    // The snap-back oracle, explained above: this tap is a fresh choice only if the
-    // refused one went back to what the parent keeps sending.
-    //
-    // The close is waited for rather than assumed. A row tap starts a dismissal that
-    // is still running for a moment, and a tap on the anchor that lands inside it is
-    // swallowed by the dismissing menu - measured here as this same reopen passing in
-    // one run and failing to open anything in a faster one. Waiting for the rows to
-    // leave also says something worth saying: choosing a row closes the menu.
+    // A second tap on the same row is a fresh choice only if the refused one was rolled back.
+    // The close is waited for first: a tap on the anchor that lands during the dismissal is
+    // swallowed by the closing menu.
     _ = waitUntilOptionGone("Ridge", "the refusing Picker's menu to close")
     try required("real-input-picker-reject", as: "the controlled Picker").fingerTap()
     try waitForOption("Ridge", "the refusing Picker's menu to reopen").fingerTap()
@@ -2333,36 +1298,14 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(try read(Echo.rejectValue), "0", "and the parent should still be refusing")
 
-    // 7. The leak case, three times: open a menu, then have React take the view away
-    //    underneath it. Nothing per-mount may attach to the view hierarchy without
-    //    releasing it (B1's rule), and a menu is the one thing a Picker puts outside
-    //    its own box. The menu is not a window of its own on iOS, so the reading is
-    //    the window count not moving plus the row's text leaving the tree; a menu that
-    //    outlived its control would leave both behind.
-    //
-    //    Two preconditions make that claim testable rather than theatrical, and both
-    //    are witnessed here rather than assumed:
-    //
-    //      - the press that arms the unmount landed. It is confirmed through the row's
-    //        own echo and re-tapped if the echo does not come. Pressing blind once cost
-    //        a red run whose only symptom was a Picker that survived, which is exactly
-    //        what this step reads as a leaked menu; the real cause was a synthesized
-    //        tap that never reached the button.
-    //      - the app is still doing its own work with a menu on screen. Step 0's
-    //        heartbeat is read again below, while the menu is open, and it moves: so
-    //        the unmount that follows is the app taking its own view away, not a
-    //        presentational technicality letting something through. (An earlier draft
-    //        of this step asserted the opposite - that the app is frozen behind a menu
-    //        - from a reading that was insensitive; the assertion now below is what
-    //        showed that up.)
+    // Opens a menu, then has React take the view away underneath it, three times. A menu is
+    // not a window of its own on iOS, so a leaked one would show as the window count moving
+    // or the row's text staying in the tree.
     let windowsWhileMounted = app.windows.count
     for cycle in 1...3 {
       if cycle > 1 {
-        // Same lesson as the press below it, on the button that brings the row back:
-        // an un-witnessed remount that never happened would make the armed press that
-        // follows read as a dead screen. The arm button is the witness - it is
-        // rendered in the same branch as the Picker, so seeing it says the row, and
-        // with it the Picker, is mounted again.
+        // The arm button renders in the same branch as the Picker, so seeing it says the
+        // Picker is mounted again.
         try pressUntil(
           named: "\"\(Echo.dropRemount)\"",
           waitingFor: "cycle \(cycle): the drop Picker to be mounted again",
@@ -2420,32 +1363,21 @@ final class RealInputTests: XCTestCase {
       )
     }
 
-    // 8. A disabled Picker refuses a real touch. Its options are 'Cinder'/'Mica'/
-    //    'Shale' and it is painted with 'Mica', so 'Cinder' can only be on screen as
-    //    an open menu's row - which makes it the witness for "no menu opened". The
-    //    words are ones no other row on this screen paints ('One' is not one of
-    //    them: the rotating list below shows it 200 times), and the ordinary picker
-    //    next to it, tapped the same way, is what turns that into a refusal rather
-    //    than a screen that stopped responding.
+    // The disabled Picker shows 'Mica', and no other row on this screen paints 'Cinder', so
+    // 'Cinder' can only be on screen as a row of its open menu.
     XCTAssertEqual(
       optionLabels(containing: "Cinder"),
       0,
       "no menu is open before this, so one option may not be on screen"
     )
 
-    // Both rows have to be reachable before anything here means anything: they
-    // render below the fold, and a tap that lands on empty space looks exactly like
-    // the refusal this step is looking for.
+    // Both rows render below the fold, and a tap that lands on empty space looks exactly like
+    // a refusal.
     try scrollIntoView("disabled-one", as: "the disabled Picker")
     try scrollIntoView("enabled-one", as: "the enabled Picker")
 
-    // SwiftUI's `.disabled(_:)` also marks the control not enabled, which is what
-    // lets VoiceOver refuse it too. The reading is taken on the hosted control
-    // rather than on the React Native view that hosts it: RN owns the wrapper's
-    // accessibility element, and a Hybrid View expresses `disabled` to the
-    // platform control rather than also speaking RN's own accessibility props.
-    // Android cannot make this claim at all yet (`HybridNitroUiPicker.kt`, and the
-    // report). Both readings are quoted so a red run says which element moved.
+    // Read on the hosted control rather than on the React Native view that hosts it:
+    // `disabled` is expressed by the platform control, not by the wrapper's accessibility props.
     let locked = try hostedControl(in: "disabled-one", as: "the disabled Picker")
     let open = try hostedControl(in: "enabled-one", as: "the enabled Picker")
     let lockedWrapper = try required("disabled-one", as: "the disabled Picker")
@@ -2465,10 +1397,6 @@ final class RealInputTests: XCTestCase {
       0,
       "a real tap on a disabled Picker should open nothing"
     )
-    // Retried, because this line is the second half of the claim above it: the
-    // enabled Picker opening is what turns "nothing appeared" into a *refusal*
-    // rather than a screen that answers nothing. A dropped tap here would otherwise
-    // fail as "the enabled Picker cannot present its list".
     try tapUntilOption(
       "enabled-one",
       as: "the enabled Picker",
@@ -2481,38 +1409,14 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real tap must open the `Menu`'s own presentation, a real tap on a row must
-  /// reach JS as a pick, and a disabled row must take none.
-  ///
-  /// This is the case the harness cannot see at all: it presses through
-  /// `nuiTestSelectRow`, which is the model's pick path, and no touch it injects has
-  /// ever opened a SwiftUI `Menu` (`G2-button.report.md` measured that for every
-  /// button style, and `Menu.harness.tsx` records the same refusal). So three claims
-  /// live only here, where the touch is a real HID event:
-  ///
-  /// 1. **The trigger's name is the one the library set.** `MenuContent.body` applies
-  ///    `.accessibilityLabel`, and the only tree that can show it is the one VoiceOver
-  ///    walks. The React Native wrapper carries the same string from its own
-  ///    `accessibilityLabel` prop, so the assertion has to aim at the hosted control
-  ///    inside it — reading the wrapper would pass with the SwiftUI modifier deleted.
-  ///    `hostedControl` is what reaches it, and the identifier check below is what
-  ///    refuses a reading that quietly fell back to the wrapper.
-  /// 2. **A real finger opens it**, which every comment in `HybridNitroUiMenu.swift`
-  ///    has so far only assumed.
-  /// 3. **A pick reaches JS and a disabled row does not**, with the twin row after it
-  ///    as the barrier — `onSelect` is the whole of the control's output on iOS, since
-  ///    D32 rules that a SwiftUI presentation reports no `onOpen`/`onClose`.
   func testRealInputMenu() throws {
     try goToTab(Tab.menuTab, showing: Echo.menuPick)
     let alpha = "Alpha"
     let bravo = "Bravo"
     let locked = "Locked row"
-    // The checkable row: a SwiftUI `Toggle` whose binding's setter is the pick, a
-    // different path from every `Button` row above (step 7 is for it).
+    // A SwiftUI `Toggle` row: its pick goes through the binding's setter, not a `Button`.
     let checkedRow = "Checked row"
 
-    // 1. The announcement, before anything is presented: the popup is another
-    //    window's tree once it is up, and the trigger is the only node worth reading.
     let anchor = try required("real-input-menu", as: "the Menu")
     let trigger = try hostedControl(in: "real-input-menu", as: "the Menu's trigger")
     XCTAssertNotEqual(
@@ -2546,8 +1450,6 @@ final class RealInputTests: XCTestCase {
       "no menu is open yet, so a row may not be on screen"
     )
 
-    // 2. A real tap opens it. The row is the witness that the press arrived, so the
-    //    trigger is pressed until one of its rows is up.
     try tapUntilOption(
       "real-input-menu",
       as: "the Menu trigger",
@@ -2555,25 +1457,14 @@ final class RealInputTests: XCTestCase {
       waitingFor: "the real tap on the trigger"
     )
     _ = try waitForOption(bravo, "the menu to open")
-    // The picture, because one claim here cannot be read from the accessibility tree:
-    // whether the trigger's `.buttonStyle` leaks into the rows. `styledMenu` sets a
-    // button style on the whole `Menu`, and an environment value reaches a presented
-    // menu's content too, so a row could have been drawn as a filled button inside the
-    // list. `Menu.harness.tsx` cannot see this at all (nothing it injects opens the
-    // menu) and an accessibility tree says nothing about chrome, so this screenshot is
-    // the measurement. It came back showing three plain system rows — the tinted
-    // trigger's capsule does not follow them — so no `.buttonStyle(.plain)` was added
-    // to `rowButton`, and this is the evidence for that. `docs/components/menu.md`
-    // makes the same claim from a screenshot; this keeps it re-measurable.
+    // A screenshot, because the accessibility tree cannot show whether the trigger's button
+    // style leaks into the rows.
     let openShot = XCUIScreen.main.screenshot()
     let openShotAttachment = XCTAttachment(image: openShot.image)
     openShotAttachment.name = "menu-open"
     openShotAttachment.lifetime = .keepAlways
     add(openShotAttachment)
-    // A per-run file too, in the process's own sandbox rather than a shared path:
-    // round 1 wrote `/tmp/g7b-menu-open.png`, which any concurrent task's run would
-    // overwrite. The copy this measurement is quoted from is committed at
-    // `docs/tasks/G7b/menu-open-ios.png`.
+    // Also written to the process's own sandbox, where a concurrent run cannot overwrite it.
     let openShotURL = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("g7b-menu-open.png")
     try? openShot.pngRepresentation.write(to: openShotURL)
@@ -2586,8 +1477,6 @@ final class RealInputTests: XCTestCase {
       "opening a menu is not a choice - nothing may be reported until a row is tapped"
     )
 
-    // 3. The row vocabulary, as the presentation publishes it: the row the group
-    //    disables is disabled to a screen reader too, and its twin is not.
     XCTAssertFalse(
       optionRow(locked).isEnabled,
       "a disabled row should report itself not enabled through accessibility, so VoiceOver "
@@ -2599,43 +1488,30 @@ final class RealInputTests: XCTestCase {
         + "refusal rather than a presentation that stopped answering"
     )
 
-    // 4. The disabled row takes no pick. Pressed once, deliberately: the correct
-    //    outcome is that nothing is reported, so there is no witness to retry towards.
-    //    The step after this one is what turns the silence into a refusal.
+    // Pressed once: the correct outcome is that nothing is reported, so there is no state to
+    // retry towards.
     try optionRow(locked).fingerTap()
     XCTAssertEqual(
       try read(Echo.menuPick),
       "-",
       "a real tap on the disabled row should report no pick"
     )
-    // Whether the menu survives that tap is SwiftUI's choice and nobody has written it
-    // down, so it is measured rather than assumed — and it has to be settled before the
-    // next press, for a reason the first run of this check found the hard way: this
-    // presentation is drawn *over* its own trigger, so pressing the trigger while the
-    // menu is still up presses whichever row happens to cover it. Measured here: the
-    // tap on the disabled row left the menu open, the next press landed on "Alpha", and
-    // the pick below came back as `select alpha > select bravo`. So the menu is put
-    // away, and away is waited for, before anything aims at the trigger again.
+    // SwiftUI may leave the menu open after that tap, and the menu is drawn over its own
+    // trigger: a press on the trigger while it is up lands on whichever row covers it. So the
+    // menu is closed, and seen to be closed, before the trigger is pressed again.
     let stayedUp = optionLabels(containing: locked) > 0
     print(
       "real-input (ios): menu: a real tap on the disabled row left the presentation "
         + (stayedUp ? "open" : "closed")
     )
     if stayedUp {
-      // Tapping away is the platform's own way out that cannot land on a row. The point
-      // is a quarter down the screen, which on `MenuScreen` is inside the page's
-      // description text: the real-input row is the first block under the title, so the
-      // popup hangs around y ≈ 0.4 of the screen and this point is above it and below
-      // the tab bar. That is a fact about the layout above this block, not a property of
-      // the coordinate: if anything is added to `MenuScreen` before the real-input Menu,
-      // 0.25 walks down onto a control and this tap stops being harmless. The assertion
-      // below catches that only as a stuck menu, so the layout above is the thing to
-      // keep in sync with this number.
+      // A quarter down the screen is inside the page's description text: above the popup and
+      // below the tab bar. Anything added to `MenuScreen` above the real-input Menu moves a
+      // control under this point.
       app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
       waitUntilOptionGone(locked, "the tap away from the menu to close it")
     }
 
-    // 5. The pick that does arrive.
     try tapUntilOption(
       "real-input-menu",
       as: "the Menu trigger",
@@ -2652,9 +1528,7 @@ final class RealInputTests: XCTestCase {
       "bravo",
       "a real tap on a menu row should reach JS as that row's id"
     )
-    // D32, in the form a reader can check against the same echo Android reads: iOS
-    // reports the pick and nothing else. `open`/`close` here would mean the library
-    // invented a presentation lifecycle SwiftUI never told it about.
+    // iOS reports the pick and nothing else: a SwiftUI presentation has no open or close event.
     XCTAssertEqual(
       try read(Echo.menuEvents),
       "select bravo",
@@ -2669,9 +1543,6 @@ final class RealInputTests: XCTestCase {
         + "went away by itself."
     )
 
-    // 6. The barrier for step 4: the same screen, the same popup, an ordinary row that
-    //    does report. A dropped tap cannot fake this - it is the same helper that
-    //    pressed the disabled row.
     try tapUntilOption(
       "real-input-menu",
       as: "the Menu trigger",
@@ -2695,11 +1566,8 @@ final class RealInputTests: XCTestCase {
       "two picks should report two picks, in order, with no open/close between them"
     )
 
-    // 7. The checked row. Its pick goes through the `Toggle` binding's setter
-    //    (`HybridNitroUiMenu.rowButton`), which the harness never reaches:
-    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
-    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
-    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    // `tapOptionUntilValue` re-presses only while the row is still up, so a retry cannot land
+    // a second pick.
     try tapUntilOption(
       "real-input-menu",
       as: "the Menu trigger",
@@ -2743,13 +1611,6 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - ContextMenu
 
-  /// A ContextMenu under a real finger (G16): a quick tap is the child's, a still hold
-  /// opens the menu and the child's `onPress` never fires for it, a row picks with
-  /// select before close, a drag that starts on it scrolls the page and opens nothing,
-  /// the innermost of two nested menus wins, and a disabled one leaves the hold to its
-  /// child. S3 measured each of these on a prototype (questions 1, 2 and 4); this is
-  /// the same reading on the shipped component, from the screen's own echo
-  /// (`ctx-echo`, React's counters, in a header the menu never covers).
   func testRealInputContextMenu() throws {
     try goToTab(Tab.contextMenuTab, showing: Echo.contextMenu)
     try contextMenuToTop()
@@ -2759,7 +1620,6 @@ final class RealInputTests: XCTestCase {
     // Off-centre: what is under the finger is the child, wherever it is pressed.
     let point = target.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
 
-    // 1. A quick tap presses the child once and opens nothing.
     var before = contextMenuEcho()
     point.fingerTap()
     var after = contextMenuEcho { $0["press"] == (before["press"] ?? 0) + 1 }
@@ -2767,8 +1627,6 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(after["press"], (before["press"] ?? 0) + 1, "a quick tap presses the child once")
     XCTAssertEqual(contextMenuEcho()["opens"], before["opens"], "and opens no menu")
 
-    // 2. A still hold opens it with no onPress; the pick reports select, then close; the
-    //    next tap presses once.
     for round in 1...2 {
       before = contextMenuEcho()
       point.press(forDuration: 1.0)
@@ -2799,7 +1657,6 @@ final class RealInputTests: XCTestCase {
       XCTAssertEqual(after["press"], (mid["press"] ?? 0) + 1, "hold \(round): a fresh tap presses once")
     }
 
-    // 3. A drag starting on the ContextMenu scrolls the page and opens nothing.
     before = contextMenuEcho()
     let from = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
     from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: -220)))
@@ -2810,7 +1667,6 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(optionLabels(containing: "Copy text"), 0, "nothing is on screen from a menu")
     try contextMenuToTop()
 
-    // 4. Nested: the inner ContextMenu's menu, not the outer's.
     before = contextMenuEcho()
     let inner = try contextMenuReveal("ctx-inner")
     inner.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0)
@@ -2824,8 +1680,8 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(after["inner"], (before["inner"] ?? 0) + 1, "the inner reports its open")
     XCTAssertEqual(after["outer"], before["outer"], "the outer reports none")
 
-    // 5. Disabled: no menu, and the hold stays the child's (a Pressable with no
-    //    onLongPress presses on release).
+    // Disabled: the hold stays the child's, and a Pressable with no `onLongPress` presses on
+    // release.
     before = contextMenuEcho()
     let disabled = try contextMenuReveal("ctx-disabled-target")
     disabled.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0)
@@ -2900,9 +1756,9 @@ final class RealInputTests: XCTestCase {
     return element
   }
 
-  /// Close an open context menu by tapping the dimmed area on the side away from its
-  /// rows, then wait out UIKit's dismissal (a hold that starts during it is ignored).
-  /// Not the top edge: S3 measured a tap in the status-bar band leaving the menu up.
+  /// Close an open context menu by tapping the dimmed area on the side away from its rows,
+  /// then wait out UIKit's dismissal (a hold that starts during it is ignored). Not the top
+  /// edge: a tap in the status-bar band leaves the menu up.
   private func contextMenuDismiss(rows: [String]) {
     let screen = app.frame
     let menuUp = { rows.contains(where: { self.optionLabels(containing: $0) > 0 }) }
@@ -2926,19 +1782,6 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - Chip
 
-  /// A real tap toggles a filter chip, a toggle the parent refuses snaps back, an
-  /// assist chip presses, and a disabled chip of either kind takes nothing (G12).
-  ///
-  /// This is also where the Chip's iOS accessibility is asserted: the SwiftUI hosting
-  /// view exposes no element to an in-app probe on iOS 27, so the harness cannot read
-  /// it, and XCUITest can. The filter chip's own element has to say it is selected
-  /// after a tap and not after the next one - read from the element's `value`, which
-  /// is what VoiceOver speaks, not from the echo.
-  ///
-  /// The refusing chip's oracle is the same as SegmentedControl's: its parent keeps
-  /// `selected={false}`, so each tap asks for `true` again. A chip that had kept the
-  /// refused selection would ask for `false` on the second tap, so two requests that
-  /// both say `true` are the snap-back.
   func testRealInputChip() throws {
     try goToTab(Tab.chipTab, showing: Echo.chipValue)
     let filter = try required("real-input-chip", as: "the controlled filter chip")
@@ -2952,8 +1795,6 @@ final class RealInputTests: XCTestCase {
       nativeChipState(of: "real-input-chip"), "off",
       "the filter chip's own element should start by announcing itself not selected")
 
-    // 1. On, then off: each tap is one change, the echo follows, and so does the
-    //    element VoiceOver reads.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-chip",
@@ -2986,8 +1827,6 @@ final class RealInputTests: XCTestCase {
       waitForChipState("real-input-chip", "off"), "off",
       "the deselected chip's element should stop announcing itself selected")
 
-    // 2. The refusing parent: two requests, both for `true`, and the chip still not
-    //    selected after either.
     for request in ["1", "2"] {
       XCTAssertEqual(
         try tapUntilValue(
@@ -3010,7 +1849,6 @@ final class RealInputTests: XCTestCase {
         "the refused chip should snap back to not selected after request \(request)")
     }
 
-    // 3. The assist chip presses once per tap.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-chip-assist",
@@ -3023,8 +1861,6 @@ final class RealInputTests: XCTestCase {
       "one real tap on the assist chip should reach onPress once"
     )
 
-    // 4. Neither disabled chip takes a tap. Both are wired to the same counters as
-    //    their enabled twins, so a stray delivery is a number that moved.
     XCTAssertFalse(
       chipElement(of: "real-input-chip-disabled")?.isEnabled ?? true,
       "the disabled filter chip's element should announce itself dimmed")
@@ -3038,8 +1874,6 @@ final class RealInputTests: XCTestCase {
       "a real tap on the disabled assist chip should be refused")
     XCTAssertEqual(try read(Echo.chipValue), "off", "the refused taps should leave the chip off")
 
-    // 5. The barrier: the same taps, on the enabled twins, still land - so the silence
-    //    above was a refusal and not a screen that stopped answering.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-chip-assist",
@@ -3056,13 +1890,12 @@ final class RealInputTests: XCTestCase {
   }
 
   /// The chip's own accessibility element: the SwiftUI control inside the React Native
-  /// component view that carries the `testID` - the same reason `nativeSwitchState`
-  /// asks the inner element first.
+  /// component view that carries the `testID`.
   private func chipElement(of identifier: String) -> XCUIElement? {
     let container = app.descendants(matching: .any)[identifier].firstMatch
     guard container.exists else { return nil }
-    // A filter chip's `Toggle(.button)` is reported as a switch (measured), an assist
-    // chip's `Button` as a button.
+    // A filter chip's `Toggle(.button)` is reported as a switch, an assist chip's `Button` as
+    // a button.
     for type in [XCUIElement.ElementType.`switch`, .button] {
       let inner = container.descendants(matching: type).firstMatch
       if inner.exists { return inner }
@@ -3071,8 +1904,8 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Whether the chip's element says it is selected, as "on"/"off", or nil when nothing
-  /// answers. The filter chip's element answers with `value` 1/0 (measured); a selected
-  /// button would answer with `isSelected`, so either counts.
+  /// answers. The filter chip's element answers with `value` 1/0; a selected button would
+  /// answer with `isSelected`, so either counts.
   private func nativeChipState(of identifier: String) -> String? {
     guard let element = chipElement(of: identifier) else { return nil }
     if element.isSelected { return "on" }
@@ -3101,34 +1934,8 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - Checkbox
 
-  /// A real tap checks a Checkbox, a toggle its parent refuses snaps back, and a disabled
-  /// one takes nothing (G15); the `iosStyle='switch'` fixture is toggled the same way, so
-  /// the look DECISIONS D47 made optional is proved unchanged by a finger and not by a
-  /// comment (G31).
-  ///
   /// iOS has no checkbox, so every style is SwiftUI's `Toggle`, which XCUITest reports as a
-  /// switch-type element carrying a toggle trait and `value` 0/1 - the same element a filter
-  /// chip's `Toggle(.button)` produces, read here with the Switch's own witness,
-  /// `nativeSwitchState`. **The picture changed in G31 and the element did not**: the
-  /// default Checkbox now draws `checkmark.circle.fill` in a style of ours rather than a
-  /// `.switch`, and this check is where that is proved - an element that lost the toggle
-  /// trait would stop answering `nativeSwitchState` at all, and one that gained a second
-  /// stop would double the event count below.
-  ///
-  /// Because the glyph is now on the **left** of the label instead of the right, the aim of
-  /// every tap in this check moved with it: the row's middle is still the label's side of
-  /// the glyph, which is what the guard under "Where the taps land" now says in the other
-  /// direction.
-  ///
-  /// The element's value is asserted alongside the echo for a reason the Switch check does
-  /// not have: a native implementation that always requested `true` would light the "on"
-  /// echo on the first tap all the same. It is the *second* tap that has to ask for
-  /// `false`, so the value echo returning to `off`, the element returning to `0` and the
-  /// counter reading exactly `2` are said out loud rather than left to be inferred.
-  ///
-  /// The refusing one's oracle is the chip's and the SegmentedControl's: its parent keeps
-  /// `checked={false}`, so every tap asks for `true` again, and a Checkbox that had kept
-  /// the refused selection would ask for `false` on the second tap.
+  /// switch-type element with `value` 0/1.
   func testRealInputCheckbox() throws {
     try goToTab(Tab.checkboxTab, showing: Echo.checkboxValue)
     let enabled = try required("real-input-checkbox", as: "the controlled Checkbox")
@@ -3151,22 +1958,9 @@ final class RealInputTests: XCTestCase {
       "the Checkbox's own element should start by reporting value 0"
     )
 
-    // Where the taps below land is part of this check, not a detail of it. The fixture
-    // gives this Checkbox a label, which makes the row wider than its glyph, so the row's
-    // middle - where every press here goes - is on the *label's* side of the glyph. The
-    // taps therefore ask "is touching the label touching the control?", which neither a
-    // switch-style `Toggle` (measured: a label press delivered nothing) nor a plain `HStack`
-    // of symbol and text answers on its own - `HybridNitroUiCheckbox.swift` carries the
-    // row's tap target for exactly this reason, for all three styles.
-    //
-    // G31 moved the glyph from the right of the label to the left of it, and the glyph
-    // style's element spans the whole row - measured: one switch element at 107 x 21.67
-    // inside a wrapper 109 x 26 - so "which element is under this press" can no longer
-    // separate the glyph from the label. The whole row *is* the element. Geometry still can:
-    // the glyph is a square of the row's own height at its left, so a row more than twice as
-    // wide as it is tall has its middle past the glyph and on the label. Asserted rather
-    // than assumed: a fixture whose label went short would move the aim onto the glyph and
-    // leave the claim unproven while still going green.
+    // Every tap below aims at the row's middle. The glyph is a square of the row's height at
+    // its left, so in a row more than twice as wide as it is tall that middle is on the label:
+    // the taps ask whether touching the label touches the control.
     let glyph = enabled.descendants(matching: .`switch`).allElementsBoundByIndex.min {
       $0.frame.width < $1.frame.width
     }
@@ -3178,7 +1972,6 @@ final class RealInputTests: XCTestCase {
         + "the label while the row is more than twice as wide as it is tall"
     )
 
-    // 1. Checked, then unchecked: one change per tap, in both directions.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-checkbox",
@@ -3222,11 +2015,8 @@ final class RealInputTests: XCTestCase {
       "two taps should report two changes, one per tap"
     )
 
-    // 2. The refusing parent: two requests, both for `true`, and the box still unchecked
-    //    after either. No `nativeState` witness is passed here, unlike the pair above: a
-    //    refused toggle is *supposed* to move natively and be pushed back by the next
-    //    render, so its value would say "the control moved and the echo sat still" about a
-    //    press that was simply dropped. The element is asserted directly, below, instead.
+    // No `nativeState` witness here: a refused toggle moves natively and is pushed back by the
+    // next render, so its value cannot tell a dropped press from a refused one.
     for request in ["1", "2"] {
       XCTAssertEqual(
         try tapUntilValue(
@@ -3250,8 +2040,6 @@ final class RealInputTests: XCTestCase {
       )
     }
 
-    // 3. The disabled box takes nothing. It renders with the enabled one's value, so a
-    //    delivery that should not have happened is a number or a word that moved.
     disabled.fingerTap()
     XCTAssertEqual(
       readUntil(Echo.checkboxDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
@@ -3268,8 +2056,6 @@ final class RealInputTests: XCTestCase {
       "the refused tap should leave the value echo where it was"
     )
 
-    // 4. The barrier: the same press, on the enabled box, still lands - so the silence
-    //    above was a refusal and not a screen that had stopped answering.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-checkbox",
@@ -3284,26 +2070,15 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssert(enabled.isHittable, "the controlled Checkbox should still be touchable")
 
-    // 5. The glyph itself, and one event for it. Every tap above aims at the row's middle,
-    //    which the guard above proved is on the label's side of the switch, so none of them
-    //    says the switch's own picture still takes a touch. It matters which one does: the
-    //    row carries a tap target of its own (`HybridNitroUiCheckbox.swift`), and a control
-    //    that answered a press on the glyph twice - once through its own gesture and once
-    //    through the row's - would look exactly right from the middle, where only the row's
-    //    handler is within reach. So: aim at the glyph, and count. One tap, one event, and
-    //    the value echo moved by one step, which is also what rules out a tap that did
-    //    nothing and a counter that was simply read too early.
+    // A press on the glyph must report exactly one event. The row carries a tap target of its
+    // own, and a control that answered through both it and the `Toggle`'s gesture would
+    // report two.
     let glyphBefore = Int(try read(Echo.checkboxEvents)) ?? -1
     let glyphWanted = String(glyphBefore + 1)
-    // The glyph's own strip: the leftmost 8 per cent of the row, which is inside a square
-    // one row-height wide at its left edge. The element's centre is *not* that - the element
-    // is the row, so a centre press here would be one more press on the label's side, which
-    // the steps above have already counted.
+    // The leftmost 8% of the row is inside the glyph. The element is the whole row, so its
+    // centre would be one more press on the label.
     enabled.atFraction(0.08).fingerTap()
-    // The counter first, and read twice: the surplus event in Chip's G12 red proof arrived
-    // *after* the count was reached, so a count taken once proves nothing. One press on the
-    // glyph is one `onCheckedChange` - a second is the row's tap target and the Toggle's own
-    // gesture both answering the same touch, which is the failure this step is here for.
+    // Read twice, with a pause between: a surplus event can arrive after the count is reached.
     XCTAssertEqual(
       readUntil(Echo.checkboxEvents, timeout: 3) { $0 != "\(glyphBefore)" }, glyphWanted,
       "a real tap on the switch's own glyph should report exactly one change (the counter "
@@ -3314,9 +2089,6 @@ final class RealInputTests: XCTestCase {
       try read(Echo.checkboxEvents), glyphWanted,
       "one press on the glyph is one `onCheckedChange`, no more, after a quiet period"
     )
-    // Then what that one event did: the echo and the element both move by one step, which
-    // rules out a press that reported without acting - and a press that acted twice, which
-    // would have landed back on "on".
     XCTAssertEqual(
       readUntil(Echo.checkboxValue, timeout: 3) { $0 == "off" }, "off",
       "a real tap on the switch's own glyph should flip the Checkbox, and the value echo "
@@ -3327,12 +2099,6 @@ final class RealInputTests: XCTestCase {
       "the tapped glyph's own element should report the value it was tapped into"
     )
 
-    // 6. `iosStyle='switch'` (G31). DECISIONS D47 keeps the old look behind a prop, and a
-    //    prop that chooses a *drawing* must not have quietly chosen a different control -
-    //    so this fixture gets the same two aims as the pair above and the same count. The
-    //    harness cannot stand in for it: on iOS a harness touch reaches no SwiftUI gesture,
-    //    which is the whole reason `nuiTestToggle` exists, and the harness's iOS toggles
-    //    therefore never touch the gesture this style is built from.
     let switched = try required(
       "real-input-checkbox-switch", as: "the switch-style Checkbox")
     XCTAssertEqual(
@@ -3343,10 +2109,8 @@ final class RealInputTests: XCTestCase {
       try read(Echo.checkboxSwitchEvents), "0",
       "the switch-style Checkbox should have reported no change before a touch"
     )
-    // The mirror of the guard above, and the reason these are two fixtures rather than one:
-    // SwiftUI's `.switch` puts its label on the left and its thumb on the right, while the
-    // glyph row puts the glyph first. Both rows still have their middle on the *label's*
-    // side, which is the only thing the claim below needs.
+    // SwiftUI's `.switch` puts its label on the left and its thumb on the right, the reverse
+    // of the glyph row. Both rows still have their middle on the label's side.
     let switchGlyph = switched.descendants(matching: .`switch`).allElementsBoundByIndex.min {
       $0.frame.width < $1.frame.width
     }
@@ -3357,7 +2121,6 @@ final class RealInputTests: XCTestCase {
         + "at x=\(switched.frame.midX) - if the switch style's glyph has moved, its row is no "
         + "longer the layout D47 promised to leave alone"
     )
-    // The label's side of the row, once: checked, with one event.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-checkbox-switch",
@@ -3375,9 +2138,6 @@ final class RealInputTests: XCTestCase {
       "the switch style's element should report value 1, as it did before the style prop "
         + "existed - the same witness, the same answer"
     )
-    // Then the glyph, which asks for the other direction: `false`, and a second event.
-    // A style that toggled through both the row's tap target and the `Toggle`'s own
-    // gesture would land back on `on` here, and read 3 or 4 rather than 2.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-checkbox-switch",
@@ -3401,15 +2161,9 @@ final class RealInputTests: XCTestCase {
         + "which is the count a row handler and a gesture both answering would break"
     )
 
-    // 7. What a reader is told about the third state (G31, DECISIONS D47 item 3).
-    //
-    // The dash is the only state whose picture and value disagree: SwiftUI's `Toggle` has
-    // two positions, so its element can say checked or unchecked and nothing else, and the
-    // component therefore sets `.accessibilityValue("mixed")` for that state alone
-    // (`HybridNitroUiCheckbox.swift`). Whether the word reaches a screen reader is a
-    // question the app cannot answer - `nuiTestProbeAccessibility` reports `unavailable`
-    // for a hosted SwiftUI view on iOS 27 - so it is read from outside, printed, and then
-    // required: one element, the label as its name, and "mixed" as its value.
+    // SwiftUI's `Toggle` has two positions, so the component sets the accessibility value
+    // "mixed" for the indeterminate state. Required here: one element, the label as its name,
+    // and "mixed" as its value.
     let mixedRow = try required(
       "real-input-checkbox-mixed", as: "the mixed Checkbox")
     let mixedNodes: [A11yNode] = [A11yNode(element: mixedRow)]
@@ -3428,12 +2182,8 @@ final class RealInputTests: XCTestCase {
     let announced = mixedNodes
       .map { "\($0.traitName)|\($0.label)|\($0.valueText)" }
       .joined(separator: "  ")
-    // The React wrapper carries the testID and the name too - that is RN, not this
-    // component - so it is the one node below that is not counted as a stop, and the
-    // question becomes what *kind* of element the control is and what else a reader would
-    // stop on. The rest of the subtree is containers: XCUITest lists them, and
-    // `scripts/real-input/a11y.mjs` does not count an unnamed box as a stop either - what
-    // a reader hears is the element with something to say.
+    // The React Native wrapper carries the testID and the name too, so it is not counted as
+    // a stop.
     let stops = mixedNodes.filter { $0.identifier != "real-input-checkbox-mixed" }
     let toggles = stops.filter { $0.traitName == "switch" }
     XCTAssertEqual(
@@ -3452,12 +2202,7 @@ final class RealInputTests: XCTestCase {
         + "renders its third state as \"Partially checked\", which is why step 8 below also "
         + "asks what the value does once the dash is gone - the tree read: \(announced)"
     )
-    // No second stop that says anything. Measured without the representation this subtree
-    // read as three named stops: the toggle, the symbol as an image named "Circle", and
-    // the row's text as static text of its own - and `.accessibilityHidden(true)` on the
-    // symbol did not remove it, which is the sentence that decided the design. A picture of
-    // a state is not a thing to announce, and neither is text the control already carries
-    // as its own name.
+    // Neither the symbol nor the row's text may be a second named stop.
     let secondStops = stops.filter { !$0.label.isEmpty && $0.traitName != "switch" }
     XCTAssertEqual(
       secondStops.count, 0,
@@ -3465,21 +2210,8 @@ final class RealInputTests: XCTestCase {
         + "of their own - the tree read: \(announced)"
     )
 
-    // 8. The press that ends the dash, and the value that has to end with it.
-    //
-    // The fixture is uncontrolled, so one press is the whole state change: the model is
-    // optimistic, the row now draws `checkmark.circle.fill`, and a reader still told
-    // "mixed" is being told about the box the finger just replaced. This is the state the
-    // value table exists for - `NitroUiCheckboxGlyphs.accessibilityValue` ranks `checked`
-    // over the dash exactly as `glyph` does - and it is also the state that table's rule
-    // used to stop short of reaching: the row asked its own `indeterminate && drawsGlyph`
-    // flag instead of asking the table, so a box that was `checked` *and* `indeterminate`
-    // drew a checkmark and said "mixed", and so did this very press. Nothing but a finger
-    // and the tree can see that, because the harness has no reader in it.
-    //
-    // One echo is deliberately not asked for: the fixture reports nothing, which is what
-    // keeps this about the announcement rather than about the event the earlier steps
-    // already count.
+    // The fixture is uncontrolled and reports nothing, so one press is the whole state change
+    // and the announced value is the only witness that the dash ended.
     let mixedToggle = mixedRow.descendants(matching: .`switch`).firstMatch
     XCTAssert(
       mixedToggle.waitForExistence(timeout: 3),
@@ -3491,9 +2223,7 @@ final class RealInputTests: XCTestCase {
         named: "the mixed Checkbox",
         waitingFor: "the real tap that resolves the dash",
         press: { _ in mixedRow.atFraction(0.5).fingerTap() },
-        // XCUITest answers a numeric value through `String(describing:)`, which is "1"
-        // here and "1.0" for a control that hands back a double; both mean checked, and
-        // the assertion is about the state, not about the formatter.
+        // XCUITest formats a numeric value as "1" or "1.0"; both mean checked.
         reading: {
           let shown = A11yNode(element: mixedToggle).valueText
           return shown == "1.0" ? "1" : shown
@@ -3526,16 +2256,10 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - ButtonGroup
 
-  /// One item of a ButtonGroup, found inside that group's own container by title.
-  ///
-  /// Scoped to the container because four groups on this screen draw an item called
-  /// "Copy": a query for the title across the whole app would tap whichever one the
-  /// tree happened to list first, and a tap that lands in the wrong row is a wrong-place
-  /// tap that blames the wrong control.
-  ///
-  /// `.any` rather than `.button` because an action item is a `Button` and a toggle item
-  /// is a `Toggle(.button)`, which XCUITest reports as a switch (G12 measured it) — the
-  /// one query has to find both.
+  /// One item of a ButtonGroup, found by title inside that group's own container, because
+  /// several groups on this screen draw an item with the same title. `.any` rather than
+  /// `.button`: an action item is a `Button` and a toggle item is a `Toggle(.button)`, which
+  /// XCUITest reports as a switch.
   private func buttonGroupItem(_ identifier: String, titled title: String) -> XCUIElement {
     app
       .descendants(matching: .any)[identifier].firstMatch
@@ -3564,11 +2288,6 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Whether one item's own element says it is checked, as "on"/"off".
-  ///
-  /// The same reading `nativeChipState` makes, aimed at one item instead of at the
-  /// control behind a testID: the group's container holds three toggles, so "the first
-  /// switch inside the identifier" would answer about whichever one the tree listed
-  /// first.
   private func nativeItemState(of identifier: String, _ title: String) -> String? {
     let item = buttonGroupItem(identifier, titled: title)
     guard item.exists else { return nil }
@@ -3604,24 +2323,6 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// A real tap presses each ButtonGroup item once, a toggle item flips once per tap, and
-  /// an overflowed item is reachable through the overflow menu (G20).
-  ///
-  /// The last step is D29's rule on this platform: `disabled` arriving while the overflow
-  /// menu is open takes the menu down. The harness cannot open a SwiftUI `Menu` from code
-  /// before iOS 18's `isExpanded` (the target is 15.1), so Android proves the rule there
-  /// and iOS proves it here, where a real finger and a real prop change are available.
-  ///
-  /// The `pressed-id` echo is what makes this a check about *items*: three taps and a
-  /// counter reading `3` is also exactly what a group that reports `items[0]` for every
-  /// tap looks like, and that group presses perfectly. So each tap asserts the counter
-  /// and the id together.
-  ///
-  /// A toggle item's own element is the witness beside the echo (Checkbox's and
-  /// IconButton's reason): a native toggle that always requested `true` would light the
-  /// "on" echo on the first tap all the same, so it is the *second* tap that has to ask
-  /// for `false`, and the echo back at the old set with the element back at `0` and the
-  /// counter at exactly `2` is what says so.
   func testRealInputButtonGroup() throws {
     try goToTab(Tab.buttonGroupTab, showing: Echo.buttonGroupPresses)
     let actions = "real-input-button-group"
@@ -3632,8 +2333,6 @@ final class RealInputTests: XCTestCase {
     let overflow = "real-input-button-group-overflow"
     let overflowControl = "Real-input overflow control"
 
-    // 1. At rest: every counter at zero and the controlled toggles showing the set
-    //    React gave them, so every number below is one that moved.
     XCTAssertEqual(
       try read(Echo.buttonGroupPresses), "0",
       "no press should be reported before a touch is delivered"
@@ -3665,7 +2364,6 @@ final class RealInputTests: XCTestCase {
       "the checked toggle item's own element should report value 1"
     )
 
-    // 2. One tap per item, and each item names itself. Exact numbers, not "at least".
     for (title, id, count) in [("Copy", "copy", "1"), ("Cut", "cut", "2"), ("Paste", "paste", "3")] {
       XCTAssertEqual(
         try tapItemUntilValue(
@@ -3689,8 +2387,6 @@ final class RealInputTests: XCTestCase {
       "three presses on the action row should move no toggle"
     )
 
-    // 3. A toggle item flips once per tap, in both directions, with its own element as
-    //    the witness that tells a dropped press from a lost change event.
     XCTAssertEqual(
       try tapItemUntilValue(
         toggles,
@@ -3733,10 +2429,8 @@ final class RealInputTests: XCTestCase {
       "two taps should report two changes — a flip is not a one-way press"
     )
 
-    // 4. The refusing group: two requests, both for `true`, and the item back at
-    //    unchecked after either. No `nativeState` witness on these taps — a refused item
-    //    is meant to move and be pushed back, so its value would call a dropped press a
-    //    lost event. The element is asserted below instead.
+    // No `nativeState` witness here: a refused item moves and is pushed back, so its value
+    // cannot tell a dropped press from a refused one.
     for request in ["1", "2"] {
       XCTAssertEqual(
         try tapItemUntilValue(
@@ -3760,8 +2454,6 @@ final class RealInputTests: XCTestCase {
       )
     }
 
-    // 5. The disabled pair takes nothing: the group that is disabled, and the group with
-    //    one disabled item. Both report into one counter the enabled items never touch.
     try requiredItem(disabledItem, "Cut").fingerTap()
     XCTAssertEqual(
       readUntil(Echo.buttonGroupDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
@@ -3777,14 +2469,8 @@ final class RealInputTests: XCTestCase {
       "3 2",
       "nothing else should answer a tap on the disabled pair"
     )
-    // The barrier: the enabled sibling in the *same* group, tapped the same way, still
-    // lands — so the silence above was a refusal and not a screen that stopped
-    // answering. It reports into the disabled pair's own counter, because that is the
-    // counter this group writes to: `onDisabled` is shared by the disabled group and the
-    // group with one disabled item, precisely so that a stray delivery is a number that
-    // moved. The presses counter belongs to the actions row two groups above, and the
-    // Android half measured that on a device (a barrier aimed at it stays at 3 however
-    // many taps land), so both platforms now aim this tap at the counter that moves.
+    // The enabled sibling in the same group still takes a tap. It reports into the disabled
+    // pair's own counter, not the presses counter of the actions row.
     XCTAssertEqual(
       try tapItemUntilValue(
         disabledItem,
@@ -3797,11 +2483,8 @@ final class RealInputTests: XCTestCase {
       "the enabled item of a group with a disabled sibling should still answer"
     )
 
-    // 6. Overflow. Six titles cannot share the 220 pt well, so some items are not drawn;
-    //    the check names one, finds it absent from the group, and reaches it through the
-    //    overflow control. The witness is the same counter-and-id pair as step 2, which
-    //    is the point: an item that arrives through a menu has to report like the item it
-    //    replaced.
+    // Six titles cannot share the 220 pt well, so some items are not drawn and are reached
+    // through the overflow control.
     XCTAssertFalse(
       buttonGroupItem(overflow, titled: "Quarter").exists,
       "the narrow well should hide \"Quarter\" — the row overflows rather than shrinking"
@@ -3839,11 +2522,9 @@ final class RealInputTests: XCTestCase {
         + "the one delivery the barrier tap beside the disabled pair was owed"
     )
 
-    // 7. D29: a group that is disabled while its overflow menu is open cannot keep that
-    //    menu. The rows are the only witness a menu has, so the check is: the rows are
-    //    up, the app flips `disabled`, the rows are gone. Re-opening the menu nobody
-    //    could open from code is the part that makes this a close — `0 row(s)` after the
-    //    disable is also what a menu that was never open looks like.
+    // A group that is disabled while its overflow menu is open must close the menu. The menu
+    // is opened first: no rows after the disable is also what a menu that never opened
+    // looks like.
     try tapItemUntilOption(
       overflow,
       titled: overflowControl,
@@ -3879,22 +2560,9 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - IconButton
 
-  /// A real tap presses an IconButton once, a toggle flips once per tap, a toggle its
-  /// parent refuses snaps back, and a disabled control takes neither (G23).
-  ///
-  /// iOS has no icon button, so the press form is a `Button` whose `Label` is drawn
-  /// `.iconOnly` and the toggle form is `Toggle(isOn:)` with the `.button` style — the
-  /// same element a filter chip is (G12 measured it), which is why the state witness
-  /// here is `nativeChipState`: it reads a `Toggle(.button)` element's `value` 1/0 and
-  /// falls back to `isSelected`, and an icon toggle button is that element again, only
-  /// without a label to make the row wide.
-  ///
-  /// The value is asserted beside the echo for the Checkbox's reason: a native
-  /// implementation that always requested `true` would light the "on" echo on the first
-  /// tap all the same, so it is the *second* tap that has to ask for `false`, and the
-  /// echo back at `off` with the element back at `0` and the counter at exactly `2` is
-  /// what says so. The press form has no value to read, so its claim is the counter:
-  /// exactly one report per tap, asserted as an exact number rather than "at least".
+  /// iOS has no icon button: the press form is a `Button` with an icon-only label and the
+  /// toggle form is a `Toggle` in the `.button` style, the same element a filter chip is, so
+  /// `nativeChipState` reads it.
   func testRealInputIconButton() throws {
     try goToTab(Tab.iconButtonTab, showing: Echo.iconButtonValue)
     let pressButton = try required(
@@ -3909,8 +2577,6 @@ final class RealInputTests: XCTestCase {
       "both enabled controls should be touchable before any tap is delivered"
     )
 
-    // 1. At rest: every number at zero and the toggle's element at 0, so each claim
-    //    below is about a number that moved.
     XCTAssertEqual(
       try read(Echo.iconButtonPresses), "0",
       "no press should be reported before a touch is delivered"
@@ -3938,8 +2604,6 @@ final class RealInputTests: XCTestCase {
       "the toggle's own element should start by reporting value 0"
     )
 
-    // 2. Pressed twice: two reports, one per tap. Exact numbers, not `atLeast` — a
-    //    button that fired twice per tap is the failure this step exists for.
     for count in ["1", "2"] {
       XCTAssertEqual(
         try tapUntilValue(
@@ -3962,8 +2626,6 @@ final class RealInputTests: XCTestCase {
       "and the toggle should still report no change"
     )
 
-    // 3. The toggle, once per direction, with the element as the witness that tells a
-    //    dropped press from a lost change event.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-icon-button-toggle",
@@ -4010,10 +2672,8 @@ final class RealInputTests: XCTestCase {
       "a tap on the toggle should not also be a press on the press form"
     )
 
-    // 4. The refusing parent: two requests, both for `true`, and the element back at 0
-    //    after either. No `nativeState` witness on these taps — a refused toggle is
-    //    meant to move and be pushed back, so its value would call a dropped press a
-    //    lost event. The element is asserted below instead.
+    // No `nativeState` witness here: a refused toggle moves and is pushed back, so its value
+    // cannot tell a dropped press from a refused one.
     for request in ["1", "2"] {
       XCTAssertEqual(
         try tapUntilValue(
@@ -4037,10 +2697,6 @@ final class RealInputTests: XCTestCase {
       )
     }
 
-    // 5. The disabled pair takes nothing. Both report into one counter the enabled
-    //    controls never touch, so a delivery that should not have happened is a number
-    //    that moved — and the counter staying put is also what says the press landed on
-    //    the disabled control rather than one row away.
     disabled.fingerTap()
     XCTAssertEqual(
       readUntil(Echo.iconButtonDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
@@ -4058,8 +2714,6 @@ final class RealInputTests: XCTestCase {
       "the enabled controls should be left alone by taps on the disabled pair"
     )
 
-    // 6. The barrier: the same press on the enabled toggle still lands, so the silence
-    //    above was a refusal and not a screen that had stopped answering.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-icon-button-toggle",
@@ -4074,19 +2728,8 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssert(disabled.isHittable, "the disabled control should still be touchable")
 
-    // 7. The touch target: a real tap in the **corner** of the laid-out box, where no
-    //    artwork is. Both fixtures are bordered (`filled` and `tonal`), so their glyphs
-    //    and their bezels measure under Apple's 44 pt minimum and the box they are laid
-    //    out in is 44 pt with the control centred inside it. A tap 2% in from the corner
-    //    is therefore outside the pill on every axis, and the only thing that can answer
-    //    it is the tappable layer `targetLayered` puts behind a control whose own style
-    //    cannot reach the target — which is why this step is the proof and a box
-    //    measurement is not: before that layer, the same box measured 39.67 x 39 pt and
-    //    the corner belonged to nobody, so the two numbers below stay exactly where they
-    //    are and no assertion about a size can see the difference.
-    //
-    // One press, and one flip, again as exact numbers: a hit layer that also let the
-    // control's own gesture answer the same touch would report two.
+    // A tap 2% in from the corner of the 44 pt box is outside the control's own drawing, so
+    // only the hit layer behind the control can answer it. One press must report one event.
     let targetBox = pressButton.frame
     XCTAssert(
       targetBox.width >= 43.5 && targetBox.height >= 43.5,
@@ -4121,15 +2764,8 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Poll a control's own Switch value until it reports `expected` (3 s), and return its
-  /// last reading.
-  ///
-  /// `waitForChipState` for the controls whose element answers with a toggle's `value`
-  /// rather than a chip's `isSelected`; the two stay apart because what counts as "on"
-  /// differs between them, and a witness has to be exact about its own vocabulary.
-  ///
-  /// The wait is what makes a snap-back assertable at all: SwiftUI paints a tapped toggle
-  /// before JS has answered, so reading the element the instant the echo moves would catch
-  /// the flip the app is about to undo and report a refused change as one that stuck.
+  /// last reading. SwiftUI paints a tapped toggle before JS has answered, so a snap-back is
+  /// only visible after a wait.
   private func waitForNativeSwitchState(_ identifier: String, _ expected: String) -> String? {
     let deadline = Date().addingTimeInterval(3)
     var shown = nativeSwitchState(of: identifier)
@@ -4145,28 +2781,17 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - Dialog
 
-  /// A real tap opens each dialog, a real tap on an action reaches JS before the
-  /// close, a disabled action takes no tap, and a tap outside closes only a dialog
-  /// that may be dismissed (G11, DECISIONS D32 / D33).
-  ///
-  /// The dialog is UIKit's `UIAlertController`, presented from a window of the
-  /// library's own, so nothing the harness injects can press its buttons: a finger
-  /// is the only proof that a button is wired to the `onAction` the app wrote. The
-  /// witness of every press is the screen's event log (`dialog-log`), which records
-  /// every callback in arrival order, so "the action before the close" is a string
-  /// comparison and a retried tap that double-reported would show as a longer one.
+  /// The dialog is UIKit's `UIAlertController`, presented from a window of the library's own.
+  /// The screen's event log records every callback in arrival order.
   func testRealInputDialog() throws {
     try goToTab(Tab.dialogTab, showing: Echo.dialogLog)
     let alertTitle = "Delete the draft?"
     let stickyTitle = "Back and outside do nothing"
     let sheetTitle = "Share the photo"
 
-    // 1. Before a touch: no event, and no dialog on screen.
     XCTAssertEqual(try read(Echo.dialogLog), "none", "no dialog has reported anything before a touch")
     XCTAssertEqual(optionLabels(containing: alertTitle), 0, "no alert is up before a touch")
 
-    // 2. A real tap on the opener presents the alert. Opening is the app's own write
-    //    (`isPresented` true), so it reports nothing.
     try tapUntilOption(
       "dialog-open-alert",
       as: "the alert's opener",
@@ -4177,7 +2802,6 @@ final class RealInputTests: XCTestCase {
     print("real-input (ios): dialog: the alert's identifier is \"\(app.alerts.firstMatch.identifier)\"")
     XCTAssertEqual(try read(Echo.dialogLog), "none", "presenting from JS reports no event")
 
-    // 3. The disabled action is disabled to VoiceOver too, and its twin is not.
     XCTAssertFalse(
       optionRow("Locked action").isEnabled,
       "a disabled action should be a button that is not enabled (twin \"Delete draft\" "
@@ -4185,15 +2809,12 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertTrue(optionRow("Delete draft").isEnabled, "and an ordinary action should be enabled")
 
-    // 4. A real tap on the disabled action takes nothing and leaves the alert up. One
-    //    press, deliberately: the right outcome is silence, so there is nothing to retry
-    //    towards; step 5 is the barrier that turns the silence into a refusal.
+    // Pressed once: the right outcome is silence, so there is nothing to retry towards.
     try waitForOption("Locked action", "the disabled action to be on screen").fingerTap()
     Thread.sleep(forTimeInterval: 1.5)
     XCTAssertEqual(try read(Echo.dialogLog), "none", "a real tap on a disabled action reports nothing")
     XCTAssertGreaterThan(optionLabels(containing: alertTitle), 0, "and the alert stays up")
 
-    // 5. The action that does report, before the close it causes (D32).
     XCTAssertEqual(
       try tapOptionUntilValue(
         option: "Delete draft",
@@ -4207,10 +2828,8 @@ final class RealInputTests: XCTestCase {
     waitUntilOptionGone(alertTitle, "the action to take the alert down")
     XCTAssertEqual(optionLabels(containing: alertTitle), 0, "an action closes its alert")
 
-    // 6. A dialog that only an action may close. A tap outside an alert does nothing
-    //    on iOS whatever `dismissible` says (UIKit offers no way out of an alert but
-    //    its buttons), so this pins that a non-dismissible alert is still an alert
-    //    and still closes from its one action.
+    // A tap outside an alert does nothing on iOS whatever `dismissible` says: UIKit offers no
+    // way out of an alert but its buttons.
     try tapUntilOption(
       "dialog-open-sticky",
       as: "the sticky alert's opener",
@@ -4237,10 +2856,8 @@ final class RealInputTests: XCTestCase {
     )
     waitUntilOptionGone(stickyTitle, "the action to take the sticky alert down")
 
-    // 7. The confirmation dialog: an action sheet whose title is shown (`'visible'`),
-    //    with the Cancel UIKit adds because the app gave no cancel action. A tap
-    //    outside an action sheet is that Cancel, so it closes the sheet and reports
-    //    the close alone - no action, because the app wrote none (B1 "Events").
+    // A tap outside an action sheet is the Cancel UIKit adds when the app gave no cancel
+    // action, so it closes the sheet and reports the close alone.
     try tapUntilOption(
       "dialog-open-sheet",
       as: "the sheet's opener",
@@ -4249,12 +2866,8 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(app.sheets.count, 1, "the confirmation variant is presented as one action sheet")
     XCTAssertGreaterThan(optionLabels(containing: sheetTitle), 0, "with its title shown")
-    // The Cancel the library adds when the app wrote none is in the controller (the
-    // harness reads `implicitCancel=1` from it), but whether UIKit *draws* it is UIKit's
-    // choice: the first run of this check found no element labelled "\(cancelTitle())"
-    // on an iOS 27 iPhone sheet. So the buttons are printed, not pinned, and the claim
-    // that matters - a tap outside, which UIKit routes to that Cancel, reports the close
-    // alone - is asserted in the step below.
+    // Whether UIKit draws that Cancel as a button is UIKit's choice, so the buttons are
+    // printed rather than asserted.
     let sheetButtons = app.sheets.firstMatch.buttons.allElementsBoundByIndex.map(\.label)
     print(
       "real-input (ios): dialog: the sheet's buttons are \(sheetButtons); "
@@ -4281,7 +2894,6 @@ final class RealInputTests: XCTestCase {
     )
     waitUntilOptionGone("Copy link", "the tap outside to take the sheet down")
 
-    // 8. And a row of the sheet reports like an alert's button.
     try tapUntilOption(
       "dialog-open-sheet",
       as: "the sheet's opener",
@@ -4301,22 +2913,14 @@ final class RealInputTests: XCTestCase {
     waitUntilOptionGone("Copy link", "the action to take the sheet down")
   }
 
-  /// A real finger on a Tooltip (G18): a closed tooltip leaves a real tap on its anchor
-  /// to the anchor, a tap on a plain RN button opens it, a tap outside closes it and
-  /// reports the close alone, and a tap on its action reports the action before the
-  /// close it causes (D32).
-  ///
-  /// The tooltip is a UIKit popover in a window of its own, so "up" is read as its own
-  /// message on screen and the screen's log only with the tooltip down - the same reads
-  /// the dialog check makes, for the same reason.
+  /// The tooltip is a UIKit popover in a window of its own, so "up" is read as its own message
+  /// on screen, and the screen's log is read only with the tooltip down.
   func testRealInputTooltip() throws {
     try goToTab(Tab.tooltipTab, showing: Echo.tooltipLog)
     let message = "Tap the star to keep this search."
     let title = "Saved searches"
     let action = "Got it"
 
-    // One real tap on the star, confirmed by its own count: the tooltip's overlay is
-    // behind the app's `Pressable` and takes no touch.
     func pressAnchor(_ expected: String, _ waitingFor: String) throws -> String {
       return try pressUntil(
         named: "the star the tooltip points at (tooltip-anchor)",
@@ -4329,8 +2933,6 @@ final class RealInputTests: XCTestCase {
       }
     }
 
-    // 1. Before a touch: nothing reported, nothing up, and a closed tooltip's anchor
-    //    takes a real tap as its own - once.
     XCTAssertEqual(try read(Echo.tooltipLog), "none", "no tooltip has reported anything before a touch")
     XCTAssertEqual(optionLabels(containing: message), 0, "no tooltip is up before a touch")
     XCTAssertEqual(
@@ -4341,15 +2943,12 @@ final class RealInputTests: XCTestCase {
     Thread.sleep(forTimeInterval: 0.8)
     XCTAssertEqual(optionLabels(containing: message), 0, "and opens nothing")
     XCTAssertEqual(try read(Echo.tooltipLog), "none", "and reports nothing")
-    // Outside: the log line, a `Text` with no press of its own and well above the
-    // popover that hangs over the star. Found while the tooltip is down, tapped where it
-    // was. A fixed point on the screen could be a tab, or a button the tap would press.
+    // The tap outside goes to the log line: a `Text` with no press of its own, well above
+    // the popover. Its frame is taken while the tooltip is down.
     let logFrame = try required(Echo.tooltipLog, as: "the log line").frame
     let outside = app.coordinate(withNormalizedOffset: .zero)
       .withOffset(CGVector(dx: logFrame.midX, dy: logFrame.midY))
 
-    // 2. A real tap on a plain RN button opens it, with its title and its action. JS
-    //    opened it, so it reports nothing (read once it is down, in step 3).
     try tapUntilOption(
       "tooltip-open-rich",
       as: "the rich tooltip's opener",
@@ -4364,8 +2963,7 @@ final class RealInputTests: XCTestCase {
       "the presented content carries <testID>-tooltip, for a test or an a11y tool to find"
     )
 
-    // 3. A tap outside closes it, and reports the close alone. A later attempt taps
-    //    only while it is still up: once it is down, the log is merely slow.
+    // A later attempt taps only while it is still up: once it is down, the log is merely slow.
     XCTAssertEqual(
       try pressUntil(
         named: "the log line outside the tooltip",
@@ -4386,7 +2984,6 @@ final class RealInputTests: XCTestCase {
     waitUntilOptionGone(message, "the tap outside to take the tooltip down")
     XCTAssertEqual(optionLabels(containing: message), 0, "and the tooltip is gone")
 
-    // 4. Its action reports, before the close it causes.
     try tapUntilOption(
       "tooltip-open-rich",
       as: "the rich tooltip's opener",
@@ -4407,7 +3004,6 @@ final class RealInputTests: XCTestCase {
     waitUntilOptionGone(message, "the action to take the tooltip down")
     XCTAssertEqual(optionLabels(containing: message), 0, "an action closes its tooltip")
 
-    // 5. Closed again, the anchor's taps are its own.
     XCTAssertEqual(
       try pressAnchor("star presses: 2", "the second real tap on the star"),
       "star presses: 2",
@@ -4418,28 +3014,16 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(try read(Echo.tooltipLog), afterAction, "and reports nothing")
   }
 
-  /// A real finger on a Popover (G22, DECISIONS D44): a real tap on the app's own anchor
-  /// opens it, its React Native content is in the popover's window and findable by id, a
-  /// tap outside closes it and reports the close, a `Pressable` *inside* reaches JS
-  /// exactly once over ten separate opens, and a `TextInput` inside takes the keyboard and
-  /// stays visible above it.
-  ///
-  /// The popover is a UIKit popover in a window of its own (D41's reason, and measured by
-  /// `example/__tests__/isolated/PopoverModalHazard.harness.tsx`), so "up" is read as its
-  /// own content on screen and the screen's log only with the popover down — the same
-  /// reads the tooltip check makes. "Exactly once" is arithmetic: the screen counts every
-  /// press that reaches JS, so ten opens with one injected tap inside each end on
-  /// `inner presses: 10`, and a touch root that also delivered the press would end it on
-  /// 11.
+  /// The popover is a UIKit popover in a window of its own, so "up" is read as its own content
+  /// on screen, and the screen's log is read only with the popover down.
   func testRealInputPopover() throws {
     try goToTab(Tab.popoverTab, showing: Echo.popoverLog)
     let content = "Do the thing"
     let fieldContent = "Rename this list"
 
-    // Outside: the log line, a `Text` with no press of its own at the top of the page,
-    // above every anchor. Taken while the popover is down and tapped where it was — a
-    // fixed point on the screen could be a tab, or the Reset button, which would zero the
-    // very counter the ten opens are read from.
+    // The tap outside goes to the log line: a `Text` with no press of its own, above every
+    // anchor. A fixed point could be a tab or the Reset button, which would zero the counter
+    // the ten opens are read from.
     let logFrame = try required(Echo.popoverLog, as: "the log line").frame
     let outside = app.coordinate(withNormalizedOffset: .zero)
       .withOffset(CGVector(dx: logFrame.midX, dy: logFrame.minY + 4))
@@ -4452,15 +3036,10 @@ final class RealInputTests: XCTestCase {
       )
     }
 
-    // 1. Before a touch: nothing reported, nothing pressed inside, nothing up.
     XCTAssertEqual(try read(Echo.popoverLog), "none", "no popover has reported anything before a touch")
     XCTAssertEqual(optionLabels(containing: content), 0, "no popover is up before a touch")
     XCTAssertEqual(echoText(Echo.popoverPresses), "inner presses: 0", "nothing has been pressed inside")
 
-    // 2. A real tap on the app's own anchor opens it, and the popover's React Native
-    //    content is in the popover's window — readable by a screen reader and findable by
-    //    id, which is the half of the rule no in-app query can state (a11y.mjs,
-    //    A11Y_PRESENTATIONS).
     try openPopover("the real tap that opens the popover")
     XCTAssertTrue(
       app.descendants(matching: .any)["popover-short-popover"].exists,
@@ -4472,8 +3051,7 @@ final class RealInputTests: XCTestCase {
         + "popover(s); the row inside it is at \(rowFrame)"
     )
 
-    // 3. A tap outside closes it and reports the close, then the dismiss. A later attempt
-    //    taps only while it is still up: once it is down, the log is merely slow.
+    // A later attempt taps only while it is still up: once it is down, the log is merely slow.
     let outsideClose = "short:presented:false > short:dismiss"
     XCTAssertEqual(
       try pressUntil(
@@ -4494,9 +3072,8 @@ final class RealInputTests: XCTestCase {
     )
     waitUntilOptionGone(content, "the tap outside to take the popover down")
 
-    // 4. Ten opens, one injected tap inside each: the press reaches JS exactly once, and
-    //    the re-read after a settle is what tells a second press that arrives late apart
-    //    from one that never arrives.
+    // Ten opens with one tap inside each must end on exactly ten presses. The re-read after a
+    // settle catches a second press that arrives late.
     for opened in 1...10 {
       try openPopover("the real tap that opens the popover for open number \(opened)")
       try required("popover-short-inner-press", as: "the Pressable inside the popover").fingerTap()
@@ -4514,9 +3091,8 @@ final class RealInputTests: XCTestCase {
         "and no second press arrives after open \(opened)"
       )
       if opened == 1 {
-        // D32's order from outside: the press reports, then the dismiss its own close
-        // causes. That close is the app's, so it reports no `presented:false` — only a
-        // close the popover decided for itself does (DECISIONS D44 item 2).
+        // The press reports, then the dismiss. That close is the app's own, so there is no
+        // `presented:false`: only a close the popover decided for itself reports one.
         XCTAssertTrue(
           try read(Echo.popoverLog).hasSuffix("press:popover-short > short:dismiss"),
           "the press inside reports, then the dismiss its own close causes"
@@ -4525,11 +3101,8 @@ final class RealInputTests: XCTestCase {
     }
     XCTAssertEqual(echoText(Echo.popoverPresses), "inner presses: 10", "ten opens, ten presses inside, and no more")
 
-    // 5. The keyboard. A `TextInput` inside has to take the keyboard focus, and the
-    //    content has to end up above the keyboard rather than under it. UIKit moves a
-    //    popover that has no room, so the claim asserted is the one the brief states —
-    //    visible above the keyboard — and how it got there is printed rather than
-    //    demanded: a popover that was already clear of the keyboard has no reason to move.
+    // UIKit moves a popover that has no room above the keyboard, so what is asserted is that
+    // the content ends up visible above the keyboard. Whether it moved is only printed.
     try tapUntilPopoverUp(
       "popover-field-anchor",
       as: "the field popover's anchor",
@@ -4552,25 +3125,9 @@ final class RealInputTests: XCTestCase {
       keyboardTop + 1,
       "the field stays visible above the keyboard (field bottom \(afterField.maxY), keyboard top \(keyboardTop))"
     )
-    // And the keystrokes reach the field - read while the popover is still up. A keystroke
-    // still in React Native's queue is lost when the close unmounts the field, and the full
-    // run on 2026-11-08 lost the second of `ab` that way (the log carried `typed:a` and then
-    // the close, with no `typed:ab`) at load1 ~13; the same control passed on its own at
-    // load1 ~5. Waiting here keeps the claim - JS received both keystrokes - and takes the
-    // close out of the race: a character that never arrives still goes red.
-    //
-    // It did not take the *typing* out of the race. One `typeText("ab")` sends both keys in
-    // one go, and the second lands in a controlled `TextInput` whose value the first key has
-    // not finished round-tripping through JS — so JS can put the field back to `a` with `b`
-    // already gone. That is the line's shape when it fails, every time: `typed:a` and no
-    // `typed:ab`. Measured on this branch: red in three full `real-input:ios` runs (load1
-    // medians 6.5-9.1), green in a solo `--control popover` run of the same tree and in the
-    // one full run taken on a machine at load1 5.4 — and red twice more on G21's and G22's
-    // own trees, so the race is the typing, not the task.
-    //
-    // So type one character, wait for JS to report it, then type the other. Both keystrokes
-    // still have to arrive, and both while the popover is still up: the claim is the same
-    // sentence, and a character that is really lost still goes red on the second wait.
+    // One character at a time, each waited for while the popover is still up. A second key
+    // sent before the first has round-tripped through JS can be overwritten by the controlled
+    // value, and a keystroke still queued is lost when the close unmounts the field.
     field.typeText("a")
     var typedWhileUp = ""
     let firstArrived = waitUntil({
@@ -4594,9 +3151,8 @@ final class RealInputTests: XCTestCase {
     )
     outside.tap()
     waitUntilOptionGone(fieldContent, "the outside tap to take the field popover down")
-    // The screen records the field popover's own close after that outside tap, so what this
-    // can claim is the order the log carries - the keystrokes, then the close. A bare
-    // `hasSuffix("typed:ab")` could only ever fail on a popover that closed as told.
+    // The log records the field popover's close after the keystrokes, so the order is
+    // asserted rather than a suffix.
     let typedLog = try read(Echo.popoverLog)
     let typedAt = typedLog.range(of: "typed:ab")
     let closedAt = typedLog.range(of: "field:presented:false", options: .backwards)
@@ -4606,21 +3162,13 @@ final class RealInputTests: XCTestCase {
         + "\(echoText(Echo.popoverLog))"
     )
 
-    // 6. Nothing left up for the next control.
     XCTAssertEqual(optionLabels(containing: content), 0, "nothing is left up at the end")
     XCTAssertEqual(optionLabels(containing: fieldContent), 0, "and no field popover either")
   }
 
-  /// A real finger on a BottomSheet (G14, D35 item 4): a tap opens it from a plain RN
-  /// button, a tap on a `Pressable` *inside* the sheet reaches JS through the sheet's own
-  /// touch root, and a drag down and a tap outside each close a dismissible sheet -
-  /// reported as the close, then the dismissal - while neither closes a sticky one.
-  /// A drag up on the two-detent sheet reports the second detent.
-  ///
   /// The screen's log is read only with every sheet down: a presented sheet is modal to
-  /// VoiceOver (`accessibilityViewIsModal`), which keeps the app's own elements out of
-  /// the tree XCUITest reads while it is up. Inside the sheet, `sheet-presses` is the
-  /// sheet's own echo.
+  /// VoiceOver, which keeps the app's own elements out of the tree XCUITest reads while it is
+  /// up. Inside the sheet, `sheet-presses` is the sheet's own echo.
   func testRealInputBottomSheet() throws {
     try goToTab(Tab.sheetTab, showing: Echo.sheetLog)
     XCTAssertEqual(try read(Echo.sheetLog), "none", "no sheet has reported anything before a touch")
@@ -4629,7 +3177,6 @@ final class RealInputTests: XCTestCase {
       "the sheet's content is not mounted before it is presented"
     )
 
-    // 1. A real tap opens the fit sheet, whose content is React Native.
     try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
     // The sheet's own view carries `<testID>-sheet`, for a test or an a11y tool to find.
     _ = try required("sheet-fit-sheet", as: "the presented sheet, by its testID")
@@ -4641,7 +3188,6 @@ final class RealInputTests: XCTestCase {
       "a fit sheet sits low on the screen, as tall as its content (title at \(title.frame))"
     )
 
-    // 2. A real tap on the Pressable inside the sheet reaches JS: the sheet's own echo.
     XCTAssertEqual(
       try pressUntil(
         named: "the Pressable inside the sheet",
@@ -4655,7 +3201,6 @@ final class RealInputTests: XCTestCase {
       "a real tap inside the sheet presses its Pressable once"
     )
 
-    // 3. A drag down closes it: the close, then the dismissal.
     try dragSheetDown(from: "sheet-fit-title", until: "sheet-press")
     XCTAssertEqual(
       readUntil(Echo.sheetLog) { $0 == "press:1 > presented:false > dismiss" },
@@ -4663,7 +3208,6 @@ final class RealInputTests: XCTestCase {
       "a drag down reports the close, then the dismissal - and the press before them"
     )
 
-    // 4. A tap outside closes it too.
     try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
     try tapOutsideSheet(until: "sheet-press")
     XCTAssertEqual(
@@ -4672,7 +3216,6 @@ final class RealInputTests: XCTestCase {
       "a tap outside reports the close, then the dismissal"
     )
 
-    // 5. A sticky sheet: neither a drag down nor a tap outside closes it; its button does.
     try tapUntilElement("sheet-open-sticky", as: "the sticky sheet's opener", appears: "sheet-sticky-close")
     let stickyTitle = try required("sheet-sticky-title", as: "the sticky sheet's title")
     stickyTitle.centre.press(
@@ -4708,7 +3251,6 @@ final class RealInputTests: XCTestCase {
       "only the sticky sheet's own button closed it, and that close is the app's: no presented:false"
     )
 
-    // 6. The two-detent sheet: a drag up on its header reports the second detent.
     try tapUntilElement("sheet-open-two", as: "the two-detent sheet's opener", appears: "sheet-two-header")
     let header = try required("sheet-two-header", as: "the two-detent sheet's header")
     let mediumTop = header.frame.minY
@@ -4806,20 +3348,8 @@ final class RealInputTests: XCTestCase {
 
   // MARK: - Reading the screen
 
-  /// Real keystrokes into the hosted `UITextField`, from XCUITest's keyboard, read back
-  /// from React's own text and from the field's accessibility value.
-  ///
-  /// - **typing**: the keys reach React as the field's text;
-  /// - **a refused edit reverts**: the frozen field reports every key and keeps showing
-  ///   `frozen` - the handshake's revert, driven by a keyboard rather than a write;
-  /// - **`maxLength`**: seven keys into a cap of five leave five;
-  /// - **focus and blur**: a real tap focuses, Return submits and blurs (RN's single-line
-  ///   default), and the screen's own `ref.focus()` / `ref.blur()` buttons, tapped for
-  ///   real, move it again.
-  ///
-  /// The emoji half of `maxLength` and the composition guard are the harness's
-  /// (`TextField.harness.tsx`): XCUITest's keyboard types neither marked text nor emoji
-  /// reliably.
+  /// The emoji half of `maxLength` and the composition guard are checked in the in-app
+  /// harness: XCUITest's keyboard types neither marked text nor emoji reliably.
   func testRealInputTextField() throws {
     try goToTab(Tab.textFieldTab, showing: Echo.textTyping)
     XCTAssertEqual(try read(Echo.textTyping), "typed:  (0)", "the typing field should start empty")
@@ -4836,9 +3366,8 @@ final class RealInputTests: XCTestCase {
 
     let frozen = try textField(labelled: "Frozen field")
     try focusByTap(frozen, echo: nil, as: "the frozen field")
-    // One key at a time, each with its own witness and its own re-type, because a
-    // key that never arrived is a delivery failure and not a revert that lost an
-    // edit (`typeKey`). Counting a whole blind string assumed both apart.
+    // One key at a time, each waited for: a key that never arrived is a delivery failure,
+    // not a revert that lost an edit.
     try typeKey(
       "x",
       into: frozen,
@@ -4917,12 +3446,8 @@ final class RealInputTests: XCTestCase {
     return node
   }
 
-  /// The search field element carrying `label`, asked for as the element type a screen
-  /// reader is told about (`app.searchFields`, not `app.textFields`).
-  ///
-  /// The query *is* an assertion: `HybridNitroUiSearchField.swift` adds `.searchField`
-  /// to the traits, and a field that lost it would be an ordinary text field to
-  /// VoiceOver while still typing perfectly - which no behavioural check would see.
+  /// The search field element carrying `label`. The query is an assertion: it goes through
+  /// `app.searchFields`, so a field that lost its search-field trait is not found.
   private func searchField(labelled label: String) throws -> XCUIElement {
     let node = app.searchFields.matching(NSPredicate(format: "label == %@", label)).firstMatch
     if !node.waitForExistence(timeout: reactTimeout) {
@@ -4933,12 +3458,8 @@ final class RealInputTests: XCTestCase {
     return node
   }
 
-  /// The clear button of a field that is editing, by its own element rather than by
-  /// UIKit's localized "Clear text" - the label is UIKit's to translate, and a check
-  /// that spells it in English stops working in another language.
-  ///
-  /// `clearButtonMode = .whileEditing` means this exists only while the field edits with
-  /// text in it, which is the same condition a person sees the button under.
+  /// The clear button of a field that is editing, found by element rather than by UIKit's
+  /// localized "Clear text" label. It exists only while the field edits with text in it.
   private func clearButton(of field: XCUIElement) throws -> XCUIElement {
     let buttons = field.buttons
     XCTAssertEqual(
@@ -4959,24 +3480,6 @@ final class RealInputTests: XCTestCase {
     return clear
   }
 
-  /// Real keystrokes into UIKit's own `UISearchTextField`, plus the two things a *search*
-  /// field does that a text field does not: the Search key refuses an empty query, and
-  /// the field grows a clear button that takes the query out without losing focus.
-  ///
-  /// Four assertions here are not in `testRealInputTextField`, and each is the out-of-app
-  /// half of a claim the component makes:
-  ///
-  /// - **the field is a search field to a screen reader** - by the query this check goes
-  ///   through (`searchField(labelled:)`), not by a trait read.
-  /// - **Return with nothing in the field reports nothing**: `enablesReturnKeyAutomatically`
-  ///   is on, so UIKit disables the key, and Android states the same rule in `onSearch`.
-  ///   This is the iOS half of the assertion Android makes with a real Enter key.
-  /// - **the clear button empties the field and keeps focus**: the blur counter does not
-  ///   move, so a clear that also dismissed the keyboard is caught.
-  /// - **Return submits the query and then blurs**, as a single-line field does.
-  ///
-  /// The emoji half of `maxLength` and the composition guard are the harness's, as they
-  /// are for TextField: XCUITest's keyboard types neither marked text nor emoji reliably.
   func testRealInputSearchField() throws {
     try goToTab(Tab.searchFieldTab, showing: Echo.searchTyping)
     XCTAssertEqual(
@@ -5008,16 +3511,8 @@ final class RealInputTests: XCTestCase {
 
     let frozen = try searchField(labelled: "Frozen search field")
     try focusByTap(frozen, echo: nil, as: "the frozen field")
-    // Burst typing, kept here on purpose. `testRealInputTextField` types its frozen
-    // field one key at a time, which is what a dropped keystroke needs in order to stay
-    // a delivery failure; this site keeps the *burst* — two keys delivered before JS has
-    // answered the first, both edits in flight at once — so that ordering is still
-    // covered somewhere (X21). The burst is a press sequence like every other one: one
-    // `typeText` of "xy", its own witness waited for, and a re-typed key that is counted
-    // and reported when the witness says an edit is missing. A refused edit leaves the
-    // field back at `frozen` whether the key arrived and JS lost it or never arrived at
-    // all (`typeKey`'s note on what this control cannot witness), so the retry gives up
-    // no evidence that one key at a time would have kept.
+    // A burst on purpose: two keys delivered before JS has answered the first, so both
+    // edits are in flight at once.
     _ = try pressUntil(
       named: "keys \"xy\" into the frozen search field",
       waitingFor: "both refused edits to be reported",
@@ -5035,9 +3530,8 @@ final class RealInputTests: XCTestCase {
       "frozen: 2 edits refused",
       "every key into the frozen field should be reported to JS"
     )
-    // Read the revert for rather than race it: with two keys in one delivery the last
-    // one can still be landing when the echo matches, a window one key at a time does
-    // not have. What is asserted is unchanged — the field shows what JS kept.
+    // Waited for: with two keys in one delivery the last can still be landing when the echo
+    // matches.
     XCTAssertTrue(
       waitUntil({ ((frozen.value as? String) ?? "") == "frozen" }, window: reactTimeout),
       "and each one reverted: the field should still show what JS kept"
@@ -5057,7 +3551,6 @@ final class RealInputTests: XCTestCase {
       "the field should show what React was told"
     )
 
-    // 1. Focus, and the key that must not answer an empty query.
     let focus = try searchField(labelled: "Focus search field")
     try focusByTap(focus, echo: Echo.searchFocus, as: "the focus field")
     XCTAssertEqual(
@@ -5072,7 +3565,6 @@ final class RealInputTests: XCTestCase {
       "Return with an empty query should submit nothing and blur nobody"
     )
 
-    // 2. The clear button: one edit, focus kept.
     focus.typeText("go")
     XCTAssertEqual(
       focus.value as? String,
@@ -5091,7 +3583,6 @@ final class RealInputTests: XCTestCase {
       "and the field should hold nothing"
     )
 
-    // 3. The key that must answer, and the two imperative handles.
     focus.typeText("go")
     focus.typeText("\n")
     XCTAssertEqual(
@@ -5111,15 +3602,9 @@ final class RealInputTests: XCTestCase {
       "focus: 2 blur: 2 submitted: go",
       "and one that calls ref.blur() should blur it"
     )
-    // 4. The keyboard props (G27), from outside the app.
-    //
-    // The harness proves the control was configured; only a run like this one can prove
-    // the system drew the keyboard that goes with the configuration, because the keyboard
-    // belongs to UIKit and not to the app. The witness for "the letter keyboard" is a
-    // QWERTY keyboard measured *in this run* — the field with no keyboard prop at all,
-    // which is also the "an app that passes nothing sees no change" claim, seen as the
-    // letters it still gets. Everything else is compared against that reading rather than
-    // against a remembered key count or height, which belong to one iOS version.
+    // The keyboard belongs to UIKit, so only a run from outside the app can show which one
+    // was drawn. Each keyboard is compared with the letter keyboard measured in this run (the
+    // field with no keyboard prop), not with a key count or height remembered from one iOS.
     try required("search-focus-js", as: "the Focus from JS button").fingerTap()
     XCTAssertEqual(
       readUntil(Echo.searchFocus) { $0 == "focus: 3 blur: 2 submitted: go" },
@@ -5140,11 +3625,9 @@ final class RealInputTests: XCTestCase {
       "and blurring it should take the keyboard away again"
     )
 
-    // The email field first, because its keyboard carries the key that puts itself away:
-    // Search submits and the field blurs (step 3 above is that rule), which is what makes
-    // the number field reachable with a scroll and a tap — a row higher up, where no
-    // keyboard is drawn. The number pad has no Return key on iOS at all, so a check that
-    // ends there has no key to dismiss it with, and the next check launches its own app.
+    // The email field first: its keyboard has a Search key, which submits and blurs the
+    // field. The number pad has no Return key on iOS, so it goes last with nothing to
+    // dismiss it.
     let email = try searchFieldInView(labelled: "Email search field")
     try focusByTap(email, echo: nil, as: "the email field")
     let emailKeys = keyboardShape("keyboardType=email-address")
@@ -5153,12 +3636,8 @@ final class RealInputTests: XCTestCase {
       "keyboardType=\"email-address\" should open a keyboard with letters on it, not "
         + "\(emailKeys.keys) keys (the letter keyboard in this run has \(qwerty.keys))"
     )
-    // The "@" is the keystroke worth typing here: that keyboard carries it on its face,
-    // and a field the IME still believed was a plain text field has no @ key to press.
-    // One key at a time, each waited for — both fields are controlled, and a burst lands
-    // its second key before JS has answered the first (the shape `testRealInputPopover`
-    // documents losing). The query is built up as it is typed, so a dropped key cannot
-    // agree with itself: the expectation is what was pressed.
+    // "@" is on the face of the email keyboard only. One key at a time, each waited for: the
+    // fields are controlled, and a burst lands its second key before JS has answered the first.
     var emailQuery = ""
     for key in ["a", "@", "b"] {
       emailQuery += key
@@ -5198,14 +3677,9 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// A search field with `label`, scrolled into the window so a tap can reach it.
-  ///
-  /// Every other field on this screen is tapped from the top down, because a keyboard
-  /// takes the lower half of it; a check that arrives at a lower field last has to move
-  /// the page instead, and a `fingerTap` on a row UIKit has scrolled away taps whatever
-  /// is at that point now. The loop re-reads the field's box on every pass because the
-  /// scroll is what moves it — and scrolls back down when the box is above the window,
-  /// which is where a field ends up after the check above it scrolled past it.
+  /// A search field with `label`, scrolled into the window so a tap can reach it. The field's
+  /// box is re-read on every pass because the scroll moves it, and the page scrolls back down
+  /// when the box is above the window.
   private func searchFieldInView(labelled label: String) throws -> XCUIElement {
     let field = try searchField(labelled: label)
     let screen = app.windows.firstMatch.frame
@@ -5228,28 +3702,15 @@ final class RealInputTests: XCTestCase {
     throw RealInputCheckAborted(identifier: label)
   }
 
-  /// Which keyboard UIKit drew, in the two readings XCUITest can take of it: how many
-  /// keys it exposes and how tall it is.
-  ///
-  /// Both belong to the system's keyboard window, so neither can be faked from inside the
-  /// app. The key count is the useful one — a number pad is a grid of a dozen keys where
-  /// the letter keyboard is a full alphabet — and it is always compared with another
-  /// reading from the same run, because how many keys a keyboard has and how tall it
-  /// stands are the business of the iOS version installed and of no remembered constant.
-  ///
-  /// The labels are printed too, so a failure says what the keyboard was made of and not
-  /// only how big it was. A count of zero is the witness failing loudly, not a keyboard
-  /// with no keys: a run that cannot see the keys grades nothing.
+  /// Which keyboard UIKit drew: how many keys it exposes and how tall it is. Both depend on
+  /// the iOS version, so compare a reading with another one from the same run.
   private func keyboardShape(_ what: String) -> (keys: Int, height: CGFloat) {
     let keyboard = app.keyboards.firstMatch
     XCTAssertTrue(
       keyboard.waitForExistence(timeout: 8),
       "no keyboard came up for \(what)"
     )
-    // `descendants`, not `children`: how UIKit nests a keyboard's keys behind its layout
-    // groups is UIKit's business, and a witness that counts only one level deep would
-    // read a real keyboard as a nearly empty one. Keys do not contain keys, so the two
-    // agree on a flat keyboard and this is the one that cannot miss.
+    // `descendants`, not `children`: UIKit nests a keyboard's keys behind its layout groups.
     let keys = keyboard.descendants(matching: .key)
     let labels = keys.allElementsBoundByIndex.prefix(24).map { element in
       element.label.isEmpty ? element.identifier : element.label
@@ -5261,9 +3722,9 @@ final class RealInputTests: XCTestCase {
     return (keys.count, keyboard.frame.height)
   }
 
-  /// Read an echo for `seconds` and hand back what it said at the end. The negative
-  /// assertions above need the period: one read taken before the keypress was processed
-  /// would say "nothing happened" about a submit that had not arrived yet.
+  /// Read an echo for `seconds` and hand back what it said at the end. A negative assertion
+  /// needs the period: one read taken before the keypress was processed would say nothing
+  /// happened.
   private func readFor(_ seconds: TimeInterval, _ identifier: String) -> String {
     let deadline = Date().addingTimeInterval(seconds)
     var shown = ""
@@ -5277,26 +3738,10 @@ final class RealInputTests: XCTestCase {
     return shown
   }
 
-  /// Tap a field until it has the keyboard focus, retrying a dropped delivery the way
-  /// `pressUntil` does for every other control. With `echo`, the witness is also that
-  /// echo moving (the focus field's own `onFocus` count).
-  ///
-  /// Two witnesses are accepted, and each is the control's own answer rather than XCUITest's
-  /// opinion about the element it was handed:
-  ///
-  /// - `hasKeyboardFocus` on the wrapper or on anything inside it. The wrapper is *not* the
-  ///   control: React Native puts the app's `testID` on the view it makes, and the responder
-  ///   is the text field hosted under it. On a plain screen the flag reads through the wrapper,
-  ///   and this is the witness that answers. In a `Form` row the responder sits under a list
-  ///   cell as well, and the flag never turns true on the wrapper - measured on the note field
-  ///   with the keyboard on screen (`kbFrame=(0, 609, 420, 245)`), the field 321 pt higher than
-  ///   it had been, and its own `onFocus` reported to React.
-  /// - The field's own `onFocus` reaching React **and** a keyboard window on screen. The
-  ///   caller reads that echo as "no" before the first tap, so the one thing that can move it
-  ///   is this field taking the focus, and the window is what says a real keyboard came with it.
-  ///
-  /// Neither witness is "the tap did something": with no keyboard and no focus event the loop
-  /// retries and then fails, naming which witness was missing.
+  /// Tap a field until it has the keyboard focus, retrying a dropped delivery. Focus is
+  /// accepted from `hasKeyboardFocus` on the wrapper or anything inside it, or, with `echo`,
+  /// from the field's own `onFocus` reaching React while a keyboard is on screen: in a `Form`
+  /// row the flag never turns true on the wrapper.
   private func focusByTap(_ field: XCUIElement, echo: String?, as what: String) throws {
     let before = echo.map { echoText($0) }
     for _ in 0..<3 {
@@ -5309,12 +3754,8 @@ final class RealInputTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.2)
       } while Date() < deadline
     }
-    // Which of the two witnesses is missing is the whole question, and the failure line
-    // alone cannot say: `hasKeyboardFocus` is XCUITest's private read of the element it was
-    // handed, while the echo is the control's own `onFocus` arriving in React. A tap that
-    // never reached the field moves neither; a field that focused and was not believed
-    // moves one. Printing the box too, because a tap that landed on the wrong row looks
-    // exactly like a field that ignores touches.
+    // Printed so a failure says which witness was missing, and the box, because a tap that
+    // landed on the wrong row looks exactly like a field that ignores touches.
     print(
       "real-input focusByTap: FAILED \(what) - box=\(field.frame) "
         + "hasKeyboardFocus=\(holdsKeyboardFocus(field)) "
@@ -5326,11 +3767,9 @@ final class RealInputTests: XCTestCase {
     throw RealInputCheckAborted(identifier: what)
   }
 
-  /// Whether the keyboard focus is on this element or on anything it hosts.
-  ///
-  /// Asked of the wrapper alone, `hasKeyboardFocus` is a question about the wrong view - see
-  /// `focusByTap`. Descendants are read because XCUITest has no "who has the focus" query: the
-  /// element that answers true is the responder, and it is inside this box or nowhere.
+  /// Whether the keyboard focus is on this element or on anything it hosts. The wrapper that
+  /// carries the `testID` is not the responder, and XCUITest has no "who has the focus"
+  /// query, so descendants are read.
   private func holdsKeyboardFocus(_ field: XCUIElement) -> Bool {
     if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false {
       return true
@@ -5353,34 +3792,8 @@ final class RealInputTests: XCTestCase {
     return false
   }
 
-  /// Type one character into a focused field, and insist that *this character's*
-  /// witness arrives before the next character is typed.
-  ///
-  /// A key event is synthesised input on the same path as a touch, and this machine
-  /// drops those (`pressUntil`'s comment; `FOLLOWUPS.md:58`). The frozen-field check
-  /// used to type a whole string blind and then wait for the count, which rested on
-  /// two claims nobody verified: that every character of the string reached the
-  /// field, and that a field reports exactly one edit per character. When one key of
-  /// `typeText("xy")` went missing the echo stayed at `frozen: 1 edits refused` and
-  /// the check reported a *delivery* failure as a broken revert - the same line on
-  /// five branches (X19, G16, E2, E3, E5), green on every re-run, because the
-  /// assertion had no way to tell "one key was never typed" from "one edit was never
-  /// emitted". Typing one key and waiting for that key's own echo is what makes the
-  /// two visible apart, and the retry is the same one every other delivery in this
-  /// suite gets.
-  ///
-  /// `pressUntil`'s `nativeState` is the field's own text, which catches the version
-  /// of a lost event that leaves a trace: a key the field is still showing while its
-  /// echo never moved is a stuck edit, and it fails instead of being re-typed into a
-  /// green (F1 M3). Reading only a snapshot would report the ordinary revert of a
-  /// delivered key as that bug, which is why the witness is a state that persists
-  /// rather than a text caught mid-flight.
-  ///
-  /// What it cannot see is a lost event that leaves no trace, and this control is one:
-  /// with the screen's `refuseEdit` emptied out, the field went back to `frozen`
-  /// anyway and the case failed as "never delivered" after three keys - not retried
-  /// into a green, but not named as a lost event either. A field the app puts back
-  /// whatever JS did with the edit has nothing left for a witness read from out here.
+  /// Type one character into a focused field and wait for that character's own echo before
+  /// the next, so a key that was never delivered is re-typed rather than read as a lost edit.
   ///
   /// - Parameter resting: the text the app forces this field to show, which a
   ///   refused edit has to return to once the echo arrives.
@@ -5394,10 +3807,8 @@ final class RealInputTests: XCTestCase {
     waitingFor: String
   ) throws {
     func fieldText() -> String { (field.value as? String) ?? "" }
-    // The previous key's revert has to have landed before this one is typed:
-    // `pressUntil` reads the control's state once, before its first press, and a
-    // reading taken mid-revert is a text this key cannot be blamed for leaving
-    // behind - it would be reported as a lost event the app never got.
+    // The previous key's revert has to land first: `pressUntil` reads the control's state
+    // once, before its first press, and a reading taken mid-revert would be blamed on this key.
     if !waitUntil({ fieldText() == resting }, window: reactTimeout) {
       dumpHierarchy("\(what): the field did not return to its value between keys")
       XCTFail(
@@ -5418,23 +3829,12 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A real tap on the `compact` field must open SwiftUI's own presentation, and a
-  /// real tap on a day inside it must reach JS as a new instant.
-  ///
-  /// This is the control where a hosted-library bug is most likely, because the
-  /// thing the finger finally lands on is not in the React Native window at all -
-  /// it is SwiftUI's calendar, presented by the presentation system. Two hops have
-  /// to work for the echo to move: the field's own button, then the day cell.
-  ///
-  /// The day is chosen by the helper rather than named: a pick of the date already
-  /// showing reports nothing by design (the suppression rule), which from out here
-  /// is indistinguishable from a touch that never arrived.
+  /// The day is chosen by the helper rather than named: a pick of the date already showing
+  /// reports nothing by design, which looks the same as a touch that never arrived.
   func testRealInputDatePicker() throws {
     try goToTab(Tab.datePickerTab, showing: Echo.dateValue)
     let field = try required("real-input-date", as: "the uncontrolled DatePicker field")
     let whereItStarted = field.frame
-    // A dash, not a date: the picker is uncontrolled, so nothing has told JS a
-    // value and nothing should have.
     XCTAssertEqual(
       try read(Echo.dateValue),
       "-",
@@ -5461,10 +3861,6 @@ final class RealInputTests: XCTestCase {
       after: "the real pick"
     )
 
-    // The refusing parent: the pick must reach JS, and the day the parent keeps
-    // sending must not move. Unlike the SegmentedControl check this does not need
-    // a tap-twice oracle - the parent's pinned day is on screen as text, and a
-    // picker that never reverted would show the picked day in the field.
     let rejecting = try required(
       "real-input-date-reject",
       as: "the controlled DatePicker field"
@@ -5497,59 +3893,23 @@ final class RealInputTests: XCTestCase {
       "the parent never accepted the change, so the day it sends is still 2024-06-15"
     )
 
-    // And the same control at the bottom of a form rather than the top, where the
-    // presentation has no room under it and the label has to leave the value alone.
     try assertLowRowField()
   }
 
-  /// The last row of the Date screen: a labelled `compact` field with the whole
-  /// screen above it and nothing under it but the home indicator.
-  ///
-  /// Two properties live or die in that position, and neither is visible from the
-  /// fields near the top that every other check uses.
-  ///
-  /// **The popover has to fit.** The bubble this control presents is 336 pt wide and
-  /// 300-420 pt tall. UIKit sizes a popover to the room available *on the side its
-  /// arrow is permitted to point*, so while the presentation permitted only one
-  /// direction, a field in the lower half of the screen got a calendar clipped to the
-  /// few dozen points left under it - the month cut in half, the day cells far under
-  /// the 44 pt target `calendarWidth` exists to guarantee. The fix is to permit both
-  /// directions; this is the check that can tell, because the row is scrolled as far
-  /// down as the page goes.
-  ///
-  /// **The announcement has to be complete.** This row sets `accessibilityLabel`, and
-  /// with a label set VoiceOver reads the label as the node's *name* - so the date has
-  /// to arrive as the node's *value* or the user hears "Departure date, button" and
-  /// never the day. That is what `.accessibilityValue` on the compact button is for,
-  /// and the accessibility tree is the only place it can be observed.
+  /// The last row of the Date screen: a labelled `compact` field at the bottom of the page.
+  /// The popover has to fit there, since UIKit sizes a popover to the room on the side its
+  /// arrow may point. And the date has to be announced as the node's value, because with a
+  /// label set VoiceOver reads the label as the node's name.
   private func assertLowRowField() throws {
-    // Whatever the earlier half of this test left open has to go first: a tap
-    // outside a popover is dismissed by the popover, and the scroll below would
-    // otherwise be swallowed by it.
+    // Anything still presented has to go first: a popover would swallow the scroll below.
     try dismissAnyPresentation()
 
     let field = try required("low-date", as: "the last row's DatePicker field")
     let screen = app.windows.firstMatch.frame
 
-    // Scroll to the end of the page. It is at the end when a further scroll no longer
-    // moves the field - not when the field becomes hittable, which happens rows
-    // before the bottom and would leave this check testing a field in the middle.
-    //
-    // The drag runs down the page's own 16pt of left padding rather than across the
-    // middle, and that is not a style choice. This page ends with three `wheel` rows
-    // (G29), and a wheel keeps every vertical drag that starts inside it - correct for
-    // a wheel, fatal for `app.swipeUp()`, which always starts at the centre of the
-    // window. Measured on the run that found this: the first swipe landed on a drum's
-    // selection row, the drums rolled, the page did not move, "no movement" read as
-    // "at the end", and the tap went to a row left at y=1005 of a 912pt window. The
-    // padding belongs to the scroll view and no wheel is laid out inside it, so a drag
-    // started there always scrolls the page.
-    //
-    // Steps rather than full swipes, as in `scrollIntoView`, and the end is three
-    // steps that move nothing rather than one: the page also carries `inline` rows that
-    // reclaim the padding and reach the gutter (the `wideBox` stories), so a step can
-    // still be swallowed on its way down, and one eaten gesture is what the old loop
-    // mistook for the end of the world.
+    // Scrolls until three steps in a row no longer move the field: it becomes hittable rows
+    // before the bottom, and one step can be swallowed. The drag runs down the page's 16pt
+    // left padding, because a `wheel` row keeps every vertical drag that starts inside it.
     let gutter = app.coordinate(
       withNormalizedOffset: CGVector(dx: 8 / screen.width, dy: 0.72)
     )
@@ -5571,11 +3931,6 @@ final class RealInputTests: XCTestCase {
     let roomBelow = screen.maxY - frame.maxY
     print("real-input low row: field=\(frame) screen=\(screen) roomBelow=\(roomBelow)")
 
-    // The row has to be *on* the window before any of this means anything: a row
-    // parked under the home indicator is in nobody's lower half and is not tappable,
-    // and a scroll loop that stopped early would otherwise be read as a date picker
-    // that refused a tap. G29's three `wheel` rows are why this needs saying - a
-    // scroll step swallowed by a drum looks exactly like the end of the page.
     XCTAssertLessThanOrEqual(
       frame.maxY,
       screen.maxY,
@@ -5583,8 +3938,6 @@ final class RealInputTests: XCTestCase {
         + "\(screen.height)pt window, so it is off it: no finger can reach it, which "
         + "means the page never scrolled to its end rather than that the field refused"
     )
-    // The check is only worth running in the position it is about, so say so loudly
-    // rather than pass quietly on a screen that did not scroll.
     XCTAssertGreaterThan(
       frame.minY,
       screen.midY,
@@ -5598,21 +3951,9 @@ final class RealInputTests: XCTestCase {
         + "of its own - the case this check exists for is a field with almost none"
     )
 
-    // The accessibility pair, read the way a screen reader reads it.
-    //
-    // `testID` names React Native's container, and the container is *not* the node
-    // VoiceOver stops on: the control is the hosted element inside it, which is where
-    // `accessibilityLabel` goes (core.md §3 bans naming the box instead). On this
-    // screen the two differ in exactly the way that matters - the container reports
-    // the label with an empty value, and the hosted button below it reports the label
-    // *and* the localised day. So the assertion aims at the innermost element the
-    // subtree offers: reading `field.value` would be reading the wrapper, which says
-    // nothing about what a user hears.
-    //
-    // The subtree is printed either way. This is the only place in the suite where the
-    // tree a screen reader walks gets written down, and the kept log
-    // (`.real-input/ios/xcodebuild-test.log`, "low row a11y") is the evidence behind
-    // the M3 claim in the report.
+    // `testID` names React Native's container, which reports the label with an empty value.
+    // VoiceOver stops on the hosted element inside it, so the assertion aims at the innermost
+    // element the subtree offers.
     func describe(_ node: XCUIElement, who: String) -> String {
       let id = node.identifier
       let label = node.label
@@ -5627,9 +3968,7 @@ final class RealInputTests: XCTestCase {
     for node in walked {
       print(describe(node, who: "descendant"))
     }
-    // Contrast, one row above: an unlabelled field's control takes its name from its
-    // own text, so a *label* is the only thing that can push the date out of the
-    // announcement - which is why the labelled row is the one under test.
+    // For contrast: an unlabelled field's control takes its name from its own text.
     let plain = app.descendants(matching: .any)["tinted-inline"].firstMatch
     if plain.exists {
       print(describe(plain, who: "the unlabelled row above"))
@@ -5655,15 +3994,9 @@ final class RealInputTests: XCTestCase {
         + "windows=\(app.windows.count) containerHittable=\(field.isHittable) "
         + "controlHittable=\(control.isHittable)"
     )
-    // The finger goes on the *control*, which is what the paragraph above just
-    // located. React Native's container reports `isHittable == false` here - hit
-    // testing returns the hosted button, not the wrapper around it - and the kept log
-    // of the run that aimed at the wrapper shows the first press eaten (`press 1 ->
-    // popovers=0`, `press 2 -> popovers=1`) with the bubble then opening at its full
-    // size. Aiming at the control is both the honest gesture and the reliable one;
-    // the retry stays because a press released while the list is still settling can
-    // still be eaten by its own gesture recogniser, and that is not the property
-    // under test - the size and place of the presentation below are.
+    // The press goes on the hosted control: hit testing returns it, not the container.
+    // Retried because a press released while the list is still settling can be eaten by its
+    // gesture recogniser.
     var attempts = 0
     while popovers.count == 0 && attempts < 3 {
       attempts += 1
@@ -5709,7 +4042,6 @@ final class RealInputTests: XCTestCase {
         + "down at the field it belongs to"
     )
 
-    // And the calendar inside it is the usable one, not a shrunken drawing.
     let days = popover.descendants(matching: .collectionView).firstMatch
       .descendants(matching: .button)
     var dayCount = 0
@@ -5728,11 +4060,8 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Close whatever presentation is on screen, by tapping outside it.
-  ///
-  /// Popovers dismiss on a tap outside their own bounds, so the corner of the window
-  /// is the neutral place to ask for that - and if something is up that will not
-  /// close, that is worth a failure of its own rather than a mysterious later tap.
+  /// Close whatever presentation is on screen by tapping outside it: a popover dismisses on
+  /// a tap outside its own bounds.
   private func dismissAnyPresentation() throws {
     let popovers = app.descendants(matching: .popover)
     guard popovers.count > 0 else {
@@ -5752,21 +4081,8 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// Press a `compact` field and return the popover it presented.
-  ///
-  /// The press has to produce a *presentation*, not just a flag: this is the one
-  /// control in the library whose content, after the tap, is not in the React
-  /// Native window at all. The wait is on the popover element itself, so a field
-  /// that only moved a piece of state fails here rather than in the day-picking
-  /// helper, where the failure would read as "no cells" and hide what happened.
-  ///
-  /// What is measured here is the thing a flag cannot tell: whether the bubble a
-  /// finger has to use is the right size and in the right place. The first version
-  /// of this control presented a 68x188.7 pt popover whose calendar was laid out at
-  /// 52 pt wide - a month of day cells drawn from `x: -43` to `x: 141`, most of them
-  /// outside the bubble and each one a fraction of the 44 pt minimum touch target -
-  /// below the status bar, 190 pt away from the field that opened it. Every number
-  /// the app reported was true.
+  /// Press a `compact` field and return the popover it presented. The wait is on the popover
+  /// element itself, and its size and place are asserted here.
   private func openPresentation(from field: XCUIElement, watching echo: String) throws -> XCUIElement {
     let fieldFrame = field.frame
     let popovers = app.descendants(matching: .popover)
@@ -5791,31 +4107,17 @@ final class RealInputTests: XCTestCase {
       "the field presented a popover \(popover.frame.width)pt wide - too narrow for a "
         + "calendar's day cells to be tappable, whatever the control reported"
     )
-    // A bubble too short clips the calendar below its own edge: the first version of
-    // this presentation was 188.7 pt around a calendar that needs about 312, so the
-    // bottom rows of the month were drawn outside the popover. There is no matching
-    // upper bound on purpose - pinning the content 700 pt tall could not drive such an
-    // assertion red, because UIKit clamps a popover to the room it has, so a "sheet
-    // wearing a popover's arrow" is not a state an iPhone can show.
+    // A bubble too short clips the calendar. There is no upper bound: UIKit clamps a popover
+    // to the room it has.
     XCTAssertGreaterThanOrEqual(
       popover.frame.height,
       250,
       "the field presented a popover \(popover.frame.height)pt tall, which is shorter "
         + "than the calendar inside it - the bottom rows of the month are cut off"
     )
-    // And it has to be *the field's* popover: a presentation that resolves its anchor
-    // somewhere else on the screen points at nothing. Which side it lands on is UIKit's
-    // choice and not the library's — the bubble goes where the screen has room, so a field
-    // near the bottom of a scroll gets its calendar above it. Asserting the side below was
-    // therefore wrong, and it went red that way on the leased iPhone 17: "the popover
-    // opened at y 213.67 while the field ends at 587.00", a bubble presented above the
-    // control that opened it. Adjacency to one of the field's two edges is the property,
-    // then, not the side. The band is a tolerance, not a measurement: `-8` of overlap is
-    // the arrow's own height, which the accessibility frame may or may not include, and 32
-    // is slack over that. What it must catch is an anchor resolved elsewhere — an anchor
-    // 220 pt off its field is 220 pt clear of both halves, so it fails by the arithmetic.
-    // That displacement was never built, so read it as arithmetic rather than a red proof;
-    // what was measured is this gate red at the wrong geometry and green at this one.
+    // The popover has to be adjacent to its field, above or below: which side is UIKit's
+    // choice. The band allows for the arrow's height, which the accessibility frame may or
+    // may not include.
     let gapBelow = popover.frame.minY - fieldFrame.maxY
     let gapAbove = fieldFrame.minY - popover.frame.maxY
     XCTAssert(
@@ -5827,18 +4129,10 @@ final class RealInputTests: XCTestCase {
     return popover
   }
 
-  /// Tap day cells inside an open popover until the echo moves.
-  ///
-  /// The days of a SwiftUI calendar are `Button`s inside the calendar's collection
-  /// view (`.cell` finds none: there is no table here), and the list is scoped to
-  /// the popover on purpose - the screen also has an *inline* picker whose days are
-  /// in the app's own window, and a tap that landed there would move the wrong
-  /// echo and prove nothing.
-  ///
-  /// Candidates start at the middle of the list rather than the top: the first rows
-  /// of a month are the days that follow its first weekday, and on the first of a
-  /// month one of them is today - the date an uncontrolled picker already shows,
-  /// whose pick reports nothing by design.
+  /// Tap day cells inside an open popover until the echo moves. The days are `Button`s in the
+  /// calendar's collection view, scoped to the popover because the screen also has an inline
+  /// picker. Candidates start mid-list: an early cell can be today, the date an uncontrolled
+  /// picker already shows, whose pick reports nothing.
   private func pickSomeDay(
     in popover: XCUIElement,
     from field: XCUIElement,
@@ -5878,13 +4172,8 @@ final class RealInputTests: XCTestCase {
       guard day.label.range(of: "[0-9]", options: .regularExpression) != nil else { continue }
       day.fingerTap()
       if isMoved(readUntil(echo, timeout: 3, isMoved)) {
-        // The pick worked, and the presentation is still open: it covers the field
-        // the next pair of assertions has to press. The field is a point outside the
-        // bubble that belongs to no reachable control, so a tap there can only be the
-        // platform's own "tap outside" affordance - and waiting for the bubble to go
-        // is what makes those assertions mean something. Closing it is the library's
-        // job too: UIKit dismisses without asking, and the model's `presented` flag
-        // has to follow or it lies to every test that reads it afterwards.
+        // The presentation is still open and covers the field the next assertions press.
+        // The field's position is outside the bubble, so a tap there dismisses the popover.
         field.fingerTap()
         let deadline = Date().addingTimeInterval(reactTimeout)
         var open = app.descendants(matching: .popover).count
@@ -5913,10 +4202,6 @@ final class RealInputTests: XCTestCase {
   }
 
   /// The element React Native gave this `testID`, waiting for it to exist.
-  ///
-  /// `.any` rather than a concrete type: the hosted controls are views React
-  /// Native hosts, and which accessibility subclass they surface as is the
-  /// library's business, not the check's.
   private func required(
     _ identifier: String,
     as what: String,
@@ -5962,36 +4247,17 @@ final class RealInputTests: XCTestCase {
     _ = try required(screenAnchor, as: "the screen behind that tab", timeout: reactTimeout)
   }
 
-  /// Scroll the tab bar sideways until a tab is wholly inside the window.
-  ///
-  /// The bar scrolls (X19): fifteen tabs sharing one row were each too small to tap, so
-  /// every tab keeps its natural width and the ones past the window's edge are scrolled
-  /// to. React Native keeps a scrolled-away tab in the accessibility tree with its real
-  /// frame, so the distance is known: each drag moves the bar by what the tab overhangs
-  /// plus a margin, at most most of a window, slowly and with a hold before the finger
-  /// lifts, so the bar does not fling past it. The pan's own slop eats part of every
-  /// drag, which is why this loops on the frame rather than trusting one step.
-  ///
-  /// How it loops is `GestureSettlement` now, not a step count (X34 item 4). The old version dragged
-  /// eight times and asked `tab.frame` once per step — and on a loaded box the bar is *still
-  /// animating* when that read happens, so eight drags ended with "tab tab-icon-button is still
-  /// outside the window (it is at (1158.0, ...))" and the IconButton case never got to run
-  /// (FOLLOWUPS; X31). Now the frame is read until two consecutive reads agree, a drag is sent only
-  /// into a reading that has settled outside the window, and the bound is a deadline instead of a
-  /// number of drags — how many drags a loaded simulator needs is precisely what cannot be known at
-  /// compile time. The counts are printed either way, so a run says what it had to do.
-  ///
-  /// - Returns: the wait's outcome — whether the tab ended wholly inside the window and hittable,
-  ///   with the reads and drags it took to get there.
+  /// Scroll the tab bar sideways until a tab is wholly inside the window. React Native keeps
+  /// a scrolled-away tab in the accessibility tree with its real frame, so each drag moves
+  /// the bar by what the tab overhangs plus a margin, slowly and with a hold so it does not
+  /// fling. A drag is sent only when two reads agree that the tab is outside the window.
   private func revealTab(
     _ tab: XCUIElement
   ) -> GestureSettlement.Outcome<TabReveal> {
-    // Asked once: the window is not going to move during a tab-bar scroll, and every read here is a
-    // round trip into the test manager, which is the cost the deadline has to cover.
+    // Read once: every read is a round trip into the test manager.
     let window = app.windows.firstMatch.frame
-    // The reading the next drag is aimed by. `settle`'s closures cannot hand each other a value, so
-    // the last read is kept here — and only ever written by `read`, so a drag is aimed at where the
-    // tab was *seen*, not at a frame read again in the middle of the drag.
+    // The reading the next drag is aimed by. Only `read` writes it, so a drag is aimed at
+    // where the tab was seen.
     var seen = TabReveal(frame: tab.frame, hittable: tab.isHittable, window: window)
     let outcome = GestureSettlement.settle(
       deadlineMs: Self.revealTabDeadlineMs,
@@ -6005,8 +4271,8 @@ final class RealInputTests: XCTestCase {
         seen = reading
         return reading
       },
-      // The frame is the question; `hittable` travels with it so a settled box that the finger still
-      // cannot reach is not mistaken for agreement about a revealed tab.
+      // `hittable` travels with the frame, so a settled box the finger still cannot reach is
+      // not taken for a revealed tab.
       agrees: { $0.frame == $1.frame && $0.hittable == $1.hittable },
       satisfied: { $0.insideWindow },
       // Outside the window and settled is exactly when a drag is owed.
@@ -6039,9 +4305,6 @@ final class RealInputTests: XCTestCase {
   }
 
   /// One reading of a tab bar: where a tab is, and whether a finger could reach it.
-  ///
-  /// The window travels with the reading so `agrees` compares two samples of the same screen rather
-  /// than a box against whatever the window happens to be called now.
   private struct TabReveal: Equatable {
     let frame: CGRect
     let hittable: Bool
@@ -6054,11 +4317,6 @@ final class RealInputTests: XCTestCase {
 
   /// Fail, with the hierarchy, if a control has moved out of the window since it
   /// was last looked at.
-  ///
-  /// Every check here taps or drags a control more than once, and a control that
-  /// has been laid out somewhere else - or nowhere - cannot be reached again.
-  /// Saying so here turns "the query found nothing" into the measurement that
-  /// shows what the app did.
   private func assertStillInPlace(
     _ identifier: String,
     startedAt: CGRect,
@@ -6075,12 +4333,8 @@ final class RealInputTests: XCTestCase {
       )
       throw RealInputCheckAborted(identifier: identifier)
     }
-    // To a hundredth of a point, not bit for bit. XCUITest hands a frame back through
-    // float32, so a box whose top and bottom sit either side of a power of two reads
-    // 2^-16 pt short on one read and exact on the next: X19's tab bar moved the
-    // controlled switch 10 pt down, to y 233.67 -> 261.67 (across 256), and this read
-    // 27.999984741 against 28.0 for a switch that had not moved. A hundredth of a point
-    // is a thirtieth of a pixel at @3x, and layout never moves a box by less than a pixel.
+    // To a hundredth of a point, not bit for bit: XCUITest hands a frame back through
+    // float32, so a box that has not moved can read 2^-16 pt differently on two reads.
     let now = node.frame
     let drift = max(
       abs(now.minX - startedAt.minX),
@@ -6129,65 +4383,20 @@ final class RealInputTests: XCTestCase {
     return shown
   }
 
-  /// Press something, then wait for the witness that the press *arrived*, and retry
-  /// the press until the witness shows or the attempts run out.
+  /// Press something, wait for the witness that the press arrived, and retry the press until
+  /// the witness shows or the attempts run out. A synthesised touch can be dropped by the OS
+  /// under load; an attempt happens only while the witness is still absent.
   ///
-  /// Every check in this file used to be `tap(); XCTAssert(readUntil(...))`: it
-  /// waited for the answer and nothing waited for the question. A synthesised touch
-  /// can be dropped by the OS at any load (`FOLLOWUPS.md:58`; X6 saw it in two of
-  /// four full runs), and this machine reproduces it - on 2026-10-28 `testRealInputSwitch`
-  /// failed 11/11 runs, one on tap 1 and one on tap 2, with the hierarchy dump
-  /// showing the SwiftUI `Switch`'s own `value:` unmoved. Nothing reached the binding
-  /// to be painted optimistically, so the missing thing is the delivery, not an
-  /// answer. The suite already knew: `tapUntilEcho` retries the press that arms the
-  /// leak case "because pressing blind once cost a red run whose only symptom was a
-  /// Picker that survived", and that check has not flaked since. This is that lesson
-  /// applied everywhere else, with the witness as a closure because it is not always
-  /// an element that appears: for a Switch it is a rendered *value*, for a
-  /// `compact` field it is a popover, for a menu anchor it is a row.
-  ///
-  /// Retrying cannot manufacture a result: an attempt happens only while the witness
-  /// is still absent, and each witness below is unreachable without a delivered
-  /// touch. What a retry does cost is that an echo which arrives *late* rather than
-  /// never can be overtapped - a real but far rarer fault (the drop is measured, the
-  /// late echo is not, and each attempt first waits the whole `reactTimeout`, eight
-  /// seconds). It shows up as the failure text quoting a reading that moved past what
-  /// was expected, which is a different sentence from the one a drop produces, and the
-  /// native-state check above is what catches the version where the control moved and
-  /// the echo did not.
-  ///
-  /// When every attempt fails, the message names both readings and says which of the
-  /// two faults it is: taps that were never delivered, or a control that ignores a
-  /// real touch - the distinction a blind tap could not make, and the reason this is
-  /// not simply a road to green.
-  ///
-  /// - Parameter press: delivers the touch, re-finding its target each attempt: a
-  ///   control that moved (a Picker whose title grew) must be aimed at where it is now.
-  ///   It is told which attempt this is, so a press that can only be made while
-  ///   something is on screen (an open menu's row) can insist on it the first time and
-  ///   treat it as gone - nothing to press, just keep waiting - after that.
-  /// - Parameter reading: what the witness currently says, for the log line and the
-  ///   failure. Keep it cheap and non-fatal - `read(_:)` XCTFails on a missing id.
-  /// - Parameter nativeState: what the *control itself* says it holds, read the same
-  ///   way `switch-uncontrolled`'s native `value:` was read to diagnose the drop. The
-  ///   witness is React's render, so it can be absent for two different reasons, and
-  ///   an attempt's window expiring cannot tell them apart on its own: the touch never
-  ///   arrived, or the control changed and lost the event on its way to JS. Retrying
-  ///   is right for the first and wrong for the second - a third press would land the
-  ///   event, the echo would arrive, and the check would go green reporting a drop
-  ///   that never happened (F1 M3). When this is given and it has moved while the
-  ///   witness has not, the helper stops and says "delivered, but the change never
-  ///   reached JS". Pass it wherever the control publishes its own state.
-  /// - Parameter pressNoun: what to call one delivery in the log lines. Every press
-  ///   in this file is a touch, so the default is "tap"; `typeKey` types instead, and
-  ///   a report that said "answered on tap 2/3" about a keystroke would name the
-  ///   wrong event in the one place a human reads what a run had to re-send.
-  /// - Parameter attemptWindow: how long one press gets to show its witness. The
-  ///   default is `reactTimeout` - the same budget the blind `readUntil` it replaces
-  ///   already gave a control - so a check gets that wait *plus* the retries rather
-  ///   than three attempts sharing what was one wait. A control that answers in six
-  ///   seconds on a loaded machine was never broken, and this helper must not be the
-  ///   reason it starts failing.
+  /// - Parameter press: delivers the touch, re-finding its target each attempt. It is told
+  ///   which attempt this is, so a press that needs something on screen (an open menu's row)
+  ///   can insist on it the first time and skip pressing after that.
+  /// - Parameter reading: what the witness currently says, for the log line and the failure.
+  ///   Keep it cheap and non-fatal.
+  /// - Parameter nativeState: what the control itself says it holds. When it has moved while
+  ///   the witness has not, the touch arrived and the event was lost on its way to JS, so the
+  ///   helper fails instead of pressing again.
+  /// - Parameter pressNoun: what to call one delivery in the log lines.
+  /// - Parameter attemptWindow: how long one press gets to show its witness.
   @discardableResult
   private func pressUntil(
     named what: String,
@@ -6205,10 +4414,8 @@ final class RealInputTests: XCTestCase {
     let startedAt = nativeState?()
     let echoStart = reading()
     if nativeState != nil && startedAt == nil {
-      // A witness that reads nothing can never report a change, so passing it would
-      // be worse than passing nothing: every retry would be blamed on a dropped
-      // touch, and a lost event would still go green. Say the guard is not armed
-      // rather than pretending it is.
+      // A witness that reads nothing can never report a change, so the guard would not be
+      // armed.
       XCTFail(
         "\(waitingFor): \(what) was given a native-state witness and it read nothing, "
           + "so a delivered touch could not be told from a lost event. The control "
@@ -6233,23 +4440,17 @@ final class RealInputTests: XCTestCase {
         }
         Thread.sleep(forTimeInterval: 0.2)
       }
-      // Not answered. Before pressing again, ask the control whether it moved:
-      // a control that changed state while its echo sat still has the touch, and
-      // has lost the event. Pressing a third time would hide that.
-      //
-      // Only when the echo has not moved *at all*: an echo that moved to the
-      // wrong value proves JS heard something, and saying "the event never
-      // reached JS" about it would be a false accusation.
+      // Before pressing again, ask the control whether it moved: one that changed while its
+      // echo sat still received the touch and lost the event. Only when the echo has not
+      // moved at all, because an echo at the wrong value proves JS heard something.
       if let nativeState,
         let moved = nativeState(),
         let startedAt,
         moved != startedAt,
         shown == echoStart
       {
-        // Not a retry: no press. "The event never reached JS" is only safe once the
-        // echo has had a second window to arrive, because a JS thread that is merely
-        // very slow - a cold bundle on a busy machine - looks exactly like a lost
-        // event from here. A dropped event still fails, one window later.
+        // No press here. The echo gets one more window first: a JS thread that is merely
+        // slow looks exactly like a lost event.
         let graceUntil = Date().addingTimeInterval(window)
         while Date() < graceUntil {
           shown = reading()
@@ -6300,33 +4501,19 @@ final class RealInputTests: XCTestCase {
     return node.label.isEmpty ? ((node.value as? String) ?? "") : node.label
   }
 
-  /// A probe readout that is a bare number, or nil when it is not there or says
-  /// something else.
-  ///
-  /// Kept apart from `echoText` because the two fail differently: an echo the suite
-  /// asserts on must be present and correct or the check is wrong, while the probe's
-  /// counters are optional witnesses — the same cell can be read from a control's own
-  /// value instead — so an unreadable one is reported as no reading, not as zero. A
-  /// zero from a witness that is missing would be a measurement, and a false one.
-  ///
-  /// - Parameter identifier: the readout's `accessibilityIdentifier`.
+  /// A readout that is a bare number, or nil when it is not there or says something else:
+  /// an unreadable one is no reading, not zero.
   private func publishedNumber(_ identifier: String) -> String? {
     let shown = echoText(identifier).trimmingCharacters(in: .whitespaces)
     return shown.allSatisfy(\.isNumber) && !shown.isEmpty ? shown : nil
   }
 
-  /// Tap a control until the on-screen *value* it is meant to change says so.
-  ///
-  /// The value rather than the echo's *existence*, which is what `tapUntilEcho`
-  /// waits for and is not enough here: `switch-controlled-value` is on screen from
-  /// the first render, so existence alone passes untouched. Keying on the value also
-  /// means each flip is unreachable without a delivered touch.
+  /// Tap a control until the on-screen value it is meant to change says so.
   ///
   /// - Parameter atFractionX: how far across the control to press, for the controls
-  ///   where the middle is not the segment under test (see `atFraction(_:)`).
+  ///   where the middle is not the part under test.
   /// - Parameter nativeState: the control's own answer, for the controls that publish
-  ///   one - `nativeSwitchState(of:)` for a Switch. See `pressUntil`: this is what
-  ///   tells a dropped touch apart from a lost event, before a retry can confuse them.
+  ///   one. Passed on to `pressUntil`.
   private func tapUntilValue(
     _ identifier: String,
     echo: String,
@@ -6356,22 +4543,9 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// A real tap on one half of a Stepper moves it exactly one step, a tap on the
-  /// half at its bound moves it nothing, and a **held** half keeps stepping.
-  ///
-  /// The first two are the pair Android measures too. The third is the reason this
-  /// check is not a copy of it: hold-to-repeat is the one behaviour iOS has and
-  /// Android does not (`docs/components/stepper.md` says so in as many words), and
-  /// it is a property of SwiftUI's own control — the Binding is written once per
-  /// repeat, and each write is a step and an event. Nothing inside the app can see
-  /// a repeat: `Stepper.harness.tsx` steps through `nuiTestStep`, which is one step
-  /// by construction. Only a finger held down asks the question, so this is the
-  /// check that proves the documented difference is a difference and not an
-  /// oversight — and its Android twin proves the opposite half, that a hold there
-  /// steps once.
-  ///
-  /// The halves are aimed at by fraction: the control is one element whose box covers
-  /// both, so `fingerTap` on it lands between them.
+  /// Hold-to-repeat exists on iOS only: SwiftUI's Stepper writes its binding once per repeat.
+  /// The halves are aimed at by fraction, because the control is one element whose box covers
+  /// both.
   func testRealInputStepper() throws {
     try goToTab(Tab.stepperTab, showing: Echo.stepperValue)
     let live = try required("real-input-stepper", as: "the real-input stepper")
@@ -6389,7 +4563,6 @@ final class RealInputTests: XCTestCase {
     let minusX: CGFloat = 0.15
     let plusX: CGFloat = 0.85
 
-    // 1. At rest, so every claim below is about a number that moved.
     XCTAssertEqual(
       try read(Echo.stepperEvents), "0",
       "no step should be reported before a touch is delivered"
@@ -6413,7 +4586,6 @@ final class RealInputTests: XCTestCase {
       "the hold fixture should start in the middle of its range, with room to repeat"
     )
 
-    // 2. Each half, one tap, one step. Exact, because one event per tap is the claim.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-stepper",
@@ -6443,10 +4615,8 @@ final class RealInputTests: XCTestCase {
       "two taps should report two steps — one event per tap, not one per half"
     )
 
-    // 3. The bounds. Down to 0, refused another descent; up to 2, refused another
-    //    ascent. SwiftUI disables the half at a bound itself, so the event counter is
-    //    the read: a control that reported a step onto the value it already holds is
-    //    the failure, and it is invisible in the value echo.
+    // SwiftUI disables the half at a bound itself, so the event counter is the read: a step
+    // onto the value already held is invisible in the value echo.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-stepper",
@@ -6480,9 +4650,8 @@ final class RealInputTests: XCTestCase {
       "a tap on the half at the maximum should be refused too"
     )
 
-    // 4. The hold, on the fixture with room for it: one press, several steps.
-    //    `>= 7` from 5 says at least *two* steps came out of one held press, which no
-    //    single tap can do, and it does not care how fast this simulator repeats.
+    // One held press, several steps: `>= 7` from 5 means at least two, which no single tap
+    // can produce, however fast the simulator repeats.
     held.atFraction(plusX).press(forDuration: 1.5)
     let afterHold = readUntil(Echo.stepperHoldValue, timeout: 4) {
       Int($0) ?? 0 >= 7
@@ -6494,14 +4663,8 @@ final class RealInputTests: XCTestCase {
         + "is what `docs/components/stepper.md` promises on iOS, and this is the only "
         + "check that can ask for it"
     )
-    // 4b. What a repeat is *worth*: the same press, counted. Every repeat is one step and
-    //     one `onValueChange`, so the event counter has moved exactly as far as the value
-    //     has, from the 5 the fixture starts at. The line above says a repeat happened;
-    //     this is the half it cannot say — a half that emitted twice per step repeats at
-    //     the same speed and passes `>= 7` with twice the events. Both echoes move in one
-    //     callback, so they are read together, after the last repeat has had time to
-    //     arrive: comparing a settled value with a count still in flight would be a
-    //     disagreement this control does not have.
+    // Every repeat is one step and one event, so the event count must have moved exactly as
+    // far as the value. Read after a pause, so both echoes have settled.
     usleep(400_000)
     let heldValue = Int(try read(Echo.stepperHoldValue)) ?? -1
     let heldEvents = Int(try read(Echo.stepperHoldEvents)) ?? -1
@@ -6518,9 +4681,8 @@ final class RealInputTests: XCTestCase {
         + "control taking the steps without telling React about them"
     )
 
-    // 5. The refusing parent: React never moves `value`, so every step is refused and
-    //    has to snap back. The oracle is what the *next* tap asks for — a stepper that
-    //    had kept the refused value would ask for 3, not for 2 again.
+    // React never moves `value`, so every step is refused. The next tap asks for the same
+    // value again only if the refused one snapped back.
     for request in ["1", "2"] {
       XCTAssertEqual(
         try tapUntilValue(
@@ -6545,7 +4707,6 @@ final class RealInputTests: XCTestCase {
       "taps on the refusing stepper should leave the live one alone"
     )
 
-    // 6. The disabled stepper takes nothing, on either half.
     for half in [minusX, plusX] {
       disabled.atFraction(half).fingerTap()
     }
@@ -6554,9 +4715,7 @@ final class RealInputTests: XCTestCase {
       "a real tap on either half of the disabled stepper should report no step"
     )
 
-    // 7. The barrier: the live stepper is at its maximum, so the barrier presses the
-    //    half that can still move — pressing the inert one and calling the result a
-    //    lost tap is exactly the misread this suite exists to avoid.
+    // The live stepper is at its maximum, so this presses the half that can still move.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-stepper",
@@ -6570,15 +4729,9 @@ final class RealInputTests: XCTestCase {
       "the live stepper, tapped on the half that can still move, should still step"
     )
 
-    // 8. A range that does not end on its step. `0...1.05` by `0.1` is the one shape
-    //    where SwiftUI must supply a stride itself — handing it `step: 0.1` would stop it
-    //    at 1.0 and make `maximumValue` unreachable — and the stride it supplies is **1**,
-    //    ten of this control's steps. The write may contribute a direction and nothing
-    //    else, so one tap from the minimum owes `0.1`. The value rules cannot catch the
-    //    other reading, because `1` *is* a legal value on that range: `quantize` nods at
-    //    it, React renders it, and nothing disagrees. Only a finger on a range with an
-    //    off-grid top asks the question, which is what this fixture is for
-    //    (`NitroUiStepperBinding.swift` has the rule the host test runs).
+    // `0...1.05` by `0.1` does not end on its step, so SwiftUI is not handed the step and
+    // strides by 1 there. Only the direction of its write is used: one tap from the minimum
+    // must still move the value by `0.1`.
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-stepper-sparse",
@@ -6594,24 +4747,10 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// A Switch's own state, as iOS answers it: the toggle's `value`, not the echo.
-  ///
-  /// This is the read that settled the drop question - the one that said
-  /// `switch-uncontrolled` was still `0` while nothing on screen had moved - and it is
-  /// what makes M3 checkable: a control whose `value` has flipped while its echo sits
-  /// still has the touch and has lost the change event.
-  ///
-  /// The `testID` is on the React Native component view, which answers with no value
-  /// of its own; the SwiftUI `Toggle` that holds the state sits *inside* it, so this
-  /// asks the inner element first and falls back to the container. Measured here: the
-  /// container's `value` is the empty string on every control in this suite, so
-  /// reading only the container would read "nothing moved" forever, and a witness that
-  /// can never move is worse than no witness - it turns every retry into a claim that
-  /// nothing arrived.
-  ///
-  /// Returns nil when nothing answers with a value, and only ever "on"/"off" when
-  /// something does: a witness consulted between attempts must not be the thing that
-  /// fails a run, and it must not report a shape the comparison cannot use.
+  /// A Switch's own state as iOS answers it: the toggle's `value`, not the echo. The `testID`
+  /// is on the React Native component view, whose own value is empty, and the SwiftUI `Toggle`
+  /// sits inside it, so the inner element is asked first. Returns nil when nothing answers
+  /// with a value, and otherwise only "on" or "off".
   private func nativeSwitchState(of identifier: String) -> String? {
     let container = app.descendants(matching: .any)[identifier].firstMatch
     guard container.exists else {
@@ -6638,14 +4777,8 @@ final class RealInputTests: XCTestCase {
     return nil
   }
 
-  /// Tap a `compact` field until it presents something.
-  ///
-  /// Same fault, different witness: a DatePicker's first hop is a *window*, so what
-  /// proves the touch arrived is the popover itself and no echo can be read while it
-  /// is up. `openPresentation(from:watching:)` cannot tell a dropped tap from a field
-  /// that cannot present; this can, and it is the retry the last-row check has used
-  /// all along for the same reason (its own comment: a press released while the list
-  /// is settling can be eaten by the control's own recogniser).
+  /// Tap a `compact` field until it presents something. The witness is the popover itself:
+  /// no echo can be read while it is up.
   private func tapUntilPresentation(
     _ identifier: String,
     as what: String,
@@ -6664,17 +4797,9 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// The same retry loop, aimed at one *item* of a group instead of at the element
-  /// carrying an identifier.
-  ///
-  /// A group's overflow control has no identifier of its own: it is a `Menu` inside the
-  /// group's container, named by `overflowAccessibilityLabel`. Pressing the container
-  /// lands in the middle of the row - on an ordinary item - so the menu never opens and
-  /// the check blames the touch. Measured on iOS 27: three presses on
-  /// `real-input-button-group-overflow` left `0 row(s) named "Quarter"`, the tap having
-  /// gone to whatever item shared the group's centre. The Android half already presses
-  /// the control by its own name and its menu opens on the first tap, which is the
-  /// reading this matches.
+  /// The same retry loop, aimed at one item of a group. A group's overflow control has no
+  /// identifier of its own, and pressing the container lands on an ordinary item in the
+  /// middle of the row.
   private func tapItemUntilOption(
     _ identifier: String,
     titled itemTitle: String,
@@ -6693,27 +4818,9 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// Tap a `Popover` anchor until its content is on screen, and never tap one whose popover is up.
-  ///
-  /// Three taps with an eight-second window each was the rule (`tapUntilOption`, as every menu
-  /// anchor still uses it). For a menu that is nearly right; for a Popover it is the flake itself:
-  /// `Popover` toggles, so a second tap *closes* what the first one opened, and the failure text
-  /// then accused a delivered touch of never having arrived. X31 measured it on a loaded box — the
-  /// UIKit window is up, React has not published the content yet, the witness reads "0 row(s)", the
-  /// loop taps again (FOLLOWUPS: "the Popover anchor's three-tap retry").
-  ///
-  /// So the state decides (X34 item 4, `GestureSettlement`): re-send the tap only while *no* popover
-  /// window exists at all; wait while one is up and its content is late; and bound the whole thing by
-  /// a deadline rather than by three. Which failure it became is said from the last reading, so a slow
-  /// publish is no longer reported as a missing finger — those are different bugs, and only one of
-  /// them is `FOLLOWUPS.md:58`.
-  ///
-  /// Two of the rules are here for this anchor in particular, because a `Popover` toggles: the
-  /// reading a tap was aimed by is thrown away, so what follows a tap is decided on two reads taken
-  /// *after* it, and `quietAfterPressMs` gives a tap a full `reactTimeout` to present before another
-  /// may go. Either half alone leaves the flake room — a popover that arrives two reads late agrees
-  /// with the pre-tap reading, and one that arrives four reads late agrees with an honest post-tap
-  /// pair — and in both cases a second tap closes the popover the first one opened.
+  /// Tap a `Popover` anchor until its content is on screen. A `Popover` toggles, so a second
+  /// tap closes what the first one opened: the tap is re-sent only while no popover window
+  /// exists at all, and a window whose content is late is waited for.
   private func tapUntilPopoverUp(
     _ identifier: String,
     as what: String,
@@ -6726,13 +4833,10 @@ final class RealInputTests: XCTestCase {
       /// Rows of *this* popover's content. The witness: it cannot exist unless the touch arrived.
       let rows: Int
     }
-    // Three `reactTimeout`s, which is what the three taps already spent in the healthy case — the
-    // deadline is the same money, spent on the wait that is actually needed instead of on a count.
     let outcome = try GestureSettlement.settle(
       deadlineMs: Int(reactTimeout * 3 * 1_000),
       pauseMs: 200,
-      // One `reactTimeout` is already the price of "that tap did nothing", spent here waiting for the
-      // first one to present instead of on a second attempt at it.
+      // A tap gets a full `reactTimeout` to present before another may be sent.
       quietAfterPressMs: Int(reactTimeout * 1_000),
       read: {
         Reading(
@@ -6770,13 +4874,8 @@ final class RealInputTests: XCTestCase {
     throw RealInputCheckAborted(identifier: identifier)
   }
 
-  /// Tap a menu anchor until one of its rows - named here, so it cannot be some
-  /// other text on screen - is up.
-  ///
-  /// A row is the only witness a menu has while it is open (the rows exist because of
-  /// the press), and without this a dropped tap on the anchor reads as the
-  /// `waitForOption` failure "no menu row labelled X appeared", i.e. as a Picker that
-  /// answers a touch but cannot present its list.
+  /// Tap a menu anchor until one of its rows, named here, is up. A row is the only witness a
+  /// menu has while it is open.
   private func tapUntilOption(
     _ identifier: String,
     as what: String,
@@ -6795,18 +4894,9 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// Tap an open menu's row until the *value* it should report arrives.
-  ///
-  /// The row is re-found each attempt, which is exactly when it can still be found:
-  /// a pick that travelled closes the menu and moves the value, so the loop has
-  /// already returned, and a pick that never arrived leaves the menu open with that
-  /// row still on screen. Keying on the value rather than on the menu leaving the
-  /// tree is what keeps a tap that opened nothing from reading as a choice.
-  ///
-  /// A later attempt presses only while the row is still up. If it has gone, the
-  /// earlier tap travelled and the echo is merely slow, and pressing where the menu
-  /// was would aim at whatever the closed menu left behind - so that attempt waits
-  /// out its window instead.
+  /// Tap an open menu's row until the value it should report arrives. A later attempt
+  /// presses only while the row is still up: if it has gone, the earlier tap travelled and
+  /// the echo is merely slow.
   private func tapOptionUntilValue(
     option title: String,
     echo: String,
@@ -6850,25 +4940,10 @@ final class RealInputTests: XCTestCase {
   }
 
 
-  /// Scroll until this element sits in the band a tap can land in.
-  ///
-  /// XCUITest taps an element's frame and does not scroll an ordinary view to reach
-  /// it, so a tap on a control below the fold lands on nothing - which is
-  /// indistinguishable from a control that refused. Measured here: the disabled and
-  /// enabled pair renders at y=773 and y=917 on an 874 pt window, so before this
-  /// helper the "a disabled Picker opens nothing" claim was true of a Picker nobody
-  /// had touched. The band leaves the header above and the home indicator below
-  /// clear, because a menu is presented from the anchor and needs room to open.
-  ///
-  /// The scroll is stepped rather than `swipeUp`ed. A full swipe moves the content
-  /// about a window's height, which is more than this band is tall, so an element can
-  /// cross the band between two checks and never be inside it; and `swipeUp` travels
-  /// one way only, so an element that starts above the band is pushed further out of
-  /// reach. Measured with the Host screen carrying all seven hosted controls:
-  /// `host-button` finished six `swipeUp`s at midY=-1858, three windows above the band
-  /// it had been scrolled past. Steps are shorter than the band, and run back down when
-  /// they overshoot, which is what lets "could not be reached" mean the screen does not
-  /// scroll rather than mean the helper overshot.
+  /// Scroll until this element sits in the band a tap can land in. XCUITest taps an element's
+  /// frame without scrolling an ordinary view to reach it, so a tap on a control below the
+  /// fold lands on nothing. The scroll runs in steps shorter than the band and turns back
+  /// when it overshoots: a full swipe can carry an element across the band.
   private func scrollIntoView(
     _ identifier: String,
     as what: String,
@@ -6901,8 +4976,7 @@ final class RealInputTests: XCTestCase {
       scroll(by: node.frame.midY < top ? step : -step)
       steps += 1
       let centre = node.frame.midY
-      // A screen that answers nothing would otherwise spend every step scrolling empty
-      // space, and that failure would look like the overshoot this replaces.
+      // A screen that does not scroll would otherwise spend every step on empty space.
       stuck = abs(centre - lastCentre) < 4 ? stuck + 1 : 0
       if stuck == 2 {
         XCTAssertTrue(
@@ -6920,17 +4994,10 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// What this screen's own ticking Picker is painting, as drawn text.
-  ///
-  /// The screen rotates that Picker's option list every 2 s with a `setInterval`, so
-  /// this is a heartbeat the check can watch: while it moves, the app is running its
-  /// own work; while it does not, the app is busy with something else.
-  ///
-  /// Deliberately the drawn `StaticText`s rather than the anchor's accessibility
-  /// label: measured, that label reads "Choice, Choice" whatever is selected, so an
-  /// "unchanged" reading taken from it would have proved nothing at all. Joining every
-  /// drawn string in the anchor keeps the reading sensitive to the title without
-  /// betting on which of them SwiftUI puts first.
+  /// What this screen's ticking Picker is painting, as drawn text. The screen rotates that
+  /// Picker's options every 2 s, so it is a heartbeat: while it moves, the app is running its
+  /// own work. The drawn `StaticText`s are read because the anchor's accessibility label is
+  /// the same whatever is selected.
   private func tickerTitle() -> String {
     let anchor = app.descendants(matching: .any)["ticker-options"].firstMatch
     guard anchor.exists else {
@@ -6946,16 +5013,9 @@ final class RealInputTests: XCTestCase {
     return anchor.label
   }
 
-  /// Watch the ticker for a window and report whether it moved, with what was seen.
-  ///
-  /// One pair of readings cannot decide anything here. The rotation repeats every
-  /// 6 s (three sets, 2 s each), and every reading costs a XCUITest query - about a
-  /// second on a loaded machine - so a pair "4 s apart" is really 5-6 s apart, and
-  /// once the gap reaches 6 s both readings land on the same set: a screen that is
-  /// beating reads as a frozen one. That is what a red step 0 looked like when the
-  /// machine was busy with another task's build. Sampling once a second for longer
-  /// than a full cycle cannot alias, whatever the phase or the load, and it returns
-  /// as soon as the screen visibly moves.
+  /// Watch the ticker for a window and report whether it moved, with what was seen. Sampled
+  /// once a second for longer than the 6 s rotation: two readings a fixed gap apart can land
+  /// on the same set and read a beating screen as a frozen one.
   private func tickerBeat(
     window: TimeInterval = 8
   ) -> (moved: Bool, readings: String) {
@@ -6975,12 +5035,6 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Tap a button until the echo it is meant to raise appears.
-  ///
-  /// A synthesized tap can miss, and on a control whose press changes nothing you can
-  /// see, the only symptom is that the control looks inert - which a check looking for
-  /// a refusal, or for a leak, reads as an answer. So every press this file depends on
-  /// for something *later* is confirmed by the echo the screen raises for it, and a
-  /// miss costs a retry rather than a wrong conclusion.
   private func tapUntilEcho(
     _ identifier: String,
     showing echo: String,
@@ -7008,13 +5062,9 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// The platform control inside a hosted `Picker`'s React Native view.
-  ///
-  /// React Native owns the view the `testID` lands on, and the hosted control
-  /// lives beneath it (the library wraps a SwiftUI `Picker`, which is what knows
-  /// about `disabled`). So an accessibility claim about the control has to be read
-  /// from the control; the anchor's reading is React Native's answer about its own
-  /// view, which says nothing about what nitro-ui passed down.
+  /// The platform control inside a hosted control's React Native view. React Native owns the
+  /// view the `testID` lands on, so an accessibility claim about the control is read from the
+  /// element beneath it.
   private func hostedControl(
     in identifier: String,
     as what: String
@@ -7024,12 +5074,8 @@ final class RealInputTests: XCTestCase {
     return buttons.firstMatch.exists ? buttons.firstMatch : anchor
   }
 
-  /// A row of a hosted `Picker`'s menu, by the label a screen reader reads.
-  ///
-  /// The menu is SwiftUI's, not React Native's: it has no `testID`, and which
-  /// accessibility subclass a row surfaces as is SwiftUI's business. So the query
-  /// crosses element types and matches the row's own text, which is also the only
-  /// thing a person has to go on.
+  /// A menu row, by the label a screen reader reads. The menu is SwiftUI's and has no
+  /// `testID`, so the query crosses element types and matches the row's own text.
   private func optionRow(_ title: String) -> XCUIElement {
     app
       .descendants(matching: .any)
@@ -7081,33 +5127,18 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// Print the accessibility tree.
-  ///
-  /// A real-input failure is worth little without the screen it happened on, and
-  /// the xcodebuild log is the evidence this suite keeps: `scripts/real-input/ios.mjs`
-  /// writes it to `.real-input/ios/xcodebuild-test.log`.
+  /// Print the accessibility tree, so a failure's log shows the screen it happened on.
   private func dumpHierarchy(_ why: String) {
     print("real-input (ios): accessibility hierarchy - \(why)")
     print(app.debugDescription)
   }
 // MARK: - Form
 
-  /// Ten real taps on a form row, on the `Pressable` inside a row and on the `Switch`
-  /// inside a row: every tap must be worth exactly one event, a row with no `onPress`
-  /// must be worth none, the cell must look pressed while the finger is down, and a
-  /// field near the bottom must still be visible when the keyboard is up.
-  ///
-  /// Why this case exists: S6 could only touch these rows with
-  /// `react-native-harness`, which delivers events by tag and never crosses UIKit's
-  /// hit-testing. The Form moves a row's Fabric view into a
-  /// `UICollectionViewListCell` — exactly where a touch can end up somewhere else —
-  /// and the press path S6 invented for it (`NitroUiFormRowCell.pressGesture`) had no
-  /// green run, because `real-input:ios` is driven off example screens and there was
-  /// no Form screen to drive. This is that screen's check.
+  /// The Form moves a row's React Native view into a `UICollectionViewListCell`, so every
+  /// tap here has to cross UIKit's hit-testing to reach it.
   func testRealInputForm() throws {
     try goToTab(Tab.formTab, showing: Echo.formScreenEcho)
 
-    // Once each, in order, so an overshoot names the control that caused it.
     try assertOnePressPerTap(
       "form-row",
       echo: Echo.formRowPresses,
@@ -7122,9 +5153,6 @@ final class RealInputTests: XCTestCase {
     )
     try assertSwitchToggledOncePerTap()
 
-    // A row that answers no tap must not answer one because its neighbour did. This is
-    // the negative half of "10/10": without it, a Form that pressed the last row it saw
-    // would pass every case above.
     try assertTapsGoNowhere(
       "form-row-plain",
       echoes: [
@@ -7139,19 +5167,11 @@ final class RealInputTests: XCTestCase {
 
     try assertRowShowsCellHighlight("form-row", echo: Echo.formRowPresses, as: "the form row with onPress")
 
-    // What a reader meets on this row, measured for `docs/components/form.md`, which said
-    // one thing about it in the API table and the opposite in its Accessibility section.
     logFormRowAccessibilityTree()
 
-    // A drag that begins on a pressable row is the list asking for the page. The cell's
-    // press recogniser starts at touch-down and recognises alongside the list's own pan —
-    // which is what lets a `Pressable` inside the row keep the same touch — so before X32
-    // the only thing a flick had to clear was the release, and a flick releases a finger
-    // too: the list scrolled *and* the row's `onPress` fired, which is a navigation nobody
-    // asked for. G30 wrote the travel check for ListItem's own row and left this cell's
-    // recogniser as it found it. Android needs no such check (`HybridNitroUiFormRow` drops
-    // a touch past the slop in its own `dispatchTouchEvent`), which is why the same claim
-    // is a guard there and a fix here.
+    // A drag that begins on a pressable row scrolls the list and must not press. The cell's
+    // press recogniser starts at touch-down and recognises alongside the list's own pan, so
+    // a flick's release would otherwise fire `onPress`.
     try scrollIntoView("form-row", as: "the form row with onPress")
     try assertDragFromRowIsNotAPress(
       "form-row",
@@ -7160,11 +5180,8 @@ final class RealInputTests: XCTestCase {
       screen: "form"
     )
 
-    // And a tap after that scroll still presses: the check above is worth nothing if the
-    // row it just refused had also stopped answering a finger.
-    // The count is not fresh here: the ten taps and the held press above already moved it,
-    // so the three taps are counted from where it stands, which the drag check has just
-    // proved it still holds.
+    // The count is not fresh: the taps above already moved it, so these three are counted
+    // from where it stands.
     try scrollIntoView("form-row", as: "the form row with onPress")
     try assertOnePressPerTap(
       "form-row",
@@ -7177,26 +5194,13 @@ final class RealInputTests: XCTestCase {
     try assertFormKeepsFieldAboveKeyboard()
   }
 
-  /// Question 3 on iOS (G30): a `ListItem` is the row content, drawn by UIKit's own
-  /// `UIListContentView`, and a real finger has to reach it through the SwiftUI host that
-  /// carries it. Every reading is React's own render of a counter, so a number moves only
-  /// if the touch reached UIKit's row, the row told Nitro, and Nitro told JS.
-  ///
-  /// The three fixtures are the three answers the component has to give: a row that presses
-  /// and highlights, a row that is disabled and says so to a reader, and a row inside a
-  /// `Form.Row`, where the cell is the Form's and the leaf draws content into it (DECISIONS
-  /// D46 item 2).
+  /// On iOS a `ListItem` is drawn by UIKit's `UIListContentView` inside a SwiftUI host. Inside
+  /// a `Form.Row` the cell is the Form's, and the item only draws content into it.
   func testRealInputListItem() throws {
     try goToTab(Tab.listItemTab, showing: Echo.listItemPresses)
 
-    // The three fixtures sit at three heights of one page taller than the window, and
-    // XCUITest taps an element's frame without scrolling a plain view to reach it (see
-    // `scrollIntoView`), so each one is brought into the band a tap can land in just
-    // before the claim that taps it. Both hittability claims below are made of a node
-    // after *its own* scroll, which is the only form of that claim that means anything
-    // here; a fixture the screen cannot bring into view fails inside `scrollIntoView`,
-    // naming the screen, rather than being tapped off-screen and reading as a refusal
-    // nobody delivered.
+    // The fixtures sit at three heights of a page taller than the window, and XCUITest taps
+    // a frame without scrolling to it, so each is brought into view just before it is tapped.
     try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     let item = try required("real-input-listitem", as: "the list item with onPress")
     XCTAssert(
@@ -7212,11 +5216,9 @@ final class RealInputTests: XCTestCase {
         + "tap is delivered — inside a row the leaf still has to be reachable (D46 item 2)"
     )
     let disabled = try required("real-input-listitem-disabled", as: "the disabled list item")
-    // The row inside that wrapper, which is where the leaf publishes its own element
-    // (`hostedControl`, the same addressing the disabled Picker's case uses).
+    // The row inside that wrapper, where the item publishes its own element.
     let disabledRow = try hostedControl(in: "real-input-listitem-disabled", as: "the disabled list item")
 
-    // 1. At rest, so every claim below is about a number that moved.
     XCTAssertEqual(
       try read(Echo.listItemPresses), "0",
       "no item press should be reported before a touch is delivered"
@@ -7231,10 +5233,8 @@ final class RealInputTests: XCTestCase {
         + "delivery is a number that moved rather than a callback nobody saw"
     )
 
-    // 2. One element, named, and the row's own text is not a stop of its own. The names
-    //    below are the fixture's title and subtitle: if UIKit published them as elements
-    //    beside the merged one, a screen reader would read the row twice, which is the
-    //    G6 symptom this repo's a11y rule exists to catch.
+    // One element: if UIKit published the title and subtitle as elements beside the merged
+    // one, a screen reader would read the row twice.
     XCTAssertEqual(
       item.label, "Real-input item",
       "the item should be one element carrying the label the app chose, not the "
@@ -7244,22 +5244,15 @@ final class RealInputTests: XCTestCase {
       optionLabels(containing: "Real input"), 0,
       "and the row's title should not also be an element of its own — one stop per item"
     )
-    // The chevron is the same claim from the other side. It is a sibling of the content
-    // subtree rather than inside it, and `chevron.right` vends its own label, so a row
-    // with a disclosure can gain a second stop that nothing in the row's own label
-    // explains. Measured in this case's own node dump before it was stood down: an
-    // `other` element named "Forward" at the arrow's 14 pt box, inside the row.
+    // The chevron is a sibling of the content subtree, and `chevron.right` vends its own
+    // label, "Forward", which would be a second stop.
     XCTAssertEqual(
       optionLabels(containing: "Forward"), 0,
       "the disclosure chevron is decoration inside the row, not a stop of its own — one "
         + "element per item (D46 item 1) includes the arrow that says what the role says"
     )
-    // The disabled claim is taken on the row's own element rather than on the React
-    // Native view that hosts it, because RN owns the wrapper's element and a Hybrid View
-    // speaks `disabled` to the platform control — the Picker's disabled case made this
-    // the rule here for the same reason. Both readings are printed *before* the claim,
-    // so a red run says which of the two elements moved instead of leaving the reader to
-    // rerun it to find out.
+    // Read on the row's own element rather than on the React Native view that hosts it:
+    // `disabled` is expressed by the platform control.
     print(
       "real-input list-item: item traits label=\(item.label) enabled=\(item.isEnabled) "
         + "frame=\(item.frame); disabled wrapper enabled=\(disabled.isEnabled) "
@@ -7273,9 +5266,6 @@ final class RealInputTests: XCTestCase {
         + "(row isEnabled=\(disabledRow.isEnabled), React Native wrapper isEnabled=\(disabled.isEnabled))"
     )
 
-    // 3. Ten taps, ten presses, one per tap (`assertOnePressPerTap` reads the counter
-    //    between taps, which is what tells an overshoot from a drop), and the *named* row
-    //    is the one that answered.
     try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     try assertOnePressPerTap("real-input-listitem", echo: Echo.listItemPresses, times: 10, as: "the list item with onPress")
     XCTAssertEqual(
@@ -7283,13 +5273,9 @@ final class RealInputTests: XCTestCase {
       "the presses should be attributed to the item that was tapped"
     )
 
-    // 4. The row's own highlight: UIKit's press colour, sampled the same way the Form's
-    //    cell is (same helper, same bounded mid-press wait, same UNSAMPLED discipline).
     try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     try assertRowShowsCellHighlight("real-input-listitem", echo: Echo.listItemPresses, as: "the list item with onPress")
 
-    // 5. The disabled item takes nothing, and the live item then proves the silence was a
-    //    refusal rather than a screen that had stopped answering.
     try scrollIntoView("real-input-listitem-disabled", as: "the disabled list item")
     try assertTapsGoNowhere(
       "real-input-listitem-disabled",
@@ -7298,10 +5284,8 @@ final class RealInputTests: XCTestCase {
       as: "the disabled list item"
     )
     try scrollIntoView("real-input-listitem", as: "the list item with onPress")
-    // The wanted count is read from the counter rather than hard-coded. The held press in
-    // the highlight check above is itself a press this counter counted, so the absolute
-    // number is a fact about how many checks ran above; "one more press after one more
-    // tap" is the claim. Android's half hard-coded 11 and its first real run arrived at 12.
+    // Read from the counter rather than hard-coded: the held press in the highlight check
+    // above is itself a press this counter counted.
     let beforeBarrier = Int(try read(Echo.listItemPresses)) ?? -1
     let wantedBarrier = String(beforeBarrier + 1)
     XCTAssertEqual(
@@ -7317,9 +5301,6 @@ final class RealInputTests: XCTestCase {
         + "\(wantedBarrier))"
     )
 
-    // 6. Inside a `Form.Row` the leaf is the other code path: the cell, the shape and the
-    //    insets belong to the row, so the item's own box is the row's content box and its
-    //    press has to arrive through the row that owns the touch.
     XCTAssertEqual(
       inForm.label, "Item inside a Form row",
       "inside a Form.Row the item is still the element that carries its own name"
@@ -7327,12 +5308,9 @@ final class RealInputTests: XCTestCase {
     try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
     try assertOnePressPerTap("real-input-listitem-in-form", echo: Echo.listItemFormPresses, times: 5, as: "the list item inside a Form.Row")
 
-    // 7. The same press has to *look* like a press. Inside a `Form.Row` the leaf paints
-    //    nothing of its own (step 6 is about the insets that prove it), so the only
-    //    feedback this row can have is the cell's - and the cell paints one only for a row
-    //    that is pressable. The README's own example and this screen's fixture both write
-    //    the handler on the *item* (`list-item-in-form`), so an item's `onPress` that never
-    //    reaches the row is a row that presses in silence.
+    // Inside a `Form.Row` the item paints nothing of its own, so the only press feedback is
+    // the cell's, and the cell highlights only a pressable row: the item's `onPress` has to
+    // reach the row.
     try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
     try assertRowShowsCellHighlight(
       "real-input-listitem-in-form",
@@ -7340,9 +5318,7 @@ final class RealInputTests: XCTestCase {
       as: "the list item inside a Form.Row"
     )
 
-    // 8. A drag that starts on a row is the scroll view asking for the page, not a thumb
-    //    asking for that row. Last, because it scrolls the page out from under everything
-    //    above it.
+    // Last, because it scrolls the page out from under everything above it.
     try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     try assertDragFromRowIsNotAPress(
       "real-input-listitem",
@@ -7351,19 +5327,8 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Print the subtree a reader is handed for the Form's pressable row.
-  ///
-  /// A measurement and not an assertion, because the thing it settles is a sentence in a
-  /// document: `docs/components/form.md` carried two answers to "is a row with `onPress`
-  /// one element?" — the API table's "iOS's merge is recorded debt" and the Accessibility
-  /// section's "a row with `onPress` is **one** element: a button on iOS". The props cannot
-  /// answer that (the label is on the row either way, which is exactly why the two claims
-  /// could coexist); the XCUITest tree a11y.mjs already reads is what does.
-  ///
-  /// Printed in the same shape as the a11y pass's own `kind=node` lines, so a reader who
-  /// has one has the other. Building the merge is a different decision and X32's brief
-  /// rules it out; what this round owes is the number, in the log, on the tree the run
-  /// actually held.
+  /// Print the subtree a screen reader is handed for the Form's pressable row, in the same
+  /// shape as the a11y pass's `kind=node` lines. A measurement, not an assertion.
   private func logFormRowAccessibilityTree() {
     guard let anchor = try? required("form-row", as: "the form row with onPress") else {
       print("real-input form a11y kind=nodes skipped=no form-row element to read")
@@ -7385,21 +5350,9 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// A drag that begins on a row belongs to the scroll view, so the row presses nobody.
-  ///
-  /// The row's press recogniser starts at once (`minimumPressDuration = 0`, which is what
-  /// made a quick thumb work at all), so it is the finger's *travel* that has to tell a
-  /// press from a scroll: a recogniser that answers `.ended` without looking at where the
-  /// finger went fires on every flick that happened to begin on a row. Ten taps and a
-  /// counter are the other half of this; this is the half that says the counter did not
-  /// move for the drag.
-  ///
-  /// The travel is measured off the row's own frame, and always downhill to the roomier
-  /// half of the window: `scrollIntoView` only promises the row's centre is inside the
-  /// band a tap can land in, which on a row that had to be scrolled *up* to reach means a
-  /// fixed screen fraction can land a few points away from it. A drag of a few points is
-  /// not a scroll, and the row is right to call it a press, so the gesture has to be a
-  /// real flick — 200 pt, twenty times the slop the recogniser allows.
+  /// A drag that begins on a row belongs to the scroll view, so the row must not press. The
+  /// gesture is a real flick of 200 pt, measured off the row's own frame: a drag of a few
+  /// points is not a scroll, and the row is right to call that a press.
   private func assertDragFromRowIsNotAPress(
     _ identifier: String,
     echo: String,
@@ -7556,19 +5509,11 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// The cell's own highlight: the pixels of one row, at rest and with the finger down.
-  ///
-  /// UIKit paints it (`pressed` -> `.quaternarySystemFill` in the cell's
-  /// `configurationUpdateHandler`) and React never hears about it, so the witness is the
-  /// screen: the same element's average luminance at rest and inside a held press. The two
-  /// numbers are printed either way, because the gate log is the evidence file.
-  ///
-  /// The sample is taken from a background thread (the main one is the thread holding the
-  /// finger down) and with a *bounded* wait, and it records when it landed: an XCUITest
-  /// screenshot asked for during a press may be served after the press, and a late sample is
-  /// indistinguishable from a row that never highlighted. So the assertion runs only when the
-  /// timestamp says the sample is genuinely mid-press, and a sample that could not be taken
-  /// in time is reported as UNSAMPLED in the log rather than folded into a pass.
+  /// The cell's own highlight: one row's average luminance at rest and inside a held press.
+  /// UIKit paints it and React never hears about it, so the witness is the screen. The sample
+  /// is taken from a background thread with a bounded wait and a timestamp, because a
+  /// screenshot asked for during a press may be served after it: a late sample is logged as
+  /// UNSAMPLED and not asserted on.
   private func assertRowShowsCellHighlight(
     _ identifier: String,
     echo: String,
@@ -7635,15 +5580,12 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Question 5 on iOS: a field near the bottom of a long form, focused by a real tap,
-  /// is still on screen above the keyboard.
+  /// A field near the bottom of a long form, focused by a real tap, is still on screen above
+  /// the keyboard.
   private func assertFormKeepsFieldAboveKeyboard() throws {
     let identifier = "form-note-field"
-    // A Form is not a page: the list realises a row only while it is drawing one, so
-    // unlike every other screen here the field is not merely off-screen, it is not in the
-    // accessibility tree at all until the list has been scrolled to it. (It is also the
-    // answer to "can anything anchor to a row that is not visible": no, and a shipped Form
-    // needs a scroll-to before a measure.)
+    // The list realises a row only while it is drawing it, so the field is not in the
+    // accessibility tree at all until the list has been scrolled to it.
     let field = app.descendants(matching: .any)[identifier].firstMatch
     var revealed = false
     for _ in 0..<14 {
@@ -7662,9 +5604,8 @@ final class RealInputTests: XCTestCase {
       throw RealInputCheckAborted(identifier: identifier)
     }
 
-    // Then to the end of the list, the way the Date screen does it: the page is at the end
-    // when another swipe stops moving the field — a field in the middle of the screen tests
-    // nothing about a keyboard.
+    // Then to the end of the list: the page is at its end when another swipe stops moving
+    // the field.
     var position = field.frame
     for _ in 0..<12 {
       app.swipeUp()
@@ -7685,9 +5626,6 @@ final class RealInputTests: XCTestCase {
       "no",
       "the field should not be focused before it is tapped"
     )
-    // `focusByTap` retries a dropped delivery (three taps, like every other control here),
-    // because question 5 is about the keyboard, not about the tap rate: a single tap that the
-    // InputManager swallowed would otherwise be reported as a field the keyboard covered.
     try focusByTap(field, echo: Echo.formFieldFocus, as: "the note field at the bottom of the form")
     if !waitUntil({ self.echoText(Echo.formFieldFocus) == "yes" }, window: reactTimeout) {
       dumpHierarchy("the note field's focus never reached React")
@@ -7699,12 +5637,9 @@ final class RealInputTests: XCTestCase {
       throw RealInputCheckAborted(identifier: identifier)
     }
 
-    // Two witnesses exist and they are not equal. XCUITest's keyboard *window* is the keyboard's
-    // real top edge. The Form's own report carries the inset it asked UIKit for
-    // (`keyboardWillChangeFrame` -> the list's bottom inset), which is a number produced by the
-    // code under test - so it is reported and compared with the keys, and never used to place the
-    // line the field is judged against. Fix round 1 fell back to that derived line when no window
-    // was there; fix round 2, item 5 called that what it is: a check graded against its subject.
+    // XCUITest's keyboard window is the keyboard's real top edge. The inset the Form echoes
+    // is produced by the code under test, so it is compared with that edge and never used to
+    // place the line the field is judged against.
     _ = waitUntil({ self.echoText(Echo.formKeyboardInset) != "-" }, window: 4)
     let insetText = echoText(Echo.formKeyboardInset)
     let inset = CGFloat(Double(insetText) ?? 0)
@@ -7738,21 +5673,12 @@ final class RealInputTests: XCTestCase {
         + "for these keys and nothing here has measured question 5."
     )
     do {
-      // The echoed inset has to *be* the keyboard's overlap, not merely a positive number that
-      // came out of the keyboard notification. This screen gives the Form `flex: 1` under a top
-      // inset and no bottom padding, so the list's box runs to the bottom of the window and the
-      // overlap UIKit was asked to reserve is exactly `screen.maxY - keyboardTop`. The bug this
-      // catches (fix round 1) compared the keyboard rect, which `list.convert(_, from: nil)`
-      // hands back in *content* space, with the list's *frame* bottom — so the inset was wrong
-      // by however far the list had been scrolled, and by the time question 5 asks the list has
-      // been dragged all the way to a field near the end of a long form.
+      // This screen's Form runs to the bottom of the window, so the overlap UIKit should
+      // reserve is exactly `screen.maxY - keyboardTop`, however far the list has scrolled.
       let overlap = screen.maxY - keyboardTop
-      // Two bounds rather than an equality, because the two witnesses differ by one known thing:
-      // XCUITest's keyboard element is the *keys*, while the keyboard notification's end frame is
-      // the keys plus the predictive-text bar above them — 44 pt on this simulator, measured
-      // (inset 328 against an overlap of 284). Reserving for that bar is right: text the person
-      // is about to type sits over the content, so a field left under it is covered as far as
-      // they are concerned. What may not happen is either end of the band.
+      // Two bounds rather than an equality: XCUITest's keyboard element is the keys, while
+      // the keyboard notification's end frame also includes the predictive-text bar above
+      // them.
       XCTAssertGreaterThanOrEqual(
         inset,
         overlap - 2,
@@ -7785,20 +5711,17 @@ final class RealInputTests: XCTestCase {
         + "keys."
     )
     // The list's own numbers, read while the keyboard is up: `ib` is the inset the Form asked
-    // for, `ab` the inset the list is *carrying* after UIKit added the bottom safe area, and
-    // `h`/`bh` the content and the viewport - which together say how far the content can scroll
-    // at all, so a rest can be proved to be the end of it.
+    // for, `ab` the inset the list carries after UIKit added the bottom safe area, and
+    // `h`/`bh` the content and the viewport.
     let geometryBefore = echoText(Echo.formListGeometry)
     print(
       "real-input (ios): form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from the "
         + "keyboard window) inset=\(insetText) focused="
         + "\(echoText(Echo.formFieldFocus)) list=\(geometryBefore)"
     )
-    // `ab` is the number the field's resting place is actually built from: UIKit adds the list's
-    // own bottom safe area to the inset asked for and pads the content by the sum. Ask for the
-    // whole overlap and the home-indicator strip is reserved twice — measured at adjusted 362
-    // against an overlap of 328, which is 34 pt of empty list above the keys (fix round 2, item
-    // 5). The same two-ended band as the inset above, asked of the sum.
+    // UIKit adds the list's bottom safe area to the inset asked for and pads the content by
+    // the sum, so asking for the whole overlap would reserve the home-indicator strip twice.
+    // The same two-ended band as the inset above, asked of the sum.
     if let adjusted = Self.geometryNumber(geometryBefore, "ab") {
       let overlap = screen.maxY - keyboardTop
       XCTAssertGreaterThanOrEqual(
@@ -7823,22 +5746,10 @@ final class RealInputTests: XCTestCase {
       )
     }
 
-    // Then a finger's scroll, because the list's offset is the variable the inset was once
-    // mixing with the keyboard's geometry, and an inset that a scroll takes back is the bug.
-    //
-    // The finger goes down on the list's own rows, well above the field. Ten points above the
-    // field's box is not the list to UIKit: it is the text interaction's loupe, and a loupe
-    // drag that ends outside the field ends the editing session — the keyboard leaves, its
-    // inset legitimately goes with it, and there is no longer an avoidance to ask about.
-    //
-    // Down first, then back up to the end of the content. Down is the direction that can move
-    // anything here: the keyboard's reservation was added *below* content the check had already
-    // scrolled to the end of, so the list is no longer at its end. And a synthesised drag
-    // carries real velocity, so how far one fling goes is not a number this file can know —
-    // where the list comes to rest at the end of its content is, and that rest is what the
-    // reservation has to hold above the keyboard. With the inset intact the last row ends at
-    // the visible bottom, one inset above the keys; with a scroll that dropped it, the same
-    // rest leaves the field below them.
+    // Then a finger's scroll: an inset that a scroll takes back is a bug. The finger goes
+    // down on the list's rows well above the field, because a drag that starts just above
+    // the field belongs to the text loupe and ends the editing session. Down first, then
+    // back up to the end of the content, where the last row must rest above the keyboard.
     let listRow = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
     listRow.press(forDuration: 0.3, thenDragTo: listRow.withOffset(CGVector(dx: 0, dy: 40)))
     var rest = settleFormKeyboard(field: field)
@@ -7872,10 +5783,7 @@ final class RealInputTests: XCTestCase {
         + "\(rest.frame); the list reported \(geometryBefore) before the scroll and "
         + "\(rest.geometry) after it."
     )
-    // The same claim asked of the list rather than of the Form's memory: the inset it is
-    // *carrying* (`ib` is its own `contentInset.bottom`, `ab` the adjusted inset every keyboard
-    // decision here is measured against). `keyboard=` is only what this class asked for, and a
-    // reservation that goes missing underneath a scroll leaves that number alone.
+    // The same claim asked of the list: the insets it is carrying must survive the scroll.
     for label in ["ib", "ab"] {
       let before = Self.geometryNumber(geometryBefore, label)
       let after = Self.geometryNumber(rest.geometry, label)
@@ -7891,10 +5799,8 @@ final class RealInputTests: XCTestCase {
         )
       }
     }
-    // "Back at the end of its content" was assumed; it is now asked. A rest in the middle of a
-    // form cannot judge a reservation added *below* the last row, and a synthesised drag stops
-    // wherever its velocity takes it, so the check swipes until the list's own numbers say it is
-    // at the end of what it holds (fix round 2, item 5).
+    // A synthesised drag stops wherever its velocity takes it, so swipe until the list's own
+    // numbers say it is at the end of its content.
     for _ in 0..<4 {
       if Self.isAtEndOfContent(rest.geometry) { break }
       listRow.press(forDuration: 0.3, thenDragTo: listRow.withOffset(CGVector(dx: 0, dy: -120)))
@@ -7906,8 +5812,8 @@ final class RealInputTests: XCTestCase {
         + "nothing about the reservation below the last row: it reported \(rest.geometry), where "
         + "the end is `h + ab - bh`. Before the scroll it reported \(geometryBefore)."
     )
-    // At the end of the content, the field has to be clear of the keys with a point of slack,
-    // not merely somewhere above them: `minY` let a field whose own box straddled the edge pass.
+    // `maxY`, with a point of slack: a field whose box straddles the keyboard's edge is not
+    // clear of it.
     XCTAssertLessThanOrEqual(
       rest.frame.maxY,
       keyboardTop + 1,
@@ -7918,12 +5824,9 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Whether the list's own echoed numbers say its content is scrolled to the end.
-  ///
-  /// UIKit puts the last row `adjustedContentInset.bottom` above the bottom of the viewport, so
-  /// the largest offset a scroll view can hold is its content height plus that inset, less the
-  /// height of the viewport it scrolls through. Every number is one the list published; none is
-  /// a constant this file could get wrong on a different device.
+  /// Whether the list's own echoed numbers say its content is scrolled to the end. The
+  /// largest offset a scroll view can hold is its content height plus the adjusted bottom
+  /// inset, less the height of the viewport.
   private static func isAtEndOfContent(_ line: String) -> Bool {
     guard let content = geometryNumber(line, "h"),
       let viewport = geometryNumber(line, "bh"),
@@ -7933,14 +5836,9 @@ final class RealInputTests: XCTestCase {
     return offset >= content + adjusted - viewport - 2
   }
 
-  /// The field's box, the screen's echo of the list's geometry and the echoed keyboard inset,
-  /// read until two reads agree.
-  ///
-  /// Both witnesses need a moment after a synthesised drag: the field's box is XCUITest's and is
-  /// read live off a list that is still springing back, and the two numbers the screen echoes
-  /// come from *polling* `nuiTestFormReport()`, so they are at most one poll interval old.
-  /// Reading either once, the instant the finger leaves, would compare a mid-animation frame
-  /// with the numbers from before the drag.
+  /// The field's box, the echoed list geometry and the echoed keyboard inset, read until two
+  /// reads agree. After a synthesised drag the list is still springing back and the echoed
+  /// numbers come from polling, so one read can pair a mid-animation frame with stale numbers.
   private func settleFormKeyboard(
     field: XCUIElement
   ) -> (frame: CGRect, geometry: String, inset: String) {
@@ -8011,21 +5909,6 @@ private struct RealInputCheckAborted: Error {
   let identifier: String
 }
 
-/// A short summary of a list of millisecond timings: min, median, max, count.
-///
-/// Median rather than mean because a handful of slow presses is what matters here and
-/// a mean would hide them in the middle of a mostly-fast run.
-private func describeTimings(_ values: [Int]) -> String {
-  guard !values.isEmpty else {
-    return "none"
-  }
-  let sorted = values.sorted()
-  let median =
-    sorted.count.isMultiple(of: 2)
-    ? (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
-    : sorted[sorted.count / 2]
-  return "n=\(values.count) min=\(sorted.first!) median=\(median) max=\(sorted.last!)"
-}
 
 extension XCUIElement {
   /// The middle of this element, as a point the system can touch.
@@ -8033,28 +5916,9 @@ extension XCUIElement {
     coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
   }
 
-  /// A finger's tap: a touch that *lasts*, rather than `tap()`'s zero-dwell one.
-  ///
-  /// Measured (F1, `docs/tasks/F1/dwell-probe.md`): `tap()` puts touch down and touch
-  /// up inside a single frame, and the hosted controls on a screen with much mounted on
-  /// it almost never take it - 0/12 and 1/12 presses moved `switch-uncontrolled`'s own
-  /// native `value:` at zero dwell, calm and loaded, while the same instant tap reached
-  /// the React Native `Pressable` beside it 3/3, so the touch path was alive. It is
-  /// *nearly* never, not never: the base `main` run at 23:15Z had a zero-dwell tap flip
-  /// that Switch on its first try and lose only the second, and X6 saw 10/10 green with
-  /// `tap()`. The drop is intermittent, which is exactly why a check that asserts after
-  /// one un-witnessed press could pass for months and then fail 11 runs in a row.
-  ///
-  /// How much is mounted matters as much as the shape: 0.03 s delivers 12/12 on the
-  /// Host screen and 1/12 on the 200-switch one. So this is not "SwiftUI ignores short
-  /// touches" - it is a recogniser that stops seeing the touch when the screen is busy,
-  /// and a person's quick tap lives in that band. That product question is in the
-  /// report; this helper's job is only to make the suite ask the same question every
-  /// time, and 0.15 s is the shortest shape with no observed losses.
-  ///
-  /// It is also the honest gesture for the refusal assertions (a disabled Button, a
-  /// disabled Picker): on a screen whose instant taps are usually dropped, "nothing
-  /// happened" was not evidence that the control refused the touch.
+  /// A finger's tap: a touch that lasts, rather than `tap()`'s zero-dwell one. `tap()` puts
+  /// touch down and touch up inside a single frame, and the hosted controls on a busy screen
+  /// drop most of those.
   func fingerTap(duration: TimeInterval = RealInputTests.pressDwell) {
     centre.fingerTap(duration: duration)
   }
@@ -8069,16 +5933,9 @@ extension XCUIElement {
     coordinate(withNormalizedOffset: CGVector(dx: dx, dy: dy))
   }
 
-  /// Press on the thumb and drag it along the track to a fraction of it.
-  ///
-  /// The start has to be where the thumb actually is. On iOS a SwiftUI Slider
-  /// ignores a touch that lands anywhere else on the track: measured in this
-  /// suite, presses at 0.1, 0.2, 0.25, 0.75 of the track and a tap on it each
-  /// reported nothing at all - no `onSlidingStart`, no `onValueChange`, no value
-  /// - while one drag that began on the thumb reported the start, forty changes
-  /// and the completion. A person grabs the thumb too. (Compose's Slider does
-  /// answer a touch on the track, which is why `scripts/real-input/android.mjs`
-  /// can start its drags at a quarter of the way along.)
+  /// Press on the thumb and drag it along the track to a fraction of it. The start has to be
+  /// where the thumb is: on iOS a SwiftUI Slider ignores a touch that lands anywhere else on
+  /// the track.
   ///
   /// - Parameters `atValue`/`toFraction`: where to press, as a Slider value, and
   ///   where to release, as a fraction of the track - both 0 being the left edge.

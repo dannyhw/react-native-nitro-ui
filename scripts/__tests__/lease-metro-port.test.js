@@ -1,25 +1,4 @@
 /* global Atomics, SharedArrayBuffer */
-/**
- * A pair nobody has leased can still have its Metro port spoken for (X15 item 1).
- *
- * The incident this guards (FOLLOWUPS, X4 on 2026-10-29): F7's harness kept running on
- * pair-a after its lease there ended, so the pool handed pair-a to X4 twice, and with two
- * Metro servers on one port the run died as
- * `The app bridge was replaced by a newer app connection` - F7's iOS app had joined X4's
- * Android Metro. Three device runs, and an error message that never mentioned a port.
- *
- * The lease file cannot see that state: the stale run holds no lease, so every lease
- * decision reads "pair-a is free". So the answer comes from the kernel, and these tests
- * check both halves of that - `lease.mjs acquire` will not hand out a pair whose port a
- * live process serves, and `gate.mjs` refuses to start on one.
- *
- * `lsof` is stubbed with `NITRO_UI_LSOF_BIN`, the same kind of override the adb/simctl
- * checks use: a test that asked the real machine would depend on what another task
- * happens to be running, and "the port is busy" would be untestable rather than merely
- * flaky. The stub replays `lsof -Fpc` byte shapes (`p<pid>`, `c<command>`) from a file,
- * so a case says which port is busy and which process owns it.
- */
-
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import {
@@ -54,7 +33,7 @@ const LEASE_CLI = join(REPO_ROOT, 'scripts', 'lease.mjs');
 const GATE_CLI = join(REPO_ROOT, 'scripts', 'gate.mjs');
 const EXAMPLE_CONFIG = join(REPO_ROOT, 'scripts', 'devices.example.json');
 
-/** devices.example.json's own pairs and Metro ports, so fixtures name what it really says. */
+/** The pairs and Metro ports `devices.example.json` declares. */
 const PAIR_A = 'pair-a';
 const PORT_A = 8295;
 const PAIR_B = 'pair-b';
@@ -73,13 +52,11 @@ describe('parseLsofListeners', () => {
   it('answers nothing for the empty output lsof gives an unused port', () => {
     expect(parseLsofListeners('')).toEqual([]);
     expect(parseLsofListeners(null)).toEqual([]);
-    // An error message is not a listener: nothing there parses as `p<digits>`.
     expect(parseLsofListeners('lsof: cannot open /dev/mem\n')).toEqual([]);
   });
 
   it('keeps a pid whose command line never arrives, rather than dropping it', () => {
-    // Output can end after the pid when the process goes between the scan and the
-    // read. Dropping it would read as "the port is free", which is the wrong way up.
+    // Output can end after the pid when the process exits between the scan and the read.
     expect(parseLsofListeners('p7\n')).toEqual([{ pid: 7, command: '' }]);
   });
 });
@@ -110,8 +87,7 @@ describe('portListeners', () => {
   });
 
   it("treats lsof's exit-1-with-no-output as 'nothing is listening'", () => {
-    // That is the normal answer for a free port, so reading it as a failure would make
-    // every free port an unchecked one - and every check would then fail open.
+    // `lsof` exits 1 and prints nothing for a free port.
     expect(portListeners({ port: PORT_A, run: run('', false) })).toEqual({
       port: PORT_A,
       checked: true,
@@ -121,8 +97,6 @@ describe('portListeners', () => {
   });
 
   it('says it could not check, rather than calling the port free', () => {
-    // The fail-open has to be visible: a machine without lsof still gets leases, but
-    // never a clean-looking "port is free" that was never asked about.
     const missing = portListeners({ port: PORT_A, run: () => null });
     expect(missing.checked).toBe(false);
     expect(missing.listeners).toEqual([]);
@@ -193,8 +167,6 @@ describe('decideAcquire with a busy Metro port', () => {
   });
 
   it('waits on the port instead of claiming every pair is leased', () => {
-    // The reason has to name the port: "every pair is already leased" sends the task to
-    // `lease.mjs list`, where a stale Metro is invisible.
     const decision = ask({ portBlocked: [blocked(PAIR_A), blocked(PAIR_B)] });
     expect(decision.ok).toBe(false);
     expect(decision.reason).toContain('Metro port');
@@ -202,18 +174,13 @@ describe('decideAcquire with a busy Metro port', () => {
   });
 
   it('does not report a port it was not told about', () => {
-    // The guard must not be decoration: with no blocked ports the answer is the old one.
     expect(ask().ok).toBe(true);
     expect(ask().pair.id).toBe(PAIR_A);
   });
 
   it('lets an exclusive acquire proceed over a busy Metro port, and says so', () => {
-    // An exclusive lease is a bench or a baseline mint, and a bench builds its JS into
-    // the Release binary (`scripts/bench/devices.mjs:10`), so it never serves or joins a
-    // Metro. Waiting here cost up to an hour for a port the run will not touch, and the
-    // `pendingExclusive` marker refreshed on every poll held back every *other* task
-    // with a message that named neither the port nor the pid (X15 review). The guard the
-    // exclusive case really needs is the device reap it already runs, not this one.
+    // An exclusive lease is for a bench, whose JS is built into the Release binary, so
+    // it never serves or joins a Metro.
     const decision = ask({ exclusive: true, portBlocked: [blocked(PAIR_B)] });
     expect(decision.ok).toBe(true);
     expect(decision.note).toContain(
@@ -223,9 +190,6 @@ describe('decideAcquire with a busy Metro port', () => {
   });
 
   it('still holds a non-exclusive lease back from a busy port when it is the only pair', () => {
-    // The other half of the pair of rules: the device task that *would* join that Metro
-    // keeps the guard. Making the exclusive case loud-but-fast must not quietly widen
-    // the exception to everyone.
     const decision = ask({
       exclusive: false,
       portBlocked: [blocked(PAIR_A), blocked(PAIR_B)],
@@ -235,10 +199,8 @@ describe('decideAcquire with a busy Metro port', () => {
   });
 
   it("still lets a task's own lease hold its pair over its own Metro", () => {
-    // Re-running `acquire` mid-suite to regenerate the env file is documented, and the
-    // server on that port is that task's own run. `acquire` answers that caller from
-    // its idempotent path before the port question; this is the decision the same
-    // situation makes when the pair really is this task's own.
+    // Re-running `acquire` mid-suite regenerates the env file, and the server on the
+    // port is then that task's own run.
     const decision = ask({
       task: 'X15',
       active: [heldLease],
@@ -255,10 +217,8 @@ describe("metroPreflightFromEnv (the gate's pre-flight)", () => {
     () => ({ ok, text });
 
   it('is nothing to check when no lease exported a port', () => {
-    // CI, and every plain `bun run check`: no METRO_PORT means no port was handed out.
-    // `listeners` is part of the answer even here (X34 item 2): a caller that explains a busy port
-    // reads it, and an absent field there would be a `TypeError` on the refusal path — the one
-    // path where this script has to be right first time.
+    // No METRO_PORT means no lease handed a port out. `listeners` is still present,
+    // because callers read it without checking.
     expect(metroPreflightFromEnv({}, run(''))).toEqual({
       checked: false,
       port: null,
@@ -276,8 +236,6 @@ describe("metroPreflightFromEnv (the gate's pre-flight)", () => {
     expect(answer.checked).toBe(true);
     expect(answer.reason).toContain(`Metro port ${PORT_A}`);
     expect(answer.reason).toContain('pid 4242 (node)');
-    // The pids travel with the refusal so the caller can ask whose group they belong to without a
-    // second `lsof` that could disagree with the first.
     expect(answer.listeners).toEqual([{ pid: 4242, command: 'node' }]);
   });
 
@@ -312,12 +270,8 @@ describe("metroPreflightFromEnv (the gate's pre-flight)", () => {
 /* --------------------- the incident's shape, end to end --------------------- */
 
 /**
- * A minimal checkout `gate.mjs` will run in, with a fake `node`/`bun` on PATH.
- *
- * `gate.mjs` starts by re-execing itself under `.nvmrc`'s major when the current runtime
- * is not one it supports, and that re-exec resolves a *real* node from the fnm-exported
- * PATH - past the fixture's fake runner. So the CLI cases carry the same runtime guard
- * `gate.test.js` uses, read from the shipped module rather than a copy of its list.
+ * Whether this Node is one the gates support. On another runtime `gate.mjs` re-execs
+ * itself under a real node, past the fixture's fake runner, so the CLI cases are skipped.
  */
 const runtime = (() => {
   const dir = mkdtempSync(join(tmpdir(), 'x15-node-'));
@@ -359,15 +313,10 @@ describeCli('a stale Metro server on a leased pair', () => {
   let checkouts;
 
   /**
-   * `lsof` as a stub: it replays whatever `ports.txt` says is listening, in `-Fpc`
-   * shape. The port is read out of the argv so one stub answers for the whole pool, and
-   * the no-match answer is lsof's real one (exit 1, nothing printed).
-   *
-   * A pid may be written `@/path/to/pid`, meaning "read the live pid out of that file",
-   * which is how the ownership cases name a process that does not exist until the run
-   * starts: the port reads as free until the fake Metro writes its pid, and as busy from
-   * then on. The alternative - asserting a pid the fixture invented - would let the sweep
-   * pass by trusting the fixture instead of the kernel.
+   * `lsof` as a stub: it replays whatever `ports.txt` says is listening, in `-Fpc` shape,
+   * and answers a free port the way lsof does (exit 1, nothing printed). A pid written
+   * `@/path/to/pid` is read from that file, so a port reads as free until the process
+   * that will serve it has written its pid.
    */
   const writeLsofStub = () => {
     writeFileSync(
@@ -413,18 +362,13 @@ describeCli('a stale Metro server on a leased pair', () => {
   };
 
   const env = (extra = {}) => ({
-    // The one environment builder in this suite, and the reason both CLI helpers below are clean:
-    // `lease.mjs` and `gate.mjs` read the pair, the boot switch and the Metro answer out of the
-    // environment they are handed, and every one of those is what a *fixture* decides here (X34
-    // item 1 — X32/X33 lost `check` from a leased shell through exactly this shape).
+    // Lease variables from the shell running this suite are removed: the fixture decides
+    // the pair and the Metro port.
     ...withoutLeaseEnv(process.env),
     NITRO_UI_HOME: home,
     NITRO_UI_LEASE_POLL_MS: '20',
     NITRO_UI_LSOF_BIN: join(bins, 'lsof'),
     NITRO_UI_FAKE_BUSY: busyFile,
-    // The gate's log store, aimed at this fixture's home (X15 review 4 needs a test that reads
-    // a run's transcript back, and a path derived from `git rev-parse --git-common-dir` in a
-    // throwaway checkout is not one a test should reconstruct). Production never sets this.
     NITRO_UI_GATE_LOG_STORE: join(home, 'log-store'),
     ...extra,
   });
@@ -465,12 +409,8 @@ describeCli('a stale Metro server on a leased pair', () => {
 
   /** `gate.mjs <gate>`, in a throwaway checkout with the lease env sourced. */
   const gateCli = (args, extra = {}) => {
-    // X28: the lease has to be in the store, not only in the environment. A device
-    // gate reads `leases.json` before the Metro pre-flight and refuses a run whose
-    // lease it cannot find, so `PAIR_A_ENV` alone would stop at "released" and never
-    // reach the port question this suite is about. pair-a is what the copied
-    // `devices.example.json` really holds, and the lease is the record
-    // `lease.mjs acquire` would have written for it.
+    // The lease has to be in the store as well as in the environment: a device gate
+    // refuses a run whose lease it cannot find, before it asks about the Metro port.
     writeLeaseStore(home, {
       skipDevices: true,
       leases: [leasePairA],
@@ -505,8 +445,7 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('is not handed out by acquire, which takes the other pair instead', () => {
-    // The incident: a run holds pair-a's *port* while holding no lease, so the pool
-    // sees pair-a free. The next task asks, and the only right answer is pair-b.
+    // A process serves pair-a's port while nobody holds a lease on pair-a.
     serve(PORT_A);
     const result = leaseCli(['acquire', '--task', 'X4']);
     expect(result.status).toBe(0);
@@ -528,8 +467,6 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('lets the task that already holds the pair re-acquire over its own Metro', () => {
-    // The documented way to get an env file again mid-run: the server on the port is
-    // this task's own suite, so this has to keep working or the guard breaks a workflow.
     const first = leaseCli(['acquire', '--task', 'X4']);
     expect(first.status).toBe(0);
     const port = Number(/export METRO_PORT='(\d+)'/.exec(first.stdout)?.[1]);
@@ -540,7 +477,7 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('says so once when the machine cannot answer, and leases anyway', () => {
-    // Fail-open with a voice: a container with no lsof must still be able to lease.
+    // A machine with no `lsof` must still be able to lease.
     const result = leaseCli(['acquire', '--task', 'X4'], {
       NITRO_UI_LSOF_BIN: join(bins, 'nope'),
     });
@@ -550,8 +487,8 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('makes gate.mjs refuse a leased pair whose Metro port someone else serves', () => {
-    // The second net: the lease was granted *before* the port went busy, and a gate
-    // starts minutes after its acquire. X4's pair, X4's lease, someone else's Metro.
+    // The port can go busy after the lease was granted, so the gate asks again when it
+    // starts.
     const run = gateCli(['harness:android'], { ...PAIR_A_ENV });
     serve(PORT_A);
     const second = gateCli(['harness:android'], { ...PAIR_A_ENV });
@@ -560,9 +497,8 @@ describeCli('a stale Metro server on a leased pair', () => {
     expect(second.stderr).toContain(`Metro port ${PORT_A}`);
     expect(second.stderr).toContain('pid 4242 (node)');
     expect(second.stderr).toContain('NITRO_UI_GATE_METRO_FORCE=1');
-    // Nothing recorded: the run never started, so there is no evidence to write. And
-    // the first run, on the same port while it was still free, did record - so the
-    // refusal is about the port and not about the fixture.
+    // A refused run never started, so it records nothing. The first run, on the same
+    // port while it was free, did record.
     expect(second.lines).toEqual([]);
     expect(run.lines).toHaveLength(1);
   });
@@ -580,19 +516,10 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('stops the Metro its own run left on the leased port', () => {
-    // The merge sequence (`real-input:ios` -> `real-input:android` -> `harness:ios` ->
-    // `harness:android`) runs four gates on one lease, and a Metro left up by the first is
-    // what the second's pre-flight then refuses - the second refuses *itself*. So a gate
-    // stops what its own run started, and the ownership test is the child's process group: a
-    // kernel fact, where attributing a listener by its environment (`ps eww`) is not - an id
-    // past that command's truncation width reads as somebody else's server, and the safe
-    // branch there is precisely the leak.
-    //
-    // `FAKE_SERVE_METRO` makes the fixture's runner spawn a real socket owner as its own child
-    // (the harness's bundle server, one process level down) and exit without stopping it. The
-    // busy file names the pid *indirectly*, so the port reads free until the listener exists
-    // and busy from then on: the order a leaked server has in a real run, and the reason the
-    // fixture cannot simply assert a pid of its own.
+    // Several gates run in a row on one lease, and a Metro left up by one would make the
+    // next refuse to start. A gate stops the listeners in its own command's process
+    // group. `FAKE_SERVE_METRO` makes the fake runner start a real listener as its child
+    // and exit without stopping it.
     const port = freePort();
     const pidFile = join(home, 'fake-metro.pid');
     rmSync(pidFile, { force: true });
@@ -613,10 +540,7 @@ describeCli('a stale Metro server on a leased pair', () => {
       expect(run.stderr).toContain('stopped the Metro this run started');
       expect(run.stderr).toContain(String(ownerPid));
       expect(pidIsAlive(ownerPid)).toBe(false);
-      // The same evidence in the run's *log*, which is what the gate's evidence store keeps
-      // (X15 review 4): on stderr alone, the fact that a sweep fired is gone with the terminal,
-      // and a reader of `gate.mjs logs` three days later cannot tell a run that cleaned up from
-      // one that never needed to. Read from the ledger's own `logPath`, not a guessed name.
+      // The sweep is also written to the run's stored log, after the run's own output.
       const [record] = run.lines;
       expect(record.logPath).toBeTruthy();
       const transcript = readFileSync(
@@ -624,15 +548,9 @@ describeCli('a stale Metro server on a leased pair', () => {
         'utf8'
       );
       expect(transcript).toContain('stopped the Metro this run started');
-      // And the run's own output is still in there in full - the drain is what keeps the tail
-      // of a harness summary, which is where the ledger's counts are parsed from.
       expect(transcript).toContain('Tests: 3 passed, 3 total');
-      // And the pool's answer for the pair is unchanged: the sweep stopped a server on the port
-      // this run was handed, not the pair's own port, and certainly not another task's.
-      // X28 first: the gate run above is checked against the fixture's X4-1 lease, so
-      // pair-a is leased while the run lasts and `acquire` would answer "already leased"
-      // for any other task, sweep or no sweep. Dropping the lease leaves the question
-      // this line actually asks: is pair-a's Metro port free again?
+      // With the fixture's lease dropped, pair-a can be leased again: its Metro port is
+      // free.
       writeLeaseStore(home, { skipDevices: true, leases: [] });
       const next = leaseCli(['acquire', '--task', 'X5']);
       expect(next.status).toBe(0);
@@ -644,12 +562,8 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('leaves a Metro in another process group alone', () => {
-    // The half that keeps this safe: stopping a stranger's Metro *is* the X4 incident, so the
-    // sweep's only authority is "same group as my child". The listener below is a child of
-    // this test process, so its group is the test's, while the busy file reports its real pid
-    // on the leased port - so a sweep keyed on the port alone, or on an environment string,
-    // would kill it. `NITRO_UI_GATE_METRO_FORCE=1` gets the run past the pre-flight (which is
-    // what a hand-started Metro session does today), isolating the sweep from the refusal.
+    // The listener is a child of this test process, so it is in the test's process group
+    // and not the gate's. `NITRO_UI_GATE_METRO_FORCE=1` gets the run past the pre-flight.
     const port = freePort();
     const pidFile = join(home, 'other-metro.pid');
     rmSync(pidFile, { force: true });
@@ -680,12 +594,8 @@ describeCli('a stale Metro server on a leased pair', () => {
   });
 
   it('leaves a run with no METRO_PORT alone (CI, a plain check)', () => {
-    // Nothing to ask about when no lease handed a port out. Written to fail if the
-    // pre-flight ever reaches a non-device gate too: `check` runs with a busy METRO_PORT
-    // exported (the lease env is sourced in the shell, and `check` inherits it), so a
-    // pre-flight on this path would refuse a CI step that has no device and no Metro of
-    // its own. `check` is also the gate that has no platform, which is the real reason it
-    // must stay out of the guard.
+    // `check` uses no device and no Metro, so the pre-flight must not apply to it even
+    // when a leased shell exports a busy METRO_PORT.
     serve(PORT_A);
     const run = gateCli(['check'], {
       NITRO_UI_LSOF_BIN: join(bins, 'nope'),
@@ -704,25 +614,9 @@ describeCli('a stale Metro server on a leased pair', () => {
 /* ------------------------- a throwaway checkout ---------------------------- */
 
 /**
- * A bundle server, as a real socket owner: binds, writes its pid, and stays up. The retries
- * are because `freePort` releases the port before the caller binds it - the usual
- * ephemeral-port race, and the same one a real Metro has with a predecessor's port.
- */
-/**
- * A bundle server, as a real socket owner: binds, writes its pid, stays up - and then exits.
- *
- * Two things it must not do, learned by being wrong about both:
- *
- *  - **leak.** The first version held the event loop open with `setTimeout(()=>{},1e6)` and
- *    nothing ended it, so a fixture killed halfway through - an assertion before its cleanup, a
- *    test that timed out - left a listener on a real port for the rest of the machine's life.
- *    Two of those were found days later, still listening. So the deadline below is the fixture's
- *    own promise: it dies even if every killer fails. `unref` because it must not *extend* life
- *    either - when the gate under test stops it, that is the end of it. 60 s is minutes away
- *    from a passing run and short enough that a missed kill is a leak that ends by itself.
- *  - **give up on a busy port.** `freePort` releases the port before this binds it, the usual
- *    ephemeral-port race, and the same one a real Metro has with a predecessor's port; hence
- *    the retry, not a single `listen`.
+ * A stand-in bundle server: it binds the port, writes its pid and stays up. It exits by
+ * itself after 60 s, so a test that dies before its cleanup cannot leave a listener
+ * behind. The bind is retried because `freePort` releases the port before this binds it.
  */
 const LISTENER_SNIPPET =
   'const net=require("net"),fs=require("fs");' +
@@ -733,13 +627,8 @@ const LISTENER_SNIPPET =
   'tryBind(0);const die=setTimeout(()=>process.exit(0),60000);if(die.unref)die.unref();';
 
 /**
- * Blocks for a moment without a subprocess and without spinning.
- *
- * A synchronous helper cannot use a timer, and the alternatives are bad: a busy loop burns a
- * core while a real process is trying to start (worst case for the very thing being waited on),
- * and spawning `node -e 0` per poll costs a whole runtime start per iteration - which is what
- * made these waits time out under a loaded suite. `Atomics.wait` on a shared buffer is a
- * scheduler-level sleep available on the main thread in Node.
+ * Blocks without a subprocess and without spinning: `Atomics.wait` on a shared buffer is a
+ * real sleep that works on Node's main thread.
  */
 function sleepSync(ms) {
   try {
@@ -750,14 +639,8 @@ function sleepSync(ms) {
 }
 
 /**
- * Waits for a fixture's pid file to appear, and returns the pid in it.
- *
- * Polling a file with a deadline instead of `expect(existsSync(...))`: the writer is a child of
- * a child of a child, and the machine decides when it gets there. Under a parallel suite run
- * this exact assertion is what failed once in four - not a wrong answer, a *too early* one, and
- * an ENOENT that points at the test rather than at the code. So the budget is generous (what a
- * loaded box needs), and the failure says "never appeared" rather than throwing ENOENT from a
- * read the test never needed to make.
+ * Waits for a fixture's pid file to appear and returns the pid in it, or null. The writer
+ * is several processes down, so the budget is generous for a loaded machine.
  */
 function readFixturePid(pidFile, limitMs = 30_000) {
   const deadline = Date.now() + limitMs;
@@ -771,19 +654,13 @@ function readFixturePid(pidFile, limitMs = 30_000) {
   }
 }
 
-/**
- * Kills a fixture's listener by the pid it wrote, and waits for it to be gone.
- *
- * In the test's `finally`, so the outcome of an assertion cannot decide whether the process
- * survives. The pid comes from the file, not from a `ChildProcess` handle: the interesting case
- * is a listener the *gate* was supposed to stop, which this test never held a handle to.
- */
+/** Kills a fixture's listener by the pid it wrote, and waits for it to be gone. */
 function killFixturePid(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return;
   try {
     process.kill(pid, 'SIGKILL');
   } catch {
-    /* gone already - which is the pass case for the sweep test */
+    /* already gone */
   }
   const deadline = Date.now() + 5_000;
   while (pidIsAlive(pid) && Date.now() < deadline) {
@@ -791,11 +668,7 @@ function killFixturePid(pid) {
   }
 }
 
-/**
- * A port nobody is listening on, asked of the OS rather than guessed: the fixture's fake Metro
- * has to own a real socket, and a hardcoded number is a test that fails whenever somebody
- * else's run happens to use it (which is what pair-a's real port turned out to be, mid-run).
- */
+/** A port nobody is listening on, asked of the OS rather than hardcoded. */
 function freePort() {
   const probe = spawnSync(
     process.execPath,
@@ -813,7 +686,7 @@ function freePort() {
 /**
  * The smallest tree `gate.mjs` runs in: the marker `repoRootOf()` looks for, an
  * `example/` for a harness gate to run in, and a fake `node`/`bun` on PATH that prints a
- * jest summary. Same shape as `gate.test.js`'s fixture.
+ * jest summary.
  */
 function makeCheckout() {
   const dir = mkdtempSync(join(tmpdir(), 'x15-gate-'));
@@ -832,23 +705,16 @@ function makeCheckout() {
   git(dir, ['checkout', '-qb', 'task/x15-fixture']);
   const bin = join(dir, 'fake-bin');
   mkdirSync(bin, { recursive: true });
-  // Built from lines rather than one concatenated string: the Metro-leak case needs a
-  // nested quoting level (a `node -e` inside a shim inside a JS string), and an array keeps
-  // each level readable.
   const script = [
     '#!/bin/sh',
     'echo "fake runner: $0 $*"',
-    // The Metro-leak case: a run that starts a bundle server and exits without stopping it.
-    // `FAKE_SERVE_METRO` is "<port> <pid file>". The listener is a *real* socket owner,
-    // spawned as this shim's own child so it shares this shim's process group - the fact the
-    // sweep decides on, which is why the runner cannot simply report a pid of its own.
-    // `FAKE_REAL_NODE` names the interpreter: `node` on this PATH is this shim.
+    // `FAKE_SERVE_METRO` is "<port> <pid file>": start a listener as this shim's own
+    // child, so it shares the shim's process group, and exit without stopping it.
+    // `FAKE_REAL_NODE` names the interpreter, because `node` on this PATH is this shim.
     'if [ -n "$FAKE_SERVE_METRO" ]; then',
     '  set -- $FAKE_SERVE_METRO',
     '  "$FAKE_REAL_NODE" -e "$FAKE_METRO_SNIPPET" "$1" "$2" &',
-    // Not a courtesy pause: the gate's Metro sweep looks for a listener on the port, so a shim
-    // that prints its summary before the server exists makes the sweep stop nothing and the
-    // test goes red for the wrong reason. 15 s of 0.2 s polls is what a loaded box takes.
+    // Wait for the listener to exist before exiting, or the gate's sweep finds nothing.
     '  i=0',
     '  while [ "$i" -lt 75 ]; do',
     '    [ -s "$2" ] && break',

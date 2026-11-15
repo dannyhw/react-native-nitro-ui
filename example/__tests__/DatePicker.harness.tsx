@@ -1,36 +1,3 @@
-/**
- * On-device tests for the DatePicker (task G5).
- *
- * DatePicker is the first control in this library that *presents*: a popover on
- * iOS, a dialog window on Android. That adds two things the SegmentedControl
- * suite does not have — a piece of UI that outlives a tap and must not outlive
- * the mount, and a value that is a calendar instant rather than a number, so the
- * device's time zone is part of the result. It keeps everything the other suites
- * have: the event-count handshake, and a size that comes from what the control
- * renders.
- *
- * Three readings, as in the Button/SegmentedControl suites:
- *  - `harnessUi.queryByTestId` — the box Fabric gave the view;
- *  - `hybridRef.measureContent()` — the size the hosted control measured;
- *  - `hybridRef.nuiTestStateReport()` — `(displayed instant, presented?)`.
- *
- * The third one is new, and it is here because of what a date picker is: a
- * calendar cell, a wheel row and a dialog button are all unreachable to a
- * synthesised press on at least one platform (see `nuiTestSelect`'s doc comment),
- * so the suite drives selections through the control's own selection path and
- * reads the result back through the only two channels that are honest about it —
- * the event that reached JS, and the report native keeps in step with what it is
- * showing. The dialog test then needs no readout at all: a leaked dialog window
- * (Android) or popover (iOS) swallows the press of the witness next to it.
- *
- * Two things make these tests able to fail:
- *  - every cold configuration is **poisoned** first (`seedSizingSize` with a size
- *    no date picker has, then an environment bump), so a correction that never
- *    arrives leaves a visible wrong box and costs a correction the test requires;
- *  - the pair test requires **exactly one** correction for two mounted pickers,
- *    which is the assertion that fails if a `compact` field's width ever depends
- *    on the date it is showing.
- */
 import {
   Platform,
   Pressable,
@@ -67,11 +34,7 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * What `hybridRef` hands back — declared, not imported (DECISIONS D14 keeps
- * Hybrid View types off the public surface). Read-only except for the two test
- * seams, which are the point of having the handle at all here.
- */
+/** Declared here: Hybrid View types are not part of the public API. */
 type DatePickerHandle = {
   /** The instant React sent, clamped to the bounds; null when uncontrolled. */
   readonly valueMillis: number | null;
@@ -95,19 +58,12 @@ type DatePickerHandle = {
   ): void;
   nuiTestPresent(): void;
   /**
-   * `"<displayed millis>|<presented 0|1>|<calendar month>|<calendar has selection>|<live presentations>|<control builds>"`.
-   *
-   * The middle two are the composed *calendar's* own facts and Android's only:
-   * Material 3's `DatePickerState` publishes a displayed month and a nullable
-   * selection, SwiftUI's `DatePicker` publishes neither, so iOS reports `-1` for both
-   * (see `readReport()` in `HybridNitroUiDatePicker.swift`). The fifth field is
-   * process-wide on both platforms; the sixth counts this mount's own platform-control
-   * builds, which is what a rebuild is measured by (`keeps the live control…`).
+   * `|`-separated fields, in the order `reportOf` parses them. The calendar's
+   * month and selection are Android-only: iOS reports `-1` for both.
    */
   nuiTestStateReport(): string;
 };
 
-/** Handles by testID, so a test can ask each control what it holds. */
 const handles = new Map<string, DatePickerHandle>();
 const captureHybrid =
   (testId: string) =>
@@ -115,13 +71,7 @@ const captureHybrid =
     handles.set(testId, view);
   };
 
-/**
- * Every `onChange` the app has reported, in order: `testID:millis`.
- *
- * The instant is in the line rather than just a count because half of what this
- * suite asserts is *which* instant a pick produced (clamping, the DST round-trip),
- * and re-rendering the tree to show one would spend a render on the measurement.
- */
+/** Every `onChange` the app has reported, in order: `testID:millis`. */
 const eventLog: string[] = [];
 const recordChange =
   (testId: string) =>
@@ -131,7 +81,6 @@ const recordChange =
 
 const stats = (): NitroUiSizingStats => nitroUiCore.sizingStats();
 
-/** `after - before` for the counters a test asserts on. */
 function delta(before: NitroUiSizingStats, after: NitroUiSizingStats) {
   return {
     corrections:
@@ -172,7 +121,7 @@ function measured(testId: string): Size | null {
   return handles.get(testId)?.measureContent() ?? null;
 }
 
-/** The report native keeps in step with what it is showing, parsed. */
+/** What native reports it is showing, parsed. */
 type Report = {
   /** The instant the control is showing, in ms. */
   millis: number;
@@ -184,23 +133,13 @@ type Report = {
   /** Presentations open in this whole process, from any mount, present or gone. */
   livePresentations: number;
   /**
-   * How many times this mount built its platform control. It moves exactly when a
-   * bounds change rebuilt the live control (Android's `key(...)`, iOS's `.id(...)`),
-   * which is the only honest way to see a rebuild: the page and selection a rebuild
-   * throws away are both re-derived from the value, so nothing else can read it.
+   * How many times this mount built its platform control. It moves only when a
+   * bounds change rebuilds the live control.
    */
   controlBuilds: number;
   /**
-   * What the platform control ON SCREEN was built with, as the two bounds the
-   * native build recorded for it (`-1` = no control built yet, `-2` = that bound is
-   * unset).
-   *
-   * `controlBuilds` says how often a control was built; this says *what the one that
-   * is up there knows*. That difference is the whole content of `docs/tasks/
-   * Q4-followups-triage.md` row 46: iOS keyed a rebuild on the live control's bounds while the
-   * record of those bounds was written from an `.onAppear` that survived rebuilds, so
-   * the count and the bounds disagreed about which control was on screen. Only
-   * reading both can show that.
+   * The bounds the platform control on screen was built with (`-1` = no control
+   * built yet, `-2` = that bound is unset).
    */
   builtMinimum: number;
   builtMaximum: number;
@@ -231,18 +170,9 @@ function reportOf(testId: string): Report {
 }
 
 /**
- * The platform-build count of `testId` once it has stopped moving, and why the
- * word "settled" is load-bearing.
- *
- * A mount is built again while its props land - the bounds arrive after the first
- * commit, and on iOS a value still outside the bounds the control was built with is
- * one more reason to rebuild - so a baseline sampled too early is a race, not an
- * assertion. What a re-render may not do is *add* to the settled number, which is
- * why every rebuild assertion in this file is made against a baseline.
- *
- * Shared by the two tests that measure rebuilds (`keeps the live control when a
- * re-render sends a new bound instant` and the escape-clause test), because the
- * quiet-window rule has to be the same in both or one of them is racing.
+ * The platform-build count of `testId` once it has stopped moving. A mount is
+ * built again while its props land (the bounds arrive after the first commit),
+ * so a count sampled early is a race: rebuild assertions compare against this.
  */
 async function settledBuilds(testId: string, what: string): Promise<number> {
   const QUIET_POLLS = 15;
@@ -281,7 +211,6 @@ function expectedMonthKey(year: number, month: number): string {
   return String(year) + '-' + String(month).padStart(2, '0');
 }
 
-/** Poll until the composed calendar is showing the given month. */
 async function waitForMonth(
   testId: string,
   year: number,
@@ -303,7 +232,6 @@ async function waitForMonth(
   );
 }
 
-/** Poll until the process-wide count of open presentations is `count`. */
 async function waitForLivePresentations(
   testId: string,
   count: number,
@@ -358,7 +286,6 @@ async function waitForTestId(testId: string, timeoutMs = 10000) {
   return screen.findByTestId(testId);
 }
 
-/** Poll until the box of `testId` is `size`, i.e. until a size has really arrived. */
 async function waitForBox(testId: string, size: Size, what: string) {
   return await pollUntil(
     () => (sameSize(sizeOf(testId), size) ? sizeOf(testId) : null),
@@ -372,7 +299,7 @@ async function waitForBox(testId: string, size: Size, what: string) {
   );
 }
 
-/** Poll until the control reports a size (a host measures after its first commit). */
+/** Polled: a host measures after its first commit. */
 async function waitForMeasured(testId: string, what: string) {
   return await pollUntil(
     () => {
@@ -383,7 +310,6 @@ async function waitForMeasured(testId: string, what: string) {
   );
 }
 
-/** Poll until the control is showing `millis`, i.e. until a write or a revert landed. */
 async function waitForDisplayed(testId: string, millis: number, what: string) {
   return await pollUntil(
     () => (displayedOf(testId) === millis ? millis : null),
@@ -396,7 +322,6 @@ async function waitForDisplayed(testId: string, millis: number, what: string) {
   );
 }
 
-/** Poll until the presentation of `testId` is `presented`. */
 async function waitForPresented(
   testId: string,
   presented: boolean,
@@ -415,14 +340,9 @@ async function waitForPresented(
 }
 
 /**
- * Poll until the box agrees with the size the control itself reports, at a
- * caller's `width`.
- *
- * Used for the `fillWidth` variants, where a single read of `measureContent()` is
- * not enough: a Material 3 calendar lays out twice when its year range and
- * `SelectableDates` land, so the first reported height can be a frame's-old
- * number, and the correction that follows is the control settling rather than the
- * engine failing. The claim is that the box ends up where the control ends up.
+ * Poll until the box is `width` wide and as tall as the control reports. A
+ * Material 3 calendar lays out twice as its year range and selectable dates
+ * land, so a single read of `measureContent()` can be a frame old.
  */
 async function waitForBoxToMatchMeasured(
   testId: string,
@@ -449,7 +369,6 @@ async function waitForBoxToMatchMeasured(
   );
 }
 
-/** Wait for `eventLog` to hold at least `count` entries. */
 async function waitForEvents(count: number) {
   return await pollUntil(
     () => (eventLog.length >= count ? eventLog.slice() : null),
@@ -462,24 +381,24 @@ async function waitForEvents(count: number) {
 }
 
 /**
- * The key `DatePicker.tsx` builds: `"<variant>|<mode>"`.
- *
- * Written out here rather than imported — a harness that poisoned the cache
- * through the library's own helper could not catch the helper being wrong, and a
- * missing input in that key is exactly the R3 bug class. Note what is *not* in
- * it: the date. That omission is the claim of the pair test, not an oversight.
+ * The sizing key `DatePicker.tsx` builds: `"<variant>|<mode>"`. Written out
+ * rather than imported, so a wrong key in the library cannot hide itself. The
+ * date is deliberately not part of it.
  */
 function sizingKey(variant: string, mode: string): string {
   return `${variant}|${mode}`;
 }
 
 /**
- * A size that is *not* any date picker's size, planted as the engine's answer for
- * a configuration before it is first mounted (see the SegmentedControl suite).
+ * A size no date picker has, planted as the cached answer before a first mount
+ * so that a correction which never arrives leaves a visibly wrong box.
  */
 const WRONG_SIZE = { width: 13.25, height: 66.5 };
 
-/** Plant a wrong answer for several configurations, then drop the cache once. */
+/**
+ * Plant a wrong size for each configuration, then invalidate: invalidating
+ * keeps the last known size as the guess a cold mount starts from.
+ */
 function poisonConfigurations(keys: readonly string[]): void {
   for (const key of keys) {
     nitroUiCore.seedSizingSize(
@@ -498,12 +417,8 @@ async function settle(ms = 250): Promise<void> {
 }
 
 /**
- * A local instant, from calendar fields — the same arithmetic native performs.
- *
- * Both sides resolve these fields in the *device's* time zone (a JS `Date`
- * constructor and a native `Calendar`/`DateComponents`), which is what makes this
- * usable as an expectation for `nuiTestSelect`: the claim under test is that the
- * two agree, including across a DST boundary. `month` is 1-12, like the seam's.
+ * A local instant from calendar fields, resolved in the device's time zone as
+ * native resolves the fields `nuiTestSelect` is given. `month` is 1-12.
  */
 function localMs(
   year: number,
@@ -515,17 +430,12 @@ function localMs(
   return new Date(year, month - 1, day, hour, minute).getTime();
 }
 
-/** What the device thinks its UTC offset is, for the log lines (D21 evidence). */
 function zoneNote(): string {
   const offsetMinutes = new Date().getTimezoneOffset();
   return `tzOffset=${String(offsetMinutes)}`;
 }
 
-/**
- * The widest string `mode` can format, from the same formatter the field's probe
- * uses. Only for failure output: a mode change that does not move the box is
- * undiagnosable without knowing what the two fields were sized from.
- */
+/** The widest string `mode` can format. Only for the log lines. */
 function probeTextOf(mode: string): string {
   const probe = new Date(2288, 10, 28, 23, 59);
   return mode === 'time'
@@ -548,12 +458,8 @@ afterEach(() => {
 
 describe('DatePicker · G5', () => {
   it('lays each variant out at the size the control measured', async () => {
-    // The base R3 claim plus the policy claim for this component: `compact` is
-    // intrinsic (the field's own width), `inline` and `wheel` are `fillWidth`
-    // (the caller's width, the control's height). A `wheel` on Android is the
-    // inline picker, so it must behave like `inline` here rather than like a
-    // field — which is also the assertion that catches a variant flipping the
-    // wrong policy.
+    // `compact` sizes to its own width; `inline` and `wheel` take the caller's
+    // width and the control's height.
     poisonConfigurations([
       sizingKey('compact', 'date'),
       sizingKey('inline', 'date'),
@@ -593,16 +499,10 @@ describe('DatePicker · G5', () => {
 
     const fieldSize = await waitForMeasured('field', 'the compact field');
     await waitForBox('field', fieldSize, 'the compact field');
-    // Intrinsic: the field is narrower than the caller's 320 dp box around the
-    // other two, and it is the control's width rather than the window's.
     expect(fieldSize.width).toBeLessThan(320);
 
     for (const testId of ['inline', 'wheel']) {
       const size = await waitForMeasured(testId, `the ${testId} picker`);
-      // Height comes from the control, width from the caller. The height is what a
-      // `fillWidth` host has to get right (a calendar is not 34 dp tall); the width
-      // is what the policy is for, and 320 rather than the control's own width is
-      // the difference between `fillWidth` and `intrinsic`.
       await waitForBoxToMatchMeasured(testId, 320, `the ${testId} picker`);
       expect(size.height).toBeGreaterThan(100);
     }
@@ -613,18 +513,13 @@ describe('DatePicker · G5', () => {
         `inline=${describeSize(sizeOf('inline'))} wheel=${describeSize(sizeOf('wheel'))} ` +
         `delta=${JSON.stringify(after)}`
     );
-    // Three configurations, each poisoned, so each owes a correction. Without a
-    // measure or a report any one of them sits at 13.25x66.5 and this fails.
+    // Three poisoned configurations, so each owes a correction.
     expect(after.corrections).toBeGreaterThanOrEqual(3);
     expect(sameSize(sizeOf('field'), WRONG_SIZE)).toBe(false);
     unmount();
   });
 
   it('reports a pick once, and nothing for the same day', async () => {
-    // The event contract, in the order a user produces it: one pick, one event
-    // with the instant; the same day again, no event. The second half is the
-    // no-op suppression that also underwrites the rejection test below — a picker
-    // that echoed "still 2027-01-15" would make a snap-back invisible.
     const FIRST = localMs(2027, 1, 15);
     const { unmount } = await render(
       <DatePicker
@@ -636,15 +531,13 @@ describe('DatePicker · G5', () => {
       { timeout: 20000 }
     );
     await waitForTestId('pick');
-    // The seed: an uncontrolled picker shows the `defaultValue` it was given.
     await waitForDisplayed('pick', localMs(2026, 6, 4), 'the default');
     // Uncontrolled means React sent no instant, so there is nothing to read back.
     expect(handles.get('pick')?.valueMillis).toBeNull();
 
     handles.get('pick')?.nuiTestSelect(2027, 1, 15, 0, 0);
     const first = await waitForEvents(1);
-    // `mode="date"` shows no clock, so the seam's hour/minute are ignored and the
-    // displayed 00:00 survives — the instant a day cell tap produces.
+    // `mode="date"` shows no clock, so the hour and minute passed are ignored.
     expect(first).toEqual([`pick:${String(FIRST)}`]);
     await waitForDisplayed('pick', FIRST, 'the pick');
 
@@ -663,11 +556,8 @@ describe('DatePicker · G5', () => {
   });
 
   it('reverts a pick the parent refuses', async () => {
-    // The controlled half of the handshake (core.md §4), with the tap-twice oracle
-    // the SegmentedControl suite uses: a picker that has reverted is showing the
-    // parent's date again, so *the same pick is a change again*. A picker that
-    // never reverted is still showing 2027-01-15, the second pick is a no-op, and
-    // the log has one line instead of two.
+    // A picker that has reverted shows the parent's date again, so the same pick
+    // is a change again and reports a second event.
     const PARENT = localMs(2026, 6, 4);
     const PICKED = localMs(2027, 1, 15);
     const { unmount } = await render(
@@ -685,12 +575,6 @@ describe('DatePicker · G5', () => {
     handles.get('rejected')?.nuiTestSelect(2027, 1, 15, 0, 0);
     const first = await waitForEvents(1);
     expect(first).toEqual([`rejected:${String(PICKED)}`]);
-    // Native owns the *displayed* instant, so the pick is painted first and the
-    // parent's refusal is what puts it back. Reading "still painted" here is not
-    // observable: waiting for the event already yielded the JS loop, so the echo
-    // of the event count and its commit have landed by now on a fast device. The
-    // revert itself, and the pick-twice oracle below, are what the handshake is
-    // actually asserted on.
     await waitForDisplayed('rejected', PARENT, 'the revert');
     expect(handles.get('rejected')?.valueMillis).toBe(PARENT);
 
@@ -708,15 +592,8 @@ describe('DatePicker · G5', () => {
   });
 
   it('clamps a value and a pick to minimumDate/maximumDate', async () => {
-    // Two controls, because the two clamps are two different paths and a
-    // controlled one cannot show the second: a pick that native clamped onto a
-    // bound is refused by a parent that keeps sending its own value, so the
-    // controlled instance ends up back on the value rather than on the bound.
-    //  - `bounded-value`: React sends an instant past `maximumDate`, and both the
-    //    wrapper and native clamp it. The handle reports the *clamped* instant,
-    //    which is what makes an out-of-range value readable instead of live;
-    //  - `bounded-pick`: uncontrolled, so a pick outside the range can stay where
-    //    the clamp put it and be read back.
+    // Two controls: a controlled picker's clamped pick is refused by its parent,
+    // so only an uncontrolled one can stay on the bound and be read back.
     const MIN = localMs(2026, 1, 1);
     const MAX = localMs(2027, 1, 1);
     const { unmount } = await render(
@@ -751,15 +628,13 @@ describe('DatePicker · G5', () => {
     expect(eventLog).toEqual([]);
 
     await waitForDisplayed('bounded-pick', localMs(2026, 6, 4), 'the seed');
-    // A pick above the range lands on the upper bound and reports it.
     handles.get('bounded-pick')?.nuiTestSelect(2031, 6, 1, 0, 0);
     const clampedHigh = await waitForEvents(1);
     expect(clampedHigh).toEqual([`bounded-pick:${String(MAX)}`]);
     await waitForDisplayed('bounded-pick', MAX, 'the upper clamp');
 
-    // ...and the 31st of a month the target year does not have stays inside the
-    // month rather than rolling over, which is the other clamp a calendar seam
-    // needs (2026-02-31 has to mean 2026-02-28).
+    // A day the month does not have stays inside the month rather than rolling
+    // over: 2026-02-31 means 2026-02-28.
     handles.get('bounded-pick')?.nuiTestSelect(2026, 2, 31, 0, 0);
     const clampedDay = await waitForEvents(2);
     expect(clampedDay[1]).toBe(`bounded-pick:${String(localMs(2026, 2, 28))}`);
@@ -776,30 +651,9 @@ describe('DatePicker · G5', () => {
   });
 
   it('shows the month the value is in, and moves the page with it', async () => {
-    // A Material 3 calendar has a *page* of its own (`displayedMonthMillis`) that the
-    // model does not, and it is easy to hand it the wrong one:
-    // `rememberDatePickerState`'s second positional argument is
-    // `initialDisplayedMonthMillis` - *not* a minimum - so the call that read like a
-    // minimum opened the calendar on today's month (or the minimum's), with the day the
-    // field was showing off-screen. `docs/tasks/G5-datepicker/android-dialog.png` is
-    // the record: `Jul 4, 2026` in the header over an October 2026 grid.
-    //
-    // The second half is that the state reads the month, the year range and the
-    // selectable days once, at construction, so React widening the range has to
-    // *rebuild* it: a calendar whose `yearRange` the value has outgrown stores `null`
-    // for the selection it is handed, and then shows no day at all while the field
-    // reads one. `calendarHasSelection` is the oracle for that, and the one the
-    // rebuild has to satisfy.
-    //
-    // Both months are derived from the device's clock rather than fixed: with the
-    // positional bug the page lands on *today's* month, so a hardcoded July would pass
-    // by luck whenever the device was in July. The value is three months out, the
-    // minimum four months before that, the rerender eleven months further again - no
-    // two of them share a month with each other or with today.
-    //
-    // The calendar pair in the report is Android's (SwiftUI publishes neither fact),
-    // so the month assertions are guarded and iOS runs this as the model-level check
-    // it can be: the value, the page and the presentation still have to agree.
+    // The months are derived from the device's clock so that none of them is
+    // today's: a calendar that wrongly opened on today's month would pass a
+    // hardcoded month whenever the device was in it.
     const today = new Date();
     const target = new Date(
       today.getFullYear(),
@@ -824,9 +678,8 @@ describe('DatePicker · G5', () => {
     );
     const endOfTargetYear = new Date(target.getFullYear(), 11, 31, 23, 59);
     const endTwoYearsLater = new Date(target.getFullYear() + 2, 11, 31, 23, 59);
-    // A value for the picker whose bounds never move. Only the model->picker effect can
-    // follow this one: nothing rebuilds an unbounded calendar's state, so if the page
-    // sync is missing, the day moves and the page does not.
+    // For the picker whose bounds never move: nothing rebuilds its calendar, so
+    // its page has to follow the value on its own.
     const laterPlain = new Date(
       target.getFullYear(),
       target.getMonth() + 6,
@@ -834,6 +687,7 @@ describe('DatePicker · G5', () => {
       8,
       15
     );
+    // The calendar's month and selection are reported on Android only.
     const isAndroid = Platform.OS === 'android';
 
     const tree = (widened: boolean, plainValue = target) => (
@@ -881,14 +735,12 @@ describe('DatePicker · G5', () => {
       await waitForDisplayed(testId, target.getTime(), `the seed on ${testId}`);
     }
     if (isAndroid) {
-      // No bounds: the page is the value's month, not the device's.
       await waitForMonth(
         'page-plain',
         target.getFullYear(),
         target.getMonth() + 1,
         'an unbounded calendar'
       );
-      // A minimum a different month again: still the value's month, not the bound's.
       await waitForMonth(
         'page-min',
         target.getFullYear(),
@@ -903,8 +755,6 @@ describe('DatePicker · G5', () => {
       );
     }
 
-    // The dialog the field opens has to start on the same page (this is the case the
-    // screenshot showed wrong), and it is the presentation the count below is for.
     handles.get('page-dialog')?.nuiTestPresent();
     await waitForPresented('page-dialog', true, 'the field press');
     if (isAndroid) {
@@ -916,13 +766,8 @@ describe('DatePicker · G5', () => {
       );
     }
     await waitForLivePresentations('page-dialog', 1, 'the open dialog');
-    // Left open on purpose: the seam opens a presentation and does not toggle it (a
-    // dialog's own Cancel/OK and the tap outside are the platform's, not the harness's),
-    // and `presents nothing after the mount that opened it is gone` is the test that
-    // unmounts an open one and checks the count comes back to zero.
+    // Left open on purpose: the test seam opens a presentation and cannot close it.
 
-    // A programmatic value moves the page. Without this the example screen's "Reset to
-    // 2026-01-01" selects a day on a page the user is not looking at.
     await rerender(tree(true));
     await waitForDisplayed(
       'page-bounded',
@@ -948,8 +793,6 @@ describe('DatePicker · G5', () => {
               'and a field that says otherwise.'
           )
       );
-      // The picker whose props did *not* move keeps its page: rebuilding the state of
-      // the one whose range widened must not disturb its neighbours.
       await waitForMonth(
         'page-plain',
         target.getFullYear(),
@@ -958,10 +801,6 @@ describe('DatePicker · G5', () => {
       );
     }
 
-    // Then a value-only change on that same unbounded picker. The page has to follow
-    // the value with nothing rebuilding the state underneath - the example screen's
-    // external "Reset" button is exactly this write, and a calendar left on the month
-    // the user was looking at shows no selected day for it.
     await rerender(tree(true, laterPlain));
     await waitForDisplayed(
       'page-plain',
@@ -975,7 +814,6 @@ describe('DatePicker · G5', () => {
         laterPlain.getMonth() + 1,
         'the value-only move'
       );
-      // A neighbour that follows the page also keeps its *selection* lit.
       await pollUntil(
         () => (reportOf('page-plain').calendarHasSelection === 1 ? 1 : null),
         () =>
@@ -996,31 +834,14 @@ describe('DatePicker · G5', () => {
   });
 
   it('keeps the live control when a re-render sends a new bound instant', async () => {
-    // `minimumDate={new Date()}` is the first example in
-    // `docs/components/date-picker.md`, and it hands the control a *new instant* on
-    // every render. Bounds reach a mounted calendar by rebuilding it - Material 3's
-    // state reads `selectableDates`/`yearRange` once, and SwiftUI's control asserts when
-    // a new date is clamped by a bound it still holds - so keying that rebuild on the
-    // raw instants made every parent render (and every pick, which re-renders through
-    // the same props) tear the platform control down: the month the user turned to, the
-    // wheel's position, and an open dialog's or popover's pending selection with it.
-    //
-    // `controlBuilds` counts the platform controls this mount built, read once it has
-    // stopped moving (`settledBuilds`). It has to stand still across re-renders that
-    // only moved a bound's millisecond: an identity keyed on the raw instants makes
-    // every one of them a new control, and everything the user had - the month they
-    // turned to, an open dialog's pending selection - goes with it. A bound that moves
-    // as far as the control can see must still get through; the two platforms let it
-    // through differently enough that the test asserts each one's mechanism rather
-    // than forcing one number on both (see the bound-that-moved step below).
+    // `minimumDate={new Date()}` hands the control a new instant on every render,
+    // and bounds reach a mounted calendar only by rebuilding it. A rebuild keyed
+    // on the raw instant would discard the user's page and any open dialog.
     const value = new Date(2026, 6, 4, 12, 0);
-    // The bound these assertions move along: `tick` is a few milliseconds (a new
-    // instant inside one minute) or whole days (a bound the control can see).
+    // `tick` moves the bound by a few milliseconds or by whole days.
     const baseMinimum = new Date(2026, 0, 1, 0, 0).getTime();
     const DAY = 86400000;
-    // A different month, sent while the `compact` field's dialog is open. A rebuild
-    // re-seeds the dialog's page from the value, so Android can see the same regression
-    // the way a user does - through the page it is showing - not only through the count.
+    // A different month, sent while the `compact` field's dialog is open.
     const laterValue = new Date(2026, 8, 15, 9, 0);
     const isAndroid = Platform.OS === 'android';
     const reportText = (testId: string) =>
@@ -1052,11 +873,6 @@ describe('DatePicker · G5', () => {
     await waitForTestId('fresh-dialog');
     await waitForDisplayed('fresh-inline', value.getTime(), 'the seed');
 
-    // The instrument first: the sixth field has to be readable and counting, because a
-    // missing one would make every assertion below vacuous. And it has to be read once it
-    // has *stopped moving* (`settledBuilds`, shared with the escape-clause test), or a
-    // baseline is a race. What a re-render may not do is add to the settled number,
-    // which is why every assertion below is against a baseline.
     const buildsInline0 = await settledBuilds(
       'fresh-inline',
       'the seed of the fresh-instant test'
@@ -1072,9 +888,6 @@ describe('DatePicker · G5', () => {
     );
     expect(reportOf('fresh-inline').controlBuilds).toBe(buildsInline0); // a millisecond of a bound is not a new calendar
 
-    // The presentation is where a rebuild costs the most, so it gets its own half: open
-    // it, re-render under it, and the control the user is interacting with has to still
-    // be the one they started with.
     handles.get('fresh-dialog')?.nuiTestPresent();
     await waitForPresented('fresh-dialog', true, 'the field press');
     await waitForLivePresentations('fresh-dialog', 1, 'the open presentation');
@@ -1086,18 +899,9 @@ describe('DatePicker · G5', () => {
       await waitForMonth('fresh-dialog', 2026, 7, 'the dialog as it opened');
     }
 
-    // Two more renders under the open presentation, and a value that moved to another
-    // month while it was up. A value-only change is not a rebuild, and since H2b it is
-    // also not something the open dialog ignores: the model's value reaches an open
-    // dialog in one direction only (it never *emits* - the pick stays provisional until
-    // OK), so the page and the lit day follow React's value while the user is looking at
-    // it. That is the G5 follow-up `docs/tasks/FOLLOWUPS.md` recorded and H2b fixed; the
-    // round this case was written in asserted the opposite, because a page that stayed
-    // put was the easiest visible sign that no rebuild had happened. The sign is now
-    // ambiguous in exactly the wrong way - a rebuild would also land the dialog on the
-    // value's month - so the rebuild is asserted with the instrument that cannot be
-    // confused: the settled control-build count, plus a presentation that never went
-    // down and came back.
+    // A value-only change does not rebuild, and an open dialog follows it: its
+    // page and lit day track the value React sends. A rebuild would also land on
+    // the value's month, so the build count is what tells the two apart.
     for (const tick of [4, 5]) {
       await rerender(tree(tick, laterValue));
     }
@@ -1107,17 +911,12 @@ describe('DatePicker · G5', () => {
       'the value moved under the open dialog'
     );
     expect(reportOf('fresh-dialog').controlBuilds).toBe(buildsOpen); // the open presentation was not rebuilt
-    // The same control, still up: a rebuild tears the presentation down and this count
-    // is read from the live one.
     await waitForLivePresentations(
       'fresh-dialog',
       1,
       'the presentation across a value that moved'
     );
     if (isAndroid) {
-      // And the user sees the value the control has, not the one the dialog opened on.
-      // Against a `followValueInDialog` that does not run, this stays on July and goes
-      // red; against a rebuild, the count above goes red first.
       await waitForMonth(
         'fresh-dialog',
         laterValue.getFullYear(),
@@ -1126,32 +925,9 @@ describe('DatePicker · G5', () => {
       );
     }
 
-    // A bound that moved as far as the control can see still has to be *in force*, and
-    // it is asserted here as something a user can see: `maximumDate` moves to the day
-    // before the dialog's value, so the value has to be clamped down onto it. A re-key
-    // that dropped the bound instead of moving with it would leave the value sitting
-    // past its maximum.
-    //
-    // And now the rebuild itself, on both platforms, because both can show it: Compose's
-    // `key(selectable, yearRange)` re-creates the control and the count sees that, and on
-    // iOS the count is the appearance handler that now sits *inside* `.id(_:)`, so a
-    // re-identification moves it (F3, row 46).
-    //
-    // That half was not merely unmeasured before the move - it was unmeasurable. The
-    // handler used to belong to the enclosing structure, which survives a
-    // re-identification, so iOS read the same settled number whether the control had been
-    // replaced or kept, in either direction: the raw bound instants, which really did
-    // rebuild every render, gave the same count as the day-granular key. This test's own
-    // earlier version recorded that and asserted only what the count could still say on
-    // iOS ("nothing was put on screen again"); `records the bounds the control it just
-    // built was built with` is what proved the blindness away, and this assertion is what
-    // keeps the iOS rebuild contract guarded now that it can be.
-    //
-    // What iOS also asserts, and Android does not need, is the contract the rebuild exists
-    // for: the presentation stays up, and the new bound is in force a moment later. The
-    // one case where iOS genuinely needs a *fresh* control - a value the live control
-    // would clamp against a bound it still holds - is the escape clause of
-    // `controlIdentity`, driven by the `shows the month the value is in...` test.
+    // A bound that moves by a whole day must take effect: `maximumDate` lands on
+    // the day before the dialog's value, so the value is clamped down onto it.
+    // Both controls are rebuilt for it, and the presentation stays up.
     const clampedMaximum = new Date(laterValue.getTime() - DAY);
     await rerender(tree(6 + DAY, laterValue, clampedMaximum));
     await waitForLivePresentations(
@@ -1195,43 +971,22 @@ describe('DatePicker · G5', () => {
   });
 
   it('records the bounds the control it just built was built with', async () => {
-    // The rebuild decision (`controlIdentity` on iOS, `key(selectable, yearRange)` on
-    // Android) and the record of *what the live control holds* have to agree, because
-    // iOS's own escape clause reads that record: a value that has left the range the
-    // control ON SCREEN was built with is one more reason to rebuild, since
-    // `UIDatePicker` clamps such a value inside its own update and the reload that
-    // follows asserts in `UICalendarView _setVisibleMonth:`.
-    //
-    // Until F3 the two disagreed on iOS: `.onAppear` sat *outside* `.id(_:)`, so it
-    // fired once per mount and `builtBounds` froze there - while the identity, and the
-    // control, went on changing (`docs/tasks/Q4-followups-triage.md` row 46). That costs a
-    // rebuild for every later crossing of a bound the live control does not hold, and
-    // it makes the escape clause check the value against bounds nobody is showing.
-    //
-    // The oracle is the pair `readReport()` now ends with - the bounds recorded *at
-    // the build* - plus the build count, because the failure was precisely that a
-    // rebuild happened without the record moving. Android is the control half: it
-    // records at the same moment Compose builds the state, so it passes either way
-    // and proves the assertions are about the mechanism rather than about one
-    // platform's quirk.
+    // iOS rebuilds the control when a value leaves the bounds the control on
+    // screen was built with (`UIDatePicker` asserts when it clamps such a value),
+    // so the record of those bounds has to move with every rebuild.
     const MIN = localMs(2026, 0, 1, 0, 0);
     const FIRST_MAX = localMs(2026, 0, 20, 12, 0);
     const WIDER_MAX = localMs(2026, 1, 20, 12, 0);
     const INSIDE_FIRST = localMs(2026, 0, 10, 12, 0);
-    // Inside the widened range and outside the first build's, so the two readings of
-    // the record disagree about whether this value needs a fresh control.
+    // Inside the widened range and outside the first build's.
     const BETWEEN = localMs(2026, 1, 10, 12, 0);
-    // Truncated to whole seconds: `readReport()` publishes the bounds as integers, so
-    // a sub-second difference would look like a mismatch here even though the control
-    // holds exactly the instant React sent (and `maximumMillis` above already proves
-    // the wire is exact).
+    // The report publishes the bounds truncated to whole seconds.
     const truncated = (millis: number) => Math.trunc(millis / 1000) * 1000;
     const boundOf = (testId: string, which: 'builtMinimum' | 'builtMaximum') =>
       reportOf(testId)[which];
 
-    // `inline`, because that is the variant whose platform control is on screen the
-    // whole time: a `compact` field composes no calendar until its dialog opens, so
-    // neither the record nor the count would move.
+    // `inline` keeps its platform control on screen; a `compact` field builds no
+    // calendar until its dialog opens.
     const tree = (maximum: number, value: number) => (
       <DatePicker
         value={new Date(value)}
@@ -1248,10 +1003,8 @@ describe('DatePicker · G5', () => {
     });
     await waitForTestId('built-bounds');
     await waitForDisplayed('built-bounds', INSIDE_FIRST, 'the seed');
-    // The bounds arrive after the first commit, so the control may well be built once
-    // with none of them; what has to be true is that the record ends up describing the
-    // control that is up. This is already red on iOS before the fix when the control
-    // appeared before its bounds did, and the assertions below are red either way.
+    // The bounds arrive after the first commit, so the control may first be built
+    // with none: poll until the record describes the bounds the mount was given.
     await pollUntil(
       () =>
         boundOf('built-bounds', 'builtMaximum') === truncated(FIRST_MAX)
@@ -1267,8 +1020,7 @@ describe('DatePicker · G5', () => {
     const built0 = await settledBuilds('built-bounds', 'the seed');
     expect(boundOf('built-bounds', 'builtMinimum')).toBe(truncated(MIN));
 
-    // Bounds and value move together - one batch, the shape of the crash the escape
-    // clause exists for.
+    // Bounds and value move in the same render.
     await rerender(tree(WIDER_MAX, BETWEEN));
     await waitForDisplayed('built-bounds', BETWEEN, 'the widened range');
     const widened = await settledBuilds('built-bounds', 'the widened bounds');
@@ -1280,27 +1032,12 @@ describe('DatePicker · G5', () => {
         }" firstMax=${String(truncated(FIRST_MAX))} ` +
         `widerMax=${String(truncated(WIDER_MAX))} between=${String(BETWEEN)}`
     );
-    // The rebuild itself, on both platforms. On Android this is `key(...)` re-creating
-    // the state; on iOS it is the `.id(_:)` replacement, which the counter could not
-    // see while the appearance handler sat *outside* the identity - the handler
-    // belonged to the structure that survives a re-identification, so the count was
-    // blind to every rebuild (that blindness is `keeps the live control…`'s reason for
-    // saying iOS gets no rebuild assertion at all, and it is the same fact row 46
-    // recorded about `builtBounds`). With the handler inside the identity, one bounds
-    // change is one appearance of one control, on either platform.
     expect(widened).toBeGreaterThan(built0);
-    // And the record describes the control that is on screen. Red on iOS before the
-    // move: the record still said `firstMax` (or nothing at all, if the control had
-    // appeared before its bounds did) while the identity, the control and React all
-    // said `widerMax`.
     expect(afterWiden.builtMaximum).toBe(truncated(WIDER_MAX));
     expect(afterWiden.builtMinimum).toBe(truncated(MIN));
 
-    // And now nothing moves but the value, across the bound the *first* build held.
-    // Three crossings of a bound the control on screen no longer holds: iOS's escape
-    // clause compares against `builtBounds`, which the widen updated, and Android's
-    // `key(...)` input did not change at all. So no reason to rebuild remains, and the
-    // count has to stand still - on either platform.
+    // Only the value moves now, back and forth across the bound the first build
+    // held. The control on screen no longer holds it, so nothing may rebuild.
     for (const value of [INSIDE_FIRST, BETWEEN, INSIDE_FIRST]) {
       await rerender(tree(WIDER_MAX, value));
       await waitForDisplayed(
@@ -1313,70 +1050,19 @@ describe('DatePicker · G5', () => {
       'built-bounds',
       'three crossings of the first build’s bound'
     );
-    // No bound moved, so no control was rebuilt.
-    //
-    // This is the assertion round 1 left on Android alone, and the review (M1) was right
-    // that the gap was not incidental: iOS paid one build here that it should not have.
-    // The escape clause fires on the render that both widens a bound and moves the value
-    // out of the *old* one - the crash shape - and `builtBounds`, which is what makes it
-    // stop firing, is recorded by the new control's appearance without republishing. So
-    // the identity that went on screen was `<granular>|outside`, the next render of
-    // anything computed plain `<granular>`, and that difference is a second rebuild: the
-    // page or wheel position this fix exists to keep, lost one render later than anyone
-    // would think to look. Measured on iOS before this round's fix: `afterFlips` was
-    // one build above `widened` - this assertion failed as `expected 9 to be 8`, and a
-    // per-step probe run before it read `widened=9 afterFlips=10` with the extra build
-    // appearing on the *first* flip's render, not spread over the three.
-    //
-    // `controlIdentity` now skips the suffix when the granular part already changed,
-    // because that render is replacing the control for the bounds' own sake and the
-    // suffix asks for nothing. What is left of the clause is the case it was written
-    // for - a bound that moved below the control's granularity, where the granular part
-    // cannot see the move - and `controlIdentity`'s comment states the one rebuild it
-    // still costs.
     expect(afterFlips).toBe(widened);
     expect(boundOf('built-bounds', 'builtMaximum')).toBe(truncated(WIDER_MAX));
     unmount();
   });
 
   it('round-trips an instant across a DST boundary', async () => {
-    // The value on the wire is an instant and both platforms' pickers speak in
-    // calendar fields - Material 3 stores a *UTC midnight* per day, SwiftUI a
-    // `Date` - so the conversion between the two is where an hour, or a day, goes
-    // missing. Both directions:
-    //  - `dst-set`: React writes an instant, native shows it unchanged
-    //    (`nuiTestStateReport` is native's own reading), and - the half that used to
-    //    be missing - says nothing about it. A conversion that reads the wrong day
-    //    makes the control *emit* the instant it just painted, which a controlled
-    //    parent then refuses, and a polling test cannot see the round trip. The
-    //    recorder makes the spurious event visible.
-    //  - `dst-pick`: uncontrolled, so a pick's calendar fields have to produce JS's
-    //    own instant. On Android the seam runs the day through the picker's own
-    //    `toUtcMidnightOfLocalDay`/`fromUtcMidnightKeepingTimeOfDay` pair, exactly as
-    //    a day cell does.
+    // The pickers speak in calendar fields (Material 3 stores a UTC midnight per
+    // day), so converting to and from an instant is where an hour or a day can go
+    // missing. `dst-set` is written by React and must show the instant without
+    // emitting; `dst-pick` is picked and must report JS's own instant.
     //
-    // The zone is read, not assumed - nothing in this suite sets it on a device, so
-    // an environment that moved the device to `UTC` used to make this test pass
-    // without crossing a transition. Two premises, both printed:
-    //  - the zone must observe DST at all (a January and a July offset differ);
-    //  - at least one of *these* instants must have a local day that is not its UTC
-    //    day, because that is what the conversion exists to get right. A noon instant
-    //    has the same day number in every zone on the planet, so an hour-skipping
-    //    conversion error would sail through it - which is how the mutation that
-    //    deleted the conversion altogether stayed green here. Hence the 00:30 and
-    //    23:45 pairs: one of them lands on another UTC day in any zone with a
-    //    non-zero offset, and the check below says so if neither does.
-    //
-    // Where either fails, the DST claim is not exercised by this device and saying
-    // so is the honest answer: the two premises used to be `expect`s, which is what
-    // CI's first hosted run went red on (`expected +0 not to be +0`, run 41230848294)
-    // because GitHub's macOS images boot a simulator at `UTC`. `example/rn-harness
-    // .config.mjs` now launches the iOS app in `Europe/Lisbon` — the zone these
-    // numbers were measured in — so the iOS job takes the full path. A device that
-    // is still in a zone without a transition (an emulator set to `UTC` is one, and
-    // the zone belongs to the device rather than to anything this run can pass) runs
-    // every assertion that does *not* need a transition and prints which claim it
-    // could not make. Nothing here is weaker on a machine where the premise holds.
+    // The device's zone is read, not assumed. In a zone with no transition the
+    // round trip still has to be exact, and the run logs what it could not show.
     const zone = deviceZone();
     const winterOffset = zone.winterOffset;
     const summerOffset = zone.summerOffset;
@@ -1401,10 +1087,9 @@ describe('DatePicker · G5', () => {
     const SPRING_DAY = localMs(2026, 3, 29, 12, 30);
     const AUTUMN_EVE = localMs(2026, 10, 24, 23, 45);
     const AUTUMN_DAY = localMs(2026, 10, 25, 23, 45);
-    // The two that make the UTC-midnight conversion observable. 00:30 is the day
-    // before in UTC for a zone ahead of it (Lisbon in summer: 23:30Z), 23:45 is the
-    // day after in UTC for a zone behind it, and both are times that exist on every
-    // date used here.
+    // A noon instant has the same day in every zone. 00:30 is the day before in
+    // UTC for a zone ahead of it and 23:45 the day after for a zone behind it,
+    // which is what makes a wrong UTC-midnight conversion visible.
     const SUMMER_JUST_AFTER_MIDNIGHT = localMs(2026, 7, 5, 0, 30);
     const WINTER_JUST_BEFORE_MIDNIGHT = localMs(2026, 1, 5, 23, 45);
     const discriminating = [
@@ -1423,13 +1108,9 @@ describe('DatePicker · G5', () => {
         `summerNight=${String(SUMMER_JUST_AFTER_MIDNIGHT)} ` +
         `winterLate=${String(WINTER_JUST_BEFORE_MIDNIGHT)}`
     );
-    // The second premise, and it is checked whenever it *can* hold: a zone with any
-    // non-zero offset must make at least one of these instants land on a different
-    // UTC day, which is what gives the UTC-midnight conversion something to get
-    // wrong. Gated on the offset rather than on DST so that a zone like Asia/Kolkata
-    // (+5:30, no transition) still gets the strong claim, and only a run whose
-    // device really is at UTC — where no local instant can ever differ from its UTC
-    // day, so the check would be asserting nothing — prints why it cannot make it.
+    // Gated on the offset rather than on DST: a zone such as Asia/Kolkata has no
+    // transition but still puts an instant on another UTC day. Only at UTC can
+    // none of these differ.
     if (winterOffset !== 0 || summerOffset !== 0) {
       expect(discriminating.length).toBeGreaterThan(0);
     } else {
@@ -1498,12 +1179,8 @@ describe('DatePicker · G5', () => {
       expect(eventLog).toEqual([]); // and none of them made the control report a pick
     }
 
-    // The other direction, on the uncontrolled instance: the same fields, in the
-    // order a user produces them, must produce JS's own instants.
-    // Each pick is a different instant from the one before it, including the
-    // `defaultValue` this instance was seeded with (`AUTUMN_EVE`): the suppression
-    // rule means a pick of the instant already showing reports nothing, and a
-    // missing line here would read as a DST failure.
+    // Each pick differs from the instant before it, starting from the
+    // `defaultValue`: a pick of the instant already showing reports nothing.
     const picks: ReadonlyArray<
       readonly [number, number, number, number, number, number]
     > = [
@@ -1532,24 +1209,10 @@ describe('DatePicker · G5', () => {
   });
 
   it('presents nothing after the mount that opened it is gone', async () => {
-    // The B1 rule for the one control in this library with a window of its own: a
-    // Material 3 `Dialog` is a second window and UIKit's popover is a view the
-    // presenting controller hosts, so either one that outlived the mount would sit on
-    // top of an app that can no longer close it.
-    //
-    // The witness press below is the *second* signal, not the first. On its own it was
-    // not enough: the kept mutation that stops `onDropView` from closing the Android
-    // dialog or disposing its composition (`/tmp/g5-mut/android-t6b.py`) left the
-    // window on screen and this press still landed, because a `Dialog` is a separate
-    // window and the harness dispatches its touch into the app's own. So the primary
-    // assertion is structural - the process-wide count of live presentations, which
-    // each platform keeps in the one place that survives a drop.
-    //
-    // It is read through a *fresh* mount, because the dropped view has no handle left:
-    // the count is process-wide, so a picker that never presented anything reports how
-    // many presentations exist. And it is asserted at 1 while the dialog is open,
-    // because a counter stuck at zero would otherwise satisfy every assertion after
-    // this one vacuously.
+    // An Android `Dialog` is a separate window and the harness dispatches touches
+    // into the app's own, so a leaked dialog does not swallow the witness press.
+    // The process-wide count of live presentations is the primary check, read
+    // through a fresh mount because the dropped view has no handle left.
     const presses: number[] = [];
     const Witness = () => (
       <Pressable
@@ -1576,11 +1239,9 @@ describe('DatePicker · G5', () => {
     await waitForTestId('witness');
     await waitForTestId('opener');
 
-    // Nothing else in this process is presenting: the count starts at zero.
     await waitForLivePresentations('opener', 0, 'the untouched process');
     handles.get('opener')?.nuiTestPresent();
     await waitForPresented('opener', true, 'the field press');
-    // Opening is not picking: the instant and the event log are untouched.
     expect(displayedOf('opener')).toBe(localMs(2026, 7, 4));
     expect(eventLog).toEqual([]);
     await waitForLivePresentations('opener', 1, 'the open presentation');
@@ -1602,11 +1263,7 @@ describe('DatePicker · G5', () => {
       { timeout: 20000 }
     );
     await waitForTestId('probe');
-    // The structural half: the mount that opened the window is gone, so nothing may
-    // still be presenting. This is the assertion the Android leak mutation failed.
     await waitForLivePresentations('probe', 0, 'the mount after the drop');
-    // The second half, and the one the leak mutation did not fail: a window that is
-    // really on top of the app also swallows a press.
     const witness = await waitForTestId('witness');
     await userEvent.press(witness);
     await pollUntil(
@@ -1624,11 +1281,6 @@ describe('DatePicker · G5', () => {
   });
 
   it('is inert while disabled', async () => {
-    // `disabled` has no native equivalent for a calendar or a clock: Material 3's
-    // `DatePicker` has no `enabled`, and SwiftUI's `.disabled` cannot reach the
-    // `nuiTestSelect` path. What the prop has to mean is "nothing the user does
-    // can change the app's date", which is assertable on the seam: no presentation,
-    // no selection, no event.
     const PINNED = localMs(2026, 6, 4);
     const { unmount } = await render(
       <DatePicker
@@ -1658,18 +1310,9 @@ describe('DatePicker · G5', () => {
   });
 
   it('gives two compact pickers one box, whatever dates they show', async () => {
-    // The sizing decision this component had to make (brief: "the field width
-    // depends on locale formatting - decide and justify, with a test"). The key is
-    // `variant|mode` and the *value is deliberately not in it*, because two
-    // instances that share a key share the engine's one size for it: if a field's
-    // width depended on the date it shows, every pair of pickers on one screen
-    // would spend the process correcting each other's box. Asserted twice:
-    //  - two instances, two very different dates, one box, and both boxes are the
-    //    size the control measures rather than the poisoned guess;
-    //  - one instance, the same key, its date moved from the narrowest day to the
-    //    widest the mode can produce: the box must not move, and no correction is
-    //    allowed - the entry is already exact (D17), which is only true while the
-    //    width is value-independent.
+    // The sizing key excludes the value: instances that share a key share one
+    // cached size, so a width that followed the date would have two pickers
+    // correcting each other's box.
     const NARROW = new Date(2026, 8, 1, 0, 0); //  Sep  1, 2026
     const WIDE = new Date(2288, 10, 28, 0, 0); //  Nov 28, 2288
     poisonConfigurations([sizingKey('compact', 'date')]);
@@ -1693,20 +1336,15 @@ describe('DatePicker · G5', () => {
     const narrowSize = await waitForMeasured('narrow', 'the 2026 field');
     await waitForBox('narrow', narrowSize, 'the 2026 field');
     const wideSize = await waitForMeasured('wide', 'the 2288 field');
-    // One key, so one answer - and it is the answer the control gives, not the
-    // fallback the engine guessed. A width that followed the date would put these
-    // two fields at different widths and leave one box wrong.
     expect(sameSize(wideSize, narrowSize)).toBe(true);
     // Polled: two instances of one cold configuration are corrected on separate
-    // turns, and Android in particular settles the second box after the control
-    // has already reported its size.
+    // turns, and Android settles the second box after the control has reported.
     await waitForBox('wide', narrowSize, 'the 2288 field');
     expect(sameSize(sizeOf('narrow'), WRONG_SIZE)).toBe(false);
-    // Not degenerate: the field really is a field, wider than the 44 pt floor the
-    // implementation clamps its probe to.
+    // Wider than the 44 pt floor the implementation clamps the field to.
     expect(narrowSize.width).toBeGreaterThan(44);
 
-    // Second half: the same instance, a different date, and the box holds.
+    // The same instance with a different date: the box must hold.
     await settle(400);
     const before = stats();
     await rerender(
@@ -1732,20 +1370,14 @@ describe('DatePicker · G5', () => {
     );
     expect(sameSize(sizeOf('narrow'), narrowSize)).toBe(true);
     expect(sameSize(measured('narrow'), narrowSize)).toBe(true);
-    // A configuration whose cached size is exact costs no correction. With the
-    // value in the key - or a field that sized itself to its own string - the
-    // 2288 date wants a different box and this counter moves.
+    // A configuration whose cached size is exact costs no correction.
     expect(after.corrections).toBe(0);
     unmount();
   });
 
   it('keeps a date field and a time field at their own boxes', async () => {
-    // The other half of the sizing-key decision. `mode` IS in the key, so a date
-    // field and a time field are two configurations with two cached answers;
-    // `gives two compact pickers one box` covers the input that is deliberately
-    // *not* in it. Take the mode out and the pair shares one cached width, which
-    // cannot be right for both - the claim here is that each box ends up at its
-    // own control's size rather than at the one answer the key can hold.
+    // `mode` is part of the sizing key, so a date field and a time field each
+    // have their own cached size.
     poisonConfigurations([
       sizingKey('compact', 'date'),
       sizingKey('compact', 'time'),
@@ -1779,22 +1411,16 @@ describe('DatePicker · G5', () => {
         )}/${describeSize(sizeOf('key-time'))} ` +
         `probeDate="${probeTextOf('date')}" probeTime="${probeTextOf('time')}"`
     );
-    // Two configurations: the widest date a `date` field can show is wider than
-    // the widest time, in every locale these two devices run.
+    // Premise: the widest date a field can show is wider than the widest time.
     expect(dateSize.width).toBeGreaterThan(timeSize.width + 1);
-    // And each is laid out at its own size. One shared key would leave the
-    // narrower of the two at the wider one's box, or set both chasing a cache
-    // entry that is right for neither.
     expect(sameSize(sizeOf('key-date'), dateSize)).toBe(true);
     expect(sameSize(sizeOf('key-time'), timeSize)).toBe(true);
     unmount();
   });
 
   it('re-measures the field when the mode changes', async () => {
-    // `mode` is in the key, so `compact|date` and `compact|time` are two
-    // configurations. Drop the mode off the key and a time field keeps the date
-    // field's box: the planted size below is the *date* field's own box, so the
-    // only thing that can move the control is a new configuration's answer.
+    // The size planted for `compact|time` is the date field's own box, so only a
+    // measurement under the new key can move the control.
     const DATE = 'mode-date';
     const { rerender, unmount } = await render(
       <DatePicker
@@ -1829,32 +1455,25 @@ describe('DatePicker · G5', () => {
     await settle(600);
     const now = measured(DATE);
     const after = delta(before, stats());
-    // Logged before the assertions: this test's whole value is the difference
-    // between a date field and a time field, and a locale where they are the same
-    // width has to be visible in the output rather than as a bare `false`.
+    // Logged before the assertions, so a locale where the two fields are the
+    // same width shows in the output.
     console.log(
       `mode-change (${Platform.OS}, ${zoneNote()}): date=${describeSize(dateSize)} ` +
         `time=${describeSize(now)} box=${describeSize(sizeOf(DATE))} ` +
         `probeDate="${probeTextOf('date')}" probeTime="${probeTextOf('time')}" ` +
         `delta=${JSON.stringify(after)}`
     );
-    // A time field is narrower than a date field in every locale this is measured
-    // in, so the planted answer is provably wrong for the new configuration...
+    // Premise: a time field is narrower, so the planted size is wrong for it.
     expect(now !== null && now.width < dateSize.width - 1).toBe(true);
-    // ...the box followed the control rather than the guess, and the engine
-    // recorded a correction for the key that includes the mode.
     expect(sameSize(sizeOf(DATE), now)).toBe(true);
     expect(after.corrections).toBeGreaterThanOrEqual(1);
     unmount();
   });
 
   it("starts a remount from its own default, not the previous mount's", async () => {
-    // The `RecyclableView` reset, from the outside. A recycled instance whose
-    // model kept the old instant, or whose `didApplyDefault` flag survived, paints
-    // a date its React element never mentioned — invisible to the box and to the
-    // handle's `valueMillis` (which reports what *React* sent). The report is what
-    // can see it, and a presentation left open by the dropped mount is read the
-    // same way.
+    // A recycled native view that kept its old state would show a date React
+    // never sent. `valueMillis` reports what React sent, so only the state report
+    // can see it.
     const DEFAULT_DAY = localMs(2026, 6, 4);
     const PICKED = localMs(2027, 1, 15);
     const tree = () => (
@@ -1885,8 +1504,7 @@ describe('DatePicker · G5', () => {
     const second = await render(tree(), { timeout: 20000 });
     await waitForTestId('recycled');
     await waitForMeasured('recycled', 'the remounted field');
-    // No correction is required here, but the report is only meaningful once the
-    // control has committed, so wait for that and then read it.
+    // The report is only meaningful once the control has committed.
     await settle(200);
     const state = reportOf('recycled');
     console.log(
@@ -1898,9 +1516,6 @@ describe('DatePicker · G5', () => {
     expect(state.presented).toBe(false);
     // The new mount has emitted nothing of its own.
     expect(eventLog).toHaveLength(1);
-    // And it is the *default* rather than a value it could have inherited: the
-    // pick above proves the seam works, so a remount showing 2027-01-15 could only
-    // come from state that survived.
     expect(state.millis).not.toBe(PICKED);
     second.unmount();
   });
@@ -1908,15 +1523,6 @@ describe('DatePicker · G5', () => {
 
 describe('DatePicker · wheel variant (G29)', () => {
   it('measures the time drum from a poisoned fallback', async () => {
-    // The sizing claim for the one wheel Android draws: `wheel` + `time` is a drum per
-    // field, and the box it lands at is the one *it* measured, not the
-    // guess the engine would have used. The configuration is poisoned first, so
-    // whatever arrives has to be a correction, and the correction is counted.
-    //
-    // What is asserted is that the box is not the planted guess, that the host was laid
-    // out at the size the composition reported, and that the height is the 120 dp this
-    // widget states for itself. The measured box is still logged, because it is the
-    // number the G29 report quotes and a run should say what it saw.
     if (Platform.OS !== 'android') {
       console.log('time drum: Android case - iOS has had a wheel since G5');
       return;
@@ -1941,22 +1547,14 @@ describe('DatePicker · wheel variant (G29)', () => {
       `time drum box: ${describeSize(size)} in a 320 dp box ` +
         `cold=${JSON.stringify(cold)}`
     );
-    // Not the planted size — the correction happened.
     expect(sameSize(sizeOf('wheel-time'), WRONG_SIZE)).toBe(false);
-    // The drum's *height* is its own claim, and it is the one that has to survive the
-    // box: the width is `fillWidth`, so an app that pins a width gets the width it
-    // asked for and the drum sits inside it at its intrinsic 280-ish dp. Asserting the
-    // width equal here would assert that a `fillWidth` control ignores the box, which
-    // is the opposite of what `fillWidth` is for. What must not happen is the height
-    // staying at the planted guess — that is a correction that never arrived.
+    // Only the height is compared: the width is the 320 the caller pinned, and
+    // the drum sits inside it at its own narrower width.
     const box = sizeOf('wheel-time');
     expect(box).not.toBeNull();
     expect(Math.abs((box?.height ?? 0) - size.height)).toBeLessThanOrEqual(1);
-    // The drum row states its own height - `TimeWheelHeight`, 120 dp of three rows with
-    // the middle one snapped - so the box is asked for *that* number rather than for "at
-    // least touch target". A `>= 48` would be happy with a drum clipped to one row, which
-    // is the way this variant could go wrong and still look plausible, and 120 is not the
-    // planted 66.5 either, so a correction that never arrived cannot pass by accident.
+    // The drum is three rows, 120 dp. A looser bound would accept a drum clipped
+    // to one row.
     expect(Math.abs(size.height - 120)).toBeLessThanOrEqual(1);
     console.log(
       `time drum height: ${String(size.height)} dp (TimeWheelHeight=120)`
@@ -1967,20 +1565,9 @@ describe('DatePicker · wheel variant (G29)', () => {
   });
 
   it('draws the calendar for a date wheel, because there is no date drum', async () => {
-    // `variant="wheel"` changes the widget only where Material has one to change
-    // it to. In `mode="date"` there is no wheel calendar to draw, so the wheel
-    // picker and the inline picker are the same grid — and the check that proves it
-    // is that the two measure the same box at the same width. A drum would be far
-    // shorter than a calendar, so a wheel that grew drums would go red here rather
-    // than quietly shipping a control nobody asked for.
-    //
-    // Mounted one after the other, not side by side: both are `fillWidth` and 512 dp
-    // tall, and two calendars stacked would put the second one off-screen, where its
-    // box would say nothing about either of them.
-    //
-    // Android's claim: on iOS `wheel` + `date` really is a wheel, and it measures
-    // nothing like the graphical calendar, so asserting equality there would assert
-    // the opposite of what iOS does.
+    // Material has no date wheel, so on Android a date wheel is the inline
+    // calendar and measures the same box. The two are mounted one after the
+    // other: stacked, the second calendar would be off-screen.
     if (Platform.OS !== 'android') {
       console.log(
         'date wheel: Android case - iOS draws a real wheel for a date, not a calendar'
@@ -2009,8 +1596,6 @@ describe('DatePicker · wheel variant (G29)', () => {
     const report = reportOf('wheel-date');
     console.log(`date wheel box: ${describeSize(wheelSize)}`);
     expect(sameSize(sizeOf('wheel-date'), WRONG_SIZE)).toBe(false);
-    // The calendar it is meant to be, rather than a drum that happens to be tall:
-    // a calendar control was built, and it is showing the value's month.
     expect(report.controlBuilds).toBeGreaterThanOrEqual(1);
     expect(report.calendarHasSelection).toBe(1);
     expect(monthKeyOf(report.calendarMonthUtc)).toBe(expectedMonthKey(2024, 6));
@@ -2034,10 +1619,6 @@ describe('DatePicker · wheel variant (G29)', () => {
   });
 
   it('sends nothing from a disabled time drum', async () => {
-    // The seam cannot be reached by a finger here any more than anywhere else, so
-    // "disabled" is asserted where it is assertable: the drum neither presents nor
-    // moves nor reports. A wheel that answered a disabled seam would move the app
-    // through a control the app said was closed.
     const PINNED = localMs(2026, 5, 15, 9, 20);
     const { unmount } = await render(
       <DatePicker
@@ -2065,22 +1646,9 @@ describe('DatePicker · wheel variant (G29)', () => {
   });
 
   it('reverts a time the parent refuses, and reports the next roll of it', async () => {
-    // The handshake on the drum: the parent keeps sending 09:20, so after a roll
-    // to 14:05 the picker is showing 09:20 again — which the tap-twice oracle can
-    // see without reading a single row. A drum that left 14:05 painted would make
-    // the second roll a no-op, and the log would be one line instead of two.
-    //
-    // What makes this case able to see that is `nuiTestSelect`: on this variant it asks
-    // the composition to *roll the drums* to the pair (as `Picker`'s hook asks for its
-    // drum), rather than writing the model. So the drums really do move to 14:05 here,
-    // the rest is a real rest, and the second call is a real roll only if something put
-    // the drums back afterwards — the props pass (`seatTimeDrumsFromModel`) when the
-    // frame the `LaunchedEffect` needs never came, and the composition's own seat when it
-    // did. Delete both and this goes red on the second `waitForEvents`: the drums are
-    // already on 14:05, the request moves nothing, no rest happens, and the log stays one
-    // line. Delete the wheel's drum mutex instead and it goes red the same way, one frame
-    // later: the revert's seat is still scrolling when the second roll is asked for, so
-    // that roll finds the drums on its own target and reports nothing.
+    // On this variant `nuiTestSelect` rolls the drums rather than writing the
+    // model. The parent keeps sending 09:20, so the same roll reports a second
+    // time only if the drums were really put back after the first.
     const PARENT = localMs(2026, 5, 15, 9, 20);
     const ROLLED = localMs(2026, 5, 15, 14, 5);
     const { unmount } = await render(
@@ -2102,25 +1670,19 @@ describe('DatePicker · wheel variant (G29)', () => {
     handles.get('wheel-refused')?.nuiTestSelect(2026, 5, 15, 14, 5);
     const first = await waitForEvents(1);
     expect(first).toEqual([`wheel-refused:${String(ROLLED)}`]);
-    // Reverted: the instant the picker holds is the parent's again.
     await waitForDisplayed('wheel-refused', PARENT, 'the revert');
 
     handles.get('wheel-refused')?.nuiTestSelect(2026, 5, 15, 14, 5);
     const second = await waitForEvents(2);
     expect(second[1]).toBe(`wheel-refused:${String(ROLLED)}`);
-    // Polled, not read: the revert rides the batch that echoes this event's count, and
-    // reading it the moment the event lands asserts against a frame that has not run.
+    // Polled, not read: the revert lands a frame after the event does.
     await waitForDisplayed('wheel-refused', PARENT, 'the second revert');
     unmount();
   });
 
   it('leaves nothing behind when the drum becomes a field again', async () => {
-    // A variant change is a remount, and this is the half a wheel cannot cheat at:
-    // the drum is a pager with a scroll position, and the field it becomes has no
-    // drum in it at all. So the box is the field's own and not the drum's, the size
-    // under the new key is a measured one rather than the poisoned guess, no roll
-    // survives as an event, and the instant the new mount shows is the one React
-    // sent it.
+    // A variant change is a remount: nothing of the drum (its box, its scroll
+    // position, a pending roll) may carry over to the field.
     poisonConfigurations([
       sizingKey('wheel', 'time'),
       sizingKey('compact', 'time'),

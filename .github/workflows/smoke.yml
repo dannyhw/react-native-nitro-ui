@@ -1,21 +1,12 @@
-# Consumer smoke tests: npm-pack the library, install it with npm into a fresh
-# Expo app and a fresh React Native CLI app, build Release, launch on a device
-# and wait for the NITRO_UI_SMOKE_READY log line (Android logcat / iOS os_log).
-# The only true check of "trivial install" (docs/research/setup-decisions.md §4).
-#
-# The pack job's tarball (+ its `.gitsha`) is a workflow artifact; the run jobs
-# download it and export SMOKE_TARBALL, which also skips re-packing and fails if
-# the tarball was not built from this exact commit.
+# Consumer smoke tests: pack the library, install it into a fresh Expo app and a
+# fresh React Native CLI app, build Release, launch it and wait for the ready log line.
 name: Smoke
 
-# Read-only like CI: these jobs build, launch and upload artifacts, and never
-# need to write to the repository (review S2).
+# Read-only token: these jobs build, launch and upload artifacts, and never write
+# to the repository.
 permissions:
   contents: read
 
-# Manual only, like the other device jobs (docs/DECISIONS.md D22, D25): the
-# nightly schedule is off, so nothing runs here until a maintainer starts it.
-# The local entry points are `bun run smoke:pack` / `smoke:expo` / `smoke:rn-cli`.
 on:
   workflow_dispatch:
     inputs:
@@ -34,7 +25,6 @@ env:
   SMOKE_TARBALL_DIR: /tmp/nitro-ui-smoke/tarballs
 
 jobs:
-  # The workflow_dispatch `platform` input, turned into a JSON matrix.
   plan:
     name: Resolve platforms
     runs-on: ubuntu-latest
@@ -71,7 +61,6 @@ jobs:
           name: tarball
           path: ${{ env.SMOKE_TARBALL_DIR }}
 
-  # Shared steps for both consumer jobs.
   expo:
     # `env` is not available in a job name, so the SDK is written here as
     # well as in `env.SDK` below (a wrong name is cosmetic; the run uses the
@@ -162,8 +151,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The supported floor only (DECISIONS D39): RN 0.88, which is also what
-        # Expo SDK 58 runs. A newer RN replaces this row once the gates pass on it.
+        # The supported floor only: RN 0.88, which is also what Expo SDK 58 runs.
         rn: ['0.88.0']
         platform: ${{ fromJSON(needs.plan.outputs.platforms) }}
     runs-on: ${{ matrix.platform == 'ios' && 'xcode-27' || 'ubuntu-latest' }}

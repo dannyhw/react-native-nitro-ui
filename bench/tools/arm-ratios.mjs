@@ -5,16 +5,11 @@
  *   node bench/tools/arm-ratios.mjs bench/results/<run>.json [more.json ...]
  *   node bench/tools/arm-ratios.mjs --arm=nitro-ui-host bench/results/<run>.json
  *
- * `bun bench` gates on launch-paired ratios to `rn-core` only (D9). The D15
- * target is a ratio to `expo-ui-shared-host`, and a ratio to `rn-core` cannot be
- * divided into it after the fact: what makes a paired ratio worth anything is
- * that arm launch L and control launch L ran next to each other in the same
- * ABBA pass (D9); two medians divided in a report do not have that property.
- * So this asks the bench's own pairing function for it, per control arm.
+ * `--arm` names the arm to express ratios from (default `nitro-ui`).
  *
- * Absolute medians are printed too - the column a before/after table needs,
- * because a ratio's *sign* is stable across runs while its size moves with the
- * machine (T12 phase 1: mount presented 1.47x in one run, 1.88x in another).
+ * A paired ratio is only meaningful when both launches ran next to each other
+ * in the same ABBA pass, so ratios come from the bench's own pairing function,
+ * never from two medians divided afterwards. Absolute medians are printed too.
  */
 import { readFileSync } from 'node:fs';
 
@@ -26,19 +21,11 @@ import {
   pairedLaunchRatios,
 } from '../../scripts/bench/lib.mjs';
 
-/**
- * The control arm to express ratios *from* (default `nitro-ui`).
- *
- * `--arm` exists for T16: the D15 question is a ratio to `expo-ui-shared-host`, and
- * asking it of the spike's `nitro-ui-host` arm needs the same launch-paired pairing
- * this tool already does - not two medians divided in prose.
- */
 const ARM =
   process.argv
     .find((arg) => arg.startsWith('--arm='))
     ?.slice('--arm='.length) ?? 'nitro-ui';
 const FILES = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
-/** `mainNsPerOp` is the UI-thread column D15 names; the rest complete the picture. */
 const METRICS = [
   ...LATENCY_METRICS,
   'jsNsPerOp',

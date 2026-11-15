@@ -1,25 +1,3 @@
-/**
- * On-device tests for BottomSheet (task G14, Q5 Appendix C8 as amended by D35).
- *
- * A sheet is a window the harness cannot tap into (H9/H10), so these tests read
- * three honest channels:
- *
- *  - `hybridRef.nuiTestStateReport()` - what is on screen, from the controller iOS
- *    presented and the Android model as composed, plus process-wide counts that
- *    survive a drop (`live` windows, iOS `controllers` and `touchRoots`, Android
- *    `roots`), read through a fresh mount when the one that opened it is gone;
- *  - the content's own `onLayout` and mount/unmount, which is React Native's view of
- *    where the sheet put it;
- *  - the events that reached JS, in order.
- *
- * and drive the sheet through test seams that run the real paths (`nuiTestDismiss`
- * takes the sheet down as a swipe does; `nuiTestSelectDetent` moves it the way a drag
- * ends). Real fingers are `real-input:*`'s job.
- *
- * The stranded-Modal hazard (D35 item 5) is *not* here: a run that reproduced it would
- * leave RN's `Modal` host over the app for every file after this one, so it runs in an
- * app instance of its own (`__tests__/isolated/BottomSheetModalHazard.harness.tsx`).
- */
 import { useEffect, useState } from 'react';
 import { Modal, Platform, ScrollView, View } from 'react-native';
 import {
@@ -36,7 +14,6 @@ import {
   type BottomSheetDetent,
 } from 'react-native-nitro-ui';
 
-/** What `hybridRef` hands back - declared, not imported (D14). */
 type SheetHandle = {
   readonly presented: boolean;
   nuiTestStateReport(): string;
@@ -55,22 +32,18 @@ const captureHybrid =
 
 /** Every event the app received, in order: `testID:presented:false`, `testID:dismiss`, `testID:detent:1`. */
 const eventLog: string[] = [];
-/** The parents' `isPresented` setters and content setters, by testID. */
 const setters = new Map<string, (next: boolean) => void>();
 const rowSetters = new Map<string, (rows: number) => void>();
-/** The content's last layout, by testID. */
 const layouts = new Map<
   string,
   { x: number; y: number; width: number; height: number }
 >();
-/** How many times each testID's content mounted and unmounted. */
 const mounts = new Map<string, number>();
 const unmounts = new Map<string, number>();
 
 const bump = (map: Map<string, number>, key: string) =>
   map.set(key, (map.get(key) ?? 0) + 1);
 
-/** The content: a box of a known height, plus rows of 80 a test can add. */
 function Content({ testId, base }: { testId: string; base: number }) {
   const [rows, setRows] = useState(0);
   rowSetters.set(testId, setRows);
@@ -93,7 +66,6 @@ function Content({ testId, base }: { testId: string; base: number }) {
   );
 }
 
-/** A ScrollView that fills the sheet's box, for the non-`fit` cases. */
 function ScrollContent({ testId }: { testId: string }) {
   return (
     <ScrollView
@@ -110,10 +82,6 @@ function ScrollContent({ testId }: { testId: string }) {
   );
 }
 
-/**
- * A sheet whose `isPresented` lives in a parent, as an app's would. `refuse` makes the
- * parent ignore every dismissal (D33); otherwise it follows `onIsPresentedChange`.
- */
 function Stage({
   testId,
   initial = false,
@@ -156,10 +124,6 @@ function Stage({
   );
 }
 
-/**
- * A sheet that can be dropped while a second, closed BottomSheet - the probe - stays
- * mounted beside it, to read the process-wide counts after the drop.
- */
 function DropScene({ testId }: { testId: string }) {
   const [shown, setShown] = useState(true);
   setters.set(`${testId}:shown`, setShown);
@@ -217,7 +181,6 @@ async function waitForHandle(testId: string): Promise<SheetHandle> {
   );
 }
 
-/** Poll until `testId`'s report satisfies `check`; fail naming what it last said. */
 async function waitForReport(
   testId: string,
   check: (report: Report) => boolean,
@@ -237,7 +200,6 @@ async function waitForReport(
   );
 }
 
-/** Up, counted and holding its content - the React Native children, in the sheet. */
 const isUp = (report: Report) =>
   report.presented === '1' &&
   report.live === '1' &&
@@ -252,7 +214,6 @@ async function waitForUp(testId: string, what = 'presented') {
   return waitForReport(testId, isUp, `${what} (up, counted, content in it)`);
 }
 
-/** A plain mount whose only job is to read the process-wide counts. */
 async function probe(): Promise<string> {
   const probeId = `probe-${String(nitroUiCore.now())}`;
   await render(<Stage testId={probeId} />);
@@ -262,10 +223,9 @@ async function probe(): Promise<string> {
 }
 
 /**
- * Poll `testId`'s report for one built *after this call*. iOS returns the report it
- * built last and asks main for the next, so every read is one behind; a read made now
- * can still describe the moment before. Its `seq` says which build it is, so this takes
- * the `seq` of a read made now and accepts only a later one (G14 review, round 2).
+ * iOS returns the report it built last and asks main for the next, so every
+ * read is one behind. This takes the `seq` of a read made now and accepts only
+ * a later one.
  */
 async function waitForFreshReport(
   testId: string,
@@ -282,10 +242,6 @@ async function waitForFreshReport(
   );
 }
 
-/**
- * Wait until Fabric has dropped `testId`'s view: its own lifetime count of drops moved
- * past `before`. What a probe reads after this is about a world without that view.
- */
 async function waitForDropped(testId: string, before: Report) {
   await waitForReport(
     testId,
@@ -294,7 +250,6 @@ async function waitForDropped(testId: string, before: Report) {
   );
 }
 
-/** Nothing of any sheet is left anywhere: no window, no controller, no root. */
 const nothingLeft = (baseline: Report) => (report: Report) =>
   report.live === '0' &&
   (IOS
@@ -304,10 +259,6 @@ const nothingLeft = (baseline: Report) => (report: Report) =>
       num(report, 'touchRoots') <= num(baseline, 'touchRoots')
     : report.roots === '0');
 
-/**
- * The sheet stays up, untouched, for `ms`: nothing closes it on its own when its box
- * arrives or its content moves, and nothing is reported.
- */
 async function staysUp(testId: string, ms: number, what: string) {
   const events = eventLog.length;
   const deadline = nitroUiCore.now() + ms;
@@ -323,28 +274,9 @@ async function staysUp(testId: string, ms: number, what: string) {
 }
 
 /**
- * Wait until the content's own mount/unmount counters have reached `times` each.
- *
- * Both counters are bumped by `Content`'s `useEffect`, which React flushes as a
- * *passive* effect - after the commit that added or removed the view - and
- * `BottomSheet` only drops its children in the render that native's dismissal
- * causes: `dismissedCallback` calls `setMounted(false)` and `onDismiss()` in one
- * go, so the `dismiss` event a test waits for is pushed before the render that
- * unmounts anything, and native's `live` reaches 0 on its own side of that hop.
- * Both witnesses are therefore older than the last unmount's bookkeeping, and a
- * read taken the moment the sheet is gone can be one behind. That is the shape of the
- * G16 and X19 runs: red on the `unmounts` line, then `20` and `30` in
- * the rounds that inherit the counters because a thrown expectation skips `reset()`
- * - the tenth unmount had arrived, late.
- *
- * It is not E2's shape. Both E2 runs were short on `mounts` and stayed short for
- * good - `9`, `19`, `29`, `39` in one and `9`, `18`, `28`, `38` in the other - and a
- * passive effect that arrives late cannot explain a mount that never arrives at
- * all. That one is a cycle that neither mounted nor unmounted; see `waitForUnmount`.
- *
- * This waits for the number, not for the control: the caller still asserts it
- * exactly, so content that never unmounts, or unmounts twice, still fails - and
- * now fails naming both counters instead of one bare `9`.
+ * The counters are bumped by a passive effect, which React flushes after the
+ * commit, and the `dismiss` event is pushed before the render that unmounts the
+ * content: a read taken the moment the sheet is gone can be one behind.
  */
 async function waitForContentCycles(
   testId: string,
@@ -366,24 +298,9 @@ async function waitForContentCycles(
 }
 
 /**
- * Wait until the content has unmounted `count` times, between one cycle and the next.
- *
- * This is E2's `expected 9 to be 10`. `dismissedCallback` puts `setMounted(false)`
- * in the same React batch as the `onDismiss()` the loop is watching, and the loop
- * used to answer that event by opening the next cycle straight away. Two updates in
- * one batch is one render, and in that render `isPresented` is already true again,
- * so `BottomSheet`'s `presented && !mounted` line mounts the content straight back
- * before anything commits (src/components/BottomSheet/BottomSheet.tsx:351). The
- * sheet closes and reopens, its content is never dropped, and *both* counters lose
- * that cycle for good - `9` and `9`, then `19` and `19` in the rounds that inherit
- * them. Waiting for the tenth unmount at the end of the round cannot save that run
- * either: the number never arrives.
- *
- * Keeping content mounted through a close-and-reopen inside one exit animation is
- * deliberate (docs/components/bottom-sheet.md), so this does not race it or forgive
- * it - it removes the ordering. An open issued after the unmount has committed
- * cannot be batched with the dismissal it would swallow, and that batch is the only
- * ordering the E2 excerpts fit. The exact per-round asserts below stay as they were.
+ * `setMounted(false)` and `onDismiss()` run in one React batch. An open issued
+ * in answer to that event joins the batch and the content is mounted straight
+ * back without unmounting, so a cycle waits for the unmount to commit first.
  */
 async function waitForUnmount(
   testId: string,
@@ -409,7 +326,6 @@ async function waitForEvent(entry: string, timeoutMs = 8000) {
   );
 }
 
-/** The content's layout once it holds still. */
 async function settledLayout(
   testId: string,
   check: (l: { width: number; height: number }) => boolean,
@@ -502,7 +418,6 @@ describe('BottomSheet', () => {
     );
     expect(Math.abs(num(grown, 'contentH') - 400)).toBeLessThanOrEqual(1);
     expect(before.presented).toBe('1');
-    // Growing is not leaving: the sheet that followed its content is still the one up.
     await staysUp('grow', 1500, 'after its content grew');
     expect(num(reportOf('grow'), 'presentCount')).toBe(1);
   });
@@ -516,7 +431,6 @@ describe('BottomSheet', () => {
     const up = await waitForUp('detents');
     expect(up.detents).toBe('medium,large');
     await waitForReport('detents', (r) => r.selected === '0', 'selected=0');
-    // Opening at a detent is not a change, and the box arriving is not a reason to go.
     await staysUp('detents', 1500, 'once its box arrived');
     expect(eventLog.filter((e) => e.includes(':detent:'))).toEqual([]);
     handles.get('detents')?.nuiTestSelectDetent(1);
@@ -524,12 +438,9 @@ describe('BottomSheet', () => {
     await waitForReport('detents', (r) => r.selected === '1', 'selected=1');
   });
 
-  // Android only. material3 1.5's sheet state keeps a `PartiallyExpanded` anchor for a
-  // sheet no taller than half the screen, on top of `Expanded`, where 1.4's dropped it:
-  // the sheet rests in the same place, but as the other value. The detent it reports
-  // is the one it rests at - the 200 dp one, as before the bump - not `medium`, which
-  // would be the taller of the two (X18). iOS presents `medium` first and is not this
-  // case.
+  // Android only. Material 3 1.5 keeps a `PartiallyExpanded` anchor, on top of
+  // `Expanded`, for a sheet no taller than half the screen. The sheet reports
+  // the detent it rests at, not `medium`. iOS presents `medium` first.
   it('reads a medium sheet that is shorter than half the screen as its shorter detent', async () => {
     if (IOS) return;
     await render(
@@ -544,23 +455,17 @@ describe('BottomSheet', () => {
       (r) => r.selected === '1',
       'selected=1'
     );
-    // The case it is: the whole measured sheet is no taller than half of what it was
-    // allowed, which is when Material puts the two anchors on one place.
     expect(num(rested, 'sheetPx') * 2).toBeLessThanOrEqual(
       num(rested, 'containerPx')
     );
-    // Resting is not a change, before or after its box arrives.
     await staysUp('short', 1500, 'once its box arrived');
     expect(reportOf('short').selected).toBe('1');
     expect(eventLog.filter((e) => e.startsWith('short:detent:'))).toEqual([]);
   });
 
-  // Android only, and the other side of the case above (X18 fix round 1). A detent of
-  // 0.49 of the screen is under half, but the sheet Material measures is the whole
-  // surface - drag handle, content and insets - and that is taller than half of what it
-  // was allowed, so Material keeps two anchors. The sheet opens at `medium` and a move to
-  // the other detent is a change. A guess from the detent and the screen calls this one
-  // converged, and then reports neither.
+  // Android only. A detent of 0.49 of the screen is under half, but Material
+  // measures the whole surface (drag handle, content and insets), which is
+  // taller than half, so it keeps two anchors.
   it('reads a sheet just under half the screen by the anchors Material measured', async () => {
     if (IOS) return;
     await render(
@@ -601,7 +506,6 @@ describe('BottomSheet', () => {
         Math.abs(l.height - num(reportOf('scroll'), 'boxH')) <= 1,
       `as the box ${report.boxW}x${report.boxH}`
     );
-    // The viewport is the sheet's, not the 40 rows' 2400.
     expect(viewport.height).toBeLessThan(2400);
   });
 
@@ -611,16 +515,12 @@ describe('BottomSheet', () => {
     const up = await waitForUp('touch');
     if (IOS) {
       expect(num(up, 'touchRoots')).toBeGreaterThanOrEqual(1);
-      // `hitTest` at the content's centre - the call UIKit routes a finger by -
-      // lands in the content, inside the sheet.
       await waitForReport(
         'touch',
         (r) => r.hit === '1',
         'a hit inside the content'
       );
     } else {
-      // Only the frontmost focusable window has focus: the sheet's is the one a
-      // finger reaches, and the content is in it.
       await waitForReport(
         'touch',
         (r) => r.focused === '1',
@@ -687,8 +587,6 @@ describe('BottomSheet', () => {
       'up again (presentCount=2)',
       10000
     );
-    // The content went with the first sheet only as far as React was concerned: it
-    // never unmounted, because the app never stopped asking for it.
     expect(unmounts.get('refuse') ?? 0).toBe(0);
   });
 
@@ -717,10 +615,8 @@ describe('BottomSheet', () => {
 
   for (const delay of [0, 80, 150, 1000]) {
     it(`leaves nothing when dropped ${delay} ms after presenting`, async () => {
-      // The probe is mounted *before* the drop and stays mounted, so it can never be
-      // the dropped view handed back by the recycle pool: a probe mounted after the
-      // drop was that view, and its first props batch (`presented=false`) closed the
-      // dropped sheet itself - the drop was never what the test read (G14 review).
+      // The probe is mounted before the drop and stays mounted, so it can never
+      // be the dropped view handed back by the recycle pool.
       const id = `drop-${delay}`;
       await render(<DropScene testId={id} />);
       await waitForHandle(id);
@@ -769,8 +665,6 @@ describe('BottomSheet', () => {
       (l) => Math.abs(l.height - 240) < 1,
       'at its own 240'
     );
-    // Report whether the pool really handed the old view back (`drops`/`recycles` are
-    // per object): the assertions above hold either way.
     console.log(`recycle: new view drops=${up.drops} recycles=${up.recycles}`);
   });
 
@@ -812,7 +706,7 @@ describe('BottomSheet', () => {
     setters.get('in-modal')?.(true);
     const up = await waitForUp('in-modal');
     if (IOS) {
-      // D35: an RN Modal on top means a window of its own.
+      // An RN Modal on top means the sheet gets a window of its own.
       expect(up.ownWindow).toBe('1');
       expect(up.appTop).toContain('ModalHostViewController');
     } else {
@@ -872,8 +766,8 @@ describe('BottomSheet', () => {
       `${key} 160 taller than ${first[key]} in a window of its own`
     );
     await staysUp('own-fit', 800, 'after its content grew');
-    // The sheet goes before the Modal: closing the Modal under a sheet is the hazard
-    // case, which runs in an app instance of its own.
+    // The sheet closes before the Modal: closing a Modal under a sheet can
+    // leave the Modal's host over the app for every later test.
     setters.get('own-fit')?.(false);
     await waitForEvent('own-fit:dismiss');
     setters.get('own-modal')?.(false);
@@ -882,12 +776,9 @@ describe('BottomSheet', () => {
 });
 
 /**
- * A second sheet asked for in the same commit as a first one presents over it while
- * the first is still arriving - a busy chain on iOS, which a present waits out in 50 ms
- * steps. The budget for that wait was once per *mount* (60 steps), so a mount that met
- * a busy chain often enough stopped presenting at all, with `presented=1` and nothing
- * up. Rounds enough to spend that budget several times over, on one mount, across two
- * tests (react-native-harness 1.6 has one timeout for every test).
+ * A second sheet asked for in the same commit as a first presents over it while
+ * the first is still arriving, which iOS waits out in 50 ms steps. Split across
+ * two tests because react-native-harness 1.6 has one timeout for every test.
  */
 describe('BottomSheet · presenting over a sheet that is still arriving', () => {
   afterEach(async () => {
@@ -895,7 +786,6 @@ describe('BottomSheet · presenting over a sheet that is still arriving', () => 
     await sleep(700);
   });
 
-  /** Both sheets up: each holds its content, and the process counts two windows. */
   const upWithTwo = (report: Report) =>
     report.presented === '1' &&
     report.live === '2' &&
@@ -915,8 +805,6 @@ describe('BottomSheet · presenting over a sheet that is still arriving', () => 
     await waitForHandle('over');
     const rounds = IOS ? 9 : 4;
     for (let round = 1; round <= rounds; round += 1) {
-      // Both in one commit, as an app opening two at once would: React batches the
-      // two writes, and the second sheet's present meets the first one arriving.
       setters.get('under')?.(true);
       setters.get('over')?.(true);
       await waitForReport(
@@ -940,18 +828,16 @@ describe('BottomSheet · presenting over a sheet that is still arriving', () => 
     }
     if (IOS) {
       const over = await waitForReport('over', (r) => r.raw !== '', 'a report');
-      // The run went past the 60 waits a mount used to get in all, on this one mount.
       expect(num(over, 'presentWaitsTotal')).toBeGreaterThan(60);
     }
   });
 });
 
 /**
- * Changing the detents while the sheet is up. On Android, whether `medium` is in the
- * list decides Material's `skipPartiallyExpanded`, which keys the sheet's saved state:
- * a new key built a new, hidden `SheetState` under a sheet that was up. The sheet keeps
- * one state for the whole presentation, and a list that adds or drops `medium` applies
- * at the next presentation there (docs/components/bottom-sheet.md).
+ * On Android, whether `medium` is in the list decides Material's
+ * `skipPartiallyExpanded`, which keys the sheet's saved state. The sheet keeps
+ * one state for a whole presentation, so a list that adds or drops `medium`
+ * applies at the next presentation.
  */
 describe('BottomSheet · detents changed while up', () => {
   afterEach(async () => {
@@ -991,7 +877,6 @@ describe('BottomSheet · detents changed while up', () => {
     );
     await staysUp('change', 1500, 'after medium left the list');
     expect(reportOf('change').presentCount).toBe('1');
-    // Next presentation: the new list from the start.
     setters.get('two')?.(true);
     setters.get('change')?.(false);
     await waitForEvent('change:dismiss');
@@ -1009,8 +894,8 @@ describe('BottomSheet · detents changed while up', () => {
 });
 
 /**
- * Fifty present/dismiss cycles, five files' worth of tests of ten - react-native-harness
- * 1.6 has one timeout for every test, and fifty animated cycles do not fit in it.
+ * Fifty cycles in five tests of ten: react-native-harness 1.6 has one timeout
+ * for every test, and fifty animated cycles do not fit in it.
  */
 describe('BottomSheet · 50 cycles', () => {
   let baseline: Report | null = null;
@@ -1018,9 +903,6 @@ describe('BottomSheet · 50 cycles', () => {
 
   for (let round = 0; round < 5; round += 1) {
     it(`cycles 10 more times (round ${round + 1})`, async () => {
-      // A probe mounted beside the cycling sheet from the start of each round, so the
-      // last round reads what fifty cycles left through a view that was never the
-      // cycling one handed back by the recycle pool.
       await render(
         <>
           <Stage testId="cycle-probe" />
@@ -1036,10 +918,6 @@ describe('BottomSheet · 50 cycles', () => {
           'a baseline with nothing up'
         );
       }
-      // Where this round's counters start. A round that passed ends in `reset()`, so
-      // this is 0; it is read rather than assumed because the round that inherits a
-      // predecessor's counters has to fail naming its own ten cycles, not starve on a
-      // wait for numbers a skipped `reset()` never cleared.
       const unmountBase = unmounts.get('cycle') ?? 0;
       for (let i = 0; i < 10; i += 1) {
         eventLog.length = 0;
@@ -1052,7 +930,6 @@ describe('BottomSheet · 50 cycles', () => {
           (r) => r.live === '0',
           `cycle ${cycles + 1} closed`
         );
-        // Before the next open, not just before the asserts: see `waitForUnmount`.
         await waitForUnmount(
           'cycle',
           unmountBase + i + 1,

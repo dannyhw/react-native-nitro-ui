@@ -11,11 +11,7 @@ import {
 } from 'react-native';
 import { Chip } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance - the helper the other screens use.
- * `Text` gets no dynamic default colour from React Native, and the screen has to
- * read in both light and dark mode for the README screenshots.
- */
+/** React Native gives `Text` no dynamic default colour, so the screen picks its own. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -30,43 +26,25 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** The uncontrolled filter row: each chip owns its own selection. */
 const DIETS = ['Vegan', 'Vegetarian', 'Gluten-free', 'Nut-free'] as const;
 
-/**
- * The Chip's example screen: the real-input block first, then filter chips
- * (controlled and not), assist chips with SF Symbols, the disabled pair, and a
- * caller's width that truncates the label.
- *
- * The README screenshots come from the top of this screen. The on-device
- * assertions live in `example/__tests__/Chip.harness.tsx`, which renders its own
- * trees.
- */
 export default function ChipScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  // The real-input suite's controls (`scripts/real-input`). Each echo is React's own
-  // render, so it only moves if a real touch reached the hosted control, the control
-  // told Nitro, and Nitro told JS.
   const [realSelected, setRealSelected] = useState(false);
   const [realEvents, setRealEvents] = useState(0);
   const onRealSelectedChange = useCallback((next: boolean) => {
     setRealSelected(next);
     setRealEvents((count) => count + 1);
   }, []);
-  // The refusing parent: `selected` stays false, so every toggle is refused and has to
-  // snap back. The last *requested* value is the oracle - a chip that kept the refused
-  // selection would request `false` on the next tap, not `true` again.
   const [refusedLast, setRefusedLast] = useState('-');
   const [refusedEvents, setRefusedEvents] = useState(0);
   const onRefusedChange = useCallback((next: boolean) => {
     setRefusedLast(String(next));
     setRefusedEvents((count) => count + 1);
   }, []);
-  // Shared by the enabled and the disabled assist chip, so a stray press on the
-  // disabled one is a number on screen rather than the absence of a callback.
   const [realPresses, setRealPresses] = useState(0);
   const onRealPress = useCallback(() => {
     setRealPresses((count) => count + 1);
@@ -91,12 +69,7 @@ export default function ChipScreen() {
           3 FilterChip and AssistChip on Android.
         </Text>
 
-        {/*
-          The real-input suite's block (`scripts/real-input`): a controlled filter chip,
-          a refusing one, an assist chip, and a disabled chip of each kind wired to the
-          same counters - so an OS tap on a disabled chip is a number that did not move.
-          It is first on the page because `uiautomator dump` lists no off-screen nodes.
-        */}
+        {/* First on the page: Android's `uiautomator dump` lists no off-screen nodes. */}
         <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
         <View style={styles.wrapRow}>
           <Chip
@@ -236,7 +209,6 @@ export default function ChipScreen() {
   );
 }
 
-/** One on-screen value the real-input suite reads. */
 function Echo({
   label,
   testID,
@@ -305,8 +277,6 @@ const styles = StyleSheet.create({
   value: {
     fontVariant: ['tabular-nums'],
   },
-  // A caller's width wins over the measured size; the label truncates instead of
-  // painting outside the box (docs/components/chip.md).
   capped: {
     width: 200,
   },

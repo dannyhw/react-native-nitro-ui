@@ -1,19 +1,3 @@
-/**
- * The Android a11y rule, against dumps measured from the running app.
- *
- * Two claims, and the second is the one that matters. The first is that the rule passes
- * on each control's real subtree — worth little on its own, because a rule that accepts
- * everything passes too. The second is that each failure mode the rule exists to catch
- * makes it red, on a fixture built by *breaking* a measured tree in the way the bug does
- * it. That is the proof AGENTS.md asks for, and it is why the fixtures are dumped rather
- * than written: a hand-typed tree tests the rule against a shape the code may never see.
- *
- * The fixtures came from `scripts/conformance/make-a11y-fixtures.mjs` on pair-b
- * (`emulator-5570`), one screen per control, scrolled so every control had a box.
- *
- * @file
- */
-
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from '@jest/globals';
 
@@ -30,8 +14,9 @@ import { parseHierarchy } from '../real-input/uiautomator.mjs';
 const parsed = new Map();
 
 /**
- * A control's measured tree, parsed once so node identity survives — the mutations below
- * find the node to break by object, which only works if there is one instance of it.
+ * A control's tree as dumped from the running app by
+ * `scripts/conformance/make-a11y-fixtures.mjs`, parsed once so node identity survives:
+ * the mutations below find the node to break by object.
  *
  * @param {string} id an `A11yControl.id`
  */
@@ -97,94 +82,43 @@ describe('the a11y rule, on measured trees', () => {
       'button',
       'date-picker',
       'picker',
-      // Menu's own case, measured on pair-a: the name is on the Spinner that *is* the
-      // trigger, at the trigger's box, and it is clickable — so nothing about it needs a
-      // debt row. Not a control we went looking for a pass in: it is the first case in the
-      // table whose Android node is a real platform widget rather than Compose semantics,
-      // which is exactly why the Compose controls are the ones with debt.
       'menu',
-      // G12's Chip, measured on pair-a: the name sits inside the FilterChip's own
-      // checkable, clickable 48 dp node - the Switch's shape - so no debt row.
       'chip',
-      // G15's Checkbox, measured on pair-a: one `View` carries the name at the whole
-      // control's box (345x126 px: the box *and* its label, because the label is part of
-      // the control), and its parent — the row Compose merged them into — is
-      // `clickable|checkable|focusable` at that same box. Measured before that merge was
-      // written, this case had two named nodes and the actionable one was not the
-      // control; see the mutation below.
       'checkbox',
-      // G23's IconButton, measured on pair-b: one `View` carries the name at the
-      // control's own 105x105 px box (the 40 dp `medium`/`uniform` container), inside
-      // the merged node that is `clickable|focusable` at 124x124 px — Material's 48 dp
-      // minimum interactive size around a 40 dp visual, which is the arrangement the
-      // ladder's own docs page prints. The Switch's shape, so no debt row.
       'icon-button',
-      // G20's ButtonGroup, measured on pair-a: the group's name is on Material's merged
-      // row (a `View` at [212,805][868,931] with no actions of its own) and the three
-      // items are `clickable|focusable` inside it, each named by its own text — which is
-      // what `role: 'container'` exists to grade, and what the mutation below proves.
       'button-group',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',
       'hosted-date-picker',
       'hosted-progress',
-      // G13's field, measured on pair-b: the label's node is a child of the `EditText`
-      // node with the same box (Compose's own shape for a text field's label), and the
-      // rule's box test finds the actionable `EditText` there.
       'text-field',
-      // G17's field, measured on pair-b: Material 3's search input publishes the same
-      // shape as TextField's — a named `View` inside the clickable `EditText`, both at
-      // the field's box — so the rule's box test finds the actionable node too.
       'search-field',
       'context-menu',
-      // G24's Form row, measured on pair-b: the row Compose merged for `onPress` is the
-      // `clickable` node, and the one node carrying "Row with onPress" sits inside it at
-      // the content box (933x116 px inside the row's own 1017x147 px touch target). So a
-      // screen reader stops once, and the stop it hears presses. Not the Checkbox shape -
-      // there the named node *is* the control's box - but the shape the rule exists to
-      // accept: an actionable node wrapping the name it announces.
       'form',
-      // G30's ListItem, measured on pair-a: the row's name is on one `View` at the item's
-      // whole box ([42,764][1038,953] — title, supporting line and value, merged, with no
-      // text node left under it), and the node *around* it is `clickable|focusable` at that
-      // same box, with Material's `Button` role on a sibling inside it. So the stop a reader
-      // hears and the thing a person presses are the one box — Form's shape, not the
-      // Checkbox's, and what `hasActableHome` exists to accept.
       'list-item',
     ]);
-    // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
       [
         'slider',
         'segmented-control',
-        // G25's Stepper, measured on pair-a: one node carries the name — the merged row
-        // `View` at the control's own 273x126 px box, with no clickable node under it —
-        // and that node is actionable through Compose's custom `SetProgress`, which a
-        // uiautomator dump cannot show. The X4 rows' limitation, on a fifth control.
+        // Actionable only through Compose's custom `SetProgress`, which a uiautomator
+        // dump cannot show.
         'stepper',
         'hosted-slider',
         'hosted-segmented',
       ]
     );
-    // And nothing *fails*, which is the difference between landing green and hiding: a new
-    // failure on a control with a debt row still goes red, because rows match findings.
+    // A new failure on a control with a debt row still goes red: rows match findings.
     for (const verdict of verdicts) {
       expect(verdict.failures).toEqual([]);
     }
   });
 
   it('goes red when a name moves to the container around the control', () => {
-    // G5 M2 and G6 M3 exactly: the label ends up on a layout box *around* the control,
-    // which is not the control, is not actionable, and leaves the control unnamed. The
-    // box here is the RN content container (1080 wide, the whole page) — the measured
-    // shape a wrapper has when a component sets `accessibilityLabel` on its host view
-    // rather than on the thing it renders.
-    //
-    // Worth naming what the *other* mutation is not: moving the name onto the Switch's
-    // own 137x126 touch-target node is not a bug, because a person pressing that box is
-    // pressing the control, and the rule passes it on purpose. What has to go red is a
-    // name on a box that is not the control's.
+    // The wrapper is the RN content container (the whole page): the shape a component
+    // produces when it sets `accessibilityLabel` on its host view rather than on the
+    // thing it renders.
     const target = named('switch');
     const wrapper = tree('switch').find(
       (node) =>
@@ -204,13 +138,10 @@ describe('the a11y rule, on measured trees', () => {
     const problems = a11yProblems(control('switch'), mutated);
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('is not actionable');
-    // The nearest actionable box it found is the page, which the message says.
     expect(problems[0]).toContain('which is the page, not the control');
   });
 
   it('goes red when the name is on the control AND on something else', () => {
-    // The more common half of the same bug, and G6's: both nodes carry it, so a screen
-    // reader stops twice and only one of the stops has the value.
     const mutated = tree('switch').map((node) =>
       node.className === 'android.widget.ScrollView'
         ? { ...node, contentDesc: control('switch').label }
@@ -222,16 +153,11 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('goes red when a labelled checkbox splits its name across two nodes', () => {
-    // Not a hypothetical: this is the shape `Checkbox` shipped with before its labelled
-    // branch was merged, dumped off the emulator on the run that found it — the row's
-    // `View` (the label) and the `CheckBox` both read "Real-input checkbox", and only the
-    // `CheckBox` could be pressed. The fixture is the fixed tree (one named node), so the
-    // regression is written back into it here: the same name on a second, wider node that
-    // answers to nothing.
+    // The fixture has one named node, so the split is written back into it: the same
+    // name on a second, wider node that answers to nothing.
     const home = named('checkbox');
     const labelBox = {
       ...home.bounds,
-      // The measured label node started where the box ended and ran to the row's edge.
       x1: home.bounds.x2 - 20,
       width: home.bounds.width,
       cx: home.bounds.cx + 100,
@@ -250,16 +176,11 @@ describe('the a11y rule, on measured trees', () => {
     ]);
     expect(problems.join('\n')).toContain('2 nodes carry the name');
     expect(problems.join('\n')).toContain('announces twice');
-    // And the tree it was measured from does not have the problem: without this, the
-    // mutation above proves only that the rule has a length test.
     expect(a11yProblems(control('checkbox'), tree('checkbox'))).toEqual([]);
   });
 
   it('goes red when a stepper’s two halves each keep a name', () => {
-    // The failure mode this control's Android half is shaped around: the row names the
-    // value and the two glyph buttons stay out of the tree. Give a half its own name
-    // back - what a dump shows the moment the buttons stop clearing their semantics -
-    // and a reader gets two focus stops with the value on only one of them.
+    // What a dump shows once the two glyph buttons stop clearing their semantics.
     const home = named('stepper');
     const half = {
       ...home,
@@ -268,7 +189,6 @@ describe('the a11y rule, on measured trees', () => {
       focusable: 'true',
       bounds: {
         ...home.bounds,
-        // The left half of the row, inside the control's own box.
         x2: home.bounds.x1 + Math.round(home.bounds.width / 2),
         width: Math.round(home.bounds.width / 2),
         cx: home.bounds.x1 + Math.round(home.bounds.width / 4),
@@ -280,16 +200,13 @@ describe('the a11y rule, on measured trees', () => {
     ]);
     expect(problems.join('\n')).toContain('2 nodes carry the name');
     expect(problems.join('\n')).toContain('announces twice');
-    // And the tree this was measured from does not carry *this* finding (it carries the
-    // actionable one, which is the fifth debt row). Without this, the mutation above
-    // proves only that the rule has a length test.
+    // The unmutated tree carries its known not-actionable finding, but not this one.
     const measured = a11yProblems(control('stepper'), tree('stepper'));
     expect(measured.join('\n')).not.toContain('nodes carry the name');
   });
 
   it('goes red when the name has no box', () => {
-    // Measured for real on a hosted control below the fold: Compose names it and draws
-    // nothing, which is why the sweep scrolls before reading.
+    // Compose names a hosted control below the fold and draws nothing for it.
     const problems = a11yProblems(
       control('hosted-button'),
       mutate('hosted-button', named('hosted-button'), { bounds: ZERO_BOX })
@@ -310,14 +227,12 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('goes red for an interactive control whose named node cannot be acted on', () => {
-    // The Picker passes because its name is on a `Spinner` that is itself `clickable`.
-    // Take that flag away and no other node whose box is the control's is actionable, so
-    // the rule has to say so.
+    // The Picker's name is on a `Spinner` that is itself `clickable`; no other node at
+    // the control's box is actionable.
     const stripped = mutate('picker', named('picker'), { clickable: 'false' });
     const problems = a11yProblems(control('picker'), stripped);
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('is not actionable');
-    // …and the message names the nearest thing it did find, so the failure is a lead.
     expect(problems[0]).toContain(
       'The nearest actionable box containing it is'
     );
@@ -325,10 +240,8 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('does not let the page’s scroll view stand in for a control', () => {
-    // The ScrollView is `focusable="true"`, `scrollable="true"` and contains everything.
-    // If containment-plus-any-action were the rule, every control on Earth would pass, so
-    // this is the assertion that keeps the rule from being a tautology: the Slider's
-    // finding has to name the scroll view as *rejected*, not as an answer.
+    // The ScrollView is focusable and contains everything, so a rule of containment plus
+    // any action would pass every control.
     const scroller = tree('slider').find((node) => node.scrollable === 'true');
     expect(scroller.focusable).toBe('true');
     expect(scroller.bounds.width).toBeGreaterThan(named('slider').bounds.width);
@@ -338,16 +251,9 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('goes red when the only actionable ancestor is a region, not the control', () => {
-    // The bound the failure message promises (X4 review N1): `hasActableHome` used to
-    // accept *any* actionable node whose box contained the name, so a screen-deep
-    // `focusable` wrapper — a card, a list row, a section container — counted as the
-    // control's own actionable box. The scrollable flag alone does not catch that shape;
-    // only size does. Measured, the real gap: touch targets are 1.0–1.5× the named box,
-    // and the next actionable container of any kind is the page at 17.6×.
-    //
-    // Built from the Switch, whose named track (137×84) sits in a Material touch target
-    // (137×126) that must stay accepted — so this fixture *removes* that target and hands
-    // the control a 4×-area ancestor instead.
+    // A `focusable` card or section container around the name is not the control's own
+    // box, and only its size tells it from a touch target. The Switch's named track sits
+    // in a Material touch target, which this fixture swaps for a much larger ancestor.
     const nodes = tree('switch');
     const target = nodes.find(
       (node) =>
@@ -359,8 +265,8 @@ describe('the a11y rule, on measured trees', () => {
     const namedBox = named('switch').bounds;
     const region = {
       ...target,
-      // ~16× the named area: the size of a section container, and well under a page's,
-      // so this test fails on the size rule alone rather than on the scroll filter.
+      // The size of a section container and well under a page's, so the size rule alone
+      // has to catch it, not the scroll filter.
       bounds: {
         ...namedBox,
         x1: namedBox.x1 - 100,
@@ -382,17 +288,14 @@ describe('the a11y rule, on measured trees', () => {
     const problems = a11yProblems(control('switch'), withRegion);
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('nothing whose box is the control');
-    // …and the same node at touch-target size is still accepted, which is the other half:
-    // without this, the bound is just a number that makes the test above pass.
+    // The same node at touch-target size is still accepted.
     const realTarget = nodes.find((node) => node === target);
     expect(a11yProblems(control('switch'), nodes)).toEqual([]);
     expect(realTarget.clickable).toBe('true');
   });
 
   it('goes red when a name lands on the scroll container itself', () => {
-    // The inverse of the last test, and the reason `scrollable` is parsed at all: the
-    // scroll view is focusable, so "the name is on an actionable node" is *true* here.
-    // A control whose name had slid onto the page would be announced as the whole screen.
+    // The scroll view is focusable, so "the name is on an actionable node" is true here.
     const scroller = tree('switch').find((node) => node.scrollable === 'true');
     const mutated = tree('switch').map((node) => {
       if (node === scroller)
@@ -406,10 +309,8 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('accepts a Material touch target taller than the visual it wraps', () => {
-    // The negative control, and the reason the rule is containment rather than box
-    // equality: the Switch's named node is 137x84 inside a clickable|checkable|focusable
-    // node 137x126 (measured). A rule demanding equality would report four healthy
-    // controls as broken, and the next person to trip over it would delete it.
+    // Why the rule is containment and not box equality: the Switch's named node is 137x84
+    // inside a clickable, checkable, focusable node of 137x126.
     const target = named('switch');
     expect(target.clickable).toBe('false');
     expect(target.checkable).toBe('false');
@@ -422,8 +323,8 @@ describe('the a11y rule, on measured trees', () => {
     );
     expect(home).toBeDefined();
     expect(a11yProblems(control('switch'), tree('switch'))).toEqual([]);
-    // And the pass is the *home* doing it: strip the home's flags and the same tree
-    // goes red, so the assertion above is not passing on the scroll view.
+    // Without the home's flags the same tree fails, so the pass above is not the scroll
+    // view's doing.
     const stripped = mutate('switch', home, {
       clickable: 'false',
       checkable: 'false',
@@ -435,13 +336,9 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('grades the control, not the first node that happens to carry its name', () => {
-    // G24 fix round 1's Android finding, from the Form's own dump. A long `real-input`
-    // session left the row's name on two nodes — the row, and a recycled wrapper the
-    // screen had re-used — and `named[0]` was the wrapper, so the actionable half of the
-    // rule graded a container and the finding said nothing about the row a person presses.
-    // Built by *adding* that second node to the measured tree, in the tree order that
-    // fooled the rule, and by making the row clickable the way `applyChrome` does for a
-    // pressable row (the other half of the same round).
+    // A recycled wrapper can carry the row's name too and come first in tree order. The
+    // fixture adds that second node ahead of the row and makes the row clickable, as a
+    // pressable Form row is.
     const row = named('form');
     expect(row.resourceId).toBe(control('form').anchorTestId);
     const pressable = { ...row, clickable: 'true' };
@@ -449,8 +346,6 @@ describe('the a11y rule, on measured trees', () => {
     const wrapper = {
       ...row,
       resourceId: '',
-      // The shape of the node the run actually graded: named, focusable, and as big as a
-      // piece of the page — a wrapper the screen kept, not a control.
       focusable: 'true',
       scrollable: 'true',
       bounds: {
@@ -471,21 +366,13 @@ describe('the a11y rule, on measured trees', () => {
     ];
 
     const problems = a11yProblems(control('form'), nodes);
-    // The duplicate is still a finding — grading the right node does not forgive a name
-    // on two of them.
+    // The duplicate is still a finding, but actionability was asked of the row, not of
+    // the wrapper.
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('announces twice');
-    // ...and the actionability question was asked of the row, not of the wrapper: before
-    // this, the run's whole Android finding was this line about a container.
     expect(problems.join(' ')).not.toContain('scroll container');
     expect(problems.join(' ')).not.toContain('is not actionable');
 
-    // The other half, and it is only this fixture: with one named node, grading the node
-    // under the anchor rather than the first named node changes nothing *when the named node
-    // is the anchor*, which is what this tree is. Whether some other control's named node sits
-    // outside its `anchorTestId` is a question the sweep answers on a device, not this test.
-    // The same tree minus the wrapper is the fixture, whose named node is *not* actionable —
-    // and still reported as such.
     const single = a11yProblems(
       control('form'),
       tree('form').map((node) => (node === row ? pressable : node))
@@ -494,13 +381,9 @@ describe('the a11y rule, on measured trees', () => {
   });
 
   it('grades a group by what its box contains, and goes red when that is nothing', () => {
-    // The `container` role's own proof, on ButtonGroup's measured tree: Material merges
-    // the row into the node that carries the group's name, and the items survive inside
-    // it as three separately clickable views. The rule passes that shape (above), so the
-    // pass has to be the *items* doing it — take their actions away and the same tree is
-    // a group that announces itself and leads nowhere. This is also the mutation a real
-    // bug would produce: a `Modifier.pointerInput` on the merged container, or a
-    // `clearAndSetSemantics` on the row, swallows exactly these three nodes.
+    // Material merges the row into the node that carries the group's name, and the items
+    // survive inside it as three separately clickable views. A `clearAndSetSemantics` on
+    // the row would swallow exactly those three nodes.
     const items = tree('button-group').filter(
       (node) =>
         node.scrollable !== 'true' &&
@@ -530,15 +413,6 @@ describe('the a11y rule, on measured trees', () => {
 
 describe('the debt list', () => {
   it('is the measured findings, per platform, and nothing else', () => {
-    // Four Android rows (two controls, one finding each) and the iOS rows, each measured
-    // on a simulator: the Slider's and the Stepper's names are announced as the wrong kind
-    // of control, a hosted Picker's name is announced twice, an accessible ContextMenu
-    // still lists a child as a stop, an IconButton's element is the drawn control inside
-    // its 44 pt touch target rather than the target, and a Form row's name stays on the
-    // React Native wrapper for its `Text` instead of the cell. A row that named no platform
-    // measurement excuse both halves, so each row says which one it was measured on. The
-    // IconButton row is that rule working: G23 expected its 44 pt target to retire it and
-    // the sweep came back with a bigger inset, so the row was re-measured, not widened.
     expect(
       A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)
     ).toEqual([
@@ -556,14 +430,12 @@ describe('the debt list', () => {
       'ios:icon-button',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
-      // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.
       expect(entry.followups.length).toBeGreaterThan(0);
     }
   });
 
   it('excuses only the finding it describes', () => {
-    // A row matched to `not actionable` must not excuse a *missing* name: that is the
-    // difference between recorded debt and a disabled test.
+    // A row matched to `not actionable` must not excuse a missing name.
     const missing = mutate('slider', named('slider'), { contentDesc: '' });
     const result = checkControlA11y(control('slider'), missing);
     expect(result.exempt).toBe(false);
@@ -572,8 +444,7 @@ describe('the debt list', () => {
   });
 
   it('goes red when a control is fixed and its row is left behind', () => {
-    // The self-clearing half: give the Slider's own node a press and the row stops
-    // matching, which `staleExemptions` reports — so a row cannot outlive the bug.
+    // Give the Slider's own node a press and its row stops matching.
     const fixed = mutate('slider', named('slider'), { clickable: 'true' });
     const result = checkControlA11y(control('slider'), fixed);
     expect(result.known).toEqual([]);
@@ -590,10 +461,7 @@ describe('the debt list', () => {
         expect.stringContaining('delete the exemption'),
       ])
     );
-    // Every Android row the run covered is reported, not just the one that was fixed: a
-    // run that saw all four controls and found nothing is four pieces of evidence. The
-    // iOS rows are not in the count, because this call asked about Android — clearing the
-    // Android list says nothing about whether the iOS half still reproduces its own bugs.
+    // Every row of the platform asked about is reported, and none of the other's.
     expect(
       staleExemptions(
         A11Y_CONTROLS.map((entry) => entry.id),
@@ -611,8 +479,7 @@ describe('the debt list', () => {
   });
 
   it('says nothing about a control the run never read', () => {
-    // A filtered `--control slider` run must not report the rows it skipped as stale, or a
-    // partial run would look like several fixes.
+    // A filtered `--control slider` run must not report the rows it skipped as stale.
     expect(staleExemptions(['slider'], ['slider'])).toEqual([]);
     expect(staleExemptions([], [])).toEqual([]);
     expect(staleExemptions(['slider'], [])).toEqual([

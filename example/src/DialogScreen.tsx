@@ -17,7 +17,6 @@ import {
   type DialogAction,
 } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -34,10 +33,8 @@ function useTopInset() {
 }
 
 /**
- * The real-input alert, spelled as `CHECKS.dialog` and `testRealInputDialog` spell
- * it. None of these titles appears anywhere else on the screen, so a text match
- * names one button of one window. `Locked action` is disabled: the button a check
- * proves takes no tap.
+ * The real-input tests find these buttons by title, so each title must appear
+ * nowhere else on the screen.
  */
 const ALERT_ACTIONS: DialogAction[] = [
   { id: 'cancel', title: 'Keep it', role: 'cancel' },
@@ -45,11 +42,7 @@ const ALERT_ACTIONS: DialogAction[] = [
   { id: 'locked', title: 'Locked action', disabled: true },
 ];
 
-/**
- * The real-input confirmation sheet: rows on Android, an action sheet on iOS. It
- * has no cancel action on purpose, so iOS adds its own Cancel - and a tap outside
- * an action sheet, which is that Cancel, reports the close alone on both platforms.
- */
+/** No cancel action, so iOS adds its own Cancel to the action sheet. */
 const SHEET_ACTIONS: DialogAction[] = [
   { id: 'copy', title: 'Copy link' },
   { id: 'remove', title: 'Remove photo', role: 'destructive' },
@@ -58,7 +51,6 @@ const SHEET_ACTIONS: DialogAction[] = [
 
 const STICKY_ACTIONS: DialogAction[] = [{ id: 'ok', title: 'Understood' }];
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({
   label,
   testID,
@@ -81,15 +73,6 @@ function Opener({
   );
 }
 
-/**
- * Every dialog configuration G11 shows on one screen: an alert with a cancel, a
- * destructive and a disabled action; a confirmation sheet; a dialog that only an
- * action can close; and the presentation contexts Q5's spike asked about - inside an
- * RN `Modal`, over one, and two dialogs at once.
- *
- * The log line (`dialog-log`) is what real input reads: every event the app received,
- * in order, so "the action before the close" is a string comparison.
- */
 export default function DialogScreen() {
   const ink = useInk();
   const topInset = useTopInset();

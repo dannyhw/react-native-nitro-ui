@@ -7,37 +7,9 @@ import { Pressable, Text } from 'react-native';
 import { nitroUiHybridObjects } from '../../../__mocks__/react-native-nitro-modules';
 import { DatePicker } from './DatePicker';
 
-/**
- * The render contract of the `DatePicker` wrapper, measured by Reassure inside
- * `bun run check` (docs/architecture/benchmarks.md, "Render counts").
- *
- * A controlled DatePicker is the Switch's shape, with one extra input the Switch
- * does not have: bounds. So the harness drives three things:
- * - **advance** moves `value` through three instants. The instant is what the
- *   wrapper computes its clamp from, so a wrapper that stopped passing it down
- *   would freeze the picker, and one that recomputed a prop into a new value per
- *   render would show up as an extra commit;
- * - **widen** moves `maximumDate` past the current value. A bound that is not
- *   clamped against is a bug this cannot catch, but a bound that is *derived*
- *   from the value (or memoised on the wrong key) is: the same instant would then
- *   reach native as a different `maximumMillis`, which is a props change native
- *   has to re-clamp for;
- * - **bump** renders the parent without touching any of the control's inputs, so
- *   the wrapper must not churn. The counter is drawn because Reassure's redundancy
- *   check compares whole rendered trees.
- *
- * The dates are built once from fixed instants (`DATES`), not per render: a
- * `new Date(...)` in the render body would be a new object each commit, which
- * would make this measure the harness rather than the wrapper. `millisOf` already
- * makes object identity irrelevant to what native receives, and the gate measures
- * commits, so keeping the objects stable is what makes an *unstable* wrapper
- * computation visible.
- *
- * A pick is deliberately not driven here: native owns the optimistic date and
- * reports through `onValueChange`, and Reassure cannot see a native gesture
- * (`docs/architecture/core.md` §4). The harness covers that
- * (`example/__tests__/DatePicker.harness.tsx`).
- */
+// The dates are built once, so every render passes the same objects.
+// The bump counter is drawn because Reassure's redundancy check compares
+// rendered trees: a parent commit that changed nothing visible is flagged.
 const DATES = [
   new Date(Date.UTC(2026, 2, 14, 10, 0)),
   new Date(Date.UTC(2026, 4, 2, 8, 30)),
@@ -71,10 +43,7 @@ function Harness() {
   );
 }
 
-// A self-sizing wrapper asks native for its sizing id (`useSizingId`), so
-// rendering one needs a core to exist. It is asked exactly once per mounted
-// instance - the hook keeps the answer in state, so no render is spent on it -
-// which is why this cannot move the count the baseline records.
+// `useSizingId` asks the native core for an instance id.
 beforeAll(() => {
   let issued = 0;
   nitroUiHybridObjects.NitroUiCore = () => ({

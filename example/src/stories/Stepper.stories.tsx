@@ -1,13 +1,3 @@
-/**
- * Stepper stories (G25). Props and behaviour: `docs/components/stepper.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- *
- * A Stepper draws no number — the app renders the value wherever it wants it —
- * so every story here pairs the control with the text that shows its value, which
- * is also the only way to *see* a step happen in a screenshot.
- */
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stepper } from 'react-native-nitro-ui';
@@ -74,19 +64,12 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The story's own value, shown next to the control the way an app would. */
 function Value({ value }: { value: number }) {
   return (
     <Text style={styles.value}>{value.toFixed(1).replace(/\.0$/, '')}</Text>
   );
 }
 
-/**
- * Every public prop on the Controls panel.
- *
- * Uncontrolled by default, which is how most apps use it: the read-out below
- * still follows every step, because `onValueChange` fires whatever the mode.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onValueChange, ...props }) {
     const [value, setValue] = useState<number>(props.defaultValue ?? 0);
@@ -116,14 +99,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * The bounds and the two states a bound produces, plus a disabled control — the
- * row the README pair is taken from.
- *
- * At each end exactly one half goes inert, which is the whole difference between
- * &quot;disabled&quot; and &quot;at a bound&quot;: the last row is the control with
- * both halves inert, which is a different thing.
- */
 export const States: Story = {
   render: function StatesStory() {
     const [quantity, setQuantity] = useState(1);
@@ -182,10 +157,6 @@ export const States: Story = {
   },
 };
 
-/**
- * The grid. Every value is a multiple of `step` measured from `minimumValue`, and
- * the maximum is always reachable, which is what a `0.1` step is really testing.
- */
 export const Steps: Story = {
   render: function StepsStory() {
     const [tenths, setTenths] = useState(0);
@@ -241,13 +212,11 @@ export const Steps: Story = {
   },
 };
 
-/** Controlled, uncontrolled, and what a refused step does. */
 export const Values: Story = {
   render: function ValuesStory() {
     const [controlled, setControlled] = useState(2);
     const [refused, setRefused] = useState(2);
     const [events, setEvents] = useState(0);
-    // The app decides: every ask is counted, and nothing above 4 is accepted.
     const refuseAboveFour = useCallback((next: number) => {
       setEvents((count) => count + 1);
       if (next <= 4) setRefused(next);
@@ -296,7 +265,6 @@ export const Values: Story = {
   },
 };
 
-/** The box, and the one thing that does not change it. */
 export const Sizing: Story = {
   render: () => (
     <Showcase>

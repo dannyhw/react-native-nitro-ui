@@ -19,7 +19,6 @@ struct HandshakeTest {
 
     print("NitroUiControlledValue")
 
-    // Fresh: uncontrolled, so a React write has nothing to apply.
     do {
       var value = NitroUiControlledValue<Bool>(displayed: false)
       check(value.displayed == false, "starts at the displayed default")
@@ -28,7 +27,6 @@ struct HandshakeTest {
       check(value.nativeEvents == 0 && value.jsEvents == 0, "no events yet")
     }
 
-    // The user changes it: native displays it at once and counts the event.
     do {
       var value = NitroUiControlledValue<Bool>(displayed: false)
       check(value.user(true) == 1, "user() returns the event count to emit")
@@ -39,8 +37,6 @@ struct HandshakeTest {
       check(value.reconcile() == false, "uncontrolled native keeps what the user did")
     }
 
-    // Rejected change: JS keeps its old value, so only the event count moves.
-    // Native must revert - but only once JS has caught up.
     do {
       var value = NitroUiControlledValue<Bool>(displayed: false)
       value.js = false
@@ -54,7 +50,6 @@ struct HandshakeTest {
       check(value.reconcile() == false, "reconciling twice changes nothing")
     }
 
-    // Stale write: a `value` in flight must not clobber what the user just did.
     do {
       var value = NitroUiControlledValue<Bool>(displayed: false)
       _ = value.user(true)
@@ -68,9 +63,6 @@ struct HandshakeTest {
             "the next write after catching up applies")
     }
 
-    // Rapid interaction: two taps in one JS round trip, and JS then writes a
-    // value that only matches the *first* of them. Native must accept the write
-    // (JS has seen both events) and stop showing the second one.
     do {
       var value = NitroUiControlledValue<Bool>(displayed: false)
       value.js = true
@@ -83,9 +75,6 @@ struct HandshakeTest {
             "the newest write applies once JS has seen every event")
     }
 
-    // Uncontrolled -> controlled: the mode switch seeds the echo (see
-    // useControlled.ts), so the first controlled write must apply immediately
-    // instead of looking stale until the next tap.
     do {
       var value = NitroUiControlledValue<Bool>(displayed: false)
       _ = value.user(true)
@@ -99,9 +88,6 @@ struct HandshakeTest {
             "the first controlled write after a mode switch applies")
     }
 
-    // A non-Bool value (what Slider/Picker will use) behaves the same, and float
-    // equality is `Equatable` equality - a 0.5 step that arrives unchanged is not a
-    // change.
     do {
       var value = NitroUiControlledValue<Double>(displayed: 0)
       check(value.user(0.25) == 1, "doubles count events")
@@ -114,12 +100,8 @@ struct HandshakeTest {
       check(value.reconcile() == true, "a different double is a change")
     }
 
-    // A continuous control holds the newest input sample until the frame tick
-    // emits it (Slider, §11). The counts cannot see that: `nativeEvents` only
-    // advances when we emit, so a parent commit in that window looks
-    // fully-echoed while native is actually ahead by an unreported value.
-    // Accepting it paints the app's number for a frame and then emits the
-    // interaction's own value under it - the thumb jumping back mid-drag.
+    // A continuous control holds its newest sample until the frame tick emits it,
+    // so the counts look caught up while native is ahead by an unreported value.
     do {
       var value = NitroUiControlledValue<Double>(displayed: 0)
       value.js = 0
@@ -136,8 +118,6 @@ struct HandshakeTest {
             "once the sample is emitted, the write is judged by the count alone")
     }
 
-    // The guard is narrow, not a drag-mode switch: an un-emitted sample does
-    // not make a *newer* uncontrolled interaction or a reset behave differently.
     do {
       var value = NitroUiControlledValue<Double>(displayed: 0)
       value.unreported = 5

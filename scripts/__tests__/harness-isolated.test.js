@@ -1,6 +1,3 @@
-// The isolated harness suites' run (G14): when a `harness:<platform>` gate adds a second
-// app instance for `example/__tests__/isolated/`, and how its exit code joins the
-// shared run's.
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -76,10 +73,9 @@ describe('the isolated harness run', () => {
   });
 
   /**
-   * The files each run selects, asked of Jest the way `react-native-harness` asks: with
-   * its own `--testPathIgnorePatterns` on the command line, which *replaces* the config's
-   * list. An exclusion written there was dropped, and the shared run ran the isolated
-   * files in its own process after all (G14 fix round 1).
+   * The files each run selects, asked of Jest the way `react-native-harness` asks:
+   * with its own `--testPathIgnorePatterns` on the command line, which replaces
+   * the config's list.
    */
   function listHarnessTests(env) {
     const result = spawnSync(

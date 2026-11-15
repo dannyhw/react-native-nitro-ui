@@ -1,45 +1,15 @@
-// CoreGraphics, not UIKit or XCTest: this file compiles into the UI-test target *and* on the host
-// under `bun run test:native`, and `CGRect` is the only type from either world it needs.
+// CoreGraphics, not UIKit or XCTest: this file compiles into the UI-test target and on the host
+// for the native unit tests, and `CGRect` is the only type from either world it needs.
 import CoreGraphics
 import Foundation
 
-/// The bounded re-read the accessibility pass runs before it compares a box.
-///
-/// Why this exists (X16 item 4): `a11y:switch` failed twice on maintainer-mac-1 with the React
-/// Native wrapper's box at *exactly* ⅓ of the switch's own — `(108.33, 72.44, 20.33, 9.33)` read
-/// beside `(325, 217.33, 61, 28)`, every component divided by the screen scale — and passed on a
-/// re-run of the same tree twenty minutes later. One read of `XCUIElement.frame` is one sample of
-/// a tree the test manager answers out of its own snapshot, and a rule that decides on one sample
-/// reports a stale snapshot as a component bug. So the pass reads until two consecutive reads
-/// agree, with a bounded wait, and only then prints.
-///
-/// ## What it waits for, and what it never waits for
-///
-/// Agreement is with the *previous read* and with nothing else: this type has no expected frame,
-/// no reference box, no "keep going until the boxes match" path. That is deliberate, and it is the
-/// whole difference between a stability wait and a cheat. A pass that retried until the wrapper's
-/// box matched the control's would retry until the rule passed, and the bug the rule exists to
-/// catch — a name on a box that is not the control's — would come back as a green with a longer
-/// runtime. A control whose two boxes are stably *different* settles on the second read and fails
-/// exactly as it did before: `A11yFrameStabilityTest` asserts that directly.
-///
-/// The wait is bounded twice over — a read cap and a wall-clock budget — because a genuinely
-/// animated tree (an indeterminate indicator, a picker mid-spin) never agrees with itself, and an
-/// unbounded wait there is a hung suite. Running out is not a pass either: the caller gets the last
-/// read with `settled == false`, prints it, and says in the log that the comparison below it rests
-/// on a tree that would not hold still.
-///
-/// Compiled into the UI-test target and, unmodified, on the host by `bun run test:native`
-/// (`scripts/native-tests/a11y-frame-stability.test.swift`), because the behaviours worth proving
-/// here are a stuck loop, an over-eager early exit and a wait that chases the answer — none of
-/// which a device run can be relied on to produce on demand.
+/// The bounded re-read the accessibility pass runs before it compares a box. One read of
+/// `XCUIElement.frame` can come from a stale test-manager snapshot, so the pass reads until two
+/// consecutive reads agree. Agreement is only ever with the previous read, never with an expected
+/// frame, so a control whose boxes are stably different still fails.
 enum A11yFrameStability {
-  /// How long a confirmation read sits behind the pair it confirms, by default.
-  ///
-  /// 2 s because React Native publishes accessibility elements on the JS thread, and a window that
-  /// is meant to let one publication happen has to be longer than a frame. The ordinary `pauseMs`
-  /// (120 ms) is a test-manager snapshot-rebuild wait, which is a different question asked a
-  /// different place.
+  /// How long a confirmation read sits behind the pair it confirms, by default. React Native
+  /// publishes accessibility elements on the JS thread, so the window has to outlast a frame.
   static let defaultConfirmMs = 2_000
 
   /// What one settle call ended with.
@@ -47,38 +17,23 @@ enum A11yFrameStability {
     /// The read to print. When `settled`, the second of the two agreeing reads; otherwise the
     /// last read taken before the cap or the budget ran out.
     let snapshot: Snapshot
-    /// The **first** read, or `nil` when there was only one. This is the box the old single-read
-    /// pass would have printed, which is the comparison the log wants: "what one sample said"
-    /// against "what the settled tree says". Keeping "the read before this one" instead would
-    /// print an agreeing box whenever a third read was needed, and quietly lose the stale read the
-    /// guard exists to catch.
+    /// The first read, or `nil` when there was only one: what a single sample would have said.
     let first: Snapshot?
     /// How many times `read` was called, including the first.
     let reads: Int
     /// Two consecutive reads agreed on every frame.
     let settled: Bool
-    /// Frames that differ between `first` and `snapshot` — "how far the tree had to move before
-    /// it held still". 0 only when no second read happened; non-zero whenever a stability line is
-    /// worth printing at all.
+    /// Frames that differ between `first` and `snapshot`.
     let moved: Int
     /// Wall clock spent, measured with the injected clock.
     let elapsedMs: Int
     /// The agreeing pair was confirmed by one more read, taken a window later, because the
-    /// snapshot's **element set** — not a box — was the thing in question (`confirmationNeeded`).
-    ///
-    /// This is what lets a reader tell "the pass read three times because the tree wobbled" from
-    /// "the pass read three times because this shape is always read three times". The first is a
-    /// finding; the second is the price of the guard, and both would otherwise print as `reads=3`.
+    /// snapshot's element set was in question (`confirmationNeeded`).
     let confirmed: Bool
   }
 
-  /// Exact frame equality, component by component.
-  ///
-  /// Exact rather than tolerant, because the question is "did these two reads see the same tree",
-  /// not "is this box close enough to pass" — a tolerance here would let a slowly moving tree look
-  /// settled, which is the one way this guard could hide the bug it guards. Two reads of one
-  /// laid-out view are bit-identical or they are not the same layout. A NaN component compares
-  /// unequal, so a frame the platform cannot answer for keeps the read unstable and gets reported.
+  /// Exact rather than tolerant: a tolerance would let a slowly moving tree look settled. A NaN
+  /// component compares unequal, so a frame the platform cannot answer for keeps the read unstable.
   static func framesAgree(_ left: CGRect, _ right: CGRect) -> Bool {
     return left.origin.x == right.origin.x
       && left.origin.y == right.origin.y
@@ -96,8 +51,7 @@ enum A11yFrameStability {
     return true
   }
 
-  /// How many frames differ between two reads. A count change reports every frame as moved,
-  /// which is what `settled` refuses anyway; the caller renders the boxes from the snapshots.
+  /// How many frames differ between two reads. A count change reports every frame as moved.
   static func movedFrameCount(_ left: [CGRect], _ right: [CGRect]) -> Int {
     guard left.count == right.count else { return left.count + right.count }
     var moved = 0
@@ -107,99 +61,30 @@ enum A11yFrameStability {
     return moved
   }
 
-  /// Do two reads agree on **which elements** the tree holds?
-  ///
-  /// Frames alone cannot answer this. React Native publishes a child accessibility element and
-  /// withdraws it without moving anything else, and XCUITest walks the subtree in whatever order
-  /// it felt like, so a tree can change its membership while its boxes and its element count both
-  /// stay put — and then two reads of two different trees agree on frames and the pass prints
-  /// whichever one it happened to sample. (X22: the same `ContextMenu` code read 3 accessibility
-  /// elements on one branch and 5 on two others, on one simulator in one day, with every frame
-  /// identical each time and no ContextMenu file in either diff.)
-  ///
-  /// Identity is a sorted multiset, not a set: the duplicates are the point. React Native publishes
-  /// each accessibility element twice (an element and the view that vends it), which is why the
-  /// sweep counts 2 stops for one leaked `Text`; deduplicating here would hide the very shape the
-  /// caller is grading, so `["Grace", "Grace"]` must not agree with `["Grace", "Menu"]`.
-  ///
-  /// Two empty lists agree: a caller with no identity channel is asking the frame question only.
+  /// Do two reads agree on which elements the tree holds? React Native can publish or withdraw a
+  /// child accessibility element without moving any box, and XCUITest walks a subtree in no fixed
+  /// order. Compared as a sorted multiset, not a set: React Native publishes each element twice,
+  /// so `["Grace", "Grace"]` must not agree with `["Grace", "Menu"]`. Two empty lists agree.
   static func identitiesAgree(_ left: [String], _ right: [String]) -> Bool {
     return left.sorted() == right.sorted()
   }
 
-  /// Should this outcome be printed as a stability line?
-  ///
-  /// The ordinary wait — two reads that agree — prints nothing, which is what keeps fourteen
-  /// healthy cases quiet and makes a printed line mean something. Everything else prints:
-  ///
-  ///   - **three reads or more**, even when nothing ended up moved. A tree that reads A, B, A, A
-  ///     settles on the fourth read holding the *same* box it started with, so `moved` is 0 and a
-  ///     `moved`-only rule hides it: three wasted round trips and no trace in the log. That is the
-  ///     case a reader most needs to see, because a control that cannot hold still for two reads is
-  ///     a control whose boxes cannot be trusted;
-  ///   - **any frame that differs** between the first read and the last, on any read count;
-  ///   - **any wait that never settled**, which is a measurement to discount rather than a pass.
-  ///
-  /// Lives here rather than inline in the UI-test target so the case above is a test rather than a
-  /// device run: `RealInputTests` asks this and prints what it says.
+  /// Should this outcome be printed as a stability line? Two reads that agree print nothing. Extra
+  /// reads print even when nothing ended up moved (a tree that reads A, B, A, A has `moved == 0`),
+  /// and so do any moved frame and any wait that never settled.
   static func shouldReport<Snapshot>(_ outcome: Outcome<Snapshot>) -> Bool {
-    // A confirmation read is not a wobble: for a shape whose element set is in question the pass
-    // reads three times *by design*, and a note on every healthy run would train nobody to read it.
-    // Anything past that designed third read is still noise worth reporting.
+    // A confirmed outcome takes three reads by design, so only reads past the third count.
     return outcome.reads > (outcome.confirmed ? 3 : 2) || outcome.moved > 0 || !outcome.settled
   }
 
   /// Read until two consecutive reads agree, or the cap or the budget says stop.
   ///
-  /// ## The budget is a count of reads, not a wall-clock guess
-  ///
-  /// A read here is a round trip to the test manager for a whole subtree, and measured on pair-a
-  /// (`real-input:ios`, 2026-11-02) it costs **2.0 s to 7.9 s** — fourteen cases, none under two
-  /// seconds. The first version of this function took a 1 500 ms budget, checked that budget before
-  /// each re-read, and so stopped after the *first* read on every single case: the run's own log
-  /// says `reads=1 settled=false` fourteen times. That is the bug this guard exists to fix, still
-  /// happening, with a note attached. So the budget is `minReads`-aware: the wait always completes
-  /// its second read — one read is the old single-sample behaviour and is never an answer this
-  /// function is allowed to return — and the budget only refuses reads *after* that.
-  ///
-  /// ## What the fix costs, stated as a measurement
-  ///
-  /// Two reads instead of one, so one extra read per case. Measured on pair-a: the first read across
-  /// the fourteen cases took **63.8 s in total** (2.0 s to 7.9 s each), so the pass costs roughly
-  /// that again — about a minute added to a `real-input:ios` run whose whole a11y pass then runs
-  /// two to three minutes. Paid knowingly. A run whose own log records `reads=2` for all fourteen
-  /// cases is the ordinary case, not the expensive one: reads three and up happen only when a tree
-  /// disagrees with itself, which is exactly when a single sample was not trustworthy.
-  ///
-  /// - Parameters:
-  ///   - maxReads: hard cap on calls to `read` (at least 2 — one read is what the pass did before
-  ///     this type existed, and it is what the ⅓-scale failure arrived on).
-  ///   - budgetMs: wall-clock budget for the extra reads, checked before each read past the second.
-  ///     Sized from the measurement above: four reads at eight seconds is ~32 s for one case and
-  ///     ~7 min if all fourteen were pathological, so the cap does the real bounding and this is a
-  ///     runaway guard for a `read` that stops returning at all. In the ordinary case a control
-  ///     settles on read two and none of this is spent.
-  ///   - minReads: how many reads are always paid for, whatever the clock says. Two: the pair whose
-  ///     agreement is the whole question.
-  ///   - pauseMs: how long to sit between reads. The point of the wait is to give the test
-  ///     manager's snapshot a chance to be rebuilt, so a zero pause re-reads the same snapshot.
-  ///   - framesOf: the frames of one snapshot that agreement is judged on. What the caller does
-  ///     not hand over here is not stability-checked, so pass the whole tree, not the anchor.
-  ///   - identitiesOf: what one snapshot *contains*, as one string per element — trait, name,
-  ///     value. Agreement then means "the same elements", not only "the same boxes", which is the
-  ///     difference between a settled tree and a settled sample of a tree that is still being
-  ///     published. The default (every snapshot answers `[]`) keeps the frame-only question.
-  ///   - confirmationNeeded: is this shape one whose **membership** is the question? When it is,
-  ///     two reads agreeing is not enough: the pair is taken ~3 s apart and React Native publishes
-  ///     accessibility elements on the JS thread, so an element can still be on its way for
-  ///     seconds. The wait then takes one more read, `confirmMs` later, and only calls it settled
-  ///     if that one agrees too. Cost: one extra read, on the cases that ask.
-  ///   - confirmMs: how long that window is. `pauseMs` is a snapshot-rebuild wait — 120 ms is not
-  ///     a window in which a JS-thread task can run, and a publication the pass has to wait for is
-  ///     exactly such a task.
-  ///   - read: one read of the tree. Called on this thread; each call is the round trip.
-  ///   - nowMs / pause: injected, so the cap and the budget are provable in milliseconds rather
-  ///     than by a device run that happens to be slow.
+  /// A read is a round trip to the test manager and takes seconds, so `minReads` are always taken
+  /// and `budgetMs` only refuses reads after that. `pauseMs` gives the test manager time to rebuild
+  /// its snapshot. Agreement is judged on `framesOf` and `identitiesOf`, so pass the whole tree.
+  /// When `confirmationNeeded` says the element set is in question, an agreeing pair is confirmed
+  /// by one more read `confirmMs` later: React Native publishes accessibility elements on the JS
+  /// thread, and one can still be on its way. `nowMs` and `pause` are injected for the host tests.
   static func settle<Snapshot>(
     maxReads: Int = 6,
     budgetMs: Int = 60_000,
@@ -239,27 +124,15 @@ enum A11yFrameStability {
     }
 
     while reads < maxReads {
-      // `minReads` is paid for before the clock gets a vote. One read is exactly what the pass did
-      // before this type existed, so a budget small enough to stop at one read silently reinstates
-      // the bug: measured on pair-a, a 1 500 ms budget did precisely that on all fourteen cases,
-      // because a read here costs seconds (2.0 s to 7.9 s), not milliseconds.
       if reads >= minReads && nowMs() - startedAt >= budgetMs {
-        // Out of budget rather than out of reads. Same `settled == false`, and the last read is
-        // handed back rather than the first: the caller prints a real measurement either way.
         return outcome(settled: false, snapshot: last)
       }
-      // The confirmation window, not the ordinary pause, when a pair has already agreed and what
-      // is being re-checked is membership: whether an element that was absent has since been
-      // published. That happens on React Native's JS thread, seconds later on a loaded machine —
-      // which is exactly when the 4-stop reading was taken.
       pause(pendingConfirmation ? confirmMs : pauseMs)
       let current = read()
       let currentFrames = framesOf(current)
       let currentIdentities = identitiesOf(current)
       reads += 1
       hasSecondRead = true
-      // Agreement is frames **and** membership: a withdrawn or newly published child element makes
-      // two reads of two different trees, however identical their boxes look.
       let agrees = movedFrameCount(lastFrames, currentFrames) == 0
         && identitiesAgree(lastIdentities, currentIdentities)
       if pendingConfirmation {
@@ -268,10 +141,8 @@ enum A11yFrameStability {
           confirmed = true
           return outcome(settled: true, snapshot: current)
         }
-        // The tree changed under the confirmation, which is the whole reason for taking it. The new
-        // read becomes the baseline and the wait keeps going, up to the same cap as any other
-        // disagreement — so a tree that never publishes its children is printed unsettled rather
-        // than retried away.
+        // The tree changed under the confirmation: the new read becomes the baseline and the wait
+        // goes on, up to the same cap as any other disagreement.
       } else if agrees {
         if !confirmed && confirmationNeeded(current) {
           pendingConfirmation = true

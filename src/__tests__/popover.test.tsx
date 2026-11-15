@@ -12,30 +12,12 @@ import { Dimensions, Text } from 'react-native';
 
 import { Popover } from '../components/Popover/Popover';
 
-/**
- * Wrapper-level tests for Popover (task G22, DECISIONS D44).
- *
- * The device suite owns what native *does* with the box. What it cannot see is the
- * wrapper's half of the deal, and every claim here is one native takes on trust:
- *
- * - the node's shape is what makes Yoga lay the content out at its own width inside a
- *   box of the cap, which is the whole no-measuring design (D44). Without
- *   `alignItems: 'flex-start'` the content box comes back the full cap and every
- *   popover draws too wide on both platforms, where it reads as a sizing bug;
- * - the cap is `min(maxWidth, window - 32)`, worked out in JS — native never sees the
- *   app's `maxWidth` and cannot check it;
- * - every prop is always sent, because Nitro does not order props within a batch and an
- *   absent one is a stale one (D7);
- * - the content is mounted from the render that asks for presentation. Mount it a turn
- *   later and there is no box to read, which is S5's 320x480 first frame.
- *
- * The tree is read as JSON rather than by testID, because the node and its content box
- * are the two things under test and only one of them carries an id.
- */
+// The tree is read as JSON rather than by testID: the node and its content box
+// are both under test, and only one of them carries an id.
 
 const WINDOW_WIDTH = Dimensions.get('window').width;
 
-/** What the wrapper promises the content: `maxWidth`, and never more than the window less its margins. */
+/** The width the wrapper caps the content at: `maxWidth`, and never more than the window less its margins. */
 const capOf = (maxWidth?: number) =>
   Math.max(0, Math.min(maxWidth ?? 320, WINDOW_WIDTH - 32));
 
@@ -128,8 +110,8 @@ describe('Popover · the box native measures', () => {
     expect(style.position).toBe('absolute');
     // Without this the content box is stretched to the cap and every popover draws wide.
     expect(style.alignItems).toBe('flex-start');
-    // The node's box sits where the content is on screen, in another window: it must
-    // never take a touch meant for the app's own view behind it.
+    // The node's box overlaps the app's own views, so it must never take a touch
+    // meant for them.
     expect(node.pointerEvents).toBe('box-none');
     // The content box is the node's one child, capped at the same width.
     expect(flatStyle(boxOf(view)?.props.style).maxWidth).toBe(capOf(undefined));
@@ -143,8 +125,7 @@ describe('Popover · the box native measures', () => {
     );
     expect((nodeOf(roomy).props as unknown as NativeProps).maxWidth).toBe(280);
 
-    // Wider than the window: the window wins, and the node's own box with it, because
-    // that node is what the content lays itself out inside.
+    // Wider than the window: the window wins, for the node's own box too.
     const wider = await render(
       <Popover
         isPresented

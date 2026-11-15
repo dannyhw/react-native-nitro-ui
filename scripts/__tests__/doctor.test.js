@@ -1,20 +1,8 @@
-/**
- * What `scripts/doctor.mjs` judges a machine by, without a machine.
- *
- * The CLI only gathers tool output; these are the rules applied to it: which
- * tool versions are usable, which simulator runtime is picked, whether a
- * `devices.json` points at devices that exist, and that `--setup` writes a pool
- * `scripts/lease.mjs` accepts.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
   DEFAULT_PAIRS,
-  addRuntimeSims,
   applyAvdConfig,
-  otherIosRuntimes,
-  planRuntimeSims,
   bunStatus,
   cocoapodsProblem,
   compareVersions,
@@ -99,7 +87,7 @@ describe('simulators', () => {
     expect(pickIosRuntime(runtimes, '27.0')?.identifier).toBe(
       'com.apple.CoreSimulator.SimRuntime.iOS-27-0'
     );
-    // 27.1 is installed but unavailable here; it is never picked for 27.0 anyway.
+    // 27.1 is installed but unavailable.
     expect(pickIosRuntime(runtimes, '27.1')).toBeNull();
     expect(pickIosRuntime(runtimes, '28.0')).toBeNull();
   });
@@ -251,15 +239,6 @@ it('fails the run only on a failing result', () => {
   expect(exitCode([{ status: 'ok' }, { status: 'fail' }])).toBe(1);
 });
 
-/**
- * Who owns what is booted, and how warm the machine is (X9 items 6 and 3).
- *
- * Both features exist because a symptom was read as something else for days: harness
- * numbers moved and nobody could say why (an unleased simulator eating cores), and a
- * first build took 9.5 min because nothing on that machine had ever compiled this
- * code. A check that stays quiet in those states is worse than no check, so each
- * rule below has a case that says "and it must still say something".
- */
 describe('unowned devices', () => {
   const pool = normalizeDevices(
     renderDevicesConfig(
@@ -290,7 +269,6 @@ describe('unowned devices', () => {
     );
     expect(byUdid.get('UDID_1').state).toBe('Booted');
     expect(byUdid.get('UDID_2').state).toBe('Shutdown');
-    // An unavailable device is not one anybody can lease or leave running.
     const withGone = simulatorsByUdidWithState({
       devices: {
         runtime: [
@@ -356,8 +334,8 @@ describe('unowned devices', () => {
   });
 
   it('never reports the reserved emulator, whoever booted it', () => {
-    // The reserved serial has the *pool's* AVD behind it in a misconfigured file;
-    // the port rule still has to win, because that device belongs to the human.
+    // A misconfigured pool that puts its own AVD on the reserved port: the port
+    // rule still has to win.
     const warnings = unownedBootedDevices({
       pool: {
         pairs: [{ id: 'pair-x', android: { avd: 'mine', emulatorPort: 5560 } }],
@@ -439,8 +417,8 @@ describe('where --prime must build', () => {
   });
 
   it('is the main checkout when called from a linked worktree', () => {
-    // ccache and Gradle's cache are shared anyway; Xcode's derived data and the
-    // pod install are not, so priming a throwaway worktree warms nothing durable.
+    // Xcode's derived data and the pod install are per checkout, so priming a
+    // throwaway worktree warms nothing durable.
     expect(
       mainCheckoutPath({
         toplevel: '/oss/nitro-ui-worktrees/X9',
@@ -454,10 +432,6 @@ describe('where --prime must build', () => {
   });
 
   it('lists the two builds a prime runs, through the build script', () => {
-    // The claim under test is that `--prime` delegates: `build-app.mjs` is where the
-    // stamp, the ccache launcher, the arch default and the machine-wide build slot
-    // live, so a prime that invented its own command line would warm the caches while
-    // skipping the slot the feature exists to protect.
     const commands = primeCommands('/Users/me/nitro-ui');
     expect(commands.map((command) => command.platform)).toEqual([
       'ios',
@@ -466,191 +440,7 @@ describe('where --prime must build', () => {
     for (const command of commands) {
       expect(command.file).toBe('scripts/build-app.mjs');
       expect(command.args).toEqual(['--platform', command.platform]);
-      // The main checkout's own tree, not the worktree `--prime` was called from.
       expect(command.cwd).toBe('/Users/me/nitro-ui');
     }
-  });
-});
-
-/**
- * X20 item 3 (D42 item 1): `--setup` makes one look-check simulator per *other* installed iOS
- * runtime and records it under `iosRuntimes`. The rules worth pinning are the ones that keep it
- * additive: never the pairs' runtime, never a second entry for a runtime already listed, reuse what
- * an earlier `--setup` made, and leave every other key of the file as it was.
- */
-describe('iOS-runtime simulators (--setup)', () => {
-  const iphones = (...names) =>
-    names.map((name) => ({
-      name,
-      identifier: `com.apple.CoreSimulator.SimDeviceType.${name.replaceAll(' ', '-')}`,
-    }));
-  const RUNTIMES = {
-    runtimes: [
-      {
-        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-27-1',
-        version: '27.1',
-        isAvailable: true,
-        supportedDeviceTypes: iphones('iPhone Duo'),
-      },
-      {
-        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
-        version: '27.0',
-        isAvailable: true,
-        supportedDeviceTypes: iphones('iPhone Air', 'iPhone 17'),
-      },
-      {
-        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-26-5',
-        version: '26.5',
-        isAvailable: true,
-        supportedDeviceTypes: iphones('iPhone Air', 'iPhone 17'),
-      },
-      {
-        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-26-0',
-        version: '26.0',
-        isAvailable: false,
-        supportedDeviceTypes: iphones('iPhone 17'),
-      },
-      {
-        identifier: 'com.apple.CoreSimulator.SimRuntime.watchOS-26-0',
-        version: '26.0',
-        isAvailable: true,
-      },
-    ],
-  };
-  const created = DEFAULT_PAIRS.map((pair, index) => ({
-    ...pair,
-    udid: `UDID-${index}`,
-  }));
-  const config = renderDevicesConfig(created, '27.0');
-
-  it('picks the installed iOS runtimes the pairs do not use, oldest first', () => {
-    expect(
-      otherIosRuntimes(RUNTIMES, ['27.0', '27.0']).map((r) => r.version)
-    ).toEqual(['26.5', '27.1']);
-  });
-
-  it('creates on iPhone 17 where the runtime has it, and on its own iPhone where it does not', () => {
-    const plan = planRuntimeSims({
-      runtimes: otherIosRuntimes(RUNTIMES, ['27.0']),
-      config,
-      simulators: [],
-      types: {},
-    });
-    expect(
-      plan.map((step) => [step.version, step.action, step.typeName])
-    ).toEqual([
-      ['26.5', 'create', 'iPhone 17'],
-      ['27.1', 'create', 'iPhone Duo'],
-    ]);
-    expect(plan[0].name).toBe('nitro-ui iOS 26.5');
-  });
-
-  it('reuses its own simulator and leaves a runtime already listed alone', () => {
-    const listed = addRuntimeSims(config, [
-      { version: '27.1', udid: 'OLD-271', name: 'nitro-ui iOS 27.1' },
-    ]);
-    const plan = planRuntimeSims({
-      runtimes: otherIosRuntimes(RUNTIMES, ['27.0']),
-      config: listed,
-      simulators: [
-        {
-          udid: 'MINE-265',
-          name: 'nitro-ui iOS 26.5',
-          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-5',
-        },
-        // Same name on another runtime is not it.
-        {
-          udid: 'OTHER',
-          name: 'nitro-ui iOS 26.5',
-          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
-        },
-      ],
-      types: {},
-    });
-    expect(
-      plan.map((step) => [step.version, step.action, step.udid ?? null])
-    ).toEqual([
-      ['26.5', 'reuse', 'MINE-265'],
-      ['27.1', 'configured', null],
-    ]);
-  });
-
-  it('only appends, on Metro ports nothing else uses, and the lease script accepts the result', () => {
-    const next = addRuntimeSims(config, [
-      { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
-      { version: '27.1', udid: 'R271', name: 'nitro-ui iOS 27.1' },
-    ]);
-    expect(next.pairs).toEqual(config.pairs);
-    expect(next.maxDeviceLeases).toBe(config.maxDeviceLeases);
-    expect(next.iosRuntimes).toEqual([
-      {
-        id: 'ios-26.5',
-        ios: { name: 'nitro-ui iOS 26.5', udid: 'R265', system: '26.5' },
-        metroPort: 8297,
-      },
-      {
-        id: 'ios-27.1',
-        ios: { name: 'nitro-ui iOS 27.1', udid: 'R271', system: '27.1' },
-        metroPort: 8298,
-      },
-    ]);
-    const pool = normalizeDevices(next);
-    expect(pool.pairs.filter((pair) => pair.iosRuntime != null)).toHaveLength(
-      2
-    );
-    // And a second round never renumbers or repeats what the first one wrote.
-    const again = addRuntimeSims(next, [
-      { version: '18.0', udid: 'R18', name: 'nitro-ui iOS 18.0' },
-    ]);
-    expect(again.iosRuntimes.slice(0, 2)).toEqual(next.iosRuntimes);
-    expect(again.iosRuntimes[2].metroPort).toBe(8299);
-  });
-
-  it('starts past a pair whose Metro is above the default floor', () => {
-    // The case above cannot tell "read the pairs' ports" from "start at the floor": its pairs top
-    // out at 8295, under the 8296 floor, so a version that never looked at the pairs gives the same
-    // answer (X20 fix round 1). Here a pair already owns 8297, so the first new entry must be 8298.
-    const crowded = JSON.parse(JSON.stringify(config));
-    crowded.pairs[1].metroPort = 8297;
-    const next = addRuntimeSims(crowded, [
-      { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
-      { version: '27.1', udid: 'R271', name: 'nitro-ui iOS 27.1' },
-    ]);
-    expect(next.iosRuntimes.map((entry) => entry.metroPort)).toEqual([
-      8298, 8299,
-    ]);
-    expect(() => normalizeDevices(next)).not.toThrow();
-  });
-
-  it('names a listed simulator that is missing, or is not on the runtime it claims', () => {
-    const next = addRuntimeSims(config, [
-      { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
-      { version: '27.1', udid: 'R271', name: 'nitro-ui iOS 27.1' },
-    ]);
-    const simulators = new Map(
-      created.map((pair) => [
-        pair.udid,
-        {
-          udid: pair.udid,
-          name: pair.simulatorName,
-          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
-        },
-      ])
-    );
-    simulators.set('R265', {
-      udid: 'R265',
-      name: 'nitro-ui iOS 26.5',
-      runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
-    });
-    expect(
-      devicesConfigProblems(next, {
-        simulators,
-        avds: new Set(created.map((pair) => pair.avd)),
-        iosRuntimeMajor: 27,
-      })
-    ).toEqual([
-      'ios-26.5: simulator R265 is not on iOS 26.5',
-      'ios-27.1: simulator R271 does not exist',
-    ]);
   });
 });

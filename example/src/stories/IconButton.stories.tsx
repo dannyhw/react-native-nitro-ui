@@ -1,14 +1,3 @@
-/**
- * IconButton stories (G23). Props and events:
- * `docs/components/icon-button.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- *
- * Every control here names both glyphs — `systemImage` for iOS and
- * `androidIcon` for Android — because each platform draws its own and a
- * screenshot of one platform says nothing about the other's glyph.
- */
 import { useCallback, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import {
@@ -23,7 +12,6 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 
 import { Frame, Note, Row, Showcase } from './showcase';
 
-/** A glyph the example app ships in `res/drawable/` — the resource-name form. */
 const DRAWABLE = 'nitroui_test_star';
 
 const RUNGS: readonly IconButtonSize[] = [
@@ -130,12 +118,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * The Playground is a press button: `checked` is left unset so the toggle rows do
- * nothing here, and the local echo of presses is the press counter below.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onPress, ...props }) {
     const [presses, setPresses] = useState(0);
@@ -157,13 +139,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * The four looks, at the rung the ladder starts its visible half on, then
- * disabled — the row the README pair is taken from.
- *
- * The last column is the toggle form of the same variant, on: a toggle is the
- * same four controls with a selection, not a fifth look.
- */
 export const Variants: Story = {
   render: function VariantsStory() {
     const [on, setOn] = useState<Record<string, boolean>>({
@@ -255,14 +230,8 @@ export const Variants: Story = {
   },
 };
 
-/**
- * The ladder: one row per rung, three columns per row on Android (Material's
- * width options) and one on iOS, where the option has no counterpart.
- *
- * The boxes are what the control measured, so this story is also the picture of
- * the 48 dp floor: on Android the two smallest rungs are laid out wider than the
- * container token they are drawn from.
- */
+// Three width columns on Android only: iOS has no counterpart to Material's
+// width options. Android lays the two smallest sizes out at its 48 dp minimum.
 export const Sizes: Story = {
   render: () => (
     <Showcase>
@@ -295,10 +264,6 @@ export const Sizes: Story = {
   ),
 };
 
-/**
- * The corner. `round` is each platform's own default; `square` is the nearest
- * corner that platform has, which is why the two look different from each other.
- */
 export const Shapes: Story = {
   render: () => (
     <Showcase>
@@ -329,13 +294,6 @@ export const Shapes: Story = {
   ),
 };
 
-/**
- * The two forms side by side, and what a refused toggle does.
- *
- * The first is uncontrolled (native keeps the selection, so a tap costs no React
- * render); the second is controlled by this story; the third is controlled to
- * `false` and never written, which is how a snap-back is shown at all.
- */
 export const Toggles: Story = {
   render: function TogglesStory() {
     const [saved, setSaved] = useState(true);
@@ -397,12 +355,6 @@ export const Toggles: Story = {
   },
 };
 
-/**
- * The glyph, from the two sources and from nowhere.
- *
- * Art that cannot be resolved draws nothing and keeps the same box: the glyph is
- * sized by the rung, never by the file.
- */
 export const Glyphs: Story = {
   render: () => (
     <Showcase>
@@ -460,11 +412,6 @@ export const Glyphs: Story = {
   ),
 };
 
-/**
- * Sizing (README "Sizing"): the box is measured, so a parent width leaves an
- * IconButton at its measured size and `alignSelf: 'stretch'` is what asks for the
- * fill.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>

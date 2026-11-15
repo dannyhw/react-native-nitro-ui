@@ -3,8 +3,8 @@
 A grouped, scrolling settings screen: `UICollectionView` in the `.insetGrouped`
 list style on iOS, rows left exactly where React Native put them with Material 3
 Expressive's segmented-list shapes drawn behind them on Android. What the platform
-draws is the *grouping* — the card, the header, the footer, the separators, the
-rounded ends, the pressed state. What React Native lays out is the *row*: any view
+draws is the _grouping_ — the card, the header, the footer, the separators, the
+rounded ends, the pressed state. What React Native lays out is the _row_: any view
 can be a row, and a nitro-ui control inside one is the same standalone control it
 is anywhere else in the app.
 
@@ -13,7 +13,10 @@ import { Form, Switch } from 'react-native-nitro-ui';
 import { Text } from 'react-native';
 
 <Form>
-  <Form.Section title="Notifications" footer="Push arrives on this device only.">
+  <Form.Section
+    title="Notifications"
+    footer="Push arrives on this device only."
+  >
     <Form.Row>
       <Text style={{ flex: 1 }}>Push notifications</Text>
       <Switch value={push} onValueChange={setPush} />
@@ -26,44 +29,43 @@ There is no Android `Form` composable to host and no SwiftUI `Form` to bridge: o
 iOS the container is UIKit's list, and on Android the scroller is React Native's
 own `ScrollView` with one Compose layer per section behind its rows. That is what
 keeps rows live — a row is a React Native subtree, so it keeps its own state, its
-own gestures and its own controls (`docs/DECISIONS.md` D45).
+own gestures and its own controls.
 
 ## API
 
 ### `Form`
 
-| Prop                | Type                     | Default | Maps to                                                                    |
-| ------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
-| `children`          | `ReactNode`              | —       | `Form.Section`s, or rows directly.                                          |
-| `keyboardAvoidance` | `boolean \| undefined`   | `true`  | Keeps the focused row above the keyboard, on both platforms.                |
+| Prop                | Type                     | Default | Maps to                                                                             |
+| ------------------- | ------------------------ | ------- | ----------------------------------------------------------------------------------- |
+| `children`          | `ReactNode`              | —       | `Form.Section`s, or rows directly.                                                  |
+| `keyboardAvoidance` | `boolean \| undefined`   | `true`  | Keeps the focused row above the keyboard, on both platforms.                        |
 | `style`             | `ViewStyle`              | —       | Already grows into the space it is given; `flex: 1` is how a screen hands that out. |
-| `hybridRef`         | `(view: handle) => void` | —       | **Internal.** Test seam for this repo's harness.                            |
+| `hybridRef`         | `(view: handle) => void` | —       | **Internal.** Test seam for this repo's harness.                                    |
 
 Everything else is `ViewProps`. `Form` is not a `<Host>` child, and it is not
 self-sizing — it takes the box you give it.
 
 ### `Form.Section`
 
-| Prop      | Type                     | Default | Maps to                                                        |
-| --------- | ------------------------ | ------- | -------------------------------------------------------------- |
-| `children`| `ReactNode`              | —       | Each direct child becomes one row.                              |
-| `title`   | `string \| null`         | `null`  | The header above the group, as text.                            |
-| `footer`  | `string \| null`         | `null`  | The explanation below the group, as text.                       |
-| `hybridRef` | `(view: handle) => void` | —      | **Internal.** Test seam.                                        |
+| Prop        | Type                     | Default | Maps to                                   |
+| ----------- | ------------------------ | ------- | ----------------------------------------- |
+| `children`  | `ReactNode`              | —       | Each direct child becomes one row.        |
+| `title`     | `string \| null`         | `null`  | The header above the group, as text.      |
+| `footer`    | `string \| null`         | `null`  | The explanation below the group, as text. |
+| `hybridRef` | `(view: handle) => void` | —       | **Internal.** Test seam.                  |
 
-Headers and footers are strings in v1. The platform draws them, which is why they
-cost no rows and why a React Native header node is a later decision.
+Headers and footers are strings. The platform draws them, so they cost no rows.
 
 ### `Form.Row`
 
-| Prop        | Type                     | Default    | Maps to                                                                 |
-| ----------- | ------------------------ | ---------- | ------------------------------------------------------------------------ |
-| `children`  | `ReactNode`              | —          | The row's content.                                                        |
-| `onPress`   | `() => void \| undefined`| —          | The cell highlight and the row's press. Android also merges the row into one a11y node; iOS does not — measured, the row is still six elements there (`a11y:form`; Accessibility, below). |
-| `accessory` | `'none' \| 'disclosure' \| 'checkmark'` | `'none'` | `UICellAccessory.disclosureIndicator` / `.checkmark`; Material Symbols `chevron_right` / `check` (D43). |
-| `selected`  | `boolean \| undefined`   | `false`    | The cell's selected background; `secondaryContainer` on Android.          |
-| `style`     | `ViewStyle`              | —          | Laid out by Yoga inside the row box.                                      |
-| `hybridRef` | `(view: handle) => void` | —          | **Internal.** Test seam.                                                  |
+| Prop        | Type                                    | Default  | Maps to                                                                                                                            |
+| ----------- | --------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `children`  | `ReactNode`                             | —        | The row's content.                                                                                                                 |
+| `onPress`   | `() => void \| undefined`               | —        | The cell highlight and the row's press. Android also merges the row into one accessibility node; iOS does not (see Accessibility). |
+| `accessory` | `'none' \| 'disclosure' \| 'checkmark'` | `'none'` | `UICellAccessory.disclosureIndicator` / `.checkmark`; Material Symbols `chevron_right` / `check`.                                  |
+| `selected`  | `boolean \| undefined`                  | `false`  | The cell's selected background; `secondaryContainer` on Android.                                                                   |
+| `style`     | `ViewStyle`                             | —        | Laid out by Yoga inside the row box.                                                                                               |
+| `hybridRef` | `(view: handle) => void`                | —        | **Internal.** Test seam.                                                                                                           |
 
 You rarely write `Form.Row`: `Form.Section` wraps every direct child in one, so an
 app names the component only to add `onPress` or an accessory. A row without
@@ -74,15 +76,15 @@ accessibility element and its own touches.
 
 ## Platform mapping
 
-| Concept      | iOS                                                        | Android                                                          |
-| ------------ | ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| Container    | `UICollectionView` + `UICollectionLayoutListConfiguration(.insetGrouped)` | React Native `ScrollView`; one Compose layer per section           |
-| Rows         | React Native views adopted into list cells                  | React Native views, in place                                       |
-| Grouping     | the list's own card, insets and separators                  | `SegmentedListItem` shapes and colours behind the rows             |
-| Header/footer| a supplementary view in the list                            | text drawn in a band the section reserves above and below its rows |
-| Accessory    | `UICellAccessory`                                            | Material Symbols drawables through `NitroUiIcons`                  |
-| Press        | the cell's own highlight                                    | M3's pressed indication, without stealing touches from the row     |
-| Keyboard     | a bottom content inset on the list, then scroll the row in | the IME inset reserved in the scroll content, then make the row visible |
+| Concept       | iOS                                                                       | Android                                                                 |
+| ------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Container     | `UICollectionView` + `UICollectionLayoutListConfiguration(.insetGrouped)` | React Native `ScrollView`; one Compose layer per section                |
+| Rows          | React Native views adopted into list cells                                | React Native views, in place                                            |
+| Grouping      | the list's own card, insets and separators                                | `SegmentedListItem` shapes and colours behind the rows                  |
+| Header/footer | a supplementary view in the list                                          | text drawn in a band the section reserves above and below its rows      |
+| Accessory     | `UICellAccessory`                                                         | Material Symbols drawables through `NitroUiIcons`                       |
+| Press         | the cell's own highlight                                                  | M3's pressed indication, without stealing touches from the row          |
+| Keyboard      | a bottom content inset on the list, then scroll the row in                | the IME inset reserved in the scroll content, then make the row visible |
 
 ## Rows
 
@@ -96,24 +98,20 @@ fragment or component in between. So a leading `{flag && <Banner/>}` that appear
 later does not re-key the rows after it, and two sibling arrays whose keys overlap
 do not collide — a row keeps its state through both.
 
-A `Form.Row` inside your own component would be a row inside the row that component
-is laid out in, and v1 gives that no meaning: it logs an error in development and
-renders as plain content. Extract the row's *content* into a component and leave the
+A `Form.Row` inside your own component is a row inside the row that component is
+laid out in, which has no meaning: it logs an error in development and renders as
+plain content. Extract the row's _content_ into a component and leave the
 `<Form.Row>` in the list.
 
-A row's own content is laid out by Yoga at the width *its own cell* hands it, which on
+A row's own content is laid out by Yoga at the width _its own cell_ hands it, which on
 iOS is narrower than the list's own bounds by the grouped insets and the cell's own
 margins. It is a per-row number, not a per-list one: a cell makes room for a trailing
-accessory by shrinking its own margins for the row it is drawing, so on one screen a
-row with an `accessory` is 22 pt narrower than its plain neighbours (measured on a
-402 pt screen). Each row takes the box its own cell reports. What the `Form` reports is
-the *plain* row's box — one number for the list, published once per list width — which
-a row uses as its starting estimate before its own cell has laid anything out, and
-which the Form re-sends to every row it holds when the list becomes a different width
-(a rotation, an iPad resize, an app changing a parent's width), so a row that is off
-screen does not go on being measured at the old orientation's box. Being laid out
-wider than the box a row is drawn in is the one direction that has teeth: content is
-drawn past the row's bounds, where UIKit stops hit-testing, and a control at a row's
+accessory by shrinking its own margins, so on one screen a row with an `accessory` is
+22 pt narrower than its plain neighbours (measured on a 402 pt screen). The `Form`
+reports the plain row's box as each row's starting estimate and re-sends it when the
+list becomes a different width (a rotation, an iPad resize, an app changing a parent's
+width). A row must never be laid out wider than the box it is drawn in: content drawn
+past the row's bounds is outside UIKit's hit-testing, and a control at the row's
 trailing edge stops answering taps.
 
 A row's Yoga width equaling the box its cell draws it in is also what makes a row's
@@ -124,24 +122,22 @@ A row lays its children out as one row of their own: `flexDirection: 'row'`,
 `alignItems: 'center'`, across the row's whole content width. A
 label with `flex: 1` therefore pushes a control to the trailing edge and the two sit
 level — at the minimum height below, and at any height a wrapping `Text` grows the row
-to. That is the row's doing, not something your content arranges, and it needed saying
-because of a base style every self-sizing control carries: `{ alignSelf: 'flex-start' }`,
-the same defence React Native's own `Switch` has so a parent with `alignItems: 'stretch'`
-cannot decide the control's width. A child's `alignSelf` beats the `alignItems` it is
-laid out under, so in a row taller than its content the control followed `flex-start` to
-the row's top edge while its label centred. A nitro-ui control now reads that rule from
-the row: `alignSelf: 'center'` inside a `Form.Row`, `flex-start` everywhere else. It is
-the control's own base style that changes, so no node is added between a row and your
-content, and your `style` stays the override it was — an `alignSelf` you write on a
-control wins either way.
+to. That is the row's doing, not something your content arranges. Every self-sizing
+control carries a base style, `{ alignSelf: 'flex-start' }`, the same defence React
+Native's own `Switch` has so a parent with `alignItems: 'stretch'` cannot decide the
+control's width, and a child's `alignSelf` beats the `alignItems` it is laid out under.
+So a nitro-ui control reads the rule from the row: `alignSelf: 'center'` inside a
+`Form.Row`, `flex-start` everywhere else. It is the control's own base style that
+changes, so no node is added between a row and your content, and an `alignSelf` you
+write on a control wins either way.
 
 Two things follow from the rule being read rather than wrapped:
 
 - a control that is not nitro-ui's keeps what it carries. React Native's `Switch` has the
   same `flex-start` base style for the same reason, and nothing reaches across to change
-  it: it takes the row's top edge as it always did, and its label centres beside it.
-  nitro-ui's own controls are the ones that centre.
-- the row's own box is what it always was: `style` on a row styles the row, and
+  it: it takes the row's top edge, and its label centres beside it. nitro-ui's own
+  controls are the ones that centre.
+- the row's own box is the row's: `style` on a row styles the row, and
   `alignItems` is the rule your children are laid out under, so writing
   `alignItems: 'stretch'` on a row stretches your content to the row's height and stops
   the centring — which is the point when a child wants the whole box.
@@ -161,7 +157,7 @@ What a row starts from is a minimum, not a fixed size: React Native's row box is
 The box you then see on screen is that plus the platform's own chrome — on iOS the
 cell adds 4 pt above and below, which is what lands a one-line row on the 52 pt the
 same row has in a SwiftUI `Form`. Compare a row with the platform's own list, not
-with the minimum: the harness measures exactly that pair.
+with the minimum.
 
 That chrome is the platform's, so the platform reports it — the section is told the
 space between adjacent rows along with its header and footer bands, and each row
@@ -186,7 +182,7 @@ where the layout tree pretends it is — including after a scroll. The Form publ
 its scroll offset as one prop and its shadow node subtracts it, the way React
 Native's own scroll views do.
 
-Two things follow from that, and both are deliberate:
+Two things follow from that:
 
 - **A row's box is right when the list is at rest, not on every frame of a fling.**
   The offset is published when scrolling settles. Mid-fling, a measurement reads the
@@ -194,32 +190,30 @@ Two things follow from that, and both are deliberate:
 - **A row outside the visible cells is not attached to a cell.** Its box is still the
   position its content occupies in the list, so an anchored surface — a `Tooltip`, a
   `Popover`, a `ContextMenu` — pointed at a row that has scrolled away behaves the
-  way it would for any anchor that has been scrolled off. v1 has no
+  way it would for any anchor that has been scrolled off. There is no
   "scroll-to-the-anchor first" step.
 
 ## Long lists
 
 A `Form` builds every row it is given, like SwiftUI `Form` does: rows exist as
-React Native views whether or not they are on screen (iOS reuses the *cells*, not the
+React Native views whether or not they are on screen (iOS reuses the _cells_, not the
 rows). That is right for a settings screen. It is the wrong tool for a thousand
 rows, and this library does not ship a virtualised list to compete with one — put
 the long list in [FlashList](https://github.com/shopify/flash-list) or
 [Legend List](https://github.com/LegendApp/legend-list), which virtualize ordinary
-React Native children and so host nitro-ui controls in their rows today.
+React Native children and so host nitro-ui controls in their rows.
 
 ## Accessibility
 
-A row with `onPress` is **one element on Android, and several on iOS**. The iOS half is
-recorded debt (`a11y:form`).
+A row with `onPress` is one element on Android, and several on iOS.
 
 Android turns the row into a single clickable node that carries the row's name. Its
 content stops being read piece by piece, which is what a settings row should do.
 
-iOS presses without merging. The measured tree — `real-input`'s accessibility pass reads
-what a screen reader is handed for this page's own pressable row (`a11y case=form`,
-iPhone 17 simulator on iOS 27, X32) and counts **six elements**, not one: the React
-Native view the row's name is written on, announced as `other` rather than a button; one
-unnamed element over the same box; and the row's two texts, each of them listed twice.
+iOS presses without merging. On an iPhone 17 simulator on iOS 27 a screen reader is
+handed six elements for a pressable row with two texts, not one: the React Native view
+the row's name is written on, announced as `other` rather than a button; one unnamed
+element over the same box; and the row's two texts, each of them listed twice.
 Nothing in that subtree carries a `.button` trait, so the row is not announced as a
 button either — it is a group of parts that happens to be pressable.
 
@@ -228,7 +222,7 @@ on it is what a reader says — as the name of the merged node on Android, and a
 of the one element that answers for the row on iOS. A row whose title is not the text
 inside it still needs that label.
 
-A row *without* `onPress` is not an element at all: its children are read
+A row _without_ `onPress` is not an element at all: its children are read
 individually, so a `Switch` in a row is a switch and nothing more.
 
 Section headers are headings on both platforms. Footers are plain text.
@@ -238,13 +232,14 @@ Section headers are headings on both platforms. Footers are plain text.
 All three views implement `RecyclableView` with a full reset, and each clears its
 own state in `onDropView`: a cell handed back by UIKit forgets which row it held, a
 row leaving its cell forgets its highlight, and a section whose rows changed
-recounts the shapes before it draws the next frame. The harness checks this by
-walking rows in and out of cells and asserting nothing is orphaned.
+recounts the shapes before it draws the next frame.
 
 ## Limits
 
-- Headers and footers are strings; React Native header and footer nodes are not in
-  v1.
+- Headers and footers are strings; React Native header and footer nodes are not
+  supported.
 - No swipe actions, no collapsible sections, no drag to reorder.
 - `measure()` is settled-time, and a row off-screen has no cell (above).
+- On iOS a row with `onPress` is several screen-reader elements, none of them a button
+  (Accessibility).
 - No virtualisation: a `Form` with hundreds of rows pays for hundreds of rows.

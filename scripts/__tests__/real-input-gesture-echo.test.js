@@ -1,20 +1,3 @@
-/**
- * The gesture echo a drag check waits on (E5).
- *
- * `hosted-slider` failed alone on several branches and passed on a re-run, because the
- * only thing it waited on was the *value* stopping for 1200 ms, and a drag that is
- * merely slow answers that like a finished one. The fix is to wait for the control to
- * report the gesture itself, which makes the parse of that report and the rule applied
- * to it load-bearing for a gate — so they are testable without a device, rather than
- * only discoverable on one.
- *
- * The fixtures are not the right answer: the accepted text is `start=2 complete=12`,
- * not `start=1 complete=1`, so a parser that happened to hard-code the common case or
- * read greedily goes red here instead of on a run.
- *
- * @file No device: `screens.mjs` is data and two pure functions.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import { gestureCounts, gestureReported } from '../real-input/screens.mjs';
@@ -28,8 +11,6 @@ describe('gestureCounts', () => {
   });
 
   it('reads both phases when complete comes first', () => {
-    // The check asks for the pair as one text node, and a node's text is not
-    // guaranteed to keep the source order if the row is ever reworded.
     expect(gestureCounts('complete=7 start=3')).toEqual({
       starts: 3,
       completes: 7,
@@ -37,8 +18,6 @@ describe('gestureCounts', () => {
   });
 
   it('reports a phase it cannot see as null, not as zero', () => {
-    // `0` would say "no gesture has happened", which a wait would then accept as
-    // "this gesture has"; `null` says the echo was not there to read.
     expect(gestureCounts(null)).toEqual({ starts: null, completes: null });
     expect(gestureCounts('order=SC')).toEqual({
       starts: null,
@@ -61,8 +40,6 @@ describe('gestureReported', () => {
   });
 
   it('refuses a complete with no start after it', () => {
-    // The case the old value-settle fell into: a `complete` that belongs to the
-    // previous gesture is not the end of this one.
     expect(
       gestureReported({ starts: 1, completes: 1 }, { starts: 1, completes: 2 })
     ).toBe(false);
@@ -75,11 +52,8 @@ describe('gestureReported', () => {
   });
 
   it('refuses a start ahead of every complete on the screen', () => {
-    // Seen `{1, 0}`, now `{2, 1}`: both counters advanced, so the two halves of the
-    // rule each pass on their own — but the only `complete` drawn belongs to the
-    // *previous* gesture, and this touch's has not arrived. Reachable on the retry
-    // path, where a first injection reported its start and lost its end: answering
-    // `true` here settles the drag on a value the retry never produced.
+    // Both counters advanced, but the only `complete` drawn belongs to the
+    // previous gesture: this touch's has not arrived.
     expect(
       gestureReported({ starts: 1, completes: 0 }, { starts: 2, completes: 1 })
     ).toBe(false);

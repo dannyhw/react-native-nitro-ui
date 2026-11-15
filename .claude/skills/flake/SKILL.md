@@ -17,9 +17,9 @@ on demand.
 3. **Red again with the same failure: it is a bug.** Stop calling it a flake. It is
    deterministic on this tree, so debug it like one.
 4. **Green on rerun: it is a flake, and it is now recorded.** A worker puts one line
-   under "Follow-ups" in its report: `Flaky: <test name>, <date>, <log path>`. The
-   orchestrator copies it to "Flaky tests" in `docs/tasks/FOLLOWUPS.md` at merge and
-   counts the sightings. Carry on.
+   under "Follow-ups" in its report: `Flaky: <test name>, <date>, <gate and start time>`.
+   The orchestrator copies the line to "Flaky tests" in `docs/tasks/FOLLOWUPS.md` at
+   merge and counts the sightings. Carry on.
 
 Never loosen an assertion, raise a timeout or add a retry to get to green. Those hide a
 failure. A quarantine, below, does the opposite: the test is visibly off and listed.

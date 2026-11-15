@@ -7,22 +7,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * JVM unit test for the two Picker rules that a device cannot reach.
- *
- * The first is the recycle reset. [NitroUiModel.reset] is the contract B1 is about -
- * a pooled view must not carry a previous mount's choices, title, open popup or
- * handshake into the next one - and no on-device test can show it red: measured on
- * `nitroui_t01`, `prepareForRecycle` is never called while the harness mounts,
- * unmounts and churns 200 Pickers, because nothing in those trees is a recycling
- * container. `example/__tests__/Picker.harness.tsx`'s remount case therefore tests
- * fresh instances, and what is left is this: the reset, asserted directly.
- *
- * The second is what a pick means ([PickerModel.applyUserSelection]) and what the
- * size report it leaves behind is allowed to describe
- * ([PickerModel.pickIsStillShown], G6 review M1). Both are pure logic that an
- * emulator can only test through a popup the harness cannot press into.
- */
 class PickerModelTest {
   /** A model that has lived: picked, tinted, labelled, and mid-handshake. */
   private fun usedModel(): PickerModel =
@@ -58,12 +42,10 @@ class PickerModelTest {
     assertNull(model.state.unreported)
     assertEquals(0, model.state.nativeEvents)
     assertEquals(0, model.state.jsEvents)
-    // The two flags a recycled host can leak through the *front door*: a seed that is
-    // already spent leaves the next mount on index 0 whatever it asked for, and an
-    // `expanded` that survived hangs a popup over a row that never opened it.
+    // A spent seed leaves the next mount on index 0 whatever it asked for, and a surviving
+    // `expanded` opens a popup over a row that never asked for one.
     assertFalse("the uncontrolled seed must be applicable again", model.didApplyDefault)
     assertFalse("a recycled host starts closed", model.expanded)
-    // And the rest of the previous mount's identity.
     assertEquals("menu", model.variant)
     assertNull(model.label)
     assertTrue("a recycled host starts enabled", model.enabled)
@@ -76,8 +58,6 @@ class PickerModelTest {
 
   @Test
   fun theUncontrolledSeedIsApplicableAgainAfterAReset() {
-    // The gate itself, spelled as the two batches a recycled view sees: seed once,
-    // then never again for that mount, then once again for the next one.
     val model = usedModel()
     assertTrue(model.didApplyDefault)
     model.reset()
@@ -112,8 +92,6 @@ class PickerModelTest {
 
   @Test
   fun aDisabledControlOrTheShownRowRefusesThePick() {
-    // Both refusals report nothing, which is what makes a refused choice observable
-    // from the outside: only a rolled-back selection makes the next tap a fresh one.
     val events = mutableListOf<Double>()
     val model = PickerModel().apply {
       options = arrayOf("One", "Two", "Three")
@@ -134,13 +112,7 @@ class PickerModelTest {
 
   @Test
   fun aPickReportsWhetherItEmitted() {
-    // The host holds its size reports for the batch a *choice* is waiting for, so it
-    // may only hold them when a choice actually happened (G6 round-2 review N2). A
-    // re-tap of the row already shown is common - the real-input case does it - and it
-    // brings no batch with it, so a hold taken for it is never released by anything
-    // but the next unrelated batch, which drops the held size: every size measured in
-    // between is lost to the engine for the life of the mount. This function is the
-    // only thing the host can ask, so it has to answer it.
+    // The host holds its size reports only for a pick that emitted, so a refusal must say so.
     val model = PickerModel().apply {
       options = arrayOf("One", "Two", "Three")
       displayed = 1
@@ -172,8 +144,7 @@ class PickerModelTest {
     model.applyUserSelection(2)
     val stamp = requireNotNull(model.pickStamp)
     assertTrue(model.pickIsStillShown(stamp))
-    // Any part of the configuration the size depends on moving means the held size
-    // describes content that is no longer on screen.
+    // Any change to what the size depends on makes the stamp stale.
     assertFalse(model.pickIsStillShown(null))
     model.options = arrayOf("One", "Two", "Three", "Four")
     assertFalse("a longer list is a different title", model.pickIsStillShown(stamp))
@@ -200,17 +171,6 @@ class PickerModelTest {
     assertEquals("an empty list has no index at all", 0, model.clamp(2.0))
   }
 
-  /**
-   * The three names this component answers with, and the one of them that is a
-   * different *window*.
-   *
-   * `'radio'` composes rows in the host's own window, so a resolution that folded
-   * it into `'menu'` would draw a text field instead of the group - green on every
-   * other assertion in this file, because nothing else here reads the variant. The
-   * device suite owns the geometry; what a JVM can pin is that the name survives
-   * the setter's guard at all, and that an unknown name still lands on the default
-   * control rather than on nothing.
-   */
   @Test
   fun theVariantResolvesToTheThreeControlsThisComponentHas() {
     assertEquals("menu", PickerModel.resolvedVariant("menu"))
@@ -223,12 +183,6 @@ class PickerModelTest {
     assertFalse("nor is a wheel", PickerModel.isRadio("wheel"))
   }
 
-  /**
-   * A radio pick is the menu's pick: same clamp, same no-op suppression, same
-   * refusal while disabled. The variant changes what is painted, not what a choice
-   * means - and this is the half the harness cannot reach on Android through a
-   * popup, because a radio group has no popup to reach into.
-   */
   @Test
   fun aRadioPickMeansTheSameThingAsAMenuPick() {
     val model =
@@ -237,11 +191,7 @@ class PickerModelTest {
         displayed = 0
         state.displayed = 0.0
         variant = "radio"
-        // A radio group never gets here on a device - it has no popup to open. The
-        // write is here so the line that closes it is the thing under test: the field
-        // starts false, so without this the assertion below passes whether or not
-        // `applyUserSelection` still says `expanded = false`. Delete that line and
-        // this goes red.
+        // A radio group has no popup; set here so the assertion below can see the pick close it.
         expanded = true
       }
     assertTrue("a pick of a different row is a choice", model.applyUserSelection(2))

@@ -1,21 +1,3 @@
-/**
- * Guards for `scripts/task-ready-core.mjs` — the deciding half of `bun run task-ready`.
- *
- * The command itself shells out to `gen-registry.mjs` and `gate.mjs` and reads a git
- * repository, so the only part that can be asserted here is the part that decides: what
- * counts as a `TODO` in the wrong place, what counts as a cited path, and when a report's
- * table has stopped matching the ledger. That split is why the module exists — the same
- * reason `gate-core.mjs` and `lease-core.mjs` are separated from their CLIs.
- *
- * Each rule is shown red by mutating the function it guards; the mutations and the lines
- * that went red are in `docs/tasks/X4-conformance.report.md`.
- *
- * @file Unit gate: `check`.
- */
-
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -35,13 +17,9 @@ import {
 } from '../task-ready-core.mjs';
 import { readerFor } from '../conformance-core.mjs';
 
-/** Reads the tool's own source, for the checks that are about the script rather than a helper. */
 const read = readerFor();
 
-/* --------------------------------- the TODO scan -------------------------------- */
-
 describe('the TODO/FIXME scan', () => {
-  /** One-file map, because every case is about one file's text. */
   const files = (path, text) => new Map([[path, text]]);
 
   const GENERATED =
@@ -49,9 +27,6 @@ describe('the TODO/FIXME scan', () => {
   const END = '// @end-generated';
 
   it('is quiet on the clean case: a TODO in ordinary hand-written code', () => {
-    // The whole shape of this check is a *narrow* one. A repo-wide TODO ban would report
-    // existing notes nobody is touching, and the first person to hit that adds a flag that
-    // turns the command off forever.
     expect(
       todoFindings(
         files(
@@ -93,10 +68,6 @@ describe('the TODO/FIXME scan', () => {
   });
 
   it('goes red for a TODO beside the fallback number in a component source', () => {
-    // The review's N2. The number lives in the component (`fallbackSize` in Swift,
-    // `FALLBACK_WIDTH_DP` in Kotlin) and the generated tables are written from it, so a
-    // note about it is the same undecided fallback the generated table would carry — and
-    // this file is 1 300 lines of ordinary code the scan used to wave through.
     const swift = [
       '  /// The size the control reports before it has measured anything.',
       '  // TODO: re-measure on iPad before shipping',
@@ -134,8 +105,6 @@ describe('the TODO/FIXME scan', () => {
   });
 
   it('still leaves a note alone two lines past the fallback declaration', () => {
-    // The window has to end somewhere or every note in a component source becomes a
-    // fallback finding, and the first person to see that turns the check off.
     const swift = [
       '  private static let fallbackSize = (width: 61.0, height: 29.0)',
       '  private static let otherThing = 1.0',
@@ -150,9 +119,6 @@ describe('the TODO/FIXME scan', () => {
   });
 
   it('calls a hit inside a generated region the generator problem, not a fallback one', () => {
-    // Ordering: a generated table is a `DeclaredFallbacks` file *and* a region. The fix is
-    // to change the manifest and re-run `regen`, and a message that said "the engine lays
-    // this out at whatever number is here" would send a person to edit the generated file.
     const problems = todoFindings(
       files(
         'NitroUiDeclaredFallbacks.swift',
@@ -164,8 +130,6 @@ describe('the TODO/FIXME scan', () => {
   });
 
   it('ends the region at the end marker, so a later TODO is not blamed on it', () => {
-    // Without the end marker every line after the first region would be scanned, which
-    // turns one real finding into a wall of them and hides the one that matters.
     expect(
       todoFindings(
         files(
@@ -192,8 +156,6 @@ describe('the TODO/FIXME scan', () => {
   });
 
   it('catches a TODO on the same line that opens a region', () => {
-    // The marker and the payload can share a line in a compact table; a scanner that
-    // flipped its flag *after* testing the line would let that one through.
     const problems = todoFindings(
       files(
         'src/__tests__/viewConfigs.test.ts',
@@ -211,10 +173,6 @@ describe('the scan and its own fixtures', () => {
   const END = '// @end-generated';
 
   it('does not report the fixture written to prove the scan works', () => {
-    // The tool ran against this branch and returned two "undecided fallbacks" from
-    // `task-ready.test.js` — the strings above, which are component sources in miniature.
-    // Reporting a test's fixture is how a check gets disabled, so proximity does not apply
-    // to a test file.
     const problems = todoFindings(
       files(
         'scripts/__tests__/task-ready.test.js',
@@ -225,8 +183,6 @@ describe('the scan and its own fixtures', () => {
   });
 
   it('still reports a generated-region TODO inside a test file', () => {
-    // The exception is scoped to the proximity inference, not to the file. A `TODO` between
-    // the generated markers is the generator's problem wherever it sits.
     const text = [GENERATED, 'const x = 1; // TODO: regenerate', END].join(
       '\n'
     );
@@ -238,8 +194,6 @@ describe('the scan and its own fixtures', () => {
   });
 
   it('still reports a fallback table that happens to live under __tests__', () => {
-    // Same reason: a file named as a declared-fallback table is scanned wherever it is,
-    // or the scoping rule above becomes a place to hide one.
     const text = ['const fallbacks = {}; // TODO: decide', ''].join('\n');
     const problems = todoFindings(
       files('scripts/__tests__/DeclaredFallbacks.ts', text)
@@ -249,14 +203,12 @@ describe('the scan and its own fixtures', () => {
   });
 });
 
-/* -------------------------------- the path scanner ------------------------------- */
-
 describe('which backtick content counts as a repo path', () => {
   it('accepts the shapes a report actually uses', () => {
     for (const cited of [
       'example/src/App.tsx',
       'scripts/real-input/a11y.mjs',
-      'docs/tasks/X4/gates.jsonl',
+      'docs/tasks/X4/context.md',
       'example/__tests__/Conformance.harness.tsx',
     ]) {
       expect(isRepoPath(cited)).toBe(true);
@@ -264,21 +216,15 @@ describe('which backtick content counts as a repo path', () => {
   });
 
   it('declines a top-level file, because a bare name cannot be resolved without guessing', () => {
-    // `nitro-ui.sizing.json` and `package.json` do exist, but so do plenty of bare names
-    // that do not, and the check's value is in never crying wolf on prose.
     expect(isRepoPath('nitro-ui.sizing.json')).toBe(false);
     expect(isRepoPath('package.json')).toBe(false);
   });
 
   it('declines a branch name, which is written exactly like a path', () => {
-    // X4's own first report cited `task/X4-conformance` in the header and this check called
-    // it a missing file. A branch has no extension and no reader tries to open it, and every
-    // citable file here has an extension, so the leaf's dot is what separates the two.
     expect(isRepoPath('task/X4-conformance')).toBe(false);
     expect(isRepoPath('origin/task/X4-conformance')).toBe(false);
     expect(isRepoPath('refs/heads/main')).toBe(false);
-    // The cost, stated so it is a decision and not an oversight: an extensionless file or a
-    // directory is not checked either.
+    // An extensionless file or a directory is not checked either.
     expect(isRepoPath('LICENSE')).toBe(false);
     expect(isRepoPath('src/components')).toBe(false);
   });
@@ -346,8 +292,6 @@ describe('report citations that point at nothing', () => {
   });
 
   it('allows a path the branch itself adds or deletes', () => {
-    // A report describes work in this branch, so citing a file the diff creates (or
-    // removes) is the normal case, not an invented reference.
     expect(
       missingReportPaths(
         'New: `scripts/real-input/a11y-sweep.mjs`. Removed: `scripts/conformance/measure-a11y.mjs`.',
@@ -375,8 +319,6 @@ describe('report citations that point at nothing', () => {
     );
   });
 });
-
-/* ---------------------------------- the gate table -------------------------------- */
 
 describe("the report's gate table against the ledger", () => {
   const generated = [
@@ -432,16 +374,13 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('says nothing when the ledger has no rows yet — `need` already refuses that', () => {
-    // Reporting it twice would make the missing gates look like two different problems.
     expect(
       reportTableProblems('## Gates\n\n| Gate | X |\n| --- | --- |\n', [])
     ).toEqual([]);
   });
 
   it('ignores inline-code markup around a cell, which is not a changed result', () => {
-    // `gate.mjs table` writes the gate name as `` `check` ``; a report that pastes it and a
-    // report that retypes it without the ticks have the same row. Insisting on byte equality
-    // would send a person back to re-paste markup, which is not what this check is for.
+    // `gate.mjs table` writes the gate name as `` `check` ``.
     const ticked = generated.map((line) =>
       line.replace('| check |', '| `check` |')
     );
@@ -455,8 +394,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('still reads a changed number inside a backticked cell as a changed row', () => {
-    // The other half: normalising *markup* must not become normalising *content*, or a
-    // different code tree hides inside the same-looking ticks.
     const ticked = generated.map((line) =>
       line.replace('| check |', '| `check` |')
     );
@@ -472,8 +409,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('quotes a gate name without doubling the markup it is already in', () => {
-    // The message puts the name in backticks of its own; passing the raw cell through printed
-    // `` ``check`` `` in a terminal, which reads like a typo in the tool.
     const report = '| Gate | Result |\n| --- | --- |\n| check | PASS |';
     const ticked = ['| `harness:ios` | PASS |'];
     expect(reportTableProblems(report, ticked)[0]).toContain(
@@ -490,9 +425,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('goes red for a gate row the ledger never printed', () => {
-    // The review's M4: only generated→report was compared, so a report could add a row of
-    // its own and nothing read it. A gate with no recorded run has no row, and a gate row
-    // in a report is a claim a reviewer will read as evidence.
     const report = [
       '| Gate | Result | Tree | Notes |',
       '| --- | --- | --- | --- |',
@@ -507,8 +439,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('goes red for an invented row even when every real row matches', () => {
-    // The order matters: a report that pastes the table correctly and then adds one row is
-    // the shape that actually happens, and the first loop finds nothing to complain about.
     const report = generated.slice();
     report.push('| test:native | **PASS** | `abc1234` | 55 s |');
     expect(
@@ -517,10 +447,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('goes red for a second row beside a gate the report also got right', () => {
-    // X4 re-review, low: "a duplicate invented row for a known gate passes". The rule used
-    // to be *naming* — a report row was refused only if no generated row named its gate — so
-    // pasting the table correctly and then adding one more `check` row with an invented tree
-    // satisfied every loop: the real row was present, and the extra one named a known gate.
     const report = generated.slice();
     report.push('| check | **PASS** | `deadbee` | also passed, allegedly |');
     const problems = reportTableProblems(report.join('\n'), generated);
@@ -530,8 +456,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('goes red when the same gate is listed twice, byte for byte', () => {
-    // The remaining corner: both copies match the ledger exactly, so exact matching refuses
-    // neither — and a table that names one gate twice still reads as two runs of it.
     const report = generated.slice();
     report.push(generated[3]);
     const problems = reportTableProblems(report.join('\n'), generated);
@@ -541,9 +465,6 @@ describe("the report's gate table against the ledger", () => {
   });
 
   it('leaves a cost table alone, because a duration is not a verdict', () => {
-    // The report's own "what the suite costs" table has gate names in its first column. A
-    // rule that flagged those would be wrong on X4's own report, and a check that cries
-    // wolf on a real report is a check that gets a flag added to it.
     const report = [
       '| Gate | Total | This suite | Share |',
       '| --- | --- | --- | --- |',
@@ -578,8 +499,6 @@ describe("the report's gate table against the ledger", () => {
   });
 });
 
-/* --------------------------------- the `--only` groups ---------------------------- */
-
 describe('the `--only` groups', () => {
   it('expands a group into the section names the command checks', () => {
     expect(expandOnly(['report'])).toEqual(['report-paths', 'report-table']);
@@ -599,8 +518,6 @@ describe('the `--only` groups', () => {
   });
 
   it('passes an unknown name through, so the caller can still refuse it', () => {
-    // Silently dropping a typo is how a flag stops meaning anything: `--only coverage,covrag`
-    // must not quietly become `--only coverage`.
     expect(expandOnly(['bogus'])).toEqual(['bogus']);
     expect(expandOnly(['report', 'nope'])).toEqual([
       'report-paths',
@@ -615,8 +532,6 @@ describe('the `--only` groups', () => {
   });
 
   it('names only real sections in its groups', () => {
-    // The command validates against its own section list; a group pointing at a section that
-    // has since been renamed would fail at run time with a message about itself.
     const sections = [
       'registry',
       'coverage',
@@ -631,13 +546,8 @@ describe('the `--only` groups', () => {
   });
 });
 
-/* ------------------------- a check that could not look -------------------------- */
-
 describe('an unavailable check is a problem, not silence', () => {
   it('refuses to let an unscanned section read as a pass', () => {
-    // X4 review N8: round 1 pushed "no merge-base with `main`" into the notes and returned
-    // `[]`, so the scan that read zero files printed `ok` and the run's last line said
-    // `ready`. Zero markers and zero files looked identical, and only one of them is a pass.
     const problems = unscannedProblem(
       'the TODO scan',
       'no merge-base with `main`',
@@ -646,7 +556,6 @@ describe('an unavailable check is a problem, not silence', () => {
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('could not run and checked nothing');
     expect(problems[0]).toContain('Run it on a branch that has one.');
-    // The whole point: that one line is enough to make the summary refuse.
     const { ok, lines } = summarise({
       registry: [],
       markers: problems,
@@ -656,8 +565,8 @@ describe('an unavailable check is a problem, not silence', () => {
   });
 
   it('is how the script reports a scan its git state blocked', () => {
-    // The rule the script has to follow, checked on the script's own source because the
-    // failure needs a git state (no merge-base, a failing `ls-tree`) a unit run cannot make.
+    // Checked on the script's own source: the failure needs a git state (no merge-base, a
+    // failing `ls-tree`) that a unit run cannot make.
     const script = read('scripts/task-ready.mjs');
     for (const fn of ['markerProblems', 'reportPathProblems']) {
       const body = script.slice(
@@ -665,13 +574,11 @@ describe('an unavailable check is a problem, not silence', () => {
         script.indexOf('\n}\n', script.indexOf(`function ${fn}(`))
       );
       expect(body).not.toBe('');
-      // Both git reads it depends on are handled, and handled as a problem.
       expect(body).toContain('unscannedProblem(');
       expect(body).not.toMatch(/return \[\];/);
     }
-    // The one remaining "note and return []" is allowed, and pinned here so it stays the
-    // one: the missing-report case, where `report paths exist` already fails for the same
-    // report. A section that would otherwise be the *only* evidence must never do this.
+    // The one allowed "note and return []" is the missing-report case, which another
+    // section already fails.
     const notesAndPass = [
       ...script.matchAll(/notes\.push\([\s\S]{0,240}?\n\s*return \[\];/g),
     ];
@@ -680,18 +587,12 @@ describe('an unavailable check is a problem, not silence', () => {
   });
 
   it('lists the committed tree, not the index, for the citation check', () => {
-    // X4 review N7. `git ls-files` reads the index, so the set called `existing` — the one
-    // the failure message calls "HEAD" — was HEAD plus whatever happens to be staged, and
-    // minus whatever is staged-deleted. Proved on a real state: a file that is `git add`ed
-    // and then deleted from the worktree is in the index and not in HEAD, and the two sets
-    // answer the same citation differently.
+    // `git ls-files` reads the index, not HEAD.
     const script = read('scripts/task-ready.mjs');
     expect(script).toContain("['ls-tree', '-r', '--name-only', 'HEAD'");
     expect(script).not.toContain("git(['ls-files']");
   });
 });
-
-/* ------------------------------------ the id -------------------------------------- */
 
 describe('which report file a task refers to', () => {
   it('prefers the branch-named report, since that is where the brief lives', () => {
@@ -710,16 +611,6 @@ describe('which report file a task refers to', () => {
     expect(reportCandidates('X4', 'X4')).toEqual(['docs/tasks/X4.report.md']);
   });
 
-  /**
-   * Every report in this repo is `<ID>-<slug>.report.md` — `G29-android-wheels.report.md`,
-   * `X30-merge-bar-and-ledger-tooling.report.md` — and none is the bare
-   * `docs/tasks/<ID>.report.md` the docs claimed (X30 fix round 1). So the two
-   * candidates above matched nothing for the common case: a fix-round branch
-   * (`task/G29-fix1`) knows the id but not the slug, and the checker reported
-   * "not found" about a report that was sitting in the directory. The third
-   * candidate is that slug — and only when it is *unique*, because guessing between
-   * two reports is the confident wrong answer this tool exists to refuse.
-   */
   it('falls back to the one slug report that carries the id', () => {
     const files = [
       'G29-android-wheels.md',
@@ -731,7 +622,6 @@ describe('which report file a task refers to', () => {
       'docs/tasks/G29.report.md',
       'docs/tasks/G29-android-wheels.report.md',
     ]);
-    // The brief (`G29-android-wheels.md`) is not a report and never a candidate.
     expect(slugReportNames('G29', files)).toEqual([
       'G29-android-wheels.report.md',
     ]);
@@ -743,14 +633,10 @@ describe('which report file a task refers to', () => {
       'G29-form-e4-pair-a.report.md',
       'G29-android-wheels.md',
     ];
-    // Nothing appended: a candidate list is a list of files to *use*, and the second
-    // one here would be a coin flip dressed as a lookup.
     expect(reportCandidates('G29', 'G29-fix1', files)).toEqual([
       'docs/tasks/G29-fix1.report.md',
       'docs/tasks/G29.report.md',
     ]);
-    // The caller's failure names all of them, which is only possible if the core
-    // hands over the matches rather than swallowing them.
     expect(slugReportNames('G29', files)).toEqual([
       'G29-android-wheels.report.md',
       'G29-form-e4-pair-a.report.md',
@@ -758,8 +644,6 @@ describe('which report file a task refers to', () => {
   });
 
   it('still prefers a name that matches exactly, slug rule or not', () => {
-    // A branch with its own report is unambiguous even when the id has two slug
-    // reports in the directory, so the ambiguity complaint has to stay silent here.
     const files = [
       'G29-form-e4-pair-a.report.md',
       'G29-android-wheels.report.md',
@@ -770,9 +654,6 @@ describe('which report file a task refers to', () => {
   });
 
   it('without a listing it asks for exactly what it used to (the 2-arg form)', () => {
-    // Every older caller, and every case above that is about the two names, passes no
-    // directory listing: then the slug rule has nothing to match and must not invent
-    // a candidate out of a pattern it cannot resolve.
     expect(reportCandidates('G29', 'G29-fix1')).toEqual([
       'docs/tasks/G29-fix1.report.md',
       'docs/tasks/G29.report.md',
@@ -782,45 +663,8 @@ describe('which report file a task refers to', () => {
   });
 });
 
-/* ------------------------- the reports this repo really has ------------------------ */
-
-describe('every report in docs/tasks is findable by its own id (X30 fix 2)', () => {
-  const names = fs
-    .readdirSync(path.join(process.cwd(), 'docs', 'tasks'))
-    .filter((name) => name.endsWith('.report.md'));
-
-  it('none is named for the bare id, which is the rule the docs used to claim', () => {
-    // 125 reports, every one `<ID>-<slug>.report.md`. Had this been true, the
-    // two-candidate lookup would have worked and this fix would not exist.
-    expect(names.length).toBeGreaterThan(50);
-    expect(
-      names.filter((name) => /^[A-Za-z0-9]+\.report\.md$/.test(name))
-    ).toEqual([]);
-  });
-
-  it('a fix-round branch for any of them resolves to that report', () => {
-    // The property the fix exists for, run over the real directory instead of a
-    // fixture: for each task, `task/<ID>-fix1` (which knows the id and nothing else)
-    // has to land on that task's report. Two reports sharing an id would make this
-    // red on purpose — the rule refuses to guess, so the checker would say so.
-    for (const name of names) {
-      const id = taskIdFromBranch(name.replace(/\.report\.md$/, ''));
-      if (id == null) continue;
-      const found = reportCandidates(id, `${id}-fix1`, names).find(
-        (candidate) => names.includes(candidate.replace('docs/tasks/', ''))
-      );
-      expect(found).toBe(`docs/tasks/${name}`);
-    }
-  });
-});
-
-/* --------------------------- the branch -> the task ------------------------------- */
-
 describe('the task a branch name belongs to (X30 item 4)', () => {
   it('reads the id off a fix round, a merge round, and any prefix', () => {
-    // `bun run task-ready` on the hand-in list is only a check if it runs. Naming the
-    // report after the branch made every fix-round and merge-round branch need
-    // `--task X29`, and a flag people forget is a check that silently did not happen.
     expect(taskFromBranchName('task/X29-fix2')).toEqual({
       branch: 'X29-fix2',
       id: 'X29',
@@ -829,14 +673,9 @@ describe('the task a branch name belongs to (X30 item 4)', () => {
       branch: 'X29-merge',
       id: 'X29',
     });
-    // A merge round is not always under `task/` — `merge/X29` worktrees exist, and a
-    // full ref comes out of `git rev-parse` in some setups. The prefix is not the
-    // task's name.
     for (const ref of ['merge/X29', 'refs/heads/merge/X29', 'X29']) {
       expect(taskFromBranchName(ref)).toEqual({ branch: 'X29', id: 'X29' });
     }
-    // The id shapes this repo actually uses: letter+digits, a trailing letter, an
-    // all-caps word with digits inside, and a lowercase probe branch.
     for (const [ref, id] of [
       ['task/A1b-baselines', 'A1b'],
       ['task/R09-release-notes', 'R09'],
@@ -849,19 +688,12 @@ describe('the task a branch name belongs to (X30 item 4)', () => {
   });
 
   it('refuses to pick a side on a branch that names two tasks (X30 fix 1)', () => {
-    // `task/G25-G26-merge` and `task/G29-X27-merge` are real. Reading the first id
-    // off one of them (which round 1 did) sends the checker to G25's report, it
-    // passes, and the command prints "ready" about a merge that shipped two tasks —
-    // the shape of failure this whole tool was written against. An id is only an
-    // answer when the branch names one; two is a question, and the question is
-    // `--task`, which the runner answers once per task.
     for (const ref of ['task/G25-G26-merge', 'G29-X27-merge', 'merge/X4-Y9']) {
       expect(taskFromBranchName(ref).id).toBeNull();
     }
     expect(taskIdsFromBranch('G25-G26-merge')).toEqual(['G25', 'G26']);
-    // The message the CLI prints names both, so nobody has to guess what to pass.
-    // A slug word that happens to end in a digit is not a second task: `e4` is a
-    // step of the form, and `fix1` is a round, not a task.
+    // A slug word that ends in a digit is not a second task: `e4` is a step of the form
+    // and `fix1` is a round.
     for (const ref of [
       'task/X29-form-e4-pair-a',
       'task/X29-fix2',
@@ -874,9 +706,6 @@ describe('the task a branch name belongs to (X30 item 4)', () => {
   });
 
   it('refuses to invent an id for a branch named in prose', () => {
-    // The line the derivation must not cross: `merge-bar-ledger-tooling` has a
-    // leading word but no task in it, and `merge.report.md` would be a file this
-    // branch never wrote. An error that asks for `--task` beats a confident guess.
     for (const ref of [
       'main',
       't3/merge-bar-ledger-tooling',
@@ -889,44 +718,30 @@ describe('the task a branch name belongs to (X30 item 4)', () => {
       expect(taskFromBranchName(ref).id).toBeNull();
     }
     expect(taskIdFromBranch('merge-bar-ledger-tooling')).toBeNull();
-    // A digit in a later word does not make the first word an id.
     expect(taskIdFromBranch('fix-round-2')).toBeNull();
   });
 
   it('still lands on the report that exists, branch-named first', () => {
-    // The two spellings in one flow: the id from the branch, the candidates from
-    // `reportCandidates`, so `task/X29-fix2` reads X29's report without being told.
     const { branch, id } = taskFromBranchName('task/X29-fix2');
     expect(reportCandidates(id, branch)).toEqual([
       'docs/tasks/X29-fix2.report.md',
       'docs/tasks/X29.report.md',
     ]);
-    // By name, not by `Object.values` spread: the signature is (id, branch) and the
-    // object is { branch, id }, so the spread passed them the wrong way round. It
-    // read as proof anyway because on `merge/X29` both halves are `X29` — a test
-    // that cannot tell the two orders apart is not testing the order (X30 fix 1).
     const merged = taskFromBranchName('merge/X29');
     expect(reportCandidates(merged.id, merged.branch)).toEqual([
       'docs/tasks/X29.report.md',
     ]);
-    // And the order does differ somewhere: on a fix branch, swapping it asks for
-    // `docs/tasks/X29-fix2.report.md` under the id and the reverse.
     expect(reportCandidates(branch, id)).not.toEqual(
       reportCandidates(id, branch)
     );
   });
 
   it('is what the command uses, not a copy of the rule', () => {
-    // The old script had its own `task/`-only regex, which is exactly the line that
-    // made a merge branch give up. Pinning the call is cheap; pinning the absence of
-    // the private re-derivation is what keeps it from coming back.
     const script = read('scripts/task-ready.mjs');
     expect(script).toContain('taskFromBranchName(');
     expect(script).not.toContain('/^task\\/[');
   });
 });
-
-/* ----------------------------------- summarise ------------------------------------ */
 
 describe('the summary the command prints', () => {
   it('passes when every section is empty', () => {
@@ -949,8 +764,6 @@ describe('the summary the command prints', () => {
   });
 
   it('reports every section that has problems, not just the first', () => {
-    // The command exists so a round hands in once; bailing at the first failure would send
-    // the person back three times for three known problems.
     const { lines, ok } = summarise({
       a: ['one'],
       b: [],
@@ -967,8 +780,6 @@ describe('the summary the command prints', () => {
   it('says nothing for no sections, rather than claiming a pass on nothing', () => {
     const { lines, ok } = summarise({});
     expect(lines).toEqual([]);
-    // Vacuously ok: the command itself refuses an empty section list by construction, so
-    // the flag is not the interesting part here — printing nothing is.
     expect(ok).toBe(true);
   });
 });

@@ -7,25 +7,8 @@ import { Pressable, Text } from 'react-native';
 import { nitroUiHybridObjects } from '../../../__mocks__/react-native-nitro-modules';
 import { SegmentedControl } from './SegmentedControl';
 
-/**
- * The render contract of the `SegmentedControl` wrapper, measured by Reassure
- * inside `bun run check` (docs/architecture/benchmarks.md, "Render counts").
- *
- * It has a controlled value, so the contract is the Switch's rather than the
- * Button's:
- * - **advance** moves `selectedIndex` through three of four options. The index is
- *   the wrapper's only rendered input besides `options`, so a wrapper that
- *   stopped passing it down would freeze the control, and one that sent an extra
- *   prop per render would show up as a redundant commit;
- * - **bump** renders the parent without touching the control's inputs, so the
- *   wrapper must not churn. The counter is drawn, because Reassure's redundancy
- *   check compares whole rendered trees.
- *
- * A tap is deliberately not driven here: native owns the optimistic selection and
- * reports through `onValueChange`, and Reassure cannot see a native gesture
- * (`docs/architecture/core.md` §4). What it *can* see is that a re-render with an
- * unchanged `selectedIndex` and an unchanged `options` array costs nothing.
- */
+// The bump counter is drawn because Reassure's redundancy check compares
+// rendered trees: a parent commit that changed nothing visible is flagged.
 const OPTIONS = ['One', 'Two', 'Three', 'Four'] as const;
 
 function Harness() {
@@ -51,9 +34,7 @@ function Harness() {
   );
 }
 
-// A self-sizing wrapper asks native for its sizing id (`useSizingId`), so
-// rendering one needs a core to exist. It is asked exactly once per mounted
-// instance - the hook keeps the answer in a ref - so this cannot move the count.
+// `useSizingId` asks the native core for an instance id.
 beforeAll(() => {
   let issued = 0;
   nitroUiHybridObjects.NitroUiCore = () => ({

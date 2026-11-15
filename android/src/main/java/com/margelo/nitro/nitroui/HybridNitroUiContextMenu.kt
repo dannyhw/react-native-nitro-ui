@@ -38,45 +38,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
-/*
- * The ContextMenu (G16, DECISIONS D36/D37; design `docs/tasks/Q6-contextmenu-design.report.md`
- * Appendices C and D, measured by S3): a `ReactViewGroup` whose React Native children stay
- * in place and which opens a Material 3 `DropdownMenu` at the finger on a long press.
- *
- * - **The view.** [ContextMenuView] is RN's own `View` (its manager is a
- *   `ReactViewManager`, `NitroUiContextMenuViewManager`), so borders, radius, overflow,
- *   `pointerEvents`, `hitSlop` and the accessibility props all work as they do on a
- *   `View`. One more child - the menu's 0 x 0 [ContextMenuHost] - is kept last and hidden
- *   from Fabric's indices by the manager. `ReactViewGroup.requestLayout` is a no-op, so the
- *   wrapper lays that host out itself (S3 change 4).
- * - **Arbitration.** The wrapper watches `dispatchTouchEvent`. At the long-press timeout it
- *   hands the gesture to native - `NativeGestureUtil.notifyNativeGestureStarted`, so JS
- *   gets one CANCEL and the `Pressable` under the finger never presses - stops its
- *   ancestors intercepting, and intercepts the rest of the gesture itself (Q6 D3).
- *   Movement past slop, a second pointer, an ancestor's CANCEL or a child's
- *   disallow-intercept (a `ScrollView` inside starting to drag) drop the pending press.
- *   The deepest ContextMenu on a gesture's path is the one that may open
- *   ([ContextMenuGestureSlot]).
- * - **The anchor.** The popup is anchored to a zero-size box at the press point, written
- *   as snapshot state at recognition and read only in `offset {}`, so it costs a
- *   placement. S3 measured the popup's top-start at the press, 0 px off, and Material
- *   flipping it above the finger near the bottom edge. An open popup follows its anchor,
- *   so a layout that moves the wrapper closes the menu (S3 change 5).
- * - **Accessibility.** The wrapper's node carries `ACTION_LONG_CLICK` "Show menu", added in
- *   `onInitializeAccessibilityNodeInfo` - not `ViewCompat.replaceAccessibilityAction`,
- *   which installs a delegate of its own and dropped RN's (the node lost its `testID`,
- *   S3 change 3). TalkBack's double-tap-and-hold sends that action to the focused node,
- *   which `accessible` makes the wrapper (D36 item 1).
- *
- * This file must stay in the package `com.margelo.nitro.nitroui` (the generated spec's).
- */
+// A `ReactViewGroup` that keeps its React Native children in place and opens a Material 3
+// menu at the finger on a long press. Must stay in this package (the generated spec's).
 
 /**
- * The gesture slot: process-wide, keyed by the gesture's `downTime`.
- *
- * A parent ContextMenu's `dispatchTouchEvent` runs before its child's, so both arm on the
- * same DOWN. Each one on the path writes itself here, so the last writer - the deepest -
- * is the only one whose timer may open. UI thread only.
+ * Process-wide, keyed by the gesture's `downTime`. A parent's `dispatchTouchEvent` runs
+ * before its child's, so every ContextMenu on the path claims the same DOWN and the last
+ * writer, the deepest, is the one whose timer may open. UI thread only.
  */
 internal object ContextMenuGestureSlot {
   private var downTime = -1L
@@ -103,9 +71,8 @@ internal object ContextMenuGestureSlot {
   }
 
   /**
-   * Take the slot back for an ancestor when the descendant that claimed it let go on the
-   * same DOWN (it was not a touch target: `pointerEvents="none"`, or `"box-none"` with
-   * nothing under the finger). A slot another view still holds for this gesture stays its.
+   * Takes the slot back for an ancestor when the descendant that claimed it on this DOWN let
+   * go because it was not a touch target. A slot another view still holds stays its.
    */
   fun claimIfFree(
     downTime: Long,
@@ -115,22 +82,15 @@ internal object ContextMenuGestureSlot {
   }
 }
 
-/** State of one ContextMenu. See [NitroUiModel] for the shape this has to have. */
 internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
-  /** The rows, as the popup draws them. */
   var entries by mutableStateOf<List<MenuEntry>>(emptyList())
 
   /** The array the `rows` setter was last handed, for its equality guard. Not observed. */
   var rawRows: Array<NitroUiMenuRow> = emptyArray()
 
-  /**
-   * The rows' `androidIcon`s, resolved - Menu's [MenuRowIcons], because both controls
-   * draw the same [MenuRow] and a long-pressed list with no glyphs beside its rows would
-   * be a different menu from the one the same `group` opens from a tap.
-   */
   val rowIcons = MenuRowIcons()
 
-  /** Resolve every action row's `androidIcon`. From `afterUpdate()`, once per change. */
+  /** Called from `afterUpdate()`, once per change. */
   fun resolveRowIcons(
     artwork: NitroUiIconArtwork,
   ) {
@@ -142,20 +102,17 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     )
   }
 
-  /** The probe pair for the open popup's window - Menu's, for Menu's reasons. */
+  /** Pixel-probe results for the open popup's window. */
   val menuProbes = NitroUiPixelProbes()
 
   /** The open menu's own view, or `null`: the rows live in that window, not this one. */
   val openMenuView: View?
     get() = menuView?.takeIf { expanded }
 
-  /** The header over the rows, or `null`. */
   var title by mutableStateOf<String?>(null)
 
-  /** `!disabled`. */
   var enabled by mutableStateOf(true)
 
-  /** Whether the popup is showing. */
   var expanded by mutableStateOf(false)
 
   /** The press point inside the wrapper, px. Read only in the anchor's `offset {}`. */
@@ -167,10 +124,8 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
   var onClose: (() -> Unit)? = null
 
   /**
-   * The native side of every close, ahead of the app's `onClose`: the wrapper stops
-   * watching the layout here, so no close path - a row press, an outside tap, Back, the
-   * popup leaving the composition, `disabled`, a layout move or a drop - can leave its
-   * pre-draw listener on the window. Installed once by the Hybrid and never reset.
+   * Runs on every close, before the app's `onClose`, so no close path can leave the
+   * wrapper's pre-draw listener on the window. Installed once and never reset.
    */
   var afterClose: (() -> Unit)? = null
 
@@ -210,10 +165,8 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     }
 
   /**
-   * Open or close the menu, and report the change once - Menu's `setOpen` rule: every
-   * `onOpen` is followed by exactly one `onClose`, whatever closed it, and idempotent by the
-   * transition test so Material's dismissal, a pick, `disabled`, a layout move and a drop
-   * can all ask for the same close without a second report.
+   * Reports each transition once: every `onOpen` is followed by exactly one `onClose`,
+   * however many paths ask for the same close.
    */
   fun setOpen(open: Boolean) {
     if (expanded == open) {
@@ -243,11 +196,7 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     setOpen(true)
   }
 
-  /**
-   * A row was picked, however it was picked: report it (when the control and the row
-   * allow), then close - DECISIONS D32's order, and Menu's `applyPick` rule that a press
-   * takes the window down whether or not it reported anything.
-   */
+  /** Reports the pick when the control and the row are enabled, then closes either way. */
   fun applyPick(id: String) {
     if (enabled) {
       for (entry in entries) {
@@ -314,12 +263,7 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     menuRowCount = rows
   }
 
-  /**
-   * Whether a harness has asked this mount's Hybrid for a report
-   * (`nuiTestContextMenuReport`). An app never does, so it never pays for one: the
-   * report and the anchor witness are built only once this is set. A recycle clears it
-   * with the counters, so a new owner is built for only once it is asked about.
-   */
+  /** Set by the first test report read. Until then no report or anchor witness is built. */
   @Volatile var reportsWanted = false
 
   /** Where Compose last placed the anchor, window px, and how often: test witness. */
@@ -341,12 +285,11 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     get() = if (menuRowCount >= 0) menuRowCount else actionableRowCount
 
   override fun reset() {
-    // First (Q6 Appendix E, "Recycling"): a recycled view must never come back open.
+    // First: a recycled view must never come back open.
     expanded = false
     entries = emptyList()
     rawRows = emptyArray()
-    // The rows' glyphs with the rows: a recycled wrapper that kept its previous owner's
-    // artwork would draw its icons beside the next owner's titles.
+    // A recycled wrapper must not draw its previous owner's icons.
     rowIcons.reset()
     menuProbes.clear()
     title = null
@@ -368,19 +311,12 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
   }
 
   companion object {
-    /**
-     * How many ContextMenu popups this process has composed right now - Menu's and
-     * Picker's rule, a counter of its own: a mount dropped mid-menu cannot report its own
-     * leak, so the next mount reads it.
-     */
+    /** Popups composed in this process right now. Process-wide, so a later mount can see a leak. */
     val liveMenus = AtomicInteger(0)
   }
 }
 
-/**
- * The menu's composition: a zero-size anchor at the press point and Menu's Material 3
- * Expressive popup on it, with Menu's groups and rows (`MenuRows.kt`). Laid out at 0 x 0 by [ContextMenuView].
- */
+/** A zero-size anchor at the press point with the shared menu popup on it. Laid out at 0 x 0. */
 internal class ContextMenuHost(
   context: Context,
   activity: Activity?,
@@ -407,8 +343,6 @@ internal class ContextMenuHost(
         }
       },
     ) {
-      // Menu's popup and groups (E2), anchored at the finger: the zero-size box is the
-      // layout the popup is positioned against. The title is the first group's label.
       NitroUiMenuPopup(
         expanded = model.expanded,
         // Outside tap and the back gesture.
@@ -455,7 +389,6 @@ internal class ContextMenuView(
   var eventCopies = 0
     private set
 
-  /** Whether a long press is pending right now. */
   val armed: Boolean
     get() = pending
 
@@ -464,36 +397,29 @@ internal class ContextMenuView(
   private val nowAt = IntArray(2)
 
   /**
-   * The observer [layoutWatch] was added to, or `null` when it is on none.
-   *
-   * The observer, not a flag (`NitroComposeHost`'s `PreDrawWatch` rule): a view that is no
-   * longer attached answers `viewTreeObserver` with a *fresh* floating observer, so a
-   * removal through it after a detach removes nothing and leaves the listener on the
-   * window's observer - which then holds this view for the life of the window, and runs
-   * the listener every frame.
+   * The observer [layoutWatch] was added to, or `null`. The observer rather than a flag: a
+   * detached view answers `viewTreeObserver` with a new floating observer, so removing
+   * through that would leave the listener on the window's.
    */
   private var watchedObserver: ViewTreeObserver? = null
   private var moveClosePosted = false
 
   /**
-   * A pre-draw check, not a layout listener: Fabric moves a view by calling its `layout`
-   * directly, outside any traversal, so a global-layout listener never hears it (measured:
-   * the harness's layout-move case stayed open with one). Every move has to be drawn,
-   * though, and this runs before each frame of the window - only while the menu is open.
+   * Pre-draw rather than a layout listener: Fabric moves a view by calling `layout` directly,
+   * outside any traversal, so a global-layout listener never hears it. Added only while the
+   * menu is open.
    */
   private val layoutWatch =
     ViewTreeObserver.OnPreDrawListener {
       if (!hybrid.isMenuOpen() || !isAttachedToWindow) {
-        // A registration that outlived its menu or its window: the leak witness. Every
-        // close and every detach removes the listener, so this never runs.
+        // A listener that outlived its menu or window: counted as a leak.
         strayWatchFires.incrementAndGet()
         return@OnPreDrawListener true
       }
       getLocationOnScreen(nowAt)
       if ((nowAt[0] != openedAt[0] || nowAt[1] != openedAt[1]) && !moveClosePosted) {
-        // The popup follows its anchor, so it would now point somewhere the finger
-        // never was (S3 measured 73 dp off): down it goes. Nothing scrolls under an open
-        // menu - the gesture is the wrapper's - so a move here is a layout's. Posted once.
+        // The popup follows its anchor, so a layout that moves the wrapper closes the menu.
+        // Posted once.
         moveClosePosted = true
         post {
           moveClosePosted = false
@@ -513,19 +439,15 @@ internal class ContextMenuView(
     host.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     reinstallHost()
     setOnLongClickListener {
-      // Reached only through accessibility (`ACTION_LONG_CLICK`): the touch path never
-      // runs `View`'s own long-press check, because `ReactViewGroup.onTouchEvent` does
-      // not call `super`. So there is no double open.
+      // Reached only through accessibility: `ReactViewGroup.onTouchEvent` does not call
+      // `super`, so the touch path never runs `View`'s own long-press check.
       if (!hybrid.canOpen()) return@setOnLongClickListener false
       hybrid.openAt(width / 2, height / 2)
       true
     }
   }
 
-  /**
-   * Put the host back as the last child. `ReactViewGroup.recycleView` removes every child
-   * on the way into the recycle pool, the host included.
-   */
+  /** `ReactViewGroup.recycleView` removes every child, the host included; this puts it back last. */
   fun reinstallHost() {
     val host = composeHost ?: return
     if (host.parent === this) return
@@ -537,10 +459,8 @@ internal class ContextMenuView(
   override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
     super.onInitializeAccessibilityNodeInfo(info)
     if (!isFocusable) {
-      // Not `accessible` (D36 item 1): the node is a plain `View`'s. The view stays
-      // long-clickable for the action below, but a node that says so is an actionable
-      // TalkBack stop, which would swallow a ContextMenu's Text children into one stop
-      // that is not the element the app asked for.
+      // Not `accessible`: a node that says it is long-clickable becomes a TalkBack stop
+      // that swallows the children's text.
       info.isLongClickable = false
       info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK)
       return
@@ -552,11 +472,7 @@ internal class ContextMenuView(
     }
   }
 
-  /**
-   * The label of the long-click action this node offers now, for the report: `none` when
-   * it offers none, `-` when it offers one without a label (the `View` default a
-   * long-clickable view gets, which TalkBack announces as nothing in particular).
-   */
+  /** For tests: `none` when the node offers no long-click action, `-` when it has no label. */
   fun a11yActionLabel(): String {
     val info = createAccessibilityNodeInfo()
     val action = info.actionList.firstOrNull { it.id == AccessibilityNodeInfo.ACTION_LONG_CLICK }
@@ -601,9 +517,8 @@ internal class ContextMenuView(
 
   override fun requestLayout() {
     super.requestLayout()
-    // `ReactViewGroup.requestLayout` is a no-op: a request from the compose host would die
-    // here, so the wrapper lays the host out itself on the next turn. Guarded, so a burst
-    // of requests posts once.
+    // `ReactViewGroup.requestLayout` is a no-op, so the wrapper lays the compose host out
+    // itself on the next turn.
     if (composeHost != null && !hostLayoutPosted) {
       hostLayoutPosted = true
       post {
@@ -614,16 +529,9 @@ internal class ContextMenuView(
   }
 
   /**
-   * Measure and lay the 0 x 0 compose host out, so Compose places the anchor.
-   *
-   * A request that is pending anywhere in the host's subtree forces the whole subtree
-   * through a real measure first. Without it a request can stick: `View.layout` clears a
-   * child's `FORCE_LAYOUT` even when its parent's measure never reached it, so the
-   * `AndroidComposeView` underneath can be left "layout requested" for good, and Compose's
-   * `scheduleMeasureAndLayout` returns early on exactly that - every later change goes
-   * unheard, and a 0 x 0 view never draws, so the `dispatchDraw` pass that would rescue a
-   * sized one never comes (measured: the anchor was never placed, and the popup stayed
-   * unpositioned at `0,142`).
+   * Measures and lays out the 0 x 0 compose host so Compose places the anchor. A request
+   * pending in the subtree is forced through a real measure first: otherwise `View.layout`
+   * clears it unmeasured and Compose ignores every later request.
    */
   fun layoutHost() {
     val host = composeHost ?: return
@@ -667,8 +575,7 @@ internal class ContextMenuView(
     val observer = watchedObserver ?: return
     watchedObserver = null
     moveClosePosted = false
-    // A floating observer that the attach merged into the window's is dead, and its
-    // listeners went with the merge: then the window's - the view's own, if attached.
+    // A floating observer merged into the window's at attach is dead: use the window's.
     val target =
       when {
         observer.isAlive -> observer
@@ -679,8 +586,7 @@ internal class ContextMenuView(
   }
 
   override fun onDetachedFromWindow() {
-    // Fabric detaches a view before `onDropView`, and `viewTreeObserver` is still the
-    // window's only until this returns.
+    // `viewTreeObserver` is the window's only until this returns.
     unwatchLayout()
     super.onDetachedFromWindow()
   }
@@ -708,8 +614,7 @@ internal class ContextMenuView(
       MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> drop()
     }
     if (pending) {
-      // The event a take-over hands to `notifyNativeGestureStarted`: copied only while a
-      // press is pending, so a view that cannot open costs no copy per event.
+      // Copied only while a press is pending; a take-over hands it to JS as the cancel.
       lastEvent?.recycle()
       lastEvent = MotionEvent.obtain(ev)
       eventCopies += 1
@@ -717,9 +622,8 @@ internal class ContextMenuView(
     val handled = super.dispatchTouchEvent(ev)
     if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
       if (!handled) {
-        // Not the touch target (`pointerEvents="none"`, or `"box-none"` with nothing
-        // under the finger): this view never hears the UP or the CANCEL, so the timer
-        // would open a menu for a tap and cancel the touch of whatever did take it.
+        // Not the touch target, so this view never hears the UP or CANCEL and the timer
+        // would open a menu for a tap.
         drop()
       } else if (pending) {
         // A descendant ContextMenu that let go above gives the slot back.
@@ -729,8 +633,7 @@ internal class ContextMenuView(
     if (tookOver &&
       (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL)
     ) {
-      // The JS dispatcher drops the rest of a gesture native took until this, or the next
-      // DOWN (`JSTouchDispatcher`).
+      // The JS dispatcher drops the rest of a gesture native took until this or the next DOWN.
       NativeGestureUtil.notifyNativeGestureEnded(this, ev)
       tookOver = false
     }
@@ -791,7 +694,6 @@ internal class ContextMenuView(
     unwatchLayout()
   }
 
-  /** Recycle: a fresh mount counts its own presses. */
   fun resetCounters() {
     arms = 0
     cancels = 0
@@ -799,16 +701,11 @@ internal class ContextMenuView(
   }
 
   companion object {
-    /**
-     * Pre-draw runs of a layout watch whose menu was closed or whose view had left its
-     * window, process-wide: a leaked registration, which a mount that leaked cannot report
-     * itself, so the next one reads it.
-     */
+    /** Pre-draw runs of a layout watch that outlived its menu or window: a leak counter. */
     val strayWatchFires = AtomicInteger(0)
   }
 }
 
-/** The Hybrid View React renders as `NitroUiContextMenu`. */
 class HybridNitroUiContextMenu(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiContextMenuSpec(), RecyclableView {
@@ -816,7 +713,6 @@ class HybridNitroUiContextMenu(
   internal val wrapper = ContextMenuView(reactContext, this)
   private val host = ContextMenuHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = wrapper
 
@@ -825,7 +721,7 @@ class HybridNitroUiContextMenu(
 
   @Volatile private var report = "pending"
 
-  /** Reports this object has built: none until a harness asks ([ContextMenuModel.reportsWanted]). */
+  /** Reports built so far: none until a test asks. */
   private var reportSeq = 0
 
   init {
@@ -847,7 +743,7 @@ class HybridNitroUiContextMenu(
   override var rows: Array<NitroUiMenuRow>
     get() = model.rawRows
     set(next) {
-      // Content, not identity (Menu's third guard): an equal menu costs nothing.
+      // Compared by content: an equal menu costs nothing.
       if (next.contentEquals(model.rawRows)) {
         return
       }
@@ -916,20 +812,13 @@ class HybridNitroUiContextMenu(
 
   // MARK: - Lifecycle
 
-  /**
-   * The app's resources, for the rows' `androidIcon`s - the same resolver `Button` and
-   * `Menu` hand their own glyphs, so a row's drawable name means the same thing in every
-   * control and in both menus.
-   */
   private val iconArtwork = NitroUiAppIconArtwork(reactContext)
 
   override fun afterUpdate() {
-    // Once per batch, never from the `rows` setter: a name is a resource table lookup and
-    // a Metro file is a socket, and neither belongs on every prop that arrives beside it.
+    // Once per batch, not in the `rows` setter: a lookup can take a lock or open a socket.
     model.resolveRowIcons(iconArtwork)
     if (!model.canOpen) {
-      // A control that answers nothing owns no live menu and arms no press (D29); the
-      // close is reported through the model's funnel.
+      // A control with nothing to pick keeps no menu open and arms no press.
       wrapper.drop()
       closeMenu()
     }
@@ -944,7 +833,7 @@ class HybridNitroUiContextMenu(
     rawRadius = null
     pressScreen[0] = -1
     pressScreen[1] = -1
-    // Resets the model - `expanded` first, `reportsWanted` too - and the host's flags.
+    // Resets the model (`expanded` first) and the host's flags.
     host.prepareForRecycle()
     reportSeq = 0
     report = "pending"
@@ -952,9 +841,8 @@ class HybridNitroUiContextMenu(
 
   override fun onDropView() {
     wrapper.resetGesture()
-    // The close is reported while the app's handler is still connected, so open state an
-    // app tracks from `onOpen`/`onClose` never outlives the view; disposing the composition
-    // below takes the window down, and the witness's close then finds nothing open.
+    // Report the close while the app's handlers are still connected; disposing the
+    // composition below takes the window down.
     closeMenu()
     model.onSelect = null
     model.onOpen = null
@@ -962,14 +850,7 @@ class HybridNitroUiContextMenu(
     host.drop()
   }
 
-  /**
-   * Sample the open menu's window, or refuse when this wrapper has none composed.
-   *
-   * Menu's pair, for Menu's reason: the rows are drawn in the popup's own window, so
-   * nothing readable on the wrapper says whether a row's glyph reached the screen. The
-   * view is the one the witness already keeps, sampled on the UI thread, posted rather
-   * than waited for.
-   */
+  /** Samples the open menu's window on the UI thread, or refuses when none is composed. */
   override fun nuiTestMenuPixelProbe(color: Double) {
     val run = {
       val view = model.openMenuView
@@ -1019,16 +900,11 @@ class HybridNitroUiContextMenu(
 
   // MARK: - Methods
 
-  /** What a row press calls (`MenuEntries`' `onPick`), and nothing more. */
   override fun nuiTestSelectRow(id: String) {
     if (Looper.myLooper() == Looper.getMainLooper()) host.choose(id) else wrapper.post { host.choose(id) }
   }
 
-  /**
-   * Re-read the open popup's semantics tree into `drawn`, on the UI thread: the rows a
-   * screen reader reaches, in Menu's notation. The witness reads it on each layout of the
-   * popup anyway; this is for a repaint without one.
-   */
+  /** Re-reads the open popup's semantics tree on the UI thread. */
   override fun nuiTestMenuProbe() {
     MenuDrawnWitness.wanted = true
     wrapper.post {
@@ -1038,8 +914,7 @@ class HybridNitroUiContextMenu(
   }
 
   override fun nuiTestContextMenuReport(): String {
-    // From the first read on, every state change keeps the report fresh; until then
-    // nothing builds it. This read returns the last one built.
+    // Reports are built only after the first read; this returns the last one built.
     model.reportsWanted = true
     MenuDrawnWitness.wanted = true
     wrapper.post { publish() }
@@ -1077,9 +952,7 @@ class HybridNitroUiContextMenu(
       "radius=-1;press=$press;menu=${model.menuFrame};anchor=${model.anchorPlaced};live=${ContextMenuModel.liveMenus.get()};" +
       "arms=${wrapper.arms};armed=${if (wrapper.armed) 1 else 0};copies=${wrapper.eventCopies};" +
       "watchStray=${ContextMenuView.strayWatchFires.get()};seq=$reportSeq;" +
-      // What each row that drew a glyph tinted it with (`MenuRowIcons.noteTint`), so a
-      // harness can sample for a colour of this device's dynamic palette it cannot
-      // otherwise name. `-` when no row has drawn one.
+      // The colour each row tinted its glyph with, or `-`.
       "iconTints=${model.rowIcons.tintsReport()};kids=$kids"
   }
 }

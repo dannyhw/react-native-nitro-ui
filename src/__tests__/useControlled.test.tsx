@@ -35,7 +35,6 @@ describe('useControlled - uncontrolled', () => {
     run(() => nativeChangeOf(hook.result.current.onNativeChange)(true, 1));
 
     expect(onValueChange).toHaveBeenCalledWith(true);
-    // Native owns the displayed value, so a toggle costs no React render.
     expect(hook.renderCount()).toBe(rendersBefore);
     expect(hook.result.current.mostRecentEventCount).toBe(0);
   });
@@ -56,9 +55,6 @@ describe('useControlled - controlled', () => {
   });
 
   it('still commits a rejected change (event count moves, value does not)', () => {
-    // The user's handler refuses: state stays `false`, so the `value` prop's
-    // identity never changes. The event count is what forces a commit, which is
-    // what lets native revert the displayed value.
     let value = false;
     const hook = renderHook(() =>
       useControlled<boolean>(value, false, (next) => {
@@ -106,7 +102,6 @@ describe('useControlled - controlled', () => {
     const hook = renderHook(() =>
       useControlled<boolean>(false, false, onValueChange)
     );
-    // Always wired: the echo is what lets native accept the next `value`.
     expect(hook.result.current.onNativeChange.f).toBeDefined();
     const identity = hook.result.current.onNativeChange;
 
@@ -137,9 +132,6 @@ describe('useControlled - controlled', () => {
   });
 
   it('echoes the event count even when the user handler throws', () => {
-    // The echo is what lets native accept the next `value` write. If a throwing
-    // handler skipped it, the component would ignore every later prop write from
-    // JS for the rest of its life.
     const hook = renderHook(() =>
       useControlled<boolean>(false, false, () => {
         throw new Error('handler rejected the change');
@@ -164,8 +156,7 @@ describe('useControlled - controlled', () => {
 
   it('catches native up when the component becomes controlled', () => {
     // An uncontrolled control echoes nothing, so after two taps native is at
-    // event 2 while JS is still at 0. Passing `value` without seeding the echo
-    // would make every write look stale until the next tap.
+    // event 2 while JS is still at 0.
     let value: boolean | undefined;
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const hook = renderHook(() =>

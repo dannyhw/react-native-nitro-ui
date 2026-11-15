@@ -1,15 +1,6 @@
 /**
- * The code blocks in README.md, as real components.
- *
- * README.md has one ```tsx block per component whose fence opens with
- * `name=<region>`; the lines between `// #region <name>` and
- * `// #endregion` here are what that block must contain, and
- * `scripts/readme-examples-check.mjs` (part of `bun run check`) fails when the
- * two drift apart. So the README is typechecked by `bun run check` with the rest
- * of `example/src`, and a prop rename cannot survive silently into the docs.
- *
- * These are documentation fixtures, not screens: the app has its own per-tab
- * screens in this folder, and nothing imports this file.
+ * The code blocks in README.md, as real components. Each region below must equal the
+ * README block of the same name, comments included; `readme-examples-check.mjs` compares.
  */
 import {
   AlertDialog,

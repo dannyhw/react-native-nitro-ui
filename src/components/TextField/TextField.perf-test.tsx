@@ -7,17 +7,8 @@ import { Pressable, Text } from 'react-native';
 import { nitroUiHybridObjects } from '../../../__mocks__/react-native-nitro-modules';
 import { TextField } from './TextField';
 
-/**
- * The render contract of the `TextField` wrapper, measured by Reassure inside
- * `bun run check` (docs/architecture/benchmarks.md, "Render counts").
- *
- * A field emits at typing rate, not tap rate (Q2 §2.3), so the contract this
- * pins is the one that matters at that rate: a **controlled** field costs one
- * commit per keystroke - the app's `setState` and the handshake's echo land in
- * the same one - and a parent render that touches none of the field's inputs
- * costs no extra commit beyond the parent's own. Three keystrokes, two bumps:
- * mount + 3 + 2 = 6. A wrapper that echoed in a second commit would make it 9.
- */
+// The bump counter is drawn because Reassure's redundancy check compares
+// rendered trees: a parent commit that changed nothing visible is flagged.
 function Harness() {
   const [text, setText] = useState('');
   const [bumps, setBumps] = useState(0);

@@ -1,11 +1,11 @@
 # BottomSheet
 
-A modal sheet whose content is React Native (G14, DECISIONS D33 and D35).
+A modal sheet whose content is React Native.
 
-| Platform | Native                                                                                     |
-| -------- | ------------------------------------------------------------------------------------------ |
+| Platform | Native                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------- |
 | iOS      | a `UIViewController` presented `.pageSheet`, configured through `UISheetPresentationController` |
-| Android  | Material 3 `ModalBottomSheet`, the content in an `AndroidView` root                         |
+| Android  | Material 3 `ModalBottomSheet`, the content in an `AndroidView` root                             |
 
 ```tsx
 import { BottomSheet } from 'react-native-nitro-ui';
@@ -27,30 +27,30 @@ screen that renders it.
 
 ## API
 
-| Prop                  | Type                                          | Default    | Notes                                                                                   |
-| --------------------- | --------------------------------------------- | ---------- | --------------------------------------------------------------------------------------- |
-| `isPresented`         | `boolean`                                     | required   | Controlled only. See [Presenting and dismissing](#presenting-and-dismissing).            |
-| `onIsPresentedChange` | `((isPresented: boolean) => void) \| undefined` | —        | Every **native** close. Not called for a change the app made.                           |
-| `children`            | `ReactNode`                                   | —          | The content. Mounted from `isPresented` turning true until the sheet has gone.          |
-| `detents`             | `BottomSheetDetent[]`                         | `['fit']`  | Smallest first; the sheet opens at the first. See [Detents](#detents).                  |
-| `onDetentChange`      | `((index: number) => void) \| undefined`      | —          | Index into `detents` after a **drag** to another detent. Reported, not controlled.      |
-| `onDismiss`           | `(() => void) \| undefined`                   | —          | The sheet has gone, however it was closed. The content unmounts at the same moment.     |
-| `dismissible`         | `boolean \| undefined`                        | `true`     | Whether a swipe down, a tap outside and Back close it.                                  |
-| `showsGrabber`        | `boolean \| undefined`                        | `true`     | iOS `prefersGrabberVisible`; Android's drag handle.                                     |
-| `cornerRadius`        | `number \| undefined`                         | platform   | iOS `preferredCornerRadius`; Android's top-corner shape.                                |
-| `containerColor`      | `ColorValue \| undefined`                     | platform   | The sheet background (`systemBackground`; Material's `ContainerColor`).                 |
-| `accessibilityLabel`  | `string \| undefined`                         | —          | Names the **sheet** (VoiceOver `.screenChanged`; TalkBack `paneTitle`), not a box.      |
-| `testID`              | `string \| undefined`                         | —          | The presented sheet gets `<testID>-sheet`.                                              |
-| `hybridRef`           | `(view: handle) => void`                      | —          | **Internal.** Read-only handle for this repo's harness.                                 |
-| `nuiPerfId`           | `number \| null \| undefined`                 | `null`     | **Internal.** Instance id for perf marks.                                               |
+| Prop                  | Type                                            | Default   | Notes                                                                               |
+| --------------------- | ----------------------------------------------- | --------- | ----------------------------------------------------------------------------------- |
+| `isPresented`         | `boolean`                                       | required  | Controlled only. See [Presenting and dismissing](#presenting-and-dismissing).       |
+| `onIsPresentedChange` | `((isPresented: boolean) => void) \| undefined` | —         | Every **native** close. Not called for a change the app made.                       |
+| `children`            | `ReactNode`                                     | —         | The content. Mounted from `isPresented` turning true until the sheet has gone.      |
+| `detents`             | `BottomSheetDetent[]`                           | `['fit']` | Smallest first; the sheet opens at the first. See [Detents](#detents).              |
+| `onDetentChange`      | `((index: number) => void) \| undefined`        | —         | Index into `detents` after a **drag** to another detent. Reported, not controlled.  |
+| `onDismiss`           | `(() => void) \| undefined`                     | —         | The sheet has gone, however it was closed. The content unmounts at the same moment. |
+| `dismissible`         | `boolean \| undefined`                          | `true`    | Whether a swipe down, a tap outside and Back close it.                              |
+| `showsGrabber`        | `boolean \| undefined`                          | `true`    | iOS `prefersGrabberVisible`; Android's drag handle.                                 |
+| `cornerRadius`        | `number \| undefined`                           | platform  | iOS `preferredCornerRadius`; Android's top-corner shape.                            |
+| `containerColor`      | `ColorValue \| undefined`                       | platform  | The sheet background (`systemBackground`; Material's `ContainerColor`).             |
+| `accessibilityLabel`  | `string \| undefined`                           | —         | Names the **sheet** (VoiceOver `.screenChanged`; TalkBack `paneTitle`), not a box.  |
+| `testID`              | `string \| undefined`                           | —         | The presented sheet gets `<testID>-sheet`.                                          |
+| `hybridRef`           | `(view: handle) => void`                        | —         | **Internal.** Read-only handle for this repo's harness.                             |
+| `nuiPerfId`           | `number \| null \| undefined`                   | `null`    | **Internal.** Instance id for perf marks.                                           |
 
-There is no `style`: the node React Native lays out *is* the content's box, sized from
+There is no `style`: the node React Native lays out _is_ the content's box, sized from
 what the sheet reports, and a background or border on it would draw in the app's
 window, not the sheet. Put padding and backgrounds on a `View` inside.
 
 ## Detents
 
-SwiftUI's names, because the platform's names win where they differ (PLAN principle 1).
+The detents use SwiftUI's names.
 
 ```ts
 type BottomSheetDetent =
@@ -65,16 +65,16 @@ List them smallest first: the sheet opens at the first, and UIKit expects them i
 order. A development build throws for an empty list, a repeat or an invalid size, and
 warns for a list it can tell is out of order (`medium` after `large`, say).
 
-| Detent                    | iOS 16+                                   | iOS 15             | Android (Material 3)                                              |
-| ------------------------- | ----------------------------------------- | ------------------ | ----------------------------------------------------------------- |
-| `'fit'`                   | custom detent: the content's height        | `large`            | expanded, the content at its own height                            |
-| `'medium'`                | `.medium()`                               | `.medium()`        | `PartiallyExpanded` (half the window)                              |
-| `'large'`                 | `.large()`                                | `.large()`         | expanded, the content at the sheet's full height                   |
-| `{ height }`              | custom detent                             | `large`            | expanded, the content at that height                               |
-| `{ fraction }`            | custom detent, `maximumDetentValue * f`   | `large`            | expanded, the content at that share of the sheet                   |
+| Detent         | iOS 16+                                 | iOS 15      | Android (Material 3)                             |
+| -------------- | --------------------------------------- | ----------- | ------------------------------------------------ |
+| `'fit'`        | custom detent: the content's height     | `large`     | expanded, the content at its own height          |
+| `'medium'`     | `.medium()`                             | `.medium()` | `PartiallyExpanded` (half the window)            |
+| `'large'`      | `.large()`                              | `.large()`  | expanded, the content at the sheet's full height |
+| `{ height }`   | custom detent                           | `large`     | expanded, the content at that height             |
+| `{ fraction }` | custom detent, `maximumDetentValue * f` | `large`     | expanded, the content at that share of the sheet |
 
-**Android has two rest positions**, `PartiallyExpanded` and `Expanded` (D33): `'medium'`
-is the first, and the *largest* other detent is the second. A development build warns
+**Android has two rest positions**, `PartiallyExpanded` and `Expanded`: `'medium'`
+is the first, and the _largest_ other detent is the second. A development build warns
 when a list has more than one non-`medium` detent, because only the largest is used.
 `['medium']` alone opens expanded at half height, since Material has no way to rest at
 half without a taller detent above it. **Back steps down a detent first** on Android:
@@ -82,7 +82,7 @@ from the expanded detent it returns to `medium` (reported as `onDetentChange`), 
 next Back closes the sheet. That is Material's own behaviour. **Changing the list while the sheet is up** applies at once on iOS; on Android a
 change to the expanded height applies at once, and a change to whether `'medium'` is in
 the list applies at the next presentation (Material's sheet state is built for one
-presentation; rebuilding it under an open sheet hid it). One consequence: a sheet resting
+presentation, and rebuilding it under an open sheet hides the sheet). One consequence: a sheet resting
 half-expanded when `'medium'` leaves the list stays half-expanded, and until it moves
 `selected` and the next `onDetentChange` name the expanded detent, the only one left.
 
@@ -93,7 +93,7 @@ change the app made.
 
 The content is laid out at the sheet's width, through a round trip: native reports the
 box the sheet gives its content (`onContentBox`), and the wrapper writes it into the
-node's `style`, so Yoga lays the children out there (S2's mechanism). Before native has
+node's `style`, so Yoga lays the children out there. Before native has
 said, the width is the window's (iOS) or `min(window, 640)` (Android's
 `SheetMaxWidth`), which is the right answer on a phone, so a `fit` sheet's first frame is
 already its content's height. Native's own report corrects it where that guess is wrong —
@@ -102,69 +102,66 @@ an iPad's page sheet, a landscape safe area.
 - **`'fit'`**: Yoga sizes the node from the children; the sheet follows. On iOS the
   custom detent reads the content view's height each time UIKit resolves it, and every
   change of that height asks UIKit to resolve again (`invalidateDetents()`). The same
-  holds in a window of its own (below): S2 measured that case moving by 0 pt; it now
-  follows, +160 pt for 160 pt of rows, on both paths (`BottomSheet.harness.tsx`).
+  holds in a window of its own (below): the sheet grows +160 pt for 160 pt of rows on
+  both paths.
 - **Any other list**: the node is the box's height. On iOS that is the current
   detent's safe area, so the content is laid out again when the sheet moves to another
-  detent (how often during a drag was not measured); on Android it is the expanded
+  detent; on Android it is the expanded
   height, with the half-expanded sheet showing its top.
 - iOS presents one turn after the commit that asked for it, so the layout of content
   mounted in that same commit is in place before UIKit first resolves a `fit` detent.
 
 ## Presenting and dismissing
 
-| What happened                                        | What the app is told                                        |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| The app writes `isPresented = true`                  | nothing — the sheet presents                                 |
-| The app writes `isPresented = false`                 | `onDismiss` once it has gone                                 |
-| A swipe down, a tap outside, Back (while `dismissible`) | `onIsPresentedChange(false)`, then `onDismiss`             |
-| A drag to another detent                             | `onDetentChange(index)`                                      |
+| What happened                                                          | What the app is told                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------- |
+| The app writes `isPresented = true`                                    | nothing — the sheet presents                   |
+| The app writes `isPresented = false`                                   | `onDismiss` once it has gone                   |
+| A swipe down, a tap outside, Back (while `dismissible`)                | `onIsPresentedChange(false)`, then `onDismiss` |
+| A drag to another detent                                               | `onDetentChange(index)`                        |
 | Its place in the app leaves the window (a push, a full-screen `Modal`) | `onIsPresentedChange(false)`, then `onDismiss` |
-| A presented controller under it is dismissed (iOS)   | `onIsPresentedChange(false)`, then `onDismiss`               |
+| A presented controller under it is dismissed (iOS)                     | `onIsPresentedChange(false)`, then `onDismiss` |
 
 - **A refused dismissal presents again**, with one development warning, as a dialog's
-  does (D33). The content stays mounted: the app never stopped asking for it.
-  The same holds for a dismissal the app *did* accept and then reversed inside the one
+  does. The content stays mounted: the app never stopped asking for it.
+  The same holds for a dismissal the app _did_ accept and then reversed inside the one
   exit animation: the content never leaves the tree, so it is one mounted content
   across the two presentations rather than an unmount and a remount.
 - **An exit the app did not ask for** is recognised on iOS from
   `presentationControllerWillDismiss`/`DidDismiss` (a swipe or an outside tap) and from
   `isBeingDismissed` in `viewDidDisappear` (anything else), never from a view merely
-  leaving the screen (D35 item 2).
+  leaving the screen.
 - **`isPresented` true at mount** presents once the component's place in the app is in a
   window.
 
-## Where iOS presents from (D35)
+## Where iOS presents from
 
 In the screen's own presentation chain — from the top-most presented controller of the
 window the component is in — **unless that controller is an RN `Modal`'s host**; then
-from a window of its own at `.alert + 1` (`ios/core/NitroUiPresentation.swift`, G11's
-helper). React Native closes a `Modal` by dismissing *its own* controller, and a sheet in
-that controller's chain is what UIKit would dismiss instead, leaving the `Modal` on screen
-for good. The isolated harness file `example/__tests__/isolated/BottomSheetModalHazard`
-closes a `Modal` under an open sheet; with the own-window rule removed it reproduces the
-strand (`modalHosts=1`), which is why it runs in an app instance of its own: every
-`harness:<platform>` gate runs `example/__tests__/isolated/` as a second app launch after
-the shared run (`scripts/harness-isolated.mjs`), and a red isolated file turns the gate
-red.
+from a window of its own at `.alert + 1` (`ios/core/NitroUiPresentation.swift`). React
+Native closes a `Modal` by dismissing _its own_ controller, and a sheet in that
+controller's chain is what UIKit would dismiss instead, leaving the `Modal` on screen for
+good. The harness file `example/__tests__/isolated/BottomSheetModalHazard.harness.tsx`
+closes a `Modal` under an open sheet to guard this; a failure there strands a `Modal` for
+the rest of the process, so it runs in an app launch of its own
+(`scripts/harness-isolated.mjs`).
 
-One consequence of presenting in the chain, read from RN's source and not measured: an
-RN `Modal` rendered on the *same screen* as an open sheet presents from that screen's
-controller (`RCTModalHostViewComponentView` uses `reactViewController`), which is already
-presenting the sheet, so UIKit would refuse it — the rule two RN `Modal`s on one screen
-already live by. A `Modal` that must open over a sheet belongs inside the sheet's
-content.
+One consequence of presenting in the chain, which follows from React Native's source and
+is not tested: an RN `Modal` rendered on the _same screen_ as an open sheet presents from
+that screen's controller (`RCTModalHostViewComponentView` uses `reactViewController`),
+which is already presenting the sheet, so UIKit refuses it — the rule two RN `Modal`s on
+one screen already live by. A `Modal` that must open over a sheet belongs inside the
+sheet's content.
 
-**react-native-screens** (measured with 4.30.1 added for one commit and reverted, D35
-item 3): on iOS a sheet presents in a native-stack screen's chain, a push over that
-screen closes it and reports the close, and a `formSheet` closing under a sheet
-presented over it leaves nothing. On Android the measurement did not run: 4.30.1's
-`ScreenStack` failed to mount in that app instance with or without a sheet in it.
+**react-native-screens** (measured with 4.30.1): on iOS a sheet presents in a
+native-stack screen's chain, a push over that screen closes it and reports the close, and
+a `formSheet` closing under a sheet presented over it leaves nothing. The Android
+behaviour is not measured.
 
 ## Platform mapping
 
 **iOS.** The Hybrid View's own view is the content view; the generated component mounts
-the children *into* it (a `patch-nitrogen` step: `RCTViewComponentView` would otherwise
+the children _into_ it (a `patch-nitrogen` step: `RCTViewComponentView` would otherwise
 mount them beside it), and the sheet's controller adopts it while it is up and hands it
 back, hidden, after. A `0 × 0` anchor stays in the app's tree to know when the
 component's place gains or loses a window. The controller owns an `RCTSurfaceTouchHandler`
@@ -192,9 +189,8 @@ edge to the sheet with `nestedScrollEnabled`.
 
 `RecyclableView`. A reset closes without animation, takes the content view out of the
 dismissed sheet and back into its component view, and resets every prop, both event
-counts and the per-mount flags (the conformance suite's residue probe: a user dismissal
-leaves one native event, which a kept count would use to refuse the next owner's
-`isPresented`). A drop closes the same way and drops the callbacks; on iOS the
+counts and the per-mount flags (a user dismissal leaves one native event, which a kept
+count would use to refuse the next owner's `isPresented`). A drop closes the same way and drops the callbacks; on iOS the
 presentation helper hides a sheet that is still arriving and carries the dismissal to its
 completion.
 
@@ -202,17 +198,17 @@ completion.
 
 The sheet is modal to VoiceOver (`accessibilityViewIsModal`); `accessibilityLabel` is
 posted with `.screenChanged` on present and names the sheet's view. On Android it is the
-sheet's `paneTitle`. The content keeps React Native's own accessibility, and real input
-reads and presses it through the accessibility tree on both platforms
-(`A11Y_PRESENTATIONS`). What TalkBack and VoiceOver say is a human pass.
+sheet's `paneTitle`. The content keeps React Native's own accessibility, and it can be
+read and pressed through the accessibility tree on both platforms. What TalkBack and
+VoiceOver speak is not tested.
 
 ## Limits
 
-- **The selected detent is reported, not controlled.** Moving the sheet from JS needs a
-  method with a main-thread hop; not in v1.
+- **The selected detent is reported, not controlled.** There is no method to move the
+  sheet from JS.
 - **Android: two detents**, and Back steps down before it closes (above).
 - **iOS 15** shows `fit`, `{ height }` and `{ fraction }` as `large`.
-- **No `keepMounted`**: the content mounts with each presentation (D33).
+- **No `keepMounted`**: the content mounts with each presentation.
 - **Not hostable**: a `<Host>` refuses it, because its content is React Native views.
 - **An RN `Modal` on the same screen** as an open sheet is expected not to open over it
-  on iOS (above; not measured).
+  on iOS (above; not tested).

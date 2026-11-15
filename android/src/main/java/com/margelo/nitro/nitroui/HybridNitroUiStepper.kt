@@ -48,36 +48,10 @@ import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
-/*
- * The Stepper component.
- *
- * Material has no stepper (D38 item 1), so Android gets one built out of Material's
- * own controls: two `FilledTonalIconButton`s with an 8 dp gap, each disabled at its
- * bound, drawing Google's `remove` and `add` glyphs (D43). `docs/components/stepper.md`
- * says this plainly, because a reader is entitled to know which half of the pair is
- * not a platform control - and which behaviour iOS has and this one does not
- * (hold-to-repeat, in v1).
- *
- * The container, colours, shapes and touch target are IconButton's, shared rather than
- * copied (`nitroUiIconButtonContainer`, `iconButtonColors`, `iconButtonShapes`): a
- * second copy is two controls that drift. The value rules are Slider's
- * (`NitroUiSliderValue`), for the same reason - `0.1` steps have to mean the same
- * thing in both controls, and the moment two implementations exist they don't.
- *
- * The accessibility story is the opposite of the visual one: what a reader meets is
- * not two buttons but one adjustable value, so the row publishes a
- * `ProgressBarRangeInfo` with a `setProgress` action and the two buttons clear their
- * own semantics away. That is how a TalkBack swipe steps it, and how it matches
- * iOS's single adjustable element.
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * manager resolves the implementation through a wildcard import of exactly that
- * package. Core helpers live in `...nitroui.core`.
- */
+// The Stepper component. Material has no stepper, so this is two filled tonal icon buttons
+// that publish one adjustable accessibility node. Must stay in this package (generated manager).
 
-/** State of one Stepper. See [NitroUiModel] for the shape this has to have. */
 internal class StepperModel : NitroUiModel() {
-  /** What the control shows. Snapshot-observed: writing it recomposes. */
   var displayed by mutableStateOf(0.0)
 
   var minimumValue by mutableStateOf(0.0)
@@ -86,13 +60,10 @@ internal class StepperModel : NitroUiModel() {
 
   var step by mutableStateOf(1.0)
 
-  /** `!disabled`, spelled positively for M3. Observed: it picks the disabled colours. */
   var enabled by mutableStateOf(true)
 
-  /** The control's name. The *value* is what the range info carries. */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /** The size configuration React sent; the engine reads it out of Fabric state. */
   var sizingKey = ""
 
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
@@ -103,19 +74,8 @@ internal class StepperModel : NitroUiModel() {
   var didApplyDefault = false
 
   /**
-   * Adopt `defaultValue` as the shown value, once, while React has sent no `value`.
-   * Returns whether it did anything, which is what makes the caller mark the host dirty.
-   *
-   * **Both copies of the shown value move.** [displayed] is what Compose draws;
-   * `state.displayed` is what the handshake compares React's next write against
-   * ([NitroUiControlledValue.reconcile]). Writing only the first leaves the control
-   * drawn at its default and the handshake believing it is where it started, and the
-   * two disagree about a write in the one direction that matters: with
-   * `defaultValue = 5`, the first controlled `value = 0` reads as "the 0 you already
-   * show" and is dropped, so React holds 0 and the screen keeps 5 until something else
-   * moves. iOS has one field for both jobs (`HybridNitroUiStepper.swift` writes
-   * `state.displayed`), and every other write to the shown value here — [userStep] and
-   * the range-clamp in `afterUpdate` — moves the pair (G25 review).
+   * Adopts `defaultValue` once, while React has sent no `value`. Both [displayed] and
+   * `state.displayed` move: the handshake compares React's next write against the latter.
    */
   fun applyDefaultOnce(): Boolean {
     if (state.js != null || didApplyDefault) {
@@ -144,16 +104,7 @@ internal class StepperModel : NitroUiModel() {
   private var stepCount = 0
   private var stepReport = "none"
 
-  /**
-   * Record what the drawing code was handed: the number the control is showing, and
-   * which half a tap could still move it.
-   *
-   * The two halves are recorded *here*, from the same answer the two buttons were
-   * given, so `up=0` is evidence about the plus button's own `enabled` rather than a
-   * second calculation that could agree with the model and disagree with the screen.
-   * iOS records the same two fields from the same rule
-   * (`HybridNitroUiStepper.swift`), which is what lets one assertion cover both.
-   */
+  // Test-only: what the composable was handed, recorded where it is drawn.
   fun recordDrawn(
     value: String,
     canStepUp: Boolean,
@@ -166,7 +117,6 @@ internal class StepperModel : NitroUiModel() {
     }
   }
 
-  /** Store what an accessibility probe found, numbered and counted. */
   fun recordAccessibility(report: String) {
     synchronized(reportLock) {
       probes += 1
@@ -174,7 +124,6 @@ internal class StepperModel : NitroUiModel() {
     }
   }
 
-  /** Store what a pixel probe found, numbered, so a test can tell it from an earlier one. */
   fun publishPixelReport(report: String) {
     synchronized(reportLock) {
       pixelProbes += 1
@@ -192,11 +141,7 @@ internal class StepperModel : NitroUiModel() {
     }
   }
 
-  /**
-   * Store an adjust-action report and count it, so two reports that do the same thing
-   * - the no-op at a bound - are still two different strings for a test waiting on
-   * "the report changed" (Slider's reason).
-   */
+  // Numbered, so two identical outcomes still produce different report strings.
   fun noteStepReport(report: String) {
     synchronized(reportLock) {
       stepCount += 1
@@ -206,7 +151,6 @@ internal class StepperModel : NitroUiModel() {
 
   fun currentStepReport(): String = synchronized(reportLock) { stepReport }
 
-  /** Store how many nodes a reader is offered. */
   fun recordMerged(count: String) {
     synchronized(reportLock) { merged = count }
   }
@@ -246,17 +190,7 @@ internal class StepperModel : NitroUiModel() {
   fun quantize(raw: Double): Double =
     NitroUiSliderValue.quantize(raw, minimumValue, maximumValue, step)
 
-  /**
-   * The range to publish to a reader: always ordered, because a reader has no way to
-   * read an inverted one, and a float range because that is what
-   * `ProgressBarRangeInfo` takes.
-   *
-   * The float conversion is not free: a `0.1` grid past 2^24 would round-trip through
-   * 32 bits and land somewhere the model never holds. That is Slider's
-   * [trackRange]'s problem too and the reason it widens a degenerate range instead
-   * of publishing an empty one, which is kept here - an empty range puts NaN in
-   * whatever divides by its width.
-   */
+  /** An ordered, non-empty float range for `ProgressBarRangeInfo`: an empty one gives NaN. */
   fun trackRange(): ClosedFloatingPointRange<Float> {
     if (!minimumValue.isFinite() || !maximumValue.isFinite()) {
       return 0f..1f
@@ -273,32 +207,20 @@ internal class StepperModel : NitroUiModel() {
     return if (widened.isFinite()) low..widened else 0f..1f
   }
 
-  /** The next legal value in one direction, or the bound when there is none. */
   fun stepped(from: Double, up: Boolean): Double =
     NitroUiSliderValue.stepped(from, up, minimumValue, maximumValue, step)
 
   /** Whether a step in [up] would change anything - which is what disables that half. */
   fun canStep(up: Boolean): Boolean = enabled && stepped(displayed, up) != displayed
 
-  /** The reader's own number of intermediate stops, from the same grid. */
   fun progressSteps(): Int {
     val division = NitroUiSliderValue.division(minimumValue, maximumValue, step) ?: return 0
-    // `ProgressBarRangeInfo.steps` counts the stops *between* the ends, so a range of
-    // `wholeSteps` intervals publishes `wholeSteps - 1`. That is also the number
-    // Compose's accessibility delegate divides the range by (`stride = width /
-    // (steps + 1)`), so publishing the real grid is what makes one of its scrolls
-    // land on one of our steps rather than on a twentieth of the span.
+    // `ProgressBarRangeInfo.steps` counts the stops between the ends. Compose's accessibility
+    // delegate strides by width / (steps + 1), so this makes one scroll one step.
     return maxOf(0, division.wholeSteps.toInt() - 1)
   }
 
-  /**
-   * The value the control now displays, asked for by a tap or a reader's action.
-   *
-   * Native is optimistic: show the new value now, before React has seen the event,
-   * so there is no visual latency (§4). Asking for the value already shown reports
-   * nothing, which is what makes "a tap at a bound does nothing" true on both
-   * platforms rather than a claim about one button's `enabled` flag.
-   */
+  /** Shows [to] at once and emits it. Returns false and emits nothing if it is unchanged. */
   fun userStep(to: Double): Boolean {
     val next = quantize(to)
     if (next == displayed) {
@@ -310,7 +232,6 @@ internal class StepperModel : NitroUiModel() {
     return true
   }
 
-  /** One step, refused while disabled, as M3 refuses a tap on a disabled button. */
   fun step(up: Boolean): Boolean {
     if (!enabled) {
       return false
@@ -319,14 +240,8 @@ internal class StepperModel : NitroUiModel() {
   }
 
   /**
-   * The reader's `setProgress`, which is handed a *target* rather than a direction.
-   *
-   * The direction is read from the target against the progress this node publishes,
-   * and one step of *this* control is then taken - not a jump to the target, which on
-   * a range that does not end on a step is a number the grid has never had
-   * (`SliderModel.accessibilityStepToward` is the same answer for the same reason).
-   *
-   * Returns whether anything moved, because that is the action's contract.
+   * A screen reader's `setProgress`. Only the direction is taken from [target]; the move is
+   * one step of this control, because the target may not be on the step grid.
    */
   fun accessibilityStepToward(target: Double): Boolean {
     val published = publishedProgress
@@ -340,41 +255,22 @@ internal class StepperModel : NitroUiModel() {
   }
 
   /**
-   * The progress this node publishes to a reader: [displayed] through the `Float` the
-   * semantics node carries it in.
-   *
-   * Not a curiosity. The target of a `setProgress` arrives as a `Float`, and a reader
-   * that asks for the value it can already read sends back exactly this number, so the
-   * comparison has to be against this number too. Against the `Double` it is not equal
-   * on any grid whose stops are not exact in binary: `0.3` through a `Float` and back is
-   * `0.30000001192092896`, which read against `0.3` is "higher than where you are", and
-   * a reader asking for the value it already holds gets read as one step up — an event,
-   * a move, and an announcement of a number the control never had (G25 review).
+   * [displayed] as the semantics node publishes it, through a `Float`. The reader's target is
+   * computed from that, so compare in the same space: 0.3 through a `Float` is 0.30000001.
    */
   val publishedProgress: Double
     get() = displayed.toFloat().toDouble()
 }
 
-/**
- * The Stepper's host: [NitroComposeHost] plus this component's composable.
- *
- * [Component] is fixed for the lifetime of the view, which is why it lives in a
- * subclass rather than being handed in as a lambda.
- */
 private class StepperHost(
   context: ThemedReactContext,
   activity: Activity?,
   model: StepperModel,
 ) : NitroComposeHost<StepperModel>(context, activity, model) {
-  /** The platform's own answer to "can a reader receive events right now?". */
   private val systemAccessibility = context.getSystemService(AccessibilityManager::class.java)
 
-  /**
-   * Hand an accessibility event to the platform only when it can accept one - the
-   * Chip, Slider and IconButton hosts' guard: `nuiTestProbeAccessibility` forces
-   * Compose's semantics on with no reader connected, and an announcement with no
-   * recipient throws `Accessibility off. Did you forget to check that?`.
-   */
+  // The accessibility test probe turns Compose semantics on with no reader connected, and
+  // `AccessibilityManager` throws for an event sent while accessibility is off.
   override fun requestSendAccessibilityEvent(
     child: View,
     event: AccessibilityEvent,
@@ -390,14 +286,9 @@ private class StepperHost(
     val enabled = model.enabled
     val displayed = model.displayed
     val label = model.accessibilityLabel
-    // The reading `nuiTestStateReport()` answers with: taken where the control is
-    // drawn, so it is what the controls are handed rather than what React sent.
     val range = model.trackRange()
     val progressSteps = model.progressSteps()
-    // The two halves ask the same question the tap answers: would a step this way
-    // change anything? At a bound it would not, and M3 draws the disabled colours and
-    // refuses the click - iOS's Stepper does the same thing to its own half, which is
-    // what keeps one rule for the pair.
+    // At a bound a step would change nothing, so that half is disabled.
     val canStepDown = model.canStep(up = false)
     val canStepUp = model.canStep(up = true)
     model.recordDrawn(nitroUiStepperValueText(displayed), canStepUp, canStepDown)
@@ -405,23 +296,14 @@ private class StepperHost(
     Row(
       verticalAlignment = Alignment.CenterVertically,
       modifier =
-        // One node, whose progress action belongs to native - Slider's structure,
-        // because the requirement is the same: a reader must meet one adjustable
-        // value, not two buttons. `mergeDescendants` makes this row that one node, and
-        // each button clears its own semantics away, so neither offers a click a
-        // reader could take (which is what `nuiTestProbeAccessibility` counts).
+        // One merged node whose progress action is native's: a reader meets one adjustable
+        // value, not two buttons. Each button clears its own semantics.
         Modifier.semantics(mergeDescendants = true) {
           if (label != null) {
             contentDescription = label
           }
-          // The value a reader *hears*, spelled the way the control spells it
-          // everywhere else (`4`, not `4.0`). Left out, TalkBack announces the progress
-          // instead, and a progress is a percentage: measured on `0...10 step 1`, the
-          // value 4 was read as "40 percent" — a number the control never had, from a
-          // range nobody asked about. `ProgressBarRangeInfo` stays, because it is what
-          // makes the node scroll-adjustable and what the delegate builds its targets
-          // from; this is the sentence spoken over it. iOS sets the same half with
-          // `accessibilityValue` (`HybridNitroUiStepper.swift`).
+          // Without a state description TalkBack reads the progress as a percentage
+          // ("40 percent" for 4 on 0..10). The range info stays: it makes the node adjustable.
           stateDescription = nitroUiStepperValueText(displayed)
           progressBarRangeInfo =
             ProgressBarRangeInfo(
@@ -429,19 +311,10 @@ private class StepperHost(
               range,
               progressSteps,
             )
-          // The direction comes from the target; the distance is always one step of
-          // this control's own grid, decided against the progress *this* node
-          // publishes (the number the delegate built its target from).
           setProgress { target ->
-            // The target arrives through the Float this node published, so the model is
-            // asked to compare it with the same Float round-trip — see
-            // [StepperModel.publishedProgress].
             model.accessibilityStepToward(target.toDouble())
           }
-          // `clearAndSetSemantics` on the buttons took M3's own `disabled()` away with
-          // them, so a disabled stepper has to restate it here. Without it TalkBack
-          // reads an inert control as a live, adjustable one - and iOS marks the same
-          // element `.notEnabled` (`HybridNitroUiStepper.swift`).
+          // The buttons' cleared semantics took Material's `disabled()` with them, so restate it.
           if (!enabled) {
             disabled()
           }
@@ -453,7 +326,6 @@ private class StepperHost(
         enabled = canStepDown,
         onClick = { model.step(up = false) },
       )
-      // The gap the design asks for, between the two 48 dp targets.
       Spacer(Modifier.width(8.dp))
       StepperHalf(
         model = model,
@@ -465,14 +337,7 @@ private class StepperHost(
   }
 }
 
-/**
- * One half of the control: a Material 3 filled tonal icon button, at the rung the
- * container helper fixes, drawing one of the library's own Material Symbols.
- *
- * Its semantics are cleared rather than merely unused: the row publishes the one
- * adjustable node a reader should meet, and a button that keeps its own node is a
- * second focus stop with a click on it that no reader should be offered.
- */
+/** One half: a filled tonal icon button. Its semantics are cleared; the row is the one node. */
 @Composable
 private fun StepperHalf(
   model: StepperModel,
@@ -496,14 +361,12 @@ private fun StepperHalf(
       painter = rememberVectorPainter(nitroUiIcon(iconRes)),
       size = IconButtonScale.Medium.iconSize(),
       tint = LocalContentColor.current,
-      // No description: the row names the control, and a second description would be
-      // read twice by TalkBack - and these halves are not focus stops anyway.
+      // No description: the row names the control.
       contentDescription = null,
     )
   }
 }
 
-/** The Hybrid View React renders as `NitroUiStepper`. */
 class HybridNitroUiStepper(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiStepperSpec(),
@@ -511,7 +374,6 @@ class HybridNitroUiStepper(
   private val model = StepperModel()
   private val host = StepperHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
@@ -522,27 +384,17 @@ class HybridNitroUiStepper(
   }
 
   companion object {
-    /** This component's name in the sizing engine (`getName()` in the generated manager). */
+    // Must match `getName()` in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiStepper"
 
-    /**
-     * The size to lay a Stepper out with before anything has been measured, in dp:
-     * two 48 dp touch targets and the 8 dp between them, 48 dp tall.
-     *
-     * Each half is a 40 dp container inside a 48 dp target, so the target - not the
-     * container - is what the row measures, for IconButton's reason: Compose will not
-     * publish a smaller touch target than the platform asks for. Measured, not
-     * inferred: `Stepper.harness.tsx`'s sizing cases compare the laid-out box with
-     * this number, and a declaration that is wrong is a wrong first frame on every
-     * cold mount (D17).
-     */
+    // The size before anything is measured, in dp: two 48 dp touch targets and an 8 dp gap.
     private const val FALLBACK_WIDTH_DP = 104.0
 
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 
-    /** One `JNI` call per process; `NitroUiDeclaredFallbacks` calls it at package init. */
+    // Called at package init, before Fabric can measure, and again from `init`.
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
         return
@@ -564,8 +416,7 @@ class HybridNitroUiStepper(
       model.state.js?.let { Variant_NullType_Double.Second(it) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // Not visual on its own: `displayed` only follows once the event count says JS
-      // has caught up. See `afterUpdate()`.
+      // Not visual by itself: `displayed` follows in `afterUpdate()`, once JS has caught up.
       model.state.js = next.asSecondOrNull()
     }
 
@@ -574,8 +425,7 @@ class HybridNitroUiStepper(
       model.defaultValue?.let { Variant_NullType_Double.Second(it) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // Stored raw: the range it has to be quantised against may arrive in the same
-      // batch, and Nitro does not order props inside one.
+      // Stored raw: the range to quantise against may arrive in the same batch, in any order.
       model.defaultValue = next.asSecondOrNull()
     }
 
@@ -622,8 +472,6 @@ class HybridNitroUiStepper(
       if (enabled == model.enabled) {
         return
       }
-      // Repaints and re-enables; the box is the same either way, which is what
-      // `Stepper.harness.tsx`'s one-box case checks rather than assumes.
       model.enabled = enabled
       host.markDirty()
     }
@@ -633,10 +481,7 @@ class HybridNitroUiStepper(
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
     set(next) {
-      // The host's tag, which is what RN's testID matchers read on Android — IconButton's
-      // answer, and the reason the prop exists on this platform at all: the
-      // generated manager forwards props to this class and nothing else, so a
-      // stored-only `testID` leaves the node invisible to every harness query.
+      // The host's tag is what RN's testID matchers read on Android.
       host.tag = next.asSecondOrNull()
     }
 
@@ -649,7 +494,6 @@ class HybridNitroUiStepper(
       if (label == model.accessibilityLabel) {
         return
       }
-      // Rendered (it is the node's name), and never a measure: a name is not width.
       model.accessibilityLabel = label
       host.markDirty()
     }
@@ -688,9 +532,7 @@ class HybridNitroUiStepper(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // `value`, `defaultValue`, `minimumValue`, `maximumValue` and `step` can all land
-    // in one batch in any order, so none of them is interpreted until the batch is
-    // complete (Slider's rule, and the same reason).
+    // Value, range and step can arrive in one batch in any order, so quantise only here.
     model.state.js?.let { js ->
       val quantised = model.quantize(js)
       if (quantised != js) {
@@ -700,14 +542,11 @@ class HybridNitroUiStepper(
     if (model.applyDefaultOnce()) {
       host.markDirty()
     }
-    // The handshake decides whether React's write wins over what the user just
-    // stepped to (§4).
     if (model.state.reconcile()) {
       model.displayed = model.state.displayed
       host.markDirty()
     }
-    // A range or step that moved under an existing value can leave the shown value
-    // outside it. Idempotent, so a value that is already legal comes back unchanged.
+    // A range or step change can leave the shown value outside the range.
     val shown = model.quantize(model.displayed)
     if (shown != model.displayed) {
       model.displayed = shown
@@ -719,9 +558,6 @@ class HybridNitroUiStepper(
 
   override fun prepareForRecycle() {
     host.tag = null
-    // The composition does not survive a recycle (core.md §6), and
-    // `host.prepareForRecycle()` resets the model - including the handshake counters
-    // the next owner's first `value` write is judged against.
     host.prepareForRecycle()
   }
 
@@ -732,26 +568,19 @@ class HybridNitroUiStepper(
 
   // MARK: - Methods
 
-  /** The size Compose measured, from the host's cache. Safe on the JS thread (§1.4). */
+  // Reads the host's cached size, so it is safe on the JS thread.
   override fun measureContent(): NitroUiStepperSize {
     val size = host.contentSize ?: return NitroUiStepperSize(0.0, 0.0)
     return NitroUiStepperSize(size.width, size.height)
   }
 
-  /** One step through the tap's path, on the UI thread (see the spec). Returns at once. */
   override fun nuiTestStep(direction: Double) {
     val up = direction >= 0.0
     Handler(Looper.getMainLooper()).post { model.step(up) }
   }
 
-  /**
-   * Perform the reader's own action on the merged node, test-only.
-   *
-   * There is deliberately **no fallback**: with no node publishing `SetProgress` the
-   * probe does nothing and says so. Calling `model.step(…)` instead would move the
-   * value either way and prove nothing about the path a screen reader takes, which is
-   * the whole thing under test (Slider's rule).
-   */
+  // Test-only. Performs the reader's action on the merged node. No fallback: calling the
+  // model directly would not test the path a screen reader takes.
   override fun nuiTestAccessibilityStep(direction: Double) {
     val up = direction >= 0.0
     Handler(Looper.getMainLooper()).post { runTestAccessibilityStep(up) }
@@ -759,25 +588,14 @@ class HybridNitroUiStepper(
 
   override fun nuiTestAccessibilityStepReport(): String = model.currentStepReport()
 
-  /** Read the control's semantics node on the UI thread (see the spec). Returns at once. */
   override fun nuiTestProbeAccessibility() {
     Handler(Looper.getMainLooper()).post {
-      // One walk of the tree, two fields: the count is the half that says the two
-      // buttons are not quiet focus stops, and the line says what the one node tells
-      // a reader.
       val (merged, detail) = describeAccessibility()
       model.recordMerged(merged)
       model.recordAccessibility(detail)
     }
   }
 
-  /**
-   * Sample the pixels this control draws for [color] (an ARGB `processColor` int).
-   *
-   * Android is the platform with something to sample: these two halves draw the
-   * Material Symbols the library ships, and "the glyphs are drawn" is a drawing
-   * contract no prop echo answers (IconButton's probe is the sampler).
-   */
   override fun nuiTestPixelProbe(color: Double) {
     val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
     if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -791,14 +609,7 @@ class HybridNitroUiStepper(
 
   override fun nuiTestStateReport(): String = model.stateReport()
 
-  /**
-   * The merged node a reader is handed, as `(<nodes publishing SetProgress>,
-   * <one line about it>)`.
-   *
-   * The count is in the report because "the buttons are cleared from the tree" is half
-   * of what the accessibility rule claims, and a report about one node says nothing if
-   * there are quietly two.
-   */
+  // Returns (how many nodes publish `SetProgress`, one line about the node).
   private fun describeAccessibility(): Pair<String, String> {
     val root = findComposeRoot(host) ?: return "none" to "no Compose root"
     root.forceAccessibilityForTesting(true)
@@ -806,7 +617,7 @@ class HybridNitroUiStepper(
     if (owner == null) {
       return "none" to "no SemanticsOwner, even after forcing accessibility on"
     }
-    // The merged tree, because that is the tree a reader is given (Slider's reason).
+    // The merged tree is the one a reader is given.
     val nodes = owner.getAllSemanticsNodes(mergingEnabled = true)
     val candidates = nodes.filter { it.config.contains(SemanticsActions.SetProgress) }
     val clickable = nodes.count { it.config.contains(SemanticsActions.OnClick) }
@@ -834,13 +645,7 @@ class HybridNitroUiStepper(
       "..${nitroUiStepperValueText(range.range.endInclusive.toDouble())}" +
       "@${nitroUiStepperValueText(range.current.toDouble())}/steps=${range.steps}"
       }
-    // What a reader is told the value is: the node's `StateDescription`, which is the
-    // property TalkBack speaks as the value of a progress node. Reading the range
-    // instead would report what the *track* is at, and that is what the `range=` field
-    // beside it is for — and it is exactly the mistake this control shipped with, where
-    // the node published a progress and no value, so the announcement was a percentage
-    // while this line still said `value=4`. iOS spells the same half with
-    // `accessibilityValue`, so the two readings of this line agree.
+    // `StateDescription` is what TalkBack speaks as the value of a progress node.
     val valueText = config.getOrNull(SemanticsProperties.StateDescription) ?: "none"
     return candidates.size.toString() to
       "range=$rangeText,value=$valueText,clickable=$clickable,disabled=$disabled," +
@@ -883,10 +688,7 @@ class HybridNitroUiStepper(
       model.noteStepReport("#${node.id} lost its action between looking and acting")
       return
     }
-    // The delegate's own stride for a scroll forward/back, from `performActionHelper`:
-    // the range divided by the tick count plus the two ends, or into twenty when there
-    // are no ticks. Sent from the progress the node publishes - the delegate's start,
-    // not the model's.
+    // The delegate's stride for a scroll: the range over (ticks + 1), or over 20 without ticks.
     val width = range.range.endInclusive - range.range.start
     val stride =
       if (range.steps > 0) {
@@ -907,12 +709,7 @@ class HybridNitroUiStepper(
     )
   }
 
-  /**
-   * The Compose view under [root], as [RootForTest] rather than as
-   * `AndroidComposeView`: that class is internal to Compose's own module, so the
-   * public interface it implements is the only legal handle on it - which is also the
-   * one that carries [RootForTest.getSemanticsOwner].
-   */
+  // `AndroidComposeView` is internal; `RootForTest` is the public interface it implements.
   private fun findComposeRoot(root: View): RootForTest? {
     val queue = ArrayDeque<View>()
     queue.add(root)
@@ -932,9 +729,8 @@ class HybridNitroUiStepper(
 }
 
 /**
- * The number the control was handed, without a float's noise: `4.0` reads as `4` and
- * `0.1` stays `0.1`. The iOS twin is `StepperModel/accessibilityValueText`, and the
- * harness compares what each platform *drew*, so the two spellings have to agree.
+ * The value without a float's noise: `4.0` reads as `4`. Must match the iOS spelling,
+ * because tests compare what each platform drew.
  */
 internal fun nitroUiStepperValueText(value: Double): String =
   if (value.isFinite() && value % 1.0 == 0.0 && abs(value) < 1e15) {

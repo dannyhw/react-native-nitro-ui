@@ -1,8 +1,6 @@
 import type { HybridObject } from 'react-native-nitro-modules';
 
-/**
- * One perf mark recorded by a native host (see `docs/architecture/core.md`).
- */
+/** One performance mark recorded by a native view. */
 export interface NitroUiPerfEvent {
   /** The view's `nuiPerfId`, or `-1` when the view did not set one. */
   instanceId: number;
@@ -13,11 +11,8 @@ export interface NitroUiPerfEvent {
 }
 
 /**
- * Counters from the intrinsic-sizing engine (`docs/architecture/sizing.md`).
- *
- * They answer the questions a sizing change can only be judged on: did a mount
- * cost a correction, how many, and how long a flush took. `nitroUiCore` is not
- * app API, so this is diagnostics rather than a public contract.
+ * Counters from the engine that sizes controls to their content. Diagnostics,
+ * not a stable contract.
  */
 export interface NitroUiSizingStats {
   /** Configurations with a measured size. */
@@ -41,8 +36,8 @@ export interface NitroUiSizingStats {
   /** Flushes that ran at all. */
   flushes: number;
   /**
-   * Flushes that changed a size. On Android this is also exactly the number of
-   * frames skipped as stale; on iOS it is not (docs/architecture/sizing.md).
+   * Flushes that changed a size. On Android this is also the number of frames
+   * skipped as stale.
    */
   changedFlushes: number;
   /** Engine time of the last and worst flush, ms (excludes the re-layout). */
@@ -79,18 +74,13 @@ export interface NitroUiSizingTraceEvent {
 }
 
 /**
- * The internal core object of `react-native-nitro-ui`.
+ * The core native object of `react-native-nitro-ui`: the shared clock, the
+ * performance marks and the sizing diagnostics.
  *
- * Implemented once in C++ (`cpp/HybridNitroUiCore.cpp`) so both platforms read
- * the same monotonic clock, and it is not `std::chrono::steady_clock` - on Apple
- * that is `CLOCK_MONOTONIC_RAW`, which keeps counting through sleep and so drifts
- * away from the display clock. `cpp/core/NitroUiClock.hpp` reads
- * `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` on Apple (the base of
- * `CACurrentMediaTime()`, `CADisplayLink` and `systemUptime`) and
- * `clock_gettime(CLOCK_MONOTONIC)` on Android (the base of `System.nanoTime()`
- * and Choreographer frame times), which is also the base every perf mark uses.
- *
- * Not part of the public API surface beyond what `src/index.ts` re-exports.
+ * `now()` reads the clock each platform's display uses: `CLOCK_UPTIME_RAW` on
+ * Apple (the base of `CACurrentMediaTime()` and `CADisplayLink`) and
+ * `CLOCK_MONOTONIC` on Android (the base of `System.nanoTime()` and Choreographer
+ * frame times). Every performance mark uses the same base.
  */
 export interface NitroUiCore extends HybridObject<{
   ios: 'c++';
@@ -102,10 +92,7 @@ export interface NitroUiCore extends HybridObject<{
    */
   now(): number;
 
-  /**
-   * Turn native perf marks on/off (off by default). While it is off, a host only
-   * pays one relaxed atomic load per mark.
-   */
+  /** Turn native performance marks on or off. Off by default. */
   setPerfEnabled(enabled: boolean): void;
 
   /**
@@ -115,9 +102,7 @@ export interface NitroUiCore extends HybridObject<{
    */
   drainPerf(): NitroUiPerfEvent[];
 
-  /**
-   * Sizing engine counters, taken as one snapshot (see `NitroUiSizingStats`).
-   */
+  /** Sizing engine counters, taken as one snapshot. */
   sizingStats(): NitroUiSizingStats;
 
   /**
@@ -144,10 +129,9 @@ export interface NitroUiCore extends HybridObject<{
 
   /**
    * Declare the environment changed (text size, density, locale): every cached
-   * size is dropped and every mounted instance is asked to measure again, so
-   * controls already on screen can be corrected. Native hosts call this
-   * themselves when they observe a change - this is the unconditional seam for
-   * tests and for environments native cannot observe.
+   * size is dropped and every mounted instance is asked to measure again. Native
+   * calls this itself when it observes a change; this is for tests and for
+   * changes native cannot observe.
    */
   invalidateSizingEnvironment(): void;
 

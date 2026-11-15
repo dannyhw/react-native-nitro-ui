@@ -1,21 +1,8 @@
 #!/usr/bin/env node
 /**
- * The AVD name the harness will boot, printed for a CI step that cannot import
- * the config it comes from.
- *
- * `example/rn-harness.config.mjs` is the single source, but loading it runs the
- * Node-version check, the `app.stamp` gate and a simulator/AVD lookup — all of
- * which are exactly what a preflight step is trying to find out about. So this
- * reads the file as text and takes the one literal, and prints nothing but the
- * name so a workflow can `$(…)` it.
- *
- * Fails loudly rather than printing empty: the step that reads this is the one
- * that reports what a job is about to boot, and an empty name there would show
- * up as "no such AVD directory" two lines later. The previous shape of this was
- * a shell one-liner whose helper took file *contents* where it took a path, and
- * it died of `ENAMETOOLONG`.
- *
- * `NITRO_UI_HARNESS_CONFIG` overrides the file.
+ * Prints the AVD name the harness will boot, for a CI step. It reads
+ * `example/rn-harness.config.mjs` as text, because importing the config runs
+ * its checks and a device lookup. `NITRO_UI_HARNESS_CONFIG` overrides the file.
  */
 
 import { readFileSync } from 'node:fs';
@@ -23,7 +10,6 @@ import process from 'node:process';
 
 const DEFAULT_CONFIG = 'example/rn-harness.config.mjs';
 
-/** The declaration this reads, kept as a pattern so the script cannot drift silently. */
 const DECLARATION = /const DEFAULT_AVD = '([^']+)'/u;
 
 const file = process.env.NITRO_UI_HARNESS_CONFIG || DEFAULT_CONFIG;
@@ -48,17 +34,8 @@ if (match == null) {
   process.exit(1);
 }
 
-/**
- * Same precedence as `avd()` in the config above: `ANDROID_AVD`, then `AVD`, then
- * the constant. Without this the two disagree on any machine that overrides the
- * name — which is every leased device on this repo's own dev boxes (`lease.mjs`
- * exports `ANDROID_AVD=nitroui_a`), and any CI job that parameterises it. The
- * consequence is silent and specific: the harness boots `nitroui_a`, this prints
- * `nitroui`, and the diagnostics step reports "no AVD directory" for a job that had
- * a fully working emulator. A name is also allowed to be empty-ish in the
- * environment (`ANDROID_AVD=''` is what a bad `set -a` source produces), so an
- * empty override falls through rather than printing an empty line.
- */
+// Same precedence as `avd()` in the config: `ANDROID_AVD`, then `AVD`, then the
+// constant. An empty override falls through instead of printing an empty line.
 const override = [process.env.ANDROID_AVD, process.env.AVD].find(
   (value) => typeof value === 'string' && value.trim() !== ''
 );

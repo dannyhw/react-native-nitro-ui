@@ -51,12 +51,8 @@ namespace margelo::nitro::benchprobe {
     return static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
   }
 
-  /**
-   * Absolute D1 timestamps (docs/DECISIONS.md D1). No process-load origin: an
-   * absolute CLOCK_UPTIME_RAW value only reaches 2^53 ns after ~104 days awake,
-   * and the offset made probe stamps uncomparable with `NitroUiCore.now()` and
-   * the perf marks T10 emits, which share this clock.
-   */
+  /// Absolute, with no process-start origin, so stamps compare with the library's
+  /// perf marks on the same clock. A double holds it exactly for ~104 days awake.
   static inline double BenchProbeNowNs(void) {
     return static_cast<double>(BenchProbeRawNs());
   }
@@ -65,45 +61,20 @@ namespace margelo::nitro::benchprobe {
     return static_cast<double>(static_cast<int64_t>(seconds * 1e9));
   }
 
-  /**
-   * The ceiling on waiting for a presenting frame, in seconds.
-   *
-   * This is a backstop for a process that never gets a frame (suspended, or a window
-   * that is not on screen), **not** the wait the runner asked for - that is the
-   * `timeoutMs` of `awaitPresented`, which resolves the same promise first through the
-   * same once-guard. It has to be well above any timeout the runner can ask for,
-   * because a backstop that fires earlier than the requested wait *becomes* the
-   * timeout: every long wait would be answered `-1` at the ceiling and the diagnostic
-   * A4 added (`presentedTimeout=` on the launch plan) would measure nothing but this
-   * number. Kept finite so a stalled launch still ends: the plan parser caps a
-   * requested timeout below this (see `BENCH_DEFAULT_TIMEOUTS` in
-   * `bench/src/plan.ts`).
-   *
-   * 90 s is iOS's own number. Android's is 2 s, unchanged from before A4, because the
-   * longer wait A4 measured here is scoped to iOS (review M1).
-   */
+  /// Backstop for a process that never gets a frame, in seconds. It must stay above
+  /// any `timeoutMs` the runner can pass to `awaitPresented` (the plan parser caps
+  /// those below this), or it would fire first and become the timeout.
   static constexpr double kBenchPresentationCeilingSeconds = 90.0;
 
-  /**
-   * How long the **pacing** frame wait (`nextFrameNs`) waits before giving up and
-   * reporting "now". Pacing only, so a slow frame here costs nothing but a slightly short
-   * gap between iterations - which is why it stays at 2 s on both platforms while the
-   * measured ceiling above does not (Android's `FRAME_TIMEOUT_MS` is the same idea).
-   */
+  /// How long `nextFrameNs` waits for a frame before reporting "now". It only paces
+  /// iterations, so it can be short.
   static constexpr double kBenchPacingFrameCeilingSeconds = 2.0;
 
   // ------------------------------------------------ transaction capture ---
 
-  /**
-   * One armed mounting transaction.
-   *
-   * The mount hook and the display link both run on the main queue (RN asserts
-   * `RCTAssertMainQueue()` around `didMountComponentsWithRootTag:`), while
-   * `armMountObserver`/`awaitMount`/`awaitPresented` are called from the JS
-   * thread - hence the mutex. As in `nextFrameNs`, every promise is resolved
-   * exactly once through an `exchange` guard and is only ever reached through a
-   * `shared_ptr`, so a losing race can never resolve a freed promise.
-   */
+  /// One armed mounting transaction. The mount hook and the display link run on the
+  /// main queue while the arm and await calls come from the JS thread, hence the
+  /// mutex. Each promise resolves exactly once and is only reached via `shared_ptr`.
   struct BenchMountCapture {
     std::mutex mutex;
     bool haveMount = false;
@@ -152,38 +123,17 @@ namespace margelo::nitro::benchprobe {
   /// Arm the one-shot frame capture for the transaction we just mounted.
   /// Must run on the main queue, in the same turn as the mount.
   ///
-  /// The safety timer below is a **ceiling, not the wait the runner asked for**: the
-  /// binding timeout is the one `awaitPresented(timeoutMs)` arms, and it resolves this
-  /// same promise exactly once through the same guard. It has to be a ceiling because
-  /// the runner can ask for longer than any fixed number (A4: `presentedTimeout=` on
-  /// the launch plan, to tell "this arm never draws" from "this arm draws slower than
-  /// we wait"); a 2 s backstop here would answer `-1` first and every long wait would
-  /// silently measure 2 s. It exists only so an app that never gets a frame (a
-  /// suspended process) cannot hang the runner.
-  ///
-  /// `capture` is taken **by value on purpose**: both blocks below outlive this
-  /// call, and a block that captures a reference parameter captures the referent,
-  /// not an owning reference - which segfaults in `capture->mutex` when the
-  /// display link fires after the mount hook has returned. Passing by value makes
-  /// each block copy-construct its own `shared_ptr`, so the capture cannot die
-  /// under either the display link or the fallback timer.
+  /// `capture` is taken by value on purpose: both blocks below outlive this call,
+  /// and a block that captures a reference parameter does not own the referent.
   static void BenchProbeArmPresentation(std::shared_ptr<BenchMountCapture> capture) {
-    // Main queue, in the same turn as the mount: a good moment to name the main
-    // thread for threadCpuNs('main').
     BenchProbeCaptureMainThreadPort();
     __block CADisplayLink* link = nil;
     BenchProbeFrameTarget* target = [[BenchProbeFrameTarget alloc] init];
     target.handler = ^(CADisplayLink *sender) {
       // `targetTimestamp`, not `timestamp`: a link armed inside a mounting
-      // transaction fires during *that* frame's update sequence, so `timestamp`
-      // is the start of the frame the commit is happening in - measured on
-      // device it lands ~0.67 ms BEFORE the JS commit, i.e. a negative latency
-      // that cannot be compared or ratioed. `targetTimestamp` is the start of
-      // the next frame, the earliest moment content committed in this turn can
-      // be on screen, which is the same "frame boundary at or after the commit"
-      // the Android side reports (intended vsync + total duration). It is still
-      // one refresh period quantised, and it is still a frame stamp, not a
-      // duration.
+      // transaction fires during that frame, so `timestamp` is the start of the
+      // frame the commit happens in and lands before the commit. `targetTimestamp`
+      // is the next frame, the earliest the committed content can be on screen.
       const double ns = BenchProbeNsFromHostSeconds(sender.targetTimestamp);
       [sender invalidate];
       bool armTimeout = false;
@@ -204,8 +154,7 @@ namespace margelo::nitro::benchprobe {
     [link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
 
     // A suspended app never gives the frame: report "no signal" rather than
-    // hanging the runner. The capture is a shared_ptr, so this block is safe to
-    // fire after the display link won.
+    // hanging the runner.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kBenchPresentationCeilingSeconds * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
       bool armTimeout = false;
@@ -252,21 +201,10 @@ namespace margelo::nitro::benchprobe {
     }
   }
 
-  /**
-   * Install the mount hook.
-   *
-   * docs/research/setup-decisions.md SS6 asks for `RCTSurfacePresenterObserver`'s
-   * `didMountComponentsWithRootTag:`. That protocol is reached through
-   * `-[id<RCTSurfacePresenterStub> addObserver:]`, and the stub is stored as an
-   * associated object on the `RCTBridgeProxy` instance - which RN 0.88 does not
-   * hand out anywhere (`+[RCTBridge currentBridge]` returns nil in bridgeless).
-   * So we hook the one method that fans the notification out to those observers
-   * instead: it is the same signal, one level down, on the main queue.
-   *
-   * If the class or selector ever disappears, we log once and leave every await
-   * resolving -1, so the runner reports "mounted: n/a" instead of producing a
-   * wrong number or crashing.
-   */
+  /// Installs the mount hook. Bridgeless React Native gives no way to reach the
+  /// surface presenter to register an observer, so this swizzles the method that
+  /// fans the mount notification out to observers. If the class or selector is
+  /// missing, it logs once and every await resolves -1.
   static void BenchProbeInstallMountHookOnce(void) {
     static std::once_flag once;
     std::call_once(once, []() {
@@ -289,13 +227,8 @@ namespace margelo::nitro::benchprobe {
     });
   }
 
-  /**
-   * Attach a promise to an already-armed capture, or answer `-1` when there is
-   * nothing to wait for (no arm, or a failed hook).
-   *
-   * `*haveStamp`/`stamp` are read under the capture's mutex so a mount that
-   * landed while JS was still getting here resolves immediately.
-   */
+  /// Attaches a promise to an already-armed capture, or answers `-1` when there is
+  /// nothing to wait for (no arm, or a failed hook).
   template <bool Presented>
   static std::shared_ptr<Promise<double>> BenchProbeAwaitStamp(double timeoutMs) {
     auto promise = Promise<double>::create();
@@ -349,18 +282,10 @@ namespace margelo::nitro::benchprobe {
 
   // ------------------------------------------------------------- CPU time ---
 
-  /**
-   * The process' main thread mach port, cached.
-   *
-   * The main thread's `pthread_getname_np` is usually the empty string, and
-   * `pthread_main_thread_np()` is not part of the iOS SDK, so there is no
-   * supported way to name it from another thread. Instead every main-thread
-   * call site of the probe (the mount turn and `nextFrameNs`) records
-   * `mach_thread_self()` the first time it runs - which is always before the
-   * runner samples CPU, because a CPU sample is only taken around an operation
-   * that mounts. If a sample somehow comes first, the fallback names the first
-   * thread of the process; the main thread is created before any other.
-   */
+  /// The main thread's mach port, cached. iOS has no supported way to name the main
+  /// thread from another thread, so the probe's main-thread call sites record
+  /// `mach_thread_self()` the first time they run. If a CPU sample comes first,
+  /// the fallback is the process's first thread, which is the main thread.
   static std::atomic<mach_port_t> gMainThreadPort{MACH_PORT_NULL};
 
   /// Call from a site known to be on the main thread. The cache owns the send
@@ -501,12 +426,8 @@ namespace margelo::nitro::benchprobe {
 
   std::shared_ptr<Promise<double>> HybridBenchProbe::nextFrameNs() {
     auto promise = Promise<double>::create();
-    /**
-     * Shared between the display-link callback and the safety timer. It has to
-     * be a shared_ptr rather than a pointer freed by whoever wins: the timer is
-     * still armed when the frame arrives, and dereferencing a freed context
-     * there resolves a freed Promise (observed as a mutex abort on main).
-     */
+    // Shared between the display-link callback and the safety timer: the timer is
+    // still armed when the frame arrives, so neither side may free the context.
     struct FrameContext {
       std::shared_ptr<Promise<double>> promise;
       std::atomic<bool> settled{false};
@@ -533,8 +454,7 @@ namespace margelo::nitro::benchprobe {
       link = [CADisplayLink displayLinkWithTarget:target selector:@selector(fire:)];
       [link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
 
-      // Never let a missed frame (e.g. a suspended app) hang the runner. The
-      // context outlives this block either way; see the comment above.
+      // Never let a missed frame (e.g. a suspended app) hang the runner.
       dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kBenchPacingFrameCeilingSeconds * NSEC_PER_SEC)),
                      dispatch_get_main_queue(), ^{
         if (context->settled.load()) {

@@ -1,15 +1,3 @@
-/**
- * Menu stories (S1). Props and events: `docs/components/menu.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- *
- * `group` gets no Controls row. It is a tree of rows, submenus and sections, and
- * the on-device Controls panel types text, numbers, booleans and lists of strings -
- * not nested objects - so the Playground chooses between five item lists on chips
- * instead. That is also the shape a caller has: the group is data a screen builds,
- * not a value someone types into a field.
- */
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -33,12 +21,6 @@ const VARIANTS: readonly ButtonVariant[] = [
 ];
 const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
 
-/**
- * The item lists the stories hand a `Menu`.
- *
- * Module-level so their identity never changes: `group` is an object prop, and a
- * literal in the JSX would be a fresh one on every render.
- */
 const GROUPS = {
   flat: {
     actions: [
@@ -100,10 +82,6 @@ const meta = {
   component: Menu,
   args: {
     title: 'Actions',
-    // Required by the component type, so it has to be in `args` for the stories to
-    // typecheck - and `control: false` below is what keeps it off the Controls
-    // panel, where no control could type it. Stories that want another list pass
-    // `group` themselves.
     group: GROUPS.flat,
     variant: 'filled',
     size: 'medium',
@@ -182,14 +160,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel, with the item list on chips.
- *
- * `primaryAction` is deliberately left out of the Playground’s args: on iOS it
- * turns a tap into an action and moves the menu behind a long-press, so the same
- * trigger would do two different things depending on a checkbox. `PrimaryAction` is
- * where that difference is the point.
- */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const { onSelect, onOpen, onClose, ...rest } = props;
@@ -239,13 +209,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * The trigger vocabulary: five variants at three sizes.
- *
- * The same nine combinations `Button` publishes, deliberately: this control claims
- * its trigger *is* a Button, and the story is where a reader can put the two
- * screens next to each other.
- */
 export const TriggerStyles: Story = {
   render: function TriggerStylesStory() {
     return (
@@ -276,14 +239,7 @@ export const TriggerStyles: Story = {
   },
 };
 
-/**
- * The row vocabulary in one control: rows, a destructive row, a disabled row,
- * sections with and without a header, and a submenu.
- *
- * The submenu is the one row that differs by platform - nested on iOS, inline as a
- * group of its own on Android (D29) - and neither platform nests a submenu inside a
- * submenu.
- */
+// A submenu is nested on iOS and drawn inline as a group of its own on Android.
 export const ItemLists: Story = {
   render: function ItemListsStory() {
     const [picked, setPicked] = useState('nothing yet');
@@ -323,14 +279,6 @@ export const ItemLists: Story = {
   },
 };
 
-/**
- * A row's second line and its check (E2): `subtitle` and `checked`.
- *
- * The checks are the story's own state - a menu has no value, so a pick reports the
- * row's `id` and `onSelect` is where the app flips what the next `checked` says. iOS
- * draws a check with `UIAction.state` and the subtitle under the title; Android draws
- * a checked row selected, with a leading check, and the subtitle as supporting text.
- */
 export const RowDetails: Story = {
   render: function RowDetailsStory() {
     const [layout, setLayout] = useState<'icons' | 'list'>('icons');
@@ -392,7 +340,6 @@ export const RowDetails: Story = {
   },
 };
 
-/** Disabled, side by side with an enabled control of the same shape. */
 export const Disabled: Story = {
   render: function DisabledStory() {
     return (
@@ -422,7 +369,6 @@ export const Disabled: Story = {
   },
 };
 
-/** The accent colour and a leading symbol, next to plain controls. */
 export const Tinted: Story = {
   render: function TintedStory() {
     return (
@@ -460,13 +406,6 @@ export const Tinted: Story = {
   },
 };
 
-/**
- * The trigger is sized by its title, and a title too long for its box truncates.
- *
- * `intrinsic` sizing: the control measures itself and its box is what it measured,
- * so a caller either gives it room or sees an ellipsis. The list is as wide as its
- * own rows need, which is not the trigger’s width - on either platform.
- */
 export const Sizing: Story = {
   render: function SizingStory() {
     return (
@@ -496,15 +435,9 @@ export const Sizing: Story = {
   },
 };
 
-/**
- * One control, two jobs - and each platform's own way of drawing that.
- *
- * The two answers differ by idiom, not by gap (D29 as E3 lifted its Android half):
- * iOS keeps one button where a tap runs the action and a long-press opens the list,
- * and Android draws Material 3's split button, where the left half runs the action and
- * the chevron on the right opens the list. A press on the action half never opens the
- * list on either platform, which is the part an app can rely on.
- */
+// iOS keeps one button: a tap runs the action and a long-press opens the list.
+// Android draws Material 3's split button: the left half runs the action and the
+// chevron opens the list.
 export const PrimaryAction: Story = {
   render: function PrimaryActionStory() {
     const [presses, setPresses] = useState(0);
@@ -532,15 +465,6 @@ export const PrimaryAction: Story = {
   },
 };
 
-/**
- * The split configuration beside the plain trigger, at all three sizes.
- *
- * The difference only shows next to each other: on Android the second container makes
- * the control visibly wider and gives the list its own half to open from, and on iOS
- * both rows are the same box, because `primaryAction` is a gesture there and not a
- * layout. That asymmetry is also why the sizing key carries an `action` field
- * (`docs/components/menu.md`).
- */
 export const SplitTrigger: Story = {
   render: function SplitTriggerStory() {
     const [log, setLog] = useState<string[]>([]);
@@ -582,13 +506,8 @@ export const SplitTrigger: Story = {
   },
 };
 
-/**
- * The events one gesture produces, in the order the platform reports them.
- *
- * One control and one line of text: the same pick reads `open > select > close` on
- * Android and `select` alone on iOS, which is D32’s ruling in a form a reader can
- * check on their own phone.
- */
+// The same pick reports `open > select > close` on Android and `select` alone on
+// iOS.
 export const Events: Story = {
   render: function EventsStory() {
     const [log, setLog] = useState<string[]>([]);
@@ -623,13 +542,6 @@ export const Events: Story = {
   },
 };
 
-/**
- * A `group` whose rows come and go while the control stays mounted.
- *
- * The prop change is the interesting half: a menu is not a value React owns, so all
- * a new item list may do is redraw the list - never reopen it, and never lose a menu
- * that is already up.
- */
 export const ChangingGroup: Story = {
   render: function ChangingGroupStory() {
     const [extra, setExtra] = useState(true);
@@ -669,13 +581,6 @@ export const ChangingGroup: Story = {
   },
 };
 
-/**
- * The announcement, and what a screen reader is offered.
- *
- * The trigger is named by `accessibilityLabel` when one is given and by its `title`
- * when not, and it is a control that opens a list either way. The rows belong to the
- * system’s presentation, so a disabled row is announced as disabled there too.
- */
 export const Accessibility: Story = {
   render: function AccessibilityStory() {
     return (

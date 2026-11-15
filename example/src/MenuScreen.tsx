@@ -16,11 +16,7 @@ import {
   type MenuGroup,
 } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance — same helper `ButtonScreen` uses.
- * `Text` gets no dynamic default colour from React Native, and the screen has to
- * read in both light and dark mode for the screenshots in `docs/components/`.
- */
+/** `Text` gets no dynamic default colour from React Native. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -46,17 +42,8 @@ const VARIANTS: readonly ButtonVariant[] = [
 const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
 
 /**
- * The rows of the real-input menu, spelled as `CHECKS.menu` and
- * `testRealInputMenu` spell them.
- *
- * None of the three titles appears anywhere else on this screen, which is what lets
- * a text match name one popup row rather than some other text on screen (the same
- * rule `PickerScreen`'s `REAL_INPUT_OPTIONS` follows). `Locked row` is disabled, so
- * it is the row a check proves takes no pick. `Checked row` is a checkable row (an iOS
- * `Toggle`, an Android `CheckableDropdownMenuItem`): its pick travels the toggle's
- * change handler rather than a button's action, and the harness's `nuiTestSelectRow`
- * never reaches that handler, so the real-input suites tap it. It stays checked
- * whatever is picked - the menu has no value, and the echo is what the checks read.
+ * The real-input tests find these rows by title, so each title must appear
+ * nowhere else on the screen.
  */
 const REAL_INPUT_GROUP: MenuGroup = {
   actions: [
@@ -67,19 +54,8 @@ const REAL_INPUT_GROUP: MenuGroup = {
   ],
 };
 
-/** The rows the "group changes" block can take away and put back. */
 const OPTIONAL_ROW = { id: 'extra', title: 'Extra row' };
 
-/**
- * Every Menu configuration G7a has to show, on one screen: each variant at each
- * size, disabled, tinted, a long title, an SF Symbol (iOS), sections, a submenu, a
- * primary action (iOS), and a `group` whose rows come and go while the control
- * stays mounted.
- *
- * This is also the screen the screenshots in `docs/components/menu.md` come from.
- * The on-device assertions live in `example/__tests__/Menu.harness.tsx`, which
- * renders its own trees.
- */
 export default function MenuScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
@@ -106,14 +82,9 @@ export default function MenuScreen() {
     setExtraRow((current) => !current);
   }, []);
 
-  // The real-input echoes: what the control reported, in the order it reported it.
-  //
-  // One string rather than three counters, because the *order* is the thing
-  // `scripts/real-input` asserts (DECISIONS D32: a pick fires `onSelect` and then
-  // `onClose`, and Android is the only platform that fires either). So the same
-  // echo reads `open > select bravo > close` on Android after one real pick and
-  // `select bravo` on iOS — row ids, not titles — and each platform's check reads
-  // it and expects its own text: the ruling is asserted rather than described.
+  // One string, because the real-input tests assert the order of events: a
+  // pick reads `open > select bravo > close` on Android and `select bravo` on
+  // iOS, where a menu reports neither opening nor closing.
   const [events, setEvents] = useState('none');
   const [lastPick, setLastPick] = useState('-');
 
@@ -123,10 +94,7 @@ export default function MenuScreen() {
     );
   }, []);
 
-  // The split trigger's own echo (E3), deliberately separate from `events`: the real-
-  // input check for the plain Menu asserts that string as a *whole*, so a second
-  // control writing into it would make its deterministic shape depend on this screen's
-  // layout. One control, one history - and the order inside it is still the point.
+  // Kept apart from `events`: the real-input tests assert each string whole.
   const [splitEvents, setSplitEvents] = useState('none');
   const appendSplitEvent = useCallback((said: string) => {
     setSplitEvents((current) =>
@@ -159,8 +127,6 @@ export default function MenuScreen() {
   const noteRealOpen = useCallback(() => appendEvent('open'), [appendEvent]);
   const noteRealClose = useCallback(() => appendEvent('close'), [appendEvent]);
 
-  // A menu with a titled group, an untitled group, a destructive row and a
-  // disabled one — the whole row vocabulary in one control.
   const sectioned = useMemo<MenuGroup>(
     () => ({
       actions: [
@@ -185,8 +151,7 @@ export default function MenuScreen() {
     []
   );
 
-  // One submenu level (DECISIONS D29): nested on iOS, inline as a group of its own
-  // on Android.
+  // A submenu is nested on iOS and drawn inline as its own group on Android.
   const withSubmenu = useMemo<MenuGroup>(
     () => ({
       actions: [
@@ -206,7 +171,6 @@ export default function MenuScreen() {
     []
   );
 
-  // The rows the caller can change while the control is mounted.
   const growing = useMemo<MenuGroup>(
     () => ({
       actions: extraRow
@@ -242,14 +206,8 @@ export default function MenuScreen() {
           a control cannot tell a dropped tap from a control that is off screen.
         </Text>
         <View style={styles.row}>
-          {/* Two suites read this one control. `CHECKS.menu` and
-              `testRealInputMenu` tap it and read the two echoes beside it; the
-              conformance suite's a11y case (`A11Y_CONTROLS` id `menu`) is what the
-              `accessibilityLabel` below is for — the label is the name the rule looks
-              for, the testID the box it compares the named node's box with, both
-              cross-checked against this file by `checkA11yTable`. Dropping the label
-              leaves every real-input check green and silently drops a control from the
-              a11y rule, which is the coupling worth knowing about on a shared anchor. */}
+          {/* The accessibility checks find this control by its
+              `accessibilityLabel`; the real-input tests by its testID. */}
           <Menu
             title="Actions"
             group={REAL_INPUT_GROUP}
@@ -259,10 +217,9 @@ export default function MenuScreen() {
             testID="real-input-menu"
             accessibilityLabel="Real-input menu"
           />
-          {/* Separate `Text`s, not one line with nested children: React Native renders
-              a nested `Text` inline inside its parent, so on Android it never becomes
-              its own view and never carries a `resource-id` — the only way
-              `scripts/real-input/android.mjs` can find an echo. */}
+          {/* Separate `Text`s: a nested `Text` renders inline in its parent, so
+              on Android it is no view of its own and carries no `resource-id`
+              for a test to find. */}
           <Text style={[styles.readout, { color: ink.muted }]}>
             last row reported
           </Text>

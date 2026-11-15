@@ -1,23 +1,3 @@
-/**
- * What `example/rn-harness.config.mjs` decides before it touches a device.
- *
- * The config file is where the `app.stamp` gate lives, and it is also a file with
- * a simulator, an emulator and a Metro port behind it - so the decisions are
- * `selectHarnessApp` in `scripts/app-stamp-core.mjs`, and this is where they are
- * exercised. All three came out of a red CI job or a lost afternoon:
- *
- *   - `Harness (Android)` refused with a *iOS* message (run 40382254368), because
- *     the action's `load-config` step imports the config with no runner on its
- *     command line and the config guessed iOS;
- *   - a relative `HARNESS_APP_PATH` named a file that does not exist from
- *     `example/`, and the run died as an opaque `AbortError` (A2, three runs);
- *   - a refusal in a config read by a *cache-planning* step would replace the
- *     harness's own test report with a config error.
- *
- * The cases hand the function a fake `existsSync` and a fake command line, so a
- * run needs no device, no app and no `.harness` directory.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -74,11 +54,8 @@ describe('which platform a harness config read is for', () => {
   it.each(['INPUT_RUNNER', 'HARNESS_RUNNER'])(
     'reads %s when argv does not name a runner',
     (key) => {
-      // `harness ci load-config` names no runner, so the action hands the answer
-      // over as INPUT_RUNNER; `Run E2E tests` exports the same fact as
-      // HARNESS_RUNNER. Both are step environment of the pinned action, and
-      // reading them is what stopped `Harness (Android)` from refusing over a
-      // missing iOS .app.
+      // `harness ci load-config` names no runner, so the action passes it as
+      // INPUT_RUNNER, and its test step exports the same as HARNESS_RUNNER.
       expect(
         selectHarnessApp({
           argv: [process.execPath, CLI, 'ci', 'load-config'],
@@ -93,8 +70,6 @@ describe('which platform a harness config read is for', () => {
   );
 
   it('does not let the environment override what was typed', () => {
-    // A leftover HARNESS_RUNNER=ios in a shell must not send an explicitly-Android
-    // run looking for the iOS app.
     const decided = selectHarnessApp({
       argv: localRun('android'),
       env: { HARNESS_RUNNER: 'ios' },
@@ -121,8 +96,7 @@ describe('which platform a harness config read is for', () => {
   });
 
   it('an environment value that is not a platform is not a runner', () => {
-    // `INPUT_RUNNER` is also set by other actions' inputs; a stray value has to
-    // fall through rather than become a platform.
+    // `INPUT_RUNNER` is also set by other actions' inputs.
     const decided = selectHarnessApp({
       argv: [process.execPath, CLI],
       env: { INPUT_RUNNER: 'windows', HARNESS_RUNNER: '' },
@@ -155,8 +129,6 @@ describe('a config read by a cache-planning step is not a device run', () => {
   );
 
   it('a test run with no runner flag still gates', () => {
-    // The other direction: `bun run harness` with no `--harnessRunner` is a
-    // device run, and must not be excused by the ci-step rule.
     expect(
       selectHarnessApp({
         argv: [process.execPath, CLI, 'Switch.harness.tsx'],
@@ -170,9 +142,8 @@ describe('a config read by a cache-planning step is not a device run', () => {
   });
 
   it('the list of ci subcommands still matches the installed CLI', () => {
-    // This list is the only reason a `ci` read is excused. If the CLI grows a
-    // fifth one, or renames the array, an excused step could be a real device run
-    // - so the copy is compared with the file the action actually execs.
+    // Only these `ci` subcommands are excused from the app check, so the copy
+    // is compared with the file the action runs.
     const cliIndex = path.join(
       process.cwd(),
       'node_modules',
@@ -204,9 +175,8 @@ describe('an explicit HARNESS_APP_PATH becomes a path the CLI can use', () => {
     });
 
   it('resolves a path relative to the project root, which is where the CLI looks', () => {
-    // `react-native-harness` never rebases HARNESS_APP_PATH: platform-android and
-    // platform-apple both do `fs.existsSync(process.env.HARNESS_APP_PATH)`, from
-    // `projectRoot`. So this is the only place a relative path can be fixed.
+    // `react-native-harness` never rebases HARNESS_APP_PATH: it calls
+    // `fs.existsSync` on it from the project root.
     expect(
       withPath('android/app/build/outputs/apk/debug/app-debug.apk', [APK])
         .artifact
@@ -234,9 +204,6 @@ describe('an explicit HARNESS_APP_PATH becomes a path the CLI can use', () => {
   });
 
   it('leaves an unresolvable path pointing at the project root, so the CLI names it', () => {
-    // The point is that the refusal is the harness's own "missing APK" message
-    // with a path in it, not a config error and not a silent success against
-    // whatever the device already has.
     expect(withPath('build/whatever.apk', []).artifact).toBe(
       '/repo/example/build/whatever.apk'
     );

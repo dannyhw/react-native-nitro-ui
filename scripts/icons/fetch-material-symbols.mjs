@@ -1,33 +1,13 @@
 #!/usr/bin/env node
 /**
- * The library's own Android icons, copied unchanged from Google's Material Symbols.
+ * Copies the library's Android icons, unchanged, from Google's Material Symbols repository
+ * at a pinned commit, and records each file's source URL and SHA-256 in the lock file.
  *
  *   node scripts/icons/fetch-material-symbols.mjs            # download, write, record hashes
  *   node scripts/icons/fetch-material-symbols.mjs --verify   # download, compare, write nothing
  *
- * D43 item 1: no glyph path is typed by hand. Every icon the library draws itself is
- * one of Google's official Material Symbols Android vector drawables (Apache 2.0),
- * fetched from Google's own repository at a pinned commit and written byte for byte,
- * so the only thing a reviewer has to trust is the URL. The Apache 2.0 text comes from
- * the same commit.
- *
- * The output is committed and nothing downloads at build time. `material-symbols.lock.json`
- * records each file's source URL and SHA-256, and `scripts/__tests__/android-icons.test.js`
- * fails `check` when a shipped file no longer matches its hash - so a hand edit to a
- * coordinate cannot pass - or when a drawable appears that this list did not write.
- *
- * `EXAMPLE_ICONS` is the same promise for the example app's test fixtures (G19 round
- * 2): the harnesses load those files and the README screenshots are taken of them, so
- * they are Google's glyphs too, recorded under `exampleFiles` rather than `files`
- * because they are not shipped in the package.
- *
- * Adding an icon: add a row to `ICONS`, run this script, and use the resource through
- * `nitroUiIcon` (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiIcons.kt`).
- * The variant is Material Symbols Outlined, weight 400, fill 0, grade 0, 24 px (the
- * `<name>_24px.xml` file), unless the Material component the icon belongs to uses
- * another one; say so in the row's `why`.
- *
- * The download is treated as data: this script writes the bytes and runs nothing.
+ * To add an icon, add a row to `ICONS` and run this script. The default variant is Outlined,
+ * weight 400, fill 0, grade 0, 24 px (`<name>_24px.xml`).
  */
 
 import { createHash } from 'node:crypto';
@@ -47,24 +27,14 @@ const DRAWABLE_DIR = 'android/src/main/res/drawable';
 /** The Apache 2.0 text the icons are distributed under, from the same commit. */
 const LICENSE_FILE = 'licenses/material-symbols/LICENSE';
 
-/** The committed record of what was written. */
 const LOCK_FILE = 'scripts/icons/material-symbols.lock.json';
 
 /**
- * The same set's files, fetched for the **example app** instead of the library.
+ * The same upstream files fetched for the example app's test fixtures, recorded under the
+ * lock's `exampleFiles` because they do not ship in the package.
  *
- * A harness that loads a hand-typed star is a harness that asserts on somebody's copy
- * of a glyph, and the screenshots in `docs/images/` are taken of it (G19 round 2).
- * These three are byte-for-byte Google's, like the library's own, and are recorded in
- * the lock's `exampleFiles` — a separate list because none of them ships in the
- * package: `scripts/__tests__/android-icons.test.js` hash-checks both lists and
- * requires every other `.xml` in those two folders to be declared there with the
- * reason it cannot be upstream.
- *
- * The example's `star_24px.xml` and `nitroui_test_star.xml` are the same upstream file
- * twice on purpose: one is `require`d and carried by Metro (the development half of
- * `androidIcon`), the other is compiled into the APK (the release half), and the pair
- * is what lets a test compare the two roads to one glyph.
+ * `star_24px.xml` and `nitroui_test_star.xml` are the same file twice on purpose: one is
+ * bundled by Metro and the other compiled into the APK, so a test can compare the two paths.
  */
 const EXAMPLE_ICONS = [
   {

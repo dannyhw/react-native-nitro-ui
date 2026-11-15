@@ -1,85 +1,3 @@
-/**
- * The conformance suite: four rules, run over every control in the registry.
- *
- * This is the in-app half of task X4. Three of the four rules are asserted here, for
- * every self-sizing control, from one parameterised suite rather than seven hand-written
- * ones; the fourth — the accessibility name on the node a person can act on — is asserted
- * here on iOS and, on Android, from the host inside `real-input:android`
- * (`scripts/real-input/a11y.mjs`), because a test process on Android cannot see a Compose
- * control's name at all: the harness queries match `View.contentDescription` and Compose
- * publishes `SemanticsNode`s that are not Views. `Slider.harness.tsx` and
- * `Progress.harness.tsx` already say so where they hit the same wall, so this file does not
- * pretend otherwise: it asserts the iOS half and, on Android, prints where the rule runs.
- *
- * ## Why a suite instead of seven tests
- *
- * Every one of these bug classes was caught late in review because the check for it existed
- * for one control and not for the others (`docs/tasks/PROCESS-review-2026-10-26.md` §1: fix
- * rounds cost 44 % of implementer time). The rules and tables live in
- * `scripts/conformance-core.mjs`, driven by the registry's own manifests, and
- * `scripts/__tests__/component-coverage.test.js` asserts this file has one fixture per
- * manifest — so 0.4's Menu is covered the day it gets a `component.json`, and the day
- * before that `check` is red on a machine with no device.
- *
- * ## Why the table below is a mirror, and not an import
- *
- * No harness suite imports anything from `scripts/` (nothing in `example/__tests__/` does
- * today), so the shared numbers are embedded as JSON in the marked region and
- * `checkSharedTableMirror` asserts that region equals `sharedInAppTable()` on every
- * `bun run check`. That is what stops this file from asserting against its own copy of the
- * answer — the tautology AGENTS.md rules out ("test fixtures must not coincide with the
- * right answer"), which is otherwise exactly what a duplicated table becomes.
- *
- * ## What makes these able to fail
- *
- * Each rule's decision logic is shown red in `scripts/__tests__/conformance.test.js`, and
- * each has a device-side counterpart here that is not satisfied by the same number twice:
- *
- * - the fallback rule compares the control's measured size with a table written from the
- *   component's source, then **poisons** the engine's guess with a size no control declares
- *   and requires a correction to arrive. `Button.harness.tsx` explains the precedent for
- *   why, at its own poison helper: a declared fallback that is close to the truth makes
- *   every "the box was right" assertion pass even when no correction ever happens.
- * - the leak rule takes its baseline *after* a warm-up mount, so the component's own
- *   registry row cannot be counted as a leak — the mistake that would get the rule exempted
- *   the first time it was green-ish for the wrong reason.
- * - the recycle rule asserts each property against the props of the control's *second*
- *   owner, so a value that stayed behind names itself.
- *
- * ## The recycle rule, and what it can reach on each platform
- *
- * Both platforms run the reset today, and F6 is what established that for Android rather than
- * reading it off a call graph. Round 1 of this file had it the other way round, and what it
- * wrote was true of RN 0.80 and false of the version this repo ships on.
- *
- * - **iOS recycles by default.** Nitrogen reports each of our views as recyclable when it
- *   implements `RecyclableView` (`NitroUiAutolinking.swift:71`), which all seven do, and
- *   nothing overrides that — so Fabric's registry enqueues the instance on unmount, calling
- *   `prepareForRecycle` as it does (`RCTComponentViewRegistry.mm:117`), and dequeues it for
- *   the next mount of that component (`:95`).
- * - **Android recycles under a flag the example app now turns on.** X4 recorded that
- *   `prepareToRecycleView` is a legacy-architecture hook whose only caller is
- *   `ViewManager.recycleView`, so Fabric's Android layer "calls `onDropViewInstance` and
- *   nothing else". On RN 0.88 that is not the whole graph: `ViewManager.onDropViewInstance`
- *   also calls `prepareToRecycleView` and pushes the view onto a pool, and
- *   `createViewInstance(tag, …)` pops it — guarded on `enableViewRecycling`, whose default is
- *   `false`, which is presumably why the hook looked dead. The example app sets that flag
- *   (`example/android/.../NitroUiFeatureFlags.kt`), and `example/__tests__/Recycling.harness.tsx`
- *   proves the consequence rather than assuming it: a dropped control answers `recycled` on
- *   the perf ring, and a *later* mount reads `recycles >= 1` from counters the reset
- *   deliberately does not clear — which a freshly allocated view cannot do under any
- *   circumstance.
- *
- * Consequence for this suite, stated plainly: **the residue probes can go red on either
- * platform**, and both have been shown red (the report lists the per-control mutations and
- * the assertion each one turned up). Both halves run on both platforms, and
- * `checkInAppFixtures` insists every control has a probe or a written reason it cannot have
- * one, so the list of unprovable controls cannot grow by omission.
- *
- * @file Gates: `harness:ios`, `harness:android`. Discovered automatically:
- *       `example/jest.harness.config.mjs` matches any `*.harness.tsx` under a
- *       `__tests__` directory, so nothing here needed registering.
- */
 import type { ComponentProps, ReactElement } from 'react';
 import { Platform, Text, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -94,7 +12,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import { deviceLocale, deviceLocaleNote } from './deviceContext';
 import { waitForHandle } from './handles';
-import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
+import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './runState';
 import {
   AlertDialog,
   BottomSheet,
@@ -340,7 +258,6 @@ const SHARED = {
 };
 /** END CONFORMANCE SHARED TABLE */
 
-/** The in-app view of {@link SHARED}, typed; the table itself stays JSON so it is checkable. */
 type Exemption = {
   component: string;
   rule: string;
@@ -353,9 +270,8 @@ const EXEMPTIONS = SHARED.exemptions as ReadonlyArray<Exemption>;
 
 type Size = { width: number; height: number };
 /**
- * A `DECLARED_FALLBACKS` row for one platform: the box, plus the locale its numbers were
- * measured in when they depend on one (`measuredUnderLocale` — the DatePicker's field width
- * is a date formatter's output). From the mirrored table, never written here.
+ * A declared-fallback row for one platform: the box, plus the locale its
+ * numbers were measured in when they depend on one.
  */
 type DeclaredRow = Size & { measuredUnderLocale?: string };
 type ViewInfo = { x: number; y: number; width: number; height: number };
@@ -369,77 +285,59 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
 ) as unknown as HarnessUiModule;
 
 /**
- * What a control's `hybridRef` hands back.
- *
- * Declared here rather than imported: DECISIONS D14 keeps Hybrid View types off the public
- * surface, and every field below is one the real handles all have — `accessibilityLabel`
- * and `measureContent()` on all seven, the value fields on the ones that have a value to
- * report. Optional because a control that has no `selectedIndex` reports no field, and the
- * recycle rule must not invent one.
+ * What a control's `hybridRef` hands back. Every field is optional because a
+ * control reports only the fields it has.
  */
 type Handle = {
   readonly accessibilityLabel: string | null;
   readonly value?: boolean | number | string | null;
   readonly selectedIndex?: number | null;
-  /**
-   * Menu's trigger text (`HybridNitroUiMenu.swift`'s `title` getter). Read because the
-   * recycle rule's props half asks what the control says about itself, and a Menu has no
-   * value — its title *is* the thing a previous owner could leave behind if a wrapper ever
-   * stopped providing it.
-   */
+  /** Menu's trigger text. */
   readonly title?: string;
   measureContent(): Size;
   /**
-   * The Slider's own answer to "what value is showing, and what happened when a reader
-   * acted on it" — `performed accessibilityIncrement on <node> <from>-><to> disabled=<bool>`,
-   * numbered `#n` on Android. The recycle rule's oracle for this control, because it is the
-   * one number that comes from the view rather than from React's last write: the `value`
-   * getter above returns `model.state.js` (`HybridNitroUiSlider.swift:693`), which is what
-   * React sent, so it cannot show what the reset owns.
+   * The Slider's report of an accessibility step: `performed
+   * accessibilityIncrement on <node> <from>-><to> disabled=<bool>`, numbered
+   * `#n` on Android. `from` is the value the view was showing, not the one
+   * React sent.
    */
   nuiTestAccessibilityStep?(direction: number): void;
   nuiTestAccessibilityStepReport?(): string;
   /**
-   * Picker's report — `expanded=<0|1>;live=<n>;…`. `live` is how many menus the platform
-   * believes this control has open, which is state the reset owns and no prop rewrites.
+   * Picker's report: `expanded=<0|1>;live=<n>;…`. `live` is how many menus the
+   * platform believes this control has open.
    */
   nuiTestMenuReport?(): string;
   /**
-   * DatePicker's report — its displayed instant plus whether a presentation is open, both
-   * from the view. `nuiTestSelect(...)` drives a selection through the control's own path,
-   * which is what leaves residue for a reset to clear.
+   * DatePicker's report: its displayed instant plus whether a presentation is
+   * open, both from the view.
    */
   nuiTestStateReport?(): string;
-  /** Opens the DatePicker's own presentation — the other thing a dropped mount can leak. */
+  /** Opens the DatePicker's own presentation. */
   nuiTestPresent?(): void;
   /**
-   * Drive a selection through the control's own path. Two arities because two controls share
-   * the hook name: `Picker` names an index (`HybridNitroUiPicker.swift:544`), `DatePicker`
-   * names a year/month/day/hour/minute, and this is one handle type for all seven controls.
+   * Drives a selection through the control's own path. `Picker` names an index;
+   * `DatePicker` names a year, month, day, hour and minute.
    */
   nuiTestSelect?(...fields: number[]): void;
   /** Progress's displayed fraction, as the view draws it, plus its animation flag. */
   nuiTestDisplayedValue?(): string;
   /**
-   * SegmentedControl's answer to "which segment is the row painting" — `displayed=<index>`,
-   * or `displayed=none` before the hosted row has been handed a selection at all. F6's
-   * read-out, written in the SwiftUI body / the composable rather than in a prop setter, and
-   * the recycle rule's oracle for this control: the handle's `selectedIndex` returns
-   * `state.js`, which is what React sent, so it cannot show what the reset owns.
+   * SegmentedControl's `displayed=<index>`, or `displayed=none` before the
+   * hosted row has been handed a selection. Written where the row is drawn, so
+   * it shows the view's state, not the prop React sent.
    */
   nuiTestDisplayedIndex?(): string;
   /**
-   * The Form's line: `rows`/`sections` registered with this list, `orphans` in neither a
-   * cell nor their section's holding view, and the scroll the platform is showing. Both are
-   * the view's own answer about what it is holding, which is what a reset owns.
+   * The Form's line: `rows`/`sections` registered with this list, `orphans` in
+   * neither a cell nor their section's holding view, and the scroll the
+   * platform is showing.
    */
   nuiTestFormReport?(): string;
-  /** Scroll the Form's list, so a probe can leave an offset behind for a reset to clear. */
+  /** Scrolls the Form's list. */
   nuiTestScrollTo?(y: number): void;
   /**
-   * Stepper's seam: take one step through the path a tap takes (`+1` up, `-1` down), so a
-   * probe can leave a *value* behind that no prop describes. The other control with a seam
-   * of this shape is Slider, which publishes the reader's action instead of the tap's.
+   * Stepper: takes one step through the path a tap takes (`+1` up, `-1` down).
    */
   nuiTestStep?(direction: number): void;
   /** Dialog's JS copy of `isPresented`, read back from the view's own props. */
@@ -455,47 +353,28 @@ type Handle = {
   focus?(): void;
   blur?(): void;
   /**
-   * Chip's label, the props half of its recycle rule. `null` is Picker's: its handle
-   * carries an optional field label of the same name.
+   * Chip's label. `null` is Picker's: its handle carries an optional field
+   * label of the same name.
    */
   readonly label?: string | null;
-  /**
-   * Chip's press, through the tap's own path (`ChipModel.press()`): the iOS harness's
-   * HID-less touch reaches no SwiftUI button gesture, so this is how a probe presses a
-   * Chip there (`Chip.harness.tsx` measured it).
-   */
+  /** Chip's press, through the tap's own path. */
   nuiTestPress?(): void;
-  /**
-   * ButtonGroup's press of one named item, through the tap's own path
-   * (`ButtonGroupModel.press(id)`): a harness touch cannot name an item in a row.
-   */
+  /** ButtonGroup's press of one named item, through the tap's own path. */
   nuiTestPressItem?(id: string): void;
   /**
-   * ButtonGroup's "what did the row draw" probe, which has to be *driven* before
-   * `nuiTestStateReport` can answer: neither platform can read overflow out of its
-   * toolkit's state, so the row stamps the report as it lays out.
+   * ButtonGroup's row probe. It has to be driven before `nuiTestStateReport`
+   * can answer: the row stamps the report as it lays out.
    */
   nuiTestProbeRow?(): void;
-  /** ButtonGroup's semantics probe, same reason. */
+  /** ButtonGroup's semantics probe, driven the same way. */
   nuiTestProbeAccessibility?(): void;
-  /**
-   * Checkbox's value, the props half of its recycle rule. `Chip`'s `label` and `Switch`'s
-   * `value` have the same job: `useControlled` echoes it back, so it is what React last
-   * sent rather than what the view shows — which is why each of the two recycle probes
-   * below is an interaction and not a read of this field.
-   */
+  /** Checkbox's value as React last sent it, not what the view shows. */
   readonly checked?: boolean | null;
-  /**
-   * Checkbox's toggle, through the tap's own path (`CheckboxModel.press()`). On iOS the
-   * harness's HID-less touch reaches no SwiftUI gesture and a `.switch` `Toggle` is one,
-   * so this is how a probe toggles a Checkbox there (`Checkbox.harness.tsx`'s
-   * `toggleCheckbox` says why). Both platforms end in `press()`, which is where the
-   * residue a reset has to clear is written.
-   */
+  /** Checkbox's toggle, through the tap's own path. */
   nuiTestToggle?(): void;
   /**
-   * ContextMenu's report (`ContextMenu.nitro.ts`): `open`, `opens`/`closes`/`selects`,
-   * `title` and the rest, `;`-separated, from a snapshot the UI thread publishes.
+   * ContextMenu's report: `open`, `opens`/`closes`/`selects`, `title` and the
+   * rest, `;`-separated.
    */
   nuiTestContextMenuReport?(): string;
   /** ContextMenu's pick, through the path a row press takes. */
@@ -503,10 +382,9 @@ type Handle = {
 };
 
 /**
- * Toggle a Checkbox: a real harness tap on Android, the control's own press path on iOS,
- * where the harness's HID-less touch reaches no SwiftUI gesture (`Checkbox.harness.tsx`'s
- * `toggleCheckbox` and `Chip.harness.tsx`'s `pressChip` measure the same thing). Both go
- * through `press()`, so a probe and a finger cannot disagree about what a press means.
+ * Toggles a Checkbox: a harness tap on Android, the control's own press path on
+ * iOS, where the harness's touch carries no HID event and reaches no SwiftUI
+ * gesture.
  */
 const pressCheckbox = async (testId: string): Promise<void> => {
   if (PLATFORM === 'ios') {
@@ -524,14 +402,9 @@ const pressCheckbox = async (testId: string): Promise<void> => {
 };
 
 /**
- * The glyph every IconButton fixture mounts, named on both platforms.
- *
- * A drawable *name* the library itself ships, not an app asset: the conformance
- * suite runs against a release-less harness build on two platforms, and G19's
- * drawable-name form needs no dev server and no Metro asset to resolve. `xmark`
- * is the same drawing's iOS name — and it has to be named, because on iOS the
- * symbol *is* the control's width, so a fixture that sent `null` would measure an
- * empty label and the fallback row would be compared against nothing.
+ * The glyph every IconButton fixture mounts: a drawable name the library ships
+ * on Android, and the same drawing's SF Symbol name on iOS, where the symbol is
+ * the control's width.
  */
 const ICON_BUTTON_GLYPH = {
   systemImage: 'xmark',
@@ -539,11 +412,8 @@ const ICON_BUTTON_GLYPH = {
 };
 
 /**
- * Press an IconButton: a real harness tap on Android, the control's own press path on
- * iOS, where the harness's HID-less touch reaches no SwiftUI `Button` gesture (the
- * Checkbox and Chip notes above say why). Both end in `press()`, so a probe and a
- * finger cannot disagree about what a press means — including the fact that a disabled
- * control takes neither.
+ * Presses an IconButton: a harness tap on Android, the control's own press path
+ * on iOS (see `pressCheckbox`).
  */
 const pressIconButton = async (testId: string): Promise<void> => {
   if (PLATFORM === 'ios') {
@@ -561,9 +431,8 @@ const pressIconButton = async (testId: string): Promise<void> => {
 };
 
 /**
- * Type into the focused TextField the way a keyboard does: `insertText` on the iOS first
- * responder, the focused view's `InputConnection` on Android (the example app's probe -
- * `TextField.harness.tsx` says why `HarnessUI` cannot reach a Compose field).
+ * Types into the focused TextField the way a keyboard does: `insertText` on the
+ * iOS first responder, the focused view's `InputConnection` on Android.
  */
 async function typeIntoFocusedField(text: string): Promise<void> {
   for (const key of Array.from(text)) {
@@ -581,7 +450,6 @@ async function typeIntoFocusedField(text: string): Promise<void> {
   }
 }
 
-/** Focus a TextField fixture and type `text` into it; waits for the field to hold it. */
 async function typeIntoField(testId: string, text: string, expected: string) {
   const handle = handleFor(testId);
   handle.focus?.();
@@ -596,50 +464,12 @@ async function typeIntoField(testId: string, text: string, expected: string) {
 }
 
 /**
- * The recycle rule's per-control oracle, and the honest answer to what round 1 asserted.
- *
- * A recycled control's **props cannot show residue**, on either platform, for reasons two
- * layers above ours:
- *
- * - Fabric hands a recycled instance its props as a *fresh mount* - the Insert mutation calls
- *   `updateProps:newProps oldProps:nil` (`RCTMountingManager.mm:83`) - so the generated
- *   setters run for every provided prop (`HybridNitroUiSwitchComponent.mm:84`:
- *   `oldViewProps == nullptr ? prop.isProvided() : ...`).
- * - and our wrappers always provide: every prop is sent, `null` included (`Switch.tsx:145-151`),
- *   and a callback the app did not pass is sent as a stable no-op *specifically* so a recycled
- *   view cannot keep the previous owner's handler (`Button.tsx:99-110`).
- *
- * So `model.accessibilityLabel = nil` in a reset is a safety line, not an observable one: the
- * next mount writes that field either way, which is exactly why deleting it left round 1's rule
- * green and the review called the rule unable to fail. What a reset *uniquely* owns is state no
- * prop rewrites - the **displayed value**, the handshake's **event counts**, and the
- * `didApplyDefault` one-shot. Only an *interaction* produces that state, and only a control's
- * own read-out shows it: the handle's `value` returns `model.state.js`
- * (`HybridNitroUiSlider.swift:693`), which is what React sent, not what is drawn.
- *
- * A probe therefore owns both lifetimes: it leaves residue behind on purpose, mounts a second
- * owner whose props are all defaults, and asks the control the one question only its own state
- * can answer. A control with no such question says so in the run rather than banking a pass
- * from a check that could not have failed - and `component-coverage.test.js` insists each
- * control has either a probe or that note, so the list of unprovable controls cannot grow in
- * silence.
- *
- * The note has **two kinds**, because the two situations want different verdicts (X4
- * re-review, medium "recycle-reset says covered for three `noProbe` controls"):
- *
- * - `noProbe` — the control holds **nothing** a reset could clear. `Button`'s props are all
- *   re-sent and its callback is always provided; `Progress` is an indicator with no
- *   interaction at all. Nothing is being missed, so the matrix says `n/a` with these words.
- * - `blindSpot` — the control **does** hold state a recycle has to clear and no platform can
- *   be shown the difference. `SegmentedControl`'s picked index and `Menu`'s open popup are
- *   real, and neither has a read-out where the recycle happens. That is a hole in the guard,
- *   so the matrix says **failing** and points at a `docs/tasks/FOLLOWUPS.md` line; the
- *   fixture prints `known failing (…)` the way the a11y sweep prints its own debt, and
- *   `staleDebt` retires the row when a run stops reporting it.
- *
- * Putting a control in the wrong kind is not free: `checkRecycleNotes` reads this table and
- * refuses a `blindSpot` with no `CONFORMANCE_EXEMPTIONS` row and a debt row whose fixture
- * claims `noProbe`, so the two lists cannot drift and a hole cannot be filed as a pass.
+ * A recycled control's props cannot show residue: a recycled instance is sent
+ * every prop as a fresh mount. What a reset alone owns is state no prop
+ * rewrites: the displayed value, the handshake's event counts and the one-shot
+ * that applies a default. So a probe leaves that state behind through an
+ * interaction, mounts a second owner whose props are all defaults, and asks
+ * the control's own read-out.
  */
 type RecycleProbe = {
   /** What the residue is, in words, printed beside the verdict. */
@@ -651,8 +481,8 @@ type RecycleProbe = {
   /** The second owner: same testID, every prop at its default. */
   second: () => ReactElement;
   /**
-   * Ask the second mount. An `actual` that is not what the second owner's own props imply is
-   * the control answering out of somebody else's state.
+   * Asks the second mount. An `actual` that is not what the second owner's
+   * props imply is residue.
    */
   read: () => Promise<
     Array<{ label: string; expected: unknown; actual: unknown }>
@@ -660,15 +490,15 @@ type RecycleProbe = {
 };
 
 /**
- * Why a control has no probe: printed as the verdict, so a pass is not read as coverage. The
- * two kinds, and what the coverage table does with each, are in {@link RecycleProbe}'s header.
+ * Why a control has no probe. `noProbe`: the control holds nothing a reset
+ * could clear. `blindSpot`: it holds state a recycle has to clear, and no
+ * platform can be shown the difference.
  */
 type RecycleNote = { noProbe: string } | { blindSpot: string };
 
 /** Every callback the probes wired up, in order, as `testID:value`. */
 const recycleEvents: string[] = [];
 
-/** One handler per control, recording what the app was told. */
 const recordRecycle =
   (testId: string) =>
   (value: unknown): void => {
@@ -676,10 +506,8 @@ const recordRecycle =
   };
 
 /**
- * A ButtonGroup's `onCheckedChange` names the item *and* the new state, where Chip's and
- * IconButton's events carry one value. The one-value recorder above would record the id
- * alone, so a probe that reads `id:false` could never match what the control reported —
- * this records the shape the event actually has.
+ * A ButtonGroup's `onCheckedChange` names the item and the new state, where the
+ * other controls' events carry one value.
  */
 const recordRecycleChecked =
   (testId: string) =>
@@ -688,25 +516,18 @@ const recordRecycleChecked =
   };
 
 /**
- * ListItem's `onPress` carries no value at all — a row press is a press, not a state change
- * (DECISIONS D46) — so the one-value recorder above would log `…:undefined` and the probe
- * would assert a string that means nothing. This records the row that answered.
+ * ListItem's `onPress` carries no value, so this records the row that answered.
  */
 const recordRecyclePress = (testId: string) => (): void => {
   recycleEvents.push(testId);
 };
 
-/** Events recorded since `from`, so a probe reads only the effect of its own press. */
 const eventsSince = (from: number): string[] => recycleEvents.slice(from);
 
 /**
- * Wait for `wanted` to be the whole of what the app has been told since `from`, and hand back
- * what was actually seen either way.
- *
- * A probe's *setup* may throw - an interaction that never produced its event means the fixture
- * is broken, and that should stop the run. A probe's **read** may not: a control that stays
- * silent is the residue this rule looks for, and it has to arrive as a finding naming both
- * values, not as a Jest timeout that names neither. So this waits, and then reports.
+ * Waits for `wanted` to be everything the app was told since `from`, and
+ * returns what was seen either way: a control that stays silent has to arrive
+ * as a finding naming both values, not as a timeout.
  */
 async function eventsSettled(from: number, wanted: string): Promise<string> {
   const deadline = Date.now() + 1500;
@@ -719,15 +540,9 @@ async function eventsSettled(from: number, wanted: string): Promise<string> {
 }
 
 /**
- * Press a ListItem through the control's own press seam (`ListItemModel.press()`), on both
- * platforms.
- *
- * The reason is Chip's and IconButton's — the harness's touch on iOS carries no HID event,
- * and UIKit's row highlight is a gesture recogniser, which is exactly the thing that
- * gesture needs and the harness does not send. On Android a harness tap would land, but a
- * probe that pressed one platform with a finger and the other with a seam could not tell a
- * lost touch from a lost reset, and the reset is what this fixture is about. `press()` is
- * where the counter a reset owns is written on both, so both go through it.
+ * Presses a ListItem through the control's own press path on both platforms:
+ * the iOS harness touch carries no HID event, and UIKit's row highlight is a
+ * gesture recogniser.
  */
 const pressListItem = (testId: string): void => {
   const handle = handleFor(testId);
@@ -738,11 +553,8 @@ const pressListItem = (testId: string): void => {
 };
 
 /**
- * ListItem's report (`HybridNitroUiListItem`'s `nuiTestStateReport`), as `key -> value`.
- *
- * Split on the first `=` only: `displayed=Notifications|-|On|none` has no `=` in its value,
- * and the a11y answer after it does (`role=button,…`), which would otherwise be read as
- * seven keys of its own.
+ * ListItem's report as `key -> value`. Split on the first `=` only: the a11y
+ * answer's value contains `=`.
  */
 function listItemReportOf(handle: Handle): Record<string, string> {
   const report: Record<string, string> = {};
@@ -755,16 +567,13 @@ function listItemReportOf(handle: Handle): Record<string, string> {
   return report;
 }
 
-/** Press a control at its own box. */
 const pressControl = async (testId: string): Promise<void> => {
   await userEvent.press(await screen.findByTestId(testId));
 };
 
 /**
- * Press a Chip: a real harness tap on Android, the control's own press path on iOS, where
- * the harness's HID-less touch reaches neither chip variant (measured in G12 -
- * `Chip.harness.tsx`'s `pressChip` says why). Both go through `press()`, which is where
- * the residue a reset has to clear is written.
+ * Presses a Chip: a harness tap on Android, the control's own press path on iOS
+ * (see `pressCheckbox`).
  */
 const pressChip = async (testId: string): Promise<void> => {
   if (PLATFORM === 'ios') {
@@ -780,13 +589,9 @@ const pressChip = async (testId: string): Promise<void> => {
 };
 
 /**
- * Tap segment `index` of `testId`, at the centre of the slice of its box that segment owns.
- *
- * The same arithmetic `SegmentedControl.harness.tsx:405` uses, and it is fair here because
- * this fixture's row is not over-wide: three short labels, so the box is the row's own width
- * and each third of it is one segment. A press is the only oracle that can put a SegmentedControl
- * in state no prop describes — the handle's `selectedIndex` echoes what React sent, so driving
- * the value through props would leave nothing for the reset to clear.
+ * Taps segment `index` at the centre of the slice of the box that segment owns.
+ * Fair here because the fixture's row is not over-wide: three short labels, so
+ * each third of the box is one segment.
  */
 const tapSegmentOf = async (
   testId: string,
@@ -804,13 +609,10 @@ const tapSegmentOf = async (
 };
 
 /**
- * Which segment a SegmentedControl's row is painting, once it has painted one.
- *
- * Polling here is safe in a way the DatePicker probe's read is not: the reset clears this
- * report to the word `none`, so waiting for a real index is waiting for the *new* mount to
- * draw, not for a reset to happen. A control that kept its previous owner's index answers
- * that index the moment you ask, so this can never go green on a missing reset — the worst it
- * can do is time out on a row that never drew, which the caller reports as a finding.
+ * Which segment a SegmentedControl's row is painting. Polling is safe: the
+ * reset clears this report to `none`, so waiting for an index waits for the new
+ * mount to draw, and a control that kept its previous owner's index answers it
+ * at once.
  */
 async function drawnIndexOf(testId: string): Promise<string> {
   const report = await pollReport(
@@ -822,15 +624,9 @@ async function drawnIndexOf(testId: string): Promise<string> {
 }
 
 /**
- * Which value a Stepper is painting, or a sentence saying it never painted one.
- *
- * Polling is safe for the same reason {@link drawnIndexOf}'s is: the reset clears this
- * report to the word `none` (`StepperModel.clearReports` / `StepperModel.reset`), so
- * waiting is waiting for the **new** mount to draw, never for a reset to happen — a
- * control that kept its previous owner's value answers with that value the moment you
- * ask. Unlike `drawnIndexOf`, a timeout here is *returned* rather than thrown: a read
- * that throws turns the residue this rule looks for into a Jest failure that names
- * neither value, and the coverage matrix wants the pair.
+ * Which value a Stepper is painting. Polling is safe for the same reason as
+ * `drawnIndexOf`. A timeout is returned as a sentence rather than thrown, so a
+ * finding can name both values.
  */
 async function drawnValueOfStepper(testId: string): Promise<string> {
   const deadline = Date.now() + 8000;
@@ -847,7 +643,6 @@ async function drawnValueOfStepper(testId: string): Promise<string> {
   }
 }
 
-/** One step of a Stepper, through the seam's own path — the same one a tap takes. */
 function stepStepper(testId: string, direction: number): void {
   const handle = handleFor(testId);
   if (handle.nuiTestStep == null) {
@@ -858,7 +653,6 @@ function stepStepper(testId: string, direction: number): void {
   handle.nuiTestStep(direction);
 }
 
-/** Poll a control's own report until it answers the way `until` wants, then hand it back. */
 async function pollReport(
   read: () => string,
   until: (report: string) => boolean,
@@ -877,23 +671,14 @@ async function pollReport(
   return seen.report;
 }
 
-/** Epoch millis for a local day, so the DatePicker probe can name a day rather than a number. */
 const localDay = (year: number, month: number, day: number): number =>
   new Date(year, month - 1, day).getTime();
 
 /**
- * The DatePicker's displayed instant and open presentation, read off the view.
- *
- * `nuiTestStateReport()` is **positional**, not `key=value`: `millis|presented|calendarMonthUtc|
- * hasSelection|livePresentations|controlBuilds|builtMinimum|builtMaximum`
- * (`HybridNitroUiDatePicker.swift`'s `publishReport`). Round 1's reader looked for `millis=` in
- * it, so every field it "read" was the `<no millis in "…">` sentinel and the probe would have
- * polled for a value it could never observe. The Picker's report *is* `key=value`-shaped
- * (`expanded=-1;live=-1;…`), which is what made the mistake easy — two controls, two formats.
- *
- * The order is the one `DatePicker.harness.tsx:208` destructures, and the segment count is
- * checked rather than trusted: a reordered or extended report has to fail here, not silently
- * answer a question about somebody else's field.
+ * The DatePicker's report is positional, not `key=value`: `millis`,
+ * `presented`, `calendarMonthUtc`, `hasSelection`, `livePresentations`,
+ * `controlBuilds`, `builtMinimum` and `builtMaximum`, separated by `|`. The
+ * segment count is checked, so a reordered or extended report fails here.
  */
 const DATE_PICKER_FIELDS = [
   'millis',
@@ -935,7 +720,6 @@ function datePickerStateOf(testId: string): {
   };
 }
 
-/** The Slider's a11y step: fire the queued action and wait for its report to change. */
 async function sliderStep(
   handle: Handle,
   direction: number,
@@ -949,9 +733,8 @@ async function sliderStep(
       `${what}: this control's handle reports no accessibility step`
     );
   }
-  // Both calls stay on the handle (see `datePickerReportOf`'s note). The action runs in a turn
-  // of the UI thread's queue (`HybridNitroUiSlider.swift:957`), so the wait is on the report
-  // *changing*, not on a guessed pause - same shape as `Slider.harness.tsx:80`.
+  // The action runs in a later turn of the UI thread's queue, so the wait is on
+  // the report changing, not on a pause.
   const before = handle.nuiTestAccessibilityStepReport();
   handle.nuiTestAccessibilityStep(direction);
   return pollReport(
@@ -972,16 +755,9 @@ function stepFrom(report: string): string {
 }
 
 /**
- * Engine counters, read once the ledger has stopped moving.
- *
- * Two consecutive equal reads, because "the ledger returned to baseline" only means something
- * against a baseline that is not on its way somewhere else. A drop from a test that ran before
- * this one can land inside the window — the first run of the leak control measured exactly that,
- * `+7` on the way up and `−8` on the way down for eight controls — and a comparison against a
- * moving number passes for the wrong reason, which is how a leak rule gets a green row.
- *
- * Throws rather than returning a contested read: this is a rule's setup, and a window that never
- * settles is not the finding this test exists to report.
+ * Engine counters, read once the ledger has stopped moving: two consecutive
+ * equal reads, because a drop from an earlier test can land inside the window.
+ * Throws if the window never settles.
  */
 async function settledStats(what: string): Promise<NitroUiSizingStats> {
   let previous = stats();
@@ -1003,7 +779,6 @@ async function settledStats(what: string): Promise<NitroUiSizingStats> {
   );
 }
 
-/** A `hybridRef` callback per testID, so one `render` can hand several controls out. */
 const handles = new Map<string, Handle>();
 const captureFor =
   (testId: string) =>
@@ -1023,45 +798,20 @@ function handleFor(testId: string): Handle {
 }
 
 /**
- * Forget any handle held for `testId`, so the next `ensureHandle` can only be answered by a
- * mount that has not happened yet.
- *
- * Call this immediately before every `render` whose control the test then reads. Without it
- * the map answers with a handle from an *earlier* owner: `hybridRef` fires once per native
- * view at mount and is never called with `null` (`useStableCallback.ts`'s own caveat — "a
- * callback prop that is already installed is never re-invoked"), and `handles` is cleared only
- * in `afterEach`. So for the second owner of the recycle rule, for the warm mount of the
- * fallback rule, and for both second owners of the residue probes, `ensureHandle` used to find
- * the first owner's handle sitting in the map and return it without waiting at all.
- *
- * That is CI run 41256853746's DatePicker failure: the uncontrolled second owner "kept its
- * identity across lifetimes" and the day it showed was `1799971200000`, which is precisely the
- * *first* owner's pick, read through the first owner's handle. It also hid the race the wait
- * exists for, since a lookup that always succeeds proves nothing about timing.
- *
- * What this cannot hide: if a remount really never re-fires the callback, `ensureHandle` now
- * times out and says so, which is the accurate finding — the control did not hand back its own
- * state.
+ * Forgets any handle held for `testId`, so the next `ensureHandle` can only be
+ * answered by a mount that has not happened yet. Call it before every `render`
+ * whose control the test then reads: `hybridRef` fires once per native view at
+ * mount and is never called with `null`, so the map would otherwise answer with
+ * an earlier owner's handle.
  */
 function expectANewHandle(testId: string): void {
   handles.delete(testId);
 }
 
 /**
- * Wait until the callback for this testID has run, then hand the handle back.
- *
- * Called once after each `render` (and only meaningful after
- * {@link expectANewHandle} has run before it), because `hybridRef` fires on a commit *after*
- * the view is created: a box can exist (that is what `waitForTestId`/`queryByTestId` see)
- * while the handle has not arrived. Run 41230848294, at load1 152 on 3 cores, is what proved
- * the difference is real rather than theoretical — `Conformance · is named on its own box`
- * died on this sentence for the DatePicker, while the same test passed on the next dispatch of
- * the same tree (41234953779). "The control never handed back its state" was a statement about
- * a callback that was 20 ms late.
- *
- * It waits for the handle only, never for an *answer*: every rule below still reads the
- * control exactly once, so the recycle rule in particular keeps its "do not wait for the
- * reset" property (see the comment on its read).
+ * Waits until `hybridRef` has run for this testID. It fires on a commit after
+ * the view is created, so a box can exist while the handle has not arrived.
+ * Waits for the handle only, never for an answer.
  */
 async function ensureHandle(testId: string): Promise<Handle> {
   return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
@@ -1100,37 +850,17 @@ function correctionsSince(before: NitroUiSizingStats): number {
 const PLATFORM = Platform.OS === 'ios' ? 'ios' : 'android';
 
 /**
- * Every `render` in this file, for the reason every other harness suite gives it.
- *
- * `react-native-harness` rejects with "Render timeout: Element did not mount within 1000ms"
- * unless a suite says otherwise, and the first cold mount of a native view on an emulator can
- * exceed that on its own — the Android run went red on exactly that, at load1 11, on a control
- * that had nothing wrong with it. 20 s is what `Button.harness.tsx` and
- * `MountChurn.harness.tsx` pass; the value is a budget for the *mount*, not for the
- * measurement, and the wall-clock assertions below still have their own tighter gates.
+ * `react-native-harness` gives a render 1000 ms unless told otherwise, and the
+ * first cold mount of a native view on an emulator can exceed that.
  */
 const RENDER = { timeout: 20000 } as const;
 
 /* ------------------------------ the rule bodies ------------------------------ */
-/* The device-side shape of `fallbackFindings`, `leakFindings` and `recycleFindings` in
- * `scripts/conformance-core.mjs`. Round 1 called these "mirrors" and said a divergence
- * between the halves was caught by `conformance.test.js` (X4 review N4). It is not, and
- * calling them mirrors oversells what is here:
- *
- * - The harness cannot import a Node module, so this file re-implements the branches. It
- *   takes its *numbers* from the shared table below, which `checkSharedTableMirror` does
- *   prove equal to `sharedInAppTable()` on every `check` — tolerance, poison sizes,
- *   declared fallbacks and box rules cannot disagree between the halves.
- * - The *wording* is free to drift, and has: three of these strings already differ from the
- *   originals by a clause. `conformance.test.js` drives the originals, not these, so no test
- *   reads this file's messages at all. What that risks is not a wrong verdict — the branches
- *   are short and the numbers are shared — it is a device failure whose sentence no longer
- *   matches the one in the report, so the two say the same bug in different words.
- * - Recorded as debt rather than fixed by loosening the claim: see the FOLLOWUPS row
- *   "X4 conformance: the in-app rule bodies are a re-implementation, not a mirror".
- *
- * What is asserted about these bodies is that a control's fixture row exists and carries a
- * probe (`checkInAppFixtures`), and that the tables match. Nothing asserts their prose. */
+/*
+ * The in-app halves of the fallback, leak and recycle rules. The harness cannot
+ * import a Node module, so these re-implement the branches of
+ * `scripts/conformance-core.mjs` and take their numbers from the shared table.
+ */
 
 type Finding = {
   component: string;
@@ -1154,14 +884,8 @@ function fmt(size: Size | null): string {
 }
 
 /**
- * The in-app half of `canonicalLocale` / `localePremiseMiss` in
- * `scripts/conformance-core.mjs` (same re-implementation note as the file header's).
- *
- * Only the shape the rule needs: strip a launch identifier to the language(+script)+region
- * prefix the engine itself reports, compare it with the locale the row was measured in, and
- * carry whether *this run* published the opt-out. Without that third field a mismatch would
- * have to be either always a failure (so nobody could ever probe another locale) or always a
- * skip (so the comparison silently stops happening) — both of which are wrong.
+ * Strips a launch identifier to the language(+script)+region prefix the engine
+ * reports. Mirrors `canonicalLocale` in `scripts/conformance-core.mjs`.
  */
 function canonicalLocale(identifier: string): string {
   const parts = String(identifier).replace(/_/g, '-').split('-');
@@ -1190,19 +914,11 @@ function localePremiseMiss(
 }
 
 /**
- * Rule 1: is the fallback the control's own, and does a wrong guess still get corrected?
- *
- * @param input.declared what the engine reports for the control (`null` = nothing
- *   registered). JS cannot read the number, only whether one exists, so the caller passes
- *   `expected` when `hasDeclaredFallback` said yes and `null` when it said no.
- * @param input.boxRule which axes the declaration describes — from the mirrored table,
- *   never worked out here. See `boxRuleFor` in `scripts/conformance-core.mjs` for why a
- *   `fillWidth` control's width and a content-sized control's box are not its declaration.
- * @param input.deviceLocale the locale this run's app reports
- *   (`deviceContext.ts`), and `input.mismatchAllowed` whether the run published
- *   `NITRO_UI_ALLOW_LOCALE_MISMATCH`. Only the box comparison consults them, and only for a
- *   row that declares it was measured in one (`measuredUnderLocale`): a mismatch then FAILS
- *   unless the run said it meant it. See `localePremiseMiss`.
+ * Rule 1: is the fallback the control's own, and does a wrong guess still get
+ * corrected? `declared` is `expected` when the engine has a fallback registered
+ * and `null` when it has none: JS can read only whether one exists. A row
+ * measured under a named locale fails on a locale mismatch unless the run opted
+ * out.
  */
 function fallbackFindings(input: {
   component: string;
@@ -1255,9 +971,6 @@ function fallbackFindings(input: {
     );
     return problems;
   }
-  // The premise the DatePicker's row needs (see `measuredUnderLocale` in the shared
-  // table), read from the app itself. `null` for every other control, so nothing here
-  // changes for them.
   const miss = localePremiseMiss(
     expected,
     input.deviceLocale ?? null,
@@ -1274,14 +987,9 @@ function fallbackFindings(input: {
       );
     }
   } else if (miss != null && !ownsAgrees(measured, expected)) {
-    // A locale mismatch is a failed premise, and a failed premise is a FAILURE: the harness
-    // pins the launch locale, so the app reporting another one means the pin was lost, was
-    // overridden without being said, or the formatter stopped following the locale it was
-    // handed. The skip exists only behind the run's own opt-out (see `localeMismatchAllowed`
-    // in `timingGate.ts`), and names the two claims it suspends — the box comparison and the
-    // warm-corrections claim below, which `HybridNitroUiDatePicker.swift`'s `fallbackSize`
-    // prices in words. Everything else still runs either way: the poison must still be
-    // corrected, and a mount that settles at nothing still fails.
+    // A locale mismatch fails: the harness pins the launch locale, so the app
+    // reporting another one means the pin was lost. It is a skip only when the
+    // run opted out, and the poison must still be corrected either way.
     const both =
       `the app runs in ${miss.actual} and this row’s ${fmt(expected)} is what the ` +
       `control measures in ${miss.expected}, so the measured ${fmt(measured)} is the ` +
@@ -1315,11 +1023,8 @@ function fallbackFindings(input: {
     !poisoned &&
     corrections > 0 &&
     boxRule === 'both' &&
-    // Same premise as the box comparison above, and suspended by it whether or not the run
-    // opted out: `fallbackSize`'s own comment says a locale wider than the measured one costs
-    // its first instance one correction, so `corrections > 0` cannot distinguish a dead
-    // declaration from a formatter answering in another locale. The box finding is the
-    // accurate headline either way, so nothing is hidden by suspending this.
+    // A locale wider than the measured one costs its first instance a
+    // correction, so a locale mismatch suspends this claim too.
     !(miss != null && !ownsAgrees(measured, expected))
   ) {
     report(
@@ -1339,10 +1044,9 @@ function fallbackFindings(input: {
 }
 
 /**
- * Rule 2: did the engine's bookkeeping return to baseline after every instance dropped?
- *
- * `baseline` is taken after a warm-up mount, so the component's own registry row is already
- * in it and cannot be mistaken for a leak.
+ * Rule 2: did the engine's bookkeeping return to baseline after every instance
+ * dropped? `baseline` is a settled read, taken while nothing is mounted or
+ * dropped.
  */
 function leakFindings(input: {
   component: string;
@@ -1402,17 +1106,12 @@ function recycleFindings(input: {
   return problems;
 }
 
-/**
- * Print debt, fail on anything new. The one report every rule shares, and the reason an
- * exemption is visible in the run rather than only in a source file.
- */
+/** Prints known debt and fails on anything new. */
 function expectConformance(findings: Finding[]): void {
   const failures: string[] = [];
   for (const finding of findings) {
     if (finding.skipped != null) {
-      // Its own channel, and printed rather than swallowed: a run that compared less than it
-      // claims has to say so in the log, or "green" and "premise missing, box never compared"
-      // are the same line to anyone reading the gate afterwards.
+      // Printed, so a run that compared less than it claims says so in the log.
       console.log(`    · ${finding.skipped}`);
       continue;
     }
@@ -1430,13 +1129,9 @@ function expectConformance(findings: Finding[]): void {
         `${finding.rule}: ${finding.problem}`
     );
   }
-  // Thrown, not asserted (X4 round 2). Neither of Jest's two channels carries a finding out
-  // of a device run here: `toEqual([])` prints `expected [ …(2) ] to deeply equal []`, `toBe('')`
-  // prints `expected 'Switch × no-leak-on-drop: 8 controls …' to be ''`, and `console.log`/
-  // `console.error` from this file reached the gate log in none of three runs — while a thrown
-  // `Error` from a probe arrived whole (`the first owner's pick: report="1799971200000|0|…"`).
-  // So the sentence a rule writes is the sentence a reviewer reads, or the gate is a list of
-  // control names. One thrown Error is still one failed test, so the summary's count is right.
+  // Thrown, not asserted: a thrown `Error` reaches the gate log whole, where
+  // `toEqual([])` prints only a count and `console.log` from a device run may
+  // not arrive.
   if (failures.length > 0) {
     throw new Error(
       `${String(failures.length)} conformance finding(s):\n${failures
@@ -1449,31 +1144,18 @@ function expectConformance(findings: Finding[]): void {
 /* ------------------------------- the shared tables --------------------------- */
 
 /**
- * Does the engine have a declared fallback for this control?
- *
- * `prewarmSizing` returns how many of the names it was given had one registered, so `1` is
- * the engine saying "a size is registered for this control" and `0` is it saying nobody did.
- *
- * That is the only way to ask from JS, and it is *not* a clean question — see
- * {@link readRegistrationOnce} for the expiry date. What the older version of this comment
- * claimed (X4 re-review, low: it contradicted M5's finding) was that the answer "does not
- * change when another suite has already mounted the control". Mounting is indeed not the
- * problem; **seeding** is, and `seedSizingSize` writes the same table
- * (`NitroUiSizingEngine.cpp:512`), so a harness that poisons a fallback anywhere in the
- * process makes every later read of this say `true` about a control the startup table may
- * never have had a row for. The guard is therefore about ordering, not about the seam: read
- * once, before anything here seeds, and say in the log when the process was already warm.
+ * `prewarmSizing` returns how many of the names it was given had a fallback
+ * registered. `seedSizingSize` writes the same table, so the answer is only
+ * meaningful before anything in the process seeds: see `readRegistrationOnce`.
  */
 function hasDeclaredFallback(component: string): boolean {
   return nitroUiCore.prewarmSizing([component]) === 1;
 }
 
 /**
- * Plant a size no control declares, so being right requires correcting it.
- *
- * `seedSizingSize` also *writes* the declared fallback (`ColdSizing.harness.tsx:288-292`
- * says so because it matters there), so poisoning is a process-wide act and must be undone:
- * the harness resets the JS runtime between files, not the native engine.
+ * Plants a size no control declares, so being right requires correcting it.
+ * Poisoning is process-wide and must be undone: the harness resets the JS
+ * runtime between files, not the native engine.
  */
 function poison(component: string): void {
   const size = SHARED.poisonSizes[PLATFORM];
@@ -1482,22 +1164,9 @@ function poison(component: string): void {
 }
 
 /**
- * The engine's own answer, for every control, read **before this file seeds anything**.
- *
- * `prewarmSizing` is the only way to ask from JS whether the engine has a declared fallback for
- * a name, and its answer is just "the name is in `fallbacks_`" (`NitroUiSizingEngine.cpp:855`).
- * That is a question with an expiry date: `seedSizingSize` writes `fallbacks_` too — not only
- * the guess, the declaration (`NitroUiSizingEngine.cpp:512`) — so after any seed in a process,
- * the answer is `true` whether or not the library's startup table ever had a row for the
- * control. Reading it once per test, as round 1 did, means the first poison in this file makes
- * every later read in this file evidence of nothing; and it is why Button's row can read `true`
- * in a whole-suite run even though `Button.harness.tsx` was the one that seeded it
- * (`Button.harness.tsx:297`).
- *
- * So the read is done once, in the file's first test, before any poison here has run, and every
- * later assertion takes its `declared` from this table rather than re-asking. On a warm process
- * even that first read is not the startup table's answer, and the log says which of the two it
- * is — the same `measurements === 0` witness `ColdSizing.harness.tsx` uses, for the same reason.
+ * The engine's answer for every control, read once before this file seeds
+ * anything: after any `seedSizingSize` in the process, `prewarmSizing` answers
+ * `true` whether or not the startup table had a row.
  */
 const registration: Record<string, boolean> = {};
 
@@ -1523,19 +1192,9 @@ function readRegistrationOnce(): void {
 }
 
 /**
- * Put the declared *number* back.
- *
- * This does not, and cannot, restore the startup declaration: `seedSizingSize` writes
- * `fallbacks_` (`NitroUiSizingEngine.cpp:512`), so from the first poison onward this component's
- * engine row is JS-supplied, and there is no JS seam that re-runs the startup table's
- * `setFallback` pass. What it does is leave a sane fallback for the suites that run after this
- * one — the obligation `ColdSizing.harness.tsx`'s header states for the same reason — and the
- * number is exact because the table it writes is the mirror checked against
- * `scripts/conformance-core.mjs` on every `check`, so a restored number cannot be a wrong number
- * the rest of the process then quietly trusts.
- *
- * Round 1 called this `restore` as if it undid the poison. It does not: what protects the
- * registration claim is {@link readRegistrationOnce} running first, not anything undone here.
+ * Puts the declared number back, so the suites that run after this one start
+ * from a sane fallback. It cannot restore the startup declaration: from the
+ * first poison on, the engine's row is JS-supplied.
  */
 function restore(component: string): void {
   const declared =
@@ -1564,11 +1223,8 @@ function declaredFallback(component: string): DeclaredRow {
 }
 
 /**
- * Which axes this control's declaration describes, from the mirrored table.
- *
- * A missing entry throws rather than defaulting: `boxRules` is generated from the same keys
- * as `declaredFallbacks`, so its absence means the mirror is stale, and silently choosing
- * the strict rule would turn a broken table into a false red on the control.
+ * Which axes this control's declaration describes, from the mirrored table. A
+ * missing entry throws: it means the mirror is stale.
  */
 function boxRuleFor(component: string): 'both' | 'height' | 'none' {
   const rule = (SHARED.boxRules as Record<string, string>)[component];
@@ -1582,29 +1238,12 @@ function boxRuleFor(component: string): 'both' | 'height' | 'none' {
 }
 
 /* ------------------------------ the control table ---------------------------- */
-/* One fixture per control the registry declares. `component-coverage.test.js` asserts this
- * list has exactly one row per manifest in `src/components`, which is what makes a new
- * control a *failing test* rather than an untested control.
- *
- * `owner(second)` is how the recycle rule hands one testID to a second owner, and `state`
- * reads what the control says about itself afterwards — through `hybridRef`, because that is
- * the control's own answer rather than a React-side copy of the props.
- *
- * The two owners are deliberately **not** symmetric, and that asymmetry is the fix. The first
- * owner puts its control in non-default state — by interaction where the control can be
- * interacted with — and the second owner sends its props at their defaults. Because:
- *
- * - if the second owner re-sends every prop with a fresh value, every generated setter runs
- *   and overwrites exactly what the reset was supposed to have cleared, so the rule passes
- *   with the reset deleted. Fabric's Insert mutation passes `oldProps:nil`
- *   (`RCTMountingManager.mm:83`), so a recycled mount runs *all* provided setters anyway;
- * - and a prop the second owner sends at its default leaves the reset as the only source of
- *   its stored value, which is the thing under test.
- *
- * `residue`/`oracle` are the part that decides whether this rule can fail at all — see
- * {@link RecycleProbe}. A control with no `oracle` has no state that survives independently
- * of React's next write (or no read-out that is not a stub on one platform), and says so in
- * the run instead of banking a pass from a check that could not have failed. */
+/*
+ * One fixture per control the registry declares. The two owners are
+ * deliberately not symmetric: the first puts its control in non-default state,
+ * and the second sends its props at their defaults, so the reset is the only
+ * source of the stored value.
+ */
 
 type Fixture = {
   /** The manifest `name`, which is also the key the tables use. */
@@ -1618,20 +1257,14 @@ type Fixture = {
   /** One owner's element. Every prop is always passed: nitro#1184. */
   owner: (second: boolean) => ReactElement;
   /**
-   * The same control under a caller-chosen `testID`, for the leak rule's positive control,
-   * which mounts K of them *at once* — `owner` reuses one testID, and K controls sharing an
-   * identity is a different test (and a broken query). `variant` flips a prop so the rows are
-   * visibly distinct, the way the other suites' churn does (`Sizing.harness.tsx:504`).
+   * The same control under a caller-chosen `testID`, for the leak rule, which
+   * mounts several at once. `variant` flips a prop so the rows are distinct.
    */
   control: (testId: string, variant: boolean) => ReactElement;
   /**
-   * What the control reports about itself, for the recycle rule.
-   *
-   * May be async because one control's state is not a prop: the Form answers from a native
-   * report whose numbers belong to the UI thread (`nuiTestFormReport`), so a JS-thread read
-   * returns the report *as it last stood* and a mount can move it a beat later. Deciding on
-   * the first answer would blame the component's reset for a report that had not been
-   * rebuilt yet — see {@link settledFormReport}.
+   * What the control reports about itself, for the recycle rule. May be async:
+   * the Form answers from a native report built on the UI thread, which a mount
+   * can move a beat later.
    */
   state: (
     handle: Handle,
@@ -1640,51 +1273,29 @@ type Fixture = {
     | Array<{ label: string; expected: unknown; actual: unknown }>
     | Promise<Array<{ label: string; expected: unknown; actual: unknown }>>;
   /**
-   * The part of this rule that can actually fail: two owners of one testID, an interaction,
-   * and the control's own answer afterwards. See {@link RecycleProbe} for why a prop cannot
-   * show residue and an interaction can, and {@link RecycleNote} for the controls where even
-   * that is not available.
+   * Two owners of one testID, an interaction, and the control's own answer
+   * afterwards; or the reason there is no probe.
    */
   probe: RecycleProbe | RecycleNote;
   /**
-   * The same rule's second probe, whose second owner is **controlled**, and the only way to
-   * see the other half of a reset (X4 re-review M2).
-   *
-   * A reset here has two lines and they live on different axes. `didApplyDefault = false`
-   * re-arms the *displayed value*, which is what an uncontrolled owner's props leave for the
-   * control to decide. `model.state = NitroUiControlledValue(…)` zeroes the *handshake's
-   * event counts*, which nothing an uncontrolled control does ever reads — `reconcile()` only
-   * applies a write when `js != nil` (`NitroUiModel.swift:71-79`), so with no `value` in
-   * flight the counts are state with no consequence. A controlled owner is the case that
-   * reads them: it sends `value` with `mostRecentEventCount` 0 (`useControlled.ts:56`), so
-   * counts left over from the previous owner make `jsEvents < nativeEvents` and the write is
-   * **refused as stale** — the control keeps showing what the last app left on screen, which
-   * is the bug the line exists to prevent.
-   *
-   * So each line gets the probe that can see it, and the report says so rather than
-   * repeating round 1's "they cover for each other": that was true of one fixture, where the
-   * second owner's default equalled the reset value (`defaultValue={false}` against
-   * `displayed: false`) so the two writes could not be told apart.
+   * The same rule with a controlled second owner. A reset has two parts:
+   * re-arming the default, which an uncontrolled owner can see, and zeroing the
+   * handshake's event counts, which only a controlled owner reads. A controlled
+   * owner sends its value with event count 0, so counts left over from the
+   * previous owner make the write look stale and it is refused.
    */
   controlledProbe?: RecycleProbe;
   /**
-   * `false` for a component with no box of its own - `sizing: null` in its
-   * `component.json`, G11's dialogs. Such a control never enters the sizing engine, so
-   * the fallback and both leak tests print the reason the coverage matrix gives
-   * (`CONFORMANCE_RULES[].applies`) instead of asserting about a ledger it never joins,
-   * and the a11y test asserts the presentation-aware half: the anchor carries no name
-   * (the presented window does, and `A11Y_PRESENTATIONS` names the real-input check that
-   * reads it). `checkInAppFixtures` holds this member to the manifest in both
-   * directions, so a self-sizing control cannot opt out of its sizing rules here.
+   * `false` for a component with no box of its own (`sizing: null` in its
+   * `component.json`). It never enters the sizing engine, so the fallback and
+   * leak tests print why they do not apply, and the a11y test asserts that the
+   * anchor carries no name.
    */
   selfSizing?: false;
   /**
-   * `true` for a component that **is** a React Native `View` - ContextMenu, whose box is
-   * Yoga's and whose accessibility props are React Native's own, landing on the view the
-   * `testID` names (D36 item 1). The a11y rule then holds the labelled box to that box on
-   * both platforms (an RN view's `contentDescription` is what the Android harness query
-   * walks, unlike a Compose control's semantics) and skips the handle's label, which a
-   * `View` does not have.
+   * `true` for a component that is a React Native `View`: its accessibility
+   * props land on the view the `testID` names, so the a11y rule holds the
+   * labelled box to that box on both platforms.
    */
   isView?: true;
 };
@@ -1694,13 +1305,8 @@ const SECOND = 'second owner';
 const columnStyle = { flexDirection: 'column' } as const;
 
 /**
- * The rows every Menu fixture passes.
- *
- * A fixture has to send a `group` because the wrapper always sends `rows` to native
- * (`Menu.nitro.ts:120-126`: a missing `rows` would leave a recycled view showing the
- * previous row's menu), and the leak rule mounts eight of these at once, so the rows are a
- * constant rather than something built per render — the same reason the other fixtures pass
- * literal `options` arrays to Picker and SegmentedControl.
+ * The rows every Menu fixture passes: a constant rather than something built
+ * per render.
  */
 const MENU_GROUP: MenuGroup = {
   actions: [
@@ -1710,23 +1316,15 @@ const MENU_GROUP: MenuGroup = {
 };
 
 /**
- * The Menu fixtures' trigger text, which is also what the props half reads back.
- *
- * Deliberately long and deliberately not the fixture's `accessibilityLabel`: the fallback
- * rule's `boxRule: 'none'` branch goes red if a content-sized control measures *exactly* its
- * declared number, and Menu declares a Button-sized 74×38 pt / 75.1×52 dp, so a two-syllable
- * title would be a coin flip on whether that guard had anything to say. A distinct label is
- * for the same reason one way and one name in two places is how round 1's Picker stutter got
- * missed.
+ * Deliberately long: a content-sized control must not measure exactly its
+ * declared fallback, and Menu declares a Button-sized one.
  */
 const MENU_TITLE = 'Conformance actions';
 const MENU_TITLE_SECOND = 'Second owner’s actions';
 
-/** The ContextMenu fixture's name, and the header its menu draws for the first owner. */
 const CONTEXT_LABEL = 'Conformance context menu';
 const CONTEXT_TITLE = 'Conformance rows';
 
-/** ContextMenu's report, as `key -> value`. */
 function contextMenuReportOf(handle: Handle): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const pair of (handle.nuiTestContextMenuReport?.() ?? '').split(';')) {
@@ -1737,8 +1335,8 @@ function contextMenuReportOf(handle: Handle): Record<string, string> {
 }
 
 /**
- * `captureFor` for a ContextMenu, whose handle is its own type (no `accessibilityLabel`,
- * no `measureContent()`: it is a `View`), filed under the shared one as Dialog's is.
+ * `captureFor` for a ContextMenu, whose handle has no `accessibilityLabel` and
+ * no `measureContent()`: it is a `View`.
  */
 const captureContextMenu =
   (testId: string) =>
@@ -1758,10 +1356,8 @@ const DIALOG_ACTIONS = [
 ];
 
 /**
- * `captureFor` for a dialog. A dialog has no `accessibilityLabel` and no
- * `measureContent()` (no box: Q5 Appendix B4/B5), so its view is filed under the
- * shared handle type here; nothing in the suite calls either member for a fixture
- * that says `selfSizing: false`.
+ * `captureFor` for a dialog, which has no `accessibilityLabel` and no
+ * `measureContent()`: it has no box.
  */
 const captureDialog =
   (testId: string) =>
@@ -1769,7 +1365,6 @@ const captureDialog =
     handles.set(testId, view as unknown as Handle);
   };
 
-/** Dialog's report (`nuiTestStateReport`), as `key -> value`. */
 function dialogReportOf(handle: Handle): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const pair of (handle.nuiTestStateReport?.() ?? '').split(';')) {
@@ -1779,7 +1374,6 @@ function dialogReportOf(handle: Handle): Record<string, string> {
   return fields;
 }
 
-/** Whether a dialog's report says its window is up and shows `title`. */
 function dialogShows(report: Record<string, string>, title: string): boolean {
   return report.kind !== 'none' && report.title === title;
 }
@@ -1789,7 +1383,6 @@ const SHEET_LABEL = 'Conformance sheet';
 const SHEET_FIRST_HEIGHT = 120;
 const SHEET_SECOND_HEIGHT = 260;
 
-/** A BottomSheet owner whose content is a box of a known height. */
 function sheetOwner(presented: boolean, height: number): ReactElement {
   return (
     <BottomSheet
@@ -1804,7 +1397,6 @@ function sheetOwner(presented: boolean, height: number): ReactElement {
   );
 }
 
-/** Whether a sheet's report says it is up holding content `height` tall. */
 function sheetShows(report: Record<string, string>, height: number): boolean {
   return (
     report.presented === '1' &&
@@ -1818,8 +1410,8 @@ const TOOLTIP_MESSAGE_SECOND = 'Second owner’s tooltip';
 const TOOLTIP_ACTIONS = [{ id: 'ok', title: 'Got it' }];
 
 /**
- * A Tooltip owner around a 40 x 40 anchor. The message is the name a presented tooltip
- * carries, so it is also what the a11y rule's presentation half looks for.
+ * The message is the name a presented tooltip carries, so it is also what the
+ * a11y rule looks for.
  */
 function tooltipOwner(presented: boolean, message: string): ReactElement {
   return (
@@ -1837,7 +1429,6 @@ function tooltipOwner(presented: boolean, message: string): ReactElement {
   );
 }
 
-/** Whether a tooltip's report says it is up showing `message`. */
 function tooltipShows(
   report: Record<string, string>,
   message: string
@@ -1851,18 +1442,12 @@ function tooltipShows(
 }
 
 const POPOVER_LABEL = 'Conformance popover';
-/** The two owners' content heights: different, and neither the other's. */
 const POPOVER_FIRST_HEIGHT = 120;
 const POPOVER_SECOND_HEIGHT = 260;
 
 /**
- * A Popover owner whose content is a box of a known height.
- *
- * It sends no `accessibilityLabel` because there is none to send: a Popover's `anchor`
- * stays in the app's layout and keeps its own taps, so a name on the wrapper would be a
- * real element on screen that the a11y rule would (correctly) find, and D44 records that
- * an `accessibilityLabel` never reaches a presented window on either platform. The name a
- * person hears is the content's own, which real input reads through the tree.
+ * Sends no `accessibilityLabel`: a Popover's anchor stays in the app's layout,
+ * and a label never reaches a presented window on either platform.
  */
 function popoverOwner(presented: boolean, height: number): ReactElement {
   return (
@@ -1878,7 +1463,6 @@ function popoverOwner(presented: boolean, height: number): ReactElement {
   );
 }
 
-/** Whether a popover's report says it is up holding content `height` tall. */
 function popoverShows(report: Record<string, string>, height: number): boolean {
   return (
     report.presented === '1' &&
@@ -1887,21 +1471,14 @@ function popoverShows(report: Record<string, string>, height: number): boolean {
   );
 }
 
-/**
- * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
- * in a plain `View`, so the box the harness measures is the control's and the press lands on
- * it. `columnStyle` is what `Slider.harness.tsx` and the other suites use for the same reason.
- */
-
 // MARK: - Form's fixture
 
 const FORM_LABEL = 'Conformance form';
 const FORM_LABEL_SECOND = 'Second owner’s form';
 
 /**
- * `captureFor` for a Form. A Form has no box of its own and so no `measureContent()`, and
- * it is not a control with an `accessibilityLabel` to read back - both members live on the
- * shared `Handle` type for the controls that do. Same arrangement as `captureDialog`.
+ * `captureFor` for a Form, which has no `measureContent()` and no
+ * `accessibilityLabel`.
  */
 const captureForm =
   (testId: string) =>
@@ -1910,13 +1487,8 @@ const captureForm =
   };
 
 /**
- * ListItem's handle, captured the way Form's is.
- *
- * The shared `Handle` type carries `title?: string`, which is Menu's trigger text; a
- * ListItem's `title` is `string | null` because every text slot is nullable (no optional
- * Hybrid View props — D7/nitro#1184), and the two types are not assignable to each other.
- * The cast is this file's standing answer for a control whose own props are wider than the
- * one handle type: the fields the fixtures below read are on both.
+ * `captureFor` for a ListItem. Its `title` is `string | null`, which is not
+ * assignable to the shared handle's `title?: string`, hence the cast.
  */
 const captureListItem =
   (testId: string) =>
@@ -1925,11 +1497,8 @@ const captureListItem =
   };
 
 /**
- * One Form, with a row count that differs between the two owners.
- *
- * The counts differ by more than one on purpose: with 3 and 4, a reset that was off by a row
- * still looks like a layout that settled late. 4 and 2 also mean the second owner cannot be
- * satisfied by a leftover from the first.
+ * One Form, with a row count that differs between the two owners by more than
+ * one, so an off-by-one reset cannot look like a late layout.
  */
 function formFixtureProps(
   second: boolean,
@@ -1955,7 +1524,6 @@ function formFixtureProps(
   };
 }
 
-/** One report string, as `key -> value` — the shape every other report here has. */
 function formFieldsOf(report: string): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const pair of report.split(';')) {
@@ -1970,18 +1538,10 @@ function formFields(handle: Handle): Record<string, string> {
 }
 
 /**
- * The Form's report once it has stopped moving.
- *
- * `nuiTestFormReport()` is the eventual-consistency seam every report in this library is
- * (the numbers are the UI thread's, the reader is on the JS thread, so a call answers what
- * the *last* call's build produced), and a recycled view inherits the report its previous
- * owner left in it. So the first read after a mount is allowed to be the previous owner's
- * `rows=4`, or the first-ever read is `pending`. This waits for two consecutive reads to
- * agree on something real, which says the tree is not moving — it never waits for a
- * particular number, so a reset that really did leave four rows registered still reads
- * four, and still fails.
- *
- * Same shape as the a11y sweep's "read 3 times before two agreed" (`scripts/real-input/a11y.mjs`).
+ * The Form's report once it has stopped moving. The numbers are the UI thread's
+ * and a call answers what the last call's build produced, so the first read
+ * after a mount can be the previous owner's. Waits for two consecutive reads to
+ * agree, never for a particular number.
  */
 async function settledFormReport(handle: Handle): Promise<string> {
   let previous = handle.nuiTestFormReport?.() ?? 'pending';
@@ -1995,11 +1555,8 @@ async function settledFormReport(handle: Handle): Promise<string> {
 }
 
 /**
- * The item rows the ButtonGroup fixture mounts.
- *
- * Module-level because `items` is an object-array prop: a literal in the JSX would be a
- * fresh identity on every re-render, which is a prop diff no other fixture pays and a
- * repaint the sizing rules would then be measuring instead of a mount.
+ * Module-level because `items` is an object-array prop: a literal in the JSX
+ * would be a new identity on every render.
  */
 const CONFORMANCE_BUTTON_GROUP_ACTIONS = [
   { id: 'copy', title: 'Copy' },
@@ -2016,33 +1573,22 @@ const CONFORMANCE_BUTTON_GROUP_B = [
 ];
 
 /**
- * One uncontrolled toggle item: `defaultChecked` seeds it checked once, so pressing it
- * reports `false` — and an item whose seed was re-applied reports the same thing, which
- * is why the probe's *read* is the press after the second mount and not the state before
- * it.
+ * One uncontrolled toggle item: `defaultChecked` seeds it checked once, so
+ * pressing it reports `false`.
  */
 const CONFORMANCE_BUTTON_GROUP_TOGGLES = [
   { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
 ];
 
-/**
- * The same item, *controlled* at unchecked: a boolean `checked` is what makes the
- * wrapper put the id in `checkedIds`/`controlledIds`, which is the only write the
- * handshake's counters can refuse.
- */
+/** The same item, controlled at unchecked. */
 const CONFORMANCE_BUTTON_GROUP_CONTROLLED = [
   { id: 'bold', title: 'Bold', toggle: true, checked: false },
 ];
 
 /**
- * Press one item of a ButtonGroup, through the control's own press path on both
- * platforms.
- *
- * Not a harness tap: on iOS a harness touch is a `UITouch` with no HID event behind it
- * and reaches no SwiftUI `Button` gesture (Chip's note above), and on either platform a
- * tap can only be aimed at a *point* — it cannot name the item, which for a row whose
- * items have different widths is guesswork. `nuiTestPressItem(id)` runs the same
- * `press(id)` a tap runs, including the disabled refusal.
+ * Presses one item of a ButtonGroup through the control's own press path on
+ * both platforms: a tap can only be aimed at a point, and on iOS a harness
+ * touch reaches no SwiftUI `Button` gesture.
  */
 const pressButtonGroupItem = async (
   testId: string,
@@ -2091,18 +1637,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // A reset in this library has two lines and each one answers to a different probe, so
-    // this control has two. The reason a single fixture cannot see both is stated on
-    // `Fixture.controlledProbe` and measured in the report; what follows is the pair.
-    //
-    // This one puts the residue on `false` and the second owner's default on `true`, which
-    // is the arrangement that separates the two lines: the residue has to be the value the
-    // *component's* reset writes (`NitroUiControlledValue<Bool>(displayed: false)`,
-    // `HybridNitroUiSwitch.swift:312`) so the display is not already right for the wrong
-    // reason, and the default has to be the third possibility — impossible for a Bool, which
-    // is exactly why round 1's fixture (`defaultValue={false}` against a `false` reset) could
-    // not tell the lines apart. Here, the second owner's default (`true`) is neither the
-    // reset's number nor the residue's.
+    // The residue is `false`, the value the reset itself writes, and the second
+    // owner's default is `true`: only a re-armed default can show it.
     probe: {
       leaveBehind:
         'an uncontrolled Switch that started ON and was pressed off, then a second ' +
@@ -2118,8 +1654,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         />
       ),
       act: async () => {
-        // Pressed *off*: the displayed value left behind is `false`, which is also what
-        // `prepareForRecycle` writes, so the display alone can never be the evidence.
         await pressControl('conformance-switch');
         await waitFor(() =>
           expect(eventsSince(0)).toEqual(['conformance-switch:false'])
@@ -2137,10 +1671,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const from = recycleEvents.length;
         await pressControl('conformance-switch');
-        // The oracle is `Switch.harness.tsx:8`'s tap-twice, pointed at the one-shot: a
-        // second owner whose default was applied shows ON, so its first press reports
-        // `false`. A control still believing it applied its default shows OFF — the value
-        // its previous owner pressed — and its first press reports `true`.
+        // A second owner whose default was applied shows ON, so its first press
+        // reports `false`. One that kept the previous owner's state shows OFF
+        // and reports `true`.
         return [
           {
             label: 'the first press after the second mount reports',
@@ -2170,19 +1703,10 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           expect(eventsSince(0)).toEqual(['conformance-switch:true'])
         );
       },
-      // Controlled at `false`, so the app's own value is the opposite of the residue.
-      // `useControlled.ts:56` sends `mostRecentEventCount` 0 with it and the setter assigns
-      // it (`HybridNitroUiSwitch.swift:206`), so the only thing that can accept this write
-      // is `nativeEvents` back at 0 — which is what the struct assignment does and nothing
-      // else does. Leave it out and `reconcile()` sees `jsEvents 0 < nativeEvents 1`,
-      // refuses the write as stale, and the control keeps showing the previous app's `true`:
-      // the first press then reports `false`, which is the app's own value coming back out of
-      // a control with somebody else's counters.
-      //
-      // `didApplyDefault` cannot matter on this axis — the default pass is guarded on
-      // `model.state.js == nil` (`HybridNitroUiSwitch.swift:196`) and a controlled owner makes
-      // that false — which is the whole reason there are two probes: each puts the other
-      // reset line out of reach, so neither can be quietly covered by the other.
+      // Controlled at `false`, the opposite of the residue. The write arrives
+      // with event count 0, so it is accepted only if the reset zeroed the
+      // native event count; otherwise it is refused as stale and the control
+      // keeps showing `true`.
       second: () => (
         <Switch
           value={false}
@@ -2261,10 +1785,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           -1,
           'the first owner’s drag down'
         );
-        // The residue is 0: the value `prepareForRecycle` itself writes
-        // (`HybridNitroUiSlider.swift:871`), so the drawn number alone can never be the
-        // evidence — see `Fixture.controlledProbe` for the probe that reads the rest. The
-        // event carries a JS number, so it records as `0`, not the report's `0.0`.
+        // The residue is 0, the value the reset itself writes. The event
+        // carries a JS number, so it records as `0`, not the report's `0.0`.
         await waitFor(() =>
           expect(eventsSince(before)).toEqual(['conformance-slider:0'])
         );
@@ -2282,9 +1804,7 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         </View>
       ),
       read: async () => {
-        // One step up from wherever the second mount is standing. The report's `from` is
-        // `model.state.displayed` read on the main thread
-        // (`HybridNitroUiSlider.swift:979`), so it is the drawn value, not React's number.
+        // The report's `from` is the drawn value, not React's number.
         const report = await sliderStep(
           handleFor('conformance-slider'),
           1,
@@ -2292,10 +1812,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         );
         return [
           {
-            // The report prints the value as the double it is (`... 0.0->0.25 ...`,
-            // `HybridNitroUiSlider.swift:979`), so the expected string is the same shape: `0`
-            // and `0.0` are the same number and different strings, and a rule that can only
-            // fail because of a format is a rule the next person deletes.
+            // The report prints the value as a double (`0.0->0.25`), so the
+            // expected string has the same shape.
             label: 'the value the control was showing before any step',
             expected: '0.75',
             actual: stepFrom(report),
@@ -2343,15 +1861,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         </View>
       ),
       read: async () => {
-        // `value={0}` is refused as stale by counters left at `nativeEvents 1`, so the
-        // control is still showing 0.25 and its next step starts there rather than at 0.
-        // One step *down* from wherever the second mount stands: from 0.25 that arrives at 0,
-        // and from 0 it cannot move — `stepped(from:up:)` returns the same value at the bound
-        // and `accessibilityStep` then does nothing at all
-        // (`HybridNitroUiSlider.swift:314-322`). So a control that accepted the controlled
-        // write reports a step from 0 to 0, and one that refused it as stale reports 0.25 to 0.
-        // Asking in this direction is what makes the two answers different strings; asking up
-        // would report `0.25` either way and the oracle would be a tautology.
+        // One step down: a control that accepted the controlled write is on 0
+        // and cannot move, and one that refused it as stale reports 0.25 to 0.
+        // A step up would report `0.25` either way.
         const report = await sliderStep(
           handleFor('conformance-slider'),
           -1,
@@ -2794,18 +2306,14 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       act: async () => {
         const before = eventsSince(0).length;
-        // A finger, not a prop: `defaultSelectedIndex` stays 0 for the whole fixture, so
-        // the index 2 the row ends up on exists nowhere in what React sent and can only
-        // arrive from the control's own state.
+        // A tap, not a prop: `defaultSelectedIndex` stays 0, so index 2 can
+        // only come from the control's own state.
         await tapSegmentOf('conformance-segmented', 2, 3);
         await waitFor(() =>
           expect(eventsSince(before)).toEqual(['conformance-segmented:2'])
         );
-        // And the residue is *measured* through the read-out this probe depends on, before
-        // that read-out is trusted: a `nuiTestDisplayedIndex` that echoed the prop would
-        // answer 0 here (React never sent 2) and go red on this line rather than banking a
-        // pass for the second mount. 2 is also what `prepareForRecycle` does *not* write,
-        // so the second read below cannot be this number arriving late.
+        // The residue is checked through the read-out this probe depends on:
+        // one that echoed the prop would answer 0 here.
         await pollReport(
           () =>
             handleFor('conformance-segmented').nuiTestDisplayedIndex?.() ?? '',
@@ -2827,14 +2335,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => [
         {
-          // The row's own answer, not the handle's `selectedIndex`: a second owner that
-          // sends no `selectedIndex` sees `null` from that getter either way, which is the
-          // blindness X4 recorded as "residue no read-out can show". Index 1 is reachable
-          // only through `prepareForRecycle` re-arming `didApplyDefault`
-          // (`HybridNitroUiSegmentedControl.swift:518`, `HybridNitroUiSegmentedControl.kt`
-          // `reset`) so the second owner's own default can apply: the residue is 2 and the
-          // reset writes 0, so this is the third value the arrangement can produce, and the
-          // line is specific to the one-shot rather than to the display write beside it.
+          // The row's own answer, not the handle's `selectedIndex`. The residue
+          // is 2 and the reset writes 0, so index 1 is reachable only by the
+          // second owner's default being applied.
           label: 'the segment the row paints',
           expected: '1',
           actual: await drawnIndexOf('conformance-segmented'),
@@ -2865,12 +2368,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           expect(eventsSince(before)).toEqual(['conformance-segmented:2'])
         );
       },
-      // Controlled on 0, the opposite of the residue. `useControlled.ts:56` sends
-      // `mostRecentEventCount` 0 with it, so the only thing that can accept the write is
-      // `nativeEvents` back at 0 — which is what the reset's handshake assignment does and
-      // nothing else does. Left at the previous owner's count, `reconcile()` sees
-      // `jsEvents 0 < nativeEvents 1`, refuses it as stale, and the row keeps painting
-      // segment 2 while the app believes it asked for 0.
+      // Controlled on 0, the opposite of the residue (see the Switch fixture's
+      // controlled probe).
       second: () => (
         <SegmentedControl
           options={['One', 'Two', 'Three']}
@@ -2885,8 +2384,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => [
         {
-          // Read through the row, not the handle: `selectedIndex` answers `state.js`, which
-          // is 0 because that is what React sent, whether or not the write was accepted.
+          // Read through the row, not the handle: `selectedIndex` answers what
+          // React sent, whether or not the write was accepted.
           label: 'the segment the controlled second mount paints',
           expected: '0',
           actual: await drawnIndexOf('conformance-segmented'),
@@ -2968,18 +2467,10 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         const state = datePickerStateOf('conformance-date-picker');
         return [
           {
-            // The displayed day, read from the view rather than from the `value` React sent:
-            // the second owner passes no `value` at all, so only the control's own state can
-            // answer this. No `pollReport` here — waiting for the reset before asking whether
-            // it happened is how this rule would go green on a control that resets late.
-            //
-            // The expected day is the *second owner's own default*, and that is the whole
-            // point of the choice: it is neither the residue (`2027-01-15`) nor what
-            // `prepareForRecycle` writes into `displayed` (epoch 0,
-            // `HybridNitroUiDatePicker.swift:1394`), so this number can only arrive by the
-            // one-shot being re-armed and the default pass running. Round 1's fixture used
-            // the same day for the default as for the residue's neighbour, which is what made
-            // the two reset lines look interchangeable.
+            // Read from the view, and read once: waiting for the reset before
+            // asking whether it happened would pass a control that resets late.
+            // The expected day is the second owner's own default, which is
+            // neither the residue nor the epoch 0 the reset writes.
             label: 'the day the field shows',
             expected: localDay(2025, 3, 1),
             actual: state.millis,
@@ -3025,11 +2516,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => [
         {
-          // Counters left at the previous owner's event make this write stale
-          // (`NitroUiModel.swift:71-79`), and a stale write is dropped: the field keeps
-          // showing the day the *previous* app picked. Reading `millis` rather than the
-          // handle's `value` is what makes that visible — the handle answers `state.js`,
-          // which is the day React sent either way.
+          // `millis` rather than the handle's `value`: the handle answers the
+          // day React sent either way.
           label: 'the day the controlled second mount shows',
           expected: localDay(2025, 3, 1),
           actual: datePickerStateOf('conformance-date-picker').millis,
@@ -3097,10 +2585,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         await waitFor(() =>
           expect(eventsSince(before)).toEqual(['conformance-picker:1'])
         );
-        // The same choice again: `applyUserSelection` returns without emitting when the
-        // index equals what is displayed (`HybridNitroUiPicker.swift:103`, whose comment
-        // names this as the thing that makes a *rolled-back* selection observable). So the
-        // second call says, in the negative, that the control really is on 1.
+        // A pick of the index already displayed emits nothing, so the silent
+        // second call says the control really is on 1.
         choose();
         await settle(300);
         if (eventsSince(before).length !== 1) {
@@ -3110,13 +2596,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           );
         }
       },
-      // Defaulted to **2**, which is neither the residue (1) nor what `prepareForRecycle`
-      // writes into `displayed` (0). That is the line-specificity X4 re-review 2 asked for:
-      // round 1's second owner defaulted to `0`, the reset's own number, so deleting
-      // `didApplyDefault = false` stayed green — the control was already on 0 for the wrong
-      // reason and both arrangements emitted the same events. Now the three states are three
-      // different answers to the same question: one-shot alive → on 2, so picking 0 moves it
-      // and fires; one-shot dead → on 0 (the reset's write), so picking 0 changes nothing and
+      // Defaulted to 2, which is neither the residue (1) nor what the reset
+      // writes (0): with the default applied, picking 0 fires; left on 0, it
       // stays silent.
       second: () => (
         <Picker
@@ -3131,21 +2612,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const before = eventsSince(0).length;
         handleFor('conformance-picker').nuiTestSelect?.(0);
-        // The event is the reset reporting for itself. Silence *is* the residue, so it gets
-        // reported rather than waited away: `waitFor` here would turn the missing reset into
-        // a Jest timeout that names neither value.
-        //
-        // What this oracle separates, and what it cannot. Its one question is "are you
-        // standing on 0?", and a pick is destructive - a firing pick moves the control, so a
-        // second question in the same read would be answered about the first pick's result.
-        // That leaves exactly two things to ask of this shape, and the pair splits them:
-        // this probe asks about `didApplyDefault` (the second owner's default of 2 is what
-        // makes that the only answer a healthy control can give), and `controlledProbe`
-        // below asks about the handshake counters - which is also where a *wholesale* reset
-        // deletion shows up, because a recycled control left on 2 with its counts intact
-        // refuses the controlled write and goes silent on that probe, not this one. Nothing
-        // an uncontrolled control does ever reads those counts, so this probe could not ask
-        // that question even with a second read to spend.
+        // Silence is the residue, so it is reported rather than waited away: a
+        // `waitFor` here would turn a missing reset into a timeout that names
+        // neither value.
         return [
           {
             label:
@@ -3191,10 +2660,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const before = eventsSince(0).length;
         handleFor('conformance-picker').nuiTestSelect?.(2);
-        // Counters left at the previous owner's event make `selectedIndex={0}` stale, and a
-        // stale write is dropped, so the control is still showing option 2 — and a pick of 2
-        // changes nothing, which `applyUserSelection` reports as silence. The app asked for
-        // index 0 and the control is on 2: that is the bug the counters' reset exists to stop.
+        // A stale write is dropped, so the control is still on option 2 and a
+        // pick of 2 is silent.
         return [
           {
             label: 'choosing the previous owner’s option again emits',
@@ -3242,20 +2709,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // The props half runs; the residue half runs nowhere, and what that hole *is* changed in
-    // F6 so the row describes today's two platforms rather than the pair X4 measured. A Menu's
-    // only native-owned state is whether its popup is open (DECISIONS D29: no `open()`/
-    // `close()` in v0.1, so only a gesture puts it there and no harness gesture can reach a
-    // SwiftUI `Menu`). `nuiTestMenuReport` reads that flag for real on **Android**, which F6
-    // proved also recycles (`example/__tests__/Recycling.harness.tsx`) — so the Android half
-    // is no longer blind, and `MenuModelTest` in `android/src/test` covers the reset line the
-    // fixture cannot reach from a device: `MenuModel.reset()` clears `expanded` ahead of every
-    // other field, and the popup's own witness closes it when its composition is disposed
-    // (`HybridNitroUiMenu.kt`'s `MenuWitness.onDispose`), which a device run goes through
-    // first. The failing half is **iOS**, where both doors are shut at once: no gesture
-    // reaches the control (D29) *and* the read-out answers `-1`
-    // (`HybridNitroUiMenu.swift:762`), and the coverage table has no way to mark one platform
-    // of a cell — see the report's follow-up for splitting it.
+    // A Menu's only native-owned state is whether its popup is open. Android
+    // reads that flag; on iOS no harness gesture reaches a SwiftUI `Menu` and
+    // the read-out answers `-1`.
     probe: {
       blindSpot:
         'a Menu holds one piece of state no prop rewrites - whether its popup is ' +
@@ -3298,13 +2754,10 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
       { label: 'presented', expected: false, actual: handle.presented },
     ],
-    // The residue a dialog can leave is the handshake's: a user dismissal is a native
-    // event, so the first owner ends with one native event counted. A second owner sends
-    // `isPresented` with `mostRecentEventCount` 0 (useControlled.ts), and if the reset
-    // left the first owner's count behind, `reconcile()` refuses that write as stale -
-    // the dialog the second app asked for never presents. The other residue is the
-    // first owner's controller: a reset that kept it would show the old title. Both are
-    // read from the view (`nuiTestStateReport`), never from React's own props.
+    // A user dismissal is a native event, so the first owner ends with one
+    // counted. If the reset kept it, the second owner's `isPresented` is
+    // refused as stale and its dialog never presents; if it kept the
+    // controller, the old title shows.
     probe: {
       leaveBehind:
         'a dismissal the first owner took (one native event) - the second owner ' +
@@ -3357,9 +2810,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => {
         const handle = handleFor('conformance-dialog');
-        // The flag is read once. The window is waited for, because presenting is
-        // asynchronous on both platforms - the wait is for UIKit or Compose to put
-        // up what the second owner asked for, not for a reset to happen.
+        // The flag is read once. The window is waited for, because presenting
+        // is asynchronous on both platforms.
         const presented = dialogReportOf(handle).presented;
         const deadline = Date.now() + 4000;
         let report = dialogReportOf(handle);
@@ -3397,11 +2849,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     state: (handle) => [
       { label: 'presented', expected: false, actual: handle.presented },
     ],
-    // A sheet's residue is the dialog's, plus its content: a user dismissal leaves one
-    // native event, so a reset that kept the count refuses the second owner's
-    // `isPresented` as stale; and a reset that kept the previous sheet's content box
-    // would show the first owner's height in the second owner's sheet. Both are read
-    // from the view (`nuiTestStateReport`).
+    // The dialog's residue, plus the content: a reset that kept the previous
+    // sheet's content box would show the first owner's height.
     probe: {
       leaveBehind:
         'a dismissal the first owner took (one native event), and the content the first ' +
@@ -3478,10 +2927,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     state: (handle) => [
       { label: 'presented', expected: false, actual: handle.presented },
     ],
-    // A tooltip's residue is the dialog's, plus its content: a user dismissal leaves one
-    // native event, so a reset that kept the count refuses the second owner's
-    // `isPresented` as stale; and a reset that kept the previous popup's content would
-    // show the first owner's message. Both are read from the view (`nuiTestStateReport`).
+    // The dialog's residue, plus the content: a reset that kept the previous
+    // popup's content would show the first owner's message.
     probe: {
       leaveBehind:
         'a dismissal the first owner took (one native event), and the message the ' +
@@ -3560,11 +3007,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     state: (handle) => [
       { label: 'presented', expected: false, actual: handle.presented },
     ],
-    // A popover's residue is the dialog's, plus its content: a user dismissal leaves one
-    // native event, so a reset that kept the count refuses the second owner's
-    // `isPresented` as stale; and a reset that kept the previous popover's content box
-    // would show the first owner's height in the second owner's popover. Both are read
-    // from the view (`nuiTestStateReport`).
+    // The dialog's residue, plus the content: a reset that kept the previous
+    // popover's content box would show the first owner's height.
     probe: {
       leaveBehind:
         'a dismissal the first owner took (one native event), and the content the first ' +
@@ -3657,12 +3101,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // Switch's pair, for Switch's reason (`Fixture.controlledProbe`): an uncontrolled chip
-    // that started selected and was pressed off, then a second owner whose own default is
-    // selected. The residue (`false`) is what `prepareForRecycle` writes, so the display
-    // alone cannot be the evidence; the first press after the second mount is. A chip whose
-    // `didApplyDefault` was re-armed shows selected and reports `false`; one that kept
-    // the flag shows the previous owner's unselected and reports `true`.
+    // An uncontrolled chip that started selected and was pressed off, then a
+    // second owner whose default is selected. A chip whose default was
+    // re-applied shows selected and reports `false` on its first press.
     probe: {
       leaveBehind:
         'an uncontrolled filter chip that started selected and was pressed off, then a ' +
@@ -3706,18 +3147,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         ];
       },
     },
-    // The handshake's counters: a press on an uncontrolled chip, then a second owner
-    // controlled at `true`. Counters left over make that write look stale, so it is
-    // refused and the chip keeps showing `false`: its first press reports `true` where a
-    // clean chip, showing the `true` it was sent, reports `false`.
-    //
-    // Why `true` and not Switch's `false` (measured, G12): Android draws a chip from
-    // `ChipModel.displayed`, which `reset()` clears to `false` on its own line, so a
-    // second owner controlled at `false` is shown `false` whether or not the counters
-    // were reset - the fixture's answer coincided with the reset's, and this probe stayed
-    // green on Android with the counter reset deleted. iOS draws from `state.displayed`,
-    // the residue itself, which is why the first owner here starts selected and is pressed
-    // *off*: the residue (`false`) differs from the controlled value on both platforms.
+    // Controlled at `true`, not `false`: Android's reset clears the drawn value
+    // to `false` on its own, so a second owner controlled at `false` would look
+    // right with the counters left over.
     controlledProbe: {
       leaveBehind:
         'a press that turns an uncontrolled filter chip off, then a second owner that ' +
@@ -3794,13 +3226,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // Switch's pair, for Switch's reason (`Fixture.controlledProbe`): a reset has two
-    // lines, `didApplyDefault = false` and a fresh `NitroUiControlledValue`, and an
-    // uncontrolled owner can only read the first. The residue here is `false` because
-    // that is what `prepareForRecycle` writes (`HybridNitroUiCheckbox.swift`'s
-    // `NitroUiControlledValue<Bool>(displayed: false)`, `CheckboxModel.reset()` on
-    // Android), so the display alone can never be the evidence and the first press after
-    // the second mount is.
+    // The residue is `false`, the value the reset writes, so the first press
+    // after the second mount is the evidence (see the Switch fixture).
     probe: {
       leaveBehind:
         'an uncontrolled Checkbox that started ON and was pressed off, then a second ' +
@@ -3833,9 +3260,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const from = recycleEvents.length;
         await pressCheckbox('conformance-checkbox');
-        // A second owner whose default was applied shows ON, so its first press reports
-        // `false`. One still believing it applied its default shows the `false` its
-        // previous owner pressed, and its first press reports `true`.
         return [
           {
             label: 'the first press after the second mount reports',
@@ -3845,10 +3269,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         ];
       },
     },
-    // A press asks for the opposite of what is showing on both platforms, which is what
-    // makes this probe read the way Switch's does rather than the way Chip's does: a
-    // checkbox that asked for `true` whatever it showed would report `true` here whether
-    // or not the counters were reset, and the line it is testing would be unmeasured.
     controlledProbe: {
       leaveBehind:
         'a press that turns an uncontrolled Checkbox on, then a second owner that is ' +
@@ -3869,13 +3289,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           expect(eventsSince(0)).toEqual(['conformance-checkbox:true'])
         );
       },
-      // Controlled at `false` while the residue is `true`, so the app's own value is the
-      // opposite of what the first owner left. `useControlled.ts` sends
-      // `mostRecentEventCount` 0 with it; only `nativeEvents` back at 0 can accept the
-      // write. Leave the counters alone and `reconcile()` sees `jsEvents 0 <
-      // nativeEvents 1`, refuses it as stale, and the control keeps showing the previous
-      // app's `true` - so its first press asks for `false`, the app's own value coming
-      // back out of a control with somebody else's counters.
+      // Controlled at `false` while the residue is `true` (see the Switch
+      // fixture's controlled probe).
       second: () => (
         <Checkbox
           checked={false}
@@ -3925,8 +3340,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         <View style={{ height: variant ? 40 : 20 }} />
       </ContextMenu>
     ),
-    // Read from the view's own report, never from React's props: a `null` title the
-    // second owner sends has to arrive as `-`, and the menu must not come back open.
+    // Read from the view's own report: a `null` title has to arrive as `-`, and
+    // the menu must not come back open.
     state: (handle, second) => {
       const report = contextMenuReportOf(handle);
       return [
@@ -3938,11 +3353,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         { label: 'open', expected: '0', actual: report.open },
       ];
     },
-    // The residue is the menu's own history: a pick counts into `selects` (and an open
-    // menu into `opens`), state no prop writes. A recycled view that kept it would report
-    // a pick its owner never made - and on Android the same reset is what closes a menu
-    // the previous owner left open (`ContextMenuModel.reset`, "a recycled view must never
-    // come back open").
+    // The residue is the menu's own history: a pick counts into `selects`,
+    // which no prop writes. On Android the same reset closes a menu the
+    // previous owner left open.
     probe: {
       leaveBehind:
         'a pick the first owner made through the row path (selects=1) - the second ' +
@@ -4010,10 +3423,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     component: 'NitroUiForm',
     label: FORM_LABEL,
     testId: 'conformance-form',
-    // A Form is laid out by its caller (D45): it has no intrinsic size to compare with a
-    // declared fallback, so it never joins the sizing engine's ledger. `isView` because the
-    // Form *is* the view that carries the label - the a11y rule reads its own box, not a row
-    // inside it.
+    // A Form is laid out by its caller, so it never joins the sizing engine's
+    // ledger. `isView` because the Form is the view that carries the label.
     selfSizing: false,
     isView: true,
     owner: (second) => <Form {...formFixtureProps(second)} />,
@@ -4022,9 +3433,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         {...formFixtureProps(variant, testId, `Leak ${variant ? 'B' : 'A'}`)}
       />
     ),
-    // The Form's own account of what it is holding: `rows` is what registered with the list,
-    // and `orphans` is the shape a component view takes when a recycle moved it out and
-    // nothing moved it back.
+    // `rows` is what registered with the list; `orphans` is a component view a
+    // recycle moved out and nothing moved back.
     state: async (handle, second) => {
       const fields = formFieldsOf(await settledFormReport(handle));
       return [
@@ -4040,13 +3450,10 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         },
       ];
     },
-    // The residue a Form leaves is its own bookkeeping: which rows are registered, and where
-    // its list is scrolled to. Four rows and a real scroll for the first owner, two rows for
-    // the second. A reset that skipped the bookkeeping reports `rows=4`, or - the shape the
-    // recycling path produces when a row is dropped on the floor - `orphans>0`. The scroll is
-    // logged rather than asserted: on Android the scroller is React Native's `ScrollView`,
-    // which belongs to the wrapper and not to the recycled view, so a zero there is not this
-    // component's own evidence on that platform.
+    // Four rows and a real scroll for the first owner, two rows for the second.
+    // The scroll is logged rather than asserted: on Android the scroller is
+    // React Native's `ScrollView`, which belongs to the wrapper, not the
+    // recycled view.
     probe: {
       leaveBehind:
         'four registered rows and a list scrolled 120 pt - the second owner mounts two, so ' +
@@ -4069,8 +3476,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           await sleep(100);
         }
         handle.nuiTestScrollTo?.(120);
-        // Wait for the list to say it moved, so the residue is real before the second owner
-        // arrives. Either platform's field counts: iOS publishes `offset`, Android `scroll`.
+        // Wait for the list to say it moved. iOS publishes `offset`, Android
+        // `scroll`.
         const moved = Date.now() + 4000;
         while (Date.now() < moved) {
           const report = formFields(handle);
@@ -4086,8 +3493,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => {
         const handle = handleFor('conformance-form');
-        // Settled, for the reason `settledFormReport` states: this read is one beat behind
-        // the UI thread, and a recycled view starts life holding its previous owner's report.
         const report = formFieldsOf(await settledFormReport(handle));
         console.log(
           `    · the second owner's list: rows=${report.rows ?? '(none)'} ` +
@@ -4107,13 +3512,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     component: 'NitroUiIconButton',
     label: 'Conformance icon button',
     testId: 'conformance-icon-button',
-    // The **press** form, at every default the wrapper resolves: this is the
-    // configuration the fallback row claims, so it is the one the sizing rules
-    // measure. The toggle form's box is the same on Android (Material's toggle
-    // icon buttons take the same container tokens) and is what
-    // `IconButtonsKeepOneBoxAcrossStates` pins in `IconButton.harness.tsx`; iOS
-    // gives a `Toggle(.button)` its own padding, which `docs/components/icon-button.md`
-    // prints instead of pretending the two forms are one box.
+    // The press form at every default: the configuration the fallback row
+    // describes. iOS gives a `Toggle(.button)` its own padding, so the toggle
+    // form is a different box there.
     owner: (second) => (
       <IconButton
         accessibilityLabel={
@@ -4145,16 +3546,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // An IconButton holds two things a prop cannot rewrite: the selection the last
-    // app pressed, and the parsed glyph. Both are on `reset()`
-    // (`IconButtonModel.reset()` / `HybridNitroUiIconButton.swift`'s
-    // `prepareForRecycle`), and the selection is the half a probe can read:
-    // `displayed` is written where the control is drawn, and the glyph's half is
-    // `IconButton.harness.tsx`'s pixel probe, which is where drawing is checked.
-    //
-    // The second owner's default is deliberately the *opposite* of the residue, so
-    // the answer cannot coincide with what a missing reset would also print —
-    // Chip's note above is the case where that coincidence kept a line unmeasured.
+    // The second owner's default is the opposite of the residue, so the answer
+    // cannot coincide with what a missing reset would print.
     probe: {
       leaveBehind:
         'an uncontrolled toggle that started ON and was pressed off, then a second ' +
@@ -4191,9 +3584,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const from = recycleEvents.length;
         await pressIconButton('conformance-icon-button');
-        // A second owner whose default was applied shows ON, so its first press
-        // reports `false`. One still believing it applied its default shows the
-        // `false` its previous owner pressed, and reports `true`.
         return [
           {
             label: 'the first press after the second mount reports',
@@ -4203,10 +3593,7 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         ];
       },
     },
-    // The other half of the reset: the handshake's event counts, which an
-    // uncontrolled owner never reads (`Fixture.controlledProbe`). A press asks for
-    // the opposite of what is showing on both platforms, which is what makes this
-    // read like Switch's and Checkbox's rather than Chip's.
+    // The handshake's event counts, which an uncontrolled owner never reads.
     controlledProbe: {
       leaveBehind:
         'a press that turns an uncontrolled toggle on, then a second owner that is ' +
@@ -4259,11 +3646,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     component: 'NitroUiButtonGroup',
     label: 'Conformance button group',
     testId: 'conformance-button-group',
-    // Two **action** items at every default the wrapper resolves: this is the
-    // configuration `DECLARED_FALLBACKS.NitroUiButtonGroup` claims, so it is the one
-    // the sizing rules measure. A toggle item is deliberately absent from the *owner* —
-    // an iOS toggle row is a different height from an action row, and the fallback
-    // describes the row the docs print — but both recycle probes mount one.
+    // Two action items at every default: the configuration the fallback row
+    // describes. An iOS toggle row is a different height from an action row.
     owner: (second) => (
       <ButtonGroup
         accessibilityLabel={
@@ -4294,14 +3678,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // A ButtonGroup holds the checked set the last app toggled, and that set survives
-    // every prop the second owner sends: `checkedIds` is built from the *controlled*
-    // items only, and an uncontrolled item's state belongs to the control. So the
-    // residue is real and the press after the remount is what reads it — Chip's and
-    // IconButton's shape, for the same reason.
-    //
-    // The second owner's `defaultChecked` is deliberately the *opposite* of the residue,
-    // so the answer cannot coincide with what a missing reset would also print.
+    // The checked set of uncontrolled items belongs to the control and survives
+    // every prop the second owner sends. The second owner's `defaultChecked` is
+    // the opposite of the residue.
     probe: {
       leaveBehind:
         'an uncontrolled toggle item that started checked and was pressed off, then a ' +
@@ -4318,8 +3697,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       act: async () => {
         await pressButtonGroupItem('conformance-button-group', 'bold');
-        // The item starts checked (`defaultChecked`), so the press that arms the probe
-        // reports it *unchecked* — the residue a missing reset would show.
+        // The item starts checked (`defaultChecked`), so the press that arms
+        // the probe reports it unchecked.
         await waitFor(() =>
           expect(eventsSince(0)).toEqual([
             'conformance-button-group:bold:false',
@@ -4338,10 +3717,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const from = recycleEvents.length;
         await pressButtonGroupItem('conformance-button-group', 'bold');
-        // A clean control re-seeded from `defaultChecked` shows the item checked, so its
-        // first press reports the *unchecked* id with `false`. One still believing it
-        // applied that default shows the previous owner's unchecked item and reports
-        // `true`.
         return [
           {
             label: 'the first press after the second mount reports',
@@ -4354,15 +3729,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         ];
       },
     },
-    // The other half of the reset: the handshake's event counts. A toggle press on an
-    // uncontrolled item, then a second owner **controlled** at unchecked — the only
-    // shape that reads the counters, because an uncontrolled write is refused before
-    // them (`reconcile()` only applies a write when `js != null`).
-    //
-    // The residue differs from the controlled value on both platforms by construction:
-    // the press leaves the item *checked*, and the second owner says unchecked, so a
-    // stale counter (write refused, control still showing checked) reports `true` where
-    // a clean one reports `false`.
+    // A toggle press on an uncontrolled item, then a second owner controlled at
+    // unchecked: the press leaves the item checked, so a stale counter reports
+    // `true` where a clean one reports `false`.
     controlledProbe: {
       leaveBehind:
         'a press that checks an uncontrolled toggle item, then a second owner that is ' +
@@ -4379,8 +3748,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       act: async () => {
         await pressButtonGroupItem('conformance-button-group', 'bold');
-        // The item starts checked (`defaultChecked`), so the press that arms the probe
-        // reports it *unchecked* — the residue a missing reset would show.
+        // The item starts checked (`defaultChecked`), so the press that arms
+        // the probe reports it unchecked.
         await waitFor(() =>
           expect(eventsSince(0)).toEqual([
             'conformance-button-group:bold:false',
@@ -4418,9 +3787,7 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     component: 'NitroUiStepper',
     label: 'Conformance stepper',
     testId: 'conformance-stepper',
-    // The default range (0…100) and step (1): a Stepper's box depends on neither, which is
-    // what its empty sizing variant claims, so the fixture mounts the configuration the
-    // fallback row describes rather than one the sizing key would have to name.
+    // The default range and step: a Stepper's box depends on neither.
     owner: (second) => (
       <Stepper
         accessibilityLabel={
@@ -4447,12 +3814,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // The residue is the displayed value and the one-shot that re-applies a default. The
-    // three possible answers are three different numbers, which is the line-specificity X4
-    // re-review 2 asked for: the previous owner stepped to **4**, `prepareForRecycle`
-    // writes **0**, and the second owner's own default is **6** — so "one-shot alive" is
-    // the only arrangement that can paint a 6, and a second owner defaulted to either of
-    // the other two would have let a deleted reset look right.
+    // Three possible answers, three numbers: the previous owner stepped to 4,
+    // the reset writes 0, and the second owner's default is 6.
     probe: {
       leaveBehind:
         'a step up to 4 on an uncontrolled stepper that started on 3, then a second ' +
@@ -4486,10 +3849,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       read: async () => {
         const before = eventsSince(0).length;
         const drawn = await drawnValueOfStepper('conformance-stepper');
-        // Then the same question in the negative, through the event: a control still
-        // standing on the previous owner's 4 steps down to 3, and one the reset left on
-        // its own 0 has no lower bound to step down from at all. Only the second owner's
-        // 6 answers 5.
+        // The same question through the event: from 4 a step down gives 3, from
+        // 0 there is nothing to step down to, and only the second owner's 6
+        // answers 5.
         stepStepper('conformance-stepper', -1);
         return [
           {
@@ -4505,10 +3867,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         ];
       },
     },
-    // The other line of the same reset, which no uncontrolled owner ever reads: the
-    // handshake's event counts. The first owner's step leaves `nativeEvents` at 1, a
-    // controlled mount arrives with `mostRecentEventCount` 0, and a stale write is
-    // *dropped* — so the control would sit on the reset's own 0 while its app shows 7.
+    // The first owner's step leaves one native event counted, so a controlled
+    // mount's write would be dropped as stale and the control would sit on 0
+    // while its app shows 7.
     controlledProbe: {
       leaveBehind:
         'a step up on an uncontrolled stepper, then a second owner that is *controlled* ' +
@@ -4563,11 +3924,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     component: 'NitroUiListItem',
     label: 'Conformance list item',
     testId: 'conformance-list-item',
-    // The one-line row with a trailing value: the configuration
-    // `DECLARED_FALLBACKS.NitroUiListItem` describes and the docs print. The subtitle is
-    // the only slot that moves the height, so it is deliberately absent here and measured
-    // rung by rung in `ListItem.harness.tsx` — a fixture that carried one would compare
-    // Material's two-line minimum against a number that says one line.
+    // The one-line row with a trailing value: the configuration the fallback
+    // row describes. A subtitle would change the height.
     owner: (second) => (
       <ListItem
         accessibilityLabel={
@@ -4597,14 +3955,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         actual: handle.accessibilityLabel,
       },
     ],
-    // What a row can leave behind is its own press counter and the line it drew, and no
-    // prop rewrites either: `ListItem.tsx` sends every prop on every commit, while
-    // `presses` is written where the tap lands and `displayed` where the row composes.
-    //
-    // The second owner's title and value are *different words* from the first's, so a
-    // `displayed=` that was never re-taken cannot coincide with the right answer, and the
-    // counter the reset owns is asked with a press rather than read: a reset that left
-    // `presses=1` behind prints `presses=2` for the second owner's first tap.
+    // The second owner's title and value are different words from the first's,
+    // and the press counter is asked with a press: a reset that left
+    // `presses=1` behind prints `presses=2`.
     probe: {
       leaveBehind:
         "a press the first owner took, through the tap's own path - one accepted press " +
@@ -4682,9 +4035,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
   },
 ];
 
-/** Mounts per control in the leak fixture. */
-const CHURN = 50;
-
 afterEach(() => {
   cleanup();
   handles.clear();
@@ -4695,12 +4045,9 @@ afterEach(() => {
 describe('conformance · every control, four rules', () => {
   for (const fixture of FIXTURES) {
     describe(`· ${fixture.name}`, () => {
-      // Both lookups are done *inside* the one test that uses them, not here (X4 review N3).
-      // In the `describe` body they ran while Jest was collecting the file, so a fixture whose
-      // component has no row in the shared table took every other control's suite down with it:
-      // one stale row became a collection error and the run reported nothing about the six
-      // controls that were fine. Here it is one red test with its name on it.
-      // `checkInAppFixtures` is what refuses such a fixture at all, on the host, in `check`.
+      // Both lookups are done inside the test, not in the `describe` body:
+      // there, a fixture with no row in the shared table would be a collection
+      // error that takes every control's suite down.
 
       it('has its own declared fallback, and still corrects a wrong guess', async () => {
         if (fixture.selfSizing === false) {
@@ -4710,18 +4057,11 @@ describe('conformance · every control, four rules', () => {
           );
           return;
         }
-        // Which axes this control's declaration describes comes from the mirrored table,
-        // because that is a host-side fact about its sizing policy — the suite that asserts
-        // does not get to decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
         const expected = declaredFallback(fixture.component);
-        // The premise, read from the app rather than assumed: what locale this run's
-        // formatter ran in. Printed per control so the log names the configuration the
-        // numbers below were taken in.
         const appLocale = deviceLocale();
-        // And whether *this run* said it meant to test a locale the table was not measured in.
-        // The app cannot read the runner's environment, so the answer is published by
-        // `example/rn-harness.config.mjs` with the machine state and read back here; the
-        // default when it cannot be read is `false`, i.e. the comparison is enforced.
+        // The app cannot read the runner's environment, so the opt-out is
+        // published by `example/rn-harness.config.mjs` and read back here;
+        // unreadable means `false`.
         const mismatchAllowed = await localeMismatchAllowed();
         if (mismatchAllowed.allowed) {
           console.log(
@@ -4731,15 +4071,13 @@ describe('conformance · every control, four rules', () => {
         }
         const boxRule = boxRuleFor(fixture.component);
 
-        // 1. The engine knows a fallback at all — read once for the whole file, before any
-        //    poison here has had the chance to write one. See `readRegistrationOnce` for why a
-        //    per-test read is not evidence, and for what a `false` means on a warm process.
+        // 1. The engine knows a fallback at all, read once for the whole file
+        // before any poison here has written one.
         readRegistrationOnce();
         const registered = registration[fixture.component] === true;
 
-        // 2. Poisoned mount, first: the correction has to arrive, and the box that results
-        //    has to be the declared one. Done before the warm case so the seed cannot be
-        //    masked by a cached answer the warm mount would have left behind.
+        // 2. Poisoned mount first, so the seed cannot be masked by a cached
+        // answer the warm mount would leave behind.
         try {
           poison(fixture.component);
           const coldBefore = stats();
@@ -4775,13 +4113,9 @@ describe('conformance · every control, four rules', () => {
         }
         await settle();
 
-        // 3. Warm. For a control whose declaration describes its whole box, the declared
-        //    number *is* the measured one and nothing has to be corrected — the assertion a
-        //    poisoned fallback cannot satisfy and a stale declaration cannot either. For a
-        //    `fillWidth` or content-sized control the box it settles at is its parent's or
-        //    its content's, so `boxRule` narrows the comparison and this run only reports a
-        //    finding if a correction was needed where the declaration should have made it
-        //    unnecessary.
+        // 3. Warm. Where the declaration describes the whole box, nothing has
+        // to be corrected; `boxRule` narrows the comparison for a `fillWidth`
+        // or content-sized control.
         const warmBefore = stats();
         expectANewHandle(fixture.testId);
         const warm = await render(fixture.owner(false), RENDER);
@@ -4817,34 +4151,22 @@ describe('conformance · every control, four rules', () => {
           );
           return;
         }
-        // The positive control, which is the half round 1's leak rule was missing. It churned
-        // 50 mount/unmount pairs with no settle between them and read `ledger 0→0`, a number a
-        // control that never registered an instance produces just as well as one that registers
-        // and forgets correctly. So this mounts K controls, waits for the last of them to be
-        // laid out — an instance reaches the engine on its first measure — requires the ledger
-        // to have risen by exactly K, then drops them and requires the rise to be gone.
-        //
-        // The window has to be *quiescent* at both reads, and that is not a nicety: the first
-        // run of this test read `rose=7` for 8 controls and `−8` on the way down, which is one
-        // instance from the *previous test's* `unmount()` releasing inside the window. Against a
-        // baseline that is still moving, "returned to baseline" is unfalsifiable in exactly the
-        // way round 1's churn was, so `settledStats` waits for two consecutive equal reads and
-        // refuses rather than comparing against a number that is on its way somewhere.
+        // Mounts K controls, waits for the last to be laid out, requires the
+        // ledger to have risen by exactly K, then drops them and requires the
+        // rise to be gone. Both reads are settled: an instance from the
+        // previous test's `unmount()` can release inside the window.
         const MOUNTS = 8;
         const before = await settledStats('before the mount window');
         const many = await render(
           <View>
             {Array.from({ length: MOUNTS }, (_, row) => row).map((row) =>
-              // A `testID` per row, so every one is its own Fabric node and the query below can
-              // name the last; `variant` flips a prop so the rows are visibly distinct, the way
-              // the other suites' churn does (`Sizing.harness.tsx:504`).
+              // A `testID` per row, so every one is its own Fabric node.
               fixture.control(`leak-mounted-${String(row)}`, row % 2 === 0)
             )}
           </View>,
           RENDER
         );
-        // The layout has to have happened for all K, or the rise asserted below is a race
-        // rather than a fact. The last row's box is the witness: Fabric lays out in order, so a
+        // The last row's box is the witness: Fabric lays out in order, so a
         // measured last row means every row before it was measured.
         await waitFor(
           () => {
@@ -4859,9 +4181,9 @@ describe('conformance · every control, four rules', () => {
         );
         const mounted = await settledStats('after the mount window');
         many.unmount();
-        // `onDropView` runs on the mounting transaction that removes the view and `host.drop()`
-        // is where the instance is released (`NitroSwiftUIHost.swift:327`), so this waits for
-        // the drops to have happened rather than assuming they were synchronous with unmount().
+        // `onDropView` runs on the mounting transaction that removes the view,
+        // so this waits for the drops rather than assuming they are synchronous
+        // with `unmount()`.
         const after = await settledStats('after the drop window');
         console.log(
           `    · ledger ${String(before.ledgerEntries)}→` +
@@ -4873,9 +4195,9 @@ describe('conformance · every control, four rules', () => {
         const problems: Finding[] = [];
         const rose = mounted.ledgerEntries - before.ledgerEntries;
         if (rose !== MOUNTS) {
-          // A finding rather than a thrown error, because the reason matters: a control whose
-          // instances never reach the engine cannot leak there, and this rule would be vacuous
-          // for it — a fact about the control worth printing, not banking.
+          // A finding rather than a thrown error: a control whose instances
+          // never reach the engine cannot leak there, and the rule would be
+          // vacuous for it.
           problems.push({
             component: fixture.name,
             rule: 'no-leak-on-drop',
@@ -4886,12 +4208,8 @@ describe('conformance · every control, four rules', () => {
               'be seen to leave it, which is the vacuity round 1’s churn had',
           });
         }
-        // Compared against the *pre-mount* baseline, not the mounted one. `leakFindings`
-        // subtracts its baseline from the post-drop read, and the mounted read already includes
-        // the K entries being asserted: passing it as the baseline asks for `0` where the honest
-        // answer is `-K` (the first run reported `-8 ledger entry(ies) survived 8 drops` for a
-        // control that had just released all eight, which is the rule crying wolf about a leak
-        // in the one direction it cannot be wrong in).
+        // Compared against the pre-mount baseline: the mounted read already
+        // includes the K entries.
         problems.push(
           ...leakFindings({
             component: fixture.name,
@@ -4903,63 +4221,9 @@ describe('conformance · every control, four rules', () => {
         expectConformance(problems);
       });
 
-      it('leaves the engine where it started across a churn of drops', async () => {
-        if (fixture.selfSizing === false) {
-          console.log(
-            `    · ${fixture.name} is not self-sizing, so it never enters the engine's ` +
-              'ledger or registry (component.json sizing: null) - its drops are proved ' +
-              'by its own suite, which reads the presentation count'
-          );
-          return;
-        }
-        // The churn, kept because it is a different shape from the one above: instances that
-        // come and go over time, in a process that has already measured this component. The
-        // warm-up is what makes its baseline honest — the component's own registry row is
-        // created by the first measure, not by a drop, so a baseline taken before it would
-        // count one legitimate entry as a leak.
-        const warmUp = await render(fixture.owner(false), RENDER);
-        await settle();
-        warmUp.unmount();
-
-        // A *quiescent* baseline, for the reason the positive-control test above
-        // states: an iOS instance reaches `onDropView` after its unmount, so the
-        // warm-up's own drop can still be in flight when the read happens, and the
-        // run that measures it reads one legitimate release as a leak. CI proved
-        // the shape — run 41230848294 reported `Menu × no-leak-on-drop: 1 ledger
-        // entry(ies) survived 50 drops` at load1 152-380 on 3 cores, and the same
-        // tree passed the same test on the next dispatch. `stats()` after a fixed
-        // `settle` was the fixture asserting about a number still on its way
-        // somewhere; `settledStats` refuses rather than comparing against one.
-        const baseline = await settledStats('the churn baseline');
-        for (let cycle = 0; cycle < CHURN; cycle += 1) {
-          const mounted = await render(fixture.owner(cycle % 2 === 1), RENDER);
-          mounted.unmount();
-        }
-        const after = await settledStats('the churn after-read');
-        console.log(
-          `    · ledger ${String(baseline.ledgerEntries)}→` +
-            `${String(after.ledgerEntries)} registry ${String(
-              baseline.registryEntries
-            )}→${String(after.registryEntries)} cached ${String(
-              baseline.cachedSizes
-            )}→${String(after.cachedSizes)} across ${String(CHURN)} mounts`
-        );
-        expectConformance(
-          leakFindings({
-            component: fixture.name,
-            baseline,
-            after,
-            instances: CHURN,
-          })
-        );
-      });
-
       it('shows none of its previous owner under one identity', async () => {
-        // Half one is the props, and it is the half round 1 mistook for the rule. It still
-        // earns its place: it is what notices a wrapper that stopped *providing* a prop,
-        // which is the other way this class of bug arrives (a prop that goes unset never
-        // reaches native at all, so the next mount keeps whatever was there). It is not what
-        // notices a missing reset, and the log says which half is which.
+        // Half one, the props: it notices a wrapper that stopped providing a
+        // prop, not a missing reset.
         expectANewHandle(fixture.testId);
         const first = await render(fixture.owner(false), RENDER);
         await settle();
@@ -4995,15 +4259,11 @@ describe('conformance · every control, four rules', () => {
         second.unmount();
         await settle(400);
 
-        // Half two is the one that can fail, and it owns both lifetimes: an interaction that
-        // puts state in the view no prop describes, then a second mount whose props are all
-        // defaults, then a question only the control's own state can answer.
+        // Half two: an interaction that puts state in the view no prop
+        // describes, then a second mount whose props are all defaults, then a
+        // question only the control's own state can answer.
         const probe = fixture.probe;
         if ('noProbe' in probe || 'blindSpot' in probe) {
-          // The two kinds are not the same sentence, and the run has to print the difference
-          // the coverage table makes: a control with nothing to reset is a pass-shaped `n/a`,
-          // a control whose residue is invisible is *debt*, printed the way the a11y sweep
-          // prints its own so a reader cannot mistake the green line for coverage.
           const note = 'noProbe' in probe ? probe.noProbe : probe.blindSpot;
           const debt =
             'noProbe' in probe
@@ -5023,9 +4283,8 @@ describe('conformance · every control, four rules', () => {
           );
           return;
         }
-        // …and half three, for the controls that have it: the same rule read through a
-        // *controlled* second owner, which is the only shape that reads the handshake's
-        // counters. See `Fixture.controlledProbe` for why one fixture cannot see both lines.
+        // Half three, where a fixture has it: the same rule through a
+        // controlled second owner.
         for (const run of [
           { name: 'uncontrolled', probe },
           ...(fixture.controlledProbe == null
@@ -5043,40 +4302,20 @@ describe('conformance · every control, four rules', () => {
           await ensureHandle(fixture.testId);
           await run.probe.act();
           firstOwner.unmount();
-          // Long enough for the drop to have run and, on iOS, for the instance to reach the
-          // recycle pool: `enqueueComponentViewWithComponentHandle` is what calls
-          // `prepareForRecycle` (`RCTComponentViewRegistry.mm:117`), and it happens on the
-          // mounting transaction that removes the view.
+          // Long enough for the drop to have run and, on iOS, for the instance
+          // to reach the recycle pool, which is where `prepareForRecycle` is
+          // called.
           await settle(500);
 
           expectANewHandle(fixture.testId);
           const secondOwner = await render(run.probe.second(), RENDER);
           await settle();
-          // The second owner's own handle, which is why the line above deleted the entry
-          // first. What this file used to claim here — that React hands the previous callback
-          // `null` on unmount, so a stale entry could not survive — is wrong: `hybridRef` is
-          // installed once per native view and never re-invoked or cleared
-          // (`src/core/useStableCallback.ts`), and `handles` was emptied only in `afterEach`.
-          // So the lookup found the *first* owner's handle and returned it without waiting,
-          // and this probe read the first owner's day and its open presentation count. That is
-          // CI's `reads 1799971200000 where the props say 1740787200000` with
-          // `presented 1`, on both hosted runs, in the one rule that cannot be explained by
-          // load. The read below still stays a single read, with no wait for the reset.
+          // The second owner's own handle: `hybridRef` is installed once per
+          // native view and never cleared, so the entry was deleted above.
           await ensureHandle(fixture.testId);
-          // Then wait for the *bookkeeping* to be quiescent, which is a different thing
-          // from waiting for the answer. Run 41230848294 read
-          // `the day the field shows = 1799971200000` (the first owner's pick) and
-          // `a presentation left open = 1` for this control at load1 152-380 on 3 cores,
-          // and the same tree read `1740787200000 / 0` on the next dispatch. One fixed
-          // `settle(500)` was the fixture assuming the device had processed the
-          // unmount-and-mount by then; on a starved main thread it had not, so the read
-          // was of a view whose previous owner's lifetime was still in flight.
-          //
-          // Two consecutive equal ledger/registry reads says no mount or drop is still in
-          // flight. It cannot say the reset happened — the reset writes no counters — so a
-          // control that never re-arms its one-shot settles quietly at the wrong day and the
-          // read below still goes red. Same discipline the leak rule uses for its baseline,
-          // for the same reason: only a quiescent read is evidence about a mount.
+          // Two consecutive equal ledger reads say no mount or drop is still in
+          // flight. They cannot say the reset happened, so the read below is
+          // still a single read.
           await settledStats(`after "${fixture.testId}" changed owner`);
           const checks = await run.probe.read();
           for (const check of checks) {
@@ -5106,10 +4345,8 @@ describe('conformance · every control, four rules', () => {
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
         if (fixture.isView === true) {
-          // A `View`'s own accessibility props (D36 item 1): the box the testID names is
-          // the element, on both platforms - the harness query walks an RN view's
-          // `contentDescription` on Android, which it cannot do for a Compose control. The
-          // platform tree (VoiceOver's element, TalkBack's node) is asserted by real input.
+          // The box the testID names is the element on both platforms: the
+          // harness query walks an RN view's `contentDescription` on Android.
           console.log(
             `    · a View: box=${describeBox(box)} labelBox=${describeBox(labelled)}`
           );
@@ -5121,11 +4358,9 @@ describe('conformance · every control, four rules', () => {
           return;
         }
         if (fixture.selfSizing === false) {
-          // The presentation-aware half (Q5 Appendix B5): a closed dialog's anchor is
-          // hidden from accessibility, so nothing on screen may carry its title - a
-          // name on a 0 x 0 view would be a stop a screen reader lands on and cannot
-          // act on. The name belongs to the presented window, which real input reads
-          // (`A11Y_PRESENTATIONS` in scripts/real-input/a11y.mjs).
+          // A closed dialog's anchor is hidden from accessibility, so nothing
+          // on screen may carry its title. The name belongs to the presented
+          // window.
           console.log(
             `    · presentation: box=${describeBox(box)} labelBox=` +
               `${describeBox(labelled)} - the window's name is asserted by real input`
@@ -5135,10 +4370,9 @@ describe('conformance · every control, four rules', () => {
           return;
         }
         if (PLATFORM !== 'ios') {
-          // The honest Android statement, from the suites that already make it: the harness
-          // walks `View.contentDescription`, Compose publishes `SemanticsNode`s, and so
-          // nothing in-process can see the name however well the component behaves. The
-          // rule runs from the host against the accessibility tree instead.
+          // On Android the harness walks `View.contentDescription` and Compose
+          // publishes `SemanticsNode`s, so nothing in-process can see the name.
+          // The rule runs from the host against the accessibility tree.
           console.log(
             `    · Android: the in-app a11y query cannot see a Compose control's ` +
               `name (labelBox=${describeBox(labelled)}) — this rule is asserted by ` +
@@ -5153,9 +4387,9 @@ describe('conformance · every control, four rules', () => {
         );
         expect(box).not.toBeNull();
         expect(labelled).not.toBeNull();
-        // The box comparison is the rule. "Some node carries the label" is also true of a
-        // wrapper, and a wrapper is the bug; a node whose box *is* the control's is a name
-        // the person can act on.
+        // The box comparison is the rule: a wrapper can carry the label too,
+        // and a node whose box is the control's is a name the person can act
+        // on.
         expect(Math.abs(labelled!.width - box!.width)).toBeLessThan(2);
         expect(Math.abs(labelled!.height - box!.height)).toBeLessThan(2);
         expect(handleFor(fixture.testId).accessibilityLabel).toBe(

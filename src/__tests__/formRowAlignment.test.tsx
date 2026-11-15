@@ -21,36 +21,13 @@ import {
   useSelfSizingBaseStyle,
 } from '../core/useSelfSizing';
 
-/**
- * The cross-axis rule a self-sizing control carries, and who decides it (task X24 round 3).
- *
- * A control's `{ alignSelf: 'flex-start' }` is what stops a column's default
- * `alignItems: 'stretch'` from deciding its width — and it is also what made a control written
- * straight into a `Form.Row` sit on the row's top edge while its label centred, because a
- * child's `alignSelf` beats its parent's `alignItems`. The fix is one rule read from the row:
- * `center` inside a `Form.Row`, `flex-start` anywhere else, and no wrapper `View` (a wrapper
- * cost a fifth of the JS thread across a 50-row form — X24's report has the numbers).
- *
- * This file guards the two halves a device run cannot tell apart:
- *
- * - the rule follows the row: `Form.Row` provides it, and a `Form.Section` that is not a row
- *   does not;
- * - every self-sizing control actually *reads* it. Eleven controls carry the base style, and a
- *   control that kept a private copy of its own would look right in every screenshot this repo
- *   takes and still be ragged in an app. The table below is why.
- *
- * Geometry stays the device suite's, where a mis-centred control is actually seen:
- * `example/__tests__/Form.harness.tsx`'s `Form row content (X24)` case.
- */
-
-/** What `render` gives back once it has settled (this RTL build renders asynchronously). */
 type View = Awaited<ReturnType<typeof render>>;
 
 const FLEX_START = { alignSelf: 'flex-start' };
 const CENTER = { alignSelf: 'center' };
 
 beforeEach(() => {
-  // Half of these controls mint a sizing id, and the fake core has to answer for all of them.
+  // Several of these controls ask the native core for a sizing id.
   nitroUiHybridObjects.NitroUiCore = () => ({ nextSizingId: () => 1 });
 });
 
@@ -61,10 +38,8 @@ function styleOf(view: View, testId: string): readonly unknown[] | undefined {
 }
 
 /**
- * What React Native makes of a style array: later entries win.
- *
- * Hand-rolled rather than `StyleSheet.flatten`, whose parameter type is RN's animated-style
- * union and so rejects an array read back out of a prop as `unknown[]`.
+ * Merges a style array as React Native does: later entries win.
+ * `StyleSheet.flatten` does not accept an array typed `unknown[]`.
  */
 function merged(style: readonly unknown[]): Record<string, unknown> {
   return Object.assign(
@@ -74,11 +49,9 @@ function merged(style: readonly unknown[]): Record<string, unknown> {
 }
 
 /**
- * Reads {@link useSelfSizingBaseStyle} out loud, through a view whose props jest can see.
- *
- * Its own component on purpose: the hook answers for the component that *calls* it, so a probe
- * written inline in the component that renders `Form.Row` would read the context from above the
- * row and report `flex-start` whatever the row provides.
+ * Renders {@link useSelfSizingBaseStyle} from a component of its own: the hook
+ * reads the context of the component that calls it, so a probe written inline
+ * beside `Form.Row` would read the context from above the row.
  */
 function Probe({ testId }: { testId: string }): ReactElement {
   return <Text testID={testId} style={useSelfSizingBaseStyle()} />;
@@ -90,15 +63,10 @@ function probeStyle(view: View, testId: string): unknown {
   return style == null ? style : merged([style]);
 }
 
-/**
- * Every control that carries the base style, with what it needs to render.
- *
- * `Progress` asks for the circular shape and `Picker` for the menu variant because those are
- * the self-sizing configurations of two controls that also have a fill-width one: a linear bar
- * and a wheel *want* the box's width and must not be centred either.
- */
 const GROUP: MenuGroup = { actions: [{ id: 'now', title: 'Now' }] };
 
+// `Progress` is circular and `Picker` is the menu variant because those are their
+// self-sizing configurations: a linear bar and a wheel fill the box's width.
 const CONTROLS: [string, (testId: string) => ReactElement][] = [
   ['Button', (testId) => <Button title="Save" testID={testId} />],
   [
@@ -169,8 +137,7 @@ describe('Form.Row', () => {
   }
 
   it('centres its children — and a Section wraps a bare child in such a row', async () => {
-    // A `Form.Section` wraps every child in a row, so an app that never writes `Form.Row`
-    // gets the same rule; the ragged pair was never limited to the explicit spelling.
+    // A `Form.Section` wraps every bare child in a row.
     const explicit = await render(<RowForm explicitRow />);
     expect(probeStyle(explicit, 'inRow')).toEqual(CENTER);
     await act(async () => {
@@ -183,8 +150,7 @@ describe('Form.Row', () => {
       implicit.unmount();
     });
 
-    // …and the rule is the row's, not the Form's: the same probe with no row above it at all
-    // still carries the guard a column's `alignItems: stretch` needs.
+    // With no row above it, the probe keeps `flex-start`.
     const outside = await render(<Probe testId="outside" />);
     expect(probeStyle(outside, 'outside')).toEqual(FLEX_START);
   });
@@ -198,8 +164,7 @@ describe('Form.Row', () => {
     const style = styleOf(view, 's') as [unknown, unknown];
     expect(style[0]).toEqual(CENTER);
     expect(style[1]).toEqual({ alignSelf: 'flex-end' });
-    // And that is what React Native makes of the array: the caller's rule, not ours — which
-    // is also how a non-nitro-ui control in the same row keeps the `alignSelf` it carries.
+    // Later entries win, so the caller's style overrides the base style.
     expect(merged(style)).toMatchObject({ alignSelf: 'flex-end' });
   });
 });

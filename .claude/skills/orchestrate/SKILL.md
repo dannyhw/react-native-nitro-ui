@@ -13,9 +13,10 @@ a session, together with your own private notes for anything about this machine.
 
 ## Yours to decide, and the owner's
 
-Decide it yourself, act, and record it in `docs/DECISIONS.md`: ordering, scope cuts,
-which worker, retries, merge order, design questions with a platform precedent, and any
-recommendation you were about to ask permission for.
+Decide it yourself and act: ordering, scope cuts, which worker, retries, merge order,
+design questions with a platform precedent, and any recommendation you were about to
+ask permission for. A design decision is written into `docs/DESIGN.md` in the pull
+request that makes it; anything else is said in the merge commit.
 
 Take to the owner, once, with your pick: publishing, a product or API choice no
 experiment can settle, anything that trades what users see for less setup or fewer
@@ -108,10 +109,16 @@ or provider error. After that, replan around it.
   repository's own email.
 - For tooling that behaves differently per platform (paths, temp directories,
   CocoaPods, CI workflows), look at CI for the branch before merging it.
-- The merge commit says what changed for users, with the PR number. The STATUS row,
-  follow-up lines, decisions and ledger export go inside it. Make no commit on `main`
-  that only updates task records: between merges, what you know lives in the pull
-  requests and in your thread. The exception is the resume line under "Stopping".
+- The merge commit says what changed for users, with the PR number. The STATUS lines
+  (the task's "In flight" line goes, a "Recently merged" line is added, and merged lines
+  older than 14 days are dropped), follow-up lines and decisions go inside it. Make no
+  commit on `main` that only updates task records: between merges, what you know lives
+  in the pull requests and in your thread. The exception is the resume line under
+  "Stopping".
+- After merging a branch into the merge checkout, run
+  `node scripts/task-records.mjs --archive`. It stages the removal of the merged task's
+  records: put that into the merge commit (`git commit --amend --no-edit`), so a task's
+  records leave git in the commit that merges it.
 - After the push: wait for CI on that SHA and read it; run
   `node scripts/worktrees.mjs --prune`; check `npm view` before saying anything about a
   release.
@@ -120,8 +127,8 @@ or provider error. After that, replan around it.
 ## Stopping
 
 On "stop", "going offline" or a restart: start nothing, let nothing half-merge, push
-every branch, and write the resume line for each task in `docs/tasks/RECOVERY.md`
-(branch, SHA, next action).
+every branch, and write the resume line for each task in `docs/tasks/STATUS.md` under
+"In flight" (name, ID, branch, SHA, next action).
 
 ## Never
 

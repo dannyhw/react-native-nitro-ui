@@ -1,41 +1,5 @@
-/**
- * On-device tests for the Picker (task G6).
- *
- * Picker is the third control whose size comes from its props, and the first
- * whose size comes from the *title it is currently showing*: a `menu` picker is a
- * button, and a button is as wide as its label. So the sizing configuration is
- * `variant + options + selected title + label`, and the R3 question this suite
- * asks is wider than SegmentedControl's: an `options` change, a *selection*
- * change and a `variant` change all move the box, and a selection change does it
- * while showing a different word.
- *
- * Three readings, as in the G2/G4 suites:
- *  - `harnessUi.queryByTestId` - the box Fabric gave the view;
- *  - `hybridRef.measureContent()` - the size the hosted control measured;
- *  - `nitroUiCore.sizingStats()` - what the engine did.
- *
- * Two things make these tests able to fail (AGENTS.md, "Every new test or gate
- * must be shown to fail"):
- *  - every cold configuration is **poisoned** first (`seedSizingSize` with a size
- *    no picker has, then an environment bump), so a correction that never arrives
- *    leaves a visible wrong box *and* costs a correction the test requires;
- *  - the warm assertions require *no* new cache entry, which on a second pass
- *    leaves the measure pass as the only road to the new size.
- *
- * What is deliberately NOT here, and where it went: a picker's options live in a
- * popup, and the harness dispatches input into the app's own window
- * (`@react-native-harness/ui`'s Android helper presses on
- * `activity.window.decorView`), so a tap can reach the anchor but never a row in
- * the popup. Selecting an option, a rejected controlled choice snapping back, the
- * popup dismissing on back/outside-tap, what a screen reader hears, and the
- * `menu` box following a title chosen *without* a React render are therefore
- * real-input cases with platform UI evidence
- * (`scripts/real-input/android.mjs`, `NitroUiExampleUITests/RealInputTests.swift`),
- * not assertions that could quietly pass without ever opening a menu.
- *
- * Deliberately absent: a `beforeAll` that mounts a picker to "warm the process",
- * which hides the process-local first-instance behaviour D17 is about.
- */
+// The harness dispatches input into the app's own window, and a picker's options
+// live in a popup outside it: a tap here can reach the anchor but never a row.
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -52,7 +16,7 @@ import {
   type NitroUiSizingStats,
 } from 'react-native-nitro-ui';
 
-/** The Fabric name - what the sizing engine files sizes under. */
+// The Fabric component name, which the sizing engine files sizes under.
 const COMPONENT = 'NitroUiPicker';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
@@ -63,15 +27,9 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * What `hybridRef` hands back - declared, not imported (DECISIONS D14 keeps
- * Hybrid View types off the public surface). Read-only on purpose, and there is
- * no `expanded`: a SwiftUI `Picker` keeps its menu's open state to itself, so an
- * `isExpanded` here would be a question Android could answer and iOS could not.
- */
+// What `hybridRef` hands back. Declared here: the library does not export it.
 type PickerHandle = {
   readonly options: string[];
-  /** The index as React sent it, normalised against `options`; null if uncontrolled. */
   readonly selectedIndex: number | null;
   readonly mostRecentEventCount: number;
   readonly variant: string;
@@ -80,19 +38,11 @@ type PickerHandle = {
   readonly tintColor: number | null;
   readonly accessibilityLabel: string | null;
   measureContent(): { width: number; height: number };
-  /**
-   * Test-only (`@internal`, D14): press the row for `index` through the same path a
-   * real row press takes - clamp, no-op guard, optimistic paint, event. The harness
-   * cannot reach a row in a popup (the popup is not in the app's window), so this is
-   * how a *real* pick gets tested here; see `scripts/real-input/` for the same pick
-   * done with a real tap.
-   */
+  // Selects `index` through the same native path a row press takes.
   nuiTestSelect(index: number): void;
-  /** Test-only (`@internal`, D14): the popup witness line, `Picker.nitro.ts`. */
   nuiTestMenuReport(): string;
 };
 
-/** The `drawn` field of a picker's witness line, or `-1`. */
 function drawnOf(testId: string): string {
   const line = handles.get(testId)?.nuiTestMenuReport() ?? '';
   const field = line.split(';').find((part) => part.startsWith('drawn='));
@@ -102,7 +52,6 @@ function drawnOf(testId: string): string {
   return field.slice('drawn='.length);
 }
 
-/** Handles by testID, so a test can ask each control what it holds. */
 const handles = new Map<string, PickerHandle>();
 const captureHybrid =
   (testId: string) =>
@@ -110,13 +59,7 @@ const captureHybrid =
     handles.set(testId, view);
   };
 
-/**
- * Every `onChange` the app has reported, in order: `testID:index`.
- *
- * Here it is the negative oracle: opening a menu must not look like a choice, and
- * a selection React never accepted must not be reported twice. The positive half
- * (a choice *does* report) is a real-input case, because choosing needs the popup.
- */
+// Every `onChange` the app has reported, in order: `testID:index`.
 const eventLog: string[] = [];
 const recordChange =
   (testId: string) =>
@@ -124,18 +67,8 @@ const recordChange =
     eventLog.push(`${testId}:${String(event.index)}`);
   };
 
-/**
- * `recordChange` plus a busy JS thread: the handler spins for `ms` before returning,
- * so the render a choice causes - and with it the props batch that carries the new
- * sizing key - lands long after the control has painted and laid out its new title.
- *
- * That ordering is the only one a pick-time measure is wrong for, and a harness that
- * asks for a pick and then waits does not reliably produce it: on a debug JS thread a
- * props batch can just as easily win the race against the control's next frame, which
- * would make the guard below look inert when it is only untested. Real apps do block
- * JS like this (a dispatch, a synchronous read, a heavy render), so this is the real
- * timing with the window the bug needs, not a fake.
- */
+// `recordChange` that then blocks the JS thread for `ms`, so the render a choice
+// causes lands after the control has painted and laid out its new title.
 const recordChangeThenBlock =
   (testId: string, ms = 250) =>
   (event: { index: number }): void => {
@@ -148,7 +81,6 @@ const recordChangeThenBlock =
 
 const stats = (): NitroUiSizingStats => nitroUiCore.sizingStats();
 
-/** `after - before` for the counters a test asserts on. */
 function delta(before: NitroUiSizingStats, after: NitroUiSizingStats) {
   return {
     corrections:
@@ -165,7 +97,7 @@ function delta(before: NitroUiSizingStats, after: NitroUiSizingStats) {
 
 type Size = { width: number; height: number };
 
-/** Within what Yoga rounds to. */
+// Equal within Yoga's rounding.
 function sameSize(a: Size | null, b: Size | null): boolean {
   return (
     a != null &&
@@ -225,7 +157,6 @@ async function waitForTestId(testId: string, timeoutMs = 10000) {
   return screen.findByTestId(testId);
 }
 
-/** Poll until the box of `testId` is `size`, i.e. until a size has really arrived. */
 async function waitForBox(testId: string, size: Size, what: string) {
   return await pollUntil(
     () => (sameSize(sizeOf(testId), size) ? sizeOf(testId) : null),
@@ -239,14 +170,8 @@ async function waitForBox(testId: string, size: Size, what: string) {
   );
 }
 
-/**
- * Poll until the control reports a size that is *not* `previous`.
- *
- * `measureContent()` answers with the size the hosted control last measured, and
- * on Android that is still the old one for the frame in which the new title
- * landed: Compose recomposes and re-measures on the UI thread. Waiting for "a
- * size" would return the pre-change number, so the wait is for a *different* one.
- */
+// Waits for a size that differs from `previous`: on Android `measureContent()` still
+// answers with the old size for the frame in which the new title landed.
 async function waitForRemeasure(
   testId: string,
   previous: Size,
@@ -266,7 +191,6 @@ async function waitForRemeasure(
   );
 }
 
-/** Poll until the control reports a size (a host measures after its first commit). */
 async function waitForMeasured(testId: string, what: string) {
   return await pollUntil(
     () => {
@@ -277,33 +201,10 @@ async function waitForMeasured(testId: string, what: string) {
   );
 }
 
-/**
- * Poll until the control reports a size that could only have come from after the
- * rerender.
- *
- * `waitForRemeasure` asks only that the number differ from the one before the
- * change. A variant change is a remount (`Picker.tsx` keys the native view on
- * `variantKey`), and four answers that all mean "not done" satisfy it: the new
- * host has not measured yet (`measureContent()` is the host cache, 0 when empty),
- * the old host was dropped (`drop()` nils the cached size) while `handles` still
- * points at it - `hybridRef` fires only on the new view's first props batch - or
- * no handle is there at all. Zero then *ends* the wait, because 0x0 is not the
- * previous size, and the box assertion below it compares a real box with nothing:
- * that is the `wheel=0.00x0.00` red X3 saw at load 35.6-57.2.
- *
- * So this refuses all four: no handle, a zero (absence, never a verdict), and the
- * size from before the rerender (Android re-measures on the UI thread, so the old
- * number is what the first frames answer with - the reason `waitForRemeasure`
- * waits for a difference at all). `waitForMeasured` already refused zero; it had
- * just never learned about the mount.
- *
- * The witness is the *size*, not the handle object. It cannot be the object: on
- * iOS the same hybrid answers for both mounts of a keyed rerender (measured - the
- * handle captured before the rerender is still what `handles` holds, reporting the
- * new variant's 330.00x216.00), so requiring a different one fails a run that
- * succeeded. Refusing a missing handle and a zero covers the dropped-old-host
- * state, because a dropped host reports nothing but zero.
- */
+// For a rerender that remounts the native view (a variant change). Refuses a
+// missing handle, a zero size (a dropped or not yet measured host) and the size
+// from before the rerender. The size is the witness, not the handle: on iOS the
+// same handle object answers for both mounts.
 async function waitForFreshMeasure(
   testId: string,
   stale: Size | null,
@@ -328,23 +229,8 @@ async function waitForFreshMeasure(
   );
 }
 
-/*
- * No `waitForEvents` helper here, unlike the G2/G4 suites: every positive change
- * event this control makes comes from a popup row the harness cannot press, so the
- * log is only ever read to require that it is *empty* (opening a menu is not a
- * choice), and an empty log needs no polling.
- */
-
-/**
- * The key `Picker.tsx` builds:
- * `variant|optionCount|label|...|sel:<selected title>|lbl:<label>`, each piece
- * escaped so a `|` or a `\` inside one cannot forge a separator.
- *
- * Written out here rather than imported - a harness that poisoned the cache
- * through the library's own helper could not catch the helper being wrong, and a
- * missing input in that key is precisely the R3 bug class: leave `sel:` out and
- * every selection a picker shows inherits the first title's width.
- */
+// Must match the sizing key `Picker.tsx` builds. Written out here, not imported,
+// so a wrong key in the library fails these tests.
 function sizingKey(
   options: readonly string[],
   selectedIndex: number,
@@ -361,19 +247,11 @@ function sizingKey(
   ].join('|');
 }
 
-/**
- * A size that is *not* any picker's size, planted as the engine's answer for a
- * configuration before it is first mounted.
- *
- * The declared fallback is deliberately close to the truth (D17), which on its own
- * would make every "the box was right" assertion pass even if no correction ever
- * arrived. A poisoned entry is provisional, so it lays the first frame out and
- * then *must* be replaced: the test requires both the right final box and at least
- * one correction.
- */
+// A size no picker has, seeded as the engine's answer before a configuration
+// first mounts: the declared fallback is close to the real size, so without this
+// a correction that never arrived would go unnoticed.
 const WRONG_SIZE = { width: 13.25, height: 66.5 };
 
-/** Plant a wrong answer for several configurations, then drop the cache once. */
 function poisonConfigurations(keys: readonly string[]): void {
   for (const key of keys) {
     nitroUiCore.seedSizingSize(
@@ -386,28 +264,18 @@ function poisonConfigurations(keys: readonly string[]): void {
   nitroUiCore.invalidateSizingEnvironment();
 }
 
-/** Let queued work land before reading counters that only move on a later turn. */
 async function settle(ms = 250): Promise<void> {
   await sleep(ms);
 }
 
-/** Press the middle of a control's box - its anchor, for a picker. */
 async function pressAnchor(testId: string): Promise<void> {
   const box = boxOf(testId);
   expect(box).not.toBeNull();
   await userEvent.pressAt(box!.x + box!.width / 2, box!.y + box!.height / 2);
 }
 
-/**
- * Choose an option the way a row press does, through the native selection path.
- *
- * `nuiTestSelect` is the `@internal` hook the component adds for exactly this: the
- * harness dispatches input into the app's own window, and a Material 3 popup (or a
- * SwiftUI menu) lives outside it, so no `userEvent` can reach a row. What the hook
- * runs is the *same* code a row runs - the model's selection path, on the UI thread -
- * which is what makes the sizing assertions below about a pick rather than about a
- * prop write. `settle` covers the hop to the UI thread and back.
- */
+// Chooses an option through the native selection path: no `userEvent` can reach
+// a row in the popup. The settle covers the hop to the UI thread and back.
 async function pickRow(testId: string, index: number): Promise<void> {
   const handle = handles.get(testId);
   expect(handle).not.toBeNull();
@@ -415,7 +283,6 @@ async function pickRow(testId: string, index: number): Promise<void> {
   await settle(150);
 }
 
-/** Every size the engine laid `testId`'s instances out with, oldest first. */
 function laidOutSizes(): { width: number; height: number }[] {
   return nitroUiCore
     .drainSizingTrace()
@@ -423,11 +290,7 @@ function laidOutSizes(): { width: number; height: number }[] {
     .map((event) => ({ width: event.width, height: event.height }));
 }
 
-/**
- * The component's *declared* fallback, per platform (`NitroUiDeclaredFallbacks`):
- * iOS 72 x 35 pt, Android 280 x 56 dp. Used to catch a box that was laid out at
- * the fallback for a frame - the flash D17 is about.
- */
+// Must match the Picker's declared fallback size on each platform.
 const DECLARED_FALLBACK =
   Platform.OS === 'ios'
     ? { width: 72, height: 35 }
@@ -435,28 +298,12 @@ const DECLARED_FALLBACK =
 
 const columnStyle = { gap: 8 } as const;
 
-/**
- * A title wide enough to be unmistakably wider than a short one on *both*
- * platforms, which the width assertions below need to say anything at all.
- *
- * The reason it has to be this wide is a measured platform difference: Material 3's
- * text field has a 280 dp minimum width (`MinTextFieldWidth` in Material's
- * `TextField.kt`), so on Android every menu picker whose title is roughly up to
- * 30 characters is the same 280 x 56 dp, whatever the title says. iOS's SwiftUI
- * menu sizes to its title instead ('Go' is 70 x 34.67 pt on iPhone 17). Two short
- * titles therefore differ by ~160 pt on iOS and by exactly nothing on Android, and
- * a fixture built from short titles tests iOS and passes Android by accident.
- * `docs/components/picker.md` has both tables.
- *
- * It is 40 characters, which is a ceiling as well as a floor: at 50 characters this
- * title measured 432.33 pt, wider than the iPhone 17's 402 pt window, and Yoga
- * clamped the *box* to the screen - so the same fixture that is a claim on Android
- * stops being one on iOS, in the other direction. 40 characters lands between the
- * two: ~355 pt and ~340 dp, each inside its own window.
- */
+// Long enough to be wider than Material 3's 280 dp minimum text field width,
+// below which every Android menu picker is the same size, and short enough to
+// fit a 402 pt iPhone window, where Yoga would clamp the box.
 const LONG_TITLE = 'A considerably longer colour name indeed';
 
-/** The reference configuration for the declared fallback (see test 1). */
+// The configuration the declared fallback size was measured from.
 const REFERENCE = ['One', 'Two', 'Three'];
 
 afterEach(() => {
@@ -466,7 +313,6 @@ afterEach(() => {
   nitroUiCore.setSizingTraceEnabled(false);
 });
 
-/** Arm the trace and empty the ring, so a test reads only its own events. */
 function armTrace(): void {
   nitroUiCore.setSizingTraceEnabled(true);
   nitroUiCore.drainSizingTrace();
@@ -474,17 +320,8 @@ function armTrace(): void {
 
 describe('Picker · G6', () => {
   it('lays each option list out at the size its own title gives it', async () => {
-    // The base R3 claim for this component, and the one that says the sizing key
-    // has the options in it at all: three option lists in one column must get
-    // three boxes, each the width of the title *that* picker shows.
     const SHORT = ['Go'];
-    // The reference configuration for the declared fallback: the default variant,
-    // the default selection, no label. `docs/components/picker.md` and the two
-    // `NitroUiDeclaredFallbacks` tables take these numbers from a run of this test.
     const MIDDLE = REFERENCE;
-    // One long title, which is what makes a *menu* wide: the list plays no part in
-    // the width beyond deciding which title is shown (see `LONG_TITLE` for why the
-    // fixture has to be this long to be a claim on both platforms).
     const LONG = [LONG_TITLE];
     poisonConfigurations([
       sizingKey(SHORT, 0, null, 'menu'),
@@ -529,19 +366,11 @@ describe('Picker · G6', () => {
         `long=${describeSize(longSize)} cold=${JSON.stringify(cold)} ` +
         `(load: menu, uncontrolled, no label)`
     );
-    // Three configurations, all poisoned, so three corrections - and three cache
-    // entries. One entry shared by two of them is the missing-input bug, and it
-    // would also make two of these widths equal.
     expect(cold.corrections).toBeGreaterThanOrEqual(3);
     expect(cold.cachedSizes).toBeGreaterThanOrEqual(3);
-    // Only the widest is compared: on Android `Go` and `One/Two/Three` are both at
-    // Material's 280 dp floor, which is a true fact about the control, not a sizing
-    // bug - three separate cache entries and three corrections above is what says
-    // the option list is in the key.
+    // Only the widest is compared: on Android the two short lists are both at
+    // Material's 280 dp minimum width.
     expect(longSize.width).toBeGreaterThan(shortSize.width + 20);
-    // The height is the platform's control height and does not move with the
-    // labels - if it did, the fallback (one number per component) would be wrong
-    // for every option list but one.
     expect(
       sameSize(shortSize, { width: shortSize.width, height: longSize.height })
     ).toBe(true);
@@ -549,11 +378,6 @@ describe('Picker · G6', () => {
   });
 
   it('sizes a menu by the title it shows, not by the longest option', async () => {
-    // The input that makes this control's key different from SegmentedControl's:
-    // a segmented row is as wide as *all* its segments, a menu button is as wide
-    // as the one label it is showing. Same `options`, different selection, so a
-    // key without `sel:` in it gives both pickers the first one's width - and
-    // here that is a box that is visibly too narrow for its own title.
     const OPTIONS = ['Red', LONG_TITLE];
     poisonConfigurations([
       sizingKey(OPTIONS, 0, null, 'menu'),
@@ -588,26 +412,19 @@ describe('Picker · G6', () => {
         `last=${describeSize(lastSize)} cold=${JSON.stringify(cold)}`
     );
     expect(lastSize.width).toBeGreaterThan(firstSize.width + 20);
-    // Two keys, so two entries: one shared entry is the `sel:`-less key.
     expect(cold.cachedSizes).toBeGreaterThanOrEqual(2);
     expect(cold.corrections).toBeGreaterThanOrEqual(2);
     unmount();
   });
 
   it('takes the box width as a wheel and its own width as a menu', async () => {
-    // The two sizing policies in one screen, which is also the `variant` input in
-    // the key: a `wheel` fills the box (`fillWidth`, so the width is Yoga's and
-    // `alignSelf: 'stretch'` is what hands it over), a `menu` measures its own
-    // (sizing.md sections 5 and 6). A key without `variant` would let a wheel read
-    // a menu's size, and the widths below are the difference.
     const OPTIONS = ['Small', 'Medium', 'Large'];
     poisonConfigurations([
       sizingKey(OPTIONS, 0, null, 'menu'),
       sizingKey(OPTIONS, 0, null, 'wheel'),
     ]);
-    // 330, not 260: a menu on Android is 280 dp wide at the field's own minimum, so
-    // a 260 dp parent would clamp it (C1) and the two policies would be
-    // indistinguishable from here.
+    // 330 wide: an Android menu is 280 dp at its minimum, and a narrower parent would
+    // clamp it.
     const { unmount } = await render(
       <View style={{ width: 330 }}>
         <Picker
@@ -633,31 +450,22 @@ describe('Picker · G6', () => {
       `policies (${Platform.OS}): menu=${describeSize(menuSize)} box=${describeSize(sizeOf('as-menu'))} ` +
         `| wheel=${describeSize(wheelSize)} box=${describeSize(wheelBox)}`
     );
-    // `intrinsic`: the box is the control's own width, and it is not the parent's.
+    // A menu takes its own width, not the parent's.
     expect(menuSize.width).toBeLessThan(330 - 20);
-    // `fillWidth`: the width the *control* reports is the box's, not its own -
-    // the engine overrides it (sizing.md section 5), and the wheel draws into it.
+    // A wheel fills the box: the width it reports is the box's.
     expect(Math.abs(wheelSize.width - 330)).toBeLessThan(1);
     expect(Math.abs(wheelBox.width - 330)).toBeLessThan(1);
-    // The two variants are different configurations: a wheel that measured the
-    // same box as a menu here has a key without `variant` in it.
     expect(sameSize(menuSize, wheelSize)).toBe(false);
     if (Platform.OS === 'ios') {
-      // Only iOS has a wheel, and it is a tall one. Android renders the menu for
-      // both variants (`docs/components/picker.md`), so asserting a height there
-      // would assert something the platform does not do.
+      // Only iOS has a wheel. Android renders the menu for both variants.
       expect(wheelSize.height).toBeGreaterThan(menuSize.height + 20);
     }
     unmount();
   });
 
   it('re-measures when the options change (R3)', async () => {
-    // A menu's width is the title it shows, so this fixture changes the *first*
-    // option too: `SHORT` and `LONG` selected 0 would otherwise be the same word,
-    // and a control that correctly stayed 70 wide would look like a missing
-    // re-measure. (That a menu is sized by its title and not by its list is the
-    // claim of the over-wide and read-back cases; measured numbers are in
-    // `docs/components/picker.md`.)
+    // The first option differs too: a menu is as wide as the title it shows, not as
+    // its list.
     const SHORT = ['Run'];
     const LONG = [LONG_TITLE, 'the', 'whole', 'build'];
     poisonConfigurations([
@@ -694,24 +502,15 @@ describe('Picker · G6', () => {
         `warm=${JSON.stringify(warm)}`
     );
     expect(longSize.width).toBeGreaterThan(shortSize.width + 1);
-    // One new configuration, so exactly one more cache entry than the first mount
-    // needed - the first one's entry is reused, not relearned.
     expect(warm.cachedSizes - cold.cachedSizes).toBe(1);
     expect(warm.corrections - cold.corrections).toBeGreaterThanOrEqual(1);
     unmount();
   });
 
   it('re-reports a key change that keeps the size (R3)', async () => {
-    // The input that makes Picker's key different from a segmented row's, and the
-    // one a caller can change without moving the control at all: a menu shows *one*
-    // title, so an `options` change that leaves the selected title alone measures
-    // exactly what it did before (measured: `['Red', 'Blue']` and
-    // `['Red', 'Blue', 'Green']` selected 0 are the same box on both platforms).
-    // The key still changes - the list is in it - so the engine has no answer for
-    // the new configuration and lays the frame out at the poisoned guess, and each
-    // host skips a report within 0.5 of the size it reported last. That makes the
-    // only report that could move the box the one the dedupe would swallow, unless
-    // the key change itself resets that memory (`noteSizingKeyChanged`, review F1).
+    // Both lists show the same title and so measure the same, but their sizing keys
+    // differ. The native host skips a report equal to its last one, so the key change
+    // itself has to reset that memory.
     const FIRST = ['Red', 'Blue'];
     const SECOND = ['Red', 'Blue', 'Green'];
     poisonConfigurations([
@@ -744,8 +543,7 @@ describe('Picker · G6', () => {
         hybridRef={captureHybrid('same')}
       />
     );
-    // Deliberately no `waitForRemeasure`: staying at `size` is the correct answer
-    // here, so the box and the counters are the only readings that can show the fix.
+    // A fixed wait: the size is expected not to change, so there is no state to wait on.
     await settle(500);
     const box = sizeOf('same');
     const after = delta(changed, stats());
@@ -753,19 +551,13 @@ describe('Picker · G6', () => {
       `same-size key change (${Platform.OS}): box=${describeSize(box)} ` +
         `measured=${describeSize(measured('same'))} delta=${JSON.stringify(after)}`
     );
-    // The visible bug first: without the reset the box would still be the guess.
     expect(sameSize(box, WRONG_SIZE)).toBe(false);
-    // ...and the box agrees with what the control measures, whatever that is.
     expect(sameSize(box, measured('same'))).toBe(true);
     expect(after.corrections).toBeGreaterThanOrEqual(1);
     unmount();
   });
 
   it('re-measures when the selection moves to a longer title', async () => {
-    // The same R3 path driven by the *selection*: React moves `selectedIndex`, the
-    // title the button shows changes, and the box has to follow the new word. This
-    // is the controlled half; the half where native picks the title with no render
-    // at all is the real-input case `menu box follows a picked title`.
     const OPTIONS = [
       'Red',
       'Greenish blue',
@@ -807,16 +599,9 @@ describe('Picker · G6', () => {
   });
 
   it('corrects a planted size that matches the current box (iOS measure signal)', async () => {
-    // The R3 tests above all move the box, and on iOS a bounds change is itself a
-    // measure point (`NitroSwiftUIHost`: bounds change, trait change, first commit,
-    // or a component that said so). That hides the fourth signal - and here it is
-    // the only one that can work: the new title's configuration is planted with the
-    // box the control is *already* in, so the switch costs no bounds change at all,
-    // and D20's re-dirty only re-reads the host's cache. What is left is the
-    // `options` setter's `noteContentSizeMayHaveChanged()` - which is what this
-    // test fails without (iOS). Android needs no such call and must still correct:
-    // Compose recomposes, and D20's re-dirty runs the host's own measure.
-    // Again a wider *title* for the second configuration - see the R3 test above.
+    // On iOS a bounds change triggers a measure by itself. Here the next configuration is
+    // seeded with the box the control is already in, so no bounds change happens and
+    // only the component's own "content size may have changed" signal can correct it.
     const SHORT = ['Run'];
     const LONG = [LONG_TITLE, 'the', 'whole', 'build'];
     const { rerender, unmount } = await render(
@@ -827,9 +612,6 @@ describe('Picker · G6', () => {
     const shortSize = await waitForMeasured('pin', 'the one-option list');
     await waitForBox('pin', shortSize, 'the one-option list');
 
-    // The answer the engine will give for the *next* configuration: today's box.
-    // Provisional by construction (`seedSize`), so it lays the frame out and is
-    // still owed a correction.
     nitroUiCore.seedSizingSize(
       COMPONENT,
       sizingKey(LONG, 0, null, 'menu'),
@@ -851,24 +633,13 @@ describe('Picker · G6', () => {
       `planted-equal-to-box (${Platform.OS}): box=${describeSize(box)} ` +
         `measured=${describeSize(now)} delta=${JSON.stringify(after)}`
     );
-    // The control measures the longer title whatever the engine was told, so the
-    // planted size is provably the wrong answer for this configuration.
     expect(now !== null && now.width > shortSize.width + 1).toBe(true);
-    // ...and the box followed it, rather than staying where the guess put it.
     expect(sameSize(box, now)).toBe(true);
     expect(after.corrections).toBeGreaterThanOrEqual(1);
     unmount();
   });
 
   it('clamps a selection the caller sends out of range', async () => {
-    // The clamp rules are SegmentedControl's, and they have a sizing consequence
-    // here that they do not have on a row: the index decides the *title*, so an
-    // out-of-range index that JS failed to clamp would ask native for a title that
-    // does not exist and size the button for nothing. The oracle is a second picker
-    // that was asked for the clamped index honestly: same title, same key, so any
-    // disagreement shows up as two different boxes for one title.
-    // The ends have to be *visibly* different widths, which on Android means the
-    // last option cannot be 'Three' (see `LONG_TITLE`).
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     const { unmount } = await render(
       <View style={columnStyle}>
@@ -912,33 +683,18 @@ describe('Picker · G6', () => {
       `clamps: 99=${describeSize(pastSize)} 2=${describeSize(honestSize)} ` +
         `NaN=${describeSize(junkSize)} -4=${describeSize(firstSize)}`
     );
-    // Past the end becomes the last one: same title, so same box.
     expect(handles.get('past')?.selectedIndex).toBe(2);
     expect(sameSize(pastSize, honestSize)).toBe(true);
-    // Junk and negatives become the first one.
     expect(handles.get('junk')?.selectedIndex).toBe(0);
     expect(handles.get('first')?.selectedIndex).toBe(0);
     expect(sameSize(junkSize, firstSize)).toBe(true);
-    // And the two ends are not the same box, or the clamp would be untestable here.
     expect(sameSize(pastSize, firstSize)).toBe(false);
     unmount();
   });
 
   it('clamps an index written straight to native', async () => {
-    // What this covers, exactly: the `selectedIndex` **getter's** clamp on both
-    // platforms (Swift's `PickerModel` getter, Kotlin's clamp in the setter that
-    // answers the read). The wrapper clamps before React sends anything, so an app
-    // cannot ask native for index 9 of three options and the handle is the only
-    // door left - which makes this the only test that can see the native half of
-    // the clamp at all, and the one that goes red when it is removed (report proof).
-    //
-    // For this control the getter is not bookkeeping: the index it answers is the
-    // title the button paints and the title the sizing key names, so an unclamped
-    // read would be a button showing a word that is not in `options`.
-    //
-    // The write is to the handshake's raw `js` field, which is plain state on both
-    // platforms and never renders, so nothing is painted off the UI thread (D14
-    // keeps writes like this off the app surface; this is the repo's own harness).
+    // The JS wrapper clamps before React sends anything, so writing through the handle
+    // is the only way to reach the native clamp.
     const { unmount } = await render(
       <Picker
         options={['One', 'Two', 'Three']}
@@ -949,12 +705,9 @@ describe('Picker · G6', () => {
     );
     await waitForTestId('raw');
     await settle(150);
-    // Cast away the `readonly` on purpose: the declared handle is read-only
-    // because that is what apps get, not because the property is unsettable.
     const raw = handles.get('raw') as unknown as {
       selectedIndex: number | null;
     };
-    // Uncontrolled, so native has no index of React's at all yet.
     expect(raw.selectedIndex).toBe(null);
 
     raw.selectedIndex = 9;
@@ -963,17 +716,11 @@ describe('Picker · G6', () => {
     raw.selectedIndex = -3;
     expect(handles.get('raw')?.selectedIndex).toBe(0);
 
-    // A prop write is not an interaction: it must not emit a change event.
     expect(eventLog).toEqual([]);
     unmount();
   });
 
   it('clamps the selection and re-measures when the options shrink', async () => {
-    // The third clamp rule, and the one with a size attached: the index is still
-    // 3 but the list is two long, so the title has to move to the last remaining
-    // option - which is a different word, so the button has to resize as well as
-    // re-seed. A host that clamped only the paint, or only the key, leaves either
-    // a title that is not in the list or a box sized for a title it no longer has.
     const WIDE = ['Red', 'Green', 'Blue', LONG_TITLE];
     const NARROW = ['Red', 'Green'];
     const { rerender, unmount } = await render(
@@ -1008,26 +755,15 @@ describe('Picker · G6', () => {
     expect(handles.get('shrink')?.selectedIndex).toBe(1);
     expect(handles.get('shrink')?.options).toEqual(NARROW);
     expect(narrow.width).toBeLessThan(wide.width - 20);
-    // The engine was told a *new* size for a configuration it had never seen
-    // (`cachedSizes`), and something measured it. Which of the two counters that
-    // costs is a platform difference worth naming: iOS reports after SwiftUI
-    // commits, so the box moves and costs a correction; Android's shadow node is
-    // measured during the layout pass in which the new props land, so it can settle
-    // the configuration before the frame and cost none (measured: shrink on
-    // `nitroui_t01` gives `corrections: 0, measurements: 1, cachedSizes: 1` with the
-    // box going 384.76 -> 280, while iPhone 17 gives `corrections: 1`). Requiring a
-    // correction on Android would be requiring a wasted frame.
+    // iOS reports a size after SwiftUI commits, which costs a correction. Android's
+    // shadow node is measured in the layout pass the new props land in, and can settle
+    // without one. So the sum is asserted.
     expect(after.cachedSizes).toBeGreaterThanOrEqual(1);
     expect(after.measurements + after.corrections).toBeGreaterThanOrEqual(1);
     unmount();
   });
 
   it('reads back what React sent', async () => {
-    // One mount, every prop: what the wrapper promised to send and what native
-    // kept. This is also the only place the suite can see `variant`, `label` and
-    // `disabled` arriving at all, since none of them has a geometry the harness can
-    // reach (a `label` shows on Android's field and iOS's menu title, and neither
-    // is queryable from inside the app).
     const OPTIONS = ['One', 'Two', 'Three'];
     const { unmount } = await render(
       <View style={columnStyle}>
@@ -1071,8 +807,7 @@ describe('Picker · G6', () => {
     expect(menu?.label).toBe('Size');
     expect(menu?.accessibilityLabel).toBe('Choose a size');
     expect(menu?.disabled).toBe(false);
-    // `processColor` on both platforms, so a hex string arrives as a number and
-    // `undefined` as null - the sentinel rule of core.md section 3, not a colour.
+    // `processColor` turns a hex string into a number, and `undefined` into null.
     expect(typeof menu?.tintColor).toBe('number');
     expect(wheel?.variant).toBe('wheel');
     expect(wheel?.disabled).toBe(true);
@@ -1082,14 +817,9 @@ describe('Picker · G6', () => {
   });
 
   it('keeps a caller width in charge, and its own size in the cache', async () => {
-    // The half of sizing the caller decides: `style.width` wins over what the
-    // control measured, and the box must be exactly that. The second half is the
-    // one that bites later: the *cache* must still hold the control's own width,
-    // because a 240 dp box filed under this title means every later picker with
-    // the same title gets 240 dp (the pre-T11 bug in sizing.md section 3). So the
-    // same configuration is mounted again afterwards, with no width, and has to
-    // come back at the intrinsic size it reported - not at 240, and not by
-    // learning a new size (which would mean the entry was never there).
+    // The size cache must hold the control's own width, not the 240 the caller gave the
+    // box: the same configuration mounted again with no width has to come back at its
+    // intrinsic size.
     const OPTIONS = ['January', 'February', 'March'];
     const { rerender, unmount } = await render(
       <Picker
@@ -1105,11 +835,9 @@ describe('Picker · G6', () => {
     expect(box).not.toBeNull();
     expect(Math.abs(box!.width - 240) < 0.6).toBe(true);
     const intrinsic = await waitForMeasured('fixed', 'three month titles');
-    // The control measured its own width; it did not adopt the box it was given.
     expect(intrinsic.width).not.toBeCloseTo(240, 0);
     await settle(300);
 
-    // Same options, same title, same variant: one configuration, no width.
     await rerender(
       <Picker
         options={OPTIONS}
@@ -1128,20 +856,8 @@ describe('Picker · G6', () => {
   });
 
   it('fits an over-wide menu into the box the caller gave it', async () => {
-    // C1, menu edition: the *title* wants ~230 dp and the box is 180, so the button
-    // has to be a 180 dp button that truncates its own title. Before the host asked
-    // for a *placement* measure with the box's constraints, Android drew the field
-    // at its intrinsic width inside the box and cut it off, and the popup was
-    // anchored to a field that was not where the box was.
-    //
-    // Note what makes a menu over-wide at all: one long selected title, not a long
-    // list - a `January` in `['January', 'February', …]` is 101 wide whatever the
-    // rest of the list holds, which is what a menu does differently from a
-    // segmented row.
-    //
-    // The reported size is asserted in the same breath, because placement must not
-    // become the report: 180 filed under this title would size every later picker
-    // with this title at 180.
+    // The box is 180 wide and the title wants more. The control is drawn at the box's
+    // width, but the size it reports stays its own intrinsic width.
     const OPTIONS = [LONG_TITLE, 'Red'];
     const { unmount } = await render(
       <Picker
@@ -1165,12 +881,6 @@ describe('Picker · G6', () => {
   });
 
   it('re-fits when the caller narrows the box under an over-wide menu', async () => {
-    // The same box moving: a flex parent narrowing on rotation is this path. An
-    // arming is a fact about one content at one box, so each move retires it, and
-    // the measure at the new box has to discover the overrun and ask for its own
-    // placement measure. A host that reads an expired arming as "already placed at
-    // the box" answers 150 with a field drawn at 230 dp, cut off, with a popup
-    // anchored somewhere the button is not.
     const OPTIONS = [LONG_TITLE, 'Red'];
     const row = (width: number) => (
       <View style={{ width }}>
@@ -1181,8 +891,7 @@ describe('Picker · G6', () => {
         />
       </View>
     );
-    // Wide enough to be over-wide at every box below, and the box comes from the
-    // parent, not from a `width` on the control: that is what a rotation does.
+    // The width comes from the parent, as it does when a flex parent narrows on rotation.
     const { rerender, unmount } = await render(row(200), { timeout: 20000 });
     await waitForTestId('refit');
     const intrinsic = await waitForMeasured('refit', 'the long title');
@@ -1198,7 +907,6 @@ describe('Picker · G6', () => {
       'the narrower parent'
     );
     expect(intrinsic.width).toBeGreaterThan(168 + 20);
-    // The report is still the control's own width, not the box it was fitted into.
     expect(sameSize(measured('refit'), intrinsic)).toBe(true);
 
     await rerender(row(140));
@@ -1216,12 +924,6 @@ describe('Picker · G6', () => {
   });
 
   it('survives remounts with the size and seed of each mount', async () => {
-    // Recycle, in the sense a list does it: the same testID, several lifetimes, each
-    // with a different option list and a different starting title. Two things are
-    // under test. Sizing: a recycled host that keeps answering with the *previous*
-    // mount's measurement leaves the next mount laid out for a title it is not
-    // showing. And state: `prepareForRecycle` has to drop the popup's open flag and
-    // the optimistic title, or a mount that never asked for a title starts with one.
     const FIRST = ['One', 'Two', 'Three'];
     const SECOND = ['A considerably longer colour name', 'Red'];
     const THIRD = ['Go'];
@@ -1239,7 +941,6 @@ describe('Picker · G6', () => {
 
     for (const [index, options] of [SECOND, THIRD, SECOND].entries()) {
       const handleId = `remount-${String(index)}`;
-      // Unmount, then mount something else under the same testID.
       rerender(<View key={`gap-${String(index)}`} />);
       await settle(150);
       await rerender(
@@ -1250,9 +951,8 @@ describe('Picker · G6', () => {
           hybridRef={captureHybrid(handleId)}
         />
       );
-      // The element keeps the one testID - that is the recycle. The handle is
-      // captured per mount, because `hybridRef` runs once per mount (D14) and the
-      // old handle belongs to a view that is gone.
+      // The handle is captured per mount: `hybridRef` runs once per mount, and the old
+      // handle belongs to a view that is gone.
       await waitForTestId('remount');
       const size = await waitForMeasured(handleId, `mount ${String(index)}`);
       await waitForBox('remount', size, `mount ${String(index)}`);
@@ -1263,28 +963,17 @@ describe('Picker · G6', () => {
           `seed=${String(index % 2)} measured=${describeSize(size)}`
       );
     }
-    // Each mount reported its own size: the first list's box is not the answer for
-    // a list of one option.
     const last = measured('remount-2');
     expect(last !== null && last.width > first.width + 20).toBe(true);
     unmount();
   });
 
-  // MARK: - M1: a pick must re-key the size it reports
+  // MARK: - A pick must re-key the size it reports
 
   it('files a real pick under the key of the title the pick shows', async () => {
-    // The sizing key names the selected title, so a pick is a change of *size
-    // configuration* - and the rule that keeps the cache honest is that a report
-    // may only be filed under a key that names the title being painted. A native
-    // pick paints a new title a whole round trip before React sends the key that
-    // names it, so the host must not answer in between: measuring there files the
-    // new title's width under the old title's key.
-    //
-    // Both configurations are poisoned, so every layout the engine does is a
-    // visible event in the trace, and the pick is required to cost exactly one
-    // correction - the new key's own cold answer. Two means something was filed
-    // under the *old* key first: the width of the title the pick painted, written
-    // against the key of the title it replaced.
+    // A native pick paints the new title a round trip before React sends the sizing key
+    // that names it. A size measured in between would be filed under the old title's
+    // key, which would cost a second correction here.
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     poisonConfigurations([
       sizingKey(OPTIONS, 0, null, 'menu'),
@@ -1307,17 +996,10 @@ describe('Picker · G6', () => {
     armTrace();
     const before = stats();
 
-    // The pick itself, and the app accepting it - what an `onChange` that calls
-    // `setState` does. The order is the real one: native chooses, emits, and the
-    // props batch that names the new title arrives after the echo.
     await pickRow('pick-key', 2);
-    // The choice is real (a row's path, not a prop write), and it is reported once.
     expect(eventLog).toEqual(['pick-key:2']);
-    // Let the choice's own paint-and-measure land before the echo, the way it does
-    // in an app: an `onChange` that calls `setState` costs a render and a bridge
-    // round trip, while the control repaints on its next frame. The invariant this
-    // test is about only exists for that ordering - a report filed while the old
-    // key is still the one the engine has.
+    // Let the control paint and measure the new title before React's props arrive, the
+    // order an app's `onChange` then `setState` produces.
     await settle(200);
     await rerender(
       <Picker
@@ -1328,8 +1010,6 @@ describe('Picker · G6', () => {
         hybridRef={captureHybrid('pick-key')}
       />
     );
-    // Native painted the new title on its own; the box follows in the batch that
-    // names it, and the test asks for that size rather than assuming a frame.
     const painted = await waitForRemeasure(
       'pick-key',
       shortSize,
@@ -1346,14 +1026,9 @@ describe('Picker · G6', () => {
         `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
         `delta=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
     );
-    // One choice, one event, and it is the one the wrapper reports.
     expect(eventLog).toEqual(['pick-key:2']);
-    // Exactly the new configuration's own cold correction - no more.
     expect(after.corrections).toBe(1);
-    // And no frame of it was laid out at the declared fallback: the engine is
-    // answering the poisoned (i.e. simply *other*) sizes here, and a fallback-sized
-    // box in the middle of a pick is the flash D17 says a warm configuration must
-    // not pay.
+    // No frame was laid out at the declared fallback.
     expect(laidOut.some((size) => sameSize(size, DECLARED_FALLBACK))).toBe(
       false
     );
@@ -1362,13 +1037,8 @@ describe('Picker · G6', () => {
   });
 
   it('leaves the width of each title in the cache after a pick', async () => {
-    // The damage a pick-time measure does is not the one frame the user sees, it is
-    // what it leaves in the process-wide cache: `sel:One` ends up holding the long
-    // title's width and is marked exact, so every later picker showing `One` is laid
-    // out at 360 pt / 385 dp and corrects back (D17: an exact entry lays the first
-    // frame out exact, 0 stale). This reads the cache back by mounting a fresh picker
-    // in the configuration the pick *started* from - warm, so it must cost no
-    // correction and no stale frame at all.
+    // Reads the process-wide size cache back by mounting a fresh picker in the
+    // configuration the pick started from: it is warm, so it must cost no correction.
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     const first = await render(
       <Picker
@@ -1385,8 +1055,6 @@ describe('Picker · G6', () => {
     await settle(200);
 
     await pickRow('poison', 2);
-    // The ordering note from the pick test above applies here too: the control has
-    // painted and measured the new title before this batch arrives.
     await settle(200);
     await first.rerender(
       <Picker
@@ -1430,26 +1098,14 @@ describe('Picker · G6', () => {
         `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
         `delta=${JSON.stringify(after)}`
     );
-    // The box the fresh mount was laid out with is the size of the title it shows,
-    // on its first read - not the title the previous picker picked.
     expect(sameSize(box, shortSize)).toBe(true);
     expect(sameSize(box, measuredAgain)).toBe(true);
-    // Warm means no correction, and the trace says no other box was ever drawn.
     expect(after.corrections).toBe(0);
     expect(laidOut.every((size) => sameSize(size, shortSize))).toBe(true);
     unmount();
   });
 
   it('re-keys the size of an uncontrolled pick, with no render to ask for it', async () => {
-    // The uncontrolled twin, which is the case the whole mechanism exists for: no
-    // React render is coming, so nothing else can tell the engine that the title -
-    // and with it the size configuration - moved. The wrapper tracks the index the
-    // native side reported (one render per choice, which is what a discrete control
-    // costs everywhere else) so the key follows the shown title, and the host holds
-    // its reports until that batch arrives.
-    //
-    // This is also the case the real-input suite proves from outside (the box grows
-    // after a tap); here it is the same claim with the counters beside it.
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     poisonConfigurations([
       sizingKey(OPTIONS, 0, null, 'menu'),
@@ -1471,14 +1127,10 @@ describe('Picker · G6', () => {
     armTrace();
     const before = stats();
 
-    // The choice is real and it is reported once - native chose, and JS was told.
     await pickRow('unc', 2);
     expect(eventLog).toEqual(['unc:2']);
-    // Still uncontrolled: JS never sends an index. So the only thing that can move
-    // the size configuration is the wrapper noticing what native showed it, and the
-    // key it sends has to name the title now on screen. Before that, every width
-    // this instance reports - and the cache entry it lands in - belongs to a title
-    // that is no longer drawn.
+    // Still uncontrolled: JS sends no index, but the sizing key it sends has to name the
+    // title now on screen.
     expect(handles.get('unc')?.selectedIndex).toBe(null);
     const sentKey = (handles.get('unc') as unknown as { nuiSizingKey?: string })
       ?.nuiSizingKey;
@@ -1498,8 +1150,6 @@ describe('Picker · G6', () => {
         `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
         `delta=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
     );
-    // One choice, one correction: the new configuration's own cold answer, and no
-    // frame of it laid out at the declared fallback.
     expect(after.corrections).toBe(1);
     expect(laidOut.some((size) => sameSize(size, DECLARED_FALLBACK))).toBe(
       false
@@ -1508,10 +1158,8 @@ describe('Picker · G6', () => {
     handles.delete('unc');
     await settle(300);
 
-    // And the damage a pick-time report does is the part nobody sees: the cache
-    // entry of the title the pick *replaced* would hold this title's width and be
-    // marked exact, so the next picker showing `One` is laid out at the long width
-    // and corrects back. A warm configuration must cost a fresh mount nothing.
+    // The cache entry of the title the pick replaced must still hold that title's
+    // width: a fresh mount showing it costs no correction.
     armTrace();
     const cacheBefore = stats();
     const second = await render(
@@ -1543,17 +1191,8 @@ describe('Picker · G6', () => {
   });
 
   it("holds a pick's report until the batch that names the title", async () => {
-    // The host's hold only matters inside one window: between the pick and the props
-    // batch that re-keys. So the fixture makes that window real - an `onChange` that
-    // keeps JS busy, the way a dispatch or a heavy render does in an app - which lets
-    // the control paint and lay out its new title *first*. A host that measures on its
-    // own then files the new title's width under the key of the title it replaced,
-    // which is the cache damage M1 is about.
-    //
-    // With the hold, the first box drawn after the pick is the new key's own cold
-    // answer (the poisoned size) and the pick costs exactly one correction. Without
-    // it, the first box is the long title's width, filed under `sel:One`, and the pick
-    // costs two.
+    // The `onChange` blocks JS, so the control paints and lays out its new title before
+    // the props that re-key it arrive. The host must hold its size report until then.
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     poisonConfigurations([
       sizingKey(OPTIONS, 0, null, 'menu'),
@@ -1575,8 +1214,6 @@ describe('Picker · G6', () => {
     armTrace();
     const before = stats();
 
-    // The choice runs the row's own path; its event handler is the spin above, so the
-    // control repaints and lays out while JS is still inside the choice.
     await pickRow('slow-echo', 2);
     expect(eventLog).toEqual(['slow-echo:2']);
     const longSize = await waitForRemeasure(
@@ -1594,10 +1231,7 @@ describe('Picker · G6', () => {
         `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
         `delta=${JSON.stringify(after)}`
     );
-    // One correction for one pick, and it belongs to the new key: the first box the
-    // engine drew after the pick is the poisoned size for `sel:<long>`. If the pick
-    // answered for itself, that first box is the long title's width instead and there
-    // is a correction more.
+    // The first box drawn after the pick is the new key's seeded size.
     expect(after.corrections).toBe(1);
     expect(sameSize(laidOut[0] ?? null, WRONG_SIZE)).toBe(true);
     expect(laidOut.some((size) => sameSize(size, DECLARED_FALLBACK))).toBe(
@@ -1608,18 +1242,9 @@ describe('Picker · G6', () => {
   });
 
   it('grows an unpoisoned pick whose new configuration starts at the fallback', async () => {
-    // The pick tests above poison every configuration, which is what makes a
-    // missing correction visible - and, as G6's real-input run found, what let one
-    // bug hide: a poisoned key answers with the poisoned size, so the box *moves*,
-    // and a host that is waiting for a box change to ask its next measure gets
-    // asked. With a cold key the engine's first answer is the declared fallback,
-    // which for a title growing inside a box that is already at the fallback width
-    // is the box it has - nothing moves, nothing asks, and the control is left
-    // painting an ellipsised title for the rest of the mount.
-    //
-    // This is real-input step 4 as a gate: no poison, no trace, just the box the
-    // user ends up with after choosing a longer title from an uncontrolled picker.
-    // The fixture is the real-input screen's own options.
+    // Nothing is seeded here: a cold key answers with the declared fallback, which can
+    // equal the box the control is already in, so no box change prompts the next
+    // measure.
     const OPTIONS = ['Onyx', 'Quartz', 'A considerably longer mineral name'];
     const { unmount } = await render(
       <Picker
@@ -1644,7 +1269,6 @@ describe('Picker · G6', () => {
       'the longer title the pick painted'
     );
     expect(longSize.width).toBeGreaterThan(shortSize.width + 20);
-    // The claim real-input makes from outside, made here with the box reading.
     await waitForBox(
       'plain-unc',
       longSize,
@@ -1661,10 +1285,6 @@ describe('Picker · G6', () => {
   });
 
   it('goes on reporting its size after a re-tap of the row already shown', async () => {
-    // The same rule on the ordinary path: a refused press leaves no hold behind, so an
-    // app that then changes something about the control's content still gets its size
-    // reported. Nothing here needs the pick's window - which is what makes this the
-    // case an app actually hits.
     const SHORT = ['One', 'Two', 'Three'];
     const LONG = [LONG_TITLE, 'Two', 'Three'];
     poisonConfigurations([
@@ -1687,13 +1307,11 @@ describe('Picker · G6', () => {
     armTrace();
     const before = stats();
 
-    // Press the row that is already shown: the list closes, nothing is emitted, and no
-    // batch follows - so nothing may be held back on its account.
+    // Pressing the row already shown emits nothing, so no props follow it.
     await pickRow('re-tap', 0);
     expect(eventLog).toEqual([]);
     expect(sameSize(sizeOf('re-tap'), shortSize)).toBe(true);
 
-    // Now the size really does move, and the engine has to hear about it.
     await rerender(
       <Picker
         options={LONG}
@@ -1720,17 +1338,11 @@ describe('Picker · G6', () => {
     unmount();
   });
 
-  // MARK: - M2: a variant change is a different control, not a repaint
+  // MARK: - A variant change is a different control, not a repaint
 
   it('asks a wheel the box question after a variant change', async () => {
-    // Both variants of Progress's two-policy switch live here, and Android builds
-    // the question when the composition is built: `NitroUiMeasuredRoot` is handed
-    // `unbounded = sizingPolicy == POLICY_INTRINSIC` once, and reads no state that
-    // changes. So a `menu` that becomes a `wheel` at runtime goes on being asked
-    // the unbounded question - and `fillMaxWidth()` under infinite constraints is a
-    // no-op, which leaves the field reporting its own 280 dp inside a box the caller
-    // made 330 wide. Progress solves this by keying the native view on the variant;
-    // a rerender of the same instance is the only thing that can show it.
+    // On Android the composition fixes whether its content is measured unbounded when
+    // it is built, so a variant change has to remount the native view.
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     const BOX = { width: 330, height: 60 };
     const { rerender, unmount } = await render(
@@ -1746,13 +1358,10 @@ describe('Picker · G6', () => {
     );
     await waitForTestId('var-w');
     const asMenu = await waitForMeasured('var-w', 'a menu of the short title');
-    // The caller's width is in charge, so the box is 330 whatever the menu measured.
     expect(Math.abs(boxOf('var-w')!.width - BOX.width) < 0.6).toBe(true);
     expect(asMenu.width).not.toBeCloseTo(BOX.width, 0);
     await settle(200);
 
-    // What this mount measures before the rerender, so the wait after it can
-    // refuse the pre-change number and a zero.
     const staleWheel = asMenu;
     await rerender(
       <Picker
@@ -1774,17 +1383,11 @@ describe('Picker · G6', () => {
       `variant menu->wheel: menu=${describeSize(asMenu)} ` +
         `wheel=${describeSize(asWheel)} box=${describeSize(boxOf('var-w'))}`
     );
-    // A wheel is as wide as its box, whatever the menu before it measured.
     expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
     unmount();
   });
 
   it('asks a menu the unbounded question after a variant change', async () => {
-    // The other direction, and the one that poisons the cache: a `wheel` that
-    // becomes a `menu` goes on being asked the *bounded* question, so a 40-character
-    // title offered a 330 box measures 330, agrees with the box, and is confirmed -
-    // the field stays truncated for the life of the mount and `cache[menu|...]`
-    // records the box's width as the title's own.
     const OPTIONS = ['One', 'Two', LONG_TITLE];
     const BOX = { width: 330, height: 60 };
     const { rerender, unmount } = await render(
@@ -1803,8 +1406,6 @@ describe('Picker · G6', () => {
     expect(Math.abs(asWheel.width - BOX.width) < 1).toBe(true);
     await settle(200);
 
-    // What this mount measures before the rerender, so the wait after it can
-    // refuse the pre-change number and a zero.
     const staleMenu = asWheel;
     await rerender(
       <Picker
@@ -1826,8 +1427,7 @@ describe('Picker · G6', () => {
       `variant wheel->menu: wheel=${describeSize(asWheel)} ` +
         `menu=${describeSize(asMenu)} box=${describeSize(boxOf('var-m'))}`
     );
-    // The menu reports the title's own width - wider than the box it sits in, which
-    // is the C1 over-wide story - rather than the box's width back as a verdict.
+    // The menu reports the title's own width, wider than the box it sits in.
     expect(asMenu.width).toBeGreaterThan(BOX.width + 1);
     unmount();
   });
@@ -1848,13 +1448,12 @@ describe('Picker · G6', () => {
       () => handles.get('selected-row') ?? null,
       () => new Error('"selected-row" never handed back a hybrid handle.')
     );
-    // Nothing has been laid out to read yet; iOS has no popup of its own at all.
+    // Nothing is drawn before the popup opens, and iOS has no popup of its own to read.
     expect(drawnOf('selected-row')).toBe('-1');
     if (Platform.OS !== 'android') {
       return;
     }
-    // The popup's own semantics tree, as TalkBack reads it: the selected row says
-    // `selected` (`+`) with `Role.RadioButton`, and only that row.
+    // The report marks the row the popup's semantics tree says is selected with `+`.
     await pressAnchor('selected-row');
     const opened = await pollUntil(
       () => {
@@ -1865,7 +1464,6 @@ describe('Picker · G6', () => {
     );
     console.log(`selected row: drawn=${opened}`);
     expect(opened).toBe('Small,Medium+,Large');
-    // A pick moves it: reopened, the new row is the selected one.
     await pickRow('selected-row', 2);
     await waitForMeasured('selected-row', 'after the pick');
     await settle(300);
@@ -1886,22 +1484,6 @@ describe('Picker · G6', () => {
   });
 
   it('does not treat opening as a choice, and the next mount sizes normally after going away mid-menu', async () => {
-    // A press on the anchor is the only interaction the harness can deliver,
-    // because the anchor is in the app's window and the popup it opens is not.
-    // That leaves two honest claims, both of which need a real tap:
-    //
-    //  1. Opening the list is not a selection. A host that reported a change when
-    //     the menu opened would give an app a phantom `onChange` on every press, so
-    //     the log has to stay empty - and the title has not moved either, which the
-    //     unchanged box says as much as the read-back does.
-    //  2. Going away while the list is open must not take the app with it. The
-    //     popup belongs to a window of its own, and B1's rule is that nothing a
-    //     mount attaches may outlive it: a popup dismissed by nothing is exactly
-    //     the leak that pattern is about. Whether the popup is *actually* gone is
-    //     counted from outside in the real-input case (`dumpsys window` /
-    //     `app.windows`), which is also where the open state is visible at all;
-    //     what this can assert from in here is that the next screen mounts, sizes
-    //     and measures normally after the one that went away mid-menu.
     const OPTIONS = ['One', 'Two', 'Three'];
     const { rerender, unmount } = await render(
       <Picker
@@ -1920,11 +1502,9 @@ describe('Picker · G6', () => {
     await settle(400);
     expect(eventLog).toEqual([]);
     expect(handles.get('press-me')?.mostRecentEventCount).toBe(0);
-    // The box did not move when the list opened: a menu is an overlay, not a
-    // relayout, and a host that resized on open would push the whole screen down.
     expect(sameSize(sizeOf('press-me'), size)).toBe(true);
 
-    // Now drop the screen with the list open, and mount a different one.
+    // Drop the screen with the list open, and mount a different one.
     rerender(<View testID="after-drop" style={{ height: 40 }} />);
     await settle(300);
     const { unmount: unmountSecond } = await render(
@@ -1948,43 +1528,11 @@ describe('Picker · G6', () => {
   });
 });
 
-/*
- * ---------------------------------------------------------------------------
- * G26 — `variant="radio"` (Q7 Appendix D, DECISIONS D38 item 4).
- *
- * A radio group is the first variant of this control that is *not* a popup, and
- * that inverts which of these tests can say what:
- *
- *  - the rows are in the app's own window, so `nuiTestSelect` presses a row that a
- *    `menu` pick can only reach through a popup - and on Android a *real* tap can
- *    reach one too, which is step 9 of `CHECKS.picker` in `scripts/real-input`;
- *  - the box is the option count by the widest row, so the selection is *not* a
- *    sizing input. The suite below reads that two ways: a pick costs 0
- *    corrections (the key has no `sel:` term to move), and the box does not move
- *    either - which is the same fact measured instead of trusted;
- *  - on iOS `radio` is the menu (there is no `RadioGroupPickerStyle` to host), so
- *    the geometry cases are Android's and iOS gets the fallback asserted - the
- *    variant answers `menu`, the box is the menu's, and flipping the prop back is
- *    not a remount.
- *
- * The 48 dp row is measured here rather than copied from the design: the numbers
- * below are what `nitroui_a` says a Material 3 `RadioButton` row is, and a row is
- * 48 dp because that is Material's own minimum touch target, which the radio
- * inside already asks for.
- * ---------------------------------------------------------------------------
- */
+// `variant="radio"`: on Android a radio group draws every option as a row in the
+// app's own window, so its box depends on the options and not on the selection
+// or the label. iOS has no radio style and renders the menu.
 
-/**
- * The key `Picker.tsx` builds for a `radio` variant, spelled out on purpose.
- *
- * On Android that is `radio|count|labels…` (Q7 Appendix D): a group paints every
- * label at once, so which row is chosen decides nothing about its box, and it draws
- * no `label` at all - that prop is the group's accessibility name there - so neither
- * field belongs in a size configuration. On iOS the variant is resolved to `menu`
- * before the key is built, and a menu is as wide as the one title it shows and has a
- * field to name - so both fields stay in the key there, and this helper says so by
- * delegating.
- */
+// Must match the sizing key `Picker.tsx` builds for the `radio` variant.
 function radioSizingKey(
   options: readonly string[],
   selectedIndex: number,
@@ -1997,17 +1545,11 @@ function radioSizingKey(
   return ['radio', String(options.length), ...options.map(escape)].join('|');
 }
 
-/** What one row of the group measures, on this device, at font scale 1. */
+// Material 3's minimum touch target, which is the height of one radio row.
 const ROW_DP = 48;
 
 describe('Picker · radio variant (G26)', () => {
   it('measures a radio group as its option count, one row per option', async () => {
-    // The base sizing claim for the variant, and the reason the option *count* is
-    // in the key: three options are 144 dp tall and five are 240. A control that
-    // reported a fixed height for every radio group - or one that inherited the
-    // menu's 56 dp field, which is what the component's declared fallback says -
-    // cannot satisfy both. Both configurations start poisoned (D17), so the pair
-    // also requires the corrections that replace the fallback.
     if (Platform.OS !== 'android') {
       console.log('radio geometry: Android only - iOS renders the menu');
       return;
@@ -2044,11 +1586,6 @@ describe('Picker · radio variant (G26)', () => {
     );
     expect(Math.abs(three.height - 3 * ROW_DP)).toBeLessThanOrEqual(1);
     expect(Math.abs(five.height - 5 * ROW_DP)).toBeLessThanOrEqual(1);
-    // The width is the widest row, not the menu's 280 dp field floor: a radio
-    // group has no field, so a short set of labels is a narrow control. (Whether
-    // *these* labels clear 280 is the device's business - what is not the
-    // device's business is that both groups are as wide as their own rows, which
-    // is what the ellipsis and the over-wide placement rule are there for.)
     expect(three.width).toBeGreaterThan(80);
     for (const testId of ['radio-three', 'radio-five']) {
       expect(sameSize(sizeOf(testId), WRONG_SIZE)).toBe(false);
@@ -2060,12 +1597,6 @@ describe('Picker · radio variant (G26)', () => {
   });
 
   it('costs no correction when a pick moves the selection', async () => {
-    // The `sel:`-free key is what this buys, and it is the only test that can see
-    // it: the pick is warm (the configuration is exact in the cache), so a key
-    // that named the selection would make it a *new* configuration - one frame at
-    // the declared fallback and a correction, on a control whose box did not move.
-    // Red proof: put `sel:` back for the `radio` variant in `Picker.tsx` and this
-    // goes red on both counts, the correction and the box.
     if (Platform.OS !== 'android') {
       return;
     }
@@ -2095,29 +1626,18 @@ describe('Picker · radio variant (G26)', () => {
         measured('radio-warm')
       )} pick=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
     );
-    // The choice happened, and it was a choice: this is the selection path, not a
-    // prop write, and the count says so. `mostRecentEventCount` is what *JS sent*,
-    // and an uncontrolled pick sends nothing back - the app was told, the control
-    // painted, and no props batch went down. A wrapper that adopted the pick and
-    // re-sent it would read 1 here, which is the same reading the menu cases at the
-    // read-back and press-me tests use for the opposite claim.
     expect(eventLog).toEqual(['radio-warm:2']);
+    // `mostRecentEventCount` is what JS sent, and an uncontrolled pick sends nothing
+    // back.
     expect(handles.get('radio-warm')?.mostRecentEventCount).toBe(0);
     expect(after.corrections).toBe(0);
     expect(after.cachedSizes).toBe(0);
-    // The box never moved, which is the same fact read from the other end.
     expect(sameSize(sizeOf('radio-warm'), first)).toBe(true);
     unmount();
   });
 
   it('costs no correction when the group is renamed', async () => {
-    // The other field that leaves a `radio` key: on Android `label` is the group's
-    // accessibility name and is drawn nowhere, so a rename is not a new size
-    // configuration either. Leave `lbl:` in the radio key in `Picker.tsx` and it
-    // becomes one - the group is laid out again at the declared fallback (the menu's
-    // 280 x 56) and pays a correction, on a control whose box cannot have moved.
-    // Android's, for the same reason as the case above: on iOS the variant is a menu,
-    // a menu draws the label as a field, and there the field *does* belong.
+    // On Android a radio group's `label` is its accessibility name and is not drawn.
     if (Platform.OS !== 'android') {
       return;
     }
@@ -2157,10 +1677,7 @@ describe('Picker · radio variant (G26)', () => {
         measured('radio-lbl')
       )} after=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
     );
-    // The rename is not vacuous: the new name is what the live control carries.
     expect(handles.get('radio-lbl')?.label).toBe('Renamed');
-    // And it cost nothing: no new configuration, so no fallback frame, no
-    // correction, and the box is the one it already had.
     expect(after.corrections).toBe(0);
     expect(after.cachedSizes).toBe(0);
     expect(eventLog).toEqual([]);
@@ -2169,24 +1686,14 @@ describe('Picker · radio variant (G26)', () => {
   });
 
   it('picks a row through the selection path and rolls back a refused one', async () => {
-    // Android's, because the two claims here are about a group whose box does not
-    // move. On iOS this variant *is* a menu, where a pick changes the title and
-    // therefore the box, and a second pick of the pinned row is the no-op the menu
-    // refuses to report - both already covered for menus by the suite above, so a
-    // guard here states the difference instead of duplicating the menu's tests.
     if (Platform.OS !== 'android') {
       console.log(
         'radio selection path: Android only - iOS picks a menu, and a menu resizes'
       );
       return;
     }
-    // `nuiTestSelect` runs the model's own selection path, which for a radio group
-    // is the row's own `selectable` press. The refusing parent is the interesting
-    // half: the control paints 2 optimistically, the parent keeps sending 0, and
-    // the second pick of that row has to be a *fresh* choice again - which is only
-    // true if the refused one was rolled back. `scripts/real-input` makes the same
-    // claim about a real tap on a real row (`CHECKS.picker` step 9); here it is the
-    // only way to see a snap-back that changes no size and paints no title.
+    // The second group's parent keeps sending 0. A second pick of the same row only
+    // reports again if the refused first pick was rolled back.
     const OPTIONS = ['Red', 'Green', 'Blue'];
     poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
     const { unmount } = await render(
@@ -2216,7 +1723,6 @@ describe('Picker · radio variant (G26)', () => {
 
     await pickRow('radio-pick', 2);
     expect(eventLog).toEqual(['radio-pick:2']);
-    // An uncontrolled pick costs the app one render and no box.
     expect(sameSize(sizeOf('radio-pick'), picked)).toBe(true);
 
     eventLog.length = 0;
@@ -2225,21 +1731,11 @@ describe('Picker · radio variant (G26)', () => {
     await settle(300);
     await pickRow('radio-refuse', 2);
     expect(eventLog).toEqual(['radio-refuse:2', 'radio-refuse:2']);
-    // The refused pick did not stick, which is the second event meaning anything: the
-    // parent never adopted it, so the index the group paints its rows from is still
-    // the one it was given (`displayed` follows the sent index, it does not lead it).
-    // This is the nearest read to "row 0 is shown again" a harness run has - the row
-    // states themselves are a `checked` read on the accessibility tree, which only
-    // the real-input dump can take, and it takes it for the group on screen
-    // (`CHECKS.picker` step 9).
     expect(handles.get('radio-refuse')?.selectedIndex).toBe(0);
     unmount();
   });
 
   it('reports nothing for the row already chosen, or for a disabled group', async () => {
-    // The barrier twin of the test above, and the disabled rule. Both are the
-    // menu's rules carried over (`applyUserSelection` is the one place a pick is
-    // applied), so what this can catch is a row that learned to emit on its own.
     const OPTIONS = ['Red', 'Green', 'Blue'];
     const { unmount } = await render(
       <View style={columnStyle}>
@@ -2271,14 +1767,10 @@ describe('Picker · radio variant (G26)', () => {
     await settle(300);
     console.log(`radio silence: events=${JSON.stringify(eventLog)}`);
     expect(eventLog).toEqual([]);
-    // A disabled control is still inert the second time.
     await pickRow('radio-disabled', 2);
     await settle(200);
     expect(eventLog).toEqual([]);
-    // Two silences are only evidence if someone was listening, so the case closes
-    // with the barrier: a row that *is* a choice, on the very control that just
-    // stayed quiet, has to be heard through the very log that came back empty. A
-    // recorder that never armed would pass every assertion above and fail here.
+    // A real choice on the same control, to show the log was recording.
     await pickRow('radio-noop', 1);
     await settle(200);
     console.log(`radio barrier: events=${JSON.stringify(eventLog)}`);
@@ -2287,11 +1779,7 @@ describe('Picker · radio variant (G26)', () => {
   });
 
   it('answers menu on the platform with no radio group to render', async () => {
-    // The D38 fallback, asserted rather than described. iOS has no
-    // `RadioGroupPickerStyle`, so the variant must come back as the menu and size
-    // like one - one control tall, not three rows - while Android reports the
-    // group and its rows. The same two lines are the difference between "falls
-    // back to the menu" and "draws nothing".
+    // SwiftUI has no radio group picker style, so on iOS the variant renders the menu.
     const OPTIONS = ['One', 'Two', 'Three'];
     poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
     const { unmount } = await render(
@@ -2314,8 +1802,7 @@ describe('Picker · radio variant (G26)', () => {
     if (Platform.OS === 'android') {
       expect(Math.abs(size.height - 3 * ROW_DP)).toBeLessThanOrEqual(1);
     } else {
-      // A menu is one row tall (~35 pt); a radio group would be 144 and a wheel
-      // 216. Neither is what iOS is promised to draw.
+      // A menu is about 35 pt tall; a wheel would be 216.
       expect(size.height).toBeLessThan(60);
       expect(size.width).toBeGreaterThan(40);
     }
@@ -2323,14 +1810,9 @@ describe('Picker · radio variant (G26)', () => {
   });
 
   it('goes back to a menu when the variant changes, with no leftovers', async () => {
-    // The variant is a `key` (`Picker.tsx`), so on Android a `radio` that becomes a
-    // `menu` is a new mount on a host that may have been recycled from the group.
-    // What would leak is the *control*: rows where a field belongs, the group's
-    // height, or a selection the fresh mount was never seeded with. On iOS the two
-    // variants are the same control, so the change must not remount anything - the
-    // witness is that the picked title is still on screen (a remount re-seeds an
-    // uncontrolled picker at `defaultSelectedIndex`, and an iOS menu is as wide as
-    // the title it shows, so a re-seed shrinks the box).
+    // On Android the variant change remounts the native view. On iOS both variants are
+    // the menu, so nothing may remount: a remount would re-seed the selection and
+    // shrink the box back to the first title.
     const OPTIONS = ['Small', 'Medium', 'Large'];
     poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
     const { rerender, unmount } = await render(
@@ -2348,12 +1830,8 @@ describe('Picker · radio variant (G26)', () => {
     await waitForBox('radio-switch', asGroup, 'the group');
     await pickRow('radio-switch', 2);
     eventLog.length = 0;
-    // The size the change must survive. On Android a pick in a group moves nothing,
-    // so `asGroup` is already the right reference; on iOS this variant is a menu,
-    // and the pick just moved its title and with it the box. The number a remount
-    // would erase is therefore the one *after* the pick: a remount re-seeds an
-    // uncontrolled picker at `defaultSelectedIndex` (index 0, "Small") and an iOS
-    // menu is as wide as the title it shows, so a re-seed shrinks it back.
+    // On iOS the pick moved the menu's title and with it the box, so the reference size
+    // is the one after the pick.
     const beforeChange =
       Platform.OS === 'android'
         ? asGroup
@@ -2379,7 +1857,6 @@ describe('Picker · radio variant (G26)', () => {
         `radio->menu (ios): ${describeSize(beforeChange)} -> ` +
           `${describeSize(same)} events=${JSON.stringify(eventLog)}`
       );
-      // Not a remount: still the title the pick chose, and nothing reported.
       expect(sameSize(same, beforeChange)).toBe(true);
       expect(handles.get('radio-switch')?.variant).toBe('menu');
       expect(eventLog).toEqual([]);
@@ -2397,70 +1874,33 @@ describe('Picker · radio variant (G26)', () => {
       `radio->menu (android): group=${describeSize(asGroup)} ` +
         `menu=${describeSize(asMenu)} events=${JSON.stringify(eventLog)}`
     );
-    // A Material field, not a column of rows: 56 dp tall, and the field's own
-    // 280 dp floor wide. The group measured 144 tall, so a leak cannot hide in
-    // rounding.
+    // A Material text field: 56 dp tall at its 280 dp minimum width.
     expect(Math.abs(asMenu.height - 56) < 1).toBe(true);
     expect(Math.abs(asMenu.width - 280) < 1).toBe(true);
     expect(sameSize(sizeOf('radio-switch'), asMenu)).toBe(true);
     expect(handles.get('radio-switch')?.variant).toBe('menu');
-    // The change itself reported nothing, and the popup witness is a *menu's*
-    // again - closed, with no rows composed.
     expect(eventLog).toEqual([]);
     expect(drawnOf('radio-switch')).toBe('-1');
     unmount();
   });
 });
 
-/* ---------------------------------------------------------------------------
- * G29 — the `wheel` variant as Material 3 1.5's `ScrollField`.
- *
- * The wheel is the third Android control in this file, and the only one of the
- * three that *moves* before it decides anything. A menu's pick is a row press and
- * a radio group's pick is a row press; a wheel's pick is a scroll that comes to
- * rest, and while it is moving the row under the centre line changes many times.
- * Every test here therefore waits for a rest rather than for a value, and the
- * interesting assertion on each of them is a count: **one** event for a roll that
- * passed several rows.
- *
- * What the suite cannot do and real-input does:
- *  - put a finger on the drum. `nuiTestSelect` asks the composition for the same
- *    animated roll a row press asks for, so the emit still happens at the settle
- *    and not at the hook (`CHECKS.picker`'s wheel step does the fling with a real
- *    swipe and counts the events the same way);
- *  - see what TalkBack hears. A Compose `SemanticsNode` is not a `View`, so the
- *    name, the spoken value and the missing `disabled` state are a
- *    `uiautomator dump` question — `scripts/real-input`, not here.
- *
- * The 200 dp drum height is `ScrollFieldDefaults.ScrollFieldHeight`, and it is
- * asserted from the *measured* box rather than trusted from that constant: the
- * wheel is the one variant whose height the control states itself, so a box that
- * came back 56 dp tall would mean the component's declared fallback (a menu
- * field) was never corrected, which is the D17 failure this variant could most
- * quietly ship with.
- * ---------------------------------------------------------------------------
- */
+// The Android `wheel` variant is Material 3's `ScrollField`. A wheel's pick is a
+// scroll that comes to rest, and the row under the centre line changes many
+// times on the way, so these tests wait for the rest and count events.
 
-/** The drum's height: `ScrollFieldDefaults.ScrollFieldHeight`, measured below. */
+// Must match `ScrollFieldDefaults.ScrollFieldHeight`.
 const WHEEL_DP = 200;
 
-/**
- * What the drum's own witness line says.
- *
- * Android's `nuiTestMenuReport` ends with five `wheel` fields (the popup fields are all
- * `-1` for this variant, because a wheel has no popup): how many props batches reached
- * the drum's sync point, whether any of them landed *while the drum was touched or
- * turning*, how many of them moved the drum, how many tried and were refused, and the
- * row the drum stands on.
- * Without them the mid-roll case below could only log that it had tested anything; with
- * them "the batch arrived mid-flight" is an assertion.
- */
+// The wheel fields of Android's `nuiTestMenuReport`: how many props batches
+// reached the wheel, whether any landed while it was touched or turning, how many
+// moved it (`seats`), how many tried and were refused, and the row it stands on
+// (-1 before its first rest).
 type WheelWitness = {
   batches: number;
   sawRolling: boolean;
   seats: number;
   refusals: number;
-  /** The row the drum stands on, or -1 before it has rested or been seated once. */
   row: number;
 };
 
@@ -2482,17 +1922,9 @@ function wheelWitness(testId: string): WheelWitness {
   };
 }
 
-/**
- * Roll the wheel to `index` and wait for the choice to arrive.
- *
- * The wait is for the *settle*, which is a later event than the call: an animated
- * scroll across several rows runs for as long as Material's expressive spec says it
- * does, on a machine whose frame rate is not ours to choose. Waiting a fixed 150 ms
- * (`pickRow`) would read an empty log on a loaded run and call it a refused pick, so
- * this waits for the first event and then for a quiet period — the quiet period is
- * what makes "exactly one event" mean anything, because without it a second event
- * still in flight would be counted as proof of nothing.
- */
+// Rolls the wheel to `index`, waits for the first event (the animated scroll's
+// length is the device's to choose), then for a quiet period so that a second
+// event would be seen.
 async function rollWheel(
   testId: string,
   index: number,
@@ -2514,19 +1946,12 @@ async function rollWheel(
       10000
     );
   }
-  // The quiet period, and it is deliberately longer than the animation: an event
-  // that arrives *after* this window arrives after a rest, which is what the
-  // assertions below are about.
+  // The quiet period, longer than the animation.
   await settle(600);
 }
 
 describe('Picker · wheel variant (G29)', () => {
   it('measures the drum from a poisoned fallback, at the box width', async () => {
-    // The base sizing claim for the variant, and Android's only: the wheel is as
-    // wide as the box that offered it and 200 dp tall whatever the box says. The
-    // configuration is poisoned first, so the 200 dp cannot come from the
-    // component's declared fallback (which is the menu's 280 x 56) - it has to be
-    // a correction, and the correction is counted.
     if (Platform.OS !== 'android') {
       console.log(
         'wheel geometry: Android-only case - iOS has had a wheel all along'
@@ -2555,11 +1980,9 @@ describe('Picker · wheel variant (G29)', () => {
       `wheel box: ${describeSize(size)} in a ${String(BOX_WIDTH)} dp box ` +
         `cold=${JSON.stringify(cold)}`
     );
-    // Not the poisoned guess, and not the menu's field either.
     expect(sameSize(sizeOf('wheel-size'), WRONG_SIZE)).toBe(false);
     expect(Math.abs(size.height - WHEEL_DP)).toBeLessThanOrEqual(1);
-    // A pager has no width of its own: the box's width is the answer, where the
-    // menu in the same box would report its title's 280 dp floor.
+    // The wheel has no width of its own: it takes the box's.
     expect(Math.abs(size.width - BOX_WIDTH)).toBeLessThanOrEqual(1);
     expect(cold.corrections).toBeGreaterThanOrEqual(1);
     expect(cold.cachedSizes).toBeGreaterThanOrEqual(1);
@@ -2567,17 +1990,8 @@ describe('Picker · wheel variant (G29)', () => {
   });
 
   it('reports one event for a roll that passed several rows', async () => {
-    // THE test for this variant. The wheel is asked for row 4 from row 0, and the
-    // drum passes rows 1, 2 and 3 on its way: `ScrollFieldState.selectedOption`
-    // names a different row every time the pager crosses a boundary, so a control
-    // that read it as a choice would report four events here. It reports one, and
-    // it reports the row the drum came to rest on.
-    //
-    // Red proof: in `HybridNitroUiPicker.Wheel`, replace the
-    // `snapshotFlow { isScrollInProgress }` collector with
-    // `LaunchedEffect(wheelState.selectedOption) { choose(...) }` — the same
-    // control read at every row crossing instead of at the rest — and this goes
-    // red with four events.
+    // Rolling from row 0 to row 4 passes rows 1, 2 and 3, and
+    // `ScrollFieldState.selectedOption` names each of them on the way.
     const OPTIONS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
     poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
     const { unmount } = await render(
@@ -2598,10 +2012,6 @@ describe('Picker · wheel variant (G29)', () => {
     await rollWheel('wheel-roll', 4, true);
     console.log(`wheel roll 0->4: events=${JSON.stringify(eventLog)}`);
     expect(eventLog).toEqual(['wheel-roll:4']);
-    // And the control agrees: the index it now holds is the one it reported, which
-    // is the "the value shown equals the value reported" half of the claim that a
-    // harness can actually check (the painted row is a pixel question, and the
-    // real-input step takes a screenshot of it).
     expect(handles.get('wheel-roll')?.selectedIndex).toBe(null);
     const settled = handles.get('wheel-roll');
     expect(settled).not.toBeUndefined();
@@ -2609,11 +2019,8 @@ describe('Picker · wheel variant (G29)', () => {
   });
 
   it('rolls a refused pick back, and reports the next roll of it again', async () => {
-    // The handshake, on the one variant where reverting means moving the control
-    // back: the parent keeps sending 0, so the drum has to come home to row 0
-    // after being asked for row 4, and asking again has to be a *new* choice.
-    // A wheel that left the refused row painted would report nothing the second
-    // time, because `applyUserSelection` refuses an index it is already showing.
+    // The parent keeps sending 0, so the wheel has to scroll back to row 0. Left on row
+    // 4, the second roll would ask for the row already shown and report nothing.
     const OPTIONS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
     poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
     const { unmount } = await render(
@@ -2633,16 +2040,9 @@ describe('Picker · wheel variant (G29)', () => {
 
     await rollWheel('wheel-refuse', 4, true);
     expect(eventLog).toEqual(['wheel-refuse:4']);
-    // The parent refused it: the index React holds is still 0, and that is the
-    // index the wheel is driven back to.
     expect(handles.get('wheel-refuse')?.selectedIndex).toBe(0);
     await settle(300);
-    // And driven back to it *in the drum*, which is the part `selectedIndex` cannot
-    // see and a screenshot cannot compare: the witness reads the row the drum came to
-    // rest on or was last seated to, and after a refusal both have to say 0. A drum left
-    // on 4 is the bug — the next roll of it is then a scroll that asks for the row the
-    // drum is already on, and reports nothing. Android's case, because the drum is
-    // Android's (`row` is not in the witness on iOS, where the wheel has always existed).
+    // Only Android's report has the wheel fields.
     if (Platform.OS === 'android') {
       const home = wheelWitness('wheel-refuse');
       console.log(`wheel refused, drum home: witness=${JSON.stringify(home)}`);
@@ -2657,27 +2057,17 @@ describe('Picker · wheel variant (G29)', () => {
   });
 
   it('leaves a roll in flight alone when an unrelated prop changes', async () => {
-    // A props batch is not a claim on the drum, and used to behave as if it were:
-    // `afterUpdate` wrote the drum's page on *every* batch, because the snap-back needs
-    // that write and the write is `requestScrollToPage` - which stops a scroll in
-    // progress and snaps the pager home. So any batch that arrived halfway through
-    // someone's roll cancelled it, and a roll that never reaches a rest reports nothing:
-    // the user's finger moved the drum, the app heard nothing, and the drum ended up back
-    // on the row React still held. The batch here says nothing about the selection at all
-    // - a renamed `label`, on an uncontrolled picker.
-    //
-    // Android-only: the witness that proves the batch landed mid-flight is Android's (the
-    // drum is Android's), and iOS has had its wheel since G5.
+    // Writing the wheel's page stops a scroll in progress, and a roll that never comes to
+    // rest reports nothing. So a props batch that does not change the selection (here a
+    // renamed `label`) must not write the page.
     if (Platform.OS !== 'android') {
       console.log(
         'mid-roll batch: Android case - the drum write is Android-only'
       );
       return;
     }
-    // Twenty options, and a request for the last one: the animation is long enough, and
-    // composes enough pages along the way, that batches spread over it cannot all miss
-    // it. Five of them, ~40 ms apart, is a wide window on "mid-flight" - and the witness
-    // below is what says whether the window was actually hit.
+    // Twenty options and a roll to the last one, so the animation is long enough for
+    // props batches to land during it.
     const OPTIONS = Array.from(
       { length: 20 },
       (_, i) => `Option ${String(i + 1)}`
@@ -2702,13 +2092,9 @@ describe('Picker · wheel variant (G29)', () => {
     expect(eventLog).toEqual([]);
 
     handles.get('wheel-midroll')?.nuiTestSelect(19);
-    // Batches until one of them is *seen* mid-flight, then a couple more after it.
-    // A fixed handful at fixed intervals is the wrong shape for this: the animation's
-    // length and the JS loop's latency are both the device's to choose, so on a loaded
-    // run five batches can all land after the rest and the case would pass having
-    // tested nothing. Stopping on the witness is what makes the window wide on a fast
-    // device and long on a slow one, and the assertion below is still the one that has
-    // to be met.
+    // Send batches until the wheel reports one landed while it was turning: the
+    // animation's length and the JS thread's latency vary by device, so a fixed number
+    // of batches could all miss it.
     const LABELS = [
       'Drum A',
       'Drum B',
@@ -2733,8 +2119,6 @@ describe('Picker · wheel variant (G29)', () => {
       await rerender(tree(label));
       if (wheelWitness('wheel-midroll').sawRolling) {
         seen = true;
-        // Two more after the proof, so the case covers the batches a real parent keeps
-        // sending while a roll is going, not only the one that happened to land.
         await settle(25);
         await rerender(tree(`${label} +`));
         break;
@@ -2745,9 +2129,7 @@ describe('Picker · wheel variant (G29)', () => {
       `mid-roll batches: witnessed=${String(seen)} witness=${JSON.stringify(during)} ` +
         `events=${JSON.stringify(eventLog)}`
     );
-    // The case bit: some batch landed while the drum was still turning. Had none
-    // arrived in time, this would be a passing test that had tested nothing, so it fails
-    // instead - the same rule the red proofs of this suite run on.
+    // If no batch landed mid-roll the case tested nothing, so it fails.
     if (!during.sawRolling) {
       throw new Error(
         `none of the ${String(LABELS.length)} batches reached the drum's sync point while ` +
@@ -2756,11 +2138,8 @@ describe('Picker · wheel variant (G29)', () => {
           `proves nothing, so this case refuses rather than passing.`
       );
     }
-    // And not one of them wrote the drum.
     expect(during.seats).toBe(0);
 
-    // The roll survives the noise: it reaches its rest, and reports the row it was asked
-    // for - exactly once, as every other roll here does.
     await pollUntil(
       () => (eventLog.length > 0 ? true : null),
       () =>
@@ -2774,20 +2153,12 @@ describe('Picker · wheel variant (G29)', () => {
     console.log(`mid-roll rest: events=${JSON.stringify(eventLog)}`);
     expect(eventLog).toEqual(['wheel-midroll:19']);
     const after = wheelWitness('wheel-midroll');
-    // Still nothing written, and nothing *refused* either: after the fix the props pass
-    // does not try to move a rolling drum at all, so the guard is a backstop rather than
-    // the routine path.
     expect(after.seats).toBe(0);
     expect(after.refusals).toBe(0);
     unmount();
   });
 
   it('reports nothing for the row already shown, or for a disabled wheel', async () => {
-    // The same two silences the menu and the radio group have, and on this variant
-    // the first of them is load-bearing in a second way: every rest calls the
-    // selection path, including the rest at the end of the snap-back after a
-    // refused pick. If "the index did not move" did not mean "report nothing",
-    // the snap-back itself would be an event and the handshake would loop.
     const OPTIONS = ['One', 'Two', 'Three'];
     const { unmount } = await render(
       <View style={columnStyle}>
@@ -2815,7 +2186,7 @@ describe('Picker · wheel variant (G29)', () => {
     await waitForTestId('wheel-noop');
     await waitForMeasured('wheel-noop', 'the drum');
     await waitForMeasured('wheel-disabled', 'the disabled drum');
-    // The rest the mount itself causes, if the control composes one at all.
+    // Covers the rest the mount itself can cause.
     await settle(400);
     expect(eventLog).toEqual([]);
 
@@ -2823,11 +2194,8 @@ describe('Picker · wheel variant (G29)', () => {
     await rollWheel('wheel-disabled', 2, false);
     console.log(`wheel silence: events=${JSON.stringify(eventLog)}`);
     expect(eventLog).toEqual([]);
-    // A disabled drum is a drum: `disabled` repaints, it does not resize, and the
-    // height is the control's own whatever the state. Measured against the *enabled*
-    // drum of the same render rather than against `WHEEL_DP`, because that number is a
-    // platform's own — Material's drum is 200 dp, SwiftUI's is 216 — and the claim here
-    // is that the state does not move it, which is the same sentence on both machines.
+    // Compared with the enabled wheel, not with `WHEEL_DP`: Material's wheel is 200 dp
+    // tall and SwiftUI's is 216 pt.
     const disabledSize = measured('wheel-disabled');
     const enabledSize = measured('wheel-noop');
     console.log(
@@ -2841,12 +2209,9 @@ describe('Picker · wheel variant (G29)', () => {
   });
 
   it('goes back to a menu and to a wheel, with nothing left behind', async () => {
-    // The recycle case the brief asks for, in both directions. A variant change is
-    // a remount (`Picker.tsx` keys the view on the variant), so what can leak is
-    // the *host*: a `fillWidth` sizing policy left on a host that now draws a menu
-    // would have that menu report the box's width as its title's own — the exact
-    // cache-poisoning bug G6 round 2 caught for `radio`, on the variant that
-    // actually owns the policy.
+    // A variant change remounts the view, possibly onto a recycled host. A fill-width
+    // sizing policy left on that host would make a menu report the box's width as its
+    // own.
     const OPTIONS = ['Small', 'Medium', 'Large'];
     poisonConfigurations([
       sizingKey(OPTIONS, 0, null, 'wheel'),
@@ -2869,7 +2234,6 @@ describe('Picker · wheel variant (G29)', () => {
     await settle(400);
     expect(eventLog).toEqual([]);
 
-    // wheel -> menu
     const staleMenu = asWheel;
     await rerender(
       <Picker
@@ -2887,12 +2251,8 @@ describe('Picker · wheel variant (G29)', () => {
       'the menu after the variant change'
     );
     await settle(300);
-    // Not a drum any more, and not the box either: a `fillWidth` policy left on the
-    // recycled host would have the field measure the 330 dp box as its own title,
-    // which is the poisoning this case exists to catch. The numbers are each
-    // platform's own — Material's field is 56 dp tall on its 280 dp floor, iOS's menu
-    // is the compact intrinsic one at 82 x 34.67 — so the box-relative claim is the
-    // one made everywhere and the absolute one is made where it was measured.
+    // The absolute numbers are Material's text field: 56 dp tall at its 280 dp minimum
+    // width. An iOS menu is smaller and sized to its title.
     expect(asMenu.width).toBeLessThan(BOX.width - 20);
     expect(asMenu.height).toBeLessThan(asWheel.height - 20);
     if (Platform.OS === 'android') {
@@ -2902,8 +2262,6 @@ describe('Picker · wheel variant (G29)', () => {
     expect(eventLog).toEqual([]);
     expect(drawnOf('wheel-switch')).toBe('-1');
 
-    // menu -> wheel: the drum again, at the box's width, with the selection back at
-    // the seed (an uncontrolled remount re-seeds at `defaultSelectedIndex`).
     await rerender(
       <Picker
         options={OPTIONS}
@@ -2925,10 +2283,6 @@ describe('Picker · wheel variant (G29)', () => {
         `menu=${describeSize(asMenu)} wheel2=${describeSize(asWheelAgain)} ` +
         `events=${JSON.stringify(eventLog)}`
     );
-    // The drum that comes back is the drum that left: its height is the widget's own
-    // claim on whichever platform this runs, so the round trip is compared with the
-    // measurement the same run made before the detour, and the width with the box the
-    // `fillWidth` policy was supposed to poison.
     expect(Math.abs(asWheelAgain.height - asWheel.height) < 1).toBe(true);
     expect(Math.abs(asWheelAgain.width - BOX.width) < 1).toBe(true);
     expect(handles.get('wheel-switch')?.variant).toBe('wheel');

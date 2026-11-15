@@ -3,18 +3,12 @@ import { Platform } from 'react-native';
 import type { MissingSampleReason } from './types';
 import { benchProbe } from '../modules/bench-probe/src';
 
-// How long the runner waits for each native signal is decided by the launch plan, which
-// `plan.ts` parses per platform (`scenario:impl:N:presentedTimeout=40000`). Nothing here
-// defaults a timeout: a second copy of that rule is exactly what a stale build would
-// answer with, and `plan.ts` must stay free of this module so parsing a plan - and
-// rejecting a bad flag loudly - does not create the native hybrid object.
+// No timeout is defaulted here: the launch plan (`plan.ts`) resolves one per
+// platform, and `plan.ts` must not import this module, which creates the probe.
 
 /**
- * Single access point to the native probe.
- *
- * Deliberately eager and unforgiving: if the private bench module did not
- * autolink into the release build, every number we would produce is meaningless,
- * so we want a loud crash on first render rather than a table of zeros.
+ * The native probe. Created eagerly, so a build the bench module did not link
+ * into crashes on first render instead of reporting zeros.
  */
 export const probe = benchProbe();
 
@@ -23,7 +17,7 @@ export const probeClock =
     ? ('CLOCK_UPTIME_RAW' as const)
     : ('System.nanoTime' as const);
 
-/** Wait for the platform to present a frame. Pacing only - see `awaitPresented`. */
+/** Wait for the platform to present a frame. For pacing, not for timing. */
 export function nextFrameNs(): Promise<number> {
   return probe.nextFrameNs();
 }
@@ -57,13 +51,8 @@ function clipError(error: unknown): string {
 }
 
 /**
- * Wait for one signal, recording *why* it did not arrive.
- *
- * The caller arms with `armMountObserver()`, so the only ways out are a stamp, a
- * `-1` at the timeout, and a probe that is not there or threw. A `NaN`/non-number
- * answer counts as an error rather than a timeout: it is not a signal that was slow,
- * it is a probe that cannot be trusted, and a run full of those must not read as "the
- * frames were just slow".
+ * Wait for one signal, recording why it did not arrive. A non-number answer is
+ * a probe error, not a timeout: the probe is broken, not the frame slow.
  */
 async function awaitStamp(
   timeoutMs: number,
@@ -104,20 +93,9 @@ async function awaitStamp(
 }
 
 /**
- * Resolve with the native mount timestamp of the transaction armed by the
- * caller's `probe.armMountObserver()`, or `null` when the signal never arrived.
- *
- * Resolved by the native mount hook, so no JS loop runs while the mount is in
- * flight. The previous implementation polled `lastMountNs` with `setTimeout(0)`
- * inside the CPU bracket, which charged the JS thread for the duration of the
- * native mount (T02 review S1).
- *
- * Prefer {@link awaitMountStamp}, which also reports why a null is a null; this
- * stays for callers that only need the number.
- *
- * `timeoutMs` has no default on purpose: the only honest number is the one the launch
- * plan resolved for this platform, and a default here would be a second place to keep
- * that rule.
+ * Resolve with the native mount timestamp of the transaction armed by
+ * `probe.armMountObserver()`, or `null` when the signal never arrived. Resolved
+ * natively, so no JS runs inside the CPU bracket while the mount is in flight.
  */
 export async function awaitMountNs(timeoutMs: number): Promise<number | null> {
   const wait = await awaitStamp(timeoutMs, (ms) => probe.awaitMount(ms));
@@ -126,8 +104,7 @@ export async function awaitMountNs(timeoutMs: number): Promise<number | null> {
 
 /**
  * Resolve with the timestamp of the frame that presented that transaction, or
- * `null`. Captured natively in the same turn as the mount, one frame after the
- * commit - not after a JS round trip (T02 review S2).
+ * `null`. Captured natively, one frame after the commit.
  */
 export async function awaitPresentedNs(
   timeoutMs: number
@@ -147,13 +124,9 @@ export function awaitPresentedStamp(timeoutMs: number) {
 }
 
 /**
- * Ask every runtime in the process to collect.
- *
- * `phys_footprint` (iOS) and PSS (Android) both include the Hermes heap, so a
- * footprint sample taken without collecting measures whatever the GC happened to
- * leave around rather than the cost of the controls. Returns whether a JS
- * collector was actually reachable, which the report prints next to the memory
- * numbers (T02 review S8).
+ * Ask every runtime in the process to collect; returns whether a JS collector
+ * was reachable. The footprint includes the Hermes heap, so a sample taken
+ * without collecting measures what the GC happened to leave around.
  */
 export function collectGarbage(): boolean {
   const jsGc = (globalThis as { gc?: () => void }).gc;

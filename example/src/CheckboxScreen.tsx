@@ -11,11 +11,7 @@ import {
 } from 'react-native';
 import { Checkbox } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance - the helper the other screens use.
- * `Text` gets no dynamic default colour from React Native, and the screen has to
- * read in both light and dark mode for the README screenshots.
- */
+/** `Text` gets no dynamic default colour from React Native. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -30,49 +26,29 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/**
- * The Checkbox's example screen: the real-input block first, then labelled and
- * bare checkboxes, the three-state row (Android), the controlled pair with a
- * refusing parent, and the disabled pair.
- *
- * The README screenshots come from the Storybook story, not this screen. The
- * on-device assertions live in `example/__tests__/Checkbox.harness.tsx`, which
- * renders its own trees.
- */
 export default function CheckboxScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  // The real-input suite's controls (`scripts/real-input`). The echo is React's own
-  // render, so it only moves if a real touch reached the hosted control, the control
-  // told Nitro, and Nitro told JS.
   const [realChecked, setRealChecked] = useState(false);
   const [realEvents, setRealEvents] = useState(0);
   const onRealCheckedChange = useCallback((next: boolean) => {
     setRealChecked(next);
     setRealEvents((count) => count + 1);
   }, []);
-  // The refusing parent: `checked` stays false, so every toggle is refused and has to
-  // snap back. The last *requested* value is the oracle - a checkbox that kept the
-  // refused value would request `false` on the next tap, not `true` again.
   const [refusedLast, setRefusedLast] = useState('-');
   const [refusedEvents, setRefusedEvents] = useState(0);
   const onRefusedChange = useCallback((next: boolean) => {
     setRefusedLast(String(next));
     setRefusedEvents((count) => count + 1);
   }, []);
-  // The `iosStyle='switch'` fixture (G31): DECISIONS D47 keeps the old look behind a
-  // prop, so a real tap has to prove it still toggles in both directions with one event
-  // each - which the harness cannot do on iOS, where its touch reaches no SwiftUI gesture.
   const [realSwitchChecked, setRealSwitchChecked] = useState(false);
   const [realSwitchEvents, setRealSwitchEvents] = useState(0);
   const onRealSwitchChange = useCallback((next: boolean) => {
     setRealSwitchChecked(next);
     setRealSwitchEvents((count) => count + 1);
   }, []);
-  // Shared by the enabled and the disabled checkbox, so a stray tap on the disabled
-  // one is a number on screen rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
   const onDisabledChange = useCallback(() => {
     setDisabledEvents((count) => count + 1);
@@ -100,12 +76,7 @@ export default function CheckboxScreen() {
           switch it shipped with.
         </Text>
 
-        {/*
-          The real-input suite's block (`scripts/real-input`): a controlled checkbox,
-          a refusing one, and a disabled one wired to its own counter - so an OS tap
-          on the disabled one is a number that did not move. It is first on the page
-          because `uiautomator dump` lists no off-screen nodes.
-        */}
+        {/* First on the page: `uiautomator dump` lists no off-screen nodes. */}
         <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
         <View style={styles.column}>
           <Checkbox
@@ -124,17 +95,9 @@ export default function CheckboxScreen() {
             testID="real-input-checkbox-switch"
           />
           {/*
-            The third state, for the one question only a screen reader can answer: what a
-            reader is *told* about a box showing a dash. iOS draws `minus.circle.fill` and
-            sets `.accessibilityValue("mixed")` for exactly that state
-            (`HybridNitroUiCheckbox.swift`), and Android publishes Material's
-            `ToggleableState.Indeterminate` - so the element has to be read from outside
-            the app, which is what `real-input` does. It is uncontrolled and has no echo
-            because the announcement, not the event, is the thing under test - and it is
-            pressed by exactly one step, step 8 of `testRealInputCheckbox`, which taps the
-            dash away and asks the same element what it says once the box shows a
-            checkmark. Nothing else may press it: with no `checked` prop its value walks
-            with every tap, and step 7's claim is about the dash as mounted.
+            Uncontrolled, so its value walks with every tap: only the
+            real-input step that reads the mixed state's announcement may
+            press it.
           */}
           <Checkbox
             label="Real input, mixed"
@@ -283,7 +246,6 @@ export default function CheckboxScreen() {
   );
 }
 
-/** One on-screen value the real-input suite reads. */
 function Echo({
   label,
   testID,

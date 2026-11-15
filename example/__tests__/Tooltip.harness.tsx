@@ -1,25 +1,3 @@
-/**
- * On-device tests for Tooltip (task G18, Q7 Appendix C7).
- *
- * A tooltip is a window, and the harness cannot tap into another window
- * (`Switch.harness.tsx`, H9/H10). So these tests read two honest channels, as
- * `Dialog.harness.tsx` does:
- *
- *  - `hybridRef.nuiTestStateReport()` - what is on screen, read from what each platform
- *    actually built (the popover controller and its presentation on iOS, the composed
- *    tooltip content on Android), plus `live`, a process-wide count of tooltip windows
- *    that survives a drop (read through a fresh mount, because a dropped mount has
- *    nothing left to report);
- *  - the events that reached JS, in order (`eventLog`).
- *
- * and drive the tooltip through test seams that run the real handlers
- * (`nuiTestPerformAction`, `nuiTestDismiss`). Real taps are `real-input:*`'s job.
- *
- * The first block is the design's three early checks (Q7 C9): a tap reaches the
- * anchor through the overlay, the popup sits where the platform puts it (on Android,
- * Material's spacing) and follows its anchor on a move, and on iOS a popover presented
- * from a window of its own still points at the anchor.
- */
 import { useState } from 'react';
 import {
   Modal,
@@ -47,7 +25,10 @@ import {
   type TooltipPlacement,
 } from 'react-native-nitro-ui';
 
-/** What `hybridRef` hands back - declared, not imported (D14). */
+/**
+ * What `hybridRef` hands back. A tooltip is a window of its own and the harness cannot
+ * tap into another window, so the tests drive it through these seams.
+ */
 type TooltipHandle = {
   readonly presented: boolean;
   readonly mostRecentEventCount: number;
@@ -77,8 +58,7 @@ const ACTIONS: TooltipAction[] = [{ id: 'ok', title: 'Got it' }];
 
 /**
  * A tooltip whose `isPresented` lives in a parent, as an app's would. `refuse` makes
- * the parent ignore every close (the D33 refusal case); otherwise the parent follows
- * `onIsPresentedChange`. The anchor is a box of a known size.
+ * the parent ignore every close; otherwise the parent follows `onIsPresentedChange`.
  */
 function Stage({
   testId,
@@ -267,7 +247,7 @@ function popupPlacement(report: Report) {
   return { side: above ? 'above' : 'below', gap, centred, popup, anchor };
 }
 
-/** Material's `SpacingBetweenTooltipAndAnchor` (material3 1.5, `TooltipKt`; the same 4 dp as 1.4.0). */
+/** Material's `SpacingBetweenTooltipAndAnchor` (material3 `TooltipKt`). */
 const M3_SPACING_DP = 4;
 /** The most an iOS popover's arrow and its gap put between the content and the anchor. */
 const IOS_ARROW_MAX_PT = 30;
@@ -349,8 +329,7 @@ describe('Tooltip · early checks (Q7 C9)', () => {
         expect(where!.gap).toBeGreaterThanOrEqual(0);
         expect(where!.gap).toBeLessThanOrEqual(IOS_ARROW_MAX_PT);
       } else {
-        // Within 1 dp of Material's spacing, from the box Material was given - which is
-        // this view's own box in the window, so the popup points at the anchor.
+        // The box Material was given is this view's own, so the popup points at it.
         expect(Math.abs(where!.gap - M3_SPACING_DP)).toBeLessThanOrEqual(1);
         expect(sameBox(settled.hostRect, settled.anchorRect)).toBe(true);
       }
@@ -359,11 +338,9 @@ describe('Tooltip · early checks (Q7 C9)', () => {
   }
 
   /**
-   * Where an open tooltip is after its anchor moved, and that it still points at the
-   * anchor: the design's invariant (Q7 C9 check 2) - it follows or it closes, and never
-   * points at nothing. Both platforms' popups follow (measured): Android's Material
-   * popup is placed again against the box it now has (`placements` goes up, and the box
-   * Material was given is this view's), and iOS's popover follows its source view.
+   * An open tooltip follows its anchor on both platforms: Android's Material popup is
+   * placed again against the view's new box (`placements` goes up), and iOS's popover
+   * follows its source view.
    */
   async function expectStillPointing(testId: string, what: string) {
     // The anchor moved 100 dp: a popup left behind would sit that far off.
@@ -382,7 +359,6 @@ describe('Tooltip · early checks (Q7 C9)', () => {
         if (where.gap < 0 || where.gap > IOS_ARROW_MAX_PT) {
           problems.push(`gap ${String(where.gap)} pt`);
         }
-        // The source was moved after the anchor, and is the anchor's box again.
         if (!(Number(after.sourceMoves) > 0))
           problems.push('source never moved');
         if (after.sourceIsAnchorBox !== '1')
@@ -426,7 +402,6 @@ describe('Tooltip · early checks (Q7 C9)', () => {
     setters.get('mover-grow')?.(true);
     await expectStillPointing('moved', 'a layout move');
     const after = popupPlacement(reportOf('moved'));
-    // And it did move: the anchor is 100 dp lower, and so is the popup.
     expect(after!.anchor.y).toBeGreaterThan(before!.anchor.y);
     expect(after!.popup.y).toBeGreaterThan(before!.popup.y);
   });
@@ -453,8 +428,8 @@ describe('Tooltip · early checks (Q7 C9)', () => {
     await waitForReport('scrolled', isUpCounted(1), 'up');
     await sleep(500);
     const before = popupPlacement(reportOf('scrolled'));
-    // A programmatic scroll: a person's starts with a touch outside the tooltip, which
-    // closes it (real input's to prove), so this is the case where nothing else would.
+    // A programmatic scroll: a person's scroll starts with a touch outside the tooltip,
+    // which closes it first.
     scroller.current?.scrollTo({ y: 100, animated: false });
     await expectStillPointing('scrolled', 'a scroll');
     const after = popupPlacement(reportOf('scrolled'));
@@ -525,8 +500,8 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
     expect(up.actions).toBe('1');
     setters.get('quiet')?.(false);
     await waitForLive('quiet', 0, 'closed by JS');
-    // The barrier: the same channel does report a user close, so the empty log above
-    // is the JS close reporting nothing, not a channel that reports nothing at all.
+    // The same channel does report a user close, so an empty log up to here is the JS
+    // close reporting nothing, not a channel that reports nothing at all.
     setters.get('twin')?.(true);
     await waitForReport('twin', isUpCounted(1), 'the twin up');
     handles.get('twin')?.nuiTestDismiss();
@@ -719,7 +694,6 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
     console.log(
       `tooltip height before/after: ${beforeHeight} / ${afterHeight}`
     );
-    // Resized in place: taller for the wrapped text, and still the one presentation.
     expect(afterHeight).toBeGreaterThan(beforeHeight);
     expect(after.presentCount).toBe(before.presentCount);
     expect(reportOf('live').live).toBe('1');
@@ -753,17 +727,10 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
       (r) => isUpCounted(1)(r) && r.title === 'Old title',
       'the old tooltip up'
     );
-    // Each round drops the mount, waits until the dropped instance is in the pool, and
-    // only then mounts the other key - so the new mount can be handed the very instance
-    // that was just up. Swapping keys in one commit does not do that on Android: the new
-    // view is created before the old one is recycled, so in a run of this case alone the
-    // closed mount got a fresh instance every time (recycles=0, measured in the G18 merge
-    // round) and the check below never met a recycled open tooltip.
-    //
-    // The recycle oracle: the pool-entry count of the instance each round's mount got,
-    // which grows by one a round while the pool keeps handing back the instance just
-    // dropped. A round whose count did not grow got some other instance, and then this
-    // case did not test what it says.
+    // Each round drops the mount and waits for the instance to reach the pool before
+    // mounting the other key: on a key swap in one commit, Android creates the new view
+    // before the old one is recycled. A recycle count that does not grow means the round
+    // was handed some other instance.
     const reuses: number[] = [Number(reportOf('recycled').recycles ?? NaN)];
     for (const round of [1, 2, 3]) {
       const before = Number(reportOf('recycled').recycles ?? NaN);
@@ -780,14 +747,12 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
       await rerender(<Swap round={round} />);
       await waitForHandle('recycled');
       if (round % 2 === 1) {
-        // The new mount asked for nothing: whatever instance it got shows nothing.
         await waitForLive('recycled', 0, `round ${String(round)} closed`);
         const report = reportOf('recycled');
         expect(report.presented).toBe('0');
         expect(report.kind).toBe('none');
         expect((report.raw ?? '').includes('Old message')).toBe(false);
-        // Never presented in this mount: a count carried over from the open tooltip
-        // the instance last served is a recycle that did not reset.
+        // A count carried over from the instance's last mount is a missed reset.
         expect(report.presentCount).toBe('0');
       } else {
         await waitForReport(
@@ -844,10 +809,8 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
 
   it('closes and reports when a full-screen Modal takes its view out of the window', async () => {
     // UIKit takes the presenting screen's views out of the window once a full-screen
-    // presentation lands, so a tooltip open on that screen loses its anchor's window -
-    // the window-loss rule then closes it and reports the close (as a dialog's does).
-    // Android's RN Modal is a window of its own and the screen under it stays attached,
-    // so the tooltip stays up there. Pinned both ways: an app can see the difference.
+    // presentation lands, so the tooltip loses its anchor's window and closes. Android's
+    // RN Modal is a window of its own and the screen under it stays attached.
     function Scene() {
       const [modal, setModal] = useState(false);
       setters.set('modal', setModal);
@@ -868,9 +831,6 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
     if (IOS) {
       await waitForLive('under-full-screen', 0, 'closed with its window gone');
       await sleep(300);
-      // The close is the proof the Modal came up: only a full-screen presentation takes
-      // the screen's views out of the window. In the app's chain, the popover made UIKit
-      // refuse the Modal instead, and the tooltip stayed up (G18 round 1, measured).
       expect(eventLog.join(',')).toBe('under-full-screen:presented:false');
     } else {
       await sleep(1000);

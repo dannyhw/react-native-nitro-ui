@@ -39,44 +39,32 @@ import {
 } from '../scripts/harness-suite-timing.mjs';
 // CommonJS, because `example/metro.config.js` requires the same module to serve
 // the state this publishes.
-import harnessTimingGate from '../scripts/harness-timing-gate.js';
+import harnessRunState from '../scripts/harness-run-state.js';
 
-const { publishTimingGate } = harnessTimingGate;
+const { publishRunState } = harnessRunState;
 
 // The harness transforms `.harness.tsx` with Jest on this machine, and that
 // transform breaks on Node 25/26 with an ESM error that reads like a bug in the
-// test file. Say so here, before any device work, rather than after a build.
+// test file.
 assertSupportedNode({ command: 'bun run harness:ios|android' });
 
-// Second gate at the same point, for the other way a device run goes wrong:
-// `HARNESS_APP_PATH` pointing at an app that is not this checkout's (a stale
-// build, or an APK whose dex lost a generated hybrid). Refusing here happens
-// before a simulator or emulator is touched, so a refusal cannot hold a device
-// another task needs. `scripts/build-app.mjs` writes the stamp this reads.
-//
-// Which platform this is asks argv first and then the environment (F4). argv is
-// what a local `bun run harness:ios` types; the environment is what the
-// `react-native-harness` GitHub Action sets, because its `load-config` step runs
-// `harness ci load-config` with no runner on the command line. Before F4 an
-// Android CI job loaded this file as iOS, went looking for the `.app` it had
-// never built, and refused inside `Harness (Android)`.
+// An app that was not built from this checkout is refused here, before a
+// simulator or emulator is touched. The platform comes from argv first and then
+// the environment: the `react-native-harness` GitHub Action loads this config
+// with no runner on the command line.
 const exampleDir = path.dirname(new URL(import.meta.url).pathname);
 const { runner, artifact, ciStep } = selectHarnessApp({
   argv: process.argv,
   env: process.env,
   existsSync: (file) => fs.existsSync(file),
   cwd: process.cwd(),
-  // The repo root, one above this file: `bun run harness:*` always starts the CLI
-  // in `example/`, so a path typed from the repository root (`example/ios/build/…
-  // NitroUiExample.app`, as the reports and CI jobs write it) has to be understood
-  // too, or the same string means two different things depending on the shell.
+  // The repo root: the CLI always starts in `example/`, and an app path typed
+  // relative to the repository root has to be understood too.
   parentDir: path.resolve(exampleDir, '..'),
   artifactFor: (platform) => artifactPath({ platform }),
 });
 
 if (ciStep) {
-  // Say it rather than being silent: a reader of a CI log should be able to see
-  // that this step checked nothing, and not have to work out whether it did.
   console.log(
     'app.stamp: not checked - this step reads the config to plan a cache, ' +
       'it is not a device run.'
@@ -98,9 +86,6 @@ if (ciStep) {
       )
     );
   } catch (error) {
-    // Red because the alternative - a green run against someone else's binary -
-    // reads like evidence. Printed before rethrowing so the fix is the last
-    // thing on the screen of whoever ran it.
     console.error(
       colorize(
         error instanceof StaleAppError
@@ -112,10 +97,8 @@ if (ciStep) {
     throw error;
   }
 } else if (process.env.NITRO_UI_ALLOW_UNSTAMPED === '1') {
-  // The escape hatch, for the runs that legitimately have nothing here: an app
-  // built by Xcode or Android Studio at a path this file does not know, and a CI
-  // action that builds the app itself. Loud, because the day a suite runs with
-  // this set is the day its green means something else.
+  // For the runs that legitimately have no stamped app: one built by Xcode or
+  // Android Studio, and a CI action that builds the app itself.
   console.log(
     colorize(
       'app.stamp: NITRO_UI_ALLOW_UNSTAMPED=1 - no artifact was checked, so this ' +
@@ -124,16 +107,8 @@ if (ciStep) {
     )
   );
 } else {
-  // Review S10. The harness never builds, so with no artifact there is no binary
-  // at all - and on Android the run then goes on against whatever the emulator
-  // already has installed, which is a previous task's app or none. Printing a
-  // note and continuing is how a suite ends up reporting results for a binary
-  // nobody has, which is the exact failure this file exists to stop.
-  //
-  // It does not offer `HARNESS_APP_PATH` as the way out (X1 re-review F3): an
-  // app built by Xcode or Android Studio has no stamp either, so pointing at one
-  // is refused three lines further down. The hatch that actually works is the
-  // one named here, with what it costs.
+  // The harness never builds, so with no artifact an Android run would go on
+  // against whatever the emulator already has installed.
   throw new Error(
     `bun run harness:${runner}: no app to test.\n` +
       `       build it: node scripts/build-app.mjs --platform ${runner}\n` +
@@ -143,14 +118,9 @@ if (ciStep) {
       '       at all, against whatever the device already has installed.'
   );
 }
-// react-native-harness does not build the app: build a Debug iOS .app or an
-// Android APK first and point HARNESS_APP_PATH at it (see CONTRIBUTING.md).
-//
-// Everything device-related is environment-driven, because several tasks run
-// this repo concurrently on one machine, each with its own simulator/AVD and
-// its own Metro port. Defaults are neutral (no task name in them); a brief
-// selects its devices with IOS_SIM_UDID (or IOS_SIM), ANDROID_AVD and
-// METRO_PORT.
+// Everything device-related is environment-driven, because several checkouts
+// can run concurrently on one machine, each with its own simulator, AVD and
+// Metro port: IOS_SIM_UDID (or IOS_SIM), ANDROID_AVD and METRO_PORT.
 const CI = process.env.CI === 'true';
 
 const DEFAULT_IOS_NAME = 'iPhone 17';
@@ -159,16 +129,13 @@ const DEFAULT_AVD = 'nitroui';
 
 /**
  * `appleSimulator()` selects by name + system version, so a UDID has to be
- * translated into those two. Fails loudly when the UDID is unknown or when two
- * booted/crashed devices share a name and runtime - then the harness could not
- * tell them apart either, and picking one at random in a shared machine is
- * worse than stopping.
+ * translated into those two. Fails when the UDID is unknown or when two
+ * simulators share a name and runtime, because the harness could not tell them
+ * apart either.
  * @returns {ReturnType<typeof appleSimulator>}
  */
 function iosDevice() {
-  // From the lease when one is named (`leaseDevice` refused the run earlier if the
-  // lease exported no UDID); the name/version selection below is for the shells that
-  // run a suite outside a lease, which `gate.mjs` no longer accepts as a gate.
+  // A leased run always has a UDID; name and version are for a run outside a lease.
   const udid = leaseDevice.udid;
   if (udid == null || udid === '') {
     return appleSimulator(
@@ -215,11 +182,8 @@ function iosDevice() {
 }
 
 /**
- * The AVD name to use (the harness creates it if missing).
- *
- * `DEFAULT_AVD` is only reachable with no lease named: `requireLeaseDevice` insists
- * on `ANDROID_AVD` from a leased run, so a gate never boots or attaches an AVD its
- * lease did not hand out (X28).
+ * The AVD name to use (the harness creates it if missing). `DEFAULT_AVD` is only
+ * reachable with no lease named: a leased run must name its `ANDROID_AVD`.
  *
  * @returns {string}
  */
@@ -228,36 +192,15 @@ function avd() {
 }
 
 /**
- * The app's own clock and locale, pinned for one run.
+ * The app's locale and time zone, for a run that sets neither.
  *
- * Defaults for {@link appLaunchOptionsFromEnv} when a run says nothing. Kept in
- * this file because they are the run's configuration, not a library's; the
- * rendering and validation of the values is unit-tested in
- * `scripts/app-launch-env.mjs`, which this file cannot import as a test without
- * running the Node check, the `app.stamp` gate and a device lookup.
- *
- * `en_US` because it is both GitHub's runner default and the most common user
- * locale, so it is the configuration worth gating: the DatePicker's field width
- * is its *locale's* formatter's widest date, and the declared fallback now states
- * that number (`107 x 36.33`, `HybridNitroUiDatePicker.swift`). Pinning it means
- * the assertion measures what the majority of users see rather than what one
- * maintainer's simulator happened to be set to — round 1 pinned `en_PT`, which was
- * the measuring configuration of the old number and backwards as a default.
- *
- * `Europe/Lisbon` because the DST round trip can only be exercised in a zone that
- * shifts its clock, and GitHub's images boot at `UTC`, where it silently is not
- * (run 41230848294: `expected +0 not to be +0`). Lisbon shifts in both directions
- * the suite covers, and it is the zone the case was written against.
- *
- * A locale this run pins and a table row disagreeing is a FAILURE, not a skip:
- * the pin exists to make the comparison meaningful, and a run that reported a skip
- * instead would read green while comparing less than it claims. Only
- * `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` turns it into the printed skip, and it is for
- * someone deliberately probing another locale — see `localePremiseMiss`.
+ * `en_US` because the DatePicker's field width is its locale's widest date, and
+ * the sizes the suite expects were measured in that locale. `Europe/Lisbon`
+ * because the DST round trip can only be exercised in a zone that shifts its
+ * clock, and CI images boot at `UTC`.
  *
  * Override per shell with `NITRO_UI_TEST_LOCALE`/`NITRO_UI_TEST_TZ`; an empty
- * value means "ask the device", which is what a developer's own machine already
- * does when they set one deliberately.
+ * value means "ask the device".
  */
 const DEFAULT_APP_TEST_LOCALE = 'en_US';
 const DEFAULT_APP_TEST_TZ = 'Europe/Lisbon';
@@ -283,20 +226,10 @@ function appLaunchEnvironment() {
 }
 
 /**
- * The device this run may use, when its shell names a lease (X28).
- *
- * A lease is the only thing between six concurrent tasks and one person's emulator,
- * and it works by exporting variables — which a shell can also do by hand. So a run
- * that names a lease (`NITRO_UI_LEASE_ID`) has to name the *whole* device that lease
- * exported: the simulator UDID, the AVD, the serial and the private adb server. A
- * half-sourced env is refused here, at config time, before the app is installed and
- * long before anything could reach a device this task does not own.
- *
- * With no lease named this returns what the environment says and asks nothing, which
- * is the developer's `bun run harness:ios` and the GitHub action that boots its own
- * emulator. The gate is what turns "a device run" into "evidence", and
- * `node scripts/gate.mjs` refuses that shape outright (`gate-core.mjs:
- * deviceGateLeaseRefusal`), so the defaults below never reach a ledger line.
+ * The device this run may use. A run that names a lease (`NITRO_UI_LEASE_ID`)
+ * has to name the whole device that lease exported; a half-sourced environment
+ * is refused here, before the app is installed. With no lease named this
+ * returns what the environment says.
  */
 const leaseDevice = requireLeaseDevice({
   env: process.env,
@@ -315,21 +248,9 @@ if (leaseDevice.leased) {
 
 /**
  * Which console port the emulator may boot on, checked before the first device
- * is touched (review S5).
- *
- * A lease names a serial, and that promise only holds while the emulator really
- * boots on the port behind it. `react-native-harness` starts the emulator
- * itself and used to pass no `-port`, so the console port was whatever happened
- * to be free: a leased AVD could come up as the one serial this repo never
- * touches, and the `ANDROID_SERIAL` the lease exported would name a device that
- * does not exist. The port now travels through `EMULATOR_PORT`, which the
- * harness reads through the patch in `patches/` (it adds `-port`, and the
- * emulator refuses to start rather than quietly picking another port).
- *
- * What is checked here is what the patch is about to act on: a port that the
- * emulator cannot take, a reserved serial in either variable, and a serial that
- * disagrees with its own port. Refusing at config time means no device work has
- * happened yet, so a mistake cannot leave a booted emulator behind.
+ * is touched. A lease names a serial, which only holds while the emulator boots
+ * on the port behind it, so `EMULATOR_PORT` reaches the emulator as `-port`
+ * through the `react-native-harness` patch in `patches/`.
  */
 const emulatorBoot = checkEmulatorEnv(process.env);
 if (emulatorBoot.port != null) {
@@ -340,30 +261,19 @@ if (emulatorBoot.port != null) {
 }
 
 /**
- * The machine state the wall-clock gates need (D21), published for the app to
- * read. `example/` is Metro's project root, and Metro serves a file under it
- * from disk per request, so an assertion reads a current load average instead
- * of one frozen at bundle time. Structural counters stay gated everywhere; this
- * only decides the duration gates, which run just under `HARNESS_TIMING=1`.
+ * What this run decided, published for the app to read. Metro serves a file
+ * under `example/` from disk per request, so an assertion reads the state of
+ * the run that is judging it rather than a value frozen at bundle time.
  */
 const metroPort = Number(process.env.METRO_PORT ?? 8291);
-const stopTimingGate = publishTimingGate({
+const stopRunStatePublisher = publishRunState({
   exampleDir,
   port: metroPort,
   log: (message) => console.log(message),
 });
-process.once('exit', stopTimingGate);
+process.once('exit', stopRunStatePublisher);
 
-/**
- * Per-suite timings (X11), when `HARNESS_SUITE_TIMING` names a file.
- *
- * The ledger could say `harness:android` cost 455 s but not *where*, which is why "Android is
- * three times iOS" stayed a mystery for a month. The harness's `test-file:finished` hook reports
- * each file's duration alongside the durations its own tests report, so a slow file can be
- * attributed to slow tests or to the app restart around it - the two need different fixes and only
- * the pair of numbers tells them apart. `scripts/gate.mjs` sets the variable, reads the file after
- * the run, and puts the result in the ledger line.
- */
+/** Per-suite timings, when `HARNESS_SUITE_TIMING` names a file to write them to. */
 const suiteTimingPlugin = suiteTimingPluginFromEnv(process.env);
 if (suiteTimingPlugin != null) {
   console.log(
@@ -374,19 +284,15 @@ if (suiteTimingPlugin != null) {
 export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'NitroUiExample',
-  // Metro runs on this port. We use 8291 rather than the 8081 default so that
-  // several checkouts (and a stock `react-native start`) can share one machine.
-  // Simulators/emulators learn the port from the harness at launch, so it is not
-  // baked into the build. Every concurrent task must set its own METRO_PORT.
+  // 8291 rather than the 8081 default so that several checkouts (and a stock
+  // `react-native start`) can share one machine. Devices learn the port from the
+  // harness at launch, so it is not baked into the build.
   metroPort,
   runners: [
     applePlatform({
       name: 'ios',
       bundleId: 'nitroui.example',
       device: iosDevice(),
-      // The locale and zone this run pins (see `appLaunchEnvironment`). Both have
-      // defaults here, so every harness launch carries them — a local run is no
-      // longer at the mercy of the machine's own region settings.
       appLaunchOptions: appLaunchEnvironment(),
     }),
     androidPlatform({
@@ -405,10 +311,9 @@ export default {
   defaultRunner: runner,
   resetEnvironmentBetweenTestFiles: 'runtime',
   // react-native-harness 1.6 has no per-test timeout: this is the budget for
-  // the slowest test in the suite, not the average one. The sizing suite mounts
-  // 200 hosted controls in a single test, which does not fit in 10s, so the
-  // floor is 30s everywhere. Several tasks share one machine's simulators, so
-  // HARNESS_TEST_TIMEOUT raises it further for a run on a loaded host.
+  // the slowest test in the suite. The sizing suite mounts 200 hosted controls
+  // in a single test, which does not fit in 10s. HARNESS_TEST_TIMEOUT raises it
+  // further for a run on a loaded host.
   testTimeout: Number(process.env.HARNESS_TEST_TIMEOUT ?? 30000),
   platformReadyTimeout: CI ? 900000 : 300000,
   bridgeTimeout: CI ? 180000 : 120000,

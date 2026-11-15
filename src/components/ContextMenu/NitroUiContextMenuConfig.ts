@@ -3,11 +3,8 @@ import type { ViewConfig } from 'react-native-nitro-modules';
 import type { NativeNitroUiContextMenuProps } from './NativeNitroUiContextMenu';
 
 /**
- * The Fabric view config of the `NitroUiContextMenu` Hybrid View.
- *
- * A copy of `nitrogen/generated/shared/json/NitroUiContextMenuConfig.json`, kept
- * inline for the reason `NitroUiMenuConfig.ts` gives. `src/__tests__/
- * viewConfigs.test.ts` fails when the copy and nitrogen's output disagree.
+ * Fabric view config of `NitroUiContextMenu`: a copy of nitrogen's generated
+ * JSON, which `src/` cannot import. A unit test fails when the two differ.
  */
 export const NitroUiContextMenuConfig: ViewConfig<NativeNitroUiContextMenuProps> =
   {

@@ -1,24 +1,7 @@
 name: Release
 
-# Releases are cut by Changesets (DECISIONS D27) and *staged* on npm (D28).
-#
-# Nothing in this workflow can put a version on the registry. The package's npm
-# Trusted Publisher allows staged publishing only, so the last step is a person:
-#
-#   a changeset -> the Version Packages pull request -> merge -> this workflow
-#   stages the new tarball -> the owner approves it on npmjs.com -> `Release
-#   tag` creates `vX.Y.Z` and the GitHub release once the version is live.
-#
-# There is no npm token anywhere. `stage` trades the job's OIDC token for
-# staging rights, and that is the only thing it can do with them.
-#
-# Why a tarball travels between jobs instead of one job doing everything:
-# packing runs this package's `prepare` (builder-bob -> nitrogen), which pulls in
-# the repo's whole dependency tree. That must not happen while a process holds
-# credentials that can reach npm. So the checks and the packing happen in `pack`
-# behind read-only rights, and `stage` — which holds the OIDC token — checks out
-# nothing, installs nothing and runs no repository script: it verifies a
-# checksum, looks at the registry and stages.
+# Versions the package with Changesets and stages the tarball on npm. Staging is
+# all this workflow can do: a person approves the staged version on npmjs.com.
 
 on:
   push:
@@ -27,12 +10,9 @@ on:
   # Re-running by hand is how a dropped or failed run is recovered.
   workflow_dispatch:
 
-# Never cancel a run that is already going: it may be mid-way through staging.
-# Note what `cancel-in-progress: false` does *not* do: GitHub keeps one pending
-# run per group, so a burst of merges can still drop a queued run in favour of
-# the newest one. That is safe here because no job keys on "my run published" —
-# `package.json` and the registry are the state, so the next run stages whatever
-# a dropped run did not, and re-running a dropped run works from its commit.
+# Never cancel a run in progress: it may be half-way through staging. A queued
+# run can still be dropped for a newer one, which is safe because every run
+# stages whatever the registry does not have yet.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -60,27 +40,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Full history for `check`, as in ci.yml.
+          # `check` needs the full history.
           fetch-depth: 0
 
       - name: Setup
         uses: ./.github/actions/setup
         with:
-          # The tarball this job uploads is what `stage` puts on the registry, so
-          # it has to come from an install of this tree and nothing else: npm's
-          # own guidance for a release build is never to reuse a package cache.
-          # `prepare` runs builder-bob and nitrogen through this `node_modules`,
-          # and a cache key is two lockfiles' hashes - not proof that what is in
-          # the directory matches the sources being packed (R6 re-review N-1;
-          # `stage` has refused a cache since, and now `pack` does too).
+          # A release build never reuses a package cache: the tarball must come
+          # from an install of this tree, and a cache key does not prove that.
           package-manager-cache: false
 
       - name: Publish the Node version
         id: node
         run: printf 'version=%s\n' "$(sed 's/^v//' .nvmrc)" >> "$GITHUB_OUTPUT"
 
-      # Stage exactly what CI validates: typecheck, lint, tests, nitrogen drift,
-      # the bob build, publint and the tarball manifest.
       - name: Run all checks
         run: bun run check
 
@@ -97,8 +70,8 @@ jobs:
             exit 1
           fi
 
-      # `npm pack` runs `prepare`, so the artifact is byte-for-byte what would be
-      # published, and the manifest gate above already covers its contents.
+      # `npm pack` runs `prepare`, so the artifact is byte-for-byte what gets
+      # published.
       - name: Pack
         id: pack
         env:
@@ -140,10 +113,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The only job with OIDC rights, and staging a tarball is all it can spend
-    # them on. Deliberately: no checkout, no bun, no install, no repository
-    # script, so nothing from the tree runs while a publish-capable token is in
-    # the environment.
+    # The only job with OIDC rights. It has no checkout, no install and no
+    # repository script, so nothing from the tree runs while a token that can
+    # reach npm is in the environment.
     permissions:
       id-token: write
     steps:
@@ -155,7 +127,7 @@ jobs:
           # supported Node.
           node-version: ${{ needs.pack.outputs.node }}
           registry-url: 'https://registry.npmjs.org'
-          # npm's own docs: never use a package cache in a release build.
+          # A release build never uses a package cache.
           package-manager-cache: false
 
       # Pinned so a new npm major cannot quietly change what we ask the registry
@@ -193,16 +165,15 @@ jobs:
             printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
           }
 
-          # State, not memory: a version that is live needs nothing from us.
+          # A version that is already live needs nothing.
           if npm view "$PACKAGE@$VERSION" version >/dev/null 2>&1; then
             say "**$PACKAGE@$VERSION** is already on the registry — nothing to stage."
             exit 0
           fi
 
-          # Best effort only. Shortlived trust tokens may not run `npm stage
-          # list`, so this reads anonymously and comes back empty; what makes a
-          # re-run safe is npm's own "cannot publish over the previously
-          # published versions" rejection, handled below.
+          # Best effort: a short-lived trust token may not be allowed to run
+          # `npm stage list`, and this then comes back empty. What makes a
+          # re-run safe is npm's own rejection, handled below.
           STAGED="$(npm stage list --json "$PACKAGE" 2>/dev/null || true)"
           if grep -qF "\"version\": \"$VERSION\"" <<<"$STAGED"; then
             say "**$PACKAGE@$VERSION** is already staged, waiting to be approved."
@@ -222,11 +193,9 @@ jobs:
             exit 0
           fi
 
-          # Re-running this run, or a run that raced with one already approved:
-          # npm already knows this version, which is the outcome we wanted.
-          # A version that is staged but not yet approved is refused with
-          # `E409 ... Cannot stage previously published version "x.y.z"` (seen
-          # 2026-10-29, 0.3.2); one already live gets the older wording.
+          # npm already knows this version, which is the wanted outcome. One
+          # that is staged but not yet approved is refused with `E409 ... Cannot
+          # stage previously published version`; a live one gets the other wording.
           if grep -qiE 'cannot publish over the previously published versions|cannot stage previously published version' <<<"$OUTPUT"; then
             say "**$PACKAGE@$VERSION** is already known to the registry — staged or published, nothing more to do."
             exit 0
@@ -239,17 +208,9 @@ jobs:
   version:
     name: Version Packages pull request
     needs: pack
-    # macOS, not ubuntu, because of one line in `release:version`: after
-    # `changeset version` bumps package.json, `sync-example-lock.mjs --fix` runs
-    # `pod install` so the Version Packages commit carries a lock that matches the
-    # version it just wrote. That has to be real CocoaPods: the lock's
-    # `SPEC CHECKSUMS` entry for a pod pulled `from:` a path is the sha1 of
-    # CocoaPods' own stored evaluation of the podspec, which nothing else in this
-    # repo can reproduce. The alternative — checking the lock in on Linux — is what
-    # let `NitroUi (0.2.0)` survive the whole 0.3.x line, and every iOS build since
-    # dirtied the tree and invalidated its own `app.stamp`. `bun run check` guards
-    # the version on every platform, so a refresh that fails here cannot go
-    # unnoticed; it just cannot be *fixed* on Linux.
+    # macOS because `release:version` runs `pod install` to refresh the example's
+    # Podfile.lock, and the lock's `SPEC CHECKSUMS` entry for a path pod can only
+    # be computed by CocoaPods itself.
     runs-on: macos-26
     timeout-minutes: 30
     # Enough to commit a version bump and open a pull request. No OIDC rights:
@@ -269,42 +230,23 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      # The pinned ruby (the same one the iOS harness job uses) and then the exact
-      # CocoaPods the lock's own trailer records. Two pins rather than `bundle install`
-      # of `example/Gemfile`, because that Gemfile only asks for `>= 1.13`: whichever
-      # version resolves would write checksums nobody compared, and the version the
-      # *lock* names is the one that keeps the file byte-comparable with the ones the
-      # maintainer machines write. `setup-ruby` puts its gem dir on PATH and owns it,
-      # so this needs no sudo. `pod-install.mjs` then finds it as `pod _<pin>_`.
+      # CocoaPods is installed at the exact version the lock's trailer records,
+      # not through `example/Gemfile` (which only asks for `>= 1.13`), so the lock
+      # this job writes is byte-comparable with one written on a developer machine.
       - name: Setup Ruby
         uses: ruby/setup-ruby@6797dcbb9a1889fd411d07e8aba7eded53fb8b48 # v1.264.0
         with:
           ruby-version: '3.3'
 
-      # `json` is a default gem, so `setup-ruby` hands it to CocoaPods at whatever
-      # version that Ruby shipped - 2.7.2 for Ruby 3.3 - and that version decides
-      # how `JSON.pretty_generate` renders an empty collection. CocoaPods hashes
-      # exactly those bytes for every pod pulled `from:` a path, so this one
-      # transitive dependency is the difference between a release and 87 changed
-      # `SPEC CHECKSUMS` lines: run 40789293108, where the runner serialised
-      # `"React-cxxstableapi": [\n\n]` and the maintainer Macs write
-      # `"React-cxxstableapi": []`. Install it *before* cocoapods so the gem set
-      # resolves with it in place. See scripts/pod-install-lib.mjs.
-      #
-      # Deliberately a json pin rather than a Ruby pin: `cocoapods-core` only
-      # requires `ruby >= 2.6`, so json is the variable and pinning it lets
-      # `ruby-version` above keep tracking the iOS harness job.
+      # CocoaPods hashes `JSON.pretty_generate` output for every path pod, and the
+      # json 2.7.2 that Ruby 3.3 ships renders an empty array differently from
+      # newer versions. Installed before CocoaPods so the gem set resolves with it.
       - name: Pin the json gem CocoaPods serialises podspecs with
         run: |
           set -euo pipefail
           gem install json -v 2.18.0 --no-document
-          # Assert what *loads*, not what is installed. `gem list json` shows
-          # every version on the gem path side by side - `json (2.18.0, default:
-          # 2.7.2)` - and says nothing about which one `require "json"` picks,
-          # which is the only fact this pin is about. `ruby -rjson` takes the
-          # same default-gem activation path CocoaPods takes, so either this
-          # line says the pin took effect, or the job says so here rather than
-          # twenty minutes later at the preflight probe.
+          # Assert what `require "json"` loads, not what is installed: `gem list`
+          # shows every version on the gem path, not which one gets picked.
           ruby -rjson -e '
             ok = Gem::Version.new(JSON::VERSION) >= Gem::Version.new("2.8.0")
             puts "pod-serialisation: `require \"json\"` loads #{JSON::VERSION} " \
@@ -327,39 +269,23 @@ jobs:
           gem install cocoapods -v "$PIN" --no-document
           pod --version
 
-      # No separate "does this runner serialise podspecs like the lock" step:
-      # `release:version` begins with `sync-example-lock.mjs --preflight`, which
-      # asks `pod ipc spec` exactly that and refuses before `changeset version`
-      # runs, so the answer is already in the log above the churn guard's own
-      # report. One question, one place that asks it.
-
-      # `publish-script` is unset on purpose: with none, the action only ever
-      # versions and opens or updates the pull request, and never publishes —
-      # which is what the stage job above is for.
+      # `publish-script` is unset on purpose: without one the action only versions
+      # and opens or updates the pull request, and never publishes.
       - name: Version the changesets
         id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          # `changeset version` and then the lock refresh, in one working tree. The
-          # action commits everything in that tree straight after this script, so the
-          # lock has to be repaired *here* for the PR's commit to be internally
-          # consistent — which is also what keeps the guard in `check` green on the
-          # commit the Version Packages PR opens with.
+          # The action commits the whole tree straight after this script, so the
+          # lock refresh has to happen inside it.
           version-script: bun run release:version
-          # Changesets would tag a release `react-native-nitro-ui@0.1.1`, not
-          # `v0.1.1`: it only writes a plain `vX.Y.Z` for a package whose
-          # workspace tool is `root`, and `"."` in `workspaces` makes manypkg
-          # report `bun`. `Release tag` makes the tags and the release instead,
-          # once the version is actually live. Both stay off as a guard, even
-          # though the action only reads them in publish mode.
+          # Changesets would tag `react-native-nitro-ui@0.1.1`, not `v0.1.1`.
+          # `Release tag` creates the tag and the release once the version is live.
           push-git-tags: 'false'
           create-github-releases: 'false'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # `release:version` is supposed to have done the work; this says so in the run
-      # rather than leaving it to the next person's `git blame`. It cannot be the
-      # guard: the action commits and pushes before this step, so by the time it can
-      # fail the damage is on the branch.
+      # Reports the lock's state in the run. It cannot be a guard: the action has
+      # already committed and pushed by this point.
       - name: Confirm the lock followed the version
         if: steps.changesets.outputs.has-changesets == 'true'
         run: bun run lock:check

@@ -1,9 +1,3 @@
-/**
- * Picker stories (S1). Props and events: `docs/components/picker.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Picker } from 'react-native-nitro-ui';
@@ -86,13 +80,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * `selectedIndex` stays authoritative: choosing moves the local echo (so the
- * control feels alive) and reports to Actions, and moving the row moves the
- * selection.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({
     onChange,
@@ -133,12 +120,8 @@ export const Playground: Story = {
 };
 
 /**
- * The two variants, and what each one is on each platform.
- *
- * Worth reading on a device: neither platform gets the same control twice. iOS
- * has SwiftUI's menu and SwiftUI's wheel; Android has Material 3's exposed
- * dropdown and, for the wheel, a `ScrollField` drum - the platform's own control
- * on both, which is the rule (`docs/DECISIONS.md` D38).
+ * iOS has SwiftUI's menu and wheel; Android has Material 3's exposed dropdown
+ * and, for the wheel, a `ScrollField` drum.
  */
 export const Variants: Story = {
   render: function VariantsStory() {
@@ -177,15 +160,9 @@ export const Variants: Story = {
 };
 
 /**
- * `variant="radio"`: every option visible at once, on the platform that has one.
- *
- * Android draws Material&apos;s radio group - a `selectableGroup()` column of 48 dp
- * rows, each one TalkBack stop with its own selected state and the group&apos;s
- * &quot;2 of 3&quot;. iOS has no radio-group picker style
- * (`RadioGroupPickerStyle` is `@available(iOS, unavailable)`), so DECISIONS D38
- * rules that this variant renders the menu there rather than an imitation: on an
- * iPhone this same story is two menus. An iOS layout that needs every choice
- * visible uses `SegmentedControl` for up to about five options.
+ * `variant="radio"`: Android draws Material's radio group. iOS has no
+ * radio-group picker style (`RadioGroupPickerStyle` is unavailable there), so
+ * this variant renders the menu on iOS.
  */
 export const Radio: Story = {
   render: function RadioStory() {
@@ -234,13 +211,6 @@ export const Radio: Story = {
   },
 };
 
-/**
- * Controlled selection, with the parent moving the index from outside.
- *
- * A picker whose `selectedIndex` the parent owns still paints a choice the moment
- * it is made and reverts it if the parent does not follow (`core.md` §4) - which
- * is what the `Refused choice` story below is for.
- */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const [index, setIndex] = useState(0);
@@ -282,13 +252,6 @@ export const Controlled: Story = {
   },
 };
 
-/**
- * Uncontrolled: native owns the selection, so a choice costs no React render.
- *
- * `defaultSelectedIndex` seeds it once and is then ignored; the parent is not
- * told the value unless it passes `onChange`, and it cannot read it back from
- * props because it never had it.
- */
 export const Uncontrolled: Story = {
   render: function UncontrolledStory() {
     return (
@@ -314,13 +277,6 @@ export const Uncontrolled: Story = {
   },
 };
 
-/**
- * What an out-of-range index does, and what a shrinking list does.
- *
- * Past the end goes to the last choice, junk goes to the first, and a list that
- * shrinks under a selection clamps the selection instead of clearing it - the same
- * rules as `SegmentedControl`, so the same story.
- */
 export const Clamped: Story = {
   render: function ClampedStory() {
     const [index, setIndex] = useState(0);
@@ -356,13 +312,6 @@ export const Clamped: Story = {
   },
 };
 
-/**
- * A parent that refuses the choice.
- *
- * Native paints the choice and then snaps back, because the parent kept sending
- * the same `selectedIndex`. The event still fires - that is how the parent would
- * have accepted it.
- */
 export const RefusedChoice: Story = {
   render: function RefusedStory() {
     const [refusals, setRefusals] = useState(0);
@@ -386,7 +335,6 @@ export const RefusedChoice: Story = {
   },
 };
 
-/** Disabled, side by side with an enabled control of the same shape. */
 export const Disabled: Story = {
   render: function DisabledStory() {
     return (
@@ -417,7 +365,6 @@ export const Disabled: Story = {
   },
 };
 
-/** The accent colour, on both variants. */
 export const Tinted: Story = {
   render: function TintedStory() {
     return (
@@ -447,13 +394,6 @@ export const Tinted: Story = {
   },
 };
 
-/**
- * What the two layout policies do inside boxes the caller chose.
- *
- * A menu picker is `intrinsic`: it is as wide as the title it shows, and a title
- * too long for its box truncates inside it (C1) rather than spilling out. A wheel
- * is `fillWidth`: the box's width is its width and it measures only its height.
- */
 export const Sizing: Story = {
   render: function SizingStory() {
     return (
@@ -485,13 +425,6 @@ export const Sizing: Story = {
   },
 };
 
-/**
- * VoiceOver / TalkBack.
- *
- * The control is one element that opens a list; the selected row announces itself
- * as selected; `accessibilityLabel` replaces the visible `label` for a screen
- * reader, which is what both platforms' own controls do.
- */
 export const Accessibility: Story = {
   render: function AccessibilityStory() {
     return (

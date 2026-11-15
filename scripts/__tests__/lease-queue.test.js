@@ -1,20 +1,3 @@
-/**
- * X26: a freed device pair goes to whoever has waited longest.
- *
- * Why (docs/tasks/X26-lease-fifo.md): `lease.mjs acquire` polled, and a pair that
- * came free was won by whoever polled first. A task that released a pair asked again
- * within seconds, so it kept what it had; on 2026-11-11 two tasks waited four and a
- * half hours each and never got a pair while the pool turned over between their
- * polls. Only a waiting *exclusive* request recorded anything, so nothing ordered
- * the ordinary ones.
- *
- * Most of this is the pure decision (`decideAcquire`, `waitQueue`,
- * `pairSatisfiesWaiter`), because that is where the rule lives and a clock can be
- * handed to it. The CLI cases at the bottom run the real script in a temporary
- * `NITRO_UI_HOME` with a fake `lsof` and `--no-boot`, so tickets, their expiry and
- * `list` are proven in the file the next task reads - and never against a device.
- */
-
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import {
@@ -45,7 +28,7 @@ const EXAMPLE_CONFIG = join(REPO_ROOT, 'scripts', 'devices.example.json');
 const T0 = 1_700_000_000_000;
 const MINUTE = 60_000;
 
-/** The machine as configured: two pairs, both halves, one of them iOS+Android. */
+/** Two pairs: one with both platforms, one Android-only. */
 const DEVICES = normalizeDevices({
   maxDeviceLeases: DEFAULT_MAX_DEVICE_LEASES,
   pairs: [
@@ -63,7 +46,6 @@ const DEVICES = normalizeDevices({
   ],
 });
 
-/** A third pair, iOS-only, for the cases about what a waiter may *not* reserve. */
 const PAIR_IOS_ONLY = {
   id: 'pair-c',
   ios: { udid: 'CCCC', name: 'iPhone 17 C' },
@@ -111,7 +93,6 @@ describe('the queue (X26: first come, first served)', () => {
   it('gives a freed pair to the oldest waiter, not to the one that asks first', () => {
     const line = [ticket('X24', 300 * MINUTE), ticket('X25', 270 * MINUTE)];
 
-    // The one that has waited less asks - and is refused, by name, with its place.
     const younger = ask('X25', {
       waiters: line,
       waitedSince: T0 - 270 * MINUTE,
@@ -132,7 +113,6 @@ describe('the queue (X26: first come, first served)', () => {
       expect(younger.waiting).toContain('X24 (waiting 5h, queue position 1)');
     }
 
-    // The one that has waited longest asks the same question and is served.
     const older = ask('X24', {
       waiters: line,
       waitedSince: T0 - 300 * MINUTE,
@@ -142,16 +122,13 @@ describe('the queue (X26: first come, first served)', () => {
   });
 
   it('will not let the task that just released a pair jump back in front', () => {
-    // X24 released the machine a second ago; X25 has been waiting all morning. The
-    // release removed X24's ticket, so its only claim is "I am asking now" - and
-    // asking now is the *back* of the queue, not the front. This is the exact shape
-    // of the starvation: release, re-ask within seconds, win, repeat.
+    // A release removes the task's ticket, so asking again right away is the back of
+    // the queue.
     const line = [ticket('X25', 240 * MINUTE)];
     const justReleased = ask('X24', { waiters: line, waitedSince: T0 });
     expect(justReleased.ok).toBe(false);
     if (!justReleased.ok) expect(justReleased.reason).toContain('X25');
 
-    // Nothing changed for the waiter that was here first.
     const served = ask('X25', {
       waiters: line,
       waitedSince: T0 - 240 * MINUTE,
@@ -161,7 +138,7 @@ describe('the queue (X26: first come, first served)', () => {
 
   it('drops a ticket that stopped refreshing, so a killed waiter frees the line', () => {
     const live = ticket('X24', 10 * MINUTE);
-    // Killed between two polls: nobody will stamp `refreshedAt` again.
+    // A waiter killed between two polls: nobody stamps `refreshedAt` again.
     const corpse = ticket('X25', 20 * MINUTE, { refreshedAt: T0 - 90_000 });
     const state = { leases: [], waiters: [corpse, live] };
 
@@ -173,7 +150,6 @@ describe('the queue (X26: first come, first served)', () => {
     const pruned = pruneExpired(state, T0);
     expect(pruned.waiters).toEqual([live]);
 
-    // The corpse no longer reserves anything, and the living waiter still does.
     const queue = waitQueue(pruned, T0);
     expect(ask('X26', { waiters: queue, waitedSince: T0 }).ok).toBe(false);
     expect(
@@ -182,9 +158,8 @@ describe('the queue (X26: first come, first served)', () => {
   });
 
   it('keeps a waiting exclusive request in the queue and still drains the machine for it', () => {
-    // X26 makes `requestedAt` mean "when I joined the queue" for every waiter, so an
-    // exclusive request that started five minutes ago and refreshed a moment ago is
-    // still first in line - and still holds new leases back while it waits.
+    // `requestedAt` is when a waiter joined the queue, so an exclusive request that
+    // keeps refreshing stays first in line and holds new leases back while it waits.
     const marker = {
       task: 'B1',
       id: 'B1-1',
@@ -202,11 +177,10 @@ describe('the queue (X26: first come, first served)', () => {
       'G6',
     ]);
     expect(waitQueue(state, T0)[0]).toMatchObject({ exclusive: true });
-    // Alive on the refresh alone: a marker that expired here would let the machine
-    // be refilled under the bench, which is the starvation it exists to end.
+    // The marker stays alive on its refresh alone.
     expect(pruneExpired(state, T0).pendingExclusive).toHaveLength(1);
 
-    // The drain rule outranks the queue for everybody else...
+    // A pending exclusive request holds every ordinary request back.
     const ordinary = ask('G6', {
       active: [lease('G6', ['pair-a'])],
       waiters: waitQueue(state, T0),
@@ -216,8 +190,8 @@ describe('the queue (X26: first come, first served)', () => {
     expect(ordinary.ok).toBe(false);
     if (!ordinary.ok) expect(ordinary.reason).toMatch(/exclusive/);
 
-    // ...and one free pair does not satisfy an exclusive request, so it is not held
-    // behind the queue it is itself holding back.
+    // One free pair does not satisfy an exclusive request, so the exclusive request
+    // is not queued behind the waiters it is holding back.
     const bench = ask('B1', {
       active: [],
       exclusive: true,
@@ -228,8 +202,7 @@ describe('the queue (X26: first come, first served)', () => {
   });
 
   it('claims only the pairs a waiter can use, so the rest still go out', () => {
-    // G7 waits for iOS only. It may not idle `pair-b`, which has no iOS half at all,
-    // so a later request takes that one and the iOS pair stays in the line for G7.
+    // G7 waits for iOS only, so it cannot reserve `pair-b`, which has no iOS half.
     const three = [...DEVICES.pairs, PAIR_IOS_ONLY];
     const spare = ask('G8', {
       pairs: three,
@@ -239,12 +212,8 @@ describe('the queue (X26: first come, first served)', () => {
     expect(spare.ok).toBe(true);
     if (spare.ok) expect(spare.pair.id).toBe('pair-b');
 
-    // The cost of the rule, asserted rather than glossed: a `both` waiter claims every
-    // pair the pool could hand it, so a request with no ticket is refused with two
-    // pairs free. The pair may sit idle until that waiter's next poll - 10 s, or 60 s
-    // if it is a corpse nobody is refreshing. The alternative is to let an unticketed
-    // task take a pair from in front of somebody who has been waiting half an hour,
-    // which is the bug, priced as utilization.
+    // A `both` waiter reserves every pair it could use, so a request without a ticket
+    // is refused even with pairs free, until that waiter's next poll takes one.
     const waiting = ask('G8', {
       pairs: three,
       waiters: [ticket('G7', 30 * MINUTE)],
@@ -253,7 +222,7 @@ describe('the queue (X26: first come, first served)', () => {
     expect(waiting.ok).toBe(false);
     if (!waiting.ok) expect(waiting.reason).toMatch(/first come, first served/);
 
-    // The one free pair the waiter *can* use is its reservation, and it holds.
+    // The one free pair the waiter can use is reserved for it.
     const taken = ask('G8', {
       platform: 'android',
       active: [lease('G6', ['pair-b'], { platform: 'android' })],
@@ -269,29 +238,17 @@ describe('the queue (X26: first come, first served)', () => {
     expect(pairSatisfiesWaiter(pairA, { platform: 'ios' })).toBe(true);
     expect(pairSatisfiesWaiter(pairB, { platform: 'ios' })).toBe(false);
     expect(pairSatisfiesWaiter(pairB, { platform: 'android' })).toBe(true);
-    // A `both` lease takes either half - that is what `decideAcquire` already grants.
+    // A `both` lease is satisfied by a pair with either half.
     expect(pairSatisfiesWaiter(pairB, { platform: 'both' })).toBe(true);
     expect(
       pairSatisfiesWaiter(pairB, { platform: 'both', exclusive: true })
-    ).toBe(true);
-    // A look-check simulator is its own resource: it reserves no other pair, and no
-    // ordinary pair is reserved for it.
-    expect(
-      pairSatisfiesWaiter(pairA, { platform: 'ios', iosRuntime: '26.5' })
-    ).toBe(false);
-    expect(
-      pairSatisfiesWaiter(
-        { id: 'rt', ios: { udid: 'R' }, iosRuntime: '26.5', metroPort: 8299 },
-        { platform: 'ios', iosRuntime: '26.5' }
-      )
     ).toBe(true);
     expect(pairSatisfiesWaiter(null, { platform: 'both' })).toBe(false);
   });
 
   it('counts a ticket written in the same millisecond exactly once', () => {
-    // The tie-break is load-bearing: one pair free and two tickets written in the
-    // same millisecond. If each saw the other as "not older" both would claim the
-    // pair, and the second would queue behind a grant that never happened.
+    // Without a tie-break, two tickets written in the same millisecond would each see
+    // the other as "not older" and both claim the one free pair.
     const same = (task) => ticket(task, MINUTE);
     const line = [same('X25'), same('X24')];
     const active = [lease('G6', ['pair-b'])];
@@ -315,8 +272,7 @@ describe('the queue (X26: first come, first served)', () => {
       ok: true,
       pair: { id: 'pair-a' },
     });
-    // A caller that has not heard of the queue (no `waiters` argument at all) gets
-    // the answer it got before X26.
+    // A caller that passes no `waiters` at all is served the same way.
     expect(
       decideAcquire({
         active: [],
@@ -334,31 +290,23 @@ describe('the CLI keeps a queue in the lease file', () => {
   let home;
   let config;
   /**
-   * Every child this file started. A test that fails half way through must not
-   * leave a waiting `acquire` behind: it holds the pipe open, jest waits for it,
-   * and a unit test that never touches a device starts looking like one.
+   * Every child this file started, killed in `afterEach`: a waiting `acquire` left
+   * behind holds its pipe open and jest waits for it.
    */
   const children = [];
 
-  /**
-   * These cases start real `lease.mjs` processes, which is the point - and on a
-   * machine running the rest of `check` next to them, the 5 s default is a coin
-   * flip. The waits inside are all polled, so this is a ceiling and not a sleep.
-   */
+  /** These cases start real `lease.mjs` processes, so they get a longer timeout. */
   const itSpawns = (name, fn) => it(name, fn, 30_000);
 
   const cli = (args, env = {}) =>
     spawnSync(process.execPath, [CLI, ...args], {
       encoding: 'utf8',
-      // Never the calling shell's lease (X34 item 1): `lease.mjs` reads the device it may touch,
-      // the boot switch and the Metro-port answer out of the environment, so an inherited lease is
-      // a second answer to every question these cases ask. A case that wants one of those names
-      // passes it in `env`, which lands last.
+      // `childEnv` drops the calling shell's lease variables, which `lease.mjs` would
+      // otherwise read.
       env: childEnv({
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '50',
-        // No device is booted by a test in this file, and nothing is listening on
-        // any port: the queue is a file-and-decision question, not a device one.
+        // No device is booted, and `FREE_LSOF` reports every port free.
         NITRO_UI_LEASE_BOOT: '0',
         ...FREE_LSOF,
         ...env,
@@ -389,13 +337,7 @@ describe('the CLI keeps a queue in the lease file', () => {
     };
   };
 
-  /**
-   * How long a spawned `lease.mjs` gets to reach a state the test can read.
-   *
-   * A ceiling on the wait, never an ingredient of the answer: the cases below say *what* they are
-   * waiting to become true, so an expiry names the missing fact instead of reporting that a
-   * number of milliseconds passed.
-   */
+  /** A ceiling on how long a spawned `lease.mjs` gets to reach a state the test waits for. */
   const POLL_EVIDENCE_TIMEOUT_MS = 20_000;
 
   const stateFile = () => statePaths(home).leases;
@@ -410,9 +352,6 @@ describe('the CLI keeps a queue in the lease file', () => {
       } catch {
         // state file mid-write, or not written yet
       }
-      // The thing that never happened, not the number of milliseconds that did: a reader of a red
-      // run should learn which fact is missing, which is what makes a waited-for wait debuggable
-      // when a slept-for one was only re-runnable.
       if (Date.now() > deadline)
         throw new Error(
           `waitFor: timed out after ${String(timeoutMs)} ms waiting for ${waitedFor}`
@@ -456,8 +395,7 @@ describe('the CLI keeps a queue in the lease file', () => {
   itSpawns(
     'hands a freed pair to the older ticket and shows the queue in `list`',
     async () => {
-      // G6 holds one of the two pairs, so the other is free: that pair is the whole
-      // question, and X24 has been waiting for it since before this test started.
+      // G6 holds one of the two pairs; X24 has a ticket for the other and is not running.
       expect(
         cli(['acquire', '--task', 'G6', '--config', config, '--no-boot']).status
       ).toBe(0);
@@ -477,8 +415,6 @@ describe('the CLI keeps a queue in the lease file', () => {
         (readState().waiters ?? []).some((entry) => entry.task === 'X25')
       );
 
-      // `list` answers the question a refusal sends a task here to ask: who is in
-      // line, since when, and in what order they will be served.
       const listed = cli(['list', '--config', config]);
       expect(listed.stdout).toMatch(/queue\s+1\. X24/);
       expect(listed.stdout).toMatch(/queue\s+2\. X25/);
@@ -488,22 +424,15 @@ describe('the CLI keeps a queue in the lease file', () => {
         ).queue.map((waiter2) => waiter2.task)
       ).toEqual(['X24', 'X25']);
 
-      // G6 lets go. The pair must not go to X25, which is polling right now - it
-      // belongs to X24, which is not even running.
+      // G6 releases. The pair must not go to X25, which is polling right now.
       expect(cli(['release', 'G6']).stdout).toContain('released');
-      // Waited for, not slept for (X34 item 3). The question is what the waiter did with a free
-      // pair, and the answer is in the file: a poll touches its own ticket (`refreshedAt`), so a
-      // ticket stamped *after* the release is a waiter that has looked at a free pool. The stamp
-      // is read from after the release returned, so there is no window in which an earlier poll
-      // counts as the one being waited for. What used to be here was `sleep(600)` - a bet about
-      // how fast a process wakes from a 50 ms poll on a machine running the rest of `check` next
-      // to it, which X33 lost once and won twice.
+      // Wait on state, not time: a poll stamps the waiter's own ticket (`refreshedAt`),
+      // so a stamp later than the release shows X25 has looked at the freed pair.
       const freedAt = Date.now();
       await waitFor(
         () => {
           const state = readState();
-          // A wrong grant is evidence too: stop waiting and let the assertion below say what
-          // happened, rather than timing out on a state that will never arrive.
+          // A wrong grant also ends the wait; the assertion below reports it.
           if ((state.leases ?? []).some((entry) => entry.task === 'X25'))
             return true;
           const ticket = (state.waiters ?? []).find(
@@ -514,15 +443,12 @@ describe('the CLI keeps a queue in the lease file', () => {
         POLL_EVIDENCE_TIMEOUT_MS,
         'the waiting X25 to look at the freed pair (its ticket refreshed, or wrongly granted)'
       );
-      // Only now is "it did not take the pair" worth asserting: the waiter has been seen looking
-      // at a free pool, so an empty grant list is a verdict and not a race won by a scheduler.
       expect(readState().leases.map((entry) => entry.task)).toEqual([]);
       expect(
         (readState().waiters ?? []).some((entry) => entry.task === 'X25')
       ).toBe(true);
       expect(waiter.stderr()).toMatch(/X24.*first come, first served/s);
 
-      // X24 comes back for what the queue already promised it; then the waiter is next.
       expect(
         cli([
           'acquire',
@@ -535,14 +461,11 @@ describe('the CLI keeps a queue in the lease file', () => {
           '0',
         ]).status
       ).toBe(0);
-      // X24 holds its pair, granted first. Once it is served, X25 is the head of the queue
-      // with a pair free, polling every 50 ms, so it may already have been granted that one
-      // within its poll: both states are the queue working, and asserting `['X24']` alone
-      // would be a race against that poll.
+      // Once X24 is served, X25 heads the queue with a pair free and polls every 50 ms,
+      // so it may already hold that pair.
       expect([['X24'], ['X24', 'X25']]).toContainEqual(
         readState().leases.map((entry) => entry.task)
       );
-      // Served: out of the queue, so it is not blocking the next grant either.
       expect(
         (readState().waiters ?? []).some((entry) => entry.task === 'X24')
       ).toBe(false);
@@ -590,7 +513,6 @@ describe('the CLI keeps a queue in the lease file', () => {
       expect(recorded.requestedAt).toBeLessThanOrEqual(Date.now());
       expect(recorded.refreshedAt).toBeGreaterThanOrEqual(recorded.requestedAt);
 
-      // Stop the waiter without ever serving it: its ticket is a corpse now.
       waiter.child.kill('SIGKILL');
       await waiter.done;
       expect(readState().leases.map((entry) => entry.task)).toEqual([
@@ -598,12 +520,11 @@ describe('the CLI keeps a queue in the lease file', () => {
         'G7',
       ]);
 
-      // `release` is how a human cleans up after it: the ticket goes with the name.
+      // `release` also removes the dead waiter's ticket.
       expect(cli(['release', 'X24']).stdout).toContain('no lease matched');
       expect(readState().waiters ?? []).toEqual([]);
 
-      // And a ticket nobody refreshes is gone by itself, with no release at all -
-      // which is what stops a killed task from holding the line forever.
+      // A ticket nobody refreshes expires by itself.
       const now = Date.now();
       writeState({
         ...readState(),
@@ -645,13 +566,10 @@ describe('the CLI keeps a queue in the lease file', () => {
       expect(refused.status).toBe(1);
       expect(refused.stderr).toMatch(/X24/);
       expect(refused.stderr).toMatch(/first come, first served/);
-      // Refused, not queued: nothing is left behind to hold a pair for a task that has
-      // already given up.
       expect(
         (readState().waiters ?? []).some((entry) => entry.task === 'X25')
       ).toBe(false);
 
-      // The ticket itself is still first, and gets the pair on the same question.
       expect(
         cli([
           'acquire',

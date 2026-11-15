@@ -1,8 +1,3 @@
-//
-//  HybridNitroUiCore.cpp
-//  react-native-nitro-ui
-//
-
 #include "HybridNitroUiCore.hpp"
 
 #include "NitroUiSizingEngine.hpp"
@@ -14,8 +9,6 @@
 namespace margelo::nitro::nitroui {
 
   double HybridNitroUiCore::now() {
-    // Nanosecond resolution, reported in milliseconds, in the D1 time base
-    // (docs: src/NitroUiCore.nitro.ts and cpp/core/NitroUiClock.hpp).
     return NitroUiClock::nowMs();
   }
 
@@ -24,8 +17,7 @@ namespace margelo::nitro::nitroui {
   }
 
   std::vector<NitroUiPerfEvent> HybridNitroUiCore::drainPerf() {
-    // The `kind` strings are part of the JS-visible contract
-    // (`NitroUiPerfEvent.kind`); the ints come from NitroUiPerf.
+    // These strings are the values of the JS-visible `NitroUiPerfEvent.kind`.
     static const std::string propsApplied = "propsApplied";
     static const std::string firstFrame = "firstFrame";
     static const std::string dropped = "dropped";
@@ -42,7 +34,6 @@ namespace margelo::nitro::nitroui {
                       ? dropped
                       : (mark.kind == NitroUiPerf::KIND_RECYCLED ? recycled
                                                                  : unknown)));
-      // `time` is milliseconds in the same base as `now()`.
       events.emplace_back(static_cast<double>(mark.instanceId), kind,
                           static_cast<double>(mark.timeNs) / 1000000.0);
     }
@@ -64,8 +55,6 @@ namespace margelo::nitro::nitroui {
     stats.flushes = static_cast<double>(engine.flushes);
     stats.changedFlushes = static_cast<double>(engine.changedFlushes);
     stats.reportsConfirmed = static_cast<double>(engine.reportsConfirmed);
-    // Nanoseconds in, milliseconds out: the same unit `now()` reports, so a test
-    // can compare a flush with a mount duration without converting.
     stats.lastFlushMs = static_cast<double>(engine.lastFlushNs) / 1000000.0;
     stats.maxFlushMs = static_cast<double>(engine.maxFlushNs) / 1000000.0;
     stats.traceDropped = static_cast<double>(engine.traceDropped);

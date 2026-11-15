@@ -1,15 +1,5 @@
-//
-//  NitroUiSizing.hpp
-//  react-native-nitro-ui
-//
-//  The native host's door into the intrinsic-sizing core (docs/architecture/sizing.md).
-//
-//  Deliberately primitive and dependency-free, exactly like `NitroUiPerf.hpp`:
-//  this header is `public_header_files` in the podspec, so Swift's C++ interop
-//  parses it, and it must therefore not include a single React Native header.
-//  Everything is plain integers, and the implementation lives in
-//  `cpp/NitroUiSizingEngine.cpp`.
-//
+// The native host's entry point into the intrinsic-sizing engine. Swift's C++ interop parses
+// this header, so it must not include any React Native header: plain integers only.
 
 #pragma once
 
@@ -19,7 +9,7 @@ namespace margelo::nitro::nitroui {
 
   /**
    * Sizing policies. The native control declares one when it reports a size, and
-   * the shadow node applies it (docs/research/core-architecture.md §1.3).
+   * the shadow node applies it.
    * A plain int32 so Swift and Kotlin can pass it without importing a C++ enum.
    */
   struct NitroUiSizing final {
@@ -49,10 +39,9 @@ namespace margelo::nitro::nitroui {
     static bool flush();
 
     /**
-     * `flush` with the platform's own budget of synchronous state updates, which
-     * is what a platform pays per one: on Android a synchronous push is a commit
-     * inside the pre-draw pass that this flush cancels anyway. The Android host
-     * spends one; iOS spends the default two (`docs/architecture/sizing.md` §3).
+     * `flush` with a budget of synchronous state updates. On Android a synchronous push is
+     * a commit inside the pre-draw pass that this flush cancels anyway, so the Android host
+     * spends one; iOS spends the default two.
      */
     static bool flush(int32_t immediateBudget);
 
@@ -63,38 +52,26 @@ namespace margelo::nitro::nitroui {
     static void invalidateEnvironment();
 
     /**
-     * `invalidateEnvironment` only if the environment this signature describes is
-     * not the last one seen.
+     * `invalidateEnvironment` only if `signature` differs from the last one seen.
      *
-     * Both platforms call this from a *per-view* callback (`traitCollectionDidChange`
-     * and `onConfigurationChanged` fire once per mounted view for one user action),
-     * and the signature is what makes one user action one epoch bump: pass
-     * something like `category=XL,legibility=0` or `fontScale=1.3,densityDpi=420,
-     * locale=en-US`, and an unchanged signature costs one string compare
-     * (review S2). A rotation, which is a configuration change that moves no size,
-     * therefore invalidates nothing. Pass `nullptr`/empty to force a bump.
+     * Both platforms call this from a per-view callback that fires once per mounted view
+     * for one user action; the signature (e.g. `fontScale=1.3,densityDpi=420,locale=en-US`)
+     * turns that into one invalidation. Pass `nullptr` or an empty string to force one.
      */
     static void invalidateEnvironmentIfChanged(const char* signature);
 
     /**
-     * Declare the size to lay a component's first instance out with, before
-     * anything has been measured - the platform's documented control size.
-     *
-     * A component calls this once, from its own native type, because only it
-     * knows what it hosts (and, on iOS, which OS's control size applies). The
-     * first real measurement overwrites it, so this is only ever the first
-     * frame's guess - but it has to be a good one: giving SwiftUI or Compose a
-     * box smaller than the control makes it paint outside it.
+     * Declare the size to lay a component's first instance out with, before anything has
+     * been measured: the platform's documented control size. The first real measurement
+     * overwrites it, but until then a box smaller than the control makes SwiftUI or
+     * Compose paint outside it.
      */
     static void setFallback(const char* componentName, double width, double height, int32_t policy);
 
     /**
-     * Record the box an instance was actually drawn at, once, on its first
-     * frame. Sizing never reads this: it is the trace that lets an on-device
-     * test assert that the first *drawn* frame had the right box, which is the
-     * difference between "Yoga was corrected" and "nobody saw a wrong size".
-     *
-     * `width`/`height` are in platform units, and `NO_INSTANCE` records nothing.
+     * Record the box an instance was drawn at on its first frame. Sizing never reads
+     * this; it is a trace for on-device tests. `width`/`height` are in platform units,
+     * and `NO_INSTANCE` records nothing.
      */
     static void recordDrawnSize(int64_t instanceId, double width, double height);
 
@@ -102,14 +79,10 @@ namespace margelo::nitro::nitroui {
     static int64_t cachedSizeCount();
 
     /**
-     * The instance is finished: its host is dropping or recycling the view.
-     *
-     * Both platforms call this from `onDropView`/`prepareForRecycle`, next to
-     * where they clear their own `sizingInstanceId`. It is what keeps the engine's
-     * per-instance maps from growing for the life of the process - a list that
-     * scrolls mounts and unmounts the same control hundreds of times, and waiting
-     * for the Fabric `State` to expire instead never notices an instance that was
-     * never pushed to (review S3). Idempotent, and `NO_INSTANCE` does nothing.
+     * The instance is finished: its host is dropping or recycling the view. Without this
+     * the engine's per-instance maps grow for the life of the process, because an instance
+     * that was never pushed to has no Fabric `State` to expire. Idempotent, and
+     * `NO_INSTANCE` does nothing.
      */
     static void forget(int64_t instanceId);
   };

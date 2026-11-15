@@ -1,18 +1,9 @@
-//
-//  UIColor+NitroUiColor.swift
-//  react-native-nitro-ui
-//
-
 import UIKit
 
 extension UIColor {
-  /// Decode the ARGB integer RN's `processColor` produces.
-  ///
-  /// `processColor` is signed on Android (`| 0x0`) and unsigned on iOS (`>>> 0`),
-  /// so the same colour arrives as two different `Double`s. Only the low 32 bits
-  /// matter, and they have to be taken without a range check that rejects either
-  /// half - an `Int32(exactly:)` guard drops every opaque iOS colour, because
-  /// `0xFF…` is above `Int32.max`.
+  /// Decode the ARGB integer RN's `processColor` produces. It is signed on Android and unsigned on
+  /// iOS, so only the low 32 bits are taken: an `Int32(exactly:)` guard would reject every opaque
+  /// iOS colour.
   convenience init?(nitroUiARGB value: Double) {
     guard value.isFinite, value >= -2_147_483_648, value <= 4_294_967_295 else {
       return nil

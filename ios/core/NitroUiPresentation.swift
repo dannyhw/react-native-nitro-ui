@@ -1,28 +1,11 @@
-//
-//  NitroUiPresentation.swift
-//  react-native-nitro-ui
-//
-//  UIKit presentation from a plain view, shared by every component that opens a
-//  window of its own: DatePicker's popover (G5) and the dialogs (G11). Factored out
-//  of `NitroUiDatePickerPresentation` (G11, DECISIONS D33), whose lifecycle rules it
-//  keeps word for word: the process-wide live count, the hide-then-dismiss for a
-//  teardown during the entry transition, and the real dismissal deferred to the
-//  presentation's own completion.
-//
+// UIKit presentation from a plain view, shared by every component that presents a view controller.
 
 import UIKit
 
-/// How many presentations of one kind this process has open right now.
-///
-/// Process-wide rather than per mount, because the property it guards is "no
-/// presentation outlives the mount that opened it" - and a mount that has been
-/// dropped has nothing left to report, so a harness reads it through a *fresh*
-/// mount. One counter per component, so a dialog left open cannot make a
-/// DatePicker assertion read wrong, and the reverse.
-///
-/// Locked rather than a plain integer: the writes are all on main, but a
-/// component's test report reads it from the JS thread, and JS must never hop to
-/// main for it (`core.md` §1.4).
+/// How many presentations of one kind this process has open. Process-wide, one counter per
+/// component, so a test can check that no presentation outlives the mount that opened it. Locked
+/// because writes are on the main thread and tests read it from the JS thread, which must not hop
+/// to main.
 final class NitroUiPresentationCounter {
   private let lock = NSLock()
   private var count = 0
@@ -46,43 +29,17 @@ final class NitroUiPresentationCounter {
   }
 }
 
-/// One component's presentation: the controller it put on screen, and whether it is
-/// still there.
-///
-/// It owns *when* UIKit is asked, never *what* is presented: the component builds its
-/// controller (a hosting controller for DatePicker's calendar, a `UIAlertController`
-/// for a dialog) and configures its presentation style, and this class presents it,
-/// counts it, and takes it down - including in the two cases UIKit makes hard:
-///
-/// - **a teardown during the entry transition.** UIKit refuses a dismissal that
-///   arrives while the presentation is still animating in, and a dropped view does not
-///   wait for the animation: the refusal is then not a delay but a leak. So the request
-///   is remembered and carried out by the presentation's own completion, and in the
-///   meantime the presentation's container view is hidden, which takes the window and
-///   its dimming layer out of the draw and out of `hitTest:` in the same turn (measured
-///   in G5: a DatePicker dropped 140 ms after its press kept swallowing touches for
-///   another 500 ms without this);
-/// - **a presentation UIKit closed on its own** - a popover's outside tap, an alert's
-///   action, a parent controller dismissed with this one on top of it. The component
-///   tells this class (``noteClosedByUIKit()``), so the count comes down exactly once.
-///
-/// The entry transition and the dismissal carried through it are kept **per
-/// controller**. DatePicker presents one controller again and again, but a dialog
-/// builds one per presentation, and a recycled dialog view presents its next mount's
-/// controller while the previous mount's may still be animating in (a re-key inside
-/// the ~300 ms entry). One flag for the instance was overwritten by the new `present`:
-/// the old controller's carried dismissal was lost, its alert stayed up in a key window
-/// of its own, and its completion marked the *new* entry finished, so the new mount's
-/// teardown was refused as well (G11 review).
-///
-/// All members are main-thread only (`NitroUiMainThread`).
+/// One component's presentation. The component builds and configures the controller; this class
+/// presents it, counts it and takes it down. UIKit refuses a dismissal during the entry transition,
+/// so one that arrives then is carried out by the presentation's completion (a teardown also hides
+/// the container view at once). State is per controller: a recycled view can present its next
+/// controller while the previous one is still animating in. Main thread only.
 final class NitroUiPresentation: NSObject {
   let counter: NitroUiPresentationCounter
 
   /// A dismissal that arrived during a controller's entry transition, carried to that
   /// transition's completion.
   private struct CarriedDismissal {
-    /// Whether one was asked for.
     var requested = false
     /// Whether it animates (a JS write) or not (a teardown).
     var animated = false
@@ -106,20 +63,15 @@ final class NitroUiPresentation: NSObject {
   /// carried to its completion, if one arrived. A controller leaves this map in its
   /// own completion, and nothing else's.
   private var entering: [ObjectIdentifier: CarriedDismissal] = [:]
-  /// The presentations this instance has counted and not yet uncounted, by
-  /// controller. One presentation, one decrement: a programmatic dismissal whose
-  /// completion lands next to UIKit's own report of the same teardown must not take
-  /// the count below zero, or a harness would read "nothing presented" while a window
-  /// is still up. Keyed per controller rather than one flag, because a dialog the app
-  /// re-presents (a refused dismissal) puts a new controller up while the old one is
-  /// still animating out, and each must come down on its own report.
+  /// The presentations counted and not yet uncounted, by controller, so each is decremented exactly
+  /// once even when a programmatic dismissal's completion and UIKit's own report both arrive.
   private var counted = Set<ObjectIdentifier>()
   /// The controllers whose dismissal this class asked for and UIKit has not finished,
   /// so a component's "the controller went away" witness can tell that from a
   /// dismissal UIKit did on its own.
   private var requested = Set<ObjectIdentifier>()
-  /// The windows of presentations made with ``presentInOwnWindow(_:over:animated:prepare:onShown:)``,
-  /// by controller, each released when its presentation ends.
+  /// The windows of presentations made with `presentInOwnWindow`, by controller, each released when
+  /// its presentation ends.
   private var windows: [ObjectIdentifier: OwnWindow] = [:]
 
   init(counter: NitroUiPresentationCounter) {
@@ -132,11 +84,9 @@ final class NitroUiPresentation: NSObject {
     controller?.presentingViewController != nil
   }
 
-  /// Present `controller` from `presenter`. The caller has configured its style (and
-  /// a popover's source) already.
-  ///
-  /// `onShown` runs in the presentation's completion, after the count has gone up and
-  /// before a dismissal carried through the entry transition is honoured.
+  /// Present `controller` from `presenter`; the caller has already configured its style. `onShown`
+  /// runs in the presentation's completion, after the count has gone up and before a carried
+  /// dismissal is honoured.
   @MainActor
   func present(
     _ controller: UIViewController,
@@ -147,15 +97,12 @@ final class NitroUiPresentation: NSObject {
     self.controller = controller
     let key = ObjectIdentifier(controller)
     entering[key] = CarriedDismissal()
-    // `self` is held until the completion runs - one transition - so a dismissal carried
-    // to it still happens when the view that owned the presentation was dropped and
-    // released in the meantime. The closure is released once it has run. It settles
-    // *this* controller only: a newer one presented meanwhile has its own entry.
+    // `self` is held strongly until the completion runs, so a carried dismissal still happens when
+    // the view that owned the presentation was released meanwhile.
     presenter.present(controller, animated: animated) {
       guard let carried = self.entering.removeValue(forKey: key) else {
-        // A teardown gave this presentation up as never started (see
-        // ``dismissForTeardown()``) and UIKit started it late after all: it ends here,
-        // uncounted, since nobody is left to want it.
+        // A teardown gave this presentation up as never started, and UIKit started it late after
+        // all: end it, uncounted.
         self.dismissNow(controller, animated: false)
         return
       }
@@ -169,20 +116,11 @@ final class NitroUiPresentation: NSObject {
     }
   }
 
-  /// Present `controller` from a window of its own, above the app's.
-  ///
-  /// What a dialog uses on iOS, for the reason React Native's own `Alert` does
-  /// (`RCTAlertController`, a `UIWindow` at `UIWindowLevelAlert + 1`): a controller
-  /// presented *in* the app's chain sits on top of whatever is presented there, and
-  /// React Native dismisses its `Modal` with `[modalController
-  /// dismissViewControllerAnimated:]` - which UIKit reads as "dismiss what this
-  /// controller presented". With a dialog on top of the Modal, closing the Modal took
-  /// the dialog down instead and left the Modal on screen for good (G11 spike,
-  /// `example/__tests__/Dialog.harness.tsx`). A window of its own touches nobody's
-  /// chain: there is always a free controller to present from, over an RN `Modal`, a
-  /// screens `formSheet` or another dialog, and closing any of those cannot reach it.
-  ///
-  /// `false` when the anchor has no window scene to put a window in.
+  /// Present `controller` from a window of its own, above the app's. A controller presented in the
+  /// app's chain sits on top of whatever is presented there, and React Native closes a `Modal` by
+  /// dismissing what the Modal's controller presented: with a dialog on top, the dialog goes and
+  /// the Modal stays. A separate window is out of that chain. Returns `false` when the anchor has
+  /// no window scene.
   @MainActor
   @discardableResult
   func presentInOwnWindow(
@@ -201,9 +139,8 @@ final class NitroUiPresentation: NSObject {
     window.overrideUserInterfaceStyle = appWindow.overrideUserInterfaceStyle
     window.backgroundColor = .clear
     let root = NitroUiPresentationRootController()
-    // The window is above the app's, so its root is what UIKit asks about the status
-    // bar and the orientations while the presentation is up: it answers as the screen
-    // it covers, whatever that is by the time UIKit asks.
+    // While the presentation is up UIKit asks this root about the status bar and orientations; it
+    // answers as the screen it covers.
     root.coveredWindow = appWindow
     window.rootViewController = root
     windows[ObjectIdentifier(controller)] = OwnWindow(
@@ -219,23 +156,18 @@ final class NitroUiPresentation: NSObject {
     return true
   }
 
-  /// Let go of the last controller, whose dismissal is already under way or done.
-  ///
-  /// Nothing here needs the property for that: an entry carried to its completion and a
-  /// dismissal both hold their controller themselves. But a view in Fabric's recycle pool
-  /// keeps this object, and with it the last controller it presented - a BottomSheet's
-  /// whole view hierarchy - until it presents again, which may be never (G14 review).
+  /// Let go of the last controller, whose dismissal is under way or done. A view in Fabric's
+  /// recycle pool keeps this object, and would keep the controller's whole view hierarchy until it
+  /// presents again.
   func forgetController() {
     controller = nil
   }
 
-  /// Whether `controller` was presented from a window of its own.
   func isInOwnWindow(_ controller: UIViewController) -> Bool {
     windows[ObjectIdentifier(controller)] != nil
   }
 
-  /// The root of the window `controller` was presented in, if it has one of its own -
-  /// what decides the status bar and the orientations while it is up. For a harness.
+  /// The root of the window `controller` was presented in, if it has one of its own.
   func ownWindowRoot(of controller: UIViewController) -> UIViewController? {
     windows[ObjectIdentifier(controller)]?.window.rootViewController
   }
@@ -264,10 +196,8 @@ final class NitroUiPresentation: NSObject {
     UIAccessibility.post(notification: .screenChanged, argument: nil)
   }
 
-  /// Keep a presentation that a teardown asked to close during its entry transition,
-  /// because a new request wants the same window: a press arriving now on a mount that
-  /// replaced the one that asked. Cancelling the pending close is what makes the flag
-  /// the caller just wrote true.
+  /// Cancel a close that a teardown asked for during the entry transition, because a new request
+  /// wants the same presentation kept.
   func cancelPendingDismissal() {
     guard let controller else { return }
     let key = ObjectIdentifier(controller)
@@ -276,13 +206,9 @@ final class NitroUiPresentation: NSObject {
     }
   }
 
-  /// Close the presentation for a teardown (recycle, drop): not animated, because the
-  /// view that owned it is going away in the same turn, and hidden at once if the entry
-  /// transition is still running (see the class).
-  ///
-  /// A present UIKit never took up - refused, so it has no presenter and its completion
-  /// will not run - is given up here rather than carried: its entry would otherwise
-  /// stay in ``entering`` for good, and its window (if it has one) stay up and key.
+  /// Close the presentation for a teardown (recycle, drop): not animated, and hidden at once if the
+  /// entry transition is still running. A present UIKit refused has no presenter and no completion
+  /// coming, so it is given up here instead of carried.
   func dismissForTeardown() {
     nitroUiAssertMainThread()
     MainActor.assumeIsolated {
@@ -302,9 +228,8 @@ final class NitroUiPresentation: NSObject {
     }
   }
 
-  /// Close the presentation because the app asked to (a dialog's `isPresented` written
-  /// `false`): animated, and carried to the completion if the entry transition is still
-  /// running - but never hidden early, since nothing is being torn down.
+  /// Close the presentation because the app asked to: animated, and carried to the completion if
+  /// the entry transition is still running, but never hidden early.
   func dismissAnimated() {
     nitroUiAssertMainThread()
     MainActor.assumeIsolated {
@@ -329,19 +254,14 @@ final class NitroUiPresentation: NSObject {
     releaseWindow(for: closed)
   }
 
-  /// Whether `controller` is going away because this class asked it to.
   func isDismissingOnRequest(_ controller: UIViewController) -> Bool {
     requested.contains(ObjectIdentifier(controller))
   }
 
-  /// Take the presentation out of the app's way without waiting for UIKit's teardown.
-  ///
-  /// UIKit installs a presentation in one full-screen view (measured on iOS 27: the
-  /// window's child `presentationController.containerView`, holding the dimming view
-  /// and the presented view), so hiding that one view takes both out of the draw and
-  /// out of `hitTest:` in the same turn. Nothing here is UIKit's teardown: the carried
-  /// dismissal still dismisses for real at the completion. Hiding may stay set because
-  /// the presentation controller is rebuilt per presentation.
+  /// Take the presentation out of the app's way without waiting for UIKit's teardown. UIKit
+  /// installs a presentation in one full-screen container view holding the dimming view and the
+  /// presented view, so hiding it removes both from drawing and hit-testing. The carried dismissal
+  /// still dismisses for real.
   @MainActor
   private func hideImmediately(_ controller: UIViewController) {
     controller.presentationController?.containerView?.isHidden = true
@@ -360,17 +280,13 @@ final class NitroUiPresentation: NSObject {
       releaseAfterDismissal(controller)
       return
     }
-    // Take the ticket before asking, and hand *that* to the completion: this can be
-    // called for a presentation that was never counted, and an unearned decrement would
-    // put the harness's witness at "nothing presented" while a window is still up. The
-    // completion deliberately does not capture `self` strongly - it has to run even when
-    // the view that owned the presentation is already gone, which is the normal case for
-    // a drop.
+    // Remove the count entry before asking and hand it to the completion, so an uncounted
+    // presentation is never decremented. The completion must not need `self`: on a drop the owning
+    // view is already gone.
     let key = ObjectIdentifier(controller)
     let wasCounted = counted.remove(key) != nil
     let counter = self.counter
-    // The window goes with the presentation, captured here rather than read from `self`
-    // in the completion, for the same reason the ticket is.
+    // The window is captured for the completion for the same reason.
     let owned = windows.removeValue(forKey: key)
     requested.insert(key)
     controller.dismiss(animated: animated) { [weak self] in
@@ -384,15 +300,9 @@ final class NitroUiPresentation: NSObject {
     }
   }
 
-  /// Hand what this class still holds for `controller` - its ticket, its window - to
-  /// the end of a dismissal already under way that this class did not ask for.
-  ///
-  /// UIKit takes an alert down by itself when an action is tapped, and the only report
-  /// of that end is the component's witness, which a teardown detaches in the same turn
-  /// it calls here (a view dropped during the ~300 ms exit). Without this, the window
-  /// stayed up at `.alert + 1`, possibly key, and the count at one, for good (G11
-  /// review, round 2). A dismissal this class asked for has taken both already, so
-  /// there is nothing left to hand over and this does nothing.
+  /// Release the count and window of `controller` when a dismissal this class did not ask for ends.
+  /// UIKit takes an alert down by itself when an action is tapped; if the view is torn down during
+  /// that exit, nothing else would release them.
   @MainActor
   private func releaseAfterDismissal(_ controller: UIViewController) {
     let key = ObjectIdentifier(controller)
@@ -400,8 +310,7 @@ final class NitroUiPresentation: NSObject {
     let owned = windows.removeValue(forKey: key)
     guard wasCounted || owned != nil else { return }
     let release = NitroUiPresentationRelease(counter: counter, wasCounted: wasCounted, owned: owned)
-    // The coordinator's completion runs once the dismissal's transition ends, which is
-    // when the component's witness would have run. No coordinator to wait on means
+    // The coordinator's completion runs when the dismissal's transition ends. No coordinator means
     // there is no transition left to wait for.
     if let coordinator = controller.transitionCoordinator,
       coordinator.animate(alongsideTransition: nil, completion: { context in
@@ -418,7 +327,7 @@ final class NitroUiPresentation: NSObject {
     release.run()
   }
 
-  /// The ticket and window of one presentation, released exactly once.
+  /// The count and window of one presentation, released exactly once.
   private final class NitroUiPresentationRelease {
     private let counter: NitroUiPresentationCounter
     private var wasCounted: Bool
@@ -443,21 +352,10 @@ final class NitroUiPresentation: NSObject {
   }
 }
 
-/// The root of a presentation window: nothing to draw, and no touches of its own.
-///
-/// The window is full screen and above the app's, so while a teardown has hidden a
-/// presentation that UIKit is still animating in, a root view that answered `hitTest:`
-/// would keep the app untouchable until the transition ends - the 500 ms G5 measured.
-/// Passing through hands the touch to the windows underneath.
-///
-/// It also answers for the screen it covers. The window sits above the app's, so while
-/// a presentation is up UIKit asks this root - not the app's controllers - whether the
-/// status bar is hidden, its style, and which orientations are allowed; a root with
-/// answers of its own would show a status bar the app hid, or let the screen rotate
-/// under a portrait-only RN `Modal`. The answers are those of the app window's top-most
-/// controller, found again each time UIKit asks - a Modal the app opens or closes under
-/// an open dialog changes them - and forwarded along the `childForStatusBar...` chain
-/// UIKit itself would follow.
+/// The root of a presentation window. It draws nothing and passes touches through, so a hidden
+/// presentation that is still animating in does not block the app. While the window is up UIKit
+/// asks this root, not the app's controllers, about the status bar and orientations, so it forwards
+/// the answers of the app window's top-most controller, looked up each time.
 final class NitroUiPresentationRootController: UIViewController {
   /// The app's window this one covers. Weak: the presentation must not keep the app's
   /// screen alive.

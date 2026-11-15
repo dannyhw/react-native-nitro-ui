@@ -9,185 +9,124 @@ import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 /**
  * Native props of the `NitroUiChip` Hybrid View.
  *
- * A Chip is a sibling of two controls and takes one thing from each:
- * - a **filter** chip has a value, so `selected` / `defaultSelected` /
- *   `mostRecentEventCount` / `onSelectedChange` are Switch's event-count
- *   handshake (`docs/architecture/core.md` §4) under a chip's names;
- * - an **assist** chip is a press, so `onPress` is Button's: a gesture, not a
- *   value JS can reject.
+ * A filter chip has a value, so `selected` uses the event-count handshake; an
+ * assist chip is a press and reports `onPress`. Both sets are always sent, so a
+ * variant change never makes a prop disappear between two commits.
  *
- * Both sets are always sent, whichever variant is showing: no member is optional
- * (DECISIONS D7 / nitro#1184) except the callbacks (D7b), and the wrapper
- * (`Chip.tsx`) always sends every prop. A variant ignores the other variant's
- * props rather than the wrapper dropping them, so a variant change at runtime
- * never makes a prop disappear between two commits.
- *
- * All props are applied in one batch between `beforeUpdate()` and
- * `afterUpdate()`; setters only store + mark dirty.
+ * No prop is optional except the callbacks: a removed prop arrives as `null`,
+ * which crashes an optional one (nitro#1184).
  */
 export interface NitroUiChipProps
   extends HybridViewProps, NitroUiIntrinsicProps {
-  /**
-   * The chip's text. Size-affecting (it is in `nuiSizingKey`), and the default
-   * accessibility label.
-   */
+  /** The chip's text, and its default accessibility label. */
   label: string;
-  /**
-   * `'filter' | 'assist'`, resolved by the wrapper; anything else is `'filter'`.
-   * See `docs/components/chip.md` for what each maps to per platform.
-   */
+  /** `'filter' | 'assist'`; anything else is `'filter'`. */
   variant: string;
   /**
-   * Controlled selection of a filter chip, or `null` for an uncontrolled one -
-   * native then keeps the displayed value, seeded by `defaultSelected`. Ignored by
-   * an assist chip.
+   * Controlled selection of a filter chip, or `null` for an uncontrolled one.
+   * Ignored by an assist chip.
    */
   selected: boolean | null;
   /** Initial selection of an uncontrolled filter chip; ignored while `selected` is set. */
   defaultSelected: boolean | null;
   /**
-   * The last event count JS has fully processed (core-architecture §4). Native
-   * only accepts a `selected` write once it has seen this many of its own events.
+   * The last event count JS has fully processed. Native accepts a `selected`
+   * write only once it has seen this many of its own events.
    */
   mostRecentEventCount: number;
-  /** Disable interaction (and show the disabled style). No event fires. */
   disabled: boolean;
-  /**
-   * Leading SF Symbol name, or `null`. iOS only: Android ignores it, which is
-   * Button's convention (`docs/components/button.md`). Still in the sizing key on
-   * both platforms, so the two cannot drift when Android gains an icon.
-   */
+  /** Leading SF Symbol name, or `null`. iOS only. */
   systemImage: string | null;
   /**
-   * Leading glyph for Android, or `null`: the same string `Button`'s `androidIcon` is
-   * sent, built the same way by the wrapper - a drawable the app ships named by its
-   * resource name, or a `url:` marker in front of the dev-server file Metro serves for
-   * a `require`'d `.xml` (`src/iconSource.ts`).
+   * Leading glyph for Android, or `null`: a drawable resource name, or a `url:`
+   * marker in front of a dev-server file. Android only.
    *
-   * Android only, like `Button`'s: iOS draws `systemImage` and ignores this. It is
-   * drawn in the chip's own leading slot, at Material's chip icon size
-   * (`FilterChipDefaults.IconSize`, 18 dp), in the chip's content colour:
-   *
-   * - an **assist** chip draws it next to the label;
-   * - a **filter** chip draws it while unselected. The leading check is what a selected
-   *   filter chip means, so the check takes the slot when selected and the glyph comes
-   *   back when the chip does not.
-   *
-   * A name that cannot be resolved is treated as no icon at all - nothing drawn,
-   * nothing reserved - so the chip is exactly its no-icon self (DECISIONS D43).
-   *
-   * It joins `nuiSizingKey`, where `systemImage` already is: on Android the glyph
-   * widens the chip, and the two platforms read one key, which is why `systemImage`
-   * is in it even though Android ignores it (`docs/components/chip.md`, "Sizing").
+   * An assist chip draws it next to the label. A filter chip draws it while
+   * unselected; the check takes its slot when selected. A name that cannot be
+   * resolved draws nothing and reserves no space.
    */
   androidIcon: string | null;
-  /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
   /** Accessibility label of the control itself, or `null` to use `label`. */
   accessibilityLabel: string | null;
   /** Benchmark instance id for perf marks; `null` disables marks for this view. */
   nuiPerfId: number | null;
   /**
-   * A filter chip's toggle: the selection native now displays, plus native's
-   * event count (echoed back as `mostRecentEventCount`). Optional for the reason
-   * `NitroUiSwitchProps.onValueChange` spells out (D7b), and always sent.
+   * A filter chip's toggle: the selection native now displays and native's event
+   * count.
+   *
+   * Callbacks are the exception to the no-optional rule: Nitro only unwraps a
+   * callback prop whose type is a plain function. The wrapper always sends one.
    */
   onSelectedChange?: (selected: boolean, eventCount: number) => void;
-  /** An assist chip's tap. Optional (D7b), and always sent - a no-op when unset. */
+  /** An assist chip's tap. */
   onPress?: () => void;
 }
 
 export interface NitroUiChipMethods extends HybridViewMethods {
   /**
-   * The size of the hosted control, as measured on the UI thread during the last
-   * layout/commit. Never calls into SwiftUI/Compose: JS reads a cached value, so
-   * this is safe to call from the JS thread (core-architecture §1.4).
+   * The size of the hosted control as of the last layout. It returns a cached
+   * value, so it is safe to call from the JS thread.
    */
   measureContent(): NitroUiChipSize;
 
   /**
-   * TEMPORARY, test-only: press the chip through the same path a tap takes - the
-   * filter chip's toggle (optimistic, with a fresh event count, so a change JS
-   * refuses still reverts) or the assist chip's `onPress`. Refused while disabled,
-   * as a tap is.
+   * Test-only: press the chip through the path a tap takes; refused while
+   * disabled. SwiftUI's button gesture ignores a synthesised touch. Hops to the
+   * UI thread and returns at once.
    *
-   * It exists for one platform's harness: a harness tap is a `UITouch` with no HID
-   * event behind it, which SwiftUI's button gesture refuses (`Button.harness.tsx`
-   * measured it, and `Toggle(.button)` is a button). The real tap is
-   * `real-input:ios`'s job. Runs on the UI thread, like a tap; a call from JS hops
-   * there and returns at once.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestPress(): void;
 
   /**
-   * TEMPORARY, test-only: read the chip's accessibility node on the UI thread and
-   * keep the answer for ``nuiTestStateReport``. Returns at once (the Slider's
-   * `nuiTestAccessibilityStep` pair has the same shape, for the same reason: a
-   * Nitro method never blocks for main).
+   * Test-only: read the chip's accessibility node on the UI thread and keep the
+   * answer for `nuiTestStateReport`. Returns at once. iOS records
+   * `a11y=unavailable`: a SwiftUI hosting view exposes no elements in-process.
    *
-   * Android reads the merged Compose semantics node a reader is handed. iOS has
-   * nothing to read in-process - the SwiftUI hosting view answers
-   * `accessibilityElements == []` to anything that is not an accessibility client
-   * (`HybridNitroUiSlider.swift` measured it) - so iOS records `a11y=unavailable`
-   * and the role is asserted by XCUITest in `real-input:ios`.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestProbeAccessibility(): void;
 
   /**
-   * TEMPORARY, test-only: what the chip is showing, as one line -
+   * Test-only: what the chip is showing, as one line:
    * `displayed=<0|1|none>;probes=<n>;a11y=<...>`.
    *
-   * `displayed` is written where the control is drawn (the SwiftUI body, the
-   * composable), so it is a reading of the hosted control rather than an echo of a
-   * prop: the handle's `selected` answers what React sent. `none` until the
-   * control has drawn, and for an assist chip, which has no selection. `probes`
-   * counts the answers ``nuiTestProbeAccessibility`` has stored, so a test can tell
-   * a fresh one from the last; `a11y` is that answer (Android:
+   * `displayed` is read where the control is drawn, not an echo of the prop; it
+   * is `none` until the control has drawn, and for an assist chip. `probes`
+   * counts the answers `nuiTestProbeAccessibility` has stored, and `a11y` is the
+   * last one (Android:
    * `role=<role>,selected=<bool|none>,toggle=<On|Off|none>,disabled=<bool>,clickable=<bool>,label=<text>`).
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestStateReport(): string;
 
   /**
-   * TEMPORARY, test-only: sample the pixels this chip is drawing, looking for `color`,
-   * and keep the answer for ``nuiTestPixelReport``. Returns at once - the sampling
-   * needs the UI thread and a Nitro method may not block for it - so the answer is
-   * polled, the way Button's pair works.
+   * Test-only: sample the pixels this chip is drawing, looking for `color`, and
+   * keep the answer for `nuiTestPixelReport`. Returns at once, because sampling
+   * needs the UI thread; poll the report.
    *
-   * Button's reason, for a chip's slot: `androidIcon` is a *drawing* contract, and
-   * every other reading of it is an echo. A glyph tinted with a constant instead of
-   * the chip's content colour, or a slot reserved for artwork that never arrived, both
-   * satisfy the prop and the box and are wrong on screen.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   * @internal Not app API. Remove once the test harness can read pixels.
    */
   nuiTestPixelProbe(color: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last ``nuiTestPixelProbe`` found, in Button's shape
-   * - `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
-   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which draws `systemImage`
-   * and has no Android glyph to sample. Empty before the first probe.
+   * Test-only: what the last `nuiTestPixelProbe` found:
+   * `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which has no Android
+   * glyph to sample. Empty before the first probe.
    *
-   * @internal Not app API (DECISIONS D14).
+   * @internal Not app API.
    */
   nuiTestPixelReport(): string;
 }
 
 /**
  * A size in platform units (iOS points / Android density-independent pixels).
+ * Per-component because nitrogen generates one struct per name.
  *
- * @internal Only reachable through a Hybrid View, which v0.1 does not expose
- * publicly (DECISIONS D14).
- *
- * The shape is per-component on purpose, like `NitroUiButtonSize`: nitrogen
- * generates one struct per name, and a shared type in one component's spec file
- * would make every other component import that component's spec.
+ * @internal Only reachable through a Hybrid View, which is not public.
  */
 export interface NitroUiChipSize {
   width: number;
@@ -197,8 +136,7 @@ export interface NitroUiChipSize {
 /**
  * The Hybrid View React renders as `NitroUiChip`.
  *
- * @internal Hybrid Views and their settable props are not public (DECISIONS
- * D14): it is exported for this repo's example, harness and smoke apps, and for
- * the typed `hybridRef` handle, and is not semver surface.
+ * @internal Not public and not semver surface: exported for this repo's example
+ * and tests, and for the typed `hybridRef` handle.
  */
 export type NitroUiChip = HybridView<NitroUiChipProps, NitroUiChipMethods>;

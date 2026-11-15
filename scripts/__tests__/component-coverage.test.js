@@ -1,17 +1,3 @@
-// Per-component *behaviour* stays hand-written (X3 brief): the bench arms dispatch on
-// `component === '…'`, and the real-input suite has one check per control on each
-// platform. Nothing in the compiler or the registry notices when a new control is
-// missing from one of those tables - the arm renders nothing, or the suite runs one
-// check fewer - so this file says so. Same shape as `src/__tests__/host.test.tsx`,
-// which asserts the hostable set rather than generating it.
-//
-// These are text scans of the real sources rather than imports: the bench arms are
-// React Native modules jest cannot render here (they need Nitro and the Expo UI
-// package), and the iOS checks are Swift. What a scan can prove is the thing that
-// actually goes missing - that the table has a case for this control at all. Each
-// check collects what is absent and asserts the list is empty, so a failure names the
-// controls rather than dumping a source file.
-
 import { beforeAll, describe, expect, it } from '@jest/globals';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -31,6 +17,8 @@ import {
   failingKeys,
   recycleNotes,
 } from '../conformance-core.mjs';
+import { SCREEN_TAB, screenTab } from '../real-input/screens.mjs';
+import { exampleTabs } from '../real-input/tab-targets.mjs';
 
 /** Where the conformance suite keeps its per-control fixtures, and its tables. */
 const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
@@ -84,12 +72,8 @@ function missingFrom(source, pattern, selected) {
 
 /**
  * The ids each `component === '…'` dispatch in `source` handles, grouped by the
- * function it sits in.
- *
- * A file can render the same batch two ways - `nitroUi.tsx` does, once as the plain
- * arm and once inside the shared `<Host>` - and adding a control to one of them and not
- * the other is exactly the miss that produces a number nobody asked for. The per-file
- * assertion below cannot see that, because the id does appear in the file.
+ * function it sits in. A file can render the same batch two ways, and a control
+ * added to only one of them still appears in the file.
  */
 function dispatchesByFunction(source) {
   const groups = [];
@@ -107,22 +91,17 @@ function dispatchesByFunction(source) {
 }
 
 describe('every bench component is implemented by every arm', () => {
-  // Each arm dispatches on `component` and ends with a fallback that renders the
-  // Switch - the first component, and the one the bare `mount`/`update` scenario names
-  // (`splitScenario` in plan.ts). So a control missing from an arm is not a type error:
-  // the cell silently measures seven more Switches, and the table prints a ratio for
-  // it. Asserting the branch is present is the only thing between a typo in a manifest
-  // id and a published number that is not what it claims to be.
+  // Each arm dispatches on `component` and falls back to rendering the Switch, so
+  // a control missing from an arm is not a type error: its cell silently
+  // measures Switches.
   const benchIds = () => manifests.filter((m) => m.bench === true);
   const mentionsId = (id) => `component === '${id}'`;
   // The id every arm falls through to (see the fallback test below).
   const fallback = 'switch';
 
   it("exactly one control is the arms' fallback, and it is named", () => {
-    // Every arm ends by rendering the Switch without testing `component`, which is
-    // what `splitScenario` relies on: a bare `mount` is the switch's cell. That makes
-    // it the one id the per-arm assertion cannot look for, so it is named here instead -
-    // change it and this test says so rather than the arms quietly disagreeing.
+    // Every arm ends by rendering the Switch without testing `component`, so it
+    // is the one id the per-arm assertion cannot look for.
     expect(
       manifests.filter((m) => m.benchUnsuffixed === true).map((m) => m.id)
     ).toEqual(['switch']);
@@ -136,26 +115,21 @@ describe('every bench component is implemented by every arm', () => {
   ]) {
     it(`${path} handles every component in the plan`, () => {
       const source = readRepo(path);
-      // `bench/src/types.ts`'s docstring spells out the consequence for the arm that
-      // gets it wrong: a cell the plan asks for and no arm implements must fail the
-      // launch, not measure the wrong control.
       const wanted = benchIds().filter((m) => m.id !== fallback);
       expect(missingFrom(source, mentionsId, wanted)).toEqual([]);
     });
 
     it(`${path} handles every component in each of its render paths`, () => {
-      // The stronger form: a rename or deletion inside one of the file's two render
-      // paths leaves the id in the file, so the check above still passes while that one
-      // path now renders the wrong control.
+      // A rename inside one of the file's two render paths leaves the id in the
+      // file, so the check above still passes.
       const groups = dispatchesByFunction(readRepo(path) ?? '');
       expect(groups.length).toBeGreaterThan(0);
       // Every id the file dispatches on anywhere, minus the fallback.
       const widest = [...new Set(groups.flatMap((group) => [...group.ids]))]
         .filter((id) => id !== fallback)
         .sort();
-      // Each path handles a control explicitly or falls through to the fallback, so the
-      // sets are equal once that one id is excluded. Collecting the offenders means the
-      // failure names the function that lost the branch.
+      // Each path handles a control explicitly or falls through to the fallback,
+      // so the sets are equal once that id is excluded.
       const narrow = groups
         .filter(
           (group) =>
@@ -169,17 +143,9 @@ describe('every bench component is implemented by every arm', () => {
   }
 
   it('the host arm handles exactly the hostable set the plan asks for', () => {
-    // The nitro-ui-host arm refuses anything outside its `components` list, and the
-    // plan may only ask for what the arm accepts. Both sides come from the manifests
-    // now, so the pair has to be compared once.
-    //
-    // `hostable` alone is not that set: it means "a `<Host>` composes this control",
-    // and is read by `HostChildren.ts` and guarded by `src/__tests__/host.test.tsx`.
-    // What the *arm* is scheduled for is hostable *and* benched - the same rule
-    // `hostArm()` in scripts/registry-core.mjs uses to fill the two
-    // `host-arm-components` regions. A control can be one without the other: G7a's
-    // Menu is hostable with `bench: false` (its bench arm is G7b), so the plan never
-    // asks the host arm for a Menu cell and the arm has no `menu` branch to be missing.
+    // The host arm is scheduled for controls that are hostable and benched, the
+    // same rule `hostArm()` in scripts/registry-core.mjs uses. `hostable` alone
+    // is not that set.
     const hostArm = manifests.filter(
       (m) => m.hostable === true && m.bench === true
     );
@@ -192,6 +158,21 @@ describe('every bench component is implemented by every arm', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * The tabs `example/src/App.tsx` renders, in bar order, read from its `TABS` array.
+ */
+function appTabs() {
+  return exampleTabs(readRepo('example/src/App.tsx'));
+}
+
+/** Every string the example app draws, so an echo testID can be proved to exist. */
+function exampleSourceText() {
+  return readdirSync(join(repoRoot, 'example/src'))
+    .filter((name) => name.endsWith('.tsx'))
+    .map((name) => readRepo(`example/src/${name}`) ?? '')
+    .join('\n');
+}
 
 describe('every real-input control has a check on both platforms', () => {
   const controls = () => {
@@ -236,11 +217,8 @@ describe('every real-input control has a check on both platforms', () => {
   });
 
   it('names each control exactly once, because the table is the run order', () => {
-    // Both runners walk this list, so a second row for one id runs that control's check
-    // twice, and the second run starts on the viewport the first one left behind. `Form`
-    // shipped with a hand-written row and a generated row at once: on Android the repeat
-    // looked up a row by the tree the keyboard had scrolled, tapped empty space three
-    // times, and reported a control that ignores a finger.
+    // Both runners walk this list, so a second row for one id would run that
+    // control's check twice, the second time on the viewport the first left.
     const ids = controls().map((control) => control.id);
     expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
   });
@@ -273,13 +251,28 @@ describe('every real-input control has a check on both platforms', () => {
       ).toBe(true);
     });
 
+    it(`${control.id}'s screen can be reached on Android`, () => {
+      // The post-suite reads reach a screen by the tab row in
+      // `scripts/real-input/screens.mjs` and then poll an echo testID to learn
+      // the screen came up, so a screen missing from that table is a run that
+      // dies mid-way on a device instead of a failing `check`.
+      const { id } = appTabs().find((tab) => tab.id === control.screen) ?? {};
+      // Named in the value rather than in a message argument, which jest ignores.
+      expect(String(id)).not.toBe('undefined');
+      const tab = screenTab(control.screen);
+      // The echo has to be drawn by something. Matched against every example
+      // source, because a screen can borrow its echo from a widget it renders.
+      const drawn = new RegExp(`["'\`]${tab.anchor}["'\`]`).test(
+        exampleSourceText()
+      );
+      expect(drawn).toBe(true);
+    });
+
     it(`${control.id}'s Android check opens the screen its row names`, () => {
-      // The suite reaches a screen by tapping the tab whose testID is `tab-<screen>`,
-      // so the pair that has to agree is the row's `screen` and the `openScreen` call
-      // in the control's own file. G17's SearchField is what this guards: the screen
-      // and its tab both existed, the navigation table the runner used did not know
-      // the screen, and the run died 15 device-minutes in — after every other control
-      // had passed. A device gate is the wrong place to discover that.
+      // The e2e suite reaches a screen by tapping the tab whose testID is
+      // `tab-<screen>`, so the pair that has to agree is the row's `screen` and
+      // the `openScreen` call in the control's own file. A device gate is the
+      // wrong place to discover that the two disagree.
       const text =
         readRepo(`example/e2e/real-input/${control.id}.e2e.ts`) ?? '';
       expect(
@@ -293,22 +286,36 @@ describe('every real-input control has a check on both platforms', () => {
   }
 });
 
+describe('the Android navigation table agrees with the tab bar', () => {
+  it('no row names a tab the example app stopped rendering', () => {
+    const ids = new Set(appTabs().map((tab) => tab.id));
+    expect(
+      Object.keys(SCREEN_TAB).filter((screen) => !ids.has(screen))
+    ).toEqual([]);
+  });
+
+  it('an unknown screen is named in the failure, not tapped as "undefined"', () => {
+    let message = '<did not throw>';
+    try {
+      screenTab('searchfield-typo');
+    } catch (error) {
+      message = String(error.message);
+    }
+    expect(message).toContain('searchfield-typo');
+    expect(message).toContain('SCREEN_TAB');
+    expect(message).toContain('scripts/real-input/screens.mjs');
+  });
+});
+
 describe('every component is covered by the conformance suite', () => {
-  // X4's four rules are manifest-driven, which is only worth something if a manifest
-  // nothing checks is impossible. This is the one place that asks the question for all
-  // three tables at once — the rule × control matrix, the host-side a11y sweep's case
-  // table, and the harness suite's fixture table — so a new control cannot land in the
-  // registry without landing in the suite. The mechanism each check uses is tested in
-  // `conformance.test.js`; this is the guard that runs it on the real tree.
   it('every manifest is covered, or has a stated reason', () => {
     const read = (p) => readRepo(p);
     const sizing = JSON.parse(read('nitro-ui.sizing.json') ?? '{}');
     const matrix = coverageMatrix(manifests, {
       sizing,
       failing: failingKeys(),
-      // The recycle column reads the *fixture table's* notes, so `n/a` is the suite's own
-      // sentence and not a second list here that could disagree with it (re-review: three
-      // `noProbe` controls whose cells said `covered`).
+      // The recycle column reads the fixture table's notes, so `n/a` is the
+      // suite's own sentence.
       recycleNotes: recycleNotes(read(HARNESS_FILE)),
     });
     expect(checkCoverage(manifests, matrix)).toEqual([]);
@@ -318,11 +325,8 @@ describe('every component is covered by the conformance suite', () => {
   });
 
   it('the debt the matrix reports is the debt the runner reports', () => {
-    // Two views of the same debt: the matrix prints `failing`, and the device run prints
-    // `known failing` lines from the exemption lists. Deriving one from the other is what
-    // keeps a report's coverage table honest when a row is added or removed.
-    // The keys are read from the exemption lists, not written out here, so adding or
-    // retiring a debt row does not edit this test.
+    // The keys are read from the exemption lists, so adding or retiring a row
+    // does not edit this test.
     const keys = failingKeys();
     expect(new Set(keys).size).toBe(keys.length);
     // …and every one of those cells really is marked failing in the matrix.
@@ -337,12 +341,8 @@ describe('every component is covered by the conformance suite', () => {
         'failing'
       );
     }
-    // …and the *other* half of the column, which is the cell the re-review called wrong.
-    // A control whose fixture says it holds nothing a reset could clear is `not-applicable`
-    // with those words, never `covered`: `covered` claims a check that does not exist, and
-    // it is the claim a reviewer reads as evidence. The two kinds of note cannot be
-    // confused, because `checkRecycleNotes` refuses a `blindSpot` with no row here — so
-    // swapping one for the other is a red test, in either direction.
+    // A control whose fixture says it holds nothing a reset could clear is
+    // `not-applicable`, never `covered`.
     const notes = recycleNotes(readRepo(HARNESS_FILE));
     for (const [name, note] of Object.entries(notes)) {
       const cell = matrix.find((row) => row.name === name).rules[
@@ -365,9 +365,8 @@ describe('every component is covered by the conformance suite', () => {
 
 describe('every component has the hand-written files behind its generated rows', () => {
   it('the example app defines a screen for each tab', () => {
-    // The generated screen switch renders `<${Name}Screen />`, so a missing file is a
-    // build break; looking for the function name catches the subtler case of a file
-    // that exists and is named for a different component.
+    // The generated screen switch renders `<${Name}Screen />`. Looking for the
+    // function name catches a file that is named for a different component.
     const absent = manifests
       .map((m) => `example/src/${m.name}Screen.tsx`)
       .filter(

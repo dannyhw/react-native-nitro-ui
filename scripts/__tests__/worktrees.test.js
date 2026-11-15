@@ -1,23 +1,3 @@
-/**
- * Which worktrees `scripts/worktrees.mjs --prune` may remove.
- *
- * The cost of being wrong is one-sided. Keeping a worktree that could have gone
- * wastes disk until the next run; removing one that still held work, or that a task
- * was running in, loses that work. So every unit case below starts from a worktree
- * that *is* removable and changes exactly one fact, and each single fact must be
- * enough to keep it.
- *
- * The first version of this rule was reviewed before it merged and failed on three of
- * those facts: it treated a pushed-but-unmerged branch (a task in review) and a
- * never-committed worktree (a task that has just started) as "landed", and it could
- * not see a build running inside a clean checkout. The end-to-end cases at the bottom
- * are those scenarios, run against the real command in a throwaway clone.
- *
- * Fixtures do not sit on the answer: the removable base is idle for 30 hours against
- * a 6-hour threshold, the "recent" case is 2 hours, and the edge is tested on both
- * sides of the constant.
- */
-
 import { afterAll, describe, expect, it } from '@jest/globals';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -119,7 +99,7 @@ describe('classifyWorktree', () => {
   });
 
   it('a lease for another task does not protect this one', () => {
-    // `G2` must not match `G24`: the task is compared whole, never by prefix.
+    // The task is compared whole, never by prefix.
     expect(
       classifyWorktree({ ...REMOVABLE, leasedTasks: ['G2', 'G240'] }).verdict
     ).toBe('remove');
@@ -159,10 +139,8 @@ describe('liveLeaseTasks', () => {
   });
 
   it('reads a lease the way the pool does, so a hand-edited one still protects', () => {
-    // The pool's own rule (`lease-core.mjs` `leaseIsLive`): an ISO date is a date, a
-    // missing ttl is the default one, and a date nobody can read counts as alive.
-    // Restating that rule here got all three wrong and would have removed a leased
-    // task's checkout.
+    // The pool's rule: an ISO date is a date, a missing ttl is the default one,
+    // and a date nobody can read counts as alive.
     const oneHourOn = acquiredAt + 60 * 60_000;
     expect(
       liveLeaseTasks(
@@ -262,10 +240,8 @@ describe('worktrees.mjs, end to end', () => {
 
   /**
    * The environment every git call here runs with. `GIT_DIR` and its relatives are
-   * inherited and win over `cwd`, so a suite that commits and adds worktrees with them
-   * set would do it to whoever set them (`gate-check.test.js` has the same scrub and
-   * the story behind it). The global config is nulled so a host that signs commits,
-   * hides untracked files or renames the default branch cannot change the fixture.
+   * inherited and win over `cwd`, so they are removed. The global config is nulled
+   * so the host's settings cannot change the fixture.
    */
   function gitEnv(home) {
     const env = { ...process.env };
@@ -318,7 +294,7 @@ describe('worktrees.mjs, end to end', () => {
       git(tree(name), ['add', '-A']);
       git(tree(name), ['commit', '-qm', `add ${file}`]);
     };
-    /** Merge the way the orchestrator does: `--no-ff`, from the main checkout. */
+    /** Merges with `--no-ff`, from the main checkout. */
     const mergeToMain = (branch) =>
       git(repo, ['merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch]);
     /** Makes a worktree look untouched since the start of the month. */
@@ -389,8 +365,7 @@ describe('worktrees.mjs, end to end', () => {
       path.join(gates, 'logs', 'check.log'),
       'in the shared store too\n'
     );
-    // Reflogs expire, and can be cleared for a whole clone by one careless command.
-    // A merged task must stay recognisable without one.
+    // Reflogs expire. A merged task must stay recognisable without one.
     clone.git(clone.repo, [
       'reflog',
       'expire',
@@ -402,8 +377,8 @@ describe('worktrees.mjs, end to end', () => {
     ).toBe('');
     clone.age('done');
 
-    // Looking must not make it look used: the first lister ran a `git status` that
-    // rewrote the index, and the index's mtime was the clock.
+    // Listing must not make the worktree look used: a `git status` that rewrites
+    // the index moves the index's mtime, which is the clock.
     expect(clone.run()['task/G71-done'].verdict).toBe('remove');
     expect(clone.run()['task/G71-done']).toMatchObject({
       verdict: 'remove',
@@ -505,9 +480,8 @@ describe('worktrees.mjs, end to end', () => {
   });
 
   it('removes a merge worktree that was fast-forwarded onto main', () => {
-    // The orchestrator merges in a worktree of its own and pushes that as `main`, so
-    // the worktree's head ends up *on* main's line. Its reflog is what shows it did
-    // work, and that is the difference from a worktree nothing was committed in.
+    // A merge done in a worktree leaves its head on main's line. Its reflog is
+    // what shows it did work.
     const clone = makeClone();
     clone.add('train', 'task/G79-merge');
     clone.commitIn('train', 'merged.txt');

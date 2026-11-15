@@ -1,16 +1,3 @@
-/**
- * Tooltip stories (G18). Props and events: `docs/components/tooltip.md`.
- *
- * A tooltip's children are its anchor, laid out in place; the tooltip is a window the
- * platform draws next to them (Material 3's `PlainTooltip` / `RichTooltip` on Android, a
- * UIKit popover on iOS). The app opens it, so every story pairs it with a way to open it
- * again, and a readout of the events it reported.
- *
- * `actions` gets no Controls row: it is a list of objects, which the on-device Controls
- * panel cannot type, so the Playground picks between action lists on chips. The
- * internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and benchmark
- * handles, not app API (DECISIONS D14).
- */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Tooltip, type TooltipAction } from 'react-native-nitro-ui';
@@ -88,7 +75,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -101,7 +87,6 @@ function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** The anchor most stories point at: a round icon button. */
 function Star({ onPress }: { onPress?: () => void }) {
   return (
     <Pressable
@@ -115,7 +100,6 @@ function Star({ onPress }: { onPress?: () => void }) {
   );
 }
 
-/** The events a tooltip reported, newest last. */
 function useEventLog() {
   const [log, setLog] = useState<string[]>([]);
   const record = useCallback((entry: string) => {
@@ -124,7 +108,8 @@ function useEventLog() {
   return { log, record };
 }
 
-/** Every public prop on the Controls panel, the action list on chips. */
+// `actions` is a list of objects, which the on-device Controls panel cannot edit, so
+// chips pick between lists.
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const { onIsPresentedChange, onAction, ...rest } = props;
@@ -169,11 +154,7 @@ export const Playground: Story = {
   },
 };
 
-/**
- * A coach mark: a title, a message and one action, open when the story loads. This is
- * the story `docs/images/components/tooltip-{ios,android}.png` is taken from - one
- * anchor in the middle of an empty page, with room on both sides.
- */
+/** The README screenshot. */
 export const CoachMark: Story = {
   render: function CoachMarkStory() {
     const [open, setOpen] = useState(true);
@@ -232,7 +213,6 @@ export const Plain: Story = {
   },
 };
 
-/** The two placements, side by side. */
 export const Placement: Story = {
   render: function PlacementStory() {
     const [above, setAbove] = useState(false);

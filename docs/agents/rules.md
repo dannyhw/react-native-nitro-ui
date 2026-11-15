@@ -23,6 +23,8 @@ shorten its sentence in `AGENTS.md` to one line.
 | A report cites files that exist and a table that is current | `bun run task-ready`: the worker runs it before hand-in and the orchestrator asks for its line. It is not part of `check` | A report must describe the tree it is handed in with |
 | A file listed as check-only tooling is not imported by a device run | `gate-check.test.js` searches for importers of the files it names, not of the whole list | A wrong entry makes a real change look like it needs no device run |
 | A worktree is removed only when nothing can be lost and nobody is in it | `worktrees.mjs --prune` and its rule in `worktrees-core.mjs` (`worktrees.test.js`) | A checkout in use must never be removed |
+| A task's records are archived only when its work is merged, it has a report, and nobody is editing them | `task-records.mjs --archive` and its rule in `task-records-core.mjs` (`task-records.test.js`) | A task in flight is read from its brief |
+| A task's gate ledger, mutation record, screenshots and failure logs are never committed | `.gitignore` | They are a machine's evidence, and the report carries what a reader needs |
 
 ## Watched, not prevented
 
@@ -62,6 +64,7 @@ These depend on an agent reading and obeying. They are the candidates for the ne
 | Process tooling under 10 % of agent hours a week; gate and lease code takes bug fixes only | orchestrate |
 | Benchmarks run before a release, not per task | orchestrate |
 | No commit on `main` only updates task records | orchestrate |
+| Task records leave git in the commit that merges their task (`task-records.mjs --archive` in the merge checkout) | orchestrate |
 | A tool or test nothing calls, or that never caught a defect, is removed | working agreements |
 | Nothing reaches `main` ungated | orchestrate |
 | Look at every screenshot before merge | orchestrate |

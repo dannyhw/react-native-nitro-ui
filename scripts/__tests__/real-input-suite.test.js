@@ -1,18 +1,3 @@
-/**
- * The real-input report: what `Suite.finish()` prints, and what it counts.
- *
- * `real-input-*.test.js` files cover the rules that decide pass or fail from a log. Nothing covered
- * the *summary* — the one line a gate's reader sees first, and the only place a fact that is neither
- * a pass nor a failure can go. That is what a WARN is for (X16 item 4): a first read at exactly the
- * screen's ⅓ scale is a real accessibility bug that came and went, and a run that swallowed it in
- * fourteen per-case notes would report it as clean.
- *
- * The assertions are on the printed line rather than on internal state, because the claim worth
- * guarding is "a human reading the end of this run sees it".
- *
- * @file No device: `Suite` is a printer, and every branch of it is reachable from here.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -23,12 +8,8 @@ import {
 } from '../real-input/report.mjs';
 
 /**
- * `report.mjs` is importable and `support.mjs` is not (it computes paths from `import.meta.url`,
- * which jest cannot parse), so this file reaching `Suite` is itself half of the reason the module
- * was split. The other half is that callers must not have to know about the split: `support.mjs`
- * re-exports all three, and its four real callers keep spelling the old name. Checked on the text
- * because a re-export that goes missing turns those callers into `undefined is not a constructor`
- * at the start of a 16-minute device run, which is a bad way to learn it.
+ * Checked on the text: `support.mjs` computes paths from `import.meta.url`, which jest cannot
+ * parse, so it cannot be imported here.
  */
 describe('support.mjs still exports the report', () => {
   it('re-exports the three classes it used to define', () => {
@@ -86,9 +67,6 @@ describe('the real-input report', () => {
   });
 
   it('prints no WARN at all for a run where nothing warned', () => {
-    // Fourteen healthy cases must not train a reader to ignore the word. A summary that always said
-    // WARN would be read as boilerplate, and the one line that exists to be noticed would join the
-    // rest of the output.
     const suite = new Suite('ios', []);
     const check = suite.beginAuxiliary('a11y:switch', 'Switch a11y');
     check.check('the control is named at its own box', true);
@@ -97,8 +75,6 @@ describe('the real-input report', () => {
   });
 
   it('counts the warnings instead of printing one line per case', () => {
-    // A gate's summary is one line. Ten cases with the same finding are one fact about the run, and
-    // ten sentences would push the totals off the screen the totals are the point of.
     const suite = new Suite('ios', []);
     for (const id of ['a11y:switch', 'a11y:slider']) {
       const check = suite.beginAuxiliary(id, `${id} a11y`);
@@ -112,9 +88,6 @@ describe('the real-input report', () => {
   });
 
   it('does not fail the run for a warning, and does not hide it either', () => {
-    // The distinction the whole item rests on. A ⅓-scale first read that settled is a measurement
-    // the rule still grades correctly - it compares two elements of one read - so the case passes.
-    // But "passed" must not be the last thing said about it: the run exits 0 *and* says WARN.
     const suite = new Suite('ios', []);
     const check = suite.beginAuxiliary('a11y:switch', 'Switch a11y');
     check.check('named', true);
@@ -129,8 +102,6 @@ describe('the real-input report', () => {
   });
 
   it('keeps a failing check failing when it also warned', () => {
-    // A warning is not a downgrade of a failure. If `warn` could make a red case look merely noisy,
-    // it would be the most convenient way to lose a real finding.
     const suite = new Suite('ios', []);
     const check = suite.beginAuxiliary('a11y:switch', 'Switch a11y');
     check.warn('a read was at ⅓ scale');
@@ -145,27 +116,17 @@ describe('the real-input report', () => {
   });
 
   it('prints a warning as WARN where it is printed, not as an ordinary note', () => {
-    // The per-case print and the summary have to agree. A note prefixed with nothing is one of forty
-    // lines about boxes; the word at the start of the line is what makes a reader stop.
     const check = new CheckLog('Switch a11y');
     const out = captured(() =>
       check.warn('the first read was this box at ⅓ scale')
     );
     expect(out).toMatch(/WARN/);
     expect(out).toContain('⅓');
-    // And it is recorded, so `finish` can count it after the run rather than re-reading stdout.
+    // And it is recorded, so `finish` can count it.
     expect(check.warns.length).toBe(1);
   });
 });
 
-/**
- * X20 item 1: an abort the log never recorded is a failure, not a pass.
- *
- * The Android runner swallowed every `AbortedCheck` to move on to the next control, on the
- * assumption that `CheckLog.abort` had already put the reason on the report. A bare
- * `throw new AbortedCheck(...)` skips the log, so the control printed PASS with no assertion
- * behind it - E1 saw exactly that. `runCheck` is the one place the runner's catch lives now.
- */
 describe('a check that aborts (runCheck)', () => {
   const CONTROL = { id: 'switch', title: 'Switch', screen: 'switch' };
 
@@ -192,7 +153,6 @@ describe('a check that aborts (runCheck)', () => {
   });
 
   it('fails the run for a bare AbortedCheck thrown after an assertion passed', async () => {
-    // The E1 shape: something passed first, so "the log has a note" is not evidence of anything.
     const { code, out } = await runOne((log) => {
       log.check('the tree has a first segment', true);
       throw new AbortedCheck('the corner probe has no first segment');
@@ -247,9 +207,8 @@ describe('a check that aborts (runCheck)', () => {
   });
 
   it('is the only catch for AbortedCheck in the real-input runners', () => {
-    // A runner that grows its own `instanceof AbortedCheck` catch can swallow a bare throw again,
-    // and a check that throws one bare skips the reason on its own line. Both are text, so both
-    // are checked as text, over every file the runners are made of.
+    // A runner with its own `instanceof AbortedCheck` catch could swallow a bare throw, and a bare
+    // throw skips the log. Both are checked as text, over every file the runners are made of.
     const fs = require('node:fs');
     const dir = `${__dirname}/../real-input`;
     const offenders = fs

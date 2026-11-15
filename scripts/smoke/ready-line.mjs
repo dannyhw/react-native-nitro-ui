@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-//
-// The consumer smoke app's ready-line check, as a command. Both platform paths
-// in `common.sh` call it, so iOS and Android cannot drift apart:
+// The consumer smoke app's ready-line check.
 //
 //   node scripts/smoke/ready-line.mjs <logfile>          # verdict on a captured log
 //   node scripts/smoke/ready-line.mjs --line "<line>"    # the same, for one line
 //
 // Exit 0 when every control has a non-zero box, 1 otherwise (one line per
-// problem), 2 on a usage or read error. The contract itself is in `lib.mjs`,
-// where the jest test can reach it (same split as `scripts/bench/`).
+// problem), 2 on a usage or read error.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -64,7 +61,7 @@ function main(argv) {
   return 0;
 }
 
-// Only run as a command, so the module stays importable (scripts/bench/*.mjs).
+// Only run as a command, so the module stays importable.
 if (
   process.argv[1] != null &&
   import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href

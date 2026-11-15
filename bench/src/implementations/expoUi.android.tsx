@@ -66,31 +66,10 @@ import {
 } from './shared';
 
 /**
- * `@expo/ui` has no DatePicker arm on Android, and a launch that asks for one
- * fails here rather than reaching Compose.
- *
- * Its only picker surface is the inline Material 3 `DateTimePicker` (there is no
- * date *field*: `DatePickerDialog` is a whole dialog, not a mountable control),
- * and neither shape of it is priceable against this library's compact field.
- * Measured on `nitroui_t02` (2026-10-25):
- *
- * - inside the `matchContents` host every self-sizing arm gets, the calendar's
- *   horizontally scrollable month pager is measured with infinite width and the
- *   process dies: `IllegalStateException: Horizontally scrollable component was
- *   measured with an infinity maximum width constraints`;
- * - with the width bounded it mounts, at 2.45 s of mount work per iteration of
- *   50 inline calendars (~96 s per launch for one host per batch, more once each
- *   calendar gets its own host), which is the runner's entire per-launch budget.
- *
- * The runner therefore never schedules these cells on Android
- * (`scripts/bench/lib.mjs` `ARMS_WITHOUT_COMPONENT`); this is the loud failure
- * for a launch that asks anyway, in place of an opaque Compose crash or 50
- * calendars that took three minutes to lay out.
- *
- * Plainly, for anyone reading this looking for a number: this arm is **never
- * rendered**, on any launch, so no table in `docs/benchmarks.md` has an Android
- * `@expo/ui` DatePicker row to compare against. It is *not* an inline calendar
- * that lost a comparison - there is no Android date-picker arm at all.
+ * `@expo/ui` has no DatePicker arm on Android. Its only mountable picker is the
+ * inline Material 3 calendar, whose horizontally scrollable month pager throws
+ * when a `matchContents` host measures it with infinite width. The runner never
+ * schedules these cells; this fails a launch that asks anyway.
  */
 function unsupportedDatePicker(): never {
   throw new Error(
@@ -101,20 +80,8 @@ function unsupportedDatePicker(): never {
 }
 
 /**
- * `@expo/ui` has no Stepper on Android, for the same reason this library has to build
- * one: Material has no stepper (`docs/components/stepper.md`, DECISIONS D38 item 1).
- * Its Compose surface has `IconButton`, `Slider` and `SegmentedButton`, and nothing
- * that steps a number.
- *
- * Composing one out of two of Expo's `IconButton`s would be a number, but not a
- * comparable one: the cell would price Expo's icon button plus our own layout, against
- * a control the other arms get from their platform. The runner therefore never
- * schedules these cells on Android (`ARMS_WITHOUT_COMPONENT` in
- * `scripts/bench/lib.mjs`), and the iOS arm is the comparison the brief asks for.
- *
- * Plainly, for anyone reading this looking for a number: no table in
- * `docs/benchmarks.md` has an Android `@expo/ui` Stepper row, because there is no such
- * arm to measure.
+ * `@expo/ui` has no Stepper on Android, because Material has none. The runner
+ * never schedules these cells; this fails a launch that asks anyway.
  */
 function unsupportedStepper(): never {
   throw new Error(
@@ -123,35 +90,21 @@ function unsupportedStepper(): never {
   );
 }
 
-/**
- * Module-level so the anchor gets the same `modifiers` array identity every render
- * (T02 review NIT), the way the other arms' modifier arrays are built.
- */
+/** Module-level so the anchor's modifier keeps its identity across renders. */
 const MENU_ANCHOR = menuAnchor();
 
 /**
- * Material 3's exposed dropdown menu - the control `nitro-ui`'s Android Picker is,
- * composed out of the same primitives through Expo's bridge (`@expo/ui`'s own
- * `Picker` renders exactly this shape).
+ * Material 3's exposed dropdown menu, the control `nitro-ui`'s Android Picker
+ * is, composed from the same primitives through Expo's bridge.
  *
- * Like `BenchProgress`, the anchor's text reaches Compose through a write to a
- * native observable rather than through a prop diff: Material 3's text field owns
- * its own string, so the chosen title has to be pushed to it. That is a different
- * shape of update from `nitro-ui`'s one prop commit, and it is what this runtime
- * costs, so the arm renders what the library offers rather than something it is
- * not.
- *
- * The expanded state is React's own: `ExposedDropdownMenuBox` is controlled, and a
- * menu that no check opens stays shut in every cell - the bench measures mounting
- * the box and the items, which is what a list of mounted pickers costs.
+ * Material 3's text field owns its string, so the chosen title reaches the
+ * anchor through a write to a native observable and not through a prop.
  */
 function BenchPicker({ value }: { value: boolean }) {
   const options = pickerOptions();
   const selection = pickerSelection(value);
   const title = useNativeState<string>(options[selection] ?? '');
   const [expanded, setExpanded] = useState(false);
-  // Hoisted, so the arm pays no per-render callback identity (the rule every other
-  // arm follows) while still answering the menu's own dismiss and choose events.
   const dismiss = useCallback(() => {
     setExpanded(false);
   }, []);
@@ -179,26 +132,14 @@ function BenchPicker({ value }: { value: boolean }) {
 }
 
 /**
- * Material 3's menu, composed out of the same primitives `nitro-ui`'s Android Menu
- * composes through Expo's bridge: an `ExposedDropdownMenuBox`, a `Button` anchor
- * carrying `menuAnchor()`, and an `ExposedDropdownMenu` of `DropdownMenuItem`s.
- *
- * The anchor is a `Button` with a `Text` child rather than the `TextField` the
- * Picker's arm needs, because that is the control under test's own shape
- * (`HybridNitroUiMenu.kt` composes `NitroUiM3Button` with
- * `menuAnchor(PrimaryNotEditable)`), and a slot `Text` takes its string from a prop
- * like every other arm does - no observable write, no `useNativeState`.
- *
- * The expanded state is React's own: the box is controlled, and a menu no check
- * opens stays shut in every cell, so the bench measures mounting the box, the
- * trigger and the items - what a list of mounted menus costs.
+ * Material 3's menu, composed from the primitives `nitro-ui`'s Android Menu
+ * uses: an `ExposedDropdownMenuBox`, a `Button` anchor carrying `menuAnchor()`,
+ * and an `ExposedDropdownMenu` of `DropdownMenuItem`s.
  */
 function BenchMenu({ value }: { value: boolean }) {
   return (
-    // `expanded` is a constant rather than React state, and `onExpandedChange` is
-    // left out entirely: no cell opens a popup, so this arm would pay a `useState`
-    // and a dismiss handler for a state transition that never happens. The props
-    // that reach Compose are the ones the control mounts with.
+    // `expanded` is a constant: no cell opens a popup, so React state and a
+    // dismiss handler would be cost for a transition that never happens.
     <ExposedDropdownMenuBox expanded={false}>
       <Button onClick={onPress} modifiers={[MENU_ANCHOR]}>
         <Text>{menuTitle(value)}</Text>
@@ -217,19 +158,10 @@ function BenchMenu({ value }: { value: boolean }) {
 }
 
 /**
- * One row of the batch's FieldGroup, in the universal toolkit's row vocabulary.
+ * One row of the batch's `FieldGroup`, `@expo/ui`'s grouped settings list.
  *
- * `@expo/ui`'s `FieldGroup` is its answer to a grouped settings list; on Android it
- * is a Compose `LazyColumn` whose rows are clipped to position-aware Material 3
- * shapes - the same job nitro-ui's section does with `SegmentedListItem`, which is
- * what makes it the peer the brief asks for. Each kind is what an app writes for
- * it: `Text` alone, a `Row` of title and value, a `Row` of title and `Switch`, and
- * a `Row` that answers to a press - universal `onPress`, this toolkit's row-level
- * press, asked the same way nitro-ui's `Form.Row onPress` asks it.
- *
- * The universal components, not the `jetpack-compose` ones the other arms use:
- * `FieldGroup.Section` builds its rows out of this toolkit's own primitives, and a
- * row has to be spelled the way a consumer of this container spells it.
+ * Built from the universal components, not the `jetpack-compose` ones the other
+ * arms use: `FieldGroup.Section` builds its rows from the universal primitives.
  */
 function BenchFormRow({ index, value }: { index: number; value: boolean }) {
   const kind = formRowKind(index);
@@ -265,13 +197,8 @@ function BenchFormRow({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * `@expo/ui` worst case for the library: one Compose hosting view per control
- * (one `AndroidComposeView` each). Expo UI always needs a `Host`, so both Expo
- * arms are required for a fair comparison
- * (docs/research/setup-decisions.md SS6).
- *
- * For `date-picker` it defers to [unsupportedDatePicker], which says why there is
- * no Android arm to write here.
+ * `@expo/ui` worst case: one Compose hosting view per control. Expo UI always
+ * needs a `Host`, so a fair comparison takes this arm and the shared-host one.
  */
 export function ExpoUiHostPerControlList({
   n,
@@ -286,9 +213,6 @@ export function ExpoUiHostPerControlList({
   }
   const style = rowStyle(component);
   if (component === 'form') {
-    // One hosting view per *row*: a FieldGroup per row, which is what an app pays
-    // when it hosts each settings row instead of one grouped list. The host needs a
-    // box (`FORM_ROW_HOST_STYLE`) because a host has no intrinsic size of its own.
     return (
       <>
         {range(n).map((index) => (
@@ -305,11 +229,8 @@ export function ExpoUiHostPerControlList({
     <>
       {range(n).map((index) =>
         component === 'button' ? (
-          // `matchContents` lets the host take the button's fitting size, which
-          // is how a consumer ships a sized-to-content control here. It is part
-          // of what this arm costs per control and is measured as such - and it
-          // stays out of the switch/slider/progress arms, which are published
-          // numbers.
+          // `matchContents` lets the host take the control's fitting size,
+          // which is how an app ships a sized-to-content control here.
           <Host key={index} matchContents style={style}>
             <BenchButton value={value} />
           </Host>
@@ -322,9 +243,6 @@ export function ExpoUiHostPerControlList({
             <BenchPicker value={value} />
           </Host>
         ) : component === 'menu' ? (
-          // `matchContents` for the same reason the Button arm gets it: the trigger
-          // sizes itself, and a host that stretched it would price a box this control
-          // does not have.
           <Host key={index} matchContents style={style}>
             <BenchMenu value={value} />
           </Host>
@@ -353,12 +271,8 @@ export function ExpoUiHostPerControlList({
 }
 
 /**
- * Material 3's filled `Button`, whose slot content is a `Text` - the same label
- * cost SwiftUI's `Button(label:)` and RN core's `Pressable` + `Text` pay.
- *
- * The default palette is left alone: `seedColor` would change what the arm draws,
- * and the comparison is each control's platform default. There is no `testID` to
- * pass either - the Compose `Button` props carry none, as in the Switch arm.
+ * Material 3's filled `Button` with a `Text` in its slot, in the default
+ * palette: the comparison is each control's platform default.
  */
 function BenchButton({ value }: { value: boolean }) {
   return (
@@ -369,15 +283,9 @@ function BenchButton({ value }: { value: boolean }) {
 }
 
 /**
- * Material 3's bare `IconButton` with an `Icon` in its slot — the peer the G23
- * brief names, and the closest thing in `@expo/ui` to the control under test.
- *
- * The default rung either way: this arm takes no `size`/`width` because
- * `@expo/ui`'s `IconButton` exposes neither (its slot content decides, and
- * `size={24}` on the icon is Material's own medium glyph), while nitro-ui gets its
- * `medium` default. The two boxes are both Material's, which is the comparison.
- * `contentDescription` is this arm's only name for the control, and it is the same
- * string every other arm uses.
+ * Material 3's bare `IconButton` with an `Icon` in its slot. `@expo/ui`'s
+ * `IconButton` takes no size of its own; 24 on the icon is Material's medium
+ * glyph, matching nitro-ui's default.
  */
 function BenchIconButton({ value }: { value: boolean }) {
   const glyph = iconButtonGlyph(value);
@@ -393,18 +301,8 @@ function BenchIconButton({ value }: { value: boolean }) {
 }
 
 /**
- * Three Material 3 `Button`s in a `Row`, spaced by 8 dp — the row nitro-ui's
- * `ButtonGroup` draws at its defaults.
- *
- * `@expo/ui` has no `ButtonGroup` binding on Android (`Button`, `ToggleButton`,
- * `SegmentedButton` and `SingleChoiceSegmentedButtonRow` are its whole group-ish
- * surface), so this arm pays for the row a consumer would hand-roll: the same three
- * labels, the same gap, no group container, no connected corners and no overflow of
- * its own. That asymmetry is the number: it is what the control under test buys over
- * the best a `@expo/ui` app can do without writing layout code.
- *
- * `horizontalArrangement` is `{ spacedBy: 8 }` rather than `Spacer`s between the
- * buttons, so the row costs three composables and not five.
+ * Three Material 3 `Button`s in a `Row`, spaced by 8 dp: the row an app
+ * hand-rolls, because `@expo/ui` has no `ButtonGroup` on Android.
  */
 function BenchButtonGroup({ value }: { value: boolean }) {
   return (
@@ -419,17 +317,8 @@ function BenchButtonGroup({ value }: { value: boolean }) {
 }
 
 /**
- * A bare Material 3 `Slider`, no tick marks and no label slots.
- *
- * `steps={0}` is continuous, matching the continuous default of the control
- * under test: a stepped slider draws tick marks neither of the other arms has
- * (T02 review B3).
- */
-/**
- * `@expo/ui`'s row for this job: its universal `ListItem`, which on this platform is
- * Material 3's own `ListItem` with a `clickable` modifier (Q10 Appendix A) — the same
- * Compose row the control under test draws, which is exactly what the ratio asks: the
- * difference left is the hosting, not the row.
+ * `@expo/ui`'s universal `ListItem`, which on Android is Material 3's own
+ * `ListItem` with a `clickable` modifier.
  */
 function BenchListItem({ value }: { value: boolean }) {
   return (
@@ -442,6 +331,10 @@ function BenchListItem({ value }: { value: boolean }) {
   );
 }
 
+/**
+ * A bare Material 3 `Slider`. `steps={0}` is continuous, like the other arms: a
+ * stepped slider draws tick marks they do not have.
+ */
 function BenchSlider({ value }: { value: boolean }) {
   return (
     <Slider
@@ -455,10 +348,8 @@ function BenchSlider({ value }: { value: boolean }) {
 }
 
 /**
- * `@expo/ui`'s Compose `TextField`, single-line, with its text in an observable -
- * the one way Expo takes a value - written when the runner flips, as the Picker arm
- * writes its anchor. So `update.text-field` is a text write here as it is for the
- * other arms, not a repaint.
+ * `@expo/ui`'s Compose `TextField`, single-line. It takes its text only as an
+ * observable, written when the runner flips.
  */
 function BenchTextField({ value }: { value: boolean }) {
   const text = useNativeState<string>(textFieldValue(value));
@@ -469,27 +360,11 @@ function BenchTextField({ value }: { value: boolean }) {
 }
 
 /**
- * The closest thing `@expo/ui` has to a progress bar: its `LoadingIndicator`
- * (Material 3's expressive `LoadingIndicator`), which is *indeterminate by
- * default* and becomes determinate only when handed a `progress` **observable**.
- *
- * That is a different shape of update from every other arm's, and it is the Expo
- * UI way of doing progress, so the arm renders what the library offers rather
- * than something it is not:
- *
- * - one observable per control (`useNativeState` is a hook, so this has to be a
- *   component per indicator - which is also what the host-per-control arm needs);
- * - the runner's flipped bit reaches Compose through a **write to the state**,
- *   not through a native prop diff: React re-renders the child, the effect writes
- *   `state.value`, and Expo schedules that write to the UI thread.
- *
- * So on `update.progress` this arm measures "React render inside the host + one
- * shared-object write" while `nitro-ui` measures "one prop commit over Nitro".
- * Both are what their runtime costs; neither arm is shaped to look cheap.
- *
- * What this arm is *not*: M3's `LinearProgressIndicator`/`CircularProgressIndicator`
- * are not exposed by `@expo/ui`, so this is the equivalent **API surface** for a
- * progress value, not the same drawable as the other two arms. The table says so.
+ * The closest thing `@expo/ui` has to a progress bar: Material 3's expressive
+ * `LoadingIndicator`, determinate only when handed a `progress` observable. So
+ * the flip reaches Compose as a write to that state and not as a prop diff,
+ * and the drawable is not the one the other arms show: `@expo/ui` exposes
+ * neither `LinearProgressIndicator` nor `CircularProgressIndicator`.
  */
 function BenchProgress({ value }: { value: boolean }) {
   const progress = useNativeState<number | null>(progressValue(value));
@@ -500,13 +375,8 @@ function BenchProgress({ value }: { value: boolean }) {
 }
 
 /**
- * Material 3's single-choice segmented row - the same composable nitro-ui hosts,
- * reached through Expo's bridge instead of through Nitro.
- *
- * No `colors`: `tintColor` has an equivalent here, but the comparison is each
- * control's platform default (as in `BenchButton`), and a seeded palette would
- * change what this arm draws. Like the other Compose arms it has no `testID` to
- * pass - the props carry none.
+ * Material 3's single-choice segmented row, the composable nitro-ui hosts,
+ * in the default palette.
  */
 function BenchSegmented({ value }: { value: boolean }) {
   return (
@@ -539,8 +409,6 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
     return null;
   }
   if (component === 'form') {
-    // The peer for nitro-ui's one grouped Form: one hosting view, one FieldGroup,
-    // one section, `n` rows - the tree an app writes.
     return (
       <Host style={stackStyle(n, component)}>
         <FieldGroup>

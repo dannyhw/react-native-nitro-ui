@@ -2,30 +2,13 @@
 //  HybridNitroUiFormRow.swift
 //  react-native-nitro-ui
 //
-//  A Row of the S6 Form spike: React Native content that keeps its children where Yoga put
-//  them, and is the thing a `UICollectionViewListCell` shows (Q10 Appendix C1).
-//
-//  The Row is *not* in `CONTENT_CHILDREN_VIEWS`, and that is deliberate: as with a
-//  ContextMenu (D36 item 5), a row's children belong in the component view, at the frames
-//  Yoga gave them. The content view here is an empty, touch-transparent box whose jobs are
-//  to point back at this object (so the Form can find its props from the view UIKit is
-//  holding) and to notice a height change (`NitroUiFormRowHostView`).
-//
-//  A row reports no position of its own. Where it is drawn is the Form's business, and the
-//  Form answers for all of them at once with one scroll offset on its shadow node
-//  (`HybridNitroUiForm.reportGeometry`); a per-row event would cost a re-render per row per
-//  settle to say the same thing.
-//
-//  What the Row does *not* do is draw anything, handle a tap, or own an accessory: on iOS
-//  the cell does all three, through UIKit's own selection, highlight and
-//  `UICellAccessory`. That division is the spike's answer to "what does UIKit give you for
-//  free".
+//  A Form row: React Native content that keeps its children where Yoga put them and is shown
+//  by a `UICollectionViewListCell`, which draws it, handles its tap and owns its accessory.
 //
 
 import NitroModules
 import UIKit
 
-/// The Row Hybrid View. See the file header.
 final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private let host = NitroUiFormRowHostView()
 
@@ -35,15 +18,11 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private var perfInstanceId: Int32 = nitroUiPerfNoInstance
   private var press: (() -> Void)?
   private var contentBox: ((_ width: Double) -> Void)?
-  /// The width this row's cell last said it gives the row, so the round trip to JavaScript
-  /// happens on a change and not on every layout of the cell. `-1` is "not told yet", and a
-  /// recycled row goes back to it: the next occupant of this view is a different row whose
-  /// JavaScript side has never been told anything, and swallowing its first report because
-  /// this number remembered the *previous* row's box is how a recycled row ends up laid out
-  /// at the Form's list-wide guess again.
+  /// The width this row's cell last gave it, so JavaScript is told on a change only. `-1` is
+  /// "not told yet"; a recycled row goes back to it so the next owner's first report is sent.
   private var reportedBoxWidth: CGFloat = -1
 
-  /// `onPress` calls delivered through the cell, for the harness's 10/10.
+  /// `onPress` calls delivered through the cell. Read by tests.
   private(set) var presses = 0
 
   override init() {
@@ -62,10 +41,8 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     host.superview
   }
 
-  /// The width React was last told to lay this row's *content* out at: the row's content view,
-  /// whose frame Fabric writes from the row's Yoga content box. Asked by the Form's overhang
-  /// witness (`overhang=` in `nuiTestFormReport`), because a row's own `frame` is the box the
-  /// cell gave it and the two disagreeing is the row drawing past itself.
+  /// The width React last laid this row's content out at: the content view's frame, which
+  /// Fabric writes from the row's Yoga content box.
   var contentLaidWidth: CGFloat {
     host.bounds.width
   }
@@ -77,8 +54,8 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     set { rawAccessory = newValue }
   }
 
-  /// The accessory as this file and the Form both want it. `.none` is a case of a C++-backed
-  /// enum *and* of `Optional`, so the comparison is done once, here, on the string.
+  /// `.none` is a case of a C++-backed enum and of `Optional`, so the comparison is done once,
+  /// here, on the string.
   var accessoryValue: FormAccessory {
     switch rawAccessory.stringValue {
       case "disclosure": return .disclosure
@@ -115,9 +92,8 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   func afterUpdate() {
     nitroUiAssertMainThread()
     guard let component = componentView else { return }
-    // The props are the cell's business, and the cell is wherever the row is: refresh the
-    // one cell showing it. An accessory that appeared must reach a row that is on screen
-    // without waiting for it to be scrolled out and back.
+    // The cell draws the props, so refresh the one cell showing this row: an accessory that
+    // appeared must reach a row that is already on screen.
     (component.superview as? NitroUiFormRowContainer)?.owningCell()?.refreshChrome()
   }
 
@@ -141,28 +117,17 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
 
   /// The cell holding this row laid it out at `width`.
   ///
-  /// Per row, and that is the whole point: a cell with a trailing accessory shrinks its own
-  /// content margins for the row it is drawing, so on one screen an accessory row's box is
-  /// narrower than its plain neighbours' - 338 pt against 316 pt at the harness's box. The
-  /// Form's own `onContentBox` is one number for the entire list and can only ever be right
-  /// for one of the two, and *too wide* is not a cosmetic answer: React lays the row's content
-  /// out at it, the content is drawn past the row's own bounds, and UIKit's hit-test stops at
-  /// those bounds, so the right-hand end of the row - a `Pressable`, a `Switch`, a value -
-  /// answers nothing. X29 found it as a harness case that pressed the same row on two
-  /// simulators and got ten presses on one and none on the other: whether the overhang escapes
-  /// depends on the screen width and on how wide the content is, which is a lottery, not a
-  /// device property.
+  /// Per row: a cell with a trailing accessory shrinks its content margins, so that row's box
+  /// is narrower than a plain row's. A row laid out wider than its box draws content past its
+  /// bounds, where UIKit's hit-test stops.
   func contentBoxReported(_ width: CGFloat) {
     guard width > 0, abs(width - reportedBoxWidth) > 0.25 else { return }
     reportedBoxWidth = width
     contentBox?(Double(width))
   }
 
-  /// Whether this row is being drawn by a cell right now.
-  ///
-  /// While it is, its own cell reports the box it is drawn in, which beats any estimate the
-  /// Form could offer; while it is not, this row is parked in its section's holding view and
-  /// the Form is the only thing that can still tell it anything.
+  /// Whether a cell is drawing this row right now. When none is, the row is parked in its
+  /// section's holding view.
   var isShownInCell: Bool {
     componentView?.superview is NitroUiFormRowContainer
   }
@@ -170,22 +135,16 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   /// Whether this row has ever been told the box it is drawn in.
   var hasReportedBox: Bool { reportedBoxWidth > 0 }
 
-  /// Forget the box this row was last told, so the next one reaches JavaScript even when it is
-  /// the number this row had before — which is what the Form does to every row of a list that
-  /// has just become a different width, since a box remembered from the old one is not an
-  /// answer about the new one (fix round 2, item 2).
+  /// Forgets the box this row was last told, so the next one reaches JavaScript even when it is
+  /// the same number. The Form calls it on every row when the list's width changes.
   func forgetReportedBox() {
     reportedBoxWidth = -1
   }
 
   // MARK: - Events
 
-  /// Ask UIKit to activate the accessibility element this row is part of.
-  ///
-  /// The harness does not assert on iOS: a person's activation there is UIKit's synthesised
-  /// centre tap on the cell, which no in-process call reproduces, and a seam that called
-  /// `cellPressed()` itself would prove only that this file can call itself. The debt is in
-  /// `docs/tasks/FOLLOWUPS.md` (override `accessibilityActivate`).
+  /// Asks UIKit to activate the accessibility element this row is part of. A person's
+  /// activation is UIKit's synthesised centre tap on the cell, which this does not reproduce.
   func nuiTestA11yClick() throws {
     DispatchQueue.main.async { [weak self] in
       guard let component = self?.componentView else { return }
@@ -231,10 +190,8 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private var report = "pending"
 
   func nuiTestRowReport() throws -> String {
-    // Nitro calls a Hybrid method on the JS thread and every number here lives on
-    // main. Asking main to answer *now* is the hop AGENTS.md forbids, and asserting
-    // on the caller's thread traps - so the read is eventually consistent, exactly as
-    // `HybridNitroUiBottomSheet.nuiTestStateReport` does it, and the harness polls.
+    // Nitro calls this on the JS thread and every number here lives on main. Blocking on main
+    // is not allowed, so the read is eventually consistent and the caller polls.
     DispatchQueue.main.async { [weak self] in self?.publishReport() }
     reportLock.lock()
     defer { reportLock.unlock() }
@@ -253,26 +210,20 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private func buildRowReport() -> String {
     nitroUiAssertMainThread()
     guard let component = componentView else { return "where=detached" }
-    // The one test of "is this row being drawn", used both by `where=` and by `window=` below,
-    // so the two can never disagree about the same row.
+    // One test of "is this row being drawn" for both `where=` and `window=`, so they agree.
     let inCell = component.superview is NitroUiFormRowContainer
     let frame = component.frame
     return [
       "where=\(inCell ? "cell" : (component.superview is NitroUiFormHoldingView ? "holding" : "other"))",
       "frame=\(String(format: "%.1f,%.1f,%.1f,%.1f", frame.minX, frame.minY, frame.width, frame.height))",
-      // Where the row's pixels actually are: this view, converted to its window by UIKit.
-      // That is a different path from `measure()`, which walks the shadow tree, so a case can
-      // compare what JavaScript is told with what the screen shows.
+      // Where the row's pixels are: this view, converted to its window by UIKit. `measure()`
+      // walks the shadow tree instead.
       "window=\(Self.inWindow(component, inCell: inCell))",
       "h=\(String(format: "%.1f", component.bounds.height))",
-      // What React was last told to lay *this row's* content out at, against `frame` above - the
-      // per-row half of the Form's `overhang`, and the number that says *which* row is drawn
-      // past itself when that one says only that some row is.
+      // What React last laid this row's content out at, against `frame` above.
       "laid=\(String(format: "%.1f", host.bounds.width))",
       "presses=\(presses)",
-      // What a screen reader would read out for this row. Android answers the same field, and
-      // a recycled view that keeps the previous mount's name is a finding there; iOS answers it
-      // so the two can be read against each other (fix round 1, item 9).
+      // What a screen reader would read out for this row.
       "desc=\(component.accessibilityLabel ?? "-")",
       "accessory=\(rawAccessory.stringValue)",
       "pressable=\(rawPressable ? 1 : 0)",
@@ -280,15 +231,11 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     ].joined(separator: ";")
   }
 
-  /// The view's box in its own window, or `-` when it has none: a row at rest in its
-  /// section's holding view draws nothing, so it has no place on screen to report.
+  /// The view's box in its own window, or `-` when no cell is drawing it.
   ///
-  /// "Has none" cannot be asked of `view.window` alone. The holding view is hidden rather than
-  /// detached, so a row that has just been handed back still has a window, and converting its
-  /// bounds answers with a box - `0,0,340,44` - for pixels that are nowhere on screen. The E7
-  /// case found that after a scroll: the two rows the scroll recycled out of their cells were
-  /// compared against that box, and no amount of polling settled it. A row reports pixels only
-  /// from inside a cell, which is where its pixels are.
+  /// `view.window` alone cannot tell: the holding view is hidden rather than detached, so a
+  /// parked row still has a window, and converting its bounds answers with a box for pixels
+  /// that are nowhere on screen.
   private static func inWindow(_ view: UIView, inCell: Bool) -> String {
     guard inCell, let window = view.window else { return "-" }
     let box = view.convert(view.bounds, to: window)

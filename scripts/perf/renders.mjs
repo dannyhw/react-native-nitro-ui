@@ -1,39 +1,18 @@
 /**
- * Hard gate on JS wrapper renders, backed by Reassure. It runs inside
- * `bun run check` (T02 review S13), so a wrapper regression fails every task's
- * own gate command.
+ * Checks JS wrapper render counts against a baseline, using Reassure. Part of
+ * `bun run check`.
  *
- *   bun run check                              includes this gate
  *   bun run perf:renders                       measure + compare to the baseline
  *   bun run perf:renders -- --update-baseline  record current counts as baseline
  *   bun run perf:renders -- --root src         widen/narrow where tests live
  *
- * Reassure measures **JS renders only** - nothing native (docs/research/
- * setup-decisions.md SS6: "Reassure measures nothing native"). Its job is to
- * catch wrapper regressions: a component that stopped being memoised, a context
- * that now re-renders a subtree, a `useEffect` that causes an extra commit. So
- * the gate is exact equality on render counts, not a tolerance.
+ * Reassure measures JS renders only, nothing native. Per measured test: the
+ * count equals the baseline's, every run produced the same count,
+ * `issues.initialUpdateCount === 0` (no synchronous `setState` in a mount
+ * effect) and `issues.redundantUpdates` is empty. A test must drive the
+ * component through a `scenario`: a bare mount has nothing redundant to find.
  *
- * Four things have to hold, per measured test (docs/tasks/T02-bench.review.md
- * "Re-render gate" - counts alone are not enough):
- *
- * 1. the count equals the baseline's;
- * 2. every one of the ~10 runs produced the **same** count - a median would hide
- *    a wrapper that renders nondeterministically (review NIT);
- * 3. `issues.initialUpdateCount === 0` - no synchronous `setState` in a mount
- *    effect, i.e. no render that the first render could have produced itself;
- * 4. `issues.redundantUpdates` is empty - no commit whose rendered output was
- *    identical to the previous one (prop churn, a missing memo).
- *
- * For 3 and 4 to mean anything, the test must **drive** the component through a
- * `scenario`, not just mount it: a bare mount measures one render and there is
- * nothing redundant to find. See docs/architecture/benchmarks.md ("Re-render
- * contract") for the harness pattern - flip the control a few times *and* render
- * an unrelated parent a few times, so "re-renders when told, and only then"
- * becomes the assertion.
- *
- * With no `*.perf-test.tsx` present the script passes loudly: the gate is wired
- * but there is nothing to measure yet (true until the first component lands).
+ * With no `*.perf-test.tsx` present the script passes and says so.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -117,10 +96,8 @@ function readCurrentMeasurements() {
     const samples = Array.isArray(record.counts)
       ? record.counts.filter((entry) => typeof entry === 'number')
       : [];
-    // `median(counts)` used to be the gate value, which read the same whether a
-    // wrapper rendered 4 times every run or 4/5/4/9/4/... A wrapper whose render
-    // count is not reproducible is exactly the bug this gate exists to catch, so
-    // the spread is an outcome, not noise to average away.
+    // Every run must produce the same count: a median would hide a wrapper that
+    // renders a different number of times from run to run.
     const unique = [...new Set(samples)].sort((a, b) => a - b);
     const value = unique.length === 1 ? (unique[0] ?? null) : null;
     if (samples.length === 0 && typeof record.meanCount !== 'number') {

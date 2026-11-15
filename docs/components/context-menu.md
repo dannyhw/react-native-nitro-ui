@@ -1,11 +1,10 @@
 # ContextMenu
 
-A `View` that opens a menu on a long press (G16, DECISIONS D36 and D37; design
-`docs/tasks/Q6-contextmenu-design.report.md`, measured by the S3 spike).
+A `View` that opens a menu on a long press.
 
-| Platform | Native                                                                                           |
-| -------- | ------------------------------------------------------------------------------------------------ |
-| iOS      | `UIContextMenuInteraction` on the view itself, with the system's lifted preview and a `UIMenu`   |
+| Platform | Native                                                                                                                                       |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| iOS      | `UIContextMenuInteraction` on the view itself, with the system's lifted preview and a `UIMenu`                                               |
 | Android  | Material 3 Expressive's menu (`DropdownMenuPopup` and Menu's groups), opened at the finger, in a `View` styled by React Native's own manager |
 
 ```tsx
@@ -18,7 +17,10 @@ import { ContextMenu } from 'react-native-nitro-ui';
       { id: 'copy', title: 'Copy text' },
     ],
     sections: [
-      { id: 'danger', items: [{ id: 'delete', title: 'Delete', destructive: true }] },
+      {
+        id: 'danger',
+        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+      },
     ],
   }}
   onSelect={(id) => run(id)}
@@ -36,49 +38,46 @@ is the scroll view's, and a hold that opens the menu **cancels** their touch, so
 
 ## API
 
-| Prop                 | Type                                     | Default  | Notes                                                                                         |
-| -------------------- | ---------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `group`              | `MenuGroup`                              | required | Menu's type, unchanged: see [Menu, "The group"](menu.md#the-group).                          |
-| `children`           | `ReactNode`                              | —        | The content the long press is made on, laid out in place.                                    |
-| `title`              | `string \| undefined`                    | —        | A header over the rows: the `UIMenu`'s title on iOS, the first group's label on Android.                |
-| `disabled`           | `boolean \| undefined`                   | `false`  | No menu; the children keep every gesture. An open menu closes, on **both** platforms.         |
-| `onSelect`           | `((id: string) => void) \| undefined`    | —        | The picked row's `id`. Fires **before** `onClose` (D32).                                     |
-| `onOpen`             | `(() => void) \| undefined`              | —        | The menu opened. **Both platforms** — unlike Menu's, which is Android-only.                  |
-| `onClose`            | `(() => void) \| undefined`              | —        | Once for every `onOpen`, however it closed: a pick, outside tap, Back, `disabled`, a drop.   |
-| `style`              | `ViewStyle`                              | —        | A full `View` style. The box is Yoga's: there is no base style and nothing is measured.      |
-| `accessible`, …      | React Native's `View` accessibility props | —       | Opt in to make the ContextMenu **one** screen-reader element with the menu on it. See below. |
-| `testID`             | `string \| undefined`                    | —        | The wrapper's own, as on a `View`.                                                            |
-| `hybridRef`          | `(view: handle) => void`                 | —        | **Internal.** Test seams for this repo's harness.                                             |
-| `nuiPerfId`          | `number \| null \| undefined`            | `null`   | **Internal.** Instance id for perf marks.                                                     |
+| Prop            | Type                                      | Default  | Notes                                                                                        |
+| --------------- | ----------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `group`         | `MenuGroup`                               | required | Menu's type, unchanged: see [Menu, "The group"](menu.md#the-group).                          |
+| `children`      | `ReactNode`                               | —        | The content the long press is made on, laid out in place.                                    |
+| `title`         | `string \| undefined`                     | —        | A header over the rows: the `UIMenu`'s title on iOS, the first group's label on Android.     |
+| `disabled`      | `boolean \| undefined`                    | `false`  | No menu; the children keep every gesture. An open menu closes, on **both** platforms.        |
+| `onSelect`      | `((id: string) => void) \| undefined`     | —        | The picked row's `id`. Fires **before** `onClose`.                                           |
+| `onOpen`        | `(() => void) \| undefined`               | —        | The menu opened. **Both platforms** — unlike Menu's, which is Android-only.                  |
+| `onClose`       | `(() => void) \| undefined`               | —        | Once for every `onOpen`, however it closed: a pick, outside tap, Back, `disabled`, a drop.   |
+| `style`         | `ViewStyle`                               | —        | A full `View` style. The box is Yoga's: there is no base style and nothing is measured.      |
+| `accessible`, … | React Native's `View` accessibility props | —        | Opt in to make the ContextMenu **one** screen-reader element with the menu on it. See below. |
+| `testID`        | `string \| undefined`                     | —        | The wrapper's own, as on a `View`.                                                           |
+| `hybridRef`     | `(view: handle) => void`                  | —        | **Internal.** Test seams for this repo's harness.                                            |
+| `nuiPerfId`     | `number \| null \| undefined`             | `null`   | **Internal.** Instance id for perf marks.                                                    |
 
-There is no value, no `open()` and no tap-to-open (D36 item 3): a button that opens a
-menu on a tap is [Menu](menu.md). No custom preview and no `previewBackgroundColor` in v1.
+There is no value, no `open()` and no tap-to-open: a button that opens a
+menu on a tap is [Menu](menu.md). No custom preview and no `previewBackgroundColor`.
 
 ## Platform mapping
 
 **iOS.** The interaction is attached to the generated component view — the view React
 Native styles and mounts the children into — once, for that view's lifetime. The Hybrid
 View's own view is an empty, touch-transparent content view whose job is to find it.
-There is **no** content-children patch (D36 item 5): Fabric already mounts the children
+There is **no** content-children patch: Fabric already mounts the children
 in the component view at Yoga's frames, and the patch would inset a padded ContextMenu's
 children twice. The configuration is `nil` (no highlight, no menu) while `disabled` or
 with no pickable rows; rows keep `group`'s order (`preferredMenuElementOrder = .fixed`,
 iOS 16+); a `group` change while open is applied in place (`updateVisibleMenu`). The
-lifted preview is the view itself, its corners rounded to the style's `borderRadius`
-(D37 item 3).
+lifted preview is the view itself, its corners rounded to the style's `borderRadius`.
 
 **Android.** A hand-written `ReactViewManager` (`NitroUiContextMenuViewManager`, named
 by `androidViewManager`), so the wrapper takes every prop RN's `View` takes — borders,
 radius, `overflow`, `pointerEvents`, `hitSlop`. The menu is a 0 × 0 `NitroComposeHost`
 kept as the wrapper's last child and hidden from Fabric's indices, composing a
-Material 3 Expressive `DropdownMenuPopup` (E2) placed against a zero-size box **at the
-press point** by `MenuDefaults.rememberDropdownMenuPopupPositionProvider(Below)` (S3
-measured the earlier `DropdownMenu`'s top-start at the press, 0 px off; the harness's "at
-the finger" case holds the new popup to the same rule). Near the bottom edge Material opens
-it above the finger. The popup, groups, rows and
-the popup witness are Menu's own (`MenuRows.kt`, D36 item 4): each section and each run
+Material 3 Expressive `DropdownMenuPopup` placed against a zero-size box **at the
+press point** by `MenuDefaults.rememberDropdownMenuPopupPositionProvider(Below)`. Near
+the bottom edge Material opens it above the finger. The popup, groups and rows are
+Menu's own (`MenuRows.kt`): each section and each run
 of top-level actions is a Material group, a submenu draws inline as a group of its own,
-as Menu's does (D29), and a row's `subtitle` and `checked` draw as they do in Menu
+as Menu's does, and a row's `subtitle` and `checked` draw as they do in Menu
 ([menu.md](menu.md#the-group)). A row's `androidIcon` draws there too, in Material's
 20 dp leading slot: it is Menu's row struct, so [Menu, "The rows'
 glyphs"](menu.md#the-rows-glyphs) is the whole story — including why iOS ignores it and
@@ -91,16 +90,15 @@ which takes no role, so Menu drops `destructive` on a checked row
 
 ## The gesture
 
-**What opens it.** A still hold: iOS's own lift (measured ~744 ms touch-down to menu,
-S3 Q7); Android at `ViewConfiguration.getLongPressTimeout()` (400 ms by default, and the
+**What opens it.** A still hold: iOS's own lift (measured ~744 ms touch-down to
+menu); Android at `ViewConfiguration.getLongPressTimeout()` (400 ms by default, and the
 user's touch-and-hold setting), with haptic feedback.
 
 **What it does to the children.** At the open, React Native's touch is cancelled:
 
 - iOS: the nearest `RCTSurfaceTouchHandler` is reset — React Native's own
   `_cancelTouches` — so the `Pressable` gets `onPressOut` and never `onPress`. On iOS 27
-  UIKit's lift already ends React Native's touch, so the reset is unproven there (D37
-  item 1; it is kept for older systems);
+  UIKit's lift already ends React Native's touch; the reset is kept for older systems;
 - Android: `NativeGestureUtil.notifyNativeGestureStarted` (JS gets one CANCEL), the
   ancestors are told not to intercept, and the rest of the gesture is the wrapper's, so a
   scroll view under an open menu does not move.
@@ -111,24 +109,23 @@ ContextMenu taking the drag. Nested ContextMenus open the innermost.
 
 **`onLongPress` inside.** Don't put one on a child. On iOS Pressability's 500 ms comes
 about 240 ms before UIKit's lift, so the child's `onLongPress` always fires and the menu
-then opens over it (S3). On Android the CANCEL at 400 ms wins at the default setting, and
+then opens over it. On Android the CANCEL at 400 ms wins at the default setting, and
 loses with a 1 s or 1.5 s touch-and-hold setting.
 
 ## Open and close
 
 `onOpen` fires when the menu is shown (iOS `willDisplayMenu`, Android at recognition);
 `onClose` fires exactly once for each, after `onSelect` on a pick (UIKit calls the row's
-handler before `willEnd`, 10/10 in S3; `onClose` comes from the end animator's
-completion). A drop while open reports `onClose` before the view goes, so open state an
+handler before `willEnd`; `onClose` comes from the end animator's completion). A drop while open reports `onClose` before the view goes, so open state an
 app tracks never outlives the menu. Android also closes an open menu when a layout
 **moves** the ContextMenu: the popup follows its anchor, and would otherwise point where
-the finger never was (S3 measured 73 dp off). A scroll is not a layout move.
+the finger never was. A scroll is not a layout move.
 
 ## Sizing
 
 `sizing: null`: no row in `nitro-ui.sizing.json`, no declared fallback, no
 `measureContent`. A ContextMenu lays out exactly like a `View` with the same style and
-children — the harness holds it to a twin `View`, with padding and a border.
+children, padding and border included.
 
 ## Recycling and cleanup
 
@@ -144,11 +141,11 @@ menu and disposes the composition, which takes the popup down.
 
 A ContextMenu is not an accessibility element by default, because that would hide the
 buttons inside it. Set `accessible` and an `accessibilityLabel` on the ContextMenu to make
-it **one** element that carries the menu (D36 item 1):
+it **one** element that carries the menu:
 
 - iOS: the view is the element, and the menu is UIKit's own on it. React Native answers
   `isAccessibilityElement` from a component's content view, so the content view answers
-  with the value React Native stored on the component view (D37 item 2);
+  with the value React Native stored on the component view;
 - Android: the wrapper is the focusable node, and carries `ACTION_LONG_CLICK` labelled
   "Show menu" — the action TalkBack's double-tap-and-hold sends — which opens the menu at
   its centre.
@@ -158,24 +155,27 @@ Android node is a plain `View`'s: it offers TalkBack no long-click, so a Context
 `Text` alone does not become one actionable stop that reads its text. The menu then has no
 screen-reader path on Android; set `accessible` to give it one.
 
-**What is verified, and how.** Only by automation (D37 item 4), on both platforms:
+**What is tested.** By automation only, on both platforms:
 
-| Claim                                                        | iOS                                                                  | Android                                                      |
-| ------------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `accessible` makes it an element; without it, it is not one  | harness (`ax`: the view's own `isAccessibilityElement`)              | harness (`ax`: the wrapper is focusable)                     |
-| one element carries the label, on the wrapper's box          | real input: XCUITest's tree — **with one gap**, below                | real input: `uiautomator`'s tree, one node with the label    |
-| that element can be acted on                                 | real input (enabled, hittable)                                       | real input (focusable, `long-clickable`)                     |
-| without `accessible`, no actionable stop of its own          | —                                                                    | real input: `ctx-bottom` is neither long-clickable nor focusable |
-| it offers the menu as an action                              | harness: the view carries the `UIContextMenuInteraction`, only that  | harness: `ACTION_LONG_CLICK` "Show menu", none while disabled |
-| performing that action opens the menu                        | not exercised: UIKit derives the action, and no tool here reads it   | harness: the action performed on the node opens the menu     |
-| a recycled wrapper keeps no previous owner's label           | harness                                                              | harness                                                      |
+| Claim                                                       | iOS                                                                 | Android                                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `accessible` makes it an element; without it, it is not one | harness (`ax`: the view's own `isAccessibilityElement`)             | harness (`ax`: the wrapper is focusable)                         |
+| one element carries the label, on the wrapper's box         | real input: XCUITest's tree — **with one gap**, below               | real input: `uiautomator`'s tree, one node with the label        |
+| that element can be acted on                                | real input (enabled, hittable)                                      | real input (focusable, `long-clickable`)                         |
+| without `accessible`, no actionable stop of its own         | —                                                                   | real input: `ctx-bottom` is neither long-clickable nor focusable |
+| it offers the menu as an action                             | harness: the view carries the `UIContextMenuInteraction`, only that | harness: `ACTION_LONG_CLICK` "Show menu", none while disabled    |
+| performing that action opens the menu                       | not exercised: UIKit derives the action, and no tool here reads it  | harness: the action performed on the node opens the menu         |
+| a recycled wrapper keeps no previous owner's label          | harness                                                             | harness                                                          |
 
-**The iOS gap (known debt).** XCUITest lists the wrapper as the element with the label, and can list the `Text`s inside it as elements of their own (measured on iOS 27, the example screen's "Grace Hopper"): React Native vends an accessibility element per `Text`, and the wrapper hides them only once `accessible` has reached the component view — so how many it lists is *when the tree was walked*, not what the component is. A walk that goes straight to the screen reads one element with no stops; one that follows the rest of the sweep reads one or both `Text`s, each as two nested elements (X22 fix round 1). Real input reports the listing on every run as known debt, `A11Y_EXEMPTIONS` and FOLLOWUPS. What stays red is the wrapper not being an element at all (D37 item 2), which the finding tells apart by the unnamed container box under the wrapper — not by the number of stops. Whether VoiceOver stops on those `Text`s is not known.
+**The iOS gap.** XCUITest lists the wrapper as the element with the label, and can also
+list the `Text`s inside it as elements of their own (iOS 27): React Native vends an
+accessibility element per `Text`, and the wrapper hides them only once `accessible` has
+reached the component view, so how many are listed depends on when the tree is walked,
+not on what the component is. Whether VoiceOver stops on those `Text`s is not known.
 
-**Not exercised:** VoiceOver and TalkBack themselves. Neither screen reader ran, and their
-double-tap-and-hold was not performed on a device: the simulator has no VoiceOver, and the
-emulator could not produce TalkBack's gesture (S3). What the table proves is the tree and
-the actions a screen reader is handed, not what it does with them.
+**Not tested:** VoiceOver and TalkBack themselves. The simulator has no VoiceOver, and an
+emulator cannot produce TalkBack's double-tap-and-hold. The table covers the tree and the
+actions a screen reader is handed, not what a screen reader does with them.
 
 ## Limits
 
@@ -184,9 +184,9 @@ the actions a screen reader is handed, not what it does with them.
   pointer's secondary click from UIKit.
 - **`systemImage` is iOS-only** and **`androidIcon` is Android-only**, on the rows as on
   Menu; a row that wants a glyph on both platforms names both. A submenu is inline on
-  Android, as on Menu (D29).
+  Android, as on Menu.
 - **Android `removeClippedSubviews`** on the ContextMenu itself is ignored, with a dev
   warning.
 - **Not hostable**: a `<Host>` refuses it, because it is a `View` around React Native
   children.
-- **react-native-gesture-handler** (a swipeable row with a context menu) is not measured.
+- **react-native-gesture-handler** (a swipeable row with a context menu) is not tested.

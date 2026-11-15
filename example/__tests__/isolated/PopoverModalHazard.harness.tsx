@@ -1,25 +1,9 @@
 /**
- * The stranded-Modal hazard (DECISIONS D35 item 5) for Popover, in an app instance of
- * its own.
- *
- * React Native closes a `Modal` by dismissing *its own* controller. A popover presented
- * in that controller's chain is what UIKit dismisses instead, and the `Modal`'s host
- * stays over the app for good - and, as G18 measured for Tooltip, a popover left in the
- * chain is also what makes UIKit *refuse the next* `Modal` the app opens. So Popover
- * presents from a window of its own, as Tooltip does (D41), rather than through D35's
- * chain.
- *
- * This file closes the Modal *while the popover inside it is up*: the exact move that
- * strands. Were the rule ever to regress, RN's host would be left over the app and every
- * later file in the same process would lay out under it, so this file must never run in
- * the shared harness process. `example/jest.harness.config.mjs` keeps `__tests__/isolated/`
- * out of the shared run; run it alone with
+ * Closes an RN `Modal` while the popover inside it is up. A stranded popover would leave
+ * RN's Modal host over the app for every later file, so this must never run in the
+ * shared harness process. Run it alone:
  *
  *   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- PopoverModalHazard
- *
- * Android has no chain to strand - the popup is a window, and so is the Modal - so there
- * the same moves pin the other half: the Modal going takes the popup with it, silently,
- * and leaves no root behind.
  */
 import { useState } from 'react';
 import { Modal, Platform, View } from 'react-native';
@@ -143,13 +127,10 @@ describe('Popover · the stranded-Modal hazard (own app instance)', () => {
       await sleep(600);
       setters.get('pin')?.(true);
       const shown = await waitForReport('pin', isUp, 'up inside the Modal');
-      // The move that strands a popover in the Modal's chain. On iOS RN keeps a closing
-      // Modal's content mounted until its native dismissal has ended, so the popover sees
-      // its window go first and the unmount comes after; on Android the unmount comes
-      // first. The order differs, the rule does not: a `Modal` closing under a popover
-      // takes the mount with it, and a popover dropped while presented reports nothing
-      // (D44 item 2, and BottomSheet's). iOS used to report `presented:false` there - the
-      // one event an app can do nothing with, since the screen it came from is gone.
+      // On iOS RN keeps a closing Modal's content mounted until its native dismissal
+      // has ended, so the popover sees its window go first and the unmount comes after;
+      // on Android the unmount comes first. Either way, a popover dropped while
+      // presented reports nothing.
       setters.get('modal')?.(false);
       await sleep(1800);
       cleanup();
@@ -170,9 +151,8 @@ describe('Popover · the stranded-Modal hazard (own app instance)', () => {
       );
       expect(after.presented).toBe('0');
       if (IOS) {
-        // Why, asserted after the strand itself so a regression reads as the strand: a
-        // window of its own, so RN's dismissal of the Modal reaches the Modal and not
-        // the popover - and the app's chain never holds a popover at all.
+        // The popover is in a window of its own, so RN's dismissal of the Modal reaches
+        // the Modal and not the popover.
         expect(shown.ownWindow).toBe('1');
         expect(shown.topPresented).toContain('ModalHostViewController');
       }

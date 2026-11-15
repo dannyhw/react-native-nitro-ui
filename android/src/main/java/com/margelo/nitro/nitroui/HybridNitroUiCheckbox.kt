@@ -55,61 +55,27 @@ import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
-/*
- * The Checkbox component: Material 3 `Checkbox`, and `TriStateCheckbox` while
- * `indeterminate`, on the core runtime.
- *
- * It is Switch's structure (`HybridNitroUiSwitch.kt`: the event-count handshake on
- * a boolean) with Chip's label rule (`HybridNitroUiChip.kt`: the label is content,
- * so it is in the sizing key and a new one re-measures). What is its own is the
- * a11y node: a checkbox has to be *announced* as a checkbox - `Role.Checkbox` with
- * its toggleable state, on one merged node when a label is shown, so TalkBack gets
- * "checkbox, checked, Email me offers" from one focus stop rather than a nameless
- * box and a separate piece of text.
- *
- * Indeterminate is Android-only: iOS has no checkbox at all, so there is no third
- * glyph to draw there (`docs/components/checkbox.md`).
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * manager resolves the implementation through a wildcard import of exactly that
- * package. Core helpers live in `...nitroui.core`.
- */
+// Material 3 `Checkbox`, or `TriStateCheckbox` while `indeterminate`. Must stay in this
+// package: the generated manager finds the implementation through a wildcard import of it.
 
-/** State of one Checkbox. See [NitroUiModel] for the shape this has to have. */
 internal class CheckboxModel : NitroUiModel() {
-  /** What the box shows. Snapshot-observed, so writing it recomposes. */
   var displayed by mutableStateOf(false)
 
-  /** Material 3's third state. Observed: it picks the composable *and* what it draws. */
   var indeterminate by mutableStateOf(false)
 
-  /** The label beside the box, or `null`. Observed: it is content, and width. */
   var label by mutableStateOf<String?>(null)
 
-  /**
-   * The `iosStyle` React sent, kept so the getter answers what was written - and
-   * deliberately *not* snapshot-observed: this platform has a checkbox
-   * (`Checkbox`, and `TriStateCheckbox` for the dash), so DECISIONS D47's choice of
-   * picture is another platform's and reading it here would be a style switch Material
-   * 3 does not have. Storing rather than dropping it means a recycled instance cannot
-   * answer the previous owner's style, and `Checkbox.harness.tsx` can assert that
-   * Android took the prop and drew the same box anyway.
-   */
+  /** Stored for the getter only: Android always draws Material's checkbox. Not observed. */
   var iosStyle: String = "circle"
 
-  /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
-  /** ARGB `processColor` int of the "on" accent, or `null` for Material 3's own. */
+  /** ARGB int for the checked colour, or `null` for Material 3's own. */
   var tint by mutableStateOf<Int?>(null)
 
-  /**
-   * `accessibilityLabel`, or `null` to fall back to [label]. Put on the box itself
-   * (never the container, core.md §3), because the box is the node a reader acts on.
-   */
+  /** `null` falls back to [label]. */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /** The size configuration React sent; the engine reads it out of Fabric state. */
   var sizingKey = ""
 
   /** Event-count handshake. Not observed: it drives [displayed], never renders. */
@@ -120,7 +86,7 @@ internal class CheckboxModel : NitroUiModel() {
 
   var onCheckedChange: ((Boolean, Double) -> Unit)? = null
 
-  /** Test-only read-outs (`nuiTestStateReport`), behind one lock. */
+  /** Test-only read-outs, behind one lock. */
   private val reportLock = Any()
   private var drawn = "none"
   private var probes = 0
@@ -128,33 +94,16 @@ internal class CheckboxModel : NitroUiModel() {
   private var accessibilityReport = "none"
 
   /**
-   * The label's centring, as `labelOff=<dp>,<dp>`: how far the text's middle sits from the
-   * row's middle (negative means it rides high), and how much taller the row is than the
-   * text. Both `none` when no label is drawn.
-   *
-   * A labelled Checkbox is a `Row` of box, spacer and text, and the height of that row is
-   * set by the box's 48 dp touch target, so a `Row` that aligns its children to the top
-   * draws the label along the top of a row that looks 48 dp tall. That is invisible to a
-   * measurement - the box, the row and the screenshot all come back 48 dp - and visible to
-   * anybody reading the screen, so it is measured in the one place that knows both boxes:
-   * the label's own layout coordinates, against its parent's.
-   *
-   * The second number is what stops the first from proving nothing. Text as tall as its
-   * row is centred by every alignment there is, so a `labelOff` of `0` measured in a row
-   * that snug as the text is a tautology; the harness reads the gap before it believes the
-   * offset.
+   * `<dp>,<dp>`: how far the label's middle sits from the row's middle, and how much taller
+   * the row is than the text. `none` when no label is drawn.
    */
   private var labelBox = "none"
 
-  /**
-   * Record what the composable was handed: `mixed` while Material draws the third
-   * state, so a test can tell "indeterminate" from "checked" and from "never drew".
-   */
+  /** `mixed` while Material draws the indeterminate dash. */
   fun recordDrawn(value: String) {
     synchronized(reportLock) { drawn = value }
   }
 
-  /** Record how many nodes a reader is offered for this control (`merged` read-out). */
   fun recordMerged(value: String) {
     synchronized(reportLock) { merged = value }
   }
@@ -166,12 +115,11 @@ internal class CheckboxModel : NitroUiModel() {
     }
   }
 
-  /** Record [labelBox] from the label's own layout pass. */
   fun recordLabelBox(value: String) {
     synchronized(reportLock) { labelBox = value }
   }
 
-  /** `displayed=…;probes=…;merged=…;a11y=…;labelBox=…`. Safe from any thread. */
+  /** Safe from any thread. */
   fun stateReport(): String =
     synchronized(reportLock) {
       "displayed=$drawn;probes=$probes;merged=$merged;a11y=$accessibilityReport;labelBox=$labelBox"
@@ -203,14 +151,7 @@ internal class CheckboxModel : NitroUiModel() {
   }
 }
 
-/**
- * The Checkbox's colours for [tint] (an ARGB int, or `null` for the scheme's own).
- *
- * The checked box is the closest analogue of iOS `.tint()`, which is Switch's choice
- * for the same prop (`HybridNitroUiSwitch.kt`'s `switchColors`). Built in the
- * composable, so it reads the live `MaterialTheme`; a Checkbox has no animation to
- * preserve, so nothing is cached - M3 builds these from five color slots.
- */
+/** [tint] is an ARGB int, or `null` for the scheme's own colours. */
 @Composable
 private fun checkboxColors(tint: Int?): CheckboxColors {
   val accent = if (tint != null) ComposeColor(tint) else null
@@ -224,26 +165,17 @@ private fun checkboxColors(tint: Int?): CheckboxColors {
   }
 }
 
-/**
- * The Checkbox's host: [NitroComposeHost] plus this component's composable.
- * [Component] is fixed for the lifetime of the view - there is no `setContent`
- * after construction.
- */
 private class CheckboxHost(
   context: ThemedReactContext,
   activity: Activity?,
   model: CheckboxModel,
 ) : NitroComposeHost<CheckboxModel>(context, activity, model) {
-  /** The platform's own answer to "can a reader receive events right now?". */
   private val systemAccessibility =
     context.getSystemService(AccessibilityManager::class.java)
 
   /**
-   * Hand an accessibility event to the platform only when it can accept one - the
-   * Chip/Slider host's guard, for their reason: `nuiTestProbeAccessibility` forces
-   * Compose's semantics on with no reader connected, Compose then announces every
-   * later change up the parent chain, and [AccessibilityManager] answers an
-   * announcement with no recipient by throwing. Inert when a reader is connected.
+   * The platform throws when sent an accessibility event while no service is enabled, which
+   * happens once the test probe has forced Compose semantics on.
    */
   override fun requestSendAccessibilityEvent(
     child: View,
@@ -256,38 +188,19 @@ private class CheckboxHost(
   }
 
   /**
-   * One press with nothing to say about the value: the label's `clickable` and the
-   * `nuiTestToggle` harness hook, which ask for what a tap on the box would ask for.
-   *
-   * `!displayed` is also Material's own cycle for the states this component can be
-   * in: `TriStateCheckbox` shows the dash only while `displayed` is false (see
-   * [CheckboxBox]), so the one press from the dash is the press that lands on
-   * checked - and the one from checked is unchecked, which is the whole of a
-   * checkbox's other half. A press that asked for "checked" whatever the box showed
-   * would make an Android checkbox impossible to uncheck by tapping it, which
-   * `Checkbox.harness.tsx`'s second toggle and `real-input:android`'s second tap
-   * both measure.
+   * A press that toggles. From the indeterminate dash this lands on checked, because the dash
+   * is only shown while `displayed` is false.
    */
   fun press() {
     press(!model.displayed)
   }
 
-  /**
-   * One press asking for [requested], through the path a tap takes - M3's
-   * `onCheckedChange` hands this half its own answer, so a tap on the box is the
-   * composable's value and not a second opinion. Refused while disabled, as M3
-   * refuses the tap.
-   *
-   * Neither M3 state changes the box's size (a checkbox is a fixed-size control;
-   * only its label is content), so unlike Chip's `press` this holds no size report:
-   * the harness measures that checked and unchecked measure the same.
-   */
+  /** A press asking for [requested], as a tap on the box does. Ignored while disabled. */
   fun press(requested: Boolean) {
     if (!model.enabled) {
       return
     }
-    // Native is optimistic: show the new value now, before React has seen the
-    // event, so there is no visual latency (§4).
+    // Optimistic: show the new value before React has seen the event.
     val eventCount = model.state.user(requested)
     model.displayed = requested
     model.onCheckedChange?.invoke(requested, eventCount.toDouble())
@@ -295,14 +208,8 @@ private class CheckboxHost(
 
   @Composable
   override fun Component(model: CheckboxModel) {
-    // The reading `nuiTestStateReport()` answers with: taken in the composable, so
-    // it is what the control is handed rather than what React sent.
-    // What Material will actually draw, in the order it draws it:
-    // `CheckboxBox` picks `TriStateCheckbox` for `indeterminate` and hands it
-    // `displayed ? On : Indeterminate`, so the dash is only on screen while the value
-    // is off. Reading `indeterminate` first here would report `mixed` after the tap
-    // that turned the dash into a check mark, which is the one transition the harness
-    // case for the third state watches.
+    // Recorded for tests, in Material's order: the dash is only on screen while the value is
+    // off, so `displayed` is read before `indeterminate`.
     model.recordDrawn(
       when {
         model.displayed -> "1"
@@ -315,8 +222,7 @@ private class CheckboxHost(
     val colors = checkboxColors(model.tint)
     val density = LocalDensity.current
     if (label == null) {
-      // A bare box: Material's own node is the one a reader acts on, and the name
-      // goes on it (Chip's rule: the name belongs on the actionable node).
+      // A bare box: Material's own node is the one a reader acts on, so the name goes on it.
       CheckboxBox(
         model,
         if (name != null) Modifier.semantics { contentDescription = name } else Modifier,
@@ -324,30 +230,12 @@ private class CheckboxHost(
         interactive = true,
       )
     } else {
-      // The label is part of the control and of its size, so the row - not just the
-      // box - is what a reader gets: one node with `Role.Checkbox`, its toggleable
-      // state, the name and the label's text, instead of a nameless box and a
-      // separate piece of text. Material publishes a labelled control this way in
-      // its own `CheckboxWithLabel`: the *row* carries the toggle and the box is
-      // presentational.
-      //
-      // Putting the click on the box and the label instead (measured, G15) is the
-      // shape that goes wrong twice over. Compose refuses to merge a node whose
-      // descendants are actionable, so the row keeps its own inert node - the name
-      // then sits on two nodes, one of them with no actions at all, which is what
-      // the a11y rule reports as "announced twice, and only one of those stops
-      // carries the value". And with the box 48 dp wide, an 8 dp spacer and a
-      // clickable label, the middle of the row is *nothing*: a press at the box's
-      // own centre - what a caller, a test and TalkBack all aim at - lands in the
-      // gap and does nothing.
+      // One merged node for the row, with the role, state, name and label text, as Material's
+      // own labelled checkbox does. A click on the box and label instead would leave a dead gap
+      // between them, and Compose will not merge a node whose descendants are actionable.
       Row(
-        // Centre the label against the box. `Row` aligns its children to the top by
-        // default, and this row is 48 dp tall because the box asks for a 48 dp touch
-        // target - so the default draws a ~24 dp label along the top of a row that still
-        // measures 48 dp, with its middle 12 dp above the row's. Every size assertion is
-        // blind to that: box, row and screenshot all come back 48 dp. Material's own
-        // labelled checkbox centres its text for the same reason, and
-        // `Checkbox.harness.tsx`'s centring case measures this row's label to prove it.
+        // `Row` aligns its children to the top by default, and this row is taller than the
+        // label because the box asks for a 48 dp touch target.
         verticalAlignment = Alignment.CenterVertically,
         modifier =
           Modifier.semantics(mergeDescendants = true) {
@@ -365,17 +253,9 @@ private class CheckboxHost(
             onClick = { press() },
           ),
       ) {
-        // Presentational here: the row already carries the toggle and the state, and
-        // a second toggleable node inside it is the second focus stop again. Its own
-        // semantics are cleared rather than merely unused: the row already publishes the
-        // one toggle a reader should meet, and a second node with one is the second focus
-        // stop this file exists to avoid.
-        //
-        // The 48 dp touch target comes with the box's *own* toggleable modifier, so a
-        // presentational box loses it - measured here as a labelled checkbox 24 dp
-        // tall against a bare one at 48. Asking for it back is what keeps the two
-        // configurations the same height, and keeps the row a touch target rather
-        // than a line of text.
+        // Presentational: the row already publishes the toggle, so the box's semantics are
+        // cleared. The 48 dp touch target comes with the box's own toggleable modifier, so it
+        // has to be asked for again.
         CheckboxBox(
           model,
           Modifier.clearAndSetSemantics {}.minimumInteractiveComponentSize(),
@@ -383,21 +263,16 @@ private class CheckboxHost(
           interactive = false,
         )
         Spacer(Modifier.width(8.dp))
-        // One line, tail-truncated: the checkbox's intrinsic width is the row's, and
-        // a caller's narrower `width` truncates the label instead of painting outside.
+        // One line, truncated: a narrower `width` shortens the label instead of overflowing.
         Text(
           modifier =
             Modifier.onGloballyPositioned { where ->
-              // Both boxes in the Row's own space: the label's middle against the
-              // middle of the height it was laid out in.
               val row = where.parentLayoutCoordinates
               model.recordLabelBox(
                 if (row == null) {
                   "none"
                 } else {
-                  // Both numbers in dp: the offset from the row's middle, and the room
-                  // the row leaves around the text. Rounded to 1/100 dp, which is well
-                  // inside what either number is asserting.
+                  // In dp, rounded to 1/100.
                   val fromMiddle =
                     row.localPositionOf(where, Offset.Zero).y +
                       where.size.height / 2f - row.size.height / 2f
@@ -419,21 +294,9 @@ private class CheckboxHost(
   }
 
   /**
-   * The box itself: M3's `TriStateCheckbox` while `indeterminate`, `Checkbox`
-   * otherwise.
-   *
-   * [interactive] decides who owns the tap. A bare box owns it: M3 is asked for the
-   * press (`onCheckedChange` / `onClick`), which is what makes the box's own node the
-   * one a reader acts on - `Role.Checkbox` with its toggleable state, published by
-   * Material rather than asserted by us. A labelled box does not: the row around it
-   * carries the toggle, the name and the state (see [Component]), so `Checkbox` is
-   * handed a `null` `onCheckedChange` - which is M3's own way to say "draw it, do not
-   * make it actionable" - and `TriStateCheckbox` is handed the same `null` for the same
-   * answer. Its `onClick` has been nullable since Material 3 1.2 and this repo ships 1.5,
-   * so neither box publishes a click of its own once the row owns the tap. Round 1's comment
-   * claimed it insists on a non-null `onClick`, which is why it kept one - and an `onClick`
-   * installs the box's own interaction handling, whose ripple is bounded by the 48 dp box,
-   * while a labelled control's press belongs to the row it is in.
+   * [interactive] decides who owns the tap. A bare box does. A labelled box is handed `null`
+   * callbacks, Material 3's way to say "draw it, do not make it actionable", because the row
+   * around it carries the toggle.
    */
   @Composable
   private fun CheckboxBox(
@@ -466,7 +329,6 @@ private class CheckboxHost(
   }
 }
 
-/** The Hybrid View React renders as `NitroUiCheckbox`. */
 class HybridNitroUiCheckbox(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiCheckboxSpec(), RecyclableView {
@@ -474,7 +336,6 @@ class HybridNitroUiCheckbox(
   private val model = CheckboxModel()
   private val host = CheckboxHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
@@ -485,31 +346,20 @@ class HybridNitroUiCheckbox(
   }
 
   companion object {
-    /** This component's name in the sizing engine (`getName()` in the generated manager). */
+    /** Must match `getName()` in the generated manager. */
     private const val SIZING_COMPONENT_NAME = "NitroUiCheckbox"
 
     /**
-     * The size to lay a Checkbox out with before anything has been measured, in dp.
-     *
-     * One number for every configuration, for Button's reason (fallbacks are keyed by
-     * component), so each axis says what it can promise.
-     *
-     * The height is not a guess. `minimumInteractiveComponentSize` will not publish a
-     * touch target smaller than 48 dp, so bare, labelled, checked and indeterminate are all
-     * 48 dp tall - measured 48.00 bare and 48.00 labelled - and the conformance run compares
-     * this constant with that box.
-     *
-     * The width is a bare box's measured 48 dp, and is not claimed for the labelled one: `Checkbox` measures
-     * 48 dp wide with nothing beside it and 131.05 dp with a label, and the engine keys
-     * fallbacks by component alone. `docs/components/checkbox.md` has the table;
-     * `Checkbox.harness.tsx` is where a label's effect on width is measured.
+     * The size used before anything has been measured, in dp. One size per component: 48 dp is
+     * the minimum touch target, so the height holds for every configuration; the width is a
+     * bare box's, and a label makes it wider.
      */
     private const val FALLBACK_WIDTH_DP = 48.0
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 
-    /** One `JNI` call per process; `NitroUiDeclaredFallbacks` calls it at package init. */
+    /** One JNI call per process. */
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
         return
@@ -531,8 +381,7 @@ class HybridNitroUiCheckbox(
       model.state.js?.let { Variant_Boolean_NullType.First(it) }
         ?: Variant_Boolean_NullType.Second(NullType.NULL)
     set(next) {
-      // Not visual on its own: `displayed` follows once the event count says JS has
-      // caught up. See `afterUpdate()`.
+      // `displayed` follows in `afterUpdate()`, once the event count says JS has caught up.
       model.state.js = next.asFirstOrNull()
     }
 
@@ -563,11 +412,7 @@ class HybridNitroUiCheckbox(
         return
       }
       model.indeterminate = next_
-      // `TriStateCheckbox` is a different composable, so the measure is asked for
-      // again - the key changed with it on Android (`Checkbox.tsx`), and a new
-      // configuration must not be answered from the old one's cache entry. On
-      // Compose the recomposition's own measure pass is what reports the new size
-      // (`HybridNitroUiChip.kt`'s `label` setter); there is nothing to notify.
+      // A different composable: Compose's own measure pass reports the new size.
       host.markDirty()
     }
 
@@ -587,18 +432,11 @@ class HybridNitroUiCheckbox(
         return
       }
       model.label = next_
-      // The composable recomposes and Compose's own measure pass reports the new
-      // width (sizing.md §5). A label is content: it is the whole width difference.
+      // A label changes the width; Compose's own measure pass reports it.
       host.markDirty()
     }
 
-  /**
-   * Stored, never read: DECISIONS D47's three pictures are what iOS draws because iOS
-   * has no checkbox, and Android's is Material 3's own. Every style arrives, is kept for
-   * the getter, and changes nothing about what is composed - no `markDirty()`, because
-   * nothing observes it, which is the same reason `Checkbox.harness.tsx` measures the
-   * box under each style name and expects one answer.
-   */
+  /** Stored for the getter only: nothing on Android observes it, so no `markDirty()`. */
   override var iosStyle: String
     get() = model.iosStyle
     set(next) {
@@ -623,9 +461,8 @@ class HybridNitroUiCheckbox(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double. Going via
-      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an
-      // opaque colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      // `processColor` hands back the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, so an opaque colour would become `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.tint) {
         return
@@ -638,7 +475,7 @@ class HybridNitroUiCheckbox(
     get() =
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
-    // RN's own `BaseViewManager.setTestID`: the tag is what testID matchers read.
+    // The view tag is what testID matchers read.
     set(next) {
       host.tag = next.asSecondOrNull()
     }
@@ -676,9 +513,7 @@ class HybridNitroUiCheckbox(
         return
       }
       model.sizingKey = next
-      // The engine has no answer for a key it has not seen, and a new configuration
-      // may measure what the old one did (Button's F1) - so the host is asked for a
-      // fresh measure and a report that the dedupe must not swallow.
+      // A new key needs a fresh measure and a report, even if the size is unchanged.
       host.noteSizingKeyChanged()
     }
 
@@ -698,8 +533,7 @@ class HybridNitroUiCheckbox(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // The handshake decides whether React's `checked` wins over what the user just
-    // did - including a change JS refused (§4).
+    // The handshake decides whether React's `checked` wins over what the user just did.
     if (model.state.reconcile()) {
       model.displayed = model.state.displayed
       host.markDirty()
@@ -709,8 +543,7 @@ class HybridNitroUiCheckbox(
 
   override fun prepareForRecycle() {
     host.tag = null
-    // The composition does not survive a recycle (core.md §6), and
-    // `host.prepareForRecycle()` resets the model and releases the sizing instance.
+    // The composition does not survive a recycle; this also resets the model.
     host.prepareForRecycle()
   }
 
@@ -721,51 +554,37 @@ class HybridNitroUiCheckbox(
 
   // MARK: - Methods
 
-  /** The size Compose measured, from the host's cache. Safe on the JS thread (§1.4). */
+  /** The size Compose measured, from the host's cache. Safe on the JS thread. */
   override fun measureContent(): NitroUiCheckboxSize {
     val size = host.contentSize ?: return NitroUiCheckboxSize(0.0, 0.0)
     return NitroUiCheckboxSize(size.width, size.height)
   }
 
-  /** Toggle through the tap's path, on the UI thread (see the spec). Returns at once. */
+  /** Posts to the UI thread and returns at once. */
   override fun nuiTestToggle() {
     Handler(Looper.getMainLooper()).post { host.press() }
   }
 
-  /** Read the control's semantics on the UI thread (see the spec). Returns at once. */
+  /** Posts to the UI thread and returns at once. */
   override fun nuiTestProbeAccessibility() {
     Handler(Looper.getMainLooper()).post {
       model.recordAccessibility(describeAccessibility())
     }
   }
 
-  /**
-   * The mount's own read-outs, then the host's lifetime pair.
-   *
-   * `drops`/`recycles` come from [NitroComposeHost] and survive a recycle deliberately
-   * (`Recycling.harness.tsx` explains why a per-mount flag cannot answer the question):
-   * a fresh instance answers `recycles=0`, so the mount that answers `recycles>=1` is a
-   * view the pool handed back - which is the only kind of mount whose reset a test can
-   * actually be testing. iOS publishes the same two fields from the same kind of counter.
-   */
+  /** The lifetime counters survive a recycle, so `recycles>=1` identifies a reused view. */
   override fun nuiTestStateReport(): String =
     model.stateReport() +
     ";drops=${host.lifetimeDrops};recycles=${host.lifetimeRecycles}"
 
   /**
-   * The control's accessibility, as two facts in one line:
-   * `role=<role>,checked=<bool|none>,toggle=<state|none>,disabled=<bool>,clickable=<bool>,label=<text>`
-   * plus the count of nodes a reader is offered, filed under `merged=`
-   * (`1` = the labelled control is one focus stop, which is what it has to be).
-   *
-   * Compose builds semantics only while an accessibility service is connected, and a
-   * harness run has none, so they are forced on for this view first (the Slider's and
-   * Chip's probes do the same, and say why).
+   * Compose builds semantics only while an accessibility service is connected, so they are
+   * forced on for this view first.
    */
   private fun describeAccessibility(): String {
     val root = findComposeRoot(host) ?: return "no Compose root"
     root.forceAccessibilityForTesting(true)
-    // Declared non-null, nullable in fact until semantics exist (the Slider's note).
+    // Declared non-null, but null until semantics exist.
     val owner: SemanticsOwner? = root.semanticsOwner
     if (owner == null) {
       return "no SemanticsOwner"
@@ -804,10 +623,7 @@ class HybridNitroUiCheckbox(
       "clickable=${config.contains(SemanticsActions.OnClick)},label=$label"
   }
 
-  /**
-   * The Compose view under [root], as [RootForTest] - the public interface
-   * `AndroidComposeView` implements (`HybridNitroUiSlider.findComposeRoot`).
-   */
+  /** The Compose view under [root]: `AndroidComposeView` implements [RootForTest]. */
   private fun findComposeRoot(root: View): RootForTest? {
     val queue = ArrayDeque<View>()
     queue.add(root)

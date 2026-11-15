@@ -1,9 +1,3 @@
-/**
- * Checkbox stories (G15). Props and events: `docs/components/checkbox.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Checkbox } from 'react-native-nitro-ui';
@@ -70,12 +64,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * `checked` stays authoritative: taps move the local echo of it and report to the
- * Actions panel, and moving the `checked` row moves the box.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onCheckedChange, checked, ...props }) {
     const [current, setCurrent] = useState<boolean>(checked ?? false);
@@ -103,18 +91,7 @@ export const Playground: Story = {
   },
 };
 
-/**
- * The states a checkbox has: off, on, a bare box, disabled in both, and the third
- * state in both of its values - a dash while the value is off, a check mark while it is
- * on, which is the row whose press reports `false`.
- *
- * Both platforms draw the third state now (DECISIONS D47 item 3): Material 3's dash on
- * Android and `minus.circle.fill` on iOS, so the middle column is a pair of pictures on
- * either platform and not one platform's column. The iOS picture is the checkmark glyph;
- * `iosStyle='switch'` is the old look and has its own story.
- *
- * This is the README screenshot.
- */
+/** The README screenshot. */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -122,17 +99,15 @@ export const States: Story = {
         <View style={styles.stack}>
           <Checkbox label="Email me offers" />
           <Checkbox label="Order confirmation" defaultChecked />
-          {/* Bare: no label at all, so the name has to come from `accessibilityLabel`. */}
+          {/* No label, so the name comes from `accessibilityLabel`. */}
           <Checkbox accessibilityLabel="Bare box" />
         </View>
       </Column>
       <Column label="Third state">
         <View style={styles.stack}>
           <Checkbox label="Select all" indeterminate />
-          {/*
-            The state a caller has to handle: `indeterminate` while `checked` is true
-            shows a check mark, and the press that empties it reports `false`.
-          */}
+          {/* `indeterminate` while `checked` is true shows a check mark, and
+              pressing it reports `false`. */}
           <Checkbox label="Select all, checked" checked indeterminate />
         </View>
       </Column>
@@ -146,19 +121,7 @@ export const States: Story = {
   ),
 };
 
-/**
- * `iosStyle`: the three pictures iOS can draw (DECISIONS D47).
- *
- * The circle is the default - Apple's own checklist symbol, the one Reminders and Notes
- * draw - because a Checkbox that looked exactly like a Switch read as the wrong
- * component. The square is the same glyph squared. `'switch'` is what this shipped with
- * under DECISIONS D38 item 1, kept because it is the look some callers chose: the
- * system's own control, at its own size, with its own thumb.
- *
- * It is one prop with three pictures and not three controls: the same `Toggle`, the same
- * binding, the same tap target, the same accessibility element, the same value. Android
- * ignores it entirely - Material 3 has a checkbox - and draws its box for all three rows.
- */
+/** Android ignores `iosStyle` and draws the Material 3 checkbox in all three columns. */
 export const IosStyles: Story = {
   render: () => (
     <Showcase>
@@ -210,7 +173,6 @@ export const IosStyles: Story = {
   ),
 };
 
-/** The controlled contract: the text is the prop, the box follows it. */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const ink = useShowcaseInk();
@@ -254,10 +216,6 @@ export const Controlled: Story = {
   },
 };
 
-/**
- * Sizing: a bare box, and the same box with a label - the label is the whole
- * width difference, and checking it changes nothing on either platform.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>
@@ -279,7 +237,6 @@ export const Sizing: Story = {
   ),
 };
 
-/** A caller's accent, and what a checkbox looks like with nothing beside it. */
 export const Tint: Story = {
   render: () => (
     <Showcase>

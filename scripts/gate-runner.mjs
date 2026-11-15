@@ -1,58 +1,12 @@
 #!/usr/bin/env node
 /**
- * The supervisor a gate's runner starts under (X34 item 2).
+ * The supervisor a gate's command runs under: it ends the command and everything in its process
+ * group when the gate that started it dies, and exits with `GATE_DEATH_EXIT`.
  *
- * `gate.mjs` starts a gate's command through this file so that the command, its Metro and its
- * harness stop when the gate stops — including when the gate is the process somebody killed. The
- * incident (X32, seen again by X33): a `gate.mjs <gate> --background` whose `gate.mjs` died left
- * its runner serving the lease's Metro port with no ledger line, and the next gate on that lease
- * read a busy port instead of the death. `gate.mjs`'s own signal handlers cannot cover that,
- * because a killed process runs no handlers; only a process that is *still alive* can notice its
- * gate is gone. That process is this one.
- *
- * The shape:
- *
- *   - `gate.mjs` spawns this file `detached`, so the runner leads a session whose id is its own
- *     pid, and the command is spawned *into that same group* (`detached: false`). One group for
- *     the whole run, which is what makes both directions of the fix work: the gate's
- *     `process.kill(-child.pid, signal)` reaches the command exactly as it reached the command
- *     before the supervisor existed, and `ownMetroPids` still finds a leftover server in
- *     `child.pid`'s group — by a number the gate knows from the spawn, not a `ps` query about a
- *     runner that may be dead by then. A command in a group of its own would break that second
- *     half: the Metro is a grandchild, so it would report a group the gate never learned.
- *   - the command keeps the three stdios it is handed, so a run's transcript is the same stream it
- *     was before the supervisor existed. This process's own notes go to stderr *and* appended to
- *     the run's log (`NITRO_UI_GATE_RUNNER_LOG`), because when the parent-death path fires the
- *     pipe into the gate's log has died with the gate, and the reason a run stopped belongs in the
- *     evidence.
- *   - the run's own stdin is `ignore`, never this process's: the supervisor's stdin may be the pipe
- *     it watches its gate through, and a Metro that read that pipe would both lose the signal and
- *     eat the EOF.
- *   - while the command runs, this process watches its gate two ways. The primary one is the pipe:
- *     `gate.mjs` opens a stdin pipe for this process and nothing ever writes it, so when the gate
- *     dies the kernel closes its end and the read reaches EOF — the parent-death check, exact for a
- *     `SIGKILL`, a segfault and a closed terminal alike, and needing no pid to be believed. The
- *     backstop is a poll of the gate's (pid, group) pair, in case something inherited the write end.
- *     Either one ending means: signal the group, wait, escalate to SIGKILL, report, and leave with
- *     `GATE_DEATH_EXIT` so the run cannot be read as a pass.
- *
- * Why the death check needs both halves of the gate's identity, and a pipe on top: pid 41 000 is not
- * a fact that stays true. The kernel hands out pids in sequence, so a long-running gate (a harness
- * run is ~50 min) can be followed by a short-lived process that reuses its pid — and a runner
- * watching the bare pid would watch a stranger, decide the gate was alive, and leave the Metro up:
- * the exact failure this file exists to prevent, arriving as its opposite. The group on its own is
- * not the answer either, and the first version of this file thought it was: a gate started by
- * `zsh -c '…'` or `nohup` is *not* its group's leader, so its group outlives it by the length of the
- * shell's own life, and `kill(-pgid, 0)` answers "alive" from a shell that has no idea its child
- * died. (Reading the pgid as a *pid* — `kill(pgid, 0)` — is the same question asked worse.) Both
- * halves together are the identity check: the pid must exist *and* still sit in the group it
- * reported at spawn. The pipe is what makes the common case need no guessing at all.
- *
- * Killing is bounded and aimed at one group — the one this supervisor was started in — so it can
- * never reach a device, another task's Metro, or the maintainer's emulator. No `pkill`, no
- * pattern, no process this file did not start.
- *
- * @see `gate.mjs` (`startBackgroundGate`, `runGateUnclaimed`), `gate-core.mjs` (`ownMetroPids`)
+ * `gate.mjs` spawns this file detached, so it leads a process group, and the command is spawned
+ * into that same group: one group id covers the command and the Metro it starts. The gate's
+ * death is noticed by EOF on the stdin pipe the gate holds open, with a poll of the gate's
+ * (pid, group) pair as a backstop. Only that one group is ever signalled.
  */
 
 import {
@@ -68,41 +22,31 @@ import { spawn, spawnSync } from 'node:child_process';
 /** Set by `gate.mjs` to its own pid: the fallback for a supervisor with no group to watch. */
 export const GATE_PID_ENV = 'NITRO_UI_GATE_RUNNER_OF';
 /**
- * Set by `gate.mjs` to its own process group id: the second half of the gate's *identity*, not the
- * thing the watchdog watches. The pid alone is reused during a long run and the recycled pid sits in
- * another group; the group alone is worse than useless, because a gate started by `zsh -c` is not
- * its leader and its group outlives it. Together they answer "is the process that started me still
- * that process" (`gateProcessIsAlive`). A caller that could not ask the kernel for a group leaves
- * this unset and gets the pid-only fallback.
+ * Set by `gate.mjs` to its own process group id. The pid alone can be reused
+ * during a long run, and a gate started by `zsh -c` is not its group's leader,
+ * so the group alone outlives it: the pair is the gate's identity
+ * (`gateProcessIsAlive`). Unset means the pid-only fallback.
  */
 export const GATE_PGID_ENV = 'NITRO_UI_GATE_RUNNER_GROUP_OF';
 /** Set by `gate.mjs` to the run's log file, so a note survives a dead gate. */
 export const RUNNER_LOG_ENV = 'NITRO_UI_GATE_RUNNER_LOG';
 /**
- * Set by `gate.mjs` to the *ledger's* spelling of that same log: the path relative to the clone's log
- * store. `RUNNER_LOG_ENV` must be absolute to be openable from a fresh process, but a sidecar that
- * wrote the absolute spelling down would name the run one way and the ledger line another - and
- * joining a dead gate's leftovers to its run is the one thing this record exists for. Optional: a
- * supervisor started outside `gate.mjs` has no ledger line to agree with, and keeps the path it was given.
+ * Set by `gate.mjs` to the same log's path relative to the clone's log store,
+ * which is how the ledger spells it, so the sidecar and the ledger line name
+ * the run the same way. Optional.
  */
 export const RUNNER_LOG_RELATIVE_ENV = 'NITRO_UI_GATE_RUNNER_LOG_RELATIVE';
 /** Set by `gate.mjs` to the gate's own name, so a sidecar says which run it describes. */
 export const GATE_NAME_ENV = 'NITRO_UI_GATE_RUNNER_GATE';
 /**
- * Optional: how often the backstop poll asks, in milliseconds.
- *
- * A seam rather than a tuning knob — 1 s is the right interval for a real gate, and nothing about a
- * run should depend on it. It exists because the two death signals have to be provable **one at a
- * time**: a test that wants to show the stdin pipe alone ends a run has to be able to take the poll
- * out of the race, and a test that wants to show the poll alone has to be able to do it on a timer
- * rather than by waiting on the pipe. Clamped, because a supervisor that polls once a century is a
- * supervisor that only has one signal.
+ * Optional: how often the backstop poll asks, in milliseconds. For tests, which
+ * need to show each of the two death signals working alone. Clamped to
+ * `MIN_POLL_MS`.
  */
 export const POLL_MS_ENV = 'NITRO_UI_GATE_RUNNER_POLL_MS';
 /**
- * The sidecar a supervisor writes about itself, named from the run's log the way `check`'s
- * `<log>.steps.json` is: one run, one namer, and it lands in the clone's log store beside the log
- * and outlives `git worktree remove` with it.
+ * The suffix of the sidecar a supervisor writes about itself, beside the run's
+ * log.
  */
 export const RUNNER_RECORD_SUFFIX = '.runner.json';
 
@@ -132,18 +76,14 @@ export const TERM_GRACE_MS = 10_000;
 /** How long the escalated kill gets to land. */
 export const KILL_GRACE_MS = 5_000;
 /**
- * How long a signalled supervisor keeps its command alive before escalating.
- *
- * A terminal Ctrl-C is aimed at the *group*, so the command receives it too, straight away; the
- * supervisor's job is then to make sure the run actually ends, not to hit it a second time. Hence
- * hold, then escalate if the command is still up. A second signal means the hold was wrong.
+ * How long a signalled supervisor keeps its command alive before escalating. A
+ * terminal Ctrl-C is aimed at the group, so the command has already received
+ * it: hold, then escalate only if the command is still up.
  */
 export const SIGNAL_HOLD_MS = 10_000;
 /**
- * The run's exit code when the gate died. Distinct from `1` because a run that was stopped for
- * loss of its gate is not a run that failed its tests, and the difference is the first thing the
- * next person reading the log needs. `1` would also be a lie in the other direction for a gate
- * that never got to run anything.
+ * The run's exit code when the gate died. Distinct from `1`: a run stopped for
+ * loss of its gate is not a run that failed its tests.
  */
 export const GATE_DEATH_EXIT = 17;
 
@@ -162,17 +102,10 @@ const logFile = () => {
 };
 
 /**
- * Survive writing to a pipe whose reader has died.
- *
- * This process's stdout and stderr are the gate's pipes, and the event this file exists to notice —
- * the gate's death — is the event that closes them. The next write after that gets `EPIPE`, which
- * node reports as an `error` *event* on the stream: an unhandled one is an uncaught exception, and
- * the supervisor dies of the very news it was reporting, mid-sweep, with the harness and its Metro
- * still up. Measured: with the gate holding the read ends (as `gate.mjs` does) and killed by signal,
- * the supervisor noticed the death, wrote the log line, and was gone inside a second — the X32 leak
- * back again through a door the fixture that read the pipes from the test suite could not see.
- *
- * So the streams are tolerated, and the log file remains the copy that matters.
+ * Survives writing to a pipe whose reader has died. This process's stdout and
+ * stderr are the gate's pipes, and the gate's death closes them: the next write
+ * gets `EPIPE`, which node reports as an `error` event, and an unhandled one
+ * would kill the supervisor mid-sweep.
  */
 export function tolerateBrokenStdio(
   streams = [process.stdout, process.stderr]
@@ -201,17 +134,13 @@ function note(message) {
 }
 
 /**
- * Does the process `pid` still exist? `ESRCH` is the kernel's "no such process"; `EPERM` means it
- * exists and belongs to somebody else, which is not a death. A supervisor reading `EPERM` as gone
- * would stop a healthy run because a process of another user shares the pid.
- *
- * Not the answer the watchdog wants on its own (see `pgidIsAlive`), but it is the answer to "is
- * this pid there", which is what the group sweep needs before it reports a survivor.
+ * Does the process `pid` still exist? `ESRCH` is "no such process"; `EPERM`
+ * means it exists and belongs to somebody else, which is not a death.
  */
 export function pidIsAlive(pid) {
   const value = Number(pid);
-  // 0 means "every process in my own group" to `kill(2)`: a healthy yes from a question nobody
-  // asked, and a signal aimed at the supervisor's whole group. A pid that is not one is not alive.
+  // 0 means "every process in my own group" to `kill(2)`, so a pid that is not
+  // a positive integer is not alive.
   if (!Number.isInteger(value) || value <= 0) return false;
   try {
     process.kill(value, 0);
@@ -222,10 +151,8 @@ export function pidIsAlive(pid) {
 }
 
 /**
- * Is the process *group* `pgid` still alive?
- *
- * Same `EPERM` rule as `pidIsAlive`, and the same refusal to ask about 0 — `kill(-0, 0)` is
- * "signal my own group", which would answer yes to a question about a stranger.
+ * Is the process group `pgid` still alive? Same `EPERM` rule as `pidIsAlive`,
+ * and the same refusal to ask about 0.
  */
 export function pgidIsAlive(pgid) {
   const value = Number(pgid);
@@ -239,27 +166,13 @@ export function pgidIsAlive(pgid) {
 }
 
 /**
- * Is the process `gate.mjs` gave us still *that process*?
+ * Is the process `gate.mjs` gave us still that process? The pid must exist and still sit in the
+ * group it reported at spawn: a long run is long enough for the kernel to reuse a pid, and a
+ * recycled pid belongs to another group. Whether the group is alive is not the question: a gate
+ * started by `zsh -c` or `nohup` is not its group's leader, and the group outlives it.
  *
- * Two questions, and the old code asked only the first:
- *
- *   1. does the pid exist (`kill(pid, 0)`), and
- *   2. is the thing at that pid still the gate?
- *
- * Question 2 is not a paranoia case: a 50-minute `real-input:ios` is exactly the window in which
- * macOS recycles a pid, and a runner that asks only question 1 watches a stranger, decides its gate
- * is alive, and outlives the run it was hired to end — the X32 incident, wearing a mask. The answer
- * is the gate's process *group*: `gate.mjs` hands over the pair (pid, pgid) it had at spawn, and a
- * recycled pid belongs to somebody else's group.
- *
- * It is not a check that the group is *alive*, which is the mistake this file's first version made —
- * that question is useless here, because a gate started by `zsh -c` or `nohup` is not its group's
- * leader and its group outlives it by the length of the shell's own life. A runner that asked only
- * that (or `kill(pgid, 0)`, the same question asked worse) keeps a Metro serving a dead task's port,
- * which is the bug this file exists to close.
- *
- * Bias is deliberate: an unreadable group means "alive". Guessing dead stops a healthy run and takes
- * a leased device with it; guessing alive costs one more poll.
+ * An unreadable group means "alive": guessing dead stops a healthy run, guessing alive costs
+ * one more poll.
  *
  * @param {number | null} gatePid
  * @param {number | null} gatePgid the group the gate reported at spawn
@@ -280,14 +193,9 @@ export function gateProcessIsAlive(
 
 /**
  * The liveness probe the real supervisor uses: `gateProcessIsAlive`, asked at two rates.
- *
- * A `kill(pid, 0)` is a syscall; the group lookup is a `ps` fork. Asking the group question on every
- * tick of a 50-minute run is ~3 000 forks, on a machine whose load the gates are measured against —
- * and, measured in this file's own fixture, enough pid churn to make reuse a thing that actually
- * happens during a run. So the cheap question runs every tick and the identity question every
- * `identityMs`, with the stdin pipe (which needs neither) as the signal the common death is noticed
- * by. A gate that dies and has its pid reused *instantly*, with no pipe, is therefore noticed up to
- * `identityMs` late — noticed, not missed.
+ * `kill(pid, 0)` is a syscall and runs every tick; the group lookup is a `ps` fork and runs
+ * every `identityMs`. A gate whose pid is reused at once, with no pipe to watch, is therefore
+ * noticed up to `identityMs` late.
  *
  * @param {{gatePid: number | null, gatePgid: number | null, identityMs?: number, nowMs?: () => number, pidAlive?: (pid: number) => boolean, groupOf?: (pid: number) => number | null}} options
  * @returns {(pid: number | null, pgid: number | null) => boolean}
@@ -317,17 +225,11 @@ export function createGateLivenessProbe({
 
 /**
  * The gate's death, as a promise: resolved when the pipe `gate.mjs` opened for this supervisor
- * reaches EOF.
+ * reaches EOF. The kernel closes the write end when the process holding it dies, however it
+ * died, so this needs no polling and no pid. The poll stays as a backstop, because a descendant
+ * that inherited the write end could hold it open.
  *
- * This is the parent-death check, and it is the one signal that needs no polling, no pid and no
- * trust: the kernel closes the write end when the process holding it dies, however it died —
- * `SIGKILL`, a segfault, a terminal closed under it. `kill(2)` asks "is there a process with this
- * number"; EOF answers "is the process I was started by still holding my stdin open", which is the
- * question. The poll stays as a backstop (a descendant that inherited the write end could hold it
- * open past the gate's death), but it is the backstop, not the mechanism.
- *
- * Returns `null` when there is no pipe to watch — an interactive run, or a fixture that handed this
- * file a TTY or `/dev/null` — so the caller can tell "watched, and not yet" from "cannot watch".
+ * Returns `null` when there is no pipe to watch (a TTY or `/dev/null`).
  *
  * @param {{fd: number, resume: () => void, once: (event: string, cb: () => void) => void, on: (event: string, cb: (chunk?: unknown) => void) => void}} [stdin]
  * @returns {Promise<string> | null}
@@ -339,12 +241,10 @@ export function gateStdinDeath(stdin = process.stdin) {
   } catch {
     return null;
   }
-  // A socket or a FIFO is something somebody is holding open at the other end. Note that a socket
-  // is what this has to accept: `spawn({stdio: 'pipe'})` makes a `socketpair`, not a pipe, so the
-  // read end `gate.mjs` hands this process reports `isSocket()` and never `isFIFO()` (measured — a
-  // FIFO-only rule read the real setup as "no pipe to watch" and left the whole check to the poll).
-  // `/dev/null` (`stdio: 'ignore'`) and a TTY are character devices, and reading either to EOF would
-  // report a healthy gate as gone the moment the read started.
+  // A socket or a FIFO is held open by somebody at the other end.
+  // `spawn({stdio: 'pipe'})` makes a `socketpair`, so the read end reports
+  // `isSocket()`, never `isFIFO()`. `/dev/null` and a TTY are character
+  // devices, and reading either to EOF would report a healthy gate as gone.
   if (stat == null || !(stat.isSocket() || stat.isFIFO())) return null;
   return new Promise((resolve) => {
     let settled = false;
@@ -353,9 +253,8 @@ export function gateStdinDeath(stdin = process.stdin) {
       settled = true;
       resolve('stdin');
     };
-    // Swallow everything: the run has its own stdin (the command is started with `ignore`, so this
-    // pipe belongs to the supervisor alone), and a `data` listener is what drives the stream to EOF
-    // without anyone having to read it.
+    // A `data` listener drives the stream to EOF without anyone having to read
+    // it.
     stdin.on('data', () => {});
     stdin.on('error', gone);
     stdin.once('end', gone);
@@ -365,13 +264,8 @@ export function gateStdinDeath(stdin = process.stdin) {
 }
 
 /**
- * This process's own process group id.
- *
- * `gate.mjs` spawns the runner `detached`, so the honest answer is "my own pid" — but the honest
- * answer to "which group am I allowed to signal" is the kernel's, not an inference from how I was
- * started: a fixture that runs this file without `detached`, or a platform where the flags mean
- * something else, gets the group it actually has. One `ps` per run, the same call `gate.mjs` uses
- * for the same question (`processGroupId`).
+ * This process's own process group id, asked of the kernel rather than inferred from how the
+ * process was started.
  *
  * @param {number} [pid] defaults to this process
  * @returns {number | null}
@@ -408,19 +302,12 @@ function signalGroup(group, signal) {
 }
 
 /**
- * May the gate sweep the process group its supervisor was started in?
+ * May the gate sweep the process group its supervisor was started in? Two conditions:
  *
- * The net under the supervisor: a run ended by a signal, or by a supervisor that died hard, can
- * leave the command and the bundle server it spawned sitting in that group. Two facts decide it,
- * because a group id is only as good as the pid it came from:
- *
- *   - **the pid must be free.** The gate watched that process exit, so a *live* process with the
- *     same number is a different process — and if it leads a group, `ps -g` and `kill(-pid, …)`
- *     describe *its* tree. pids get reused; a sweep aimed at a number learned seconds ago can be
- *     aimed at a stranger's run, which is the one thing this file is not allowed to do.
- *   - **the supervisor must not have said it was done.** Its sidecar carries a `stopped` note once a
- *     sweep has finished, and a gate that reads one has nothing left to clean; a sidecar without one
- *     is the X32 shape — a supervisor killed so hard that its own cleanup never ran.
+ *   - the supervisor's pid must be free. The gate watched that process exit, so a live process
+ *     with the same number is a different one, and `kill(-pid, …)` would reach its tree.
+ *   - the supervisor must not have said it was done. Its sidecar carries a `stopped` note once
+ *     a sweep has finished; one without it is a supervisor killed before its cleanup ran.
  *
  * @param {object} options
  * @param {number | null} options.runnerPid the group id: the pid of the supervisor the gate started
@@ -476,21 +363,13 @@ function readRunnerRecordFile(file) {
 }
 
 /**
- * The sidecar naming this run's process group, written as the run starts.
+ * Writes the sidecar naming this run's process group, as the run starts. A later run uses it to
+ * tell a dead gate's leftover bundle server from another task's live one, so it has to exist
+ * before the supervisor can be killed. A failure to write it returns null and the command runs
+ * anyway.
  *
- * Why it has to exist before anything can go wrong: the fact it carries — "this group belongs to
- * gate pid N, log L" — is the only way a *later* run can tell a dead gate's leftover bundle server
- * from another task's live one. Written by the supervisor (one writer, no read-modify-write race
- * with the launcher's record) and written at the start rather than on the death path, because the
- * case that needs explaining is the one where the supervisor itself was killed and no death path
- * ran at all.
- *
- * A failure to write it is a lost diagnostic, never a reason to stop a run: it returns null and the
- * command runs anyway.
- *
- * The `logPath` that gets written down is `ledgerLogPath` when the caller knows it, so the sidecar
- * and the ledger line describe one run with one string; `logPath` itself stays the location, because
- * the sidecar is named from it and lives beside the log.
+ * `ledgerLogPath`, when given, is the `logPath` written down, so the sidecar and the ledger line
+ * name the run with one string.
  *
  * @param {{group: number, gatePid: number | null, gatePgid: number | null, gate: string | null, logPath: string | null, ledgerLogPath?: string | null, lease?: string | null}} fields
  * @returns {string | null} the file written, or null
@@ -504,8 +383,7 @@ export function writeRunnerRecord(fields) {
   try {
     if (existsSync(file)) previous = JSON.parse(readFileSync(file, 'utf8'));
   } catch {
-    // A sidecar that cannot be parsed is replaced rather than trusted — it describes a run whose
-    // evidence is already unreadable, and keeping it would hide this one.
+    // A sidecar that cannot be parsed is replaced rather than trusted.
   }
   try {
     writeFileSync(
@@ -534,10 +412,8 @@ export function writeRunnerRecord(fields) {
 }
 
 /**
- * Note in the sidecar that the gate died and what the sweep left behind.
- *
- * A merge over the file the supervisor wrote at the start, which owns every other field — the
- * group, the gate pid, the log — so this one cannot contradict them by omitting them.
+ * Notes in the sidecar that the gate died and what the sweep left behind, merged over the file
+ * written at the start.
  *
  * @param {string | null} file the sidecar path, from `writeRunnerRecord`
  * @param {object} stopped what the sweep found
@@ -562,12 +438,8 @@ export function markRunnerRecordStopped(file, stopped) {
 }
 
 /**
- * The run's processes in `group` that are still alive — this process excluded.
- *
- * `ps -g` answers with the whole session, which includes the supervisor. It is not one of the
- * run's processes and never a thing the sweep is reporting on: leaving it in would make every sweep
- * "find" a survivor (itself) that no one asked about, and the escalation below would be aiming a
- * SIGKILL at its own process.
+ * The run's processes in `group` that are still alive, this process excluded:
+ * `ps -g` answers with the whole session, which includes the supervisor.
  */
 export function groupMembers(group) {
   const value = Number(group);
@@ -605,18 +477,11 @@ export function groupMembers(group) {
 }
 
 /**
- * Stop the group a run lives in: term the group, then kill the survivors by pid.
+ * Stops the group a run lives in: SIGTERM to the group, then SIGKILL to the survivors by pid.
+ * The group still contains this process, so `kill(-group, SIGKILL)` would take the supervisor
+ * down mid-sweep.
  *
- * Two different targets for the two signals, deliberately. SIGTERM goes to the group, because that
- * is the whole tree in one call and every tool in it knows how to shut down on a term. SIGKILL goes
- * to the named survivors, because the group still contains this process: escalating with
- * `kill(-group, SIGKILL)` would take the supervisor down mid-sweep, and a supervisor killed by its
- * own cleanup reports nothing, writes no sidecar, and leaves the gate reading a signal exit instead
- * of the death it was told about.
- *
- * Returns the pids still alive at the end. The caller reports them rather than hiding them: a
- * descendant that outlives both signals is the fact the next run's pre-flight has to answer for,
- * and a supervisor that said "cleaned up" about it would be the next mystery.
+ * Returns the pids still alive at the end, which the caller reports.
  *
  * @param {number} group
  * @param {{log?: (message: string) => void, signal?: (group: number, signal: NodeJS.Signals) => boolean, kill?: (pid: number, signal: NodeJS.Signals) => boolean, members?: (group: number) => Promise<number[]>, wait?: (ms: number) => Promise<void>, termGraceMs?: number, killGraceMs?: number}} [options]
@@ -669,7 +534,7 @@ function signalPid(pid, signal) {
 
 /**
  * The supervisor's whole job, with the process calls injected so the rule is testable without
- * starting a real command (the same shape as `stopOwnMetro`).
+ * starting a real command.
  *
  * @param {object} options
  * @param {string[]} options.argv the command to run, already split
@@ -696,9 +561,8 @@ export async function superviseGateRunner({
   gatePid = null,
   gatePgid = null,
   start,
-  // The gate as a *process*, identified by the (pid, group) pair it reported: a bare pid is a
-  // number that gets reused, and the group on its own is a question about a shell that outlives
-  // the gate. Both halves, or neither — see `gateProcessIsAlive`.
+  // The gate is identified by the (pid, group) pair it reported: see
+  // `gateProcessIsAlive`.
   isAlive = (pid, pgid) => gateProcessIsAlive(pid, pgid),
   gateGone = null,
   stop = stopGroup,
@@ -722,9 +586,9 @@ export async function superviseGateRunner({
     return { code: exit.code, reason: 'command exited' };
   }
 
-  // The pipe is raced, not polled: when `gate.mjs` dies the kernel closes its end and this
-  // resolves, which is why a run whose gate was `SIGKILL`ed ends in about a second rather than on
-  // a timer. A `null` (no pipe to watch) becomes a promise that never settles.
+  // The pipe is raced, not polled: when `gate.mjs` dies the kernel closes its
+  // end and this resolves. A `null` (no pipe to watch) becomes a promise that
+  // never settles.
   const gateDied =
     gateGone == null
       ? new Promise(() => {})
@@ -757,16 +621,11 @@ export async function superviseGateRunner({
    * @param {string} why which of the two signals noticed
    */
   async function sweep(why) {
-    // The group this process leads is the only thing it may signal, and a group number that is not
-    // its own pid belongs to somebody else.
-    //
-    // `gate.mjs` starts the supervisor `detached`, so the group it leads carries its pid and the
-    // sweep below is exactly this run's tree. A supervisor started any other way — imported by a
-    // suite, run by hand, or launched by a caller that forgot the flag — sits in a group that holds
-    // processes it was never given: a test runner's, or a shell's. Signalling that group on a timer
-    // is the X4 failure with a watchdog bolted on, and the `gate.mjs` that created the group has its
-    // own number and can sweep it itself. So: say why, write no `stopped` record (nothing was
-    // swept), and let the gate do the part only it can do.
+    // The group this process leads is the only thing it may signal, and a group
+    // id that is not its own pid belongs to somebody else: a supervisor not
+    // started detached sits in a group that holds a test runner's or a shell's
+    // processes. Then nothing is swept and no `stopped` record is written; the
+    // gate sweeps the group itself.
     if (group !== ownPid) {
       log(
         `gate-runner: gate ${String(watch)} died (${why}), but group ${String(
@@ -781,15 +640,8 @@ export async function superviseGateRunner({
           'gate died; this supervisor does not lead the group, so nothing was swept',
       };
     }
-    // Refuse to sweep a group that contains the gate itself.
-    //
-    // The supervisor is started `detached` by `gate.mjs`, so it leads a group of its own and the
-    // sweep can be blunt. A caller that started it some other way puts this process in somebody
-    // else's group — quite possibly the gate's, or a test runner's — and then "signal this run's
-    // group" means "signal the thing that is watching me", which is the opposite of the fix: a
-    // supervisor that SIGKILLs its own gate, or the suite running it, on a timer. The kernel is
-    // asked who is in the group before anything is signalled, because this is the one place where
-    // being wrong reaches a process this file was not given.
+    // Refuse to sweep a group that contains the gate itself. The kernel is
+    // asked who is in the group before anything is signalled.
     const inGroup = await members(group);
     if (gatePid != null && inGroup.includes(gatePid)) {
       log(
@@ -801,9 +653,8 @@ export async function superviseGateRunner({
         left: inGroup,
       };
     }
-    // Written before anything is signalled, and into the log file as well as the pipe: the pipe
-    // belongs to a gate that is already gone, and this line is the only explanation the next
-    // person gets of a run that stopped in the middle.
+    // Written before anything is signalled, and into the log file as well as
+    // the pipe: the pipe belongs to a gate that is already gone.
     log(
       `gate-runner: gate ${String(watch)} died without a ledger line (${why}); stopping this run's group ${String(group)}\n`
     );
@@ -825,21 +676,17 @@ export async function superviseGateRunner({
 }
 
 /**
- * The real `start`: the command runs in this process's group, with the stdios it is handed.
- *
- * `detached: false` is the whole design (see the header): the command inherits the runner's group,
- * so one negative pid covers the harness and the Metro it spawns, and the gate — which created
- * that group when it spawned this file — already knows its number.
+ * The real `start`: the command runs in this process's group (`detached:
+ * false`), so one negative pid covers the harness and the Metro it spawns.
  */
 function startCommand(argv, group) {
   return new Promise((resolve, reject) => {
     const [command, ...args] = argv;
     let child;
     try {
-      // `ignore` for stdin, not `inherit`: the supervisor's own stdin may be the pipe it watches
-      // its gate through (see `gateStdinDeath`), and a run must not be able to read that pipe or
-      // drive it to EOF. `ignore` is what the command had before (`/dev/null`), so this preserves
-      // the behaviour and keeps the watchdog's file descriptor private to the supervisor.
+      // `ignore` for stdin, not `inherit`: the supervisor's own stdin may be
+      // the pipe it watches its gate through, and the command must not read it
+      // or drive it to EOF.
       child = spawn(command, args, { stdio: ['ignore', 'inherit', 'inherit'] });
     } catch (error) {
       reject(error);
@@ -865,14 +712,10 @@ function startCommand(argv, group) {
 }
 
 /**
- * Survive a signal that was really meant for the run, and end the run properly.
- *
- * A Ctrl-C on a foreground gate is aimed at the group, and the group holds the command: it is
- * already shutting down when this handler runs, so forwarding would add a second signal to a tool
- * in the middle of cleaning up, and the escalation below would add a SIGKILL to a shutdown that
- * was working. The supervisor's own exit is the thing at risk here — it is in the same group, and
- * the default action would take it out mid-sweep, which is the leak this file exists to close. So:
- * block, hold for `SIGNAL_HOLD_MS`, and if the command is still standing by then, end the group.
+ * Survives a signal that was meant for the run, and ends the run properly. A Ctrl-C on a
+ * foreground gate is aimed at the group, so the command is already shutting down: forwarding
+ * would add a second signal. The handler blocks the default action, holds for `SIGNAL_HOLD_MS`,
+ * and ends the group only if the command is still up by then.
  *
  * @param {number} group the run's group, this process included
  * @param {() => boolean} commandIsAlive
@@ -891,9 +734,8 @@ export function holdOnSignal(
     signals = FORWARD_SIGNALS,
   } = {}
 ) {
-  // The same rule as the sweep's, on the other half of the job: a hold that ends in a signal to a
-  // group it does not lead is a Ctrl-C aimed at whatever else is in that group — a test runner, or
-  // the shell of someone who ran this file by hand. Holding is only safe for the leader.
+  // The sweep's rule again: holding is only safe for the group's leader,
+  // because the hold can end in a signal to the group.
   if (group !== ownPid) {
     log(
       `gate-runner: not holding signals for group ${String(
@@ -903,10 +745,9 @@ export function holdOnSignal(
     return { get: () => null, pause: () => {}, dispose: () => {} };
   }
   let held = null;
-  // Set once the supervisor is sweeping on its own account. The group's own SIGTERM arrives at this
-  // process too — it leads the group it is signalling — and a hold that reacts to it would start a
-  // second sweep and exit with a signal code, so a run ended by its gate's death would be reported
-  // as a run ended by a Ctrl-C nobody sent.
+  // Set once the supervisor is sweeping on its own account: the group's SIGTERM
+  // arrives at this process too, and reacting to it would start a second sweep
+  // and exit with a signal code.
   let paused = false;
   /** Stop reacting to signals; this process is about to be the one sending them. */
   function pause() {
@@ -917,10 +758,9 @@ export function holdOnSignal(
     const handler = () => {
       if (paused) return;
       if (held != null) {
-        // Second signal: the hold was the wrong call, and the person typing it is right that
-        // something is not coming down. The survivors are killed by pid rather than by the group,
-        // which contains this process — and the note goes out first, because this is the path
-        // where the supervisor may not get to speak again.
+        // Second signal: end the run now. The survivors are killed by pid, not
+        // by the group, which contains this process, and the note goes out
+        // first.
         log(`gate-runner: second ${signal}; ending the run now\n`);
         void stop(group, { termGraceMs: 0, killGraceMs: 2_000 }).then(() =>
           process.exit(128 + signum(signal))
@@ -933,12 +773,9 @@ export function holdOnSignal(
         log(
           `gate-runner: ${signal} was ignored by the run; stopping group ${String(group)}\n`
         );
-        // This sweep signals the group this process leads, so it signals *itself*, and this handler
-        // is what catches that term. Pausing first is the whole point: unpaused, the SIGTERM the
-        // supervisor sends reads as a *second* signal from a hand that is not typing, the
-        // escalation branch runs with `termGraceMs: 0`, and the group is killed within a second of
-        // the decision to give it ten — a harness and a bundle server cut off in the middle of a
-        // cleanup that was working, which is what this hold exists to prevent.
+        // This sweep signals the group this process leads, so it signals
+        // itself. Pausing first keeps that SIGTERM from being read as a second
+        // signal, which would kill the group with no grace.
         pause();
         void stop(group).then(() => process.exit(128 + signum(signal)));
       }, holdMs).unref?.();
@@ -954,9 +791,8 @@ export function holdOnSignal(
     /** Stop reacting to signals: the supervisor is about to be the one sending them. */
     pause,
     /**
-     * Take the handlers back off. A real supervisor never needs to — it is leaving anyway — but a
-     * suite that installs one and walks away hands every later test a handler that signals a group
-     * from a finished fixture, which is a flake with a signal attached.
+     * Takes the handlers back off, for a test suite: a handler left installed
+     * would signal a finished fixture's group.
      */
     dispose() {
       for (const [signal, handler] of handlers) {
@@ -971,11 +807,9 @@ const SIGNUMS = { SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGTERM: 15 };
 const signum = (signal) => SIGNUMS[String(signal)] ?? 15;
 
 /**
- * The CLI: read the supervisor's instructions, start the command, sweep the group if the gate dies.
- *
- * A function rather than top-level statements: `gate.mjs` runs this file directly, and a test suite
- * imports it — and a top-level `await` in a module jest transforms to CommonJS is a syntax error,
- * which would make the supervisor untestable for the shape of problem it exists for.
+ * The CLI. A function rather than top-level statements: a test suite imports
+ * this file, and a top-level `await` in a module jest transforms to CommonJS is
+ * a syntax error.
  */
 async function main() {
   // Before anything can be written: the pipes may already be dead by the time this process starts.
@@ -996,8 +830,7 @@ async function main() {
   };
   const gatePgid = readId(GATE_PGID_ENV);
   const gatePid = readId(GATE_PID_ENV);
-  // This process's own group, asked once: the sweep is aimed at it, and a group this file invented
-  // from `process.pid` would be a guess about how it was started.
+  // This process's own group, asked once: the sweep is aimed at it.
   const group = currentProcessGroupId() ?? process.pid;
   const logPath = logFile();
   const runnerRecord = writeRunnerRecord({
@@ -1030,11 +863,9 @@ async function main() {
       // The sweep is about to signal the group this process leads.
       beforeSweep: () => heldSignal.pause(),
     });
-    // A signal the supervisor rode out is reported the way a shell reports one, so `wait` and the
-    // ledger see a killed run rather than a passed one - and never a *zero*, which is what the
-    // command's own exit code would have been for a tool that shuts down cleanly on a term. A gate
-    // death outranks that: the term a signalled supervisor receives is often the group signal of
-    // its own sweep, and the run's reason for leaving was the gate, which has its own code.
+    // A signal the supervisor rode out is reported the way a shell reports one,
+    // never as zero. A gate death outranks it: the term a signalled supervisor
+    // receives is often the group signal of its own sweep.
     const held = heldSignal.get();
     process.exitCode =
       held == null || result.code === GATE_DEATH_EXIT
@@ -1063,24 +894,12 @@ function commandIsAlive(pid) {
 }
 
 /**
- * Put the watchdog's handles down: the run is over, one way or another.
+ * Puts the watchdog's handles down once the run is over. The stdin socket and the poll timer
+ * both keep the event loop alive, and `gate.mjs` waits for this process to exit before it writes
+ * the ledger line, so a supervisor still watching a healthy gate would deadlock it.
  *
- * Two things keep this event loop alive while a run is going, and both are worth having for a
- * watchdog: the stdin socket whose other end a *healthy* gate is holding open — the death signal that
- * needs no pid to be believed — and the poll timer, ref'd on purpose because it is the only thing
- * keeping a supervisor with no pipe to watch alive at all. Neither may outlive the run.
- *
- * `gate.mjs` waits for this process to exit before it can write the ledger line. A supervisor that
- * stays alive because it is still watching a gate that never died therefore deadlocks its own gate:
- * the command finishes, nothing is recorded, the Metro goes on serving the lease's port, and the leak
- * this file exists to close arrives as a hang instead of a corpse. Measured, before this function
- * existed: every clean run under the supervisor did exactly that, and only a run whose *gate* died
- * ever left — because that path closes the pipe and so drains the loop by accident.
- *
- * The pipe is released only when it really is a pipe: a TTY or `/dev/null` belongs to whoever started
- * this file, and destroying that would take their terminal's input with it. What is left is then
- * given a chance to drain, on a grace that is itself `unref`'d — it speaks up only when a handle
- * refuses to go, which is the whole reason for its existence.
+ * The pipe is released only when it really is a pipe: a TTY or `/dev/null` belongs to whoever
+ * started this file. What is left gets `LEAVE_GRACE_MS` to drain.
  *
  * @param {number} code the exit code this run leaves with
  * @param {any} [stdin] the handle the gate is watched through
@@ -1099,16 +918,15 @@ export function leaveWhenRunIsOver(code, stdin = process.stdin) {
     // A descriptor that cannot be asked about at the end of a run is not a reason to stay in it.
   }
   const grace = setTimeout(() => process.exit(code), LEAVE_GRACE_MS);
-  // Unref'd so a clean run leaves with its own code the moment the loop drains on its own; the timer
-  // only fires while something else is still holding that loop open.
+  // Unref'd, so a clean run leaves with its own code as soon as the loop
+  // drains; the timer fires only while something still holds the loop open.
   grace.unref?.();
 }
 
-// "Am I being run as a command, or imported?" — the question `lease.mjs` answers with
-// `import.meta.url`. It cannot be answered that way here: this module is imported by its own test
-// suite, and a suite that transforms modules to CommonJS cannot parse `import.meta` at all. A
-// mistake in either direction is loud in only one of them, so the comparison is on the resolved
-// path of the script the shell named.
+// "Run as a command, or imported?" cannot be asked with `import.meta.url` here:
+// the test suite transforms modules to CommonJS, which cannot parse
+// `import.meta`. So the comparison is on the resolved path of the script the
+// shell named.
 const isEntry =
   process.argv[1] != null &&
   path.resolve(process.argv[1]).endsWith(`${path.sep}gate-runner.mjs`);

@@ -17,12 +17,9 @@ import type {
   MissingSampleReason,
 } from './types';
 
-/** Noise control protocol (docs/research/setup-decisions.md SS6). */
 export const WARMUP_ITERATIONS = 5;
 export const MEASURED_ITERATIONS = 20;
-/** Wall-clock settle after launch, before anything is timed. */
 export const LAUNCH_SETTLE_MS = 1000;
-/** Leak-slope cycles for the `leak` scenario. */
 export const LEAK_CYCLES = 10;
 
 /**
@@ -54,18 +51,8 @@ interface IterationTarget {
 
 /**
  * One measured operation: commit, native apply, presenting frame.
- *
- * `mountedNs`/`presentedNs` are absolute D1 timestamps (`probe.now()` shares that
- * base), so each is reported as an offset from `t0` rather than a duration.
- *
- * A signal that does not arrive is recorded with a *reason* (`missing`), because a
- * count of nulls is not a diagnosis: A3's iOS mint was refused over 105 missing
- * `presented` samples on one arm and nobody could tell a 2 s probe timeout from a
- * probe that never answered. `jsCommitNs` is resolved by the app itself in the same
- * turn, so a null there has no meaningful cause and is not attributed.
- *
- * Returns `t0` so the caller can put the runtime's own perf marks on this
- * iteration's timeline.
+ * `mountedNs`/`presentedNs` are reported as offsets from `t0`. A signal that
+ * does not arrive is recorded with a reason in `missing`.
  */
 async function measureLatency(
   engine: Engine,
@@ -73,11 +60,8 @@ async function measureLatency(
 ): Promise<number> {
   const { t0, tCommit } = await engine.commit(target.count, target.value);
 
-  // A cell that declares `mountSignal: false` has no transaction to stamp, so
-  // both waits can only end in a timeout - 3.5 s per iteration of nothing, and
-  // the pair is reported as `n/a` afterwards regardless. Skip the wait; the
-  // nulls below are the same nulls, reached without the delay, and recorded as
-  // `not-awaited` so the per-cell summary cannot mistake them for timeouts.
+  // A cell with `mountSignal: false` has no transaction to stamp: skip the
+  // waits, which could only time out, and record the nulls as `not-awaited`.
   const expectsSignal = target.plan.mountSignal;
   const missing: MissingSample[] = [];
   const mountedWait = expectsSignal
@@ -114,12 +98,7 @@ async function measureLatency(
   return t0;
 }
 
-/**
- * The `missing` entry for one signal that did not arrive.
- *
- * `wait` is null when the runner never asked (the `mountSignal: false` case), so the
- * caller supplies that reason; otherwise the reason comes from the wait itself.
- */
+/** `wait` is null when the runner never asked; the caller gives the reason. */
 function missingSample(
   metric: 'mountedNs' | 'presentedNs',
   wait: StampWait | null,
@@ -144,18 +123,9 @@ function missingSample(
 }
 
 /**
- * Fold one iteration's native perf marks into a `perf` record.
- *
- * Called **outside every CPU bracket**: `drainPerf()` crosses into native code,
- * allocates per mark and hands an array to JS, so draining inside a bracket would
- * charge the JS thread for reading the marks - and marking itself is already a
- * mutex write on the UI thread. That is why a `--perf-marks` run is a diagnostic
- * that explains a measured number rather than a second measurement.
- *
- * It answers: how many `updateState`s one flip really caused (`propsApplied` per
- * instance), whether the hosted content drew at all (`firstFrame`), and how long
- * the library's own props-to-pixels span took. Marks arrive oldest first, so the
- * last of a kind is the newest.
+ * Folds one iteration's native perf marks into a `perf` record. Call it
+ * outside every CPU bracket: draining crosses into native code and allocates
+ * per mark. Marks arrive oldest first.
  */
 function emitPerfMarks(
   engine: Engine,
@@ -208,28 +178,20 @@ function emitPerfMarks(
   });
 }
 
-/**
- * Teardown of the batch, timed by its own CPU bracket.
- *
- * Tearing down `n` hosting controllers is real work - unmounting it used to sit
- * inside the "mount" bracket, so a costlier teardown looked like a costlier
- * mount (T02 review S5).
- */
+/** Teardown of the batch, in its own CPU bracket not counted as mount. */
 async function teardown(
   engine: Engine,
   target: IterationTarget
 ): Promise<void> {
   await engine.commit(0, target.value);
-  // Same rule as the measured wait: a diagnostic run that asked to wait longer for a
-  // mount should not have its teardown give up at the default while its iterations do
-  // not, or the launch's wall-clock budget (which is derived from the requested waits,
-  // `launchBudget` in scripts/bench/run.mjs) would not describe the launch it covers.
+  // Waits as long as a measured iteration does, so the launch budget derived
+  // from the requested waits covers the teardown too.
   await awaitMountNs(target.plan.mountTimeoutMs);
 }
 
 /**
- * Drop whatever the warmups recorded, so the first measured iteration's marks are
- * its own. `setPerfEnabled(true)` clears the ring, but it runs before the warmups.
+ * Drops what the warmups recorded: `setPerfEnabled(true)` clears the ring, but
+ * it runs before the warmups.
  */
 function discardPerfMarks(engine: Engine): void {
   if (engine.drainPerfMarks !== null) {
@@ -245,11 +207,9 @@ interface CpuSample {
 }
 
 /**
- * Sums one thread's CPU deltas over a batch of iterations.
- *
- * A delta is dropped (rather than clamped to 0) when either sample is missing or
- * the pair went backwards, so an unreadable counter yields `null` for the whole
- * batch instead of an understated number.
+ * Sums one thread's CPU deltas over a batch of iterations. A missing or
+ * backwards sample makes the whole batch `null` rather than an understated
+ * number.
  */
 class CpuBatch {
   private jsTotal = 0;
@@ -309,12 +269,9 @@ function deltaOrNull(after: number, before: number): number | null {
 /* -------------------------------------------------------------- scenarios --- */
 
 /**
- * `mount`: mount `n` controls, measure, then tear them down.
- *
- * Each iteration is teardown -> two idle frames -> a short settle -> mount, so a
- * leftover mount from the previous iteration can never be attributed to this
- * one. The pacing sits outside both CPU brackets, and the teardown has its own
- * bracket, so `mount` CPU is the op alone.
+ * `mount`: mount `n` controls, measure, then tear them down. Each iteration is
+ * teardown, two idle frames, a short settle, then mount; the pacing and the
+ * teardown sit outside the mount CPU bracket.
  */
 export async function runMountScenario(
   engine: Engine,
@@ -406,12 +363,9 @@ export async function runUpdateScenario(
 /* ----------------------------------------------------------------- memory --- */
 
 /**
- * Footprint sample: collect every heap, settle, then read.
- *
- * Both `phys_footprint` and PSS include the Hermes heap, so skipping a JS
- * collect measures garbage rather than the controls. Whether a collector was
- * reachable is recorded with the sample, because a release Hermes build is not
- * guaranteed to expose one.
+ * Footprint sample: collect every heap, settle, then read. Both
+ * `phys_footprint` and PSS include the Hermes heap, and a release Hermes build
+ * may expose no collector, so whether one ran is recorded with the sample.
  */
 async function sampleFootprint(
   engine: Engine,
@@ -453,9 +407,8 @@ export async function runMemoryScenario(
 }
 
 /**
- * `leak`: repeated mount/unmount cycles with a footprint sample after each, so a
- * monotonic climb (a leak) is visible in the slope rather than hidden by a
- * single sample. The reporter gates on that slope (T02 review S8).
+ * `leak`: repeated mount/unmount cycles with a footprint sample after each, so
+ * a leak shows as a slope across the samples.
  */
 export async function runLeakScenario(
   engine: Engine,

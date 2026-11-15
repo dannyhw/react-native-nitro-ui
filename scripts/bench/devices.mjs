@@ -1,13 +1,10 @@
 /**
- * Device plumbing for the bench runner.
+ * Device plumbing for the bench runner. Every device identity comes from the
+ * environment:
  *
- * Every device identity comes from the environment, because several tasks run
- * this repo at once and AGENTS.md forbids touching a device you did not start:
- *
- *   IOS_SIM_UDID      simulator UDID (from the task brief)
+ *   IOS_SIM_UDID      simulator UDID
  *   ANDROID_SERIAL    adb serial, e.g. emulator-5572
- *   ANDROID_AVD       AVD name (legacy alias: AVD), used for the device key
- *   METRO_PORT        unused here on purpose - release builds embed the bundle
+ *   ANDROID_AVD       AVD name, used for the device key
  */
 
 import { execFileSync } from 'node:child_process';
@@ -22,7 +19,6 @@ import { requireLeaseDevice } from '../lease-core.mjs';
  */
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-/** Portable blocking sleep (these scripts run under both bun and node). */
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
@@ -96,7 +92,7 @@ export function resolveIosDevice() {
 
 /**
  * Device class for a key: lowercase alphanumerics only (`iPhone Air` ->
- * `iphoneair`, `Pixel 9` -> `pixel9`), matching D9's examples.
+ * `iphoneair`, `Pixel 9` -> `pixel9`).
  */
 export function deviceClassName(value) {
   return String(value)
@@ -104,23 +100,12 @@ export function deviceClassName(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-/** What `simctl` puts in front of every `deviceTypeIdentifier`. */
 const SIM_DEVICE_TYPE_PREFIX = 'com.apple.CoreSimulator.SimDeviceType.';
 
 /**
- * The device class of a simulator: its hardware type, never its name.
- *
- * A device key is half of a committed baseline's path, so it has to say *which class
- * of device* was measured - and a name says what whoever created the simulator felt
- * like calling it. The lease pool's own simulators are the case in point: pair-a is
- * an iPhone 17 simulator named `nitro-ui A`, which keyed by name would mint into
- * `…/ios27-sim-nitrouia.json`, a baseline nothing else can gate against.
- * `deviceTypeIdentifier` (`…SimDeviceType.iPhone-17`) is what `simctl create` was
- * actually given, so it is the source and the name is only the fallback for an entry
- * that carries no identifier.
- *
- * Android does the same thing for the same reason: `describeAndroidDevice` prefers
- * the AVD's `hw.device.name` over `ro.product.model`.
+ * The device class of a simulator: its hardware type, not its name. A simulator
+ * can be named anything, and the key is part of a committed baseline's path. The
+ * name is the fallback for an entry that carries no type identifier.
  *
  * @param {{ deviceTypeIdentifier?: string | null, name?: string | null }} device a `simctl list devices` entry
  * @returns {string} e.g. `iphone17`
@@ -140,10 +125,7 @@ export function iosDeviceClassName(device) {
 }
 
 /**
- * The D9 device key for a simulator: platform + OS runtime + device class.
- *
- * Pure, so `scripts/__tests__/bench-device-key.test.js` can pin the pair that a
- * leased simulator's *name* would get wrong.
+ * The device key for a simulator: platform + OS runtime + device class.
  *
  * @param {string | null} runtime e.g. `27.0`
  * @param {{ deviceTypeIdentifier?: string | null, name?: string | null }} device
@@ -154,7 +136,6 @@ export function iosDeviceKey(runtime, device) {
   return `ios${major}-sim-${iosDeviceClassName(device)}`;
 }
 
-/** Serials adb currently sees, in `adb devices` order. */
 function attachedSerials() {
   return adb(null, ['devices'])
     .split('\n')
@@ -174,19 +155,8 @@ function avdNameFor(serial) {
 }
 
 /**
- * Resolve the device to measure on.
- *
- * `ANDROID_AVD` is what an unleased bench names, because
- * console ports are handed out in order of availability. A *leased* run is a different
- * animal (X28): its pair has a fixed console port, so the serial the lease exported is
- * both known and binding, and `requireLeaseDevice` refuses a bench whose env names a
- * lease without naming that serial.
- *
- * What used to happen when the two disagreed is the reason this changed: the runner
- * printed "ANDROID_SERIAL=… is not the emulator running AVD …; using emulator-55xx"
- * and measured on the other emulator anyway. A bench number is a claim about one
- * device, so a run that cannot tell which device it is on has no result to report —
- * it now refuses, naming both candidates.
+ * Resolves the device to measure on. When the serial and the AVD name different
+ * emulators the run is refused: a bench number describes one device.
  */
 export function resolveAndroidDevice() {
   const device = requireLeaseDevice({
@@ -245,7 +215,7 @@ function describeAndroidDevice(serial, avd) {
     'ro.build.fingerprint',
   ]).trim();
   // `pixel_9` from the AVD's own config beats `sdk_gphone64_arm64` from the
-  // system image: the hardware profile is the device class D9 means.
+  // system image: the hardware profile is the device class.
   const profile = avdHardwareProfile(avd);
   const className = deviceClassName(profile ?? model);
   return {
@@ -285,9 +255,7 @@ function avdHardwareProfile(avd) {
   return null;
 }
 
-/**
- * Power off a device this process booted, and nothing else (AGENTS.md).
- */
+/** Powers off a device this process booted, and nothing else. */
 export function shutdownDevice(device) {
   if (device.bootedByUs !== true) {
     process.stderr.write(

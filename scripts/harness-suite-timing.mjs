@@ -1,24 +1,11 @@
 #!/usr/bin/env node
 /**
- * Per-suite timing for a harness run (X11).
+ * Per-suite timing for a harness run: a harness plugin that writes each finished
+ * test file's duration to a hand-off file, which `gate.mjs` reads once the run
+ * has exited. `example/rn-harness.config.mjs` registers it only when
+ * `HARNESS_SUITE_TIMING` names a file.
  *
- * Why: the ledger said `harness:android` took 455 s for 214 tests, and that is the whole
- * granularity available - so "Android costs three times iOS" could not be turned into "these five
- * files cost 200 s between them". A wall-clock total is not actionable; a per-file list is.
- *
- * The mechanism is the harness's own plugin API: `test-file:finished` hands over the file, its
- * duration, its status and its test results, which is exactly the row wanted and needs no log
- * parsing (the console prints no per-file durations at all). Registration happens in
- * `example/rn-harness.config.mjs` and only when `HARNESS_SUITE_TIMING` names a file, so an
- * uninvolved harness run stays exactly as it was.
- *
- * The file, not the ledger, is the hand-off: the harness process is the one that knows the numbers,
- * and the gate wrapper reads the file once the child has exited. It is written incrementally - each
- * finished file rewrites it - because the run that would have told you where the time went is
- * sometimes the run that times out or crashes.
- *
- * No `import.meta`: `scripts/__tests__/harness-suite-timing.test.js` imports this under Jest's
- * CommonJS transform, the same reason `scripts/lease-core.mjs` avoids it.
+ * No `import.meta`: Jest imports this under its CommonJS transform.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -28,11 +15,9 @@ import { dirname, join } from 'node:path';
 export const SUITE_TIMING_ENV = 'HARNESS_SUITE_TIMING';
 
 /**
- * The gate the hand-off belongs to, spelled by whoever asked for it. Optional: the name can be
- * recovered from the file (see `gateFromTimingFile`), but that is a *reconstruction* — the log name
- * has every character outside `[\w.-]` folded to `+`, so an argument containing one of those comes
- * back with a `+` in it. A header that says which gate it belongs to should not be approximate, so
- * `gate.mjs` passes the real string and the file-name parser is the fallback rather than the rule.
+ * The gate the hand-off belongs to, as its caller spelled it. Optional: the name
+ * can be recovered from the file name, but only approximately, because the log
+ * name folds every character outside `[\w.-]` to `+`.
  */
 export const SUITE_TIMING_GATE_ENV = 'HARNESS_SUITE_TIMING_GATE';
 
@@ -40,19 +25,8 @@ export const SUITE_TIMING_GATE_ENV = 'HARNESS_SUITE_TIMING_GATE';
 export const SUITE_TIMING_VERSION = 1;
 
 /**
- * The hand-off file for a run, named from that run's **log**.
- *
- * It used to be `<repo>/.gates/suite-timing/<gate>-<ms>-<pid>.json`, built from the project root.
- * That was wrong in three ways X12 has since made explicit for every other per-run file: it was
- * inside the worktree, so `git worktree remove` took a run's timings with it while its ledger line
- * went on citing them; it was in a directory retention does not walk, so the files accumulated
- * forever; and its name was derived independently of the log's, which is the shape of the bug
- * X10's review N7 found for step timings — two functions naming one run's file, and a reader sent
- * to the file that was never written. So this returns `<log>.suites.json`, beside the log in the
- * clone's gate log store, which retention already sweeps along with `.log` and `.steps.json`.
- *
- * Naming it from the log costs a `pid`: the log name is unique per run, so the file is too, and the
- * pid bought nothing but a second way to be wrong.
+ * The hand-off file for a run: `<log>.suites.json`, beside the run's log in the
+ * gate log store, so retention sweeps it with the log.
  */
 export function suiteTimingPath(absoluteLogFile) {
   const file = String(absoluteLogFile ?? '').trim();
@@ -87,14 +61,10 @@ export function newSuiteTimingRecord({ gate, platform = null, startedAt }) {
 }
 
 /**
- * One `test-file:finished` context -> one row.
- *
- * `name` is the path relative to the runner's project root where possible: the absolute path is
- * the same string 45 times over with a different tail, and the tail is the only thing a reader
- * compares. `testBodyMs` sums the durations the *runtime* reports per test, which is what lets a
- * 40 s file be classified: a file whose tests add up to 35 s is slow tests, one whose tests add up
- * to 4 s is the app restart and bridge handshake around them. That difference is the question the
- * brief asks, and only the two numbers side by side can answer it.
+ * One `test-file:finished` context -> one row. `name` is relative to the runner's
+ * project root where possible. `testBodyMs` sums the per-test durations the
+ * runtime reports, so the rest of a file's duration is the app restart and
+ * bridge handshake around its tests.
  */
 export function suiteTimingRow(ctx, { projectRoot = null } = {}) {
   const tests = flattenTests(ctx?.result);
@@ -116,12 +86,8 @@ export function suiteTimingRow(ctx, { projectRoot = null } = {}) {
 }
 
 /**
- * The leaf tests of a `TestSuiteResult`.
- *
- * The harness hands back a *tree* (`{ name, tests, suites }`, nested `describe` blocks as children),
- * and the first version of this read `result.testResults` - a field that does not exist - so every
- * suite came back with `tests: 0` and `testBodyMs: 0` and the whole restart/test-body split was
- * silently wrong. A real run caught it; the fixture below is shaped like the real thing now.
+ * The leaf tests of a `TestSuiteResult`, which is a tree: `{ name, tests, suites }`
+ * with nested `describe` blocks as children.
  *
  * @param {object | null | undefined} result
  * @returns {object[]}
@@ -148,9 +114,8 @@ export function flattenTests(result) {
 }
 
 /**
- * Writes the record. Incremental on purpose: the file is readable after the first suite finishes,
- * which is the difference between "the sizing suite is the problem" and a guess, on a run that then
- * dies.
+ * Writes the record. Called after every suite, so the file is readable on a run
+ * that later dies.
  */
 export function writeSuiteTiming(file, record) {
   mkdirSync(dirname(file), { recursive: true });
@@ -180,10 +145,8 @@ export function readSuiteTiming(file) {
 }
 
 /**
- * The gap between the run's wall clock and the sum of its files.
- *
- * Naming it matters: a run whose suites add up to 200 s but took 455 s spends 255 s outside any
- * suite - booting the device, building, bundling - and that is a different fix from a slow test.
+ * The gap between the run's wall clock and the sum of its files: time spent
+ * outside any suite, such as booting the device and bundling.
  */
 export function suiteTimingTotals(record) {
   const suites = record?.suites ?? [];
@@ -209,10 +172,8 @@ export function suiteTimingTotals(record) {
 }
 
 /**
- * The table the ledger and the report print: slowest first, with the split that says *why*.
- * `overheadShare` is per row too - `duration - testBody` is the restart/handshake time that file
- * paid, which is the thing `resetEnvironmentBetweenTestFiles: 'runtime'` buys back if it is ever
- * removed.
+ * The table the ledger and the report print: slowest first. `duration - testBody`
+ * is the restart and handshake time a file paid.
  */
 export function formatSuiteTimings(record, { limit = 10 } = {}) {
   const suites = [...(record?.suites ?? [])].sort(
@@ -254,12 +215,9 @@ function formatSeconds(ms) {
 }
 
 /**
- * The plugin itself.
- *
- * A plugin is `{ name, hooks, createState? }` and the harness validates it structurally
- * (`isHarnessPlugin` in `@react-native-harness/plugins`), so it is built here without importing
- * `definePlugin` - which is an identity function - and this module stays loadable by a unit test
- * on a machine with no harness install.
+ * The plugin itself. A plugin is `{ name, hooks, createState? }` and the harness
+ * validates it structurally, so it is built without importing `definePlugin` and
+ * this module loads on a machine with no harness install.
  */
 export function createSuiteTimingPlugin({
   file,
@@ -324,13 +282,9 @@ export function createSuiteTimingPlugin({
 }
 
 /**
- * The env-facing helper the harness config calls: build the plugin when the environment asked for
- * it, otherwise return null so the config's `plugins` array stays empty.
- *
- * The gate name comes from `SUITE_TIMING_GATE_ENV` when the caller supplied it, and is otherwise
- * reconstructed from the hand-off file's name — because the plugin would otherwise report the
- * *runner* name, and the two are the same string only by luck. A ledger row that cannot say which
- * gate produced a timing is the kind of evidence a report then has to explain.
+ * Builds the plugin when the environment asked for it, otherwise returns null.
+ * The gate name comes from `SUITE_TIMING_GATE_ENV` when set, and is otherwise
+ * reconstructed from the hand-off file's name.
  */
 export function suiteTimingPluginFromEnv(
   env = process.env,
@@ -348,17 +302,10 @@ export function suiteTimingPluginFromEnv(
 }
 
 /**
- * The gate a hand-off file belongs to, read back from its name.
- *
- * Current shape (`<safeGate>-<iso>.log.suites.json`, see `suiteTimingPath`) and the pre-X12 shape
- * (`<safeGate>-<ms>-<pid>.json`) are both recognised, because an old file can still be sitting in a
- * worktree's `.gates/suite-timing/` while its gate is re-run.
- *
- * This is a reconstruction, not the truth: the safe spelling folds every character outside
- * `[\w.-]` into `+`, so the gate that comes back is right for every name `canonicalGateName` can
- * produce (those `:` become `+` and reverse cleanly) and approximate for a raw argument that
- * already contained one of the folded characters. That is why `gate.mjs` also passes the real name
- * through `SUITE_TIMING_GATE_ENV` and this is the fallback.
+ * The gate a hand-off file belongs to, read back from its name. Both
+ * `<safeGate>-<iso>.log.suites.json` and the older `<safeGate>-<ms>-<pid>.json`
+ * are recognised. The result is approximate for a gate argument that contained
+ * a character the safe spelling folds into `+`.
  */
 export function gateFromTimingFile(file) {
   const base = String(file ?? '')

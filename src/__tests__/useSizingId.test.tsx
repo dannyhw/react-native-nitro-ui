@@ -22,36 +22,18 @@ import {
   nitroUiHybridObjectsReset,
 } from '../../__mocks__/react-native-nitro-modules';
 
-/**
- * The host-side contract of `useSizingId(configuration)`.
- *
- * The sizing engine is process-global and keys its ledger by the id alone, so a
- * minted id costs nothing until a *view* files it - and after that, only that
- * view's `onDropView` may end it (`NitroUiSizing.forget`, called by both hosts).
- * A new id handed to a view that is not remounting is therefore a permanent
- * leak: the entry under the old id has no drop left to end it, and D17's
- * "instance already exact in the cache lays out exact" rule silently degrades.
- *
- * Here a host element (`'NitroUiProgress'`) stands for the Fabric node and a
- * mount/cleanup pair of the probe's effect for file/forget, so the two things
- * that must agree are both readable: the id the live view carries, and the id
- * lifetimes. Both are asserted as *deltas*, because a render React throws away
- * may legitimately burn an id that no view ever files.
- *
- * The discarded render is a `Suspense` update: React hides the mounted content,
- * keeps its fibers, and throws the in-flight render away. Hook *state* comes
- * back from the committed fiber on the next render; a ref mutated during the
- * discarded render does not - which is the difference these tests pin.
- */
+// A host element (`'NitroUiProgress'`) stands for the native view, and the mount
+// and cleanup of the probe's effect stand for the view filing and forgetting its
+// id. A discarded render is made with a `Suspense` update: React keeps the
+// mounted fibers and throws the in-flight render away.
 
 /** Ids the fake native core handed out, in order - one entry per mint. */
 let mints: number[] = [];
 
-// Registered once, statically, and never reset: `nitroUiCore` creates its native
-// object lazily (on the first mint), and the hook module has to be the same React
-// module instance the renderer drives, so neither the hybrid-object registry nor
-// jest's module registry may be reset between tests. The factory reads the
-// current `mints` binding, so emptying that array per test is enough.
+// Registered once and never reset: `nitroUiCore` creates its native object
+// lazily, and the hook must share the renderer's React module instance, so
+// neither registry may be reset between tests. The factory reads the current
+// `mints` binding.
 nitroUiHybridObjectsReset();
 nitroUiHybridObjects.NitroUiCore = () => ({
   nextSizingId(): number {
@@ -103,8 +85,7 @@ function Probe({
     return () => {
       log.push(`forget:${sizingId}`);
     };
-    // `log` is the test's own array and never swapped, so naming it here keeps
-    // the pair running exactly when the id changes.
+    // `log` never changes, so the effect re-runs only when the id does.
   }, [sizingId, log]);
   if (gate !== null) {
     use(gate);
@@ -126,8 +107,8 @@ function boundary(
 
 /**
  * `await act` throughout: an update that suspends must be flushed through an
- * awaited scope, or React leaves the render half-done and the next root in the
- * file inherits the mess (and says so with "unmounted test renderer").
+ * awaited scope, or React leaves the render half-done for the next root in the
+ * file.
  */
 async function mount(
   configuration: string | undefined,
@@ -198,7 +179,6 @@ describe('useSizingId(configuration)', () => {
 
     expect(first).toBe(mints[0]);
     expect(idOnView(tree)).toBe(first);
-    // One mint for three renders, and one id lifetime for the whole run.
     expect(mints).toHaveLength(1);
     expect(log).toEqual([`file:${first}`]);
   });
@@ -208,8 +188,7 @@ describe('useSizingId(configuration)', () => {
     const tree = await mount(undefined, log);
     const linearless = idOnView(tree);
 
-    // `undefined` is one configuration, not a new one per render: Switch, Slider
-    // and Button call the hook with no argument at all.
+    // `undefined` is one configuration, not a new one per render.
     await rerender(tree, undefined, null, log);
     expect(mints).toHaveLength(1);
     expect(idOnView(tree)).toBe(linearless);
@@ -219,7 +198,7 @@ describe('useSizingId(configuration)', () => {
     const circular = idOnView(tree);
     expect(circular).toBe(mints[1]);
     expect(circular).not.toBe(linearless);
-    // The previous configuration's view is gone, so its entry was ended - once.
+    // The previous configuration's view is gone, so its id was forgotten once.
     expect(lifetimes(log, linearless)).toEqual({ filed: 1, forgotten: 1 });
 
     await rerender(tree, 'circular', null, log);
@@ -241,17 +220,15 @@ describe('useSizingId(configuration)', () => {
     await rerender(tree, 'circular', pending(), log);
     expect(idOnView(tree)).toBe(mounted);
 
-    // 2. The flip is undone before the gate resolves (a transition or Suspense
-    //    flipping the variant back). The view was never remounted, so it must not
-    //    be re-id'd - and the discarded render must not have left its id in the
-    //    hook either, because that is what makes the next commit re-id a live view.
+    // 2. The flip is undone before the gate resolves. The view was never
+    //    remounted, so it must keep its id.
     await rerender(tree, 'linear', null, log);
 
     const current = idOnView(tree);
     expect(current).toBe(mounted);
     expect(lifetimes(log, mounted)).toEqual({ filed: 1, forgotten: 0 });
-    // Nothing else may have been filed: an id filed without a view that is really
-    // mounting is an entry no `onDropView` will ever end.
+    // Nothing else may be filed: an id filed without a view that is really
+    // mounting is never forgotten.
     const filed = new Set(
       log
         .filter((line) => line.startsWith('file:'))
@@ -265,8 +242,8 @@ describe('useSizingId(configuration)', () => {
     const tree = await mount('linear', log);
     const mounted = idOnView(tree);
 
-    // Suspend first, so this test proves the fix does not simply freeze the id:
-    // the same path that discards a render must still re-id a real change.
+    // Suspend first: the path that discards a render must still re-id a real
+    // change.
     let resolveGate!: () => void;
     const gate = new Promise<null>((resolve) => {
       resolveGate = () => resolve(null);
@@ -285,15 +262,9 @@ describe('useSizingId(configuration)', () => {
   });
 });
 
-/**
- * The call-site half of the same contract: `Progress` hands `useSizingId` the same
- * value it keys the native view on - the *normalised shape* - and not the wider
- * sizing key. `variant` is a plain `string` on the native spec, so a JS caller that
- * bypasses the union (`variant={'round' as ProgressVariant}`) must not be able to
- * change the sizing configuration - or mint an id, or remount the view - without
- * also changing the key. And `appearance` / `contained`, which move the sizing key
- * under a view that stays mounted, must not move the id at all.
- */
+// `Progress` passes `useSizingId` the normalised shape it also keys the native
+// view on. `appearance` and `contained` change the sizing key under a view that
+// stays mounted, so they must not change the id.
 describe('Progress · sizing id follows the view key', () => {
   function progressProps(tree: ReactTestRenderer): Record<string, unknown> {
     return onlyHost(tree, 'NitroUiProgress').props as unknown as Record<
@@ -352,13 +323,6 @@ describe('Progress · sizing id follows the view key', () => {
     expect(mints).toHaveLength(2);
   });
 
-  /**
-   * `appearance` and `contained` are the two props that change the *configuration*
-   * without replacing the view: `key={shape}` keeps this view mounted, so an id
-   * swapped for either of them has no `onDropView` coming, and the entry filed
-   * under the id it drops is never forgotten. The configuration still moves - it
-   * rides `nuiSizingKey`, which is the channel built for exactly that.
-   */
   it('keeps the id when only appearance or contained moves, and re-ids for the shape', () => {
     let tree!: ReactTestRenderer;
     act(() => {

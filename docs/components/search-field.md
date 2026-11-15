@@ -1,12 +1,11 @@
 # SearchField
 
-A search field: **one line**, the keyboard's Search key, a leading search glyph,
-and a clear button that comes with the query — on iOS only while the field is
-editing, which is UIKit's own rule for a search field. UIKit's `UISearchTextField` —
-the field `UISearchBar` itself vends — on iOS, Material 3's search input field
-(`SearchBarDefaults.InputField`, in a plain `Surface` shaped like the bar's
-collapsed input field) on Android. Both are hosted by the core runtime (`docs/architecture/core.md`), so
-typing, caret, autocorrect and IME behaviour are the platform's own.
+A search field: one line, the keyboard's Search key, a leading search glyph, and a clear button
+that appears with the query (on iOS only while the field is editing, which is UIKit's rule for a
+search field). It is UIKit's `UISearchTextField`, the field `UISearchBar` itself vends, on iOS,
+and Material 3's search input field (`SearchBarDefaults.InputField`, in a plain `Surface` shaped
+like the bar's collapsed input field) on Android. Typing, caret, autocorrect and IME behaviour
+are the platform's own.
 
 ```tsx
 import { SearchField } from 'react-native-nitro-ui';
@@ -15,55 +14,44 @@ const [query, setQuery] = useState('');
 <SearchField placeholder="Search" value={query} onChangeText={setQuery} />;
 ```
 
-The prop names are React Native `TextInput`'s, the same subset `TextField`
-takes, and the three keyboard props are the same three: `keyboardType`,
-`autoCapitalize` and `autoCorrect` mean what they mean on `TextField`, and take
-the same values. What `SearchField` still does not have is `multiline` and
-`secureTextEntry`, and its Return key is not a prop either — a search field is
-one line with no password in it, and the key that submits it is always Search
-(D38 item 2). A field that needs those is a `TextField`.
+The prop names are React Native `TextInput`'s, the same subset `TextField` takes, including the
+three keyboard props `keyboardType`, `autoCapitalize` and `autoCorrect`. `SearchField` has no
+`multiline` and no `secureTextEntry`, and its Return key is always Search. A field that needs
+those is a `TextField`.
 
-Why each platform's control rather than a styled `TextField`: a search field is
-recognized by its shape, and the two shapes are not one shape — Android's is a
-56 dp bar with a glyph in front and the framework's own word as its prompt, iOS's
-is UIKit's 28 pt bordered field. A `TextField` with a glyph drawn over it is a
-`TextField` with a glyph drawn over it. iOS could not use SwiftUI either: it has
-no standalone search field, only the `searchable` modifier, which needs a
-navigation container to attach to. `UISearchBar` itself was rejected because it
-is the *delegate* of its own text field and reports through
-`UISearchBarDelegate`, so the controlled-value half below would have been
-rewritten rather than reused — and its `searchTextField` is this same class.
+The two platforms' search fields have different shapes: Android's is a 56 dp bar with a leading
+glyph and the framework's own prompt, iOS's is UIKit's 28 pt bordered field. SwiftUI has no
+standalone search field, only the `searchable` modifier, which needs a navigation container, so
+iOS hosts the UIKit control.
 
-It is its own Hybrid View rather than `variant="search"` on `TextField` because
-a declared fallback is keyed by component (`docs/architecture/sizing.md` §5): as
-a variant, every cold SearchField would be laid out at TextField's 22 pt / 24 dp
-line for one frame and then correct to a 28 pt / 56 dp bar — a jump at the top
-of a search screen.
+`SearchField` is its own Hybrid View, not a variant of `TextField`, because a declared fallback
+is per component: its cold first frame is its own 28 pt / 56 dp height, not TextField's 22 pt /
+24 dp line.
 
 ## API
 
-| Prop                 | Type                       | Default | Maps to |
-| -------------------- | -------------------------- | ------- | ------- |
-| `value`              | `string \| undefined`      | unset   | Controlled query. Omit it for an uncontrolled field. |
-| `defaultValue`       | `string \| undefined`      | `''`    | Initial query of an uncontrolled field. |
-| `onChangeText`       | `(text: string) => void`   | —       | After every edit the user makes — the clear button's tap included — with the text native shows. |
-| `placeholder`        | `string \| undefined`      | none on iOS, the framework's hint on Android | `UITextField.placeholder` / the input field's placeholder slot. |
-| `maxLength`          | `number \| null \| undefined` | none | Enforced natively, in UTF-16 code units, as `TextField`'s. |
-| `keyboardType`       | `TextFieldKeyboardType \| undefined` | `'default'` | The keyboard the field opens. `TextField`'s values and `TextField`'s mapping — [the table there](text-field.md#api) is the one table. |
-| `autoCapitalize`     | `TextFieldAutoCapitalize \| undefined` | `'none'` | What the keyboard capitalises. A query is not a sentence, so the default is `'none'` rather than `TextField`'s `'sentences'`. |
-| `autoCorrect`        | `boolean \| undefined`     | `true`  | Whether the keyboard may correct the query as it is typed. |
-| `editable`           | `boolean \| undefined`     | `true`  | `false`: the query shows, but the field takes no focus, no input and no clear. |
-| `onSubmitEditing`    | `(text: string) => void`   | —       | The Search key, with the query as a string; the field then loses focus. Never called for an empty query. |
-| `onFocus` / `onBlur` | `() => void`               | —       | First responder / Compose focus, gained and lost. |
-| `ref`                | `Ref<SearchFieldHandle>`   | —       | `focus()` and `blur()`. |
-| `style`              | `ViewStyle`                | —       | The box (see Sizing). |
-| `testID`             | `string \| undefined`      | —       | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`. |
-| `accessibilityLabel` | `string \| undefined`      | —       | The field's own name. |
-| `hybridRef`          | `(view: handle) => void`   | —       | **Internal.** The native view, for this repo's harness and benchmarks. |
-| `nuiPerfId`          | `number \| null \| undefined` | `null` | **Internal.** Instance id for perf marks. |
+| Prop                 | Type                                   | Default                                      | Maps to                                                                                                                |
+| -------------------- | -------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `value`              | `string \| undefined`                  | unset                                        | Controlled query. Omit it for an uncontrolled field.                                                                   |
+| `defaultValue`       | `string \| undefined`                  | `''`                                         | Initial query of an uncontrolled field.                                                                                |
+| `onChangeText`       | `(text: string) => void`               | —                                            | After every edit the user makes, the clear button's tap included, with the text native shows.                          |
+| `placeholder`        | `string \| undefined`                  | none on iOS, the framework's hint on Android | `UITextField.placeholder` / the input field's placeholder slot.                                                        |
+| `maxLength`          | `number \| null \| undefined`          | none                                         | Enforced natively, in UTF-16 code units, as `TextField`'s.                                                             |
+| `keyboardType`       | `TextFieldKeyboardType \| undefined`   | `'default'`                                  | The keyboard the field opens. `TextField`'s values and mapping: see [the table there](text-field.md#api).              |
+| `autoCapitalize`     | `TextFieldAutoCapitalize \| undefined` | `'none'`                                     | What the keyboard capitalises. A query is not a sentence, so the default is `'none'`, not `TextField`'s `'sentences'`. |
+| `autoCorrect`        | `boolean \| undefined`                 | `true`                                       | Whether the keyboard may correct the query as it is typed.                                                             |
+| `editable`           | `boolean \| undefined`                 | `true`                                       | `false`: the query shows, but the field takes no focus, no input and no clear.                                         |
+| `onSubmitEditing`    | `(text: string) => void`               | —                                            | The Search key, with the query as a string; the field then loses focus. Never called for an empty query.               |
+| `onFocus` / `onBlur` | `() => void`                           | —                                            | First responder / Compose focus, gained and lost.                                                                      |
+| `ref`                | `Ref<SearchFieldHandle>`               | —                                            | `focus()` and `blur()`.                                                                                                |
+| `style`              | `ViewStyle`                            | —                                            | The box (see Sizing).                                                                                                  |
+| `testID`             | `string \| undefined`                  | —                                            | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.                                                          |
+| `accessibilityLabel` | `string \| undefined`                  | —                                            | The field's own name.                                                                                                  |
+| `hybridRef`          | `(view: handle) => void`               | —                                            | Internal. The native view, for this repo's harness and benchmarks.                                                     |
+| `nuiPerfId`          | `number \| null \| undefined`          | `null`                                       | Internal. Instance id for perf marks.                                                                                  |
 
-`SearchField` is a `View`, so the other `ViewProps` apply to its box. A negative
-or non-finite `maxLength` is no limit, as it is for `TextInput`.
+`SearchField` is a `View`, so the other `ViewProps` apply to its box. A negative or non-finite
+`maxLength` is no limit, as it is for `TextInput`.
 
 ### `ref`: `focus()` and `blur()`
 
@@ -73,237 +61,163 @@ const search = useRef<SearchFieldHandle>(null);
 search.current?.focus();
 ```
 
-The same two calls `TextField` has, with the same rules: they hop to the UI
-thread and return at once, `onFocus` says when focus landed, an ask made from a
-parent's mount effect — before the native view reached JS — is held by the
-wrapper and run when it arrives, and a field that is not `editable` ignores
-`focus()`. Making a field non-editable while it is focused takes focus away.
+The same two calls `TextField` has, with the same rules: they hop to the UI thread and return at
+once, and `onFocus` says when focus landed. A call made from a parent's mount effect, before the
+native view reached JS, is held by the wrapper and run when the view arrives. A field that is not
+`editable` ignores `focus()`, and making a focused field non-editable takes focus away.
 
 ## Platform mapping
 
-| Concept              | iOS                                                            | Android                                                          |
-| -------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Control              | `UISearchTextField`                                             | `SearchBarDefaults.InputField(TextFieldState, SearchBarState)` in a `Surface` |
-| Host                 | a `UIViewRepresentable` in `NitroSwiftUIHost`                   | `NitroComposeHost`                                               |
-| Search glyph         | the control's own leading image                                 | `SearchBarDefaults.InputField`'s `leadingIcon`                   |
-| Clear button         | `clearButtonMode = .whileEditing` (UIKit's own)                 | a trailing `IconButton` that appears with the query               |
-| User edit            | `editingChanged`                                                | `snapshotFlow` over the state's text, plus a catch-up in `afterUpdate()` |
-| JS write             | `text = …` in `afterUpdate()`                                   | `TextFieldState.edit {}` in `afterUpdate()`                      |
-| Composition flag     | `markedTextRange != nil`                                        | `TextFieldState.composition != null`                             |
-| `maxLength`          | `shouldChangeCharactersIn`                                      | an `InputTransformation`                                          |
-| Focus                | `editingDidBegin`/`End`, `becomeFirstResponder()`               | `onFocusChanged`, `FocusRequester`, `FocusManager.clearFocus()`  |
-| Keyboard             | `UIKeyboardType` / `UITextAutocapitalizationType` / `.autocorrectionType` + `.spellCheckingType`, as `TextField` sets them | `KeyboardOptions(capitalization, autoCorrectEnabled, keyboardType)` handed to `InputField` |
-| Search key           | `textFieldShouldReturn`, with `enablesReturnKeyAutomatically` on | the input field's `onSearch`, and `ImeAction.Search` Material merges over the keyboard options                                      |
-| Empty query          | UIKit disables the Return key                                   | `onSearch` returns without reporting                              |
-| Prompt nobody asked for | nothing — UIKit sets no `placeholder` on the bare field       | the framework's `search_hint` string                             |
-| Announcement         | the `.searchField` accessibility trait                          | the editable node under the field's name                         |
+| Concept                 | iOS                                                                                                                        | Android                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Control                 | `UISearchTextField`                                                                                                        | `SearchBarDefaults.InputField(TextFieldState, SearchBarState)` in a `Surface`                  |
+| Host                    | a `UIViewRepresentable` in `NitroSwiftUIHost`                                                                              | `NitroComposeHost`                                                                             |
+| Search glyph            | the control's own leading image                                                                                            | `SearchBarDefaults.InputField`'s `leadingIcon`                                                 |
+| Clear button            | `clearButtonMode = .whileEditing` (UIKit's own)                                                                            | a trailing `IconButton` that appears with the query                                            |
+| User edit               | `editingChanged`                                                                                                           | `snapshotFlow` over the state's text, plus a catch-up in `afterUpdate()`                       |
+| JS write                | `text = …` in `afterUpdate()`                                                                                              | `TextFieldState.edit {}` in `afterUpdate()`                                                    |
+| Composition flag        | `markedTextRange != nil`                                                                                                   | `TextFieldState.composition != null`                                                           |
+| `maxLength`             | `shouldChangeCharactersIn`                                                                                                 | an `InputTransformation`                                                                       |
+| Focus                   | `editingDidBegin`/`End`, `becomeFirstResponder()`                                                                          | `onFocusChanged`, `FocusRequester`, `FocusManager.clearFocus()`                                |
+| Keyboard                | `UIKeyboardType` / `UITextAutocapitalizationType` / `.autocorrectionType` + `.spellCheckingType`, as `TextField` sets them | `KeyboardOptions(capitalization, autoCorrectEnabled, keyboardType)` handed to `InputField`     |
+| Search key              | `textFieldShouldReturn`, with `enablesReturnKeyAutomatically` on                                                           | the input field's `onSearch`, and `ImeAction.Search` Material merges over the keyboard options |
+| Empty query             | UIKit disables the Return key                                                                                              | `onSearch` returns without reporting                                                           |
+| Prompt when none is set | nothing: UIKit sets no `placeholder` on the bare field                                                                     | the framework's `search_hint` string                                                           |
+| Announcement            | the `.searchField` accessibility trait                                                                                     | the editable node under the field's name                                                       |
 
 ## The text, and the handshake
 
-The query is a controlled value on the event-count handshake
-(`docs/architecture/core.md` §4), on the *same model and the same code* as
-`TextField`: `TextFieldModel`, the write/apply/revert bodies and the
-`maxLength` limit are shared, not copied (they live in
-`ios/components/TextField/NitroUiTextEditing.swift` and
-`HybridNitroUiTextField.kt`). So the four things true of `TextField`'s text are
-true here in the same way: a refused edit reverts, a write in flight cannot
-overwrite a keystroke, a JS write is not reported back as an edit, and typing in
-an uncontrolled field costs no React render. `maxLength` counts UTF-16 code
-units and never cuts an emoji in half — see
+The query is a controlled value on the event count ([DESIGN.md](../DESIGN.md), section 3.5), on
+the same model and code as `TextField`: `TextFieldModel`, the write/apply/revert bodies and the
+`maxLength` limit are shared (`ios/components/TextField/NitroUiTextEditing.swift` and
+`HybridNitroUiTextField.kt`). So what holds for `TextField`'s text holds here: a refused edit
+reverts, a write in flight cannot overwrite a keystroke, a JS write is not reported back as an
+edit, and typing in an uncontrolled field costs no React render. `maxLength` counts UTF-16 code
+units and never cuts an emoji in half; see
 [text-field.md](text-field.md#the-text-and-the-handshake).
 
-What the two components fix differently is the Return key: `SearchField` sets it
-to `search` and there is no prop for it. The three keyboard props are props —
-their defaults are what this component used to fix them to (`'default'`,
-`'none'`, autocorrection on), so a field whose app passes no keyboard prop is
-configured exactly as it was.
+The Return key is always `search` and has no prop.
 
 ## The clear button
 
-It is one edit, and *when it is visible* is the one place the two controls
-visibly disagree:
+Clearing is one edit. When the button is visible differs by platform:
 
-- iOS uses UIKit's own clear button (`clearButtonMode = .whileEditing`), so it is
-  there while the field is editing and not in the bar before that — a field with a
-  query that nobody has tapped into shows no button. That is UIKit's search-field
-  rule, kept rather than replaced by `.always`, which would offer a clear button on
-  an empty field. UIKit
-  asks the delegate first — `textFieldShouldClear` refuses it on a field that is
-  not `editable` — then empties the field and sends `editingChanged`, so
-  `onChangeText('')` arrives through the same path as any other edit.
-- Android has no built-in one, so the trailing slot holds an `IconButton` with
-  Material's close glyph. It calls `TextFieldState.clearText()`, which the
-  `snapshotFlow` above reports as the edit it is, and the bar shows it as soon as
-  the query is non-empty, focused or not — which is why the same story row carries
-  an ✕ on Android and none on iOS.
+- iOS uses UIKit's own clear button (`clearButtonMode = .whileEditing`), so it shows while the
+  field is editing. A field with a query that has not been tapped into shows no button. UIKit
+  asks the delegate first (`textFieldShouldClear` refuses on a field that is not `editable`),
+  then empties the field and sends `editingChanged`, so `onChangeText('')` arrives like any other
+  edit.
+- Android has no built-in one, so the trailing slot holds an `IconButton` with Material's close
+  glyph. It calls `TextFieldState.clearText()`, which is reported as an edit, and it shows as
+  soon as the query is non-empty, focused or not.
 
-Either way focus stays: clearing a query is not leaving the field, and a clear
-that also dismissed the keyboard would be a second thing to do. The harness runs
-the control's own handler (`nuiTestClear`) rather than writing the text, and the
-real-input suite taps the button from outside the app.
+Focus stays on the field after a clear.
 
 ## The Search key
 
-The keyboard's key is Search on both platforms and does three things: reports
-`onSubmitEditing(query)`, then gives up focus — React Native's default
-`submitBehavior` for a single line. **An empty query never submits**, which is a
-rule stated on both sides rather than a coincidence of two defaults: iOS sets
-`enablesReturnKeyAutomatically`, so UIKit disables the key while the field is
-empty; Android's `onSearch` returns without reporting. `nuiTestSubmit()` runs the
-same guard, so the rule is assertable rather than invisible inside UIKit, and
-`real-input` presses a real key on both platforms (on Android a hardware Enter,
-which reaches the same `onSearch` the soft Search key does).
+The keyboard's key is Search on both platforms. It reports `onSubmitEditing(query)` and then the
+field gives up focus, React Native's default `submitBehavior` for a single line. An empty query
+never submits: iOS sets `enablesReturnKeyAutomatically`, so UIKit disables the key while the
+field is empty, and Android's `onSearch` returns without reporting. A hardware Enter on Android
+reaches the same `onSearch`.
 
-The Android bar stays **collapsed** — v1 has no results view to expand into, and
-a bar that grew on focus would move the box under the keyboard. `expanded` in the
-test state is the composition's own answer, and the harness asserts the box does
-not change height while focused.
+The Android bar stays collapsed: there is no results view to expand into, and its box does not
+change height while focused.
 
 ## The keyboard
 
-`keyboardType`, `autoCapitalize` and `autoCorrect` are `TextField`'s props, and
-so is the mapping: [the table in text-field.md](text-field.md#api) is the one
-place this library spells out which `UIKeyboardType` and which Compose
-`KeyboardType` each spelling becomes. What a search field fixes is not a value in
-that table but the key beside it — the key that submits is Search whatever
-keyboard is open, and on Android `ImeAction.Search` is what Material 3 merges
-over the options handed to the field.
+`keyboardType`, `autoCapitalize` and `autoCorrect` are `TextField`'s props with `TextField`'s
+mapping ([the table in text-field.md](text-field.md#api)). The submit key is Search whatever
+keyboard is open; on Android `ImeAction.Search` is merged over the options handed to the field.
 
-The defaults are what this component has always been built with, so an app that
-passes no keyboard prop gets the field it already had:
+| Prop             | Default     | Why that default                                                                                                   |
+| ---------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| `keyboardType`   | `'default'` | The standard text keyboard.                                                                                        |
+| `autoCapitalize` | `'none'`    | A query is not a sentence. `TextField`'s default is `'sentences'`; this is the only keyboard default that differs. |
+| `autoCorrect`    | `true`      | The system's own answer on iOS (`.default`, and `.no` when refused), and Android's autocorrection flag.            |
 
-| Prop             | Default     | Why that default |
-| ---------------- | ----------- | ---------------- |
-| `keyboardType`   | `'default'` | The keyboard a search field has always opened. |
-| `autoCapitalize` | `'none'`    | A query is not a sentence. `TextField`'s default is `'sentences'`; this one is not, and that is the only place the two components' keyboard props disagree. |
-| `autoCorrect`    | `true`      | The system's own answer on iOS (`.default`, and `.no` when refused), and Android's autocorrection flag — what `TextField` sends for `true`. |
+A change while the field is focused reaches the keyboard that is already up, on both platforms.
+On iOS a `UITextInputTraits` setter does not affect a visible keyboard, so the apply step calls
+`reloadInputViews()` when a trait changed. On Android, Compose restarts the field's input session
+when its keyboard options change while it has focus, so the IME gets the new keyboard without the
+field losing focus.
 
-**A change while the field is focused** reaches the keyboard that is already up,
-on both platforms. On iOS a `UITextInputTraits` setter does not touch a keyboard
-once it is visible, so the apply step calls `reloadInputViews()` when any of them
-moved — `TextField`'s rule, run through the same code. On Android, Compose
-restarts the field's input session when its keyboard options change while it
-has focus, so the IME is handed the new keyboard without the field losing focus;
-the IME's own record of the connection shows the switch (from the text keyboard
-to the number keyboard, Search key kept).
-
-One consequence of a keyboard prop is worth knowing before shipping one. UIKit's
-`.numberPad` and `.decimalPad` have **no Return key at all**, so on iOS a field
-with `keyboardType="number-pad"` or `"decimal-pad"` cannot be submitted from the
-keyboard: `onSubmitEditing` needs a key press and there is none to press.
-Android's number keyboard keeps its action key, and there it is still Search.
-`"phone-pad"`, `"email-address"` and `"url"` keep the key on both platforms.
+UIKit's `.numberPad` and `.decimalPad` have no Return key, so on iOS a field with
+`keyboardType="number-pad"` or `"decimal-pad"` cannot be submitted from the keyboard. Android's
+number keyboard keeps its action key, which is still Search. `"phone-pad"`, `"email-address"` and
+`"url"` keep the key on both platforms.
 
 ## The placeholder
 
-`placeholder` is the app's word, and what the field says without one differs by
-platform — the first iOS run measured the difference rather than assuming it:
+`placeholder` is the app's word. Without one the platforms differ:
 
-- **iOS draws no prompt.** `UISearchTextField` has no `placeholder` of its own —
-  UIKit writes "Search" *inside a search bar*, as its own drawing, and never sets
-  the property on the bare field. The control reads its own `placeholder` once at
-  init and uses that as the default, so the day UIKit does set one, an unset
-  `placeholder` starts saying the platform's word with no change here. Until then,
-  pass `placeholder` if you want a word on iOS.
-- **Android says the framework's word.** Material 3's input field leaves the prompt
-  to the app, so the component reads the framework's `search_hint` string resource.
-  That resource is private to the framework — `android.R.string` names only
-  `search_go` of the family, checked against the android-35 stub — so it is resolved
-  by name once per process, and an answer of 0 falls back to the English the
-  platform itself uses.
+- iOS draws no prompt. `UISearchTextField` has no `placeholder` of its own: UIKit writes "Search"
+  only inside a search bar. The control reads its own `placeholder` once at init and uses that as
+  the default. Pass `placeholder` if you want a prompt on iOS.
+- Android shows the framework's word. Material 3's input field leaves the prompt to the app, so
+  the component reads the framework's `search_hint` string resource. That resource is private to
+  the framework, so it is resolved by name once per process, and if it is not found the field
+  falls back to the English the platform uses.
 
-Either way the library writes no search string of its own: an empty field is not
-English in a German app. `SearchField.harness.tsx` asserts the two halves
-separately — Android's word is non-empty, iOS's is empty — because "the platform's
-own" is a claim you can only make one platform at a time.
+The library ships no search string of its own.
 
 ## Sizing
 
-`fillWidth` (`docs/architecture/sizing.md` §5): the width is the parent's box,
-the height is the field's own — and the height is one number, because a search
-field does not grow with its query, its prompt or its width:
+The policy is `fillWidth`: the width is the parent's box, the height is the field's own. The
+height does not change with the query, the prompt or the width:
 
-- **28 pt** on iOS 27 (the height UIKit's `UISearchTextField` measures at the body
-  font, and the height UIKit gives the field inside its own search bar) and
-  **56 dp** on Android (`SearchBarDefaults.InputFieldHeight`) at the default text
-  size. Both are measured on the devices the gates run on, not read out of a header.
-- Those are also the declared fallbacks (200 × 28 pt, 200 × 56 dp — 200 being
-  the width a `fillWidth` control draws under a parent that gives it none), so a
-  cold first mount is the right height rather than a frame at something else.
-  `prewarm(['NitroUiSearchField'])` makes it exact, and because the sizing key is
-  a constant, one cache entry is every field.
-- The two numbers are deliberately *not* `TextField`'s 22 pt / 24 dp, and
-  `SearchField.harness.tsx` asserts the measured height is not TextField's: that
-  assertion is what stops the component quietly becoming a `TextField` with a
-  glyph on it. The conformance suite holds the measured box to the declaration,
-  on a fallback poisoned to a size that belongs to nothing.
+- 28 pt on iOS 27 (what `UISearchTextField` measures at the body font) and 56 dp on Android
+  (`SearchBarDefaults.InputFieldHeight`) at the default text size.
+- Those are also the declared fallbacks (200 × 28 pt, 200 × 56 dp; 200 is the width a `fillWidth`
+  control draws under a parent that gives it none), so a cold first mount is the right height.
+  The sizing key is a constant, so one cache entry covers every field, and
+  `prewarm(['NitroUiSearchField'])` seeds it.
 
 ## Inside a `<Host>`
 
-Not yet: a `SearchField` is in `UNHOSTABLE_CONTROLS`, so a `<Host>` refuses it
-with an error naming it — the same answer `TextField` and `Chip` get. A field
-inside a shared composition means IME sessions and focus owned by the Host, and
-no round has measured that.
+Not supported: a `SearchField` is in `UNHOSTABLE_CONTROLS`, so a `<Host>` refuses it with an
+error naming it, as it does `TextField` and `Chip`. A field inside a shared composition would
+mean IME sessions and focus owned by the Host.
 
 ## Recycling and cleanup
 
-A recycled field comes back with none of its previous owner: the query, focus,
-the handshake's counts, `maxLength`, `editable`, the accessibility label and the
-placeholder — which returns to whatever the platform shows by default (nothing on
-iOS, the framework's hint on Android), not the last row's
-(`SearchField.harness.tsx`'s recycle case, and the X4 conformance probes, which
-leave typed text behind on purpose and read it back from the next owner). On iOS
-the UIKit control outlives the mount with the hosting controller, so the reset
-clears its text, resigns first responder and re-applies the search presets; on
-Android the composition is disposed and the next mount gets a fresh
-`TextFieldState`.
+A recycled field keeps nothing of its previous owner: the query, focus, the event counts,
+`maxLength`, `editable`, the accessibility label and the placeholder are reset, and the
+placeholder returns to the platform default (nothing on iOS, the framework's hint on Android).
+On iOS the UIKit control outlives the mount with the hosting controller, so the reset clears its
+text, resigns first responder and re-applies the search presets. On Android the composition is
+disposed and the next mount gets a fresh `TextFieldState`.
 
 ## Accessibility
 
-The name is on the field a person types into, and the announcement is a search
-field on both platforms:
+The name is on the field a person types into, and the announcement is a search field on both
+platforms:
 
-- **iOS**: the `UITextField` carries `accessibilityLabel`, and
-  `accessibilityTraits` gains `.searchField` — UIKit gives that trait to the
-  field *inside* a `UISearchBar`, and standing alone it does not get it.
-  `real-input`'s a11y sweep reads the element by that announcement
-  (`iosTrait: 'search field'`), and its keystroke check goes through
-  `app.searchFields`, so a field that lost the trait fails the check that types
-  into it rather than only the a11y line.
-- **Android**: the label is on the search input's own node, whose editable child
-  carries the text — the shape `uiautomator dump` reports for the platform's own
-  fields, and the shape `scripts/real-input/a11y.mjs` reads as one named control.
-  The clear button is a separate named node, and `real-input` asserts that it has
-  a name at all, because an unnamed button is one TalkBack cannot describe.
+- iOS: the `UITextField` carries `accessibilityLabel`, and `accessibilityTraits` gains
+  `.searchField`. UIKit gives that trait to the field inside a `UISearchBar`; standing alone it
+  does not get it.
+- Android: the label is on the search input's own node, whose editable child carries the text.
+  The clear button is a separate named node.
 
-What automation does **not** cover: nobody has read this field with a screen
-reader switched on — the sweep reads the tree a screen reader walks, not what it
-says — and on Android the a11y rule is decided from a committed dump of this
-screen, so what a device in another layout (a larger touch target, a different
-font scale) publishes is unasserted. The clear button's *behaviour* is asserted
-from outside the app; its announcement is asserted only as "non-empty".
+Not covered by automation: what a screen reader speaks for the field, and what the Android tree
+publishes at another font scale or touch-target size.
 
 ## Behaviour notes
 
-- **`editable={false}`**: the query shows, a tap does nothing, `focus()` does
-  nothing, and the clear button is refused at the delegate rather than merely
-  hidden — on Android the button is not even offered.
-- **`Back`** on Android hides the keyboard and leaves the field focused, which is
-  the platform's behaviour; iOS has no Back.
-- **`onSubmitEditing`** takes the text as a string, not RN's
-  `{ nativeEvent: { text } }` event, like `TextField`'s.
-- Focus changes reach JS as one native callback (`onFocusChange(true|false)`) and
-  the wrapper splits it into `onFocus` / `onBlur`, so the native names stay clear
-  of the base view's own `onFocus` / `onBlur` events.
+- `editable={false}`: the query shows, a tap does nothing, `focus()` does nothing, and the clear
+  button is refused at the delegate on iOS and not offered on Android.
+- Back on Android hides the keyboard and leaves the field focused.
+- `onSubmitEditing` takes the text as a string, not RN's `{ nativeEvent: { text } }` event, like
+  `TextField`'s.
+- Focus changes reach JS as one native callback (`onFocusChange(true|false)`), and the wrapper
+  splits it into `onFocus` / `onBlur`.
 
 ## Limits
 
-- No results view, no suggestions, no Cancel button, no scope bar: this is the
-  *field*, and the screen around it is the app's. The Android bar is held
-  collapsed and every request to expand it is dropped.
-- No `multiline`, `secureTextEntry`, `returnKeyType`, `autoFocus`,
-  `selection`, `submitBehavior` or font/colour props. The three keyboard props
-  are there; the Return key is not a choice.
-- No `TextInput.State` integration: `Keyboard.dismiss()` and RN's focused-input
-  tracking do not see a `SearchField` (same gap as `TextField`).
-- No benchmark arm yet, and no `<Host>` support.
+- No results view, no suggestions, no Cancel button, no scope bar: this is the field, and the
+  screen around it is the app's. The Android bar is held collapsed.
+- No `multiline`, `secureTextEntry`, `returnKeyType`, `autoFocus`, `selection`, `submitBehavior`
+  or font/colour props.
+- No `TextInput.State` integration: `Keyboard.dismiss()` and RN's focused-input tracking do not
+  see a `SearchField` (as with `TextField`).
+- No benchmark, and no `<Host>` support.

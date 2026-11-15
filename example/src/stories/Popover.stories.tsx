@@ -1,14 +1,3 @@
-/**
- * Popover stories (G22). Props and events: `docs/components/popover.md`.
- *
- * A popover's `anchor` is laid out in place, in the app's own layout, and the wrapper
- * around it is what the platform points at; `children` are React Native views that the
- * popover shows. The app opens it, so every story pairs it with a way to open it again
- * and a readout of the events it reported.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and
- * benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Popover } from 'react-native-nitro-ui';
@@ -68,7 +57,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -81,7 +69,6 @@ function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** The element most stories point at. */
 function Anchor({ label }: { label: string }) {
   return (
     <View style={styles.anchor}>
@@ -90,7 +77,6 @@ function Anchor({ label }: { label: string }) {
   );
 }
 
-/** Menu-like content: a title and rows that do something. */
 function MenuContent({ onPick }: { onPick: (id: string) => void }) {
   return (
     <View style={styles.content}>
@@ -109,7 +95,6 @@ function MenuContent({ onPick }: { onPick: (id: string) => void }) {
   );
 }
 
-/** The events a popover reported, newest last. */
 function useEventLog() {
   const [log, setLog] = useState<string[]>([]);
   const record = useCallback((entry: string) => {
@@ -118,7 +103,6 @@ function useEventLog() {
   return { log, record };
 }
 
-/** Every public prop on the Controls panel. */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const { onIsPresentedChange, onDismiss, ...rest } = props;
@@ -151,11 +135,7 @@ export const Playground: Story = {
   },
 };
 
-/**
- * A menu open over its anchor: one anchor in the middle of an empty page, with room
- * below it. This is the story `docs/images/components/popover-{ios,android}.png` is
- * taken from.
- */
+/** The README screenshot. */
 export const OpenMenu: Story = {
   render: function OpenMenuStory() {
     const [open, setOpen] = useState(true);
@@ -176,7 +156,6 @@ export const OpenMenu: Story = {
   },
 };
 
-/** A field inside: the popover moves clear of the keyboard (DECISIONS D44 item 1). */
 export const Rename: Story = {
   render: function RenameStory() {
     const [open, setOpen] = useState(false);
@@ -216,7 +195,6 @@ export const Rename: Story = {
   },
 };
 
-/** Below the anchor when there is room, above it when there is not. */
 export const Placement: Story = {
   render: function PlacementStory() {
     const [top, setTop] = useState(false);

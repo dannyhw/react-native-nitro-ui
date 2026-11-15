@@ -1,20 +1,6 @@
 /**
- * What a run records about the machine it ran on.
- *
- * Lives here rather than in `run.mjs` for the reason `format.mjs` documents: the
- * runner is a CLI that resolves repo paths through `import.meta`, which jest's
- * CommonJS transform cannot represent, and this record decides whether a run may
- * mint a baseline at all - so it has to be testable without a device.
- *
- * The label is the single thing here that is *not* a measurement
- * (`machineLabelFromEnv`), and it is the one that picks the directory the run's
- * baseline is written to. `run.mjs` therefore refuses an unusable label before the
- * run starts, in the same pre-flight as the load check: both are facts about the
- * machine, known at second one, that decide whether the next three hours are worth
- * spending. Recording the label differently from the way that pre-flight judged it
- * - a raw `process.env` read that skips the trim, say - would discover the
- * mismatch at the end of the plan rather than the start, which is what the test for
- * this module guards.
+ * What a bench run records about the machine it ran on. Nothing here may identify
+ * the machine by name: results are quoted in public reports.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -22,9 +8,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { machineLabelFromEnv } from './baseline.mjs';
 import { installedVersion, resolvedDependencies } from './deps.mjs';
-import { isNumber, loadBlocker } from './lib.mjs';
+import { loadOverCeiling } from './lib.mjs';
 
 /** Bounded best-effort command execution: null rather than a throw or a hang. */
 export function tryExec(command, args) {
@@ -39,13 +24,8 @@ export function tryExec(command, args) {
 }
 
 /**
- * The two installed packages a run measured, read from `node_modules`.
- *
- * Beside the lock because the measured thing is the install, and the two
- * disagreeing is worth a line: a stale install would otherwise put an unrecorded
- * app's numbers under this commit's versions.
- *
- * A package that is not installed is null rather than a guess.
+ * The two installed packages a run measured, read from `node_modules`. A package
+ * that is not installed is null.
  *
  * @param {{ nodeModulesDir: string, read?: (file: string) => string }} input
  * @returns {{ reactNative: string | null, expoUi: string | null }}
@@ -70,10 +50,8 @@ export function installedPackageVersions({
 }
 
 /**
- * The app versions a run's numbers belong to. Read from `bun.lock` because that is
- * the version list committed with the run's own commit; the installed packages are
- * recorded beside it because the measured thing is the install
- * (`installedDependenciesProblem()` compares the two).
+ * The app versions a run's numbers belong to: the ones `bun.lock` names, with the
+ * installed ones beside them because the install is what was measured.
  *
  * @param {{ lockPath: string, nodeModulesDir: string, read?: (file: string) => string }} input
  */
@@ -107,34 +85,21 @@ export function runDependencies({
 }
 
 /**
- * Who ran this, on what, and how busy they were (T02 review S10, D9, R4).
- *
- * A baseline is only meaningful if it says so: the load average decides whether
- * the run may mint one at all, and the OS runtime is part of the device key
- * because a runtime change breaks comparability sooner than a device change.
- *
- * `load` is the sampler that ran with the run, so the file carries the load of
- * the whole run (`loadSamples`) and not just the instant this function happens to
- * be called in. `loadavg1`/`loadavg5` stay what they always were - the end-of-run
- * instant, which is all a results file from before R4 had, and what
- * `bench/tools/arm-ratios.mjs` and the markdown report already read.
+ * The hardware, OS and load a run was measured under. `load` is the sampler that
+ * ran with the run (`loadSamples`); `loadavg1`/`loadavg5` are the instant this is
+ * called, at the end of the run.
  */
 export function collectMachine(platform, device, load) {
   const loadavg = os.loadavg();
   const cpuCount = os.cpus().length;
   const machine = {
-    // A label, not os.hostname(): results and baselines are committed to a public repo
-    // (D25). It also picks the directory this machine's baselines live in, and it has to
-    // be the same value the pre-flight judged - hence the shared helper, not an env read.
-    hostname: machineLabelFromEnv(),
     osPlatform: os.platform(),
     osRelease: os.release(),
     osVersion: os.version(),
     arch: os.arch(),
     cpuCount,
-    // D15: device keys stay class-level, so the CPU model is what tells two
-    // machines claiming the same `android35-emu-pixel9` / `ios27-sim-iphone17`
-    // key apart when a baseline is being compared across desks or with CI.
+    // Device keys name a device class, so the CPU model is what tells two
+    // machines with the same key apart.
     cpuModel: os.cpus()[0]?.model ?? null,
     loadavg1: loadavg[0] ?? null,
     loadavg5: loadavg[1] ?? null,
@@ -142,7 +107,7 @@ export function collectMachine(platform, device, load) {
     totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,
     xcode: tryExec('xcodebuild', ['-version'])?.split('\n')[0] ?? null,
   };
-  machine.quiet = isNumber(machine.loadavg1) && loadBlocker(machine) === null;
+  machine.quiet = loadOverCeiling(machine) === null;
   if (platform === 'ios') {
     machine.simRuntime = device.runtime ?? null;
   } else {

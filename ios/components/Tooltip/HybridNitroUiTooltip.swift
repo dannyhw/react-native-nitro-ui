@@ -1,31 +1,10 @@
-//
-//  HybridNitroUiTooltip.swift
-//  react-native-nitro-ui
-//
-//  Tooltip (G18, DECISIONS D38, Q7 Appendix C2): a UIKit popover with SwiftUI content,
-//  presented from a plain view through the core ``NitroUiPresentation`` helper. iOS has
-//  no tooltip control; a popover anchored to a view is the platform's own way to point
-//  at one, and DatePicker's `compact` field already presents one the same way.
-//
-//  The view React Native lays out is the **anchor**: the JS wrapper fills its own box
-//  with it, behind the app's children, and it takes no touches and is invisible to
-//  VoiceOver. There is no `NitroSwiftUIHost`: a closed tooltip on every row of a list
-//  costs one plain view (Q5 B2's rule for the dialogs), and the hosting controller is
-//  built only when the tooltip presents.
-//
-//  It presents from a window of its own (`NitroUiPresentation.presentInOwnWindow`), as
-//  the dialogs do, and never from the app's chain: a popover in the chain is what the app's
-//  top controller is presenting, so UIKit refuses the RN `Modal` an app opens while the
-//  tooltip is up (measured, G18). A window of its own also keeps a tooltip out of an RN
-//  `Modal`'s chain, which is where a dialog stranded the Modal (D35); for a tooltip that
-//  strand was not reproduced (`TooltipModalHazard.harness.tsx` pins it either way).
-//
+// Tooltip: a UIKit popover with SwiftUI content. The view React Native lays out is only the anchor;
+// the hosting controller is built when the tooltip presents, from a window of its own.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-// Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
 private typealias NitroUiTooltipPerf = margelo.nitro.nitroui.NitroUiPerf
 
 /// The view React Native lays out: the anchor. Nothing to draw, no touches, no
@@ -60,9 +39,7 @@ final class NitroUiTooltipAnchorView: UIView {
   }
 }
 
-/// What the SwiftUI content shows. One per mount, shared by every controller the mount
-/// presents. Plain stored properties and one `objectWillChange` per apply, the rule
-/// ``NitroUiModel`` states.
+/// What the SwiftUI content shows. One per mount, shared by every controller the mount presents.
 final class TooltipContentModel: NitroUiModel {
   var title: String?
   var message = ""
@@ -115,13 +92,10 @@ final class NitroUiTooltipController: UIHostingController<TooltipContent> {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiTooltip`.
 final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
-  /// How many tooltips this process has on screen. See ``NitroUiPresentationCounter``.
   static let live = NitroUiPresentationCounter()
 
-  /// Material's rich-tooltip maximum width, so the two platforms wrap at about the same
-  /// width (Q7 C2).
+  /// Material's rich-tooltip maximum width, so the two platforms wrap at about the same width.
   static let maxContentWidth: CGFloat = 320
   /// The narrowest margin the popover keeps from the window's edges.
   static let windowMargin: CGFloat = 16
@@ -140,7 +114,7 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     self.followAnchor()
     return true
   }
-  /// How many times the popover's source moved to follow the anchor, for the harness.
+  /// How many times the popover's source moved to follow the anchor (test read-out).
   private var sourceMoves = 0
 
   // MARK: Props, stored raw (setters only store; `afterUpdate()` applies)
@@ -154,8 +128,8 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
   private var presentedChange: ((_ presented: Bool, _ eventCount: Double) -> Void)?
   private var actionHandler: ((_ id: String) -> Void)?
 
-  /// Whether the tooltip is up, behind the handshake: `js` is `presented` as React sent
-  /// it, `displayed` is what native shows (core.md §4).
+  /// Whether the tooltip is up, behind the event-count handshake: `js` is `presented` as React sent
+  /// it, `displayed` is what native shows.
   private var state = NitroUiControlledValue<Bool>(displayed: false)
 
   // MARK: What is on screen
@@ -170,7 +144,7 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
   private var mountGeneration = 0
   /// A present is queued for the next main turn.
   private var presentScheduled = false
-  /// How many times this mount presented, for the harness.
+  /// How many times this mount presented (test read-out).
   private var presentCount = 0
   /// What the app had presented on top when this tooltip last presented.
   private var appTopClass = "-"
@@ -254,8 +228,8 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
 
   func afterUpdate() {
     mark(.propsApplied)
-    // The handshake decides whether React's `presented` wins - including a close JS
-    // refused, which is how a refused close presents again (D33).
+    // The handshake decides whether React's `presented` wins, including a close JS refused, which
+    // presents again.
     _ = state.reconcile()
     applyContent()
     sync()
@@ -314,8 +288,8 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
 
   // MARK: - Content
 
-  /// The props, into the content the popover shows - in place while it is up (C2 "Live
-  /// updates"), with the popover's size measured again for the new text.
+  /// The props, into the content the popover shows. Applied in place while it is up, with the
+  /// popover's size measured again for the new text.
   private func applyContent() {
     let changed = content.title != titleValue || content.message != messageValue
       || content.actions.map(\.id) != actionsValue.map(\.id)
@@ -326,10 +300,8 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     content.actions = actionsValue
     content.objectWillChange.send()
     guard let popover, popoverIsUp else { return }
-    // SwiftUI applies an `objectWillChange` in its own update, which a measure made now
-    // would precede - it read the text being replaced (measured: a message that wraps to
-    // three lines kept the one-line height, in this turn and in the next). Laying the
-    // hosting view out runs that update first.
+    // SwiftUI applies an `objectWillChange` in its own later update, so a measure made now would
+    // read the text being replaced. Laying the hosting view out runs that update first.
     popover.view.setNeedsLayout()
     popover.view.layoutIfNeeded()
     let size = fittingSize(of: popover)
@@ -345,8 +317,7 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     return min(Self.maxContentWidth, windowWidth - 2 * Self.windowMargin)
   }
 
-  /// The size the content needs at ``maxWidth`` - `sizeThatFits(in:)` with an unbounded
-  /// height, the measurement DatePicker's popover and the sizing engine both make.
+  /// The size the content needs at `maxWidth`, with an unbounded height.
   private func fittingSize(of controller: NitroUiTooltipController) -> CGSize {
     let fitted = controller.sizeThatFits(in: CGSize(width: maxWidth, height: .infinity))
     return CGSize(width: min(ceil(fitted.width), maxWidth), height: ceil(fitted.height))
@@ -417,29 +388,25 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     popover = controller
     presentCount += 1
     appTopClass = NitroUiPresenterChain.topPresentedClass(in: window)
-    // A window of its own, always - the dialogs' rule rather than BottomSheet's (D35).
-    // Presented in the app's chain, the popover is what the top controller is presenting,
-    // so an RN `Modal` the app opens while a tooltip is up is refused by UIKit and never
-    // appears (`Tooltip.harness.tsx`, "closes and reports when a full-screen Modal takes
-    // its view out of the window"). The isolated `TooltipModalHazard` suite pins that a
-    // `Modal` closing under an open tooltip leaves no Modal host behind.
+    // Always a window of its own. Presented in the app's chain, the popover is what the top
+    // controller is presenting, so UIKit refuses an RN `Modal` the app opens while the tooltip is
+    // up.
     let presented = presentation.presentInOwnWindow(
       controller,
       over: anchor,
       animated: true,
       prepare: { [weak self] root in
         guard let self else { return }
-        // The source is the anchor's box expressed in the presentation window's root, as
-        // a dialog's is. Not the anchor itself: with a source view in the app's window,
-        // UIKit presented the popover in the app's chain after all (measured).
+        // The source is the anchor's box expressed in the presentation window's root. Not the
+        // anchor itself: with a source view in the app's window, UIKit presents the popover in the
+        // app's chain after all.
         source.sourceView = root.view
         source.sourceRect = self.anchor.convert(self.anchor.bounds, to: root.view)
         source.permittedArrowDirections = self.arrowDirections(for: controller.preferredContentSize)
       },
       onShown: { [weak self, weak controller] in
         guard let self, let controller, controller === self.popover else { return }
-        // VoiceOver reads the new content: the app opened it, so nothing else would tell
-        // a screen-reader user it is there (C5).
+        // The app opened it, so nothing else would tell a screen-reader user it is there.
         UIAccessibility.post(notification: .screenChanged, argument: controller.view)
         self.tracker.start()
         self.publishReport()
@@ -452,11 +419,10 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     publishReport()
   }
 
-  /// `placement` as UIKit's arrow directions. `auto` permits both and lets UIKit pick
-  /// the side with room (DatePicker's choice); `above` and `below` permit their own side
-  /// when the content fits there and flip to the other when it does not, as Material's
-  /// position provider does - with a single permitted direction UIKit would squeeze the
-  /// content into the room on that side instead.
+  /// `placement` as UIKit's arrow directions. `auto` permits both and lets UIKit pick the side with
+  /// room. `above` and `below` permit their own side when the content fits there and flip when it
+  /// does not: with a single fixed direction UIKit would squeeze the content into the room on that
+  /// side.
   private func arrowDirections(for size: CGSize) -> UIPopoverArrowDirection {
     guard let window = anchor.window, placementValue == "above" || placementValue == "below" else {
       return [.up, .down]
@@ -471,11 +437,9 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     return roomBelow >= needed || roomBelow >= roomAbove ? .up : .down
   }
 
-  /// Point the popover at where the anchor is now. The source is a view in the
-  /// presentation's own window, so nothing in UIKit follows the anchor for it: this runs
-  /// each frame while the popover is up (``NitroUiTooltipAnchorTracker``) and when the
-  /// anchor's own box changes, and moves the source only when the anchor did - a layout
-  /// move, a scroll, a parent's animation.
+  /// Point the popover at where the anchor is now. The source is a view in the presentation's own
+  /// window, so UIKit does not follow the anchor: this runs each frame while the popover is up and
+  /// when the anchor's box changes, and moves the source only when the anchor moved.
   private func followAnchor() {
     guard let popover, popoverIsUp, anchor.window != nil,
       let source = popover.popoverPresentationController, let sourceView = source.sourceView
@@ -502,8 +466,7 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
 
   // MARK: - What the user did
 
-  /// An action was tapped (or `nuiTestPerformAction` ran its handler): report the
-  /// action, then the close - D32's order - then take the popover down.
+  /// An action was tapped: report the action, then the close, then take the popover down.
   private func actionTapped(_ id: String) {
     guard state.displayed, popoverIsUp, actionsValue.contains(where: { $0.id == id }) else {
       return
@@ -551,12 +514,10 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     publishReport()
   }
 
-  /// The anchor gained or lost its window.
-  ///
-  /// Gained: a tooltip React wants up and that is not up yet is presented now. Lost while
-  /// up: one turn later - after an unmount's `onDropView`, which runs in the same mount
-  /// transaction, and after a reparent that puts the view straight back - the popover is
-  /// closed without animation and the close is reported, as a dialog's is.
+  /// The anchor gained or lost its window. Gained: a tooltip React wants up is presented now. Lost
+  /// while up: one turn later (after an unmount's `onDropView` in the same mount transaction, or a
+  /// reparent that puts the view straight back) the popover is closed without animation and the
+  /// close is reported.
   private func windowChanged(_ hasWindow: Bool) {
     if hasWindow {
       sync()
@@ -582,7 +543,7 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
   // MARK: - Methods
 
   func nuiTestStateReport() throws -> String {
-    // Refresh on main for the next read - never wait for it (`NitroUiMainThread`).
+    // Refresh on main for the next read, never wait for it.
     DispatchQueue.main.async { [weak self] in self?.publishReport() }
     reportLock.lock()
     defer { reportLock.unlock() }
@@ -600,8 +561,8 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
       guard let self, let popover = self.popover, self.popoverIsUp, self.state.displayed else {
         return
       }
-      // What a tap outside reports, through the same handler; the dismissal itself is the
-      // helper's, since UIKit offers no way to replay its own.
+      // Report what a tap outside reports, through the same handler, then dismiss: UIKit offers no
+      // way to replay its own dismissal.
       self.popoverDismissedByUser(popover)
       self.presentation.dismissAnimated()
       self.publishReport()
@@ -647,8 +608,7 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
       fields.append("anchorRect=\(Self.screenRect(of: anchor))")
       fields.append("popRect=\(Self.screenRect(of: popover.viewIfLoaded))")
       fields.append("contentId=\(popover.viewIfLoaded?.accessibilityIdentifier ?? "-")")
-      // Whether the window the card is drawn in is the key window - what another
-      // presentation closing has to leave alone (`NitroUiPresentation.close`).
+      // Whether the popover's window is the key window.
       fields.append("windowKey=\(popover.viewIfLoaded?.window?.isKeyWindow == true ? 1 : 0)")
     } else {
       fields.append("kind=none")
@@ -709,8 +669,7 @@ final class NitroUiTooltipPopoverDelegate: NSObject, UIPopoverPresentationContro
     super.init()
   }
 
-  /// Without this, UIKit adapts a popover to a full-screen sheet at compact width,
-  /// which is a different control (DatePicker's `:953`).
+  /// Without this, UIKit adapts a popover to a full-screen sheet at compact width.
   func adaptivePresentationStyle(
     for controller: UIPresentationController,
     traitCollection: UITraitCollection

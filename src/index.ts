@@ -1,28 +1,6 @@
-/**
- * The public surface of `react-native-nitro-ui`.
- *
- * Deliberately small (DECISIONS D14): components and the shared clock. *Not*
- * public are the Hybrid Views behind them, their settable props, and the core
- * hooks a wrapper is built from - all of those are package-internal, so
- * every prop flows through React (UI thread, batched) and an imperative surface
- * can arrive later without breaking anyone. `SwitchProps.hybridRef` stays typed
- * for this repo's own harness and benchmarks; it is marked `@internal` and is
- * read-only in practice.
- *
- * `prewarm` is the one sizing call that is app API: it adopts a component's
- * declared size as this environment's answer so its first mount needs no
- * correction. The rest of the sizing surface is `nitroUiCore`'s diagnostics.
- *
- * `NitroUiSizingStats` and `NitroUiSizingTraceEvent` are the shapes the sizing
- * diagnostics return (docs/architecture/sizing.md). They are exported because
- * `nitroUiCore`'s methods return them - the diagnostics themselves stay
- * diagnostics.
- */
+/** The public surface of `react-native-nitro-ui`. */
 export { nitroUiCore, prewarm } from './NitroUiCore';
 
-// The one app-level theme choice (D39): Android draws with Material 3 Expressive unless
-// the app opts out to the baseline theme. No per-control prop - the setting is the
-// process's, and every composition the library owns reads it at its root.
 export { setMaterialTheme, type MaterialTheme } from './MaterialTheme';
 export type {
   NitroUiCore,
@@ -33,8 +11,6 @@ export type {
 
 export { Slider, type SliderProps } from './components/Slider/Slider';
 
-// The row content of a list row (D46): UIKit's `UIListContentView` on iOS, Material 3's
-// `ListItem` on Android, so a settings screen reads like the platform's.
 export {
   ListItem,
   type ListItemAccessory,
@@ -43,13 +19,6 @@ export {
 
 export { Switch, type SwitchProps } from './components/Switch/Switch';
 
-// An opt-in shared native composition (H1): a container whose nitro-ui children render
-// into one Compose composition instead of one each. Android only - on iOS `Host` is the
-// documented passthrough `View`, permanently (D23 and its T17 outcome). Eight controls
-// are hosted now - Switch since 0.1.0, Slider/Progress/Button since 0.2.0,
-// SegmentedControl/Picker/DatePicker since 0.3.0 and Menu since 0.4.0 - because
-// `HostChildren.ts` has a row for each. Hosting another one still means a row there, a
-// native `isHostable` override, and a bench arm for it.
 export { Host, type HostProps } from './components/Host/Host';
 
 export {
@@ -58,8 +27,6 @@ export {
   type SegmentedControlProps,
 } from './components/SegmentedControl/SegmentedControl';
 
-// `AndroidIconProp` is the type of `ButtonProps.androidIcon`, which an app writes
-// directly, so it is app API even though the code behind it is not (DECISIONS D14).
 export {
   Button,
   type ButtonProps,
@@ -69,12 +36,6 @@ export {
   type AndroidIconProp,
 } from './components/Button/Button';
 
-// A row of commands, optionally with independent toggles (G20): Material 3's
-// `ButtonGroup` on Android and a row of bordered `Button`s / SwiftUI's `ControlGroup`
-// on iOS. Items are data, so the ones that do not fit in the box move into an overflow
-// menu - which is why the control is `fillWidth` and only its height is measured. A
-// toggle item's state is a *set* controlled through the same event-count handshake
-// `Switch` uses; `onPress`/`onCheckedChange` report the item's `id`.
 export {
   ButtonGroup,
   type ButtonGroupAppearance,
@@ -104,11 +65,6 @@ export {
   type DatePickerVariant,
 } from './components/DatePicker/DatePicker';
 
-// A button that opens a list of actions (G7a). Its trigger is a Button's label and
-// its items are data, not children. `primaryAction` is iOS-only, `onOpen`/`onClose`
-// fire on Android only (iOS never fires either), and a pick reports `onSelect` before
-// it reports `onClose` - DECISIONS D32. `docs/components/menu.md` says which prop is
-// which platform's, as Picker's `wheel` and Button's `systemImage` do.
 export {
   Menu,
   type MenuAction,
@@ -118,10 +74,6 @@ export {
   type MenuSubmenu,
 } from './components/Menu/Menu';
 
-// Two dialogs over one native view (G11, DECISIONS D33): UIKit's `UIAlertController`
-// on iOS, Material 3's `AlertDialog` and `ModalBottomSheet` on Android. `isPresented`
-// is controlled through the event-count handshake, an action reports `onAction` before
-// `onIsPresentedChange(false)` (D32), and neither has a box (`sizing: null`).
 export {
   AlertDialog,
   ConfirmationDialog,
@@ -131,20 +83,11 @@ export {
   type DialogProps,
 } from './components/Dialog/Dialog';
 
-// A modal bottom sheet with React Native content (G14, DECISIONS D33/D35): UIKit's sheet
-// presentation on iOS, Material 3's `ModalBottomSheet` on Android. `isPresented` is
-// controlled through the event-count handshake, detents use SwiftUI's names, and the
-// content is mounted only while the sheet is up.
 export {
   BottomSheet,
   type BottomSheetDetent,
   type BottomSheetProps,
 } from './components/BottomSheet/BottomSheet';
-// A single- or multi-line text field (G13, DECISIONS D34): `UITextField` (a
-// `UITextView` when `multiline`) on iOS, Compose `BasicTextField(TextFieldState)`
-// on Android. The text is controlled through the event-count handshake, a `value`
-// write is dropped while an IME composition is open, and `ref` gives `focus()` /
-// `blur()`.
 export {
   TextField,
   type TextFieldAutoCapitalize,
@@ -153,15 +96,7 @@ export {
   type TextFieldProps,
   type TextFieldReturnKeyType,
 } from './components/TextField/TextField';
-// A compact choice or action (G12): Material 3 `FilterChip` / `AssistChip` on
-// Android, SwiftUI `Toggle(.button)` / a bordered capsule `Button` on iOS, which has
-// no chip. A filter chip's `selected` is controlled through the event-count
-// handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
-// A single icon as a control (G23): Material 3's four icon buttons and their toggle
-// forms on Android, a SwiftUI `Button` / `Toggle(.button)` with `.iconOnly` on iOS.
-// `accessibilityLabel` is required — an IconButton has no text, so it is the only
-// name a screen reader has.
 export {
   IconButton,
   type IconButtonProps,
@@ -171,11 +106,6 @@ export {
   type IconButtonWidth,
 } from './components/IconButton/IconButton';
 
-// A tooltip the app opens next to a view (G18, DECISIONS D38): Material 3's
-// `PlainTooltip` / `RichTooltip` on Android, a UIKit popover with SwiftUI content on
-// iOS, which has no tooltip. `isPresented` is controlled through the event-count
-// handshake, an action reports `onAction` before `onIsPresentedChange(false)` (D32),
-// and it stays up until it is dismissed. The children are the anchor (`sizing: null`).
 export {
   Tooltip,
   type TooltipAction,
@@ -183,43 +113,22 @@ export {
   type TooltipProps,
 } from './components/Tooltip/Tooltip';
 
-// A checkbox (G15): Material 3 `Checkbox`, or `TriStateCheckbox` while
-// `indeterminate`, on Android - and on iOS a SwiftUI `Toggle(isOn:)` wearing a style
-// that draws Apple's checklist glyph (`checkmark.circle.fill` over `circle`), because
-// iOS has no checkbox (`CheckboxToggleStyle` is unavailable there) and a Checkbox that
-// looked like a Switch read as the wrong component (D47). `iosStyle` picks the picture
-// there and is ignored here; `indeterminate` is a display, not a value. `checked` is
-// controlled through the event-count handshake.
 export {
   Checkbox,
   type CheckboxIosStyle,
   type CheckboxProps,
 } from './components/Checkbox/Checkbox';
-// A `View` that opens Menu's `group` on a long press (G16, DECISIONS D36/D37):
-// `UIContextMenuInteraction` on iOS, a Material 3 `DropdownMenu` at the finger on
-// Android. The children stay in place, a hold cancels their touch, and `onOpen`/
-// `onClose` fire on both platforms - unlike Menu's, which are Android-only (D32).
 export {
   ContextMenu,
   type ContextMenuProps,
 } from './components/ContextMenu/ContextMenu';
 
-// A search field (G17, DECISIONS D38 item 2): UIKit's `UISearchTextField` on iOS and Material
-// 3's search-bar input field on Android, sharing TextField's model, handshake, IME guard and
-// `maxLength`. It has no keyboard props - the Search key is always the Return key, and an empty
-// query never submits - and it is its own native view rather than a TextField variant because
-// a declared fallback is keyed by component, so it needs its own first-frame height.
 export {
   SearchField,
   type SearchFieldHandle,
   type SearchFieldProps,
 } from './components/SearchField/SearchField';
 
-// A grouped list whose rows are ordinary React Native views (G24, DECISIONS D45): a
-// `UICollectionView` in `.insetGrouped` appearance on iOS, Material 3 Expressive's segmented
-// list shapes behind in-place rows on Android. `Form.Section` gives a header and a footer,
-// `Form.Row` the cell-level behaviour (`onPress`, `accessory`, `selected`) — and a bare child
-// of a section is a row too, so an app writes the wrapper only when it wants one.
 export {
   Form,
   type FormAccessory,
@@ -228,18 +137,6 @@ export {
   type FormSectionProps,
   type RowProps as FormRowProps,
 } from './components/Form/Form';
-// A popover with React Native content, anchored to one of your views (G22, DECISIONS
-// D44): `UIPopoverPresentationController` on iOS and a Compose `Popup` under a Material 3
-// `Surface` on Android, which has no popover control (D38 item 1). `isPresented` is
-// controlled through the event-count handshake, the `anchor` is laid out in place, and the
-// `children` lay themselves out in the app's own tree at up to `maxWidth` - the popover
-// shows that box rather than measuring it, so its first frame is its final size.
 export { type PopoverProps, Popover } from './components/Popover/Popover';
 
-// A numeric stepper (G25, DECISIONS D38 item 1): SwiftUI's `Stepper` on iOS, and two
-// Material 3 tonal icon buttons on Android, which has no stepper control of its own.
-// `value` is controlled through the event-count handshake, and the clamping and step
-// snapping are Slider's `quantize` - shared rather than copied, which is what keeps a
-// `0.1` step from arriving as `0.30000000000000004`. It shows no number: the value
-// belongs to your own text.
 export { Stepper, type StepperProps } from './components/Stepper/Stepper';

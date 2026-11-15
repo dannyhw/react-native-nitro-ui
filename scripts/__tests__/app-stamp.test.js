@@ -1,22 +1,3 @@
-/**
- * The `app.stamp` gate: a device run must not be evidence about code it does not
- * contain.
- *
- * `G2-button.report.md` records the failure this exists for - a harness run that
- * passed against an `.app` from before the change - and the Android variant is
- * worse because gradle can be *right* about being up-to-date while the dex lost
- * a generated hybrid. So the cases here are the ones that would otherwise be a
- * silently green lie:
- *
- *   - the code tree digest covers what the app is built from, and only that
- *     (writing a report must not invalidate a build);
- *   - the component list comes from nitrogen's generated sources, so a new
- *     component joins the gate on its own commit;
- *   - a component really is found in (or found missing from) a dex, including
- *     when the dex is deflate-compressed - a false "missing" would block a
- *     device run over nothing.
- */
-
 import { describe, expect, it } from '@jest/globals';
 import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
@@ -48,11 +29,7 @@ import {
   stampPath,
 } from '../app-stamp.mjs';
 
-/**
- * Build a ZIP with the given entries, so the dex reader is tested against real
- * container bytes rather than a fixture that could drift from the format.
- * Method 0 is stored (what an APK uses today), 8 is deflated (what it may use).
- */
+/** Builds a ZIP with the given entries. Method 0 is stored, 8 is deflated. */
 function buildZip(entries) {
   const chunks = [];
   const central = [];
@@ -112,8 +89,8 @@ describe('the code tree digest', () => {
     ]) {
       expect(isCodeFile(ignored)).toBe(false);
     }
-    // Guard for the list itself: an exclusion has to be a prefix, not a substring
-    // a source directory could accidentally contain.
+    // An exclusion must be a directory prefix, not a substring a source path
+    // could contain.
     expect(NON_CODE_PREFIXES.every((prefix) => prefix.endsWith('/'))).toBe(
       true
     );
@@ -126,9 +103,8 @@ describe('the code tree digest', () => {
     expect(
       codeTreeDigest({ 'src/a.ts': '1', 'src/b.ts': '3' }, 'head')
     ).not.toBe(a);
-    // Review M4: HEAD is not in here. The digest is what the compiler read, so
-    // a commit that moves no source file must not invalidate a build - writing
-    // a report used to cost a rebuild of the example app.
+    // The digest ignores HEAD: a commit that moves no source file must not
+    // invalidate a build.
     expect(codeTreeDigest({ 'src/a.ts': '1', 'src/b.ts': '2' })).toBe(a);
   });
 });
@@ -159,8 +135,8 @@ describe('the component list', () => {
   });
 
   it('finds every component the real generated sources register', () => {
-    // Not a fixture: if nitrogen changes how it emits the autolinker, the gate
-    // would quietly start checking nothing, and this is what notices.
+    // Reads the real generated sources: if nitrogen changed what it emits, the
+    // gate would otherwise quietly check nothing.
     for (const platform of ['ios', 'android']) {
       const components = registeredComponents({ platform });
       expect(components.length).toBeGreaterThanOrEqual(8);
@@ -184,9 +160,6 @@ describe('the needle (review S7)', () => {
   });
 
   it('does not match the generated spec it is supposed to be distinct from', () => {
-    // Measured on a real Debug .app: the plain name occurs ~2300 times because
-    // every HybridNitroUiSwitchSpec mention contains it, the length-prefixed
-    // class name occurs 4 times, and the length-prefixed spec name never.
     const spec = 'HybridNitroUiSwitchSpec';
     expect(spec).toContain('HybridNitroUiSwitch');
     expect(spec).not.toContain(componentNeedle('ios', 'Switch'));
@@ -238,8 +211,7 @@ describe('the binary scan', () => {
 
   it('falls back to the raw APK bytes rather than reporting a false miss', () => {
     const warnings = [];
-    // Not a ZIP at all (a truncated or unusual container): scanning the bytes is
-    // still the honest answer, and it has to say it did so.
+    // Not a ZIP at all, as a truncated container would be.
     const fake = Buffer.concat([
       Buffer.from('PK\x03\x04garbage'),
       Buffer.from('HybridNitroUiSwitch'),
@@ -268,8 +240,6 @@ describe('the binary scan', () => {
 });
 
 describe('the refusal', () => {
-  // A v2 stamp: the tree, and the file the tree was built into. Both halves are
-  // needed - see the two worktrees below.
   const APK = '/repo/example/android/app/build/outputs/apk/debug/app-debug.apk';
   const decide = (override) =>
     decideFreshness({
@@ -305,9 +275,8 @@ describe('the refusal', () => {
   });
 
   it('refuses a stamp written for another checkout', () => {
-    // The M2 case, and the one this repo makes easy: every worktree has the same
-    // relative path for the APK, so a stamp from a sibling worktree reads green
-    // for a binary that was built elsewhere.
+    // Every worktree has the same relative path for the APK, so only the
+    // absolute path tells a sibling worktree's build apart.
     const decision = decide({
       artifactPath:
         '/other-worktree/X1/example/android/app/build/outputs/apk/debug/app-debug.apk',
@@ -337,9 +306,6 @@ describe('the refusal', () => {
   });
 
   it('does not care which commit produced the tree', () => {
-    // M4, the other direction: a docs-only commit moved HEAD and left every
-    // source byte alone. The stamp stays green - the live proof of this is in
-    // docs/tasks/X1-dev-tooling.report.md.
     expect(
       decide({
         stamp: {
@@ -389,10 +355,7 @@ describe('a build that ran while the tree moved (review M3)', () => {
     existsSync(stampFile) ? readFileSync(stampFile, 'utf8') : null;
 
   it('writes no stamp when the tree at the end is not the tree at the start', () => {
-    // The shape that bites: an agent backgrounds a build, edits a component (or
-    // merges) while xcodebuild is reading the tree, and the stamp would then
-    // describe the edited tree over a binary compiled before the edit. The
-    // artifact here does not even exist - the check has to come first, because
+    // The artifact does not exist: the tree check has to come first, because
     // a tree that moved makes the artifact irrelevant.
     const before = contentsNow();
     const moved = { tree: 'c'.repeat(64), head: 'no-such-commit', files: 1 };
@@ -409,7 +372,6 @@ describe('a build that ran while the tree moved (review M3)', () => {
       message = String(error?.message ?? error);
     }
     expect(message).toMatch(/changed during the build/);
-    // Both digests, so whoever sees it can tell which run was which.
     expect(message).toMatch(/before c{12}/);
     expect(message).toMatch(/after [0-9a-f]{12}/);
     expect(message).toMatch(/No stamp was written/);
@@ -417,8 +379,7 @@ describe('a build that ran while the tree moved (review M3)', () => {
   });
 
   it('gets past the check when the tree stood still', () => {
-    // The same call with a tree that did not move: the refusal must be about the
-    // missing artifact, which is the next check - not about the tree.
+    // The refusal must now be about the missing artifact, the next check.
     const still = currentCodeTree();
     /** @type {string} */
     let message = '';
@@ -438,12 +399,6 @@ describe('a build that ran while the tree moved (review M3)', () => {
 });
 
 describe('the freshness question (review N7)', () => {
-  // `build-app.mjs` asks it to decide whether to skip a build, and the device
-  // gates ask it to decide whether to run at all. Both go through
-  // `checkFreshApp`, and `assertFreshApp` picks its message from the `missing`
-  // flag rather than from the wording of a problem - so the flag is the part
-  // worth pinning: a reworded sentence must not turn "go build one" into
-  // "refusing to run against a stale app", or the other way round.
   const missingArtifact = join(
     tmpdir(),
     'nitro-ui-no-such-app',
@@ -478,12 +433,9 @@ describe('the freshness question (review N7)', () => {
       ...quiet,
     });
     expect(decision.ok).toBe(false);
-    // The point: there is a file here. It is the wrong file, which is a
-    // different sentence and a different fix.
     expect(decision.missing).toBeUndefined();
-    // Which doubt it is does not matter here (this checkout may or may not have
-    // a stamp, and the tree may or may not match). What matters is that the
-    // answer is "there is a file, and it is not proven", never "go build one".
+    // This checkout may or may not have a stamp or a matching tree, so only
+    // the kind of answer is asserted.
     expect(decision.problems.length).toBeGreaterThan(0);
     expect(decision.problems.join('\n')).not.toMatch(/does not exist$/);
   });

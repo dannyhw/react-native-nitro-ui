@@ -4,42 +4,20 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * JVM unit test for where the Popover's popup may put its content.
- *
- * The Android half of D44 item 1 is "the content stays above the keyboard", and the number
- * that decides it is arithmetic: the anchor's edges, the composed height, the frame's margins
- * and the frame's own two edges. A device run can only read the result afterwards - the
- * real-input check measures the field's box once the keyboard is already up - so the rule that
- * decides it lives here, where it can be run against the geometry a device produced.
- *
- * The fixtures *are* that geometry, read off a Pixel 9 AVD at 1080x2424 while the real-input
- * popover case ran (G22): the 16 dp margin is 42 px and the 4 dp gap 11 px, the visible frame
- * of the window is [142..2361] with the keyboard away and [142..1541] with
- * `com.google.android.inputmethod.latin` on screen, the anchor of the popover with a field in
- * it is 1646..1752, and the popover's content is composed 578x414.
- *
- * The frame has two edges on purpose. Compose hands a position provider only the frame's
- * *height*, and the first version of [PopoverPlacement] treated that height as the window's
- * and subtracted the keyboard from it - which counted the keyboard twice, because the visible
- * frame has already lost it. That model puts this anchor's popup at 60, where the window
- * manager parks it against the status bar; the frame puts it at 1085, 42 px above the keys and
- * 147 px above the anchor it belongs to.
- */
+/** Pixel geometry of a 1080x2424 screen: the 16 dp margin is 42 px, the 4 dp gap 11 px. */
 class PopoverPlacementTest {
   private val marginPx = 42
   private val spacingPx = 11
 
-  /** The status bar: where the frame the popup may use starts. */
+  /** Below the status bar. */
   private val frameTopPx = 142
 
-  /** Measured: [142..2361], the last 63 px being the navigation bar. */
+  /** Keyboard hidden; the last 63 px of the screen are the navigation bar. */
   private val frameBottomAway = 2361
 
-  /** Measured with the keyboard up: its own top edge, 883 px of inset. */
+  /** Keyboard shown: its top edge. */
   private val frameBottomIme = 1541
 
-  /** The anchor of the example's popover with a `TextInput` in it. */
   private val anchorTop = 1646
   private val anchorBottom = 1752
   private val contentHeight = 414
@@ -63,16 +41,12 @@ class PopoverPlacementTest {
 
   @Test
   fun withTheKeyboardAwayThePopupSitsBelowItsAnchor() {
-    // The placement the device produced: anchor's bottom plus the 4 dp gap, and the popup's
-    // own bottom 184 px above the navigation bar.
+    // The anchor's bottom plus the gap.
     assertEquals(1763, place(frameBottom = frameBottomAway))
   }
 
   @Test
   fun anAnchorTheKeyboardLeavesAloneKeepsThatPlacement() {
-    // The same popover opened near the top of the screen: the keyboard takes the bottom of
-    // the frame and nothing about this placement changes, so it does not move when the field
-    // is tapped.
     assertEquals(
       417,
       place(anchorTop = 300, anchorBottom = 406, frameBottom = frameBottomIme),
@@ -81,8 +55,7 @@ class PopoverPlacementTest {
 
   @Test
   fun anAnchorWithNoRoomBelowFlipsAboveItWhileThereIsRoomThere() {
-    // Keyboard away: 2017 + 414 is 2431, past the frame, so the popup goes above the anchor
-    // instead, and stays 1889 there - 430 px above the frame's bottom.
+    // Below would end at 2431, past the frame, so the popup goes above the anchor.
     assertEquals(
       1475,
       place(
@@ -96,8 +69,7 @@ class PopoverPlacementTest {
   @Test
   fun anAnchorBehindTheKeyboardDoesNotFlipThePopupIntoIt() {
     val y = place(frameBottom = frameBottomIme)
-    // Above the anchor would be 1221, whose bottom is 94 px behind the keys; below the anchor
-    // is 1763, which is 636 px behind them. Neither is an answer, so the popup rises to the
+    // Above the anchor and below it both end behind the keyboard, so the popup rises to the
     // highest edge the frame allows.
     assertEquals(1085, y)
     assertTrue(
@@ -108,11 +80,8 @@ class PopoverPlacementTest {
 
   @Test
   fun aKeyboardTakesTheFrameFromBelowRatherThanFromItsTop() {
-    // The regression the two-edge frame fixes. The keyboard's inset (883 px) is not a number
-    // to subtract from a height: with it up, the frame Compose reports is 1399 px tall, which
-    // is already the screen minus the status bar minus the keyboard. Treating that height as
-    // the window's answered 60 - above the status bar, so the window manager pinned the popup
-    // to 142 with the field 1 px behind the keys and 985 px of room unused.
+    // With the keyboard up the frame is already only 1399 px tall: subtracting the 883 px
+    // inset from that height counts the keyboard twice.
     val asAWindowHeight = 1399
     val y = place(frameBottom = frameBottomIme)
     assertTrue(
@@ -123,16 +92,14 @@ class PopoverPlacementTest {
       "and it must not be the double-subtracted answer: $y vs 60",
       y > 60,
     )
-    // What the wrong model produced, for the record: the frame's own height minus the
-    // keyboard, minus the margin, minus the content's height.
+    // The double-subtracted answer.
     assertEquals(60, asAWindowHeight - 883 - marginPx - contentHeight)
   }
 
   @Test
   fun contentTooTallForTheFrameStartsAtTheFramesTopMargin() {
-    // Android hands the popup the height it asked for, so nothing moves this content fully
-    // into the frame; the top of the frame is the part of it a person can still reach - and
-    // not underneath the status bar, which is what a margin measured from 0 would say.
+    // Android gives the popup the height it asked for, so content taller than the frame
+    // starts at the frame's top margin.
     assertEquals(
       frameTopPx + marginPx,
       place(contentHeight = 1600, frameBottom = frameBottomIme),
@@ -140,19 +107,8 @@ class PopoverPlacementTest {
   }
 
   /**
-   * The frame arrives in *screen* coordinates and the popup is placed in the host
-   * window's, so the window's own corner has to come off before any of the above.
-   *
-   * Every fixture in this file has the host window at the screen's origin - a phone with
-   * the app filling the screen, which is the only geometry an RN example app has ever had
-   * here - and there the subtraction changes no number, so none of them can see the
-   * difference. The window below is a freeform/split-screen one: it occupies screen y
-   * 1200..2400, its visible frame is `[0,1200]..[1080,2200]`, and the anchor's own box is
-   * 700..806 *in the window* (1900..2006 on screen, behind the frame's bottom edge as
-   * screen coordinates report it). Placed against the frame as it came, this anchor gets
-   * y=817 - below the anchor, running 231 px past the bottom of the window the popup
-   * belongs to. Placed against the frame in the window's coordinates, there is no room
-   * below and the popup flips above: y=275.
+   * The frame arrives in screen coordinates and the popup is placed in the host window's. The
+   * window here is a split-screen one at screen y 1200..2400, so the two differ.
    */
   @Test
   fun theVisibleFrameIsConvertedIntoTheWindowThatHostsThePopover() {
@@ -192,9 +148,7 @@ class PopoverPlacementTest {
         frameBottomPx = frame.bottom,
       ),
     )
-    // A window at the screen's origin - every other fixture here - subtracts nothing, which
-    // is why none of them could have found this: the frame it places against is the one the
-    // tests above already pin (1763 below the anchor, 1085 with the keyboard up).
+    // A window at the screen's origin subtracts nothing.
     assertEquals(
       PopoverFrame(0, 142, 1080, 2361),
       PopoverPlacement.windowFrame(
@@ -210,7 +164,6 @@ class PopoverPlacementTest {
 
   @Test
   fun thePopupStaysInsideTheFrameHorizontally() {
-    // The measured case: the anchor is 42 px in, the content 578 wide, the frame 1080.
     assertEquals(
       42,
       PopoverPlacement.placeLeft(

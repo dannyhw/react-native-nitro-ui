@@ -1,25 +1,3 @@
-/**
- * On-device tests for AlertDialog and ConfirmationDialog (task G11, Q5 Appendix B7).
- *
- * A dialog is a window, and the harness cannot tap into another window
- * (`Switch.harness.tsx`, H9/H10). So these tests read two honest channels:
- *
- *  - `hybridRef.nuiTestStateReport()` - what is on screen, read from the controller
- *    iOS actually built and from the Android model as composed, plus `live`, a
- *    process-wide count of dialog windows that survives a drop (read through a fresh
- *    mount, because a dropped mount has nothing left to report);
- *  - the events that reached JS, in order (`eventLog`).
- *
- * and drive the dialog through test seams that run the real handlers
- * (`nuiTestPerformAction`, `nuiTestDismiss`); on iOS the action seam has the alert take
- * itself down, as a tap does, rather than asking the presentation helper to. Real taps
- * are `real-input:*`'s job.
- *
- * The first block is the presentation spike (Q5 B9, brief item 1): can a plain view
- * always find a controller to present from - inside an RN `Modal`, over one, over
- * another dialog - and is the window gone when the dismissal or the drop lands during
- * the entry transition.
- */
 import { useState } from 'react';
 import { Modal, Platform, View } from 'react-native';
 import {
@@ -38,7 +16,7 @@ import {
   type DialogAction,
 } from 'react-native-nitro-ui';
 
-/** What `hybridRef` hands back - declared, not imported (D14). */
+/** What `hybridRef` hands back. */
 type DialogHandle = {
   readonly presented: boolean;
   readonly mostRecentEventCount: number;
@@ -67,9 +45,9 @@ const ACTIONS: DialogAction[] = [
 ];
 
 /**
- * A dialog whose `isPresented` lives in a parent, as an app's would. `refuse` makes
- * the parent ignore every dismissal (the D33 refusal case); otherwise the parent
- * follows `onIsPresentedChange`.
+ * A dialog whose `isPresented` lives in a parent, as an app's would. `refuse`
+ * makes the parent ignore every dismissal; otherwise it follows
+ * `onIsPresentedChange`.
  */
 function Stage({
   testId,
@@ -360,12 +338,8 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     });
   }
 
-  // The other end of the presentation: the view goes while the dialog is animating
-  // *out*. After an action tap UIKit takes the alert down itself, and the teardown that
-  // lands during that exit found it already leaving and stood down - while the one
-  // report of the exit's end, the alert's witness, is what the teardown detaches. The
-  // window stayed up at `.alert + 1` and `live` at 1 (G11 review, round 2). A JS
-  // `false` is the helper's own dismissal, which already carried both: the barrier.
+  // The view goes while the dialog is animating out. After an action tap UIKit
+  // takes the alert down itself; a JS `false` is the library's own dismissal.
   for (const closing of ['an action', 'a JS false'] as const) {
     it(`leaves no window when dropped 100 ms into the close of ${closing}`, async () => {
       const first = await render(<Stage testId="closing" initial />);
@@ -398,10 +372,10 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
   }
 
   it('leaves no Modal behind when the RN Modal under an open dialog closes', async () => {
-    // The case an in-chain presenter fails: React Native dismisses its Modal with
-    // `[modalController dismissViewControllerAnimated:]`, which UIKit reads as "dismiss
-    // what this controller presented" - so with a dialog on top, the dialog went and
-    // the Modal stayed on screen with React believing it gone.
+    // React Native dismisses its Modal with
+    // `[modalController dismissViewControllerAnimated:]`, which UIKit reads as
+    // "dismiss what this controller presented": a dialog presented from the
+    // Modal's own chain would go instead, and the Modal would stay on screen.
     function Scene() {
       const [modal, setModal] = useState(true);
       setters.set('modal', setModal);
@@ -444,8 +418,9 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       'over-closing-modal',
       'the outer dialog closed too'
     );
-    // The inner dialog's view left the window with its Modal, which reports a close
-    // if the view outlived the dismissal (B1) and nothing if it was dropped first.
+    // The inner dialog's view left the window with its Modal, which reports a
+    // close if the view outlived the dismissal and nothing if it was dropped
+    // first.
     console.log(`events: ${eventLog.join(',')}`);
     expect(
       eventLog.filter((e) => e.startsWith('over-closing-modal:')).join(',')
@@ -458,11 +433,11 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
   });
 
   it('closes and reports when its view leaves the window under a full-screen Modal', async () => {
-    // UIKit takes the presenting screen's views out of the window once a full-screen
-    // presentation lands, so a dialog open on that screen loses its anchor's window -
-    // B2's rule then closes it and reports the close. Android's RN Modal is a window of
-    // its own, the screen under it stays attached, and the dialog stays up. Pinned both
-    // ways, because it is a platform difference an app can see.
+    // UIKit takes the presenting screen's views out of the window once a
+    // full-screen presentation lands, so a dialog open on that screen loses its
+    // anchor's window, closes, and reports the close. Android's RN Modal is a
+    // window of its own: the screen under it stays attached and the dialog
+    // stays up.
     function Scene() {
       const [modal, setModal] = useState(false);
       setters.set('modal', setModal);
@@ -514,8 +489,8 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     expect(up.actions).toBe('3');
     setters.get('quiet')?.(false);
     await waitForLive('quiet', 0, 'closed by JS');
-    // The barrier: the same channel does report a user close, so the empty log above
-    // is the JS close reporting nothing, not a channel that reports nothing at all.
+    // The same channel does report a user close, so the empty log above is the
+    // JS close reporting nothing, not a channel that reports nothing at all.
     setters.get('twin')?.(true);
     await waitForReport('twin', isUpCounted(1), 'the twin up');
     handles.get('twin')?.nuiTestDismiss();
@@ -545,16 +520,15 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       );
       await waitForHandle('locked');
       const up = await waitForReport('locked', isUpCounted(1), 'up');
-      // What is drawn, in the app's action order. iOS: the `isEnabled` of the actions
-      // on the controller UIKit draws. Android: the colour each composed label was
-      // given (`drawn`), not the model's flag (`enabled`) - an M3 `ListItem` row that
-      // ignores the flag paints the disabled action like the others.
+      // What is drawn, in the app's action order. iOS: the `isEnabled` of the
+      // actions on the controller UIKit draws. Android: the colour each
+      // composed label was given (`drawn`), not the model's flag (`enabled`).
       expect(Platform.OS === 'ios' ? up.enabled : up.drawn).toBe('1,0,1');
       handles.get('locked')?.nuiTestPerformAction('locked');
       await sleep(400);
       expect(eventLog.join(',')).toBe('');
       expect(reportOf('locked').presented).toBe('1');
-      // Barrier: an enabled action on the same dialog does report.
+      // An enabled action on the same dialog does report.
       handles.get('locked')?.nuiTestPerformAction('go');
       await waitForLive('locked', 0, 'closed by the enabled action');
       expect(eventLog.join(',')).toBe(
@@ -563,19 +537,10 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     });
   }
 
-  /**
-   * Android, and only Android can answer it: what the sheet's rows *are*, read off the
-   * open sheet rather than out of the props that produced it. The seam is a reserved
-   * action id - `nuiTestPerformAction('__nui_probe_rows')` asks for one read, and reading
-   * the report stays the pure read it is everywhere else (G28, fix round 1).
-   *
-   * `rows=` is each row's own merged accessibility node - `~` marks one that says it is
-   * disabled, the same mark `Menu.harness.tsx`'s probe writes - and `radii=` is the
-   * corner radius, in dp, that the row's container is *painted* with at its leading edge.
-   * Between them they say the row honours `enabled` and is the segmented row it claims to
-   * be: a row that ignored `enabled` loses its `~`, and a plain row loses the 16 dp outer
-   * corners, whichever way the first half of the line moved.
-   */
+  // Android only: what the sheet's rows are, read off the open sheet.
+  // `nuiTestPerformAction('__nui_probe_rows')` asks for one read. `rows=` is
+  // each row's merged accessibility node (`~` marks a disabled one) and
+  // `radii=` is the corner radius, in dp, its container is painted with.
   const itAndroid = Platform.OS === 'android' ? it : it.skip;
   itAndroid(
     'reports the sheet rows as the component draws them, disabled included',
@@ -590,10 +555,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       );
       await waitForHandle('rows');
       await waitForReport('rows', isUpCounted(1), 'the sheet up');
-      // Past the slide-in: a sheet on its way up measures below the window, and the
-      // probe answers `?-outside`, `?-small` or `?-blind` rather than guess. One ask is
-      // one answer, so this asks again - and only again - until the answer is one that
-      // could be measured, whatever the first ones said.
+      // Past the slide-in: a sheet on its way up measures below the window, and
+      // the probe then answers `?-outside`, `?-small` or `?-blind`. One ask is
+      // one answer, so this asks again until the answer could be measured.
       await sleep(900);
       const measurable = (report: Report) => {
         const answer = report.probe ?? '';
@@ -625,16 +589,10 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       // The group's outer radius (material3's `CornerLarge`) on the first row's top and
       // the last row's bottom; the small radius (`CornerExtraSmall`) where rows meet.
       expect(fields.radii).toBe('16/4,4/4,4/16');
-      // What the container is painted in, so a failure names what it compared against.
       expect(fields.container).toMatch(/^[0-9A-F]{6}$/);
-      // The barrier that makes `~` mean something: an ordinary row of the same sheet is
-      // not marked, and the sheet as a whole is not one long disabled row.
+      // An ordinary row of the same sheet is not marked.
       expect(fields.rows).not.toBe('Locked,Go,Wipe');
-      // The press check. Which layer refuses the press is deliberately not this line's
-      // claim: `rows=` and `radii=` above are what show the row's own `enabled = false`,
-      // and this is the line that would see a press that got through *either* layer,
-      // because both report through the same log. A press here that did something is a
-      // bug whoever let it through; which layer is the row's own story, told by the probe.
+      // A press on the disabled row must do nothing.
       handles.get('rows')?.nuiTestPerformAction('locked');
       await sleep(400);
       expect(eventLog.join(',')).toBe('');
@@ -751,8 +709,8 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     );
     // The disabled flag follows in place on both platforms...
     expect(after.enabled?.split(',')[0]).toBe('0');
-    // ...and the action *set* is the platform difference B2 documents: UIKit cannot drop
-    // or add an action on a presented alert, so iOS keeps two until the next
+    // ...and the action set differs by platform: UIKit cannot drop or add an
+    // action on a presented alert, so iOS keeps two until the next
     // presentation; Compose recomposes, so Android shows three now.
     expect(after.actions).toBe(Platform.OS === 'ios' ? '2' : '3');
     expect(after.presentCount).toBe('1');
@@ -804,15 +762,11 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     console.log(`recycled-dialog recycles per round: ${reuses.join(',')}`);
   });
 
-  // A re-key hands the dropped view straight back to the new mount (Fabric's pool is
-  // LIFO, and the delete runs before the create in one transaction), so the old
-  // mount's dialog can still be animating in when the same native view presents the
-  // new one. iOS builds a controller per presentation, and the old one's carried
-  // dismissal has to survive the new `present`: when it did not (G11 review, item 2),
-  // the old alert stayed up in a key window of its own, `live` never came down, and the
-  // old completion marked the *new* entry finished, so the new mount's own teardown was
-  // refused too. Two endings per delay: the new dialog stays up and is then dropped,
-  // or it is dropped during its own entry.
+  // A re-key hands the dropped view straight back to the new mount (Fabric's
+  // pool is LIFO, and the delete runs before the create in one transaction), so
+  // the old mount's dialog can still be animating in when the same native view
+  // presents the new one. Two endings per delay: the new dialog stays up and
+  // is then dropped, or it is dropped during its own entry.
   for (const delay of [0, 80, 150]) {
     for (const ending of ['kept', 'dropped mid-entry'] as const) {
       it(`leaves one dialog, then none, when a recycled view presents again ${String(delay)} ms into the entry (${ending})`, async () => {
@@ -908,9 +862,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
   }
 
   it('presents from inside a <Host>, and goes when the Host is dropped', async () => {
-    // Q5 B7 item 11. On Android the Host's one composition composes the dialog, window
-    // and all, so dropping the Host is what has to take the window down; on iOS a Host
-    // is a passthrough and this is the plain drop.
+    // On Android the Host's one composition composes the dialog, window and
+    // all, so dropping the Host has to take the window down. On iOS a Host is
+    // a passthrough and this is the plain drop.
     function Scene() {
       const [shown, setShown] = useState(true);
       setters.set('host-shown', setShown);
@@ -950,14 +904,12 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
 
   if (Platform.OS === 'ios') {
     it('answers for the status bar and orientations as the screen it covers does', async () => {
-      // The dialog's window is above the app's, so UIKit asks *its* root about the
-      // status bar and the orientations while the dialog is up. The root has to give
-      // the answers of the app's top controller - here an RN Modal, portrait only.
-      // Only the orientations discriminate: this app sets
-      // `UIViewControllerBasedStatusBarAppearance` to NO, and RN's StatusBar then
-      // changes neither answer the Modal gives (measured: `0,0` with `hidden` and
-      // `light-content`), so the status bar half is the same code path held equal to
-      // its defaults. A bare controller answers `30` (all orientations) here.
+      // The dialog's window is above the app's, so UIKit asks its root about
+      // the status bar and the orientations while the dialog is up. The root
+      // has to answer as the app's top controller does: here an RN Modal,
+      // portrait only. Only the orientations discriminate, because this app
+      // sets `UIViewControllerBasedStatusBarAppearance` to NO. A bare
+      // controller answers `30` (all orientations).
       await render(
         <Modal
           visible
@@ -1007,8 +959,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       await render(<Scene />);
       await waitForHandle('rechrome');
       const up = await waitForReport('rechrome', isUpCounted(1), 'up', 12000);
-      // The fixture: the app's own screen answers something other than the Modal's
-      // `.portrait`, so a root still answering for it reads wrong once the Modal is up.
+      // The app's own screen answers something other than the Modal's
+      // `.portrait`, so a root still answering for it reads wrong once the
+      // Modal is up.
       expect(up.appChrome).not.toBe('0,0,2');
       expect(up.chrome).toBe(up.appChrome);
       const before = up.appChrome;
@@ -1038,7 +991,7 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       const first = await render(<Stage testId="keyed" initial />);
       await waitForHandle('keyed');
       const up = await waitForReport('keyed', isUpCounted(1), 'up');
-      // Barrier: the channel does say so when a window of ours is key.
+      // The channel does say so when a window of ours is key.
       expect(up.key).toBe('ours');
       handles.get('keyed')?.nuiTestPerformAction('later');
       await waitForNothingLeft('keyed', 'closed by its action');

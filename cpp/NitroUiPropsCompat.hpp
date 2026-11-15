@@ -1,9 +1,7 @@
 #pragma once
 // Workaround for margelo/nitro#1656 until react-native-nitro-modules >= 0.37.2 is the floor.
-// Mirrors upstream RawPropsCompat::initializeDynamicProps (margelo/nitro#1749) for the React
-// Native this library supports (>= 0.88, DECISIONS D39): from RN 0.87 on, Android always takes
-// the dynamic-props path, so the call is unconditional. Upstream's RN 0.84-0.86 branch, behind
-// `enableExclusivePropsUpdateAndroid`, went with the old floor (X18).
+// Mirrors upstream RawPropsCompat::initializeDynamicProps (margelo/nitro#1749): from React
+// Native 0.87 on, Android always takes the dynamic-props path, so the call is unconditional.
 #include <react/renderer/core/Props.h>
 #include <react/renderer/core/RawProps.h>
 #ifdef ANDROID

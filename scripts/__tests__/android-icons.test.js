@@ -1,32 +1,3 @@
-/**
- * Are the Android icons the library draws itself Google's own, unchanged (D43 item 1)?
- *
- * SearchField 0.7.0 shipped a hand-typed copy of Material's search path with a mistake
- * in it, and it drew a key instead of a magnifier. Nothing could have noticed: a path
- * written out in Kotlin looks like any other path. So every glyph now comes from
- * Google's Material Symbols Android drawables, written byte for byte by
- * `scripts/icons/fetch-material-symbols.mjs`, and this file holds the two rules that
- * keep it that way:
- *
- *   1. `android/src/main` builds no glyph by hand: no `ImageVector.Builder`, no path
- *      builder or path parser, no path commands - the `ImageVector` builder's, Compose
- *      `PathNode`s and `Path` calls, and `android.graphics.Path`'s - and no vector
- *      drawable or `pathData` outside the files the script wrote.
- *   2. Every `nitroui_*.xml` drawable, and the Apache 2.0 text beside them, matches the
- *      SHA-256 the script recorded, and the script recorded nothing that is not shipped.
- *      A hand edit to one coordinate fails here.
- *   3. The example app's icon fixtures are provenance-checked the same way (G19 round
- *      2), so the file a harness loads and a screenshot is taken of is Google's glyph
- *      rather than somebody's copy of one. What is *not* upstream has to be declared,
- *      with a reason, in `EXAMPLE_FIXTURES` below.
- *
- * One file is exempt from rule 1 and says why: `NitroUiVectorDrawable.kt`, the reader
- * for a vector drawable an *app* supplied (D43 item 2). See APP_ICON_PARSER.
- *
- * Both run at `check` time, offline. `--verify` on the script is the online half: it
- * downloads the files again and compares them with what is committed.
- */
-
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,10 +18,8 @@ const EXAMPLE_ICON_DIRS = [
 const EXAMPLE_FIXTURE_PATTERN = /\.(xml|png)$/;
 
 /**
- * The example app's fixtures that are **not** Google's files, because they are not
- * glyphs: each exists to be something a Material Symbol cannot be. Declared here with
- * the reason, so the provenance case can demand that every other icon file in those
- * folders came from the fetch script (G19 round 2).
+ * The example app's fixtures that are not Google's files, each with the reason.
+ * Every other icon file in those folders must come from the fetch script.
  */
 const EXAMPLE_FIXTURES = {
   'example/src/assets/icons/not-a-vector.xml':
@@ -71,7 +40,7 @@ const EXAMPLE_FIXTURES = {
 
 const lock = JSON.parse(fs.readFileSync(path.join(root, LOCK_FILE), 'utf8'));
 const locked = new Map(lock.files.map((entry) => [entry.path, entry]));
-/** The example app's fixtures, provenance-checked the same way (G19 round 2). */
+/** The example app's fixtures, checked the same way. */
 const exampleFiles = new Map(
   (lock.exampleFiles ?? []).map((entry) => [entry.path, entry])
 );
@@ -93,16 +62,8 @@ function walk(dir) {
 }
 
 /**
- * What a hand-built glyph looks like in Kotlin or Java.
- *
- * The builder (`ImageVector.Builder`, `materialIcon`/`materialPath` from
- * material-icons-core, `PathBuilder`, `addPathNodes`), the parsers that turn a typed
- * `pathData` string into one (`PathParser`, `PathParser.createPathFromPathData`), and
- * the path commands a glyph is written in: the `ImageVector` builder's, Compose's
- * `PathNode`s and `Path` calls (`relativeLineTo`, `cubicTo`, …) and
- * `android.graphics.Path`'s (`rLineTo`, …). A `Canvas`/`DrawScope` drawing of
- * something that is not an icon would trip the last pattern too, and that is the
- * point: it is the same hand-typed geometry, and it should be a deliberate exemption.
+ * What a hand-built glyph looks like in Kotlin or Java: the vector builders, the
+ * `pathData` parsers and the path commands a glyph is written in.
  */
 const HAND_BUILT = [
   [/ImageVector\.Builder\b/, 'ImageVector.Builder'],
@@ -129,27 +90,10 @@ const HAND_BUILT = [
   [/"\s*[Mm]\s*-?\d*\.?\d+[\s,]*-?\d*\.?\d+/, 'a typed pathData string'],
 ];
 
-/** Problems with `android/src/main`'s sources, one line each. */
 /**
  * The one file allowed to turn glyph geometry into an `ImageVector`: the reader for a
- * vector drawable an **app** supplied.
- *
- * D43 item 2 has nitro-ui load the `.xml` a developer `require`d from Metro, because
- * React Native refuses to serve an Android `.xml` asset itself
- * (`assetSupportsNetworkLoads`). Reading somebody else's drawable means parsing their
- * `pathData`, which is `PathParser`'s job, and assembling the result, which is
- * `ImageVector.Builder`'s. Both names look like a hand-built glyph to the patterns
- * above, and this file is the opposite of one: it holds no path of ours, only bytes
- * handed to it at run time. `docs/components/button.md`, "Android icons", is the
- * feature that needs it.
- *
- * The exemption is two patterns in one path, not a file-level pass. Typed path
- * commands, `PathNode`s and inline `pathData` strings stay illegal *here* too: a glyph
- * authored into the parser is the bug this test exists to catch, and the case below
- * asserts exactly that — for the strings as well, because the list above matches a
- * quoted `M\u2026` pair of numbers, so "a typed path stays illegal" is a pattern and not
- * a sentence. The case after it asserts the exemption cannot outlive its reason: if the
- * file stops being a parser, this list has to shrink.
+ * vector drawable an app supplied. Only `PathParser` and `ImageVector.Builder` are
+ * exempt there; typed path commands and inline `pathData` stay illegal.
  */
 const APP_ICON_PARSER =
   'android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt';
@@ -197,14 +141,10 @@ describe('Android icons (D43)', () => {
   });
 
   it('catches a hand-built glyph and a hand-typed drawable', () => {
-    // The rule's own red case, kept beside it so a pattern that stops matching fails
-    // here rather than passing every later source tree.
     const sources = {
       'android/src/main/java/A.kt':
         'private val G = ImageVector.Builder(name = "g").path { moveTo(1f, 2f) }.build()',
-      // One line per other way to type a glyph out (FIX4 review): Compose's path
-      // nodes, its `Path` calls, `android.graphics.Path`, and material-icons-core's
-      // builder block.
+      // One line per other way to type a glyph out.
       'android/src/main/java/B.kt': [
         'val p = Path(pathData = listOf(PathNode.MoveTo(1f, 2f)))',
         'path.relativeMoveTo(1f, 2f)',
@@ -217,11 +157,8 @@ describe('Android icons (D43)', () => {
       ].join('\n'),
       'android/src/main/res/drawable/nitroui_typed.xml':
         '<vector><path android:pathData="M0,0L1,1Z"/></vector>',
-      // The exempt file, on its own terms: parsing geometry it was handed is silence
-      // (lines 1-2), and authoring geometry is still reported — the path command on
-      // line 3, and the glyph written as a string on line 4, which is the same bug with
-      // its clothes on: `PathParser` is exempt, a path nobody was handed is not. That is
-      // what makes the exemption two patterns wide rather than a file-level pass.
+      // The exempt file: parsing geometry it was handed is allowed (lines 1-2),
+      // authoring geometry is still reported (lines 3-4).
       [APP_ICON_PARSER]: [
         'val v = ImageVector.Builder(name = "x")',
         'val p = PathParser.createPathFromPathData(bytes)',
@@ -250,14 +187,9 @@ describe('Android icons (D43)', () => {
   });
 
   it('exempts the app-file parser only while it is one', () => {
-    // The exemption above is a claim about a file, and claims go stale. If the parser
-    // stops using PathParser, the exemption is shielding nothing and should be gone
-    // rather than inherited by whatever that file becomes.
     const text = readRepoFile(APP_ICON_PARSER);
     expect(text).toContain('PathParser');
     expect(text).toContain('ImageVector.Builder');
-    // And the file the exemption names is the one that ships the reader, not a file
-    // that merely sounds like it.
     expect(text).toContain('object NitroUiVectorDrawableReader');
   });
 
@@ -305,11 +237,6 @@ describe('Android icons (D43)', () => {
   });
 
   it('proves where every icon the example app renders came from', () => {
-    // G19's harnesses load these files and its screenshots are taken of them, so an
-    // edit to one coordinate changes what a test asserts and what a reader of
-    // docs/images sees — the same risk rule 2 covers for the library's own glyphs, one
-    // directory over. Upstream files are hash-checked; anything else has to be
-    // declared below with the reason it cannot be upstream.
     const problems = [];
     for (const entry of exampleFiles.values()) {
       const absolute = path.join(root, entry.path);
@@ -352,8 +279,6 @@ describe('Android icons (D43)', () => {
         );
       }
     }
-    // And every line of that list has to still be true: a fixture that became an
-    // upstream file, or stopped existing, would keep its exemption for nothing.
     for (const [relative, reason] of Object.entries(EXAMPLE_FIXTURES)) {
       if (!fs.existsSync(path.join(root, relative))) {
         problems.push(

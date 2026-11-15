@@ -5,18 +5,8 @@ import { assertHostChildren } from '../components/Host/HostChildren';
 import { Switch } from '../components/Switch/Switch';
 import { Host } from '../components/Host/Host';
 
-/**
- * The native Host's report about a child it will not compose (review S5).
- *
- * On Android the Host can see what React flattened away — a `Picker` behind a
- * `memo`, an RN view behind a `<Row>`, another `<Host>` — and a `Log.w` for that
- * is a line no app author reads. The bridge is a device event, and JS turns it
- * into a `console.error`, which is what reaches Metro and LogBox.
- *
- * One case per file, because the listener latches on the module: the second
- * `assertHostChildren` in this test proves it registers once per process, and a
- * second test could not tell a latch from a fresh subscription.
- */
+// The only test in this file: the listener registers once per module, so a
+// second test could not tell that latch from a fresh subscription.
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -32,8 +22,6 @@ describe('Host unhostable-child report', () => {
         .mockImplementation(() => ({ remove: jest.fn() }) as never);
       const error = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-      // Two Hosts mounting: one subscription, not two. A listener per Host would
-      // mean an app with a hundred Hosts prints the same refusal a hundred times.
       assertHostChildren(<Switch value />, Host);
       assertHostChildren(<Switch value />, Host);
 
@@ -50,8 +38,6 @@ describe('Host unhostable-child report', () => {
         'react-native-nitro-ui: a <Host> holds a Picker.'
       );
 
-      // A report without a message must still say something: the alternative is a
-      // dev-time problem that is silently ignored, which is the bug being fixed.
       error.mockClear();
       (handler as () => void)();
       expect(error).toHaveBeenCalledWith(

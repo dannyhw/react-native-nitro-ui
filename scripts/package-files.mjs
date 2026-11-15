@@ -1,15 +1,6 @@
 #!/usr/bin/env node
-//
-// package-files.mjs
-//
-// Tarball contents gate. `etc/package-files.txt` is the committed, reviewable
-// list of files that ship to npm; a publish that adds or drops a file has to
-// change it deliberately (`bun run manifest:update`), which makes accidental
-// codegen/native omissions visible in review.
-//
-// Requires the package to be built (`bun run prepare`), because `lib/` is part
-// of the tarball. The tarball is listed with `--ignore-scripts` so this never
-// rebuilds (and so build logs cannot get mixed into the JSON output).
+// Checks the npm tarball's contents against the committed list in
+// `etc/package-files.txt`. Needs a built package, because `lib/` ships.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';

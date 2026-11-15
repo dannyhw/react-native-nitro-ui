@@ -1,58 +1,31 @@
 /**
- * Aggregate, print, compare and gate benchmark results.
+ * Aggregates, prints and gates existing benchmark results. Reads results files
+ * and never touches a device.
  *
- *   node scripts/bench/report.mjs [results.json] [--compare <git-ref|file>]
- *                               [--check] [--update-baseline] [--force]
+ *   node scripts/bench/report.mjs [results.json] [--compare <git-ref|results-file>]
  *
- * Reading the output
- * -----------------
- * Every headline number is a **median of per-launch medians** with the MAD of
- * those launch medians beside it, which is the unit the protocol varies (a fresh
- * process per launch, launches interleaved ABBA across implementations). `p95`
- * is over the pooled iterations, because a tail only shows up there.
- * Smaller is better everywhere.
+ * Every headline number is a median of per-launch medians with the MAD of
+ * those launch medians beside it; `p95` is over the pooled iterations. Smaller
+ * is better everywhere.
  *
- * What gates (docs/DECISIONS.md D9, implemented once in `gate()`):
+ * What gates (implemented once in `gate()`):
  *
- * 1. Every metric is first turned into a **launch-paired ratio to `rn-core`**:
+ * 1. Every metric is first turned into a launch-paired ratio to `rn-core`:
  *    launch N's arm median over launch N's control median, so machine drift
- *    cancels instead of being measured and excused.
- * 2. `--compare <ref>` gates `head(x/rn-core) / base(x/rn-core)`; `--check`
- *    compares the same ratios with a committed ratio-only baseline.
- * 3. A ratio over 1.20 fails only when its bootstrap 95% CI excludes 1.05 *and*
- *    the within-run spread of that (scenario, N, metric) is quiet. Noise is
- *    judged per cell and metric inside the run - never by absolute drift against
- *    a baseline, which used to make the gate unable to fire.
+ *    cancels.
+ * 2. A comparison gates `head(x/rn-core) / base(x/rn-core)`, where base is
+ *    another run measured on this machine.
+ * 3. A ratio over 1.20 fails only when its bootstrap 95% CI excludes 1.05 and
+ *    the within-run spread of that (scenario, N, metric) is quiet.
  * 4. Only `nitro-ui` arms are gated. `rn-core` is the control and `expo-ui-*`
- *    are reference arms: they inform review, they do not fail a nitro-ui PR.
- *
- * This file is the single implementation of the gate: `run.mjs` calls
- * `comparisonSections()` with the same arguments it prints, so the standalone
- * reporter cannot drift from the runner again.
- *
- * Both flags that read or write a baseline work the same way here as in a live run:
- * the file is `bench/baselines/<machine.hostname>/<deviceKey>.json`, keyed by the
- * label the run itself recorded, and there is no fallback to another machine's file
- * (`scripts/bench/baseline.mjs`).
+ *    are reference arms.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mintBaselineFileFor, openBaselineForCheck } from './baseline.mjs';
-import { formatCommittedJsonFile } from './format.mjs';
-
-import {
-  SCHEMA_VERSION,
-  baselineBlockers,
-  baselineNoise,
-  baselineTable,
-  buildBaseline,
-  isCompatibleBaseline,
-  newestResultsName,
-  skippedCellNotes,
-} from './lib.mjs';
+import { SCHEMA_VERSION, newestResultsName } from './lib.mjs';
 import { comparisonSections, renderMarkdown } from './render.mjs';
 
 const REPO_ROOT = path.resolve(
@@ -61,19 +34,15 @@ const REPO_ROOT = path.resolve(
   '..'
 );
 export const RESULTS_DIR = path.join(REPO_ROOT, 'bench', 'results');
-export const BASELINES_DIR = path.join(REPO_ROOT, 'bench', 'baselines');
 
 export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-/* ------------------------------- comparisons ------------------------------ */
-
 /**
- * Resolve `--compare <ref|file>` to a results file. A bare ref resolves to the
- * newest *clean* results file of that sha (dirty runs are named `-dirty-` and
- * only match when nothing clean exists), so two runs of one commit can no
- * longer overwrite each other.
+ * Resolves `--compare <ref|file>` to a results file. A bare ref resolves to the
+ * newest clean results file of that sha; a dirty run (named `-dirty-`) matches
+ * only when nothing clean exists.
  */
 export function resolveCompareTarget(value, platform) {
   if (fs.existsSync(value)) {
@@ -96,72 +65,6 @@ export function resolveCompareTarget(value, platform) {
   );
 }
 
-/**
- * Baseline write, with the D9 guards. Returns the block reasons, if any.
- *
- * `buildBaseline(run)` replaces the file. That is what makes a *filtered* mint
- * dangerous - it would write one component's cells and delete every other row,
- * which reads to `--check` as "not measured in base" - so `narrowingProblem()`
- * refuses a narrowed schedule for it, before the run.
- *
- * `--force` overrides `baselineBlockers()`'s per-run judgements (load, cleanliness,
- * plan, completeness).
- */
-export function writeBaseline(file, run, { force = false } = {}) {
-  const blockers = force ? [] : baselineBlockers(run);
-  if (blockers.length > 0) {
-    return { written: false, blockers, baseline: null, skippedCellNotes: [] };
-  }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const baseline = buildBaseline(run);
-  const text = `${JSON.stringify(baseline, null, 2)}\n`;
-  // Write, format, then rename — in that order (review L2). The committed file is
-  // every machine's gate table, and prettier runs on it *after* the write: writing
-  // in place means a crash mid-write, or a prettier that dies half-way, leaves a
-  // truncated or re-wrapped table where a byte-identical one should be. The temp
-  // file is in the same directory, so the rename is atomic and a reader sees either
-  // the old file or the finished new one. It keeps a `.json` extension because
-  // prettier infers its parser from the file it is handed.
-  const tempFile = path.join(
-    path.dirname(file),
-    `.${path.basename(file, '.json')}.${String(process.pid)}.tmp.json`
-  );
-  fs.writeFileSync(tempFile, text);
-  // The baseline is a committed file, and `bun run format` checks committed
-  // files - so the mint formats what it wrote instead of leaving a formatting
-  // diff for whoever commits it (A1b follow-up).
-  // From the repo root, so bunx finds this repo's prettier rather than the
-  // bench app's (see scripts/bench/format.mjs).
-  try {
-    const { note } = formatCommittedJsonFile(tempFile, { cwd: REPO_ROOT });
-    if (note != null) {
-      // Prettier could not run, or exited non-zero — possibly after writing a
-      // half-formatted file. Serialise what we meant to write over whatever it left
-      // behind: an unformatted baseline is a formatting diff for a human to fix
-      // (`bun run format:write`), a corrupt one is a lost table.
-      fs.writeFileSync(tempFile, text);
-    }
-    fs.renameSync(tempFile, file);
-    return {
-      written: true,
-      blockers: [],
-      file,
-      baseline,
-      formatted: note == null,
-      // The note tells a human to run prettier on the file, and it was written for
-      // the temp name it has just lost: re-point it at the path that now exists.
-      note: note == null ? null : note.split(tempFile).join(file),
-      skippedCellNotes: skippedCellNotes(baseline, {
-        display: path.relative(REPO_ROOT, file),
-      }),
-    };
-  } catch (error) {
-    // Nothing was committed; take the half-written temp with us.
-    fs.rmSync(tempFile, { force: true });
-    throw error;
-  }
-}
-
 export function writeReportFiles({ run, markdown, fileName }) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
   const json = path.join(RESULTS_DIR, fileName);
@@ -172,10 +75,8 @@ export function writeReportFiles({ run, markdown, fileName }) {
 }
 
 /**
- * The raw records a device produced, saved next to the results *before* anything
- * can throw. Re-aggregating is cheap and offline; a 10-minute device run is
- * not, so a bug in the maths must not cost the measurement. `bench/results/` is
- * gitignored.
+ * Saves the raw records a device produced next to the results, so a bug in the
+ * aggregation does not cost the measurement. `bench/results/` is gitignored.
  */
 export function writeRawRecords({ fileName, records }) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
@@ -201,8 +102,7 @@ if (
   const resultsFile = argv.find((entry) => !entry.startsWith('--'));
   if (resultsFile == null) {
     process.stderr.write(
-      'usage: node scripts/bench/report.mjs <results.json> [--compare <ref|file>] [--check]\n' +
-        '                                 [--update-baseline] [--force]\n'
+      'usage: node scripts/bench/report.mjs <results.json> [--compare <ref|file>]\n'
     );
     process.exit(2);
   }
@@ -235,73 +135,10 @@ if (
     const section = comparisonSections({
       run,
       base: readJson(target.file),
-      mode: 'compare',
       label: target.label,
     });
     process.stdout.write(`\n${section.markdown}\n`);
     exitCode = Math.max(exitCode, section.exitCode);
-  }
-
-  if (argv.includes('--update-baseline')) {
-    const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
-    if (mint.refusal != null) {
-      process.stderr.write(`\n${mint.refusal}\n`);
-      exitCode = Math.max(exitCode, 2);
-    } else if (argv.includes('--component')) {
-      // A mint replaces the whole file, so one component's results would delete
-      // every other row. This spelling used to merge; refuse it rather than ignore it.
-      process.stderr.write(
-        '\n--update-baseline --component: a mint replaces the whole baseline file and takes no --component.\n'
-      );
-      exitCode = Math.max(exitCode, 2);
-    } else {
-      const outcome = writeBaseline(mint.file, run, {
-        force: argv.includes('--force'),
-      });
-      if (outcome.written) {
-        process.stdout.write(
-          `\nWrote baseline ${path.relative(REPO_ROOT, mint.file)}\n` +
-            (outcome.note == null ? '' : `  ${outcome.note}\n`)
-        );
-      } else {
-        process.stderr.write(
-          `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
-            .map((reason) => `  - ${reason}`)
-            .join('\n')}\n`
-        );
-        exitCode = Math.max(exitCode, 2);
-      }
-    }
-  }
-
-  if (argv.includes('--check')) {
-    const opened = openBaselineForCheck({
-      baselinesDir: BASELINES_DIR,
-      run,
-      display: (file) => path.relative(REPO_ROOT, file),
-      readJson,
-      isCompatibleBaseline,
-    });
-    if (opened.refusal != null) {
-      process.stderr.write(`\n${opened.refusal.message}\n`);
-      // A missing baseline has always been a 1 here and a 2 in `run.mjs`; the new
-      // refusals are a 2 on both, because the run could not be judged at all.
-      exitCode =
-        opened.refusal.kind === 'missing'
-          ? Math.max(exitCode, 1)
-          : Math.max(exitCode, 2);
-    } else {
-      const section = comparisonSections({
-        run,
-        base: { cells: {} },
-        mode: 'check',
-        label: opened.display,
-        baseTable: baselineTable(opened.baseline),
-        baseNoise: baselineNoise(opened.baseline),
-      });
-      process.stdout.write(`\n${section.markdown}\n`);
-      exitCode = Math.max(exitCode, section.exitCode);
-    }
   }
   process.exit(exitCode);
 }

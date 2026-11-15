@@ -1,38 +1,3 @@
-/**
- * On-device tests for the controls task H2a added to `<Host>`: **Slider, Progress and
- * Button** (H1 shipped Switch, and `Host.harness.tsx` stays the owner of the Switch and
- * of the geometry rules that do not depend on which control is inside).
- *
- * Three jobs, in this file's order.
- *
- * 1. **A hosted control is still that control.** Each of the three gets what its own
- *    unhosted suite gives it, but inside somebody else's composition: the Slider's
- *    controlled handshake (a drag JS refuses snaps back, and the *next* drag starting
- *    from the old value is the evidence, because `nuiTestDrag` begins on what the
- *    control displays), the Progress's drawn value (`nuiTestDisplayedValue` is written
- *    by the drawing code, so it reads the pixels rather than echoing a prop) and its
- *    animation gate, and the Button's `onPress`. Where a claim needs a witness, the
- *    witness is a pair: an enabled control beside the disabled one that was just
- *    pressed, an indeterminate indicator beside a determinate one. A Host that composed
- *    nothing would answer "no event" and "displayed=0" forever, and the pairs are what
- *    stop those answers reading green.
- * 2. **D24, per control.** `docs/architecture/sizing.md` §10 now states what each
- *    control's sizing policy means inside a Host's `Column`, and the cases below
- *    measure it: a hosted Slider's track spans the **Host's** inner width — proved by
- *    the *value* one absolute offset produces in a wide Host versus a narrow one, not by
- *    a pixel count — and a hosted Button stays **its own width** at the column's leading
- *    edge, proved by a short title and a long one answering different x offsets in the
- *    same 260 dp Host. A hosted child's own `style` appears in neither answer, which the
- *    third pair pins down.
- * 3. **N4 (H1's review).** A hosted child builds no composition of its own, so it must
- *    arm neither a lifecycle observer nor a first-frame pre-draw listener for one.
- *    `nuiTestArmedGuards()` is read from a hosted Switch and an unhosted one in the same
- *    render, because the comparison is the claim.
- *
- * The mixed cases (four kinds of control, one Host) run on **both** platforms: on iOS a
- * Host is the documented passthrough `View`, so this file is also the iOS regression
- * proving that adding three controls to the allowlist changed nothing there.
- */
 import { useState } from 'react';
 import {
   Platform,
@@ -77,12 +42,7 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * What `hybridRef` hands back, per control. Declared here rather than imported:
- * DECISIONS D14 keeps Hybrid View types off the public surface, and the only reason to
- * read one is a test seam — what a *hosted* control displays, and what its own view has
- * armed.
- */
+/** What `hybridRef` hands back, per control: the test seams these cases read. */
 type SliderHandle = {
   readonly value: number | null;
   readonly mostRecentEventCount: number;
@@ -108,11 +68,6 @@ type SwitchHandle = {
   readonly value: boolean | null;
   nuiTestArmedGuards(): string;
 };
-/**
- * The three H2b controls, as far as these mixed cases need them: enough to say each one
- * is *live* inside a Host of seven, and — for the two that open windows — enough to read
- * the process-wide count that says nothing was left behind.
- */
 type SegmentHandle = {
   readonly options: readonly string[];
   readonly selectedIndex: number | null;
@@ -139,9 +94,8 @@ type SlideEvent = {
 type Log = {
   /**
    * Every event that says "a control answered this press", in order, named by `testID`.
-   *
-   * One list rather than one per control because a press has to answer for *all* of
-   * them: two entries for one press is two hosted controls claiming one touch.
+   * One list for all controls: two entries for one press is two hosted controls claiming
+   * one touch.
    */
   taps: string[];
   /** The Slider's three callbacks, with values, so the handshake is auditable. */
@@ -160,13 +114,9 @@ type Log = {
   acceptedSegments: Record<string, number>;
   acceptedPickers: Record<string, number>;
   /**
-   * Disable one date row by id.
-   *
-   * The only lever an app has for taking a dialog it opened back off the screen:
-   * `nuiTestPresent()` presents, like the field's press does, and a harness press cannot
-   * reach the dialog's own window. A disabled control does not keep a window open
-   * (`HybridNitroUiDatePicker.afterUpdate`), which is the rule this suite relies on to
-   * leave the process-wide count clean for the next case.
+   * Disable one date row by id. A harness press cannot reach the dialog's own window,
+   * and a disabled control does not keep a window open, so this is how a case takes a
+   * dialog it opened back off the screen.
    */
   disableDate: Record<string, (disabled: boolean) => void>;
   /** JS-side writes, so a test can move a control with no touch at all. */
@@ -203,8 +153,7 @@ const newLog = (): Log => ({
 
 /**
  * A wrapper that takes its child's size, so `queryByTestId` on it reports the Host's
- * box. RN stretches a childless-axis `View` to its parent instead, which would report
- * the screen (`Host.harness` has the same helper for the same reason).
+ * box. RN stretches a `View` to its parent otherwise, which would report the screen.
  */
 const HUG: ViewStyle = { alignSelf: 'flex-start' };
 
@@ -214,13 +163,9 @@ function settle(ms: number) {
 
 /**
  * Poll for a `testID` and hand back its box. `screen.findByTestId` has no timeout, and a
- * hosted control mounts through the Host's composition — slower than the single pass the
- * harness makes, on a loaded machine.
- *
- * A box whose control was wired with `handleRef` is handed back only once that
- * control's handle has landed as well (`handles.ts`): the box exists before the
- * `hybridRef` callback has run, and the reads after a `boxOf` here go through the
- * handle. Waiting here covers the reads that have no `handleOf` of their own.
+ * hosted control mounts through the Host's composition, which is slower. A control wired
+ * with `handleRef` is handed back only once its handle has landed too: the box exists
+ * before the `hybridRef` callback has run.
  */
 async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   const deadline = nitroUiCore.now() + timeoutMs;
@@ -249,17 +194,10 @@ async function mount(ui: Parameters<typeof render>[0], timeoutMs = 30000) {
 }
 
 /**
- * Press at an absolute point and report which control answered, or `null`.
- *
- * "Answered" is an event reaching JS from one of `allowed`. On Android a hosted control
- * declines to measure, so *at mount* its own view is laid out at `0 x 0` and is neither a
- * hit target nor visible-to-user: the only way an answer can arrive is through the Host's
- * composition, which is the property under test rather than an assumption. Mount is the
- * whole sentence, though - a later layout pass over that child writes its Yoga frame into
- * the view, and that frame is never the rect Compose drew (`docs/components/host.md`,
- * F8), so a press aimed at a hosted child's own box is aimed at a rectangle drawn around
- * the drawing rather than at the drawing. Two answers for one press fails on its own
- * (overlapping hit areas between hosted children).
+ * Press at an absolute point and report which control answered, or `null`. "Answered" is
+ * an event reaching JS from one of `allowed`. On Android a hosted child's own box is not
+ * the rect Compose drew, so presses are aimed through the Host, never at that box. Two
+ * answers for one press fails.
  */
 async function probeAt(
   x: number,
@@ -292,16 +230,11 @@ function probeIn(
 }
 
 /**
- * Where the first row of a Host is pressable on each platform.
- *
- * Android: inside the Host at the column's leading edge, so the press travels through
- * the Host's `AndroidComposeView`. iOS: the passthrough lays children out as RN views,
- * so the control's own box is the honest target — and its *centre*, because the RN
- * instance stretches across the Host while the SwiftUI control inside it is intrinsic and
- * centred. (Measured on the iOS simulator with a `12 dp`-from-the-left press: a hosted Switch,
- * whose instance hugs the control at 61 x 28, answered; a hosted Button, whose instance
- * stretches and whose button does not, answered for nothing.) Two answers, one question,
- * and the difference is the documented behaviour (`Host.harness` explains the same split).
+ * Where the first row of a Host is pressable on each platform. Android: inside the Host
+ * at the column's leading edge, so the press travels through the Host's
+ * `AndroidComposeView`. iOS: the Host lays children out as RN views, so the target is
+ * the control's own box, at its centre, because the RN instance can stretch across the
+ * Host while the SwiftUI control inside it stays intrinsic and centred.
  */
 async function pressRow(
   hostBox: ViewInfo,
@@ -322,12 +255,9 @@ async function pressRow(
 }
 
 /**
- * Wait for the drawing to say `expected`.
- *
- * `nuiTestDisplayedValue` starts at `displayed=none` and is written by the drawing
- * code, so polling it is the only way to see a commit reach the pixels. Progress.harness
- * polls the same seam for the same reason; a single read after a fixed sleep would
- * measure the machine rather than the control.
+ * Wait for the drawing to say `expected`. `nuiTestDisplayedValue` starts at
+ * `displayed=none` and is written by the drawing code, so polling it is how a commit is
+ * seen to reach the pixels.
  */
 async function waitForDisplayed(
   handle: ProgressHandle,
@@ -353,20 +283,10 @@ async function waitForDisplayed(
 // MARK: - Fixtures
 
 /**
- * A controlled Slider the test drives, wired to the log.
- *
- * It holds its own state, so a JS write is a real React state change and a refused drag
- * is a real refusal. `accept: false` is the snap-back fixture: the event reaches JS, the
- * state does not move, and native has to put the thumb back.
- */
-/**
  * Poll a hosted DatePicker's report until `ready` is happy, and hand back what it saw.
- *
- * Field 1 of the report is `presented` and field 4 is `livePresentations`. Both, not the
- * first: `presented` is model state and lands with the props batch, while the dialog's
- * window goes when Compose disposes it, a frame or two later. Reading the count the
- * moment the flag lands measures a window that is already on its way out - measured in
- * `HostPopups.harness.tsx`, where the same pair is waited on the same way.
+ * Field 1 of the report is `presented` and field 4 is `livePresentations`. Both are
+ * read: the flag lands with the props batch, while the dialog's window goes when Compose
+ * disposes it, a frame or two later.
  */
 async function waitDate(
   handle: DateHandle,
@@ -418,9 +338,9 @@ function Slide({
   log.writeSlider[id] = setValue;
   const record = (kind: SlideEvent['kind']) => (next: number) => {
     log.slides.push({ id, kind, value: next });
-    // One answer per gesture, counted on the event that opens it. A Slider's contract is
-    // start -> change* -> complete, so counting both ends would report two answers for
-    // one press, and `probeAt` reads two answers as two controls claiming one touch.
+    // One answer per gesture, counted on the event that opens it: a Slider reports
+    // start -> change* -> complete, and `probeAt` reads two answers as two controls
+    // claiming one touch.
     if (kind === 'start') {
       log.taps.push(id);
     }
@@ -442,9 +362,7 @@ function Slide({
       onSlidingComplete={(next) => {
         record('complete')(next);
         if (accept) {
-          // Only an accepted value is recorded as accepted: the snap-back fixture is
-          // the same component with `accept: false`, and "the app never agreed" has to
-          // be visible in the log as an absence.
+          // Only an accepted value is recorded: a refusal shows as an absence.
           log.acceptedSliders[id] = next;
           setValue(next);
         }
@@ -544,20 +462,11 @@ function EnableableSlide({
 }
 
 /**
- * A wrapper whose `View` the test can make layout-only after mount.
- *
- * RN collapses a layout-only `View` out of the native tree and attaches its children to
- * the nearest view-owning ancestor, so what the *Host* sees as its child changes when
- * the wrapper starts or stops owning a view - and RN's differ moves the control's own
- * view between the two parents, same instance, without JS remounting anything. JS cannot
- * see the flip (the Host's child is a component either way), which is what makes this the
- * ordinary way an app moves a *mounted* control into or out of a Host (review S2).
- *
- * Measured, because "it has a style" is not enough: a wrapper with only a
- * `backgroundColor` stayed flattened (the control inside it was hosted from the first
- * frame), while a wrapper that also clips and sizes itself owns a view (the control
- * inside it armed its own guards). Both halves of the flip were read on the device
- * before this fixture was relied on.
+ * A wrapper whose `View` the test can make layout-only after mount. RN collapses a
+ * layout-only `View` out of the native tree and attaches its children to the nearest
+ * view-owning ancestor, so the flip moves the control's own view into or out of the
+ * Host, same instance, with no JS remount. A `backgroundColor` alone does not stop the
+ * flattening; a wrapper that clips and sizes itself owns a view.
  */
 function Reparenter({
   log,
@@ -588,7 +497,7 @@ function Reparenter({
   );
 }
 
-/** A hosted (or plain) Switch, as `Host.harness` wires one, plus the N4 probe. */
+/** A hosted (or plain) Switch. */
 function Toggle({
   id,
   log,
@@ -673,17 +582,10 @@ function Dates({ id, log }: { id: string; log: Log }) {
 }
 
 /**
- * One Host whose children are named by `ids`, each id's *suffix* choosing the control.
- *
- * An id is `mix-<kind>-<n>`: `sw` a Switch, `btn` a Button, `sl` a Slider, `pr` a
- * Progress, and — since H2b — `seg` a SegmentedControl, `pk` a Picker, `dp` a DatePicker.
- * Naming the control in the id is what lets an order assertion say what the app asked for
- * rather than what a fixture happened to build, and lets a reordering test move children
- * without moving kinds.
- *
- * Only the Switch and the Button answer a *press* on both platforms (a Progress has no
- * press target, and a Slider needs a tap that lands on its track), so the order sweeps
- * below read the Switch/Button bands and leave the rest to their own cases.
+ * One Host whose children are named by `ids`, each id's kind choosing the control. An id
+ * is `mix-<kind>-<n>`: `sw` a Switch, `btn` a Button, `sl` a Slider, `pr` a Progress,
+ * `seg` a SegmentedControl, `pk` a Picker, `dp` a DatePicker. Only the Switch and the
+ * Button answer a press on both platforms, so the order sweeps read those two.
  */
 function controlFor(id: string, log: Log) {
   const kind = id.split('-')[1];
@@ -781,9 +683,7 @@ describe('Host · a hosted Slider is still a Slider', () => {
 
     await drag('slide-0', 0.75);
     const kinds = kindsFor('slide-0');
-    // One start, one complete, at least one change between them, in that order: the
-    // three-callback contract of `docs/architecture/core.md` §11, inside a composition
-    // this control does not own.
+    // One start, one complete, at least one change between them, in that order.
     expect(kinds[0]).toBe('start');
     expect(kinds[kinds.length - 1]).toBe('complete');
     expect(kinds.filter((kind) => kind === 'start')).toHaveLength(1);
@@ -792,9 +692,7 @@ describe('Host · a hosted Slider is still a Slider', () => {
     expect(slidesFor('slide-0')[0]?.value).toBeCloseTo(0, 5);
     expect(log.acceptedSliders['slide-0']).toBeCloseTo(0.75, 2);
     expect(log.sliders['slide-0']?.value).toBeCloseTo(0.75, 2);
-    // A drag that ended must not leave its frame pump running: nothing else can see a
-    // pump that outlived its drag, and inside a shared composition it would be burning
-    // frames for a control nobody is touching.
+    // A drag that ended must not leave its frame pump running.
     expect(log.sliders['slide-0']?.nuiTestFramePumpArmed()).toBe(false);
     unmount();
   });
@@ -813,11 +711,8 @@ describe('Host · a hosted Slider is still a Slider', () => {
     expect(log.acceptedSliders['refuse-0']).toBeUndefined();
     expect(log.sliders['refuse-0']?.value).toBeCloseTo(0, 5);
 
-    // The model's own account of what it shows: `runTestDrag` starts from
-    // `model.displayed`, which is the field the drawing is driven from rather than a
-    // reading of the drawing (review M3). A hosted Slider whose model had kept 0.8 would
-    // start this drag at 0.8, and that is all this can show — whether the *composition*
-    // snapped its thumb back is gated by a tap, in the D24 suite below.
+    // The next drag starts from what the model displays, so a model that had kept 0.8
+    // would start this drag at 0.8.
     log.slides.length = 0;
     await drag('refuse-0', 0.9);
     expect(slidesFor('refuse-0')[0]?.value).toBeCloseTo(0, 5);
@@ -836,10 +731,8 @@ describe('Host · a hosted Slider is still a Slider', () => {
     await handleOf(() => log.sliders['write-slide-0'], 'write-slide-0');
     log.writeSlider['write-slide-0']?.(0.4);
     await settle(500);
-    // A handle is the model's last JS prop, not what is drawn: a Host whose composition
-    // never recomposed would read 0.4 here too. The next drag narrows it to the model's
-    // displayed value — still a model field, not the drawing (review M3), which is what
-    // the tap case in the D24 suite below is for.
+    // The handle is the model's last JS prop, not what is drawn. The next drag reads
+    // the model's displayed value.
     expect(log.sliders['write-slide-0']?.value).toBeCloseTo(0.4, 5);
     expect(log.slides).toHaveLength(0);
 
@@ -865,7 +758,7 @@ describe('Host · a hosted Slider is still a Slider', () => {
     await drag('disabled-slide-0', 0.6);
     expect(log.slides).toHaveLength(0);
 
-    // The witness: the same seam, the same drag, one prop different. Without this, "no
+    // The same seam and the same drag with one prop different. Without this, "no
     // events" would be equally consistent with a Host that composed nothing.
     log.setSliderDisabled?.(false);
     await settle(500);
@@ -894,15 +787,13 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
     );
     await boxOf('bar-0');
     const handle = await handleOf(() => log.bars['bar-0'], 'bar-0');
-    // The mount write reached the drawing (this is the witness that the reader reads
-    // *something* — a control that never drew would answer `displayed=none` forever).
+    // The mount write reached the drawing: a control that never drew would answer
+    // `displayed=none` forever.
     await waitForDisplayed(handle, 'displayed=0.25');
 
     log.writeProgress['bar-0']?.(0.75);
     await waitForDisplayed(handle, 'displayed=0.75');
-    // The handle agrees, and that is the weak half kept only to say the two readings
-    // are of one control: the report above is what the drawing wrote, the prop below is
-    // what JS last sent. A commit that stored without repainting fails the line above.
+    // The handle is what JS last sent; the report above is what the drawing wrote.
     expect(handle.value).toBe(0.75);
     unmount();
   });
@@ -925,16 +816,12 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
       () => log.bars['anim-determinate'],
       'anim-determinate'
     );
-    // The pair is in one Host: the same composition keeps one indicator animating and
-    // does not animate the other, so "the animation gate survived hosting" cannot be a
-    // reading of a composition that never started.
+    // Both are in one Host, so one composition animates one indicator and not the other.
     expect(spinning.nuiTestIsAnimating()).toBe(true);
     expect(still.nuiTestIsAnimating()).toBe(false);
     await waitForDisplayed(spinning, 'displayed=indeterminate');
 
-    // Same instance, one prop different: giving the spinning bar a value has to stop it,
-    // which is the animation gate answering inside the shared composition rather than
-    // only at its own view's attach.
+    // Giving the spinning bar a value has to stop it.
     log.writeProgress['anim-indeterminate']?.(0.2);
     await waitForDisplayed(spinning, 'displayed=0.2');
     expect(spinning.nuiTestIsAnimating()).toBe(false);
@@ -942,12 +829,9 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
   });
 
   it('leaves a hosted circular Progress alone to size itself', async () => {
-    // The variant that is `intrinsic` both ways: it has no width to fill, so the Host
-    // must not stretch it. The measurement of that is the accessibility tree (the
-    // `hosted-mixed` case in `scripts/real-input/android.mjs`), because a Progress has
-    // no press target to aim a probe at; what this case can prove on the harness side is
-    // that the variant that fills and the variant that does not coexist in one
-    // composition and both draw.
+    // The circular variant has no width to fill, so the Host must not stretch it. A
+    // Progress has no press target to probe, so this only shows that the variant that
+    // fills and the one that does not both draw in one composition.
     const { unmount } = await mount(
       <View testID="circle-host" style={HUG}>
         <Host style={{ width: 260, height: 140 }}>
@@ -970,14 +854,10 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
 });
 
 /**
- * A hosted Button's press, where a harness tap can reach one.
- *
- * `Button.harness` documents the asymmetry (G2, `docs/tasks/G2-button.report.md`): the
- * harness synthesises a `UITouch` with no HID event behind it, RN's own touch handler and
- * SwiftUI's `Toggle` both accept that, and SwiftUI's `Button` gesture environment refuses
- * it - on iOS, for every button style, hosted or not. So three cases run on Android, and
- * the case below keeps the iOS half honest; the real tap on a hosted Button is proved by
- * the real-input suite (`hosted-button`), where the input is injected at HID level.
+ * A hosted Button's press, where a harness tap can reach one. The harness synthesises a
+ * `UITouch` with no HID event behind it: RN's touch handler and SwiftUI's `Toggle`
+ * accept that, and SwiftUI's `Button` refuses it, hosted or not. So three cases run on
+ * Android only.
  */
 describe('Host · a hosted Button still presses', () => {
   let log: Log;
@@ -985,14 +865,8 @@ describe('Host · a hosted Button still presses', () => {
     log = newLog();
   });
 
-  /**
-   * What a hosted Button keeps even where no harness touch can reach it: its props.
-   *
-   * The drawing is Compose's/SwiftUI's, but the state a hosted control answers with has to
-   * come from JS - so a `disabled` flip and the title have to arrive with no view of its
-   * own to store them in. A Host that composed the child once and stopped would show a
-   * stale `disabled` here, which is a Button that fires `onPress` when the app said not to.
-   */
+  // A hosted Button has no view of its own to store props in, so its `disabled` and
+  // title have to stay live through the Host.
   it('keeps a hosted Button props live on both platforms', async () => {
     const { unmount } = await mount(
       <View testID="props-press-host" style={HUG}>
@@ -1084,9 +958,7 @@ describe('Host · a hosted Button still presses', () => {
           seen.push(hit);
         }
       }
-      // Two rows, two Buttons, each answering for its own band, in mount order. `probeAt`
-      // already fails the run if any single tap produced two events, so what this line
-      // adds is that both bands exist and neither swallowed the other.
+      // Two rows, two Buttons, each answering for its own band, in mount order.
       expect(seen).toEqual(['pair-a', 'pair-b']);
       unmount();
     });
@@ -1114,9 +986,7 @@ describe('Host · four kinds of control, one composition', () => {
       </View>
     );
     const host = await boxOf('mixed-host');
-    // Every child is mounted *and hosted*: `boxOf` throws if an id resolves to nothing,
-    // and on Android a hosted child's own box is `0 x 0`, so the four queries below are
-    // also the statement that all four are inside the Host rather than beside it.
+    // `boxOf` throws if an id resolves to nothing, so this checks all four are mounted.
     for (const id of MIXED) {
       await boxOf(id);
     }
@@ -1140,9 +1010,8 @@ describe('Host · four kinds of control, one composition', () => {
       'displayed=0.25'
     );
 
-    // Button: a real press, answered — and it has to be *reachable*, not merely
-    // pressable-in-principle. Android aims inside the Host at the rows Compose placed;
-    // iOS aims at the child's own centre, which is where the passthrough draws it.
+    // Button: a real press. Android aims inside the Host at the rows Compose placed;
+    // iOS aims at the child's own centre.
     if (Platform.OS === 'android') {
       const seen: string[] = [];
       for (let offset = 6; offset <= 260; offset += 8) {
@@ -1158,16 +1027,14 @@ describe('Host · four kinds of control, one composition', () => {
         }
       }
       expect(seen).toContain('mix-btn-1');
-      // And every answer came from a control in this Host: a stray press reaching a
-      // fixture another test left mounted would show up here.
+      // Every answer came from a control in this Host.
       expect(new Set(seen).size).toBeGreaterThan(0);
       for (const hit of seen) {
         expect(MIXED).toContain(hit);
       }
     } else {
-      // iOS reaches no SwiftUI `Button` with a harness touch (`Button.harness`, G2), so
-      // this half of the mixed batch is read where it can be: the Button's props arrived
-      // at the control the Host is drawing. The press is `hosted-button`'s job.
+      // A harness touch reaches no SwiftUI `Button` on iOS, so this half reads the
+      // Button's props off the control the Host is drawing.
       const button = await handleOf(
         () => log.buttons['mix-btn-1'],
         'mix-btn-1'
@@ -1180,11 +1047,9 @@ describe('Host · four kinds of control, one composition', () => {
 
   if (Platform.OS === 'android') {
     /**
-     * Sweep the Host's column and report which pressable child answered each band.
-     *
-     * Sequential within one mount, one press per offset, and the answer list collapses
-     * repeats: the row pitch is Compose's business, so the claim is "the first pressable
-     * child is answered before the second", not a y coordinate.
+     * Sweep the Host's column and report which pressable child answered each band. The
+     * answer list collapses repeats: the row pitch is Compose's business, so the claim
+     * is an order, not a y coordinate.
      */
     async function sweepOrder(box: ViewInfo, ids: string[]) {
       const allowed = [
@@ -1192,9 +1057,8 @@ describe('Host · four kinds of control, one composition', () => {
         ...ids.filter((id) => id.includes('-sl-')),
       ];
       const seen: string[] = [];
-      // 16 dp leaves every row of a 320 dp column reachable (the shortest row here is a
-      // Progress track, comfortably taller than the stride) while keeping a sweep to two
-      // dozen presses — four sweeps of the old 8 dp stride did not fit the 30 s budget.
+      // A 16 dp stride reaches every row of a 320 dp column and keeps a sweep to two
+      // dozen presses, which fits the test's time budget.
       for (let offset = 6; offset <= 280; offset += 16) {
         const hit = await probeIn(box, 12, offset, allowed, log);
         if (hit != null && seen[seen.length - 1] !== hit) {
@@ -1225,9 +1089,7 @@ describe('Host · four kinds of control, one composition', () => {
       const { unmount, host } = await mountMixed('order-mixed-host');
       expect(await sweepOrder(host, MIXED)).toEqual(['mix-sw-0', 'mix-btn-1']);
 
-      // Reorder: the Button moves above the Switch, the Slider and Progress stay where
-      // they are relative to it. On Android this is the per-child `key(child)` scope in
-      // the Host's Column, so the drawing has to follow the child list, not the mount.
+      // Reorder: the Button moves above the Switch.
       const swapped = ['mix-btn-1', 'mix-sl-2', 'mix-sw-0', 'mix-pr-3'];
       log.setIds?.(swapped);
       await settle(600);
@@ -1243,7 +1105,7 @@ describe('Host · four kinds of control, one composition', () => {
       expect(await sweepOrder(host, MIXED)).toEqual(['mix-sw-0', 'mix-btn-1']);
 
       // Remove: the Switch goes, so the Button is the only pressable child left and the
-      // first answer must be it (a Host that kept the old composition answers `mix-sw-0`).
+      // first answer must be it.
       const minusSwitch = ['mix-btn-1', 'mix-sl-2', 'mix-pr-3'];
       log.setIds?.(minusSwitch);
       await settle(600);
@@ -1262,10 +1124,8 @@ describe('Host · four kinds of control, one composition', () => {
     });
 
     it('reports nothing to the sizing engine, mixed children included', async () => {
-      // D24's other half for the three new controls. `Host.harness` proves it for eight
-      // Switches; Slider and Progress are the controls that *would* be a different story
-      // — both are `fillWidth`, so an implementation that let a hosted child measure its
-      // own box would report a size here and the counters would move.
+      // Slider and Progress are `fillWidth`: an implementation that let a hosted child
+      // measure its own box would report a size here and the counters would move.
       nitroUiCore.invalidateSizingEnvironment();
       const before = nitroUiCore.sizingStats();
       const hosted = await mount(
@@ -1281,8 +1141,7 @@ describe('Host · four kinds of control, one composition', () => {
       hosted.unmount();
       await settle(400);
 
-      // Same four controls, no Host: the positive control that these counters could
-      // have moved at all.
+      // The same four controls with no Host, to show these counters can move at all.
       const plain = await mount(
         <View>{MIXED.map((id) => controlFor(id, log))}</View>
       );
@@ -1315,37 +1174,20 @@ describe('Host · four kinds of control, one composition', () => {
       expect(hostedDelta.reports).toBe(0);
       expect(hostedDelta.cachedSizes).toBe(0);
       expect(hostedDelta.corrections).toBe(0);
-      // What hosting does *not* change: Fabric still asks each child's Yoga node once,
-      // hosted or not, so four children is four measure calls either way. "Hosted
-      // controls never measure" is a sentence about content, and this is the line
-      // between that claim and a false one.
+      // Fabric still asks each child's Yoga node once, hosted or not, so four children
+      // is four measure calls either way.
       expect(hostedDelta.measurements).toBe(MIXED.length);
-      // Unhosted is "at least one each", not the same number: a `fillWidth` control can
-      // be asked twice when its honest answer overruns the box (the second pass in
-      // `docs/architecture/sizing.md`), and this batch holds two of them. What the pair
-      // has to show is that hosting asks no *fewer* questions.
+      // Unhosted is "at least one each": a `fillWidth` control can be asked twice when
+      // its answer overruns the box, and this batch holds two of them.
       expect(plainDelta.measurements).toBeGreaterThanOrEqual(MIXED.length);
-      // And the witness that the reporting counters were live to be moved.
+      // The reporting counters did move without a Host.
       expect(plainDelta.reports).toBeGreaterThan(0);
     });
   }
 });
 
-/**
- * Every control the library ships, in one Host (H2b).
- *
- * H2a's mixed cases above sweep presses down a four-control column, which is the right
- * instrument for press *order* and the wrong one for the two controls that open a window:
- * a menu opened mid-sweep puts a second window in front of the rows the sweep is aiming
- * at. So this case asks each of the seven what its own suite asks it — a drag, a drawn
- * value, a press, a choice, an open window — and the popup rows contribute that they
- * recompose with the rest and leave nothing behind. The popup geometry itself, and the
- * remove/reorder/drop-the-Host-while-a-window-is-open cases, are
- * `HostPopups.harness.tsx`'s.
- *
- * Runs on both platforms: on iOS a Host is the passthrough, so this is also the
- * regression that says adding three controls to the allowlist changed nothing there.
- */
+// Every hostable control in one Host. A press sweep is the wrong instrument for the two
+// controls that open a window, so each of the seven is asked what its own suite asks it.
 describe('Host \u00b7 all seven kinds of control, one composition', () => {
   let log: Log;
   beforeEach(() => {
@@ -1372,8 +1214,7 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
         />
       </View>
     );
-    // All seven are mounted, and on Android all seven are *hosted*: a hosted child
-    // declines to measure, so its own view is `0 x 0`. One left out of the allowlist
+    // On Android a hosted child's own view is `0 x 0`. One left out of the allowlist
     // draws nothing but keeps a real React Native frame, which is what this catches.
     for (const id of SEVEN) {
       const own = await boxOf(id, 25000);
@@ -1430,23 +1271,19 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
     expect(date.mode).toBe('date');
     if (Platform.OS !== 'android') {
       // A SwiftUI `Picker` keeps its menu in the system's own presentation and reports
-      // nothing about it, and the dialog below is Material 3's, so there is no window to
-      // read on the platform where a Host is a passthrough anyway (D23).
+      // nothing about it, and the dialog below is Material 3's, so there is no window
+      // to read on iOS.
       return;
     }
-    // Picker: a choice reaches JS from inside somebody else's composition, and the
-    // process-wide menu count is back at 0 because no window of this mount is open.
+    // Picker: a choice reaches JS, and the process-wide menu count is back at 0.
     picker.nuiTestSelect(2);
     await settle(500);
     expect(log.acceptedPickers['mix-pk-5']).toBe(2);
     expect(picker.nuiTestMenuReport()).toContain('live=0');
 
-    // DatePicker: it presents a dialog from the Host's composition, and an app-side
-    // write takes it down again. Pressing the field is an open and never a close - the
-    // harness hook goes through the same entry, so it cannot dismiss the dialog either -
-    // which leaves disabling the control as the way to prove the window is the Host's to
-    // lose. Read as a pair (`presented` and `livePresentations`) for the reason on
-    // `waitDate`, and left at zero so the next case does not read this one as a leak.
+    // DatePicker: it presents a dialog from the Host's composition. Pressing the field
+    // can only open one, so disabling the control is how the app takes the window down
+    // again. Left at zero so the next case does not read this one as a leak.
     date.nuiTestPresent();
     const shown = await waitDate(
       date,
@@ -1465,18 +1302,14 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
   });
 });
 
-// MARK: - Android: what hosting costs, and what D24 means per control
+// MARK: - Android: what hosting costs, and the sizing rules per control
 
 if (Platform.OS === 'android') {
   /**
-   * N4 (H1's review): a hosted child arms nothing for a composition it never builds.
-   *
-   * `NitroComposeHost` arms two things for a control that owns its composition — a
-   * `ViewCompositionStrategy` (which installs an observer on the activity's
-   * `LifecycleRegistry`) and a first-frame `OnPreDrawListener`. Both are keyed to *this*
-   * view's composition. A hosted child has none, so arming them bought nothing and cost
-   * one `LifecycleRegistry` registration per child per mount — which is what a list of
-   * hosted controls is made of.
+   * A hosted child arms nothing for a composition it never builds. A control that owns
+   * its composition arms a `ViewCompositionStrategy` (an observer on the activity's
+   * `LifecycleRegistry`) and a first-frame `OnPreDrawListener`, both keyed to its own
+   * view's composition.
    */
   describe('Host · a hosted control arms no composition guards (N4)', () => {
     let log: Log;
@@ -1517,7 +1350,7 @@ if (Platform.OS === 'android') {
           const [ever = '', live = ''] = line.split('|live:');
           return { ever, live };
         });
-      // The claim: nothing armed, and nothing installed, for a control the Host draws.
+      // Nothing armed, and nothing installed, for a control the Host draws.
       expect(read(hostedIds).map((guards) => guards.ever)).toEqual([
         '',
         '',
@@ -1528,21 +1361,16 @@ if (Platform.OS === 'android') {
         '',
         '',
       ]);
-      // The witness that the probe reads a field that really gets written: the same
-      // control, mounted beside the Host, armed both of them. The `ever` half is about
-      // the mount rather than about this instant on purpose — the first-frame listener
-      // unregisters itself once it has marked, so a live-only probe would read `""` for
-      // a hosted child whether or not the guard that stops it arming is there. Round 1's
-      // mutation proved exactly that: with the guard deleted the test stayed green.
+      // The same control mounted beside the Host armed both. `ever` is about the mount
+      // rather than this instant: the first-frame listener unregisters itself once it
+      // has marked, so a live-only probe would read empty either way.
       expect(read(aloneIds).map((guards) => guards.ever)).toEqual([
         'strategy,preDraw',
         'strategy,preDraw',
       ]);
 
-      // And it stays nothing after the control is used: a recomposition of a hosted child
-      // must not lazily arm what its attach declined to arm.
-      // The press goes to the first row of the column, which is where the Host put
-      // `n4-hosted-0`.
+      // It stays nothing after the control is used. The press goes to the first row of
+      // the column, which is where the Host put `n4-hosted-0`.
       expect(await pressRow(host, 'n4-hosted-0', log)).toBe('n4-hosted-0');
       await settle(300);
       expect(read(hostedIds).map((guards) => guards.ever)).toEqual([
@@ -1555,19 +1383,11 @@ if (Platform.OS === 'android') {
     });
 
     /**
-     * The other half of N4: a control that *moves* into a Host gives back what its
-     * unhosted mount armed (`NitroComposeHost.releaseOwnCompositionGuards`), and takes it
-     * back again when it moves out.
-     *
-     * The case above gates `armCompositionStrategy` declining for a child that arrives
-     * hosted. This is the transition that finds the guards already armed — reachable
-     * without an app doing anything exotic, because RN's flattening (not the app) decides
-     * who the Host's native child is, and a wrapper that starts or stops owning a view
-     * flips that decision (`Reparenter`).
-     *
-     * The `ever` half cannot see this release: an arming that was given back still
-     * happened. So this reads the `live` half, which is the only witness the release path
-     * has — deleting that call is what turns this red (review S2).
+     * A control that moves into a Host gives back what its unhosted mount armed, and
+     * takes it back when it moves out. RN's flattening decides who the Host's native
+     * child is, so a wrapper that starts or stops owning a view moves the control
+     * (`Reparenter`). Only the `live` half sees the release: an arming that was given
+     * back still happened.
      */
     it('gives back its own guards when flattening moves a live control into a Host', async () => {
       const id = 'move-in-0';
@@ -1588,10 +1408,8 @@ if (Platform.OS === 'android') {
         const [ever = '', live = ''] = line.split('|live:');
         return { ever, live };
       };
-      // Step 1 — the wrapper owns a view, so the Switch is a control like any other: it
-      // armed both guards for its own composition, and still holds the strategy that its
-      // composition is installed against. (Measured here: a real 52 x 48 box, and a press
-      // that answers.)
+      // Step 1: the wrapper owns a view, so the Switch armed both guards for its own
+      // composition and still holds the strategy.
       await boxOf(id);
       await handleOf(() => log.switches[id], id);
       await settle(600);
@@ -1600,27 +1418,21 @@ if (Platform.OS === 'android') {
       expect(await pressRow(await boxOf('move-wrap'), id, log)).toBe(id);
       expect(log.acceptedSwitches[id]).toBe(true);
 
-      // Step 2 — make the wrapper layout-only and RN's differ reparents the Switch's view
-      // into the Host's group, which composes it. Its own composition is disposed, and the
-      // strategy — the activity `LifecycleRegistry` observer — has to go with it, or a
-      // control that once lived outside a Host keeps an observer for a composition that no
-      // longer exists. The `ever` half says the arming happened; the `live` half is what
-      // `releaseOwnCompositionGuards()` answers, and is the only witness that path has.
+      // Step 2: make the wrapper layout-only and RN's differ reparents the Switch's
+      // view into the Host's group, which composes it. Its own composition is disposed,
+      // and the activity lifecycle observer has to go with it.
       log.setWrapperDraws?.(false);
       await settle(900);
       expect(guards().ever).toBe('strategy,preDraw');
       expect(guards().live).toBe('');
 
-      // And it is a control in its new home, not a corpse with tidy bookkeeping: the Host's
-      // composition draws it, so the column's first row answers — a second time, which says
-      // the press reached the same instance rather than a stale handle.
+      // The Host's composition draws it now, so the column's first row answers.
       expect(await pressRow(await boxOf('move-wrap'), id, log)).toBe(id);
       expect(log.acceptedSwitches[id]).toBe(false);
 
-      // Step 3 — the way back. Un-flattening the wrapper moves the control out again, and
-      // the arm a hosted attach declined has to run: `strategyArmed` is false, so this is
-      // the re-arm. (`watchForFirstFrame` stays declined for this mount, which has already
-      // marked a frame.)
+      // Step 3: un-flattening the wrapper moves the control out again, and the strategy
+      // has to be re-armed. The first-frame listener stays unarmed, because this mount
+      // has already marked a frame.
       log.setWrapperDraws?.(true);
       await settle(900);
       expect(guards().live).toBe('strategy');
@@ -1630,17 +1442,11 @@ if (Platform.OS === 'android') {
     });
 
     /**
-     * A hosted Slider answers the platform's own adjustable action.
-     *
-     * The seam (`nuiTestAccessibilityStep`) searches for the semantics node that
-     * publishes `SetProgress` — and for a hosted control that node lives in the
-     * **Host's** Compose view, so the probe starts there. Two things fail without the
-     * work this covers: the search would answer "no Compose root" for a control that is
-     * composed perfectly well, and the announcement Compose sends for the semantics
-     * change leaves through the *Host's* view, which is where the accessibility-off
-     * guard now sits — without it the platform answers
-     * `IllegalStateException: Accessibility off. Did you forget to check that?` and the
-     * app dies with a hosted Slider in it.
+     * A hosted Slider answers the platform's own adjustable action. The node that
+     * publishes `SetProgress` lives in the Host's Compose view, so the probe starts
+     * there. The announcement Compose sends for the change also leaves through the
+     * Host's view, and the platform throws `IllegalStateException: Accessibility off`
+     * if that is sent while accessibility is off.
      */
     it('lets a screen reader step a hosted Slider through the Host composition', async () => {
       const { unmount } = await mount(
@@ -1666,25 +1472,18 @@ if (Platform.OS === 'android') {
       handle.nuiTestAccessibilityStep(1);
       await settle(700);
       const report = handle.nuiTestAccessibilityStepReport();
-      // Performed on the real node, not synthesised by us: the report says which action
-      // it found and where it landed.
+      // Performed on the real node: the report says which action it found.
       expect(report).toContain('performed SetProgress');
-      // And the rule under test is the library's, not M3's: one stride up from 3 on
-      // `0…12 step 3` is 6.
+      // One stride up from 3 on `0…12 step 3` is 6.
       expect(log.acceptedSliders['a11y-slide']).toBe(6);
       expect(handle.value).toBe(6);
       unmount();
     });
   });
 
-  /**
-   * D24 per control, measured.
-   *
-   * `docs/architecture/sizing.md` §10 states the rule; these are the numbers. Each case
-   * mounts one fixture, probes it, and unmounts before the next — two fixtures sharing
-   * the screen share coordinates, so a press would answer for whichever Compose view is
-   * on top rather than for the style under test.
-   */
+  // Each case mounts one fixture, probes it, and unmounts before the next: two fixtures
+  // sharing the screen share coordinates, so a press would answer for whichever Compose
+  // view is on top.
   describe('Host · sizing rules per control (D24)', () => {
     let log: Log;
     beforeEach(() => {
@@ -1693,12 +1492,9 @@ if (Platform.OS === 'android') {
 
     /**
      * Mount one `Slide` in a Host, tap the track at an x offset, and report the value
-     * the tap produced (or `null` for nothing answering).
-     *
-     * The value is the instrument, not a pixel: M3 turns the tap's position into a
-     * fraction of *the width it was laid out at*, so the same absolute offset is worth
-     * different values in a wide Host and a narrow one. That is the `fillWidth` rule read
-     * through the event stream, with no second layout implementation in the test.
+     * the tap produced (or `null` for nothing answering). M3 turns the tap's position
+     * into a fraction of the width the track was laid out at, so the same offset is
+     * worth different values in a wide Host and a narrow one.
      */
     async function tapSlider(options: {
       testId: string;
@@ -1758,9 +1554,8 @@ if (Platform.OS === 'android') {
         Math.round(wide.box.width),
         Math.round(narrow.box.width),
       ]).toEqual([260, 100]);
-      // 50 dp is a small fraction of a 260 dp track and about half of a 100 dp one. How
-      // large exactly is M3's business (thumb inset), so the assertion is the ordering
-      // and a margin far wider than that inset, not two expected numbers.
+      // 50 dp is a small fraction of a 260 dp track and about half of a 100 dp one. The
+      // exact value depends on M3's thumb inset, so only the ordering is asserted.
       expect(wide.value!).toBeLessThan(35);
       expect(narrow.value!).toBeGreaterThan(35);
       expect(narrow.value! - wide.value!).toBeGreaterThan(15);
@@ -1777,8 +1572,8 @@ if (Platform.OS === 'android') {
       expect(far.value).not.toBeNull();
       expect(far.value!).toBeGreaterThan(90);
 
-      // And the child's own style is decorative for a `fillWidth` control too: no style
-      // at all answers the same value at the same offset in the same Host.
+      // The child's own style does not matter: no style at all answers the same value
+      // at the same offset in the same Host.
       const unstyled = await tapSlider({
         testId: 'wide-slider-unstyled',
         hostStyle: { width: 260, height: 120 },
@@ -1789,16 +1584,9 @@ if (Platform.OS === 'android') {
       );
     });
 
-    /**
-     * A hosted Slider's `disabled` and its snap-back, read out of the composition.
-     *
-     * `nuiTestDrag` drives `SliderModel` directly: it refuses on `model.enabled` before
-     * Compose is involved and starts from `model.displayed`, a model field rather than the
-     * drawing. So the Slider suite's versions of these two cases say the model behaved;
-     * they cannot say the Host's shared composition received the `enabled` recomposition
-     * or redrew the old value (review M3/S1). A tap can, because M3 turns a press on the
-     * track into a value *inside* that composition — or refuses it there.
-     */
+    // `nuiTestDrag` drives the Slider's model directly, so it cannot show that the
+    // Host's composition received `enabled` or redrew the old value. A tap can: M3
+    // turns a press on the track into a value inside that composition, or refuses it.
     it('asks the composition, not the model, whether a hosted Slider is enabled', async () => {
       const id = 'tap-slide-0';
       const { unmount } = await mount(
@@ -1809,9 +1597,9 @@ if (Platform.OS === 'android') {
         </View>
       );
       const box = await boxOf('tap-slide-host');
-      // 200 dp along the track, twice over: a disabled M3 Slider refuses the press, and
-      // the refusal has to be the control's rather than the Host drawing nothing, so the
-      // same press at the same offset answers as soon as one prop changes.
+      // A disabled M3 Slider refuses the press. The same press at the same offset
+      // answers once the prop changes, so the refusal was the control's and not a Host
+      // drawing nothing.
       expect(await probeIn(box, 200, 24, [id], log)).toBeNull();
       expect(log.slides.filter((event) => event.id === id)).toHaveLength(0);
 
@@ -1823,7 +1611,7 @@ if (Platform.OS === 'android') {
         .map((event) => event.value);
       expect(asked.length).toBeGreaterThan(0);
       // 200 of a 300 dp Host: the value the composition was laid out to answer, not the
-      // child's own style width (D24) and not a value the test injected.
+      // child's own style width.
       expect(Math.max(...asked)).toBeGreaterThan(0.3);
       expect(Math.max(...asked)).toBeLessThan(1);
       unmount();
@@ -1918,8 +1706,7 @@ if (Platform.OS === 'android') {
       // leading edge, not centred in the Host's box.
       expect(short.answered[0]).toBe(12);
       expect(long.answered[0]).toBe(12);
-      // Neither reaches 250 dp of a 260 dp Host: a Button does not stretch to fill,
-      // which is the `intrinsic` half of the rule.
+      // Neither reaches 250 dp of a 260 dp Host: a Button does not stretch to fill.
       expect(short.answered).not.toContain(250);
       expect(long.answered).not.toContain(250);
       // The width comes from the *content*: the long title answers for offsets the short
@@ -1929,8 +1716,8 @@ if (Platform.OS === 'android') {
       for (const offset of short.answered) {
         expect(long.answered).toContain(offset);
       }
-      // And a child's own RN frame is decorative, exactly as it is for a Switch: 220 dp
-      // of `width` and 120 dp of `height` on the child change nothing about the drawing.
+      // A child's own RN frame does not matter: 220 dp of `width` and 120 dp of
+      // `height` on the child change nothing about the drawing.
       expect(styled.answered).toEqual(short.answered);
     });
   });

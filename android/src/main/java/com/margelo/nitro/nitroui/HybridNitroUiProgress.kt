@@ -36,123 +36,50 @@ import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
-/*
- * The Progress component: Material 3's `LinearProgressIndicator` and
- * `CircularProgressIndicator`, their `…WavyProgressIndicator` forms, and
- * Expressive's `LoadingIndicator` / `ContainedLoadingIndicator`, on the core
- * runtime. Which of the six is built is decided by `variant`, `appearance` and
- * `contained` - the three props that make up this control's sizing key.
- *
- * It is the library's first **non-interactive** control, so this is the file that
- * shows what a component without a handshake looks like
- * (`docs/architecture/core.md` §12): no `NitroUiControlledValue`, no
- * `mostRecentEventCount`, no callback prop, and an `afterUpdate()` that is only
- * `host.commit()`. That is what makes a `value` written at 60 Hz cheap - one
- * props commit per JS turn, and no round trip to wait for.
- *
- * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
- * `HybridNitroUiProgressManager` resolves `HybridNitroUiProgress` through a
- * wildcard import of exactly that package. Core helpers live in `...nitroui.core`.
- */
+// Material 3's linear, circular, wavy and loading progress indicators. Must stay in this
+// package: the generated manager finds the implementation through a wildcard import of it.
 
-/** State of one Progress. See [NitroUiModel] for the shape this has to have. */
 internal class ProgressModel : NitroUiModel() {
-  /**
-   * `'linear'`, `'circular'` or `'loading'`. Rendered (it picks the indicator), so
-   * Compose reads it.
-   */
+  /** `'linear'`, `'circular'` or `'loading'`. */
   var variant by mutableStateOf(VARIANT_LINEAR)
 
-  /**
-   * `'flat'` or `'wavy'`. Rendered: it picks *which* indicator composable is built,
-   * and a wavy bar/ring measures a bigger box than the flat one, which is why the
-   * sizing key carries it.
-   *
-   * A `'loading'` indicator has no wavy form, so [drawsWavy] is the question the
-   * drawing code asks rather than this field.
-   */
+  /** `'flat'` or `'wavy'`. The loading shape has no wavy form, so drawing code asks [drawsWavy]. */
   var appearance by mutableStateOf(APPEARANCE_FLAT)
 
-  /**
-   * Whether a `'loading'` indicator is drawn inside Material's tonal container
-   * ([ContainedLoadingIndicator]). Rendered, and part of the sizing key like the
-   * other two configuration props - although both loading boxes measure the same
-   * 48 dp, so this one re-measures to the same number.
-   */
+  /** Whether a `'loading'` indicator is drawn inside Material's tonal container. */
   var contained by mutableStateOf(false)
 
-  /**
-   * The fraction React sent, unclamped, or `null` for an indeterminate indicator.
-   *
-   * Observed: the indicator reads it (through [drawnValue]) on every recomposition
-   * that matters. Clamping happens in [drawnValue], where the drawing code has to
-   * stay in range, rather than here, where the prop getter has to answer what was
-   * sent.
-   */
+  /** The fraction React sent, unclamped, or `null` for indeterminate. Clamped in [drawnValue]. */
   var value by mutableStateOf<Double?>(null)
 
   /** ARGB `processColor` int of the indicator, or `null` for the scheme's. */
   var tintColor by mutableStateOf<Int?>(null)
 
-  /**
-   * ARGB `processColor` int of the track, or `null` for the scheme's.
-   *
-   * Observed here, unlike on iOS, where SwiftUI's `ProgressView` has nothing that
-   * addresses its track and the value is only stored
-   * (`docs/components/progress.md`).
-   */
+  /** ARGB int of the track, or `null` for the scheme's. */
   var trackColor by mutableStateOf<Int?>(null)
 
-  /**
-   * `accessibilityLabel`, read by the composable so the label can go on the
-   * indicator itself - see the a11y rule in `docs/architecture/core.md`.
-   */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
   /**
-   * Whether this host is attached to a window. Observed, because it decides which
-   * indicator gets composed ([drawnValue]).
-   *
-   * An indeterminate M3 indicator animates itself from the composition, and a
-   * composition outlives the view's detach (`NitroComposeHost` disposes it through
-   * the activity's lifecycle, not the window - `AbstractComposeView` has no
-   * `onDetachedFromWindow` to dispose it), so an indicator that simply stayed
-   * indeterminate would keep asking for frames with nobody watching it. iOS draws
-   * the same rule (`HybridNitroUiProgress.swift`).
+   * Whether the host is attached to a window. An indeterminate indicator animates from the
+   * composition, which outlives a detach, so off-window it must not be drawn indeterminate.
    */
   var inWindow by mutableStateOf(false)
 
-  /**
-   * The size configuration React sent: `''`, `'wavy'`, `'circular'`,
-   * `'circular|wavy'`, `'loading'` or `'loading|contained'`
-   * (`progressSizingKey` in `src/components/Progress/Progress.tsx` writes it).
-   * Stored for symmetry with the other props; the sizing engine reads the key out
-   * of Fabric state itself, so nothing native looks at this.
-   */
+  /** Stored for the getter only: the sizing engine reads the key from Fabric state. */
   var sizingKey = ""
 
   /** Guards the two mirrors below: written on the UI thread, read on the JS thread. */
   private val mirrorLock = Any()
 
-  /** What the drawing code was last handed, as one line. */
   private var drawnReport = "displayed=none"
 
-  /** Whether this control is allowed to be animating. See [isAnimating]. */
   private var animating = false
 
   /**
-   * The fraction to hand the drawing code, clamped into range, or `null` for the
-   * indeterminate indicator.
-   *
-   * Out of range clamps (progress that arrives from a download callback overshoots,
-   * and an indicator that vanished over it is worse than one that looked full for a
-   * frame); `NaN` counts as out of range and lands on 0, because it is what an
-   * unfinished division produces.
-   *
-   * The off-window rule: away from a window an indeterminate indicator is drawn as
-   * an **empty determinate** one in the same style - same style, so the measured
-   * size does not move, and empty because that is the one determinate state that
-   * needs no motion. Re-attaching restores it.
+   * The fraction to draw, clamped to 0..1 (`NaN` reads as 0), or `null` for indeterminate.
+   * Off-window an indeterminate indicator is drawn as an empty determinate one: the same
+   * size, and no animation.
    */
   val drawnValue: Double?
     get() {
@@ -163,13 +90,7 @@ internal class ProgressModel : NitroUiModel() {
       return if (inWindow) null else 0.0
     }
 
-  /**
-   * Record what the drawing code was handed, from the composable.
-   *
-   * Called where the control is drawn rather than in a prop setter, which is what
-   * makes [displayedReport] a reading of the hosted control instead of an echo of
-   * the prop.
-   */
+  /** Called from the composable, so the report is what was drawn, not what was sent. */
   fun recordDrawn(drawn: Double?) {
     synchronized(mirrorLock) {
       drawnReport = drawn?.let { "displayed=$it" } ?: "displayed=indeterminate"
@@ -177,23 +98,18 @@ internal class ProgressModel : NitroUiModel() {
     }
   }
 
-  /** Say so from somewhere that is not the composable (a detach, a recycle). */
+  /** Refreshes the report from outside the composable (a detach, a recycle). */
   fun refreshAnimationReport() {
     recordDrawn(drawnValue)
   }
 
-  /** What the control displays, as one line. Thread-safe. */
+  /** Thread-safe. */
   val displayedReport: String
     get() = synchronized(mirrorLock) { drawnReport }
 
   /**
-   * Whether the control is allowed to be animating. Thread-safe.
-   *
-   * Two things animate it, and only one of them is the indeterminate spinner:
-   * Material's *determinate* wavy indicators travel too ([waveSpeed]), so a wavy
-   * configuration counts while it is in the window, value or not. Away from a
-   * window neither may animate - the indeterminate one is drawn as an empty
-   * determinate indicator and the wave is pinned at zero.
+   * Thread-safe. Material's determinate wavy indicators animate too, so a wavy configuration
+   * counts while it is in the window, with or without a value.
    */
   val isAnimating: Boolean
     get() = synchronized(mirrorLock) { animating }
@@ -202,33 +118,16 @@ internal class ProgressModel : NitroUiModel() {
   val isIntrinsicShape: Boolean
     get() = variant == VARIANT_CIRCULAR || variant == VARIANT_LOADING
 
-  /**
-   * Whether a wavy composable is what draws.
-   *
-   * The `'loading'` shape has no wavy form in Material 3, so `appearance` asks
-   * nothing of it - the same kind of documented no-op as `trackColor` on iOS, and
-   * the reason the JS wrapper does not even send `'wavy'` for that shape.
-   */
+  /** The `'loading'` shape has no wavy form in Material 3. */
   val drawsWavy: Boolean
     get() = appearance == APPEARANCE_WAVY && variant != VARIANT_LOADING
 
-  /** Whether the loading indicator is drawn inside its container. */
   val drawsContainer: Boolean
     get() = contained && variant == VARIANT_LOADING
 
   /**
-   * `waveSpeed` for a wavy composable, or `null` to leave it at Material's own.
-   *
-   * Material's determinate wave *travels*: `BaseLinearWavyProgressNode` and
-   * `BaseCircularWavyProgressNode` run an `infiniteRepeatable` offset animation
-   * whenever the node is attached and the speed is above zero, and the determinate
-   * indicators default that speed to the wavelength. So the off-window swap to an
-   * empty determinate indicator (`[drawnValue]`) never ended the animation - it
-   * left a wave nobody could see asking for frames while [isAnimating] reported
-   * `false`. Zero is the one value that stops that animation, and it is asked for
-   * exactly when [inWindow] is false, which is also the only time the indicator is
-   * forced determinate; in the window nothing is passed at all, so Material's own
-   * tuning stays Material's.
+   * `null` leaves Material's own wave speed. Material's determinate wave keeps animating
+   * while its speed is above zero, so off-window the speed is forced to zero.
    */
   val waveSpeed: Dp?
     get() = if (inWindow) null else 0.dp
@@ -264,29 +163,13 @@ internal class ProgressModel : NitroUiModel() {
   }
 }
 
-/**
- * The Progress's host: [NitroComposeHost] plus this component's composable and the
- * window flag the animation gate needs.
- *
- * [Component] is fixed for the lifetime of the view, which is why it lives in a
- * subclass rather than being handed in as a lambda - there is no `setContent`
- * anywhere in this library after construction.
- */
 private class ProgressHost(
   context: ThemedReactContext,
   activity: Activity?,
   model: ProgressModel,
 ) : NitroComposeHost<ProgressModel>(context, activity, model) {
 
-  /**
-   * A `<Host>` composes this control (H2a). Same line as the Switch's, same JS row.
-   *
-   * The one thing that needed checking is the animation gate: [ProgressModel.inWindow]
-   * is written by the attach of *this* view, and a hosted child is attached (the Host
-   * `addView`s it), so an indeterminate indicator keeps animating inside the shared
-   * composition and stops when the Host leaves the window - which detaches every child
-   * through this same view.
-   */
+  /** A `<Host>` may compose this control; it still attaches this view, which sets `inWindow`. */
   override val isHostable: Boolean
     get() = true
 
@@ -301,11 +184,8 @@ private class ProgressHost(
       return
     }
     model.inWindow = true
-    // Not `host.commit()`: nothing about a window change is a props apply, and
-    // `commit()` would mark `propsApplied` for a turn in which no props arrived
-    // (`docs/architecture/core.md` §8). The snapshot write is already visible to
-    // the composition; this is what makes it land now rather than at the next
-    // global apply.
+    // Not `commit()`: a window change is not a props apply. This makes the snapshot write
+    // reach the composition now rather than at the next global apply.
     Snapshot.sendApplyNotifications()
   }
 
@@ -321,22 +201,12 @@ private class ProgressHost(
 }
 
 /**
- * The indicator itself.
- *
- * Reads [ProgressModel.drawnValue] here, in the smallest composable that needs it:
- * a `value` write at 60 Hz invalidates this group and nothing else, and Material 3
- * reads the lambda during its own composition, so the new fraction reaches the
- * canvas without a recomposition of anything above it.
- *
- * Colours are resolved to explicit values rather than being left to M3's defaults:
- * `ProgressIndicatorDefaults.linearColor` and friends are `@ReadOnlyComposable`
- * reads of the shared scheme (not allocations), so passing them costs the same as
- * letting M3 read them, and it keeps one code path for tinted and untinted.
+ * Reads [ProgressModel.drawnValue] in the smallest composable that needs it, so a `value`
+ * written every frame invalidates this group and nothing above it.
  */
 @Composable
 private fun ProgressContent(model: ProgressModel) {
   val drawn = model.drawnValue
-  // The reading of the hosted control that `nuiTestDisplayedValue()` answers with.
   model.recordDrawn(drawn)
 
   val tint = model.tintColor
@@ -347,16 +217,8 @@ private fun ProgressContent(model: ProgressModel) {
   val wavy = model.drawsWavy
   val contained = model.drawsContainer
 
-  // One accessibility node for the control: the label it was given, and the value
-  // as a progress range (indeterminate says so with M3's own `Indeterminate`).
-  // `clearAndSetSemantics` rather than an extra `semantics { }`, the Slider's
-  // reasoning (`HybridNitroUiSlider.kt`): the subtree is cleared to exactly this
-  // node, so a screen reader hears one rule from one place.
-  //
-  // It also clears whatever semantics the indicator itself installs - the wavy
-  // indicators call `progressSemantics()` and the loading indicator publishes its
-  // own `ProgressBarRangeInfo` - which is the point: one node, published by this
-  // file, with the value React sent rather than the one the composable guessed.
+  // One accessibility node for the control. `clearAndSetSemantics` also removes the
+  // semantics the wavy and loading indicators install themselves.
   val semantics =
     Modifier.clearAndSetSemantics {
       if (label != null) {
@@ -370,14 +232,8 @@ private fun ProgressContent(model: ProgressModel) {
         }
     }
 
-  // `fillMaxWidth` is what makes the M3 bar mean "the width is the box"
-  // (`docs/architecture/sizing.md` §5): the modifier's own default is
-  // `size(240.dp, 4.dp)`, so without it the indicator measures its preferred
-  // 240 dp and is centred in whatever box the host was given. With it, the bar
-  // takes the constraint the `fillWidth` question forwarded, and under an
-  // *unbounded* constraint `fillMaxWidth` is a no-op, which is why the intrinsic
-  // measurement path is unaffected. The wavy bar needs the same line for the same
-  // reason - its own preferred size is `size(240.dp, 10.dp)`.
+  // Material's bar defaults to `size(240.dp, 4.dp)`; `fillMaxWidth` makes it take the
+  // box's width instead, and is a no-op under an unbounded constraint.
   val barModifier = semantics.fillMaxWidth()
 
   when {
@@ -385,15 +241,10 @@ private fun ProgressContent(model: ProgressModel) {
 
     circular && wavy -> {
       val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
-      // Material's wavy indicators share one track default across both states,
-      // and it is the visible one (`ProgressIndicatorTokens.TrackColor`), which
-      // is why a wavy ring keeps its track while indeterminate and the flat ring
-      // - whose own default for that state is transparent - does not.
+      // Wavy indicators use one visible track default for both states.
       val trackTint =
         track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
-      // `null` means "Material's own speed", which is the travelling wave. A value
-      // arrives only off-window - `drawnValue` forces the determinate form there -
-      // and the one value that stops the wave is the zero it sends.
+      // `null` keeps Material's own speed; a value arrives only off-window, where it is zero.
       val speed = model.waveSpeed
       if (drawn == null) {
         CircularWavyProgressIndicator(modifier = semantics, color = color, trackColor = trackTint)
@@ -418,9 +269,7 @@ private fun ProgressContent(model: ProgressModel) {
     circular -> {
       val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
       if (drawn == null) {
-        // Material 3 has separate track defaults for the two states, so each branch
-        // falls back to its own - `circularTrackColor` is the deprecated alias of one
-        // of them, and an app that sets `trackColor` overrides both.
+        // Material 3 has separate track defaults for the indeterminate and determinate states.
         val trackTint =
           track?.let { ComposeColor(it) }
             ?: ProgressIndicatorDefaults.circularIndeterminateTrackColor
@@ -439,11 +288,7 @@ private fun ProgressContent(model: ProgressModel) {
     }
 
     wavy -> {
-      // Material's own defaults for amplitude, wavelength and speed: the brief's
-      // rule, and the right one - they are the numbers in Material's spec for the
-      // wavy form, and a component that passed its own would own tuning them. The
-      // one speed this does pass is the off-window zero, which is a stop rather
-      // than a tuning ([ProgressModel.waveSpeed]).
+      // Material's own amplitude, wavelength and speed, except the off-window zero speed.
       val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearColor
       val trackTint =
         track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
@@ -487,19 +332,8 @@ private fun ProgressContent(model: ProgressModel) {
 }
 
 /**
- * The `variant="loading"` shape: Material 3 Expressive's morphing indicator,
- * contained or not, determinate when React sent a fraction and indeterminate
- * otherwise.
- *
- * This is the file's **only** use of an `@ExperimentalMaterial3ExpressiveApi`
- * surface, and the opt-in is written here rather than at the file so the rest of
- * Progress - the flat indicators, the wavy ones, the sizing, the a11y node and the
- * whole host - keeps its ordinary "no opt-in required" compile-time guarantee.
- *
- * What the opt-in costs at material3 1.5.0 stable is written up in
- * `docs/components/progress.md`; in short: an experimental member can change shape
- * or vanish between minors without a deprecation cycle, and this file is where any
- * such break would compile red, in one place, with the four call sites below.
+ * The `variant="loading"` shape. The only experimental Material 3 API in this file, so the
+ * opt-in is on this function rather than on the file.
  */
 @Composable
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -513,10 +347,7 @@ private fun LoadingShape(
   if (model.drawsContainer) {
     val indicator =
       tint?.let { ComposeColor(it) } ?: LoadingIndicatorDefaults.containedIndicatorColor
-    // `trackColor` has a job to do on this one shape: a contained loading
-    // indicator's container is the thing behind the shape, which is what the prop
-    // means everywhere else. Every other shape either paints its track (the flat
-    // and wavy indicators) or has none (the plain loading indicator).
+    // On this shape `trackColor` paints the container behind the indicator.
     val container =
       track?.let { ComposeColor(it) } ?: LoadingIndicatorDefaults.containedContainerColor
     if (drawn == null) {
@@ -543,7 +374,6 @@ private fun LoadingShape(
   }
 }
 
-/** The Hybrid View React renders as `NitroUiProgress`. */
 class HybridNitroUiProgress(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiProgressSpec(), RecyclableView {
@@ -551,62 +381,25 @@ class HybridNitroUiProgress(
   private val model = ProgressModel()
   private val host = ProgressHost(reactContext, reactContext.currentActivity, model)
 
-  /** The Nitro `view` - created once here and never replaced. */
   override val view: View
     get() = host
 
   init {
-    // Both variants are self-sized: a linear bar measures its height, a circular
-    // one its square.
     host.wantsContentSize = true
-    // The default variant is linear, so the default policy is `fillWidth`; the
-    // `variant` setter moves it along with the rest of the variant change.
+    // The default variant is linear; the `variant` setter changes the policy with it.
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
-    // The backstop: `NitroUiDeclaredFallbacks` registers this at startup, which is
-    // the point that matters (see its doc comment).
+    // A backstop: fallbacks are normally declared at package init.
     declareFallback()
   }
 
   companion object {
-    /**
-     * This component's name in the sizing engine: `HybridNitroUiProgressComponentName`
-     * in the generated C++, and `getName()` in the generated Kotlin manager.
-     */
+    /** Must match the name in the generated C++ and in the generated manager's `getName()`. */
     private const val SIZING_COMPONENT_NAME = "NitroUiProgress"
 
     /**
-     * The size to lay a Progress out with before anything has been measured, in dp:
-     * the first Progress of an app's first launch.
-     *
-     * **The linear variant's numbers**, because the engine's declared-fallback map is
-     * keyed by *component*, not by configuration (`docs/architecture/sizing.md` §2),
-     * so one pair has to serve both shapes and the default variant is the one to
-     * serve. A cold first *circular* mount is therefore laid out at the linear box for
-     * one frame before its own measurement corrects it - D17's one-frame budget, and
-     * the harness test that names it.
-     *
-     * Six configurations, one declaration, so five of them pay that frame: the ring
-     * and the loading indicator are both squares (40 dp and 48 dp), and the wavy bar
-     * is 10 dp rather than 4. `docs/components/progress.md` has the table, and the
-     * harness's `lays every configuration out at the size it measures` test is what
-     * checks each one against its own number rather than against this pair.
-     *
-     * Both halves matter, for different parents (sizing.md §5). Under a finite
-     * parent the box owns the width, so the **height** is the number that has to be
-     * right: on the API 35 / 420 dpi emulator this task measured on, M3's
-     * `LinearProgressIndicator` is 11 whole pixels - **4.19 dp** - and
-     * `CircularProgressIndicator` is a **40 dp** square, the pair with iOS's in the
-     * table in `docs/components/progress.md`. The declared 4 dp is 4.19 dp's
-     * nearest whole dp, so a cold bar is one tenth of a dp off on its first frame
-     * and the correction path has nothing to chase.
-     *
-     * Under a parent that gives no finite width - a bar in a horizontal
-     * `ScrollView` - there is no box width to substitute, and since F3 nothing files
-     * a measured width into a `fillWidth` entry either, so the **declared width is
-     * what draws**, on every frame and not just the first. [FALLBACK_WIDTH_DP] is
-     * therefore a decision about how long an unbounded bar looks rather than a
-     * placeholder; F3's own change is what made it so (before, such a bar drew at
-     * whichever width some other Progress had last been measured at).
+     * The size used before anything has been measured, in dp. Fallbacks are keyed by component,
+     * so this is the linear bar's and the other shapes are corrected after their first measure.
+     * Under a parent with no finite width the declared width is what a bar draws at.
      */
     private const val FALLBACK_WIDTH_DP = 320.0
     private const val FALLBACK_HEIGHT_DP = 4.0
@@ -614,13 +407,8 @@ class HybridNitroUiProgress(
     private val fallbackDeclared = AtomicBoolean(false)
 
     /**
-     * One JNI call per process, before the first Progress can be measured.
-     *
-     * Called from `NitroUiDeclaredFallbacks.registerAll()` at package init - a Fabric
-     * measure can happen before this class has ever been instantiated, so a fallback
-     * declared from `init` is one measure too late for the first instance (T14) - and
-     * from `init` as the backstop. The two calls land on different threads, hence the
-     * atomic.
+     * One JNI call per process. Called at package init, because Fabric can measure before this
+     * class is first instantiated, and from `init` as a backstop, on a different thread.
      */
     internal fun declareFallback() {
       if (!fallbackDeclared.compareAndSet(false, true)) {
@@ -641,8 +429,7 @@ class HybridNitroUiProgress(
   override var variant: String
     get() = model.variant
     set(next) {
-      // The wrapper is the only writer and sends one of the three names; anything
-      // else behaves as `'linear'`, which is what the spec documents.
+      // Anything but the three names behaves as `'linear'`.
       val normalized =
         when (next) {
           ProgressModel.VARIANT_CIRCULAR -> ProgressModel.VARIANT_CIRCULAR
@@ -653,14 +440,9 @@ class HybridNitroUiProgress(
         return
       }
       model.variant = normalized
-      // The one prop that changes the control's size, and the question the measure
-      // pass asks (an `intrinsic` square vs a bar at the box's width), so the policy
-      // moves with it. A *fresh* composition is what picks the question up:
-      // `NitroUiMeasuredRoot` captures it when the composition is built, so
-      // `Progress.tsx` keys the native view on the variant and a change remounts
-      // (see the doc comment there). The setter still runs before that mount's first
-      // measure, which is what makes the new policy the one its first frame uses.
-      // A loading indicator is a square like a ring, so it asks the same question.
+      // The sizing policy follows the shape: a square is intrinsic, a bar fills the width.
+      // A composition captures the policy when it is built, so JS remounts the view on a
+      // variant change, and this setter runs before that mount's first measure.
       host.sizingPolicy =
         if (model.isIntrinsicShape) {
           NitroUiSizing.POLICY_INTRINSIC
@@ -673,8 +455,7 @@ class HybridNitroUiProgress(
   override var appearance: String
     get() = model.appearance
     set(next) {
-      // The wrapper normalises (`Progress.tsx`), so `'wavy'` reaches here only for a
-      // shape that has a wavy form; anything else behaves as `'flat'`.
+      // Anything but `'wavy'` behaves as `'flat'`.
       val normalized = if (next == ProgressModel.APPEARANCE_WAVY) {
         ProgressModel.APPEARANCE_WAVY
       } else {
@@ -684,11 +465,8 @@ class HybridNitroUiProgress(
         return
       }
       model.appearance = normalized
-      // Rendered (it picks the composable) and size-affecting - a wavy bar is 10 dp
-      // tall where the flat one is 4 - but *not* a new sizing question: the policy
-      // is the same, so the view is not remounted and the measure the new
-      // configuration needs is asked by the `nuiSizingKey` write that arrives in the
-      // same props batch.
+      // Changes the size but not the sizing policy; the `nuiSizingKey` write in the same
+      // props batch asks for the measure.
       host.markDirty()
     }
 
@@ -699,11 +477,7 @@ class HybridNitroUiProgress(
         return
       }
       model.contained = next
-      // Rendered only for `variant="loading"`, where it swaps in
-      // [ContainedLoadingIndicator]. Both boxes are the same square, so the sizing
-      // key still changes - the engine must not hand a contained indicator a
-      // non-contained one's entry, which is a bug by construction rather than one
-      // that shows up at this size - and `nuiSizingKey` asks for the measure.
+      // Same size either way, but a different sizing key; `nuiSizingKey` asks for the measure.
       host.markDirty()
     }
 
@@ -712,16 +486,13 @@ class HybridNitroUiProgress(
       model.value?.let { Variant_NullType_Double.Second(it) }
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
-      // Stored exactly as sent - `NaN` included, so the getter round-trips - and
-      // clamped where it is drawn ([ProgressModel.drawnValue]), like iOS.
+      // Stored as sent, `NaN` included, so the getter round-trips; clamped where it is drawn.
       val sent = next.asSecondOrNull()
       if (sent == model.value) {
         return
       }
       model.value = sent
       host.markDirty()
-      // Not size-affecting: a bar at 0.2 and a bar at 0.9 are the same box on both
-      // toolkits.
     }
 
   override var tintColor: Variant_NullType_Double
@@ -730,9 +501,8 @@ class HybridNitroUiProgress(
         ?: Variant_NullType_Double.First(NullType.NULL)
     set(next) {
       val raw = next.asSecondOrNull()
-      // `processColor` on Android hands back the ARGB int as a double. Going via
-      // `toLong()` keeps the bit pattern (D10): `Double.toInt()` saturates, so an
-      // opaque colour above `Int.MAX_VALUE` would become `Int.MAX_VALUE`.
+      // `processColor` hands back the ARGB int as a double. `toLong()` keeps the bit pattern;
+      // `Double.toInt()` saturates, so an opaque colour would become `Int.MAX_VALUE`.
       val argb = if (raw != null && raw.isFinite()) raw.toLong().toInt() else null
       if (argb == model.tintColor) {
         return
@@ -759,8 +529,7 @@ class HybridNitroUiProgress(
     get() =
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
-    // Same as RN's own `BaseViewManager.setTestID`: the tag is what
-    // `findNodeByName`/testID matchers read on Android.
+    // The view tag is what testID matchers read.
     set(next) {
       host.tag = next.asSecondOrNull()
     }
@@ -793,14 +562,8 @@ class HybridNitroUiProgress(
   override var nuiSizingKey: String
     get() = model.sizingKey
     set(next) {
-      // The engine reads the key out of Fabric state, so storing is not what makes
-      // this work - asking for the measure is. `appearance` and `contained` change
-      // the configuration *without* a remount (the shape, and with it the sizing
-      // policy, is unchanged), and the engine has no answer for a key it has not
-      // seen, so it lays this out at the declared fallback. A wavy bar measured
-      // exactly what the flat bar beside it measured would also be swallowed by the
-      // host's dedupe (Button's `nuiSizingKey` says the same for its icon, review
-      // F1). Guarded, because React re-sends an unchanged key on every render.
+      // `appearance` and `contained` change the configuration without a remount, and the
+      // engine has no size for a key it has not seen, so ask for a measure and a report.
       if (next == model.sizingKey) {
         return
       }
@@ -817,28 +580,20 @@ class HybridNitroUiProgress(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
-    // Nothing to reconcile (`docs/architecture/core.md` §12): React's `value` is the
-    // whole story, so one commit per turn is the entire update path.
+    // No controlled value to reconcile: one commit per turn is the whole update path.
     host.commit()
   }
 
   override fun prepareForRecycle() {
     host.tag = null
-    // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
-    // marked the recycle: clearing it here would hide that mark.
-    // Back to the default policy, matching the reset variant - a host that kept
-    // `intrinsic` would ask the next owner's linear bar the wrong question, and the
-    // composition rebuilt for the next owner reads the policy as it is built.
+    // Back to the default policy to match the reset variant: the next owner's composition
+    // reads the policy as it is built.
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
-    // Resets the model, including `inWindow`, and releases the sizing instance. The
-    // composition does not survive a recycle: Nitro's generated manager calls
-    // `onDropView()` (-> [onDropView], which disposes it) first.
+    // Resets the model, `inWindow` included, and releases the sizing instance.
     host.prepareForRecycle()
   }
 
   override fun onDropView() {
-    // No callbacks to release (there are none), but the window flag and the
-    // animation mirror still belong to the mount that is ending.
     model.inWindow = false
     model.refreshAnimationReport()
     host.drop()
@@ -846,23 +601,13 @@ class HybridNitroUiProgress(
 
   // MARK: - Methods
 
-  /**
-   * The size Compose measured for this indicator, from the host's cache. Never calls
-   * into Compose, so it is safe on the JS thread (§1.4).
-   */
+  /** The size Compose measured, from the host's cache. Safe on the JS thread. */
   override fun measureContent(): NitroUiSize {
     val size = host.contentSize ?: return NitroUiSize(0.0, 0.0)
     return NitroUiSize(size.width, size.height)
   }
 
-  /** What the control is displaying - see `NitroUiProgressMethods.nuiTestDisplayedValue`. */
   override fun nuiTestDisplayedValue(): String = model.displayedReport
 
-  /**
-   * Whether the control is allowed to be animating - see
-   * `NitroUiProgressMethods.nuiTestIsAnimating`. On Android that is "indeterminate,
-   * and the host is attached to a window", which is the rule
-   * [ProgressModel.drawnValue] actually draws under.
-   */
   override fun nuiTestIsAnimating(): Boolean = model.isAnimating
 }

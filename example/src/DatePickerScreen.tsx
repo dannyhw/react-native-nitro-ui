@@ -12,12 +12,7 @@ import {
 } from 'react-native';
 import { DatePicker } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance — the same helper the other screens
- * use. `Text` gets no dynamic default colour from React Native and the screen has
- * to read in both appearances, because it is where the screenshots in
- * `docs/components/date-picker.md` are taken from.
- */
+/** `Text` gets no dynamic default colour from React Native. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -33,12 +28,8 @@ function useTopInset() {
 }
 
 /**
- * A date as `2026-10-25`, written by hand.
- *
- * `toLocaleDateString()` would be shorter and is wrong here: what the real-input
- * suite asserts is a piece of on-screen text, and a locale-dependent string makes
- * that assertion depend on the simulator's region. Y-M-D is the same on every
- * device and is readable in a screenshot.
+ * A date as `2026-10-25`. Not `toLocaleDateString()`: the real-input suite
+ * asserts this text, and it must not depend on the device's region.
  */
 function dayOf(date: Date | null): string {
   if (date == null) {
@@ -49,7 +40,6 @@ function dayOf(date: Date | null): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-/** {@link dayOf} plus `HH:mm`, for the `time` and `datetime` echoes. */
 function instantOf(date: Date | null): string {
   if (date == null) {
     return '-';
@@ -59,41 +49,20 @@ function instantOf(date: Date | null): string {
   return `${dayOf(date)} ${hours}:${minutes}`;
 }
 
-/**
- * Every DatePicker configuration G5 has to prove, on one screen: a real tap pair,
- * each `mode` × `variant`, a range, disabled, tinted, and a controlled value the
- * screen resets from outside the picker.
- *
- * The on-device assertions live in
- * `example/__tests__/DatePicker.harness.tsx`, which renders its own trees; this
- * screen is for screenshots and for `scripts/real-input`, which can only read
- * text the app paints.
- */
 export default function DatePickerScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  // The pair `scripts/real-input` reads, at the top of the page because
-  // `uiautomator dump` lists no off-screen nodes on Android.
+  // At the top of the page: `uiautomator dump` lists no off-screen nodes on
+  // Android.
   const [realDate, setRealDate] = useState<Date | null>(null);
   const [realEvents, setRealEvents] = useState(0);
   const [rejectEvents, setRejectEvents] = useState(0);
-  // The `wheel` pair (G29): the time drum that accepts, and the `date` wheel that is
-  // not a drum. The time one's counter is the whole check — a drum that reported every
-  // row a fling rolled past would move it by more than one.
   const [wheelTime, setWheelTime] = useState<Date | null>(null);
   const [wheelTimeEvents, setWheelTimeEvents] = useState(0);
-  // The same pin, on the drum (G29). A dial commits once, when the finger leaves it,
-  // so a refused pick there is a value the model never had. A drum is different: it
-  // *stays* where the finger left it until something moves it back, so this control
-  // exists to be flung and refused — and read again, from the accessibility tree, to
-  // see whether the drums came home or the refused time is still painted.
   const [rejectWheelEvents, setRejectWheelEvents] = useState(0);
   const [rejectWheelTime] = useState(() => new Date(2024, 5, 15, 9, 20));
-  // Pinned: the parent never moves it, so a date chosen in the dialog has to
-  // snap back. The counter is what proves the pick was seen at all - which only
-  // happens once native has reverted, because the same value twice reports nothing.
   const [rejectDate] = useState(() => new Date(2024, 5, 15, 9, 0));
 
   const [controlled, setControlled] = useState(
@@ -115,8 +84,6 @@ export default function DatePickerScreen() {
     setWheelTime(date);
   }, []);
 
-  // Refuses everything, like `countRejectChange`: the time the parent keeps sending
-  // never moves, so the drum has to come back to it.
   const countRejectWheelChange = useCallback(() => {
     setRejectWheelEvents((current) => current + 1);
   }, []);
@@ -144,13 +111,7 @@ export default function DatePickerScreen() {
           zone and locale decide how they read.
         </Text>
 
-        {/*
-          The real-input suite's pair: one picker whose parent accepts the pick and
-          one whose parent refuses it. Both echo through React's own render, so the
-          text only moves if a real touch opened the dialog, reached a day cell, and
-          the new instant came back to JS. The refusing one's counter is the
-          snap-back proof, exactly as on the SegmentedControl screen.
-        */}
+        {/* One parent accepts the pick, the other refuses it. */}
         <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
         <DatePicker
           onChange={countRealChange}
@@ -242,9 +203,6 @@ export default function DatePickerScreen() {
         <View style={styles.buttonRow}>
           <Pressable
             onPress={() => {
-              // A new Date object, not the same one: a parent that "resets" to the
-              // identical object sends no prop change, and native would be right to
-              // ignore it.
               setControlled(new Date(2026, 0, 1, 8, 30));
             }}
             testID="reset-controlled"
@@ -256,8 +214,6 @@ export default function DatePickerScreen() {
           </Pressable>
           <Pressable
             onPress={() => {
-              // A value the picker must clamp: `maximumDate` is 2027-01-01, and a
-              // controlled value past it is not a bug the caller gets to keep.
               setControlled(new Date(2030, 0, 1, 12, 0));
             }}
             testID="clamp-controlled"
@@ -321,39 +277,9 @@ export default function DatePickerScreen() {
           testID="inline-time"
         />
         {/*
-          Android only, and placed just after the pickers it looks like rather than at
-          the foot of the page: this screen carries full-height inline calendars, so a
-          fixture below them sits ~9 000 px down — measured, and the reason the first
-          version of this check spent its whole scroll budget arriving and gave up.
-          Adding them here moves nothing above them.
-
-          The width *is* the check, in both directions. Material 3 lays a calendar's
-          seven weekday columns out with `Arrangement.SpaceEvenly` and gives each one
-          `LocalMinimumInteractiveComponentSize` (48 dp) of interactive minimum, so the
-          grid wants 7 × 48 + 2 × 12 = 360 dp. In a narrower box the columns past the
-          squeeze simply lose width, and nothing inside React Native can see it: an
-          `inline` picker is a `fillWidth` control, so Compose is asked "what height at
-          320 dp" and answers 320 wide whether or not the grid fits (measured at boxes
-          of 240, 320 and 361 dp: 240, 320 and 361 back). The weekday cells are Compose
-          nodes, not `View`s, so the in-app queries cannot reach them either — the same
-          gap `scripts/real-input/a11y.mjs` records for a control's *name*. What can see
-          them is `uiautomator dump`, which is why the rule runs in
-          `real-input:android` (`CHECKS['date-picker']`) and these two rows are its
-          fixtures.
-
-          Measured here before any fix, at 320 dp: the header columns came back 126 px
-          six times and then 20 px — Saturday at 7.6 dp, over day cells of 126, 126,
-          126, 126, 126, 73, 105. That is the clipping
-          `docs/images/components/date-picker-android.png` used to show. The narrow
-          calendar answers with 40 dp cells now, which is what fits, and the wide one
-          exists to keep that honest: it spans the page edge to edge (the negative
-          margins reclaim the page's own 16 dp of padding) so its box is past 360 dp and
-          its columns have to still be Material's 48 dp. Without that second row, a
-          calendar that shaved 8 dp off every touch target at *every* width would have
-          nothing saying so.
-
-          iOS renders neither row, so `RealInputTests.swift` sees the page it always
-          saw and the popover check's last row stays where it was.
+          Android only. Material 3 gives each of a calendar's seven weekday
+          columns a 48 dp minimum, so the grid wants 360 dp: the narrow box is
+          under that and the wide one over it.
         */}
         {Platform.OS === 'android' ? (
           <DatePicker
@@ -414,43 +340,13 @@ export default function DatePickerScreen() {
         />
 
         {/*
-          Deliberately the last row of the page, and deliberately labelled.
-
-          Two things are proved from one field, both by
-          `example/ios/NitroUiExampleUITests/RealInputTests.swift`:
-
-          - **the presentation fits.** A `compact` field's popover is 336 pt wide and
-            300-420 pt tall. With only one arrow direction permitted, UIKit caps the
-            bubble at the room on that side of the field, so the *last row of a form* -
-            this row - gets a clipped calendar. Whatever the field's y ends up being
-            after the page is scrolled to the bottom, it is the worst case a real
-            screen can hand a date picker, and that is the case worth a check.
-          - **the announcement is complete.** The label is on the control here, so the
-            value has to arrive next to it rather than be replaced by it - the
-            accessibility half of M2/M3, read from the accessibility tree a screen
-            reader actually walks.
-
-          Android is not ignored by this row, it is just not checkable from here: its
-          `compact` field opens a dialog, which is centred and never squeezed, and the
-          label/value/disabled state is read from a `uiautomator dump` instead (the
-          report records those dumps).
+          The last row of the page on iOS: with one arrow direction permitted,
+          UIKit caps a `compact` field's popover at the room on that side of
+          the field, so this is the worst case for fitting the calendar.
         */}
         {/*
-          G29: the `wheel` variant's Android cases, last on the page but the "last row"
-          (which is the worst case a popover has to fit above). Everything the checks
-          above read sits *above* these, because `uiautomator dump` lists no off-screen
-          node and a check reads its echoes while the drum is on screen.
-
-          `mode="time"` becomes a drum per field (Material 3 1.5's `ScrollField`, the widget
-          its own `TimeScroll` is built from): rolled with a
-          finger, one event per settle — which is what the counters are for. The second
-          one is refused by the parent, so its drum has to roll itself back.
-          `mode="date"` with the same variant stays the inline calendar (there is no
-          Material date wheel to draw), and a check reads its box to prove that: a
-          calendar is far taller than the 120 dp drum.
-
-          Every echo is above the control it belongs to, for the same reason: the check
-          brings the *drum* into the window, and what a drum needs is its own 120 dp of it.
+          Android `wheel` cases. Every echo sits above its control because
+          `uiautomator dump` lists no off-screen node.
         */}
         <Text style={[styles.section, { color: ink.ink }]}>
           Real input · wheel
@@ -565,20 +461,13 @@ const styles = StyleSheet.create({
   column: {
     gap: 6,
   },
-  /** The 320 dp box `DatePickerScreen`'s narrow inline calendar is laid out in. */
   narrowBox: {
     width: 320,
     maxWidth: '100%',
   },
   /**
-   * Reclaims the page's own 16 dp of padding on both sides, so the wide inline calendar
-   * is measured at the screen's width rather than the page's content width.
-   *
-   * A `width` would not do: the `inline` variant is a `fillWidth` control, so whatever
-   * the box is, that is what the calendar is laid out at — and the point of this row is
-   * that the box is past the 360 dp where Material's own 48 dp grid fits. Negative
-   * margins make a stretched child wider than its parent's content box without touching
-   * the page's layout for anything else.
+   * Reclaims the page's 16 dp of padding on both sides, so the wide inline
+   * calendar is laid out at the screen's width.
    */
   wideBox: {
     marginHorizontal: -16,

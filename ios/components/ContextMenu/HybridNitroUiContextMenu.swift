@@ -1,41 +1,17 @@
-//
-//  HybridNitroUiContextMenu.swift
-//  react-native-nitro-ui
-//
-//  ContextMenu (G16, DECISIONS D36/D37; design `docs/tasks/Q6-contextmenu-design.report.md`
-//  Appendix B, measured by S3): a `UIContextMenuInteraction` on the Nitro-generated
-//  component view, whose React Native children Fabric already mounts there.
-//
-//  1. **Mount: no `.mm` patch.** `RCTViewComponentView` mounts children into
-//     `currentContainerView` - the component view itself - at the frames Yoga gives them
-//     relative to its outer border. The Hybrid View's own view is installed with
-//     `setContentView:` and framed *inside* padding and border, so mounting the children
-//     into it (G14's `CONTENT_CHILDREN_VIEWS` patch) would offset a padded ContextMenu's
-//     children twice (D36 item 5). The content view here is an empty, transparent,
-//     touch-transparent box whose one job is to find the component view
-//     (`didMoveToSuperview`) - and to answer `isAccessibilityElement` for it (below).
-//  2. **Arbitration.** UIKit's recognizers cannot cancel React Native's touch: the
-//     surface's `RCTSurfaceTouchHandler` cannot be prevented by a recognizer on a
-//     descendant view. So at `willDisplayMenu` the nearest surface handler is toggled
-//     off and on, which is RN's own `_cancelTouches`: the `Pressable` under the finger
-//     gets `onResponderTerminate`, so `onPressOut` and never `onPress` (Q6 D2). iOS 27's
-//     lift already ends RN's touch (S3 Q1), so on 27 this is belt and braces; D37 item 1
-//     keeps it for older systems.
-//  3. **Order.** UIKit calls a row's handler before `willEnd` (S3 Q4, 10/10), and
-//     `onClose` fires from the end animator's completion, so a pick reports `onSelect`
-//     then `onClose` (D32).
-//
+// ContextMenu: a `UIContextMenuInteraction` on the Nitro-generated component view, where
+// Fabric already mounts the React Native children.
 
 import NitroModules
 import UIKit
 
-// Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
+// Perf ring buffer, shared with C++ and Kotlin.
 private typealias NitroUiContextMenuPerf = margelo.nitro.nitroui.NitroUiPerf
 
 // MARK: - The content view
 
-/// The Hybrid View's view: an empty box that tells the Hybrid which component view it
-/// was installed in, and takes nothing from it.
+/// The Hybrid View's view: an empty, touch-transparent box whose job is to find the component
+/// view it was installed in. React Native mounts the children into that component view, at
+/// frames relative to its border box, so they are not mounted here.
 final class ContextMenuContentView: UIView {
   var onSuperview: ((UIView?) -> Void)?
 
@@ -58,16 +34,10 @@ final class ContextMenuContentView: UIView {
     onSuperview?(superview)
   }
 
-  /// The component view's own `accessible`, read back for it (DECISIONS D37 item 2).
-  ///
-  /// `RCTViewComponentView.isAccessibilityElement` answers with its `contentView`'s value
-  /// whenever it has one (`RCTViewComponentView.mm`, `isAccessibilityElement`), so a plain
-  /// `false` here makes an `accessible` ContextMenu invisible to VoiceOver as one element:
-  /// S3 measured `ax=0` with the label set. The value React Native stored is on the
-  /// component view itself (`self.accessibilityElement.isAccessibilityElement = accessible`),
-  /// so it is read through `UIView`'s own getter, skipping the override that asks this view.
-  /// `ContextMenu.harness.tsx` reads `ax` for an accessible and a plain ContextMenu, so a
-  /// React Native that moves this answer again goes red there.
+  /// `RCTViewComponentView.isAccessibilityElement` answers with its content view's value, so
+  /// a plain `false` here would hide an `accessible` ContextMenu from VoiceOver. The value
+  /// React Native stored is on the component view, and is read through `UIView`'s own getter
+  /// to skip the override that asks this view.
   override var isAccessibilityElement: Bool {
     get {
       guard let host = superview else { return false }
@@ -146,13 +116,10 @@ final class ContextMenuInteractionDelegate: NSObject, UIContextMenuInteractionDe
 
 // MARK: - React Native's touches
 
-/// RN's own `_cancelTouches` on the nearest surface touch handler up the tree.
-///
-/// The class is looked up by name, as `NitroUiTouchRoot` does, so Swift never imports
-/// React. Toggling `isEnabled` resets the recognizer, which sends `touchCancel` for every
-/// active touch (`RCTSurfaceTouchHandler.mm`, `reset`); a set UIKit already ended is
-/// empty, and the toggle then sends nothing. The nearest handler is the surface's, an RN
-/// `Modal`'s or a BottomSheet's own, whichever window the ContextMenu is in.
+/// Cancels React Native's active touches by toggling the nearest surface touch handler up the
+/// tree, so a `Pressable` under the finger gets `onPressOut` and never `onPress`. A recognizer
+/// on a descendant view cannot prevent that handler, so UIKit's own gesture arbitration does
+/// not do this. The class is looked up by name, so Swift never imports React.
 enum NitroUiReactTouches {
   /// Whether a handler was found and toggled.
   @discardableResult
@@ -173,13 +140,11 @@ enum NitroUiReactTouches {
 
 // MARK: - The Hybrid View
 
-/// The Hybrid View React renders as `NitroUiContextMenu`.
 final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableView {
   private let content = ContextMenuContentView()
   private let menuDelegate = ContextMenuInteractionDelegate()
-  /// The generated component view: the box, the children's parent, and the view the
-  /// interaction lives on. Attached once and never detached - every iOS recycle is also a
-  /// drop (the generated `prepareForRecycle` calls `notifyOnDropView` first), so an
+  /// The generated component view: the children's parent, and the view the interaction lives
+  /// on. Attached once and never detached: every iOS recycle is also a drop, so an
   /// interaction removed at drop would leave the recycled view with no menu.
   private weak var host: UIView?
   private var interaction: UIContextMenuInteraction?
@@ -215,9 +180,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
 
   private let reportLock = NSLock()
   private var report = "pending"
-  /// Whether a harness has asked this object for a report (under `reportLock`). An app
-  /// never does, so its ContextMenus never build one. A recycle clears it, so a new owner
-  /// is built for only once it is asked about.
+  /// Whether a test has asked for a report (under `reportLock`). An app never does, so its
+  /// ContextMenus never build one.
   private var reportsWanted = false
   /// Reports built (main thread).
   private var reportSeq = 0
@@ -291,11 +255,11 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     nitroUiAssertMainThread()
     if isOpen {
       if rawDisabled || actionableRowCount == 0 {
-        // A control that answers nothing cannot own a live menu (D29). UIKit ends the
-        // menu, and `willEnd` reports the close.
+        // A disabled or empty control cannot own a live menu. UIKit ends the menu, and
+        // `willEnd` reports the close.
         interaction?.dismissMenu()
       } else if menuDirty {
-        // A `group` changed while the menu is up: rebuild it in place (iOS 14).
+        // The rows changed while the menu is up: rebuild it in place.
         interaction?.updateVisibleMenu { [weak self] current in
           self?.buildMenu() ?? current
         }
@@ -308,10 +272,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
 
   func onDropView() {
     nitroUiAssertMainThread()
-    // The menu goes with the mount. The close is reported now, while the app's handler is
-    // still connected, so an app that tracks open state from `onOpen`/`onClose` never
-    // keeps a menu that no longer exists; the end animator's completion then finds the
-    // menu already closed and reports nothing twice.
+    // Report the close now, while the app's handler is still connected. The end animator's
+    // completion then finds the menu already closed and reports nothing twice.
     if isOpen {
       interaction?.dismissMenu()
       finishClose(generation: openGeneration)
@@ -367,8 +329,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
   func nuiTestMenuProbe() throws {
     let run = { [weak self] in
       guard let self else { return }
-      // The same refusal `configuration(at:)` makes, without counting a configuration:
-      // the probe reads what UIKit would be handed, it does not ask for a menu.
+      // Reads what UIKit would be handed, without counting a configuration.
       self.drawn = self.canOpen ? Self.describe(self.buildMenu().children) : "nil"
       self.publishReport()
     }
@@ -381,16 +342,11 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
 
   // MARK: - Pixel probes (test-only)
 
-  /// How many probes were asked for, so a harness can tell its own answer from the
-  /// previous control's.
   private let pixelProbesLock = NSLock()
   private var pixelProbes = 0
 
-  /// Counts the probe and answers nothing. The rows are UIKit's: a context menu is
-  /// presented by the system in a window this process cannot rasterise into a bitmap,
-  /// so there is nothing to sample even with a menu open - which is why this answers
-  /// `no pixels` rather than Android's `no popup`. Menu's pair, for Menu's reason:
-  /// whether a row's glyph reached the screen is a fact only its pixels hold.
+  /// The system presents a context menu in a window this process cannot rasterise, so there
+  /// is nothing to sample and the report says `no pixels`.
   func nuiTestMenuPixelProbe(color: Double) throws {
     pixelProbesLock.lock()
     pixelProbes += 1
@@ -405,8 +361,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
   }
 
   func nuiTestContextMenuReport() throws -> String {
-    // From the first read on, every state change keeps the report fresh; until then
-    // nothing builds it. This read returns the last one built.
+    // Nothing builds a report until the first read, which returns the last one built.
     reportLock.lock()
     reportsWanted = true
     let line = report
@@ -424,8 +379,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
   private func attach(to superview: UIView?) {
     guard let superview, host !== superview else { return }
     #if DEBUG
-      // The shape `scripts/patch-nitrogen.mjs` also depends on: Nitro installs this view
-      // with `setContentView:` on an `RCTViewComponentView`.
+      // Nitro installs this view with `setContentView:` on an `RCTViewComponentView`.
       if let viewClass = NSClassFromString("RCTViewComponentView") {
         assert(superview.isKind(of: viewClass), "ContextMenu: the content view's superview is not a component view")
       }
@@ -486,7 +440,9 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     _ configuration: UIContextMenuConfiguration,
     animator: UIContextMenuInteractionAnimating?
   ) {
-    // The configuration that ended, not the latest one asked for (see `openGeneration`).
+    // The configuration that ended, not the latest one asked for. UIKit calls a row's handler
+    // before this, and the close fires from the animator's completion, so a pick reports
+    // `onSelect` then `onClose`.
     let ending = Self.menuId(of: configuration)
     if let animator {
       animator.addCompletion { [weak self] in
@@ -517,8 +473,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
   fileprivate func targetedPreview() -> UITargetedPreview? {
     guard let host, host.window != nil else { return nil }
     let parameters = UIPreviewParameters()
-    // The style's radius, never the layer's: React Native draws a visible border in a
-    // layer of its own and leaves `layer.cornerRadius` at 0 (S3 change 2).
+    // The style's radius, never the layer's: React Native draws a visible border in a layer
+    // of its own and leaves `layer.cornerRadius` at 0.
     let radius = min(rawRadius ?? 0, min(host.bounds.width, host.bounds.height) / 2)
     parameters.visiblePath = UIBezierPath(roundedRect: host.bounds, cornerRadius: radius)
     lastRadius = radius
@@ -569,8 +525,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
 
   // MARK: - The menu
 
-  /// Menu's rows as a `UIMenu` (Q6 B3): a submenu nests (D29), a section is an inline
-  /// group - titled or not - and the root carries `title`.
+  /// A submenu nests, a section is an inline group (titled or not), and the root carries
+  /// `title`.
   private func buildMenu() -> UIMenu {
     var top: [UIMenuElement] = []
     for entry in entries {
@@ -599,8 +555,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     if item.destructive { attributes.insert(.destructive) }
     if item.disabled { attributes.insert(.disabled) }
     let id = item.id
-    // A `checked` row is a menu toggle: its state draws the check. `nil` is a plain row.
-    // A pick reports the id; the next `checked` is the app's to send (Menu's rule).
+    // A `checked` row draws its check through `state`. A pick only reports the id; the app
+    // sends the next `checked`.
     return UIAction(
       title: item.title,
       subtitle: item.subtitle,
@@ -613,9 +569,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     }
   }
 
-  /// Menu's `drawn` notation (`Menu.nitro.ts`), for one level of a `UIMenu`.
-  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before it there
-  /// is nothing to read, and the mark is left off.
+  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before that the mark
+  /// is left off.
   private static func subtitleMark(_ action: UIAction) -> String {
     guard #available(iOS 16.0, *), let subtitle = action.subtitle, !subtitle.isEmpty
     else { return "" }
@@ -649,8 +604,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     NitroUiContextMenuPerf.mark(perfInstanceId, kind.rawValue)
   }
 
-  /// The report line (`ContextMenu.nitro.ts`), published on main for JS to read - once a
-  /// harness has asked for one, and never before.
+  /// Built on main for JS to read, and only once a test has asked for one.
   private func publishReport() {
     reportLock.lock()
     let wanted = reportsWanted
@@ -681,9 +635,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
       + "box=\(box);contentIndex=\(contentIndex);interaction=\(attached);ax=\(ax);a11yAction=-1;"
       + "radius=\(lastRadius < 0 ? "-1" : fmt(lastRadius));press=-1;menu=-1;live=-1;arms=-1;armed=-1;"
       + "copies=-1;watchStray=-1;seq=\(reportSeq);"
-      // Android's field, answered `-` here: iOS draws `systemImage` and has no Android
-      // glyph to tint, so no row recorded a colour. Menu answers `-` for the same
-      // reason, which keeps one report shape for both platforms.
+      // Android's field: iOS has no Android glyph to tint, so it answers `-`.
       + "iconTints=-;kids=\(kids.joined(separator: "|"))"
     reportLock.lock()
     report = line

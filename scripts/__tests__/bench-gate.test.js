@@ -1,20 +1,3 @@
-/**
- * The benchmark gate must be able to fail.
- *
- * T02 round 1 shipped a gate that could not: `--check` vetoed the whole run
- * whenever `rn-core`'s *absolute* numbers had moved since the baseline, which
- * between sessions is nearly always, and `--compare` only ever compared
- * `nitro-ui` against nothing. The reviewer proved it from the committed data
- * (docs/tasks/T02-bench.review.md B1). These fixtures are the regression test
- * for that, with no device involved: a synthetic run where a `nitro-ui` arm got
- * twice as slow has to produce a conclusive failure, and the levers that are
- * *not* evidence - control drift, a slow reference arm, a noisy cell - must not
- * suppress or manufacture one.
- *
- * The same `gate()` is used by `run.mjs --check/--compare` and by
- * `report.mjs --compare/--check` (review S11), so covering it covers both.
- */
-
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -24,11 +7,7 @@ import { join, resolve } from 'node:path';
 import {
   SCHEMA_VERSION,
   aggregateRecords,
-  baselineBlockers,
-  baselineNoise,
-  baselineTable,
   buildSchedule,
-  buildBaseline,
   cellKey,
   ARM_SCOPES,
   armScopeCovers,
@@ -40,7 +19,7 @@ import {
   IMPLEMENTATIONS,
   incompleteMetrics,
   launchPlanString,
-  loadBlocker,
+  loadOverCeiling,
   loadCeiling,
   scenarioActionOf,
   summarizeLoadSamples,
@@ -64,18 +43,10 @@ const LAUNCHES = 4;
 const ITERATIONS = 20;
 
 /**
- * The arms a component's cells must carry.
- *
- * `IMPLEMENTATIONS` is every arm the runner knows about; `ARM_SCOPES` narrows the
- * ones that render only some controls (`nitro-ui-host`, the seven hostable controls on
- * Android). Naming the arms a cell must have, rather than "all of them", is what keeps
- * these assertions true when an arm exists that cannot serve the component - a missing
- * arm is only acceptable when it is a scoped one.
- *
- * `ARMS_WITHOUT_COMPONENT` narrows the same way the scheduler does: an arm with no
- * mountable cell on the named platform is not a missing arm. It only narrows when a
- * platform is named, because a platform-less schedule asks for every arm that mounts
- * the control somewhere.
+ * The arms a component's cells must carry: every unscoped arm, plus the scoped
+ * ones (`ARM_SCOPES`) that render this component, minus the arms with no
+ * mountable cell on the named platform (`ARMS_WITHOUT_COMPONENT`). The last
+ * only narrows when a platform is named.
  */
 function armsFor(component, platform = null) {
   return new Set(
@@ -107,10 +78,9 @@ const QUIET = [1, 1.01, 0.995, 1.005];
 const LOUD = [1, 1.7, 0.62, 1.35];
 
 /**
- * Records for one cell.
- *
- * `values` are per-op nanoseconds; latency metrics are written per iteration and
- * CPU as one bracket per launch, exactly like the bench app does.
+ * Records for one cell. `values` are per-op nanoseconds; latency metrics are
+ * written per iteration and CPU as one bracket per launch, as the bench app
+ * does.
  */
 function cellRecords({
   scenario = 'mount',
@@ -138,8 +108,8 @@ function cellRecords({
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
-      // The waiting rule this fixture's app would have reported (iOS's defaults). A run
-      // that records none is refused by `baselineBlockers`, so every mintable fixture
+      // The waiting rule this fixture's app reports (iOS's defaults). A run
+      // whose app records none is flagged in its problems list, so a fixture
       // has to carry one.
       mountTimeoutMs: 1_500,
       presentedTimeoutMs: 8_000,
@@ -161,7 +131,7 @@ function cellRecords({
         jsCommitNs: jsCommit * factor * wiggle,
         mountedNs: mounted * factor * wiggle,
         // The Android probe answers `-1` when no frame arrived in time, which
-        // the app records as a missing sample (round 4).
+        // the app records as a missing sample.
         presentedNs:
           index < missingPresented ? null : presented * factor * wiggle,
       });
@@ -304,11 +274,10 @@ function leakRun({ rnCore, nitroUi }) {
 }
 
 /**
- * `makeRun` plus the metadata `--check` and `--update-baseline` read: a whole
- * run object that is allowed to mint a baseline (clean tree, `full` plan, 8
- * launches, quiet machine).
+ * `makeRun` plus the metadata a results file carries (clean tree, `full` plan,
+ * 8 launches, quiet machine).
  */
-function baselineRun(overrides = {}) {
+function measuredRun(overrides = {}) {
   return {
     ...makeRun(overrides),
     platform: 'ios',
@@ -348,8 +317,7 @@ describe('benchmark gate', () => {
   });
 
   it('never gates the reference arms', () => {
-    // Expo gets twice as slow, nitro-ui does not move. An `@expo/ui` bump must
-    // not fail a nitro-ui pull request (review S9).
+    // Expo gets twice as slow and nitro-ui does not move.
     const result = gate({
       head: makeRun({
         'expo-ui-host-per-control': { mounted: 420_000 },
@@ -366,8 +334,8 @@ describe('benchmark gate', () => {
   });
 
   it('is not suppressed by control drift, and not triggered by it either', () => {
-    // The exact failure mode of round 1: `rn-core` 5x slower in head. On its own
-    // that is machine state, not a regression...
+    // `rn-core` 5x slower in head: on its own that is machine state, not a
+    // regression...
     const drifted = makeRun({
       'rn-core': {
         jsCommit: 200_000,
@@ -437,8 +405,6 @@ describe('benchmark gate', () => {
   });
 
   it('sees a costlier teardown as its own metric', () => {
-    // Review S5: mount and unmount used to share one CPU bracket, so a slower
-    // teardown was reported as a slower mount.
     const result = gate({
       head: makeRun({ 'nitro-ui': { unmountMainCpuPerOp: 24_000 } }),
       base: makeRun(),
@@ -461,8 +427,8 @@ describe('benchmark gate', () => {
       )
     ).toBe(true);
 
-    // A slope fitted over a series that is not climbing is not "a monotonic
-    // increase" (§6's wording), so it is not comparable and cannot gate.
+    // A slope fitted over a series that is not climbing is not comparable and
+    // cannot gate.
     const wobbling = aggregateRecords(
       memoryRecords({
         scenario: 'leak',
@@ -479,10 +445,8 @@ describe('benchmark gate', () => {
   });
 
   it("labels a reference arm's monotonic climb as reported, not gated (X15)", () => {
-    // Only `GATED_IMPLEMENTATIONS` can fail the gate, so the same word in both
-    // arms' cells told a reviewer that a third-party leak refused a run it cannot
-    // refuse (A5 review). The word is the claim: the arm that carries no verdict
-    // says so.
+    // Only `GATED_IMPLEMENTATIONS` can fail the gate, so a reference arm's
+    // climb is labelled as reported.
     const cells = aggregateRecords(
       [
         ...memoryRecords({
@@ -521,7 +485,6 @@ describe('benchmark gate', () => {
     const noisy = comparisonSections({
       run: noisyHead,
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(noisy.exitCode).toBe(0);
@@ -530,137 +493,22 @@ describe('benchmark gate', () => {
     const clear = comparisonSections({
       run: makeRun({ 'nitro-ui': { mounted: 220_000, presented: 260_000 } }),
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(clear.exitCode).toBe(1);
     expect(clear.markdown).toContain('nitro-ui');
   });
-
-  it('refuses to mint a baseline from a dirty, broken or busy machine', () => {
-    const clean = {
-      ...makeRun(),
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-    };
-    expect(baselineBlockers(clean)).toEqual([]);
-    expect(
-      baselineBlockers({ ...clean, dirty: true }).some((reason) =>
-        reason.includes('dirty')
-      )
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, problems: ['launch 2 ended early'] }).length
-    ).toBeGreaterThan(0);
-    expect(
-      baselineBlockers({
-        ...clean,
-        machine: { cpuCount: 14, loadavg1: 12, quiet: false },
-      }).some((reason) => reason.includes('load average'))
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, machine: { cpuCount: 14 } }).length
-    ).toBeGreaterThan(0);
-    // A `quick` run at 4 launches is local feedback, not baseline material
-    // (docs/DECISIONS.md D9). `report.mjs --update-baseline` reads files from
-    // disk, so the guard belongs in the shared blocker list rather than in the
-    // runner's flags.
-    expect(
-      baselineBlockers({ ...clean, plan: 'quick' }).some((reason) =>
-        reason.includes('full')
-      )
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, launches: 4 }).some((reason) =>
-        reason.includes('launches')
-      )
-    ).toBe(true);
-  });
-
-  /**
-   * The ART regime guard (T12 round 2). `speed-profile` and `verify` are two
-   * comparability regimes - T12 measured the same code's ratio to the shared host
-   * move 1.22x -> 0.99x on mount `presented` across that line - so a baseline may
-   * not be minted from an app that is still interpreting. iOS has no ART, so the
-   * guard is keyed on the platform, and a pre-T12 results file that recorded no
-   * `art` at all is refused rather than assumed compiled.
-   */
-  it('refuses to mint an Android baseline from an uncompiled app', () => {
-    // Rebuilt under Android's waiting rule, because that is what an Android run has to
-    // report to mint at all (A4/M1: the rule is per platform, and `makeRun`'s cells carry
-    // iOS's).
-    const androidCells = makeRun().cells;
-    for (const cell of Object.values(androidCells)) {
-      cell.timeouts = { mountTimeoutMs: 1_500, presentedTimeoutMs: 2_000 };
-    }
-    const cleanAndroid = {
-      ...makeRun(),
-      cells: androidCells,
-      platform: 'android',
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-      art: {
-        packageName: 'com.nitroui.bench',
-        status: 'speed-profile',
-        primed: true,
-        attempts: 1,
-      },
-    };
-    expect(baselineBlockers(cleanAndroid)).toEqual([]);
-    expect(
-      baselineBlockers({
-        ...cleanAndroid,
-        art: { ...cleanAndroid.art, status: 'verify', primed: false },
-      }).some((reason) => reason.includes('verify'))
-    ).toBe(true);
-    expect(
-      baselineBlockers({
-        ...cleanAndroid,
-        art: { ...cleanAndroid.art, status: 'interpret-only' },
-      }).some((reason) => reason.includes('interpreter'))
-    ).toBe(true);
-    // A run from before the state was recorded: unknown regime, no baseline.
-    expect(
-      baselineBlockers({ ...cleanAndroid, art: null }).some((reason) =>
-        reason.includes('did not record an ART compile state')
-      )
-    ).toBe(true);
-    // iOS is exempt: it has no ART, and must keep minting baselines as before.
-    const cleanIos = {
-      ...makeRun(),
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-    };
-    expect(baselineBlockers(cleanIos)).toEqual([]);
-  });
 });
 
 /**
- * The idle-machine rule judges **the run, not its last minute** (R4).
- *
- * A1b's iOS run is the fixture this block is written against: `--plan full`, 1120
- * launches over 154 minutes, no problems, `load5` 4.06 against a 7.0 ceiling - and
- * a single `loadavg1` of 7.60 taken in its final minute is what refused it.
- *
- * The fixtures deliberately never sit on the answer (AGENTS.md): the quiet band is
- * 1.6-5.0, the ceiling is 7.0, the busy band is 8.4-13.6, so a rule that read the
- * wrong quantile, the wrong comparison, or the wrong field could not produce these
- * verdicts by accident. The two boundary tests are the only places a value touches
- * a threshold, and they are named for it.
+ * The fixtures never sit on a threshold: the quiet band is 1.6-5.0, the ceiling
+ * is 7.0 and the busy band is 8.4-13.6. The two boundary tests are the only
+ * places a value touches one.
  */
 describe('the idle-machine rule samples the run (R4)', () => {
   const CPU_COUNT = 14;
   const CEILING = loadCeiling(CPU_COUNT);
-  /** A1b's iOS run: three quiet hours, then one noisy minute at the very end. */
+  /** One noisy minute at the end of an otherwise quiet run. */
   const A1B_SPIKE = 7.6;
 
   const quiet = (count) =>
@@ -682,22 +530,22 @@ describe('the idle-machine rule samples the run (R4)', () => {
       loadavg5: 4.06,
       loadSamples,
     };
-    machine.quiet = loadBlocker(machine) === null;
-    return { ...baselineRun(), machine };
+    machine.quiet = loadOverCeiling(machine) === null;
+    return { ...measuredRun(), machine };
   }
 
-  it('accepts a run that was quiet from start to finish', () => {
+  it('calls a run that was quiet from start to finish quiet', () => {
     const run = sampledRun({ samples: quiet(180), loadavg1: 2.4 });
     expect(run.machine.loadSamples).toMatchObject({ count: 180, over: 0 });
     expect(run.machine.quiet).toBe(true);
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
   });
 
   /**
-   * The bug: one sample at the end of a 154-minute run. The spike is still
-   * recorded and still visible in `max`, it just cannot condemn the run.
+   * The spike is still recorded and still visible in `max`; it cannot condemn
+   * the run on its own.
    */
-  it('accepts the shape that refused A1b - quiet for hours, a spike at the end', () => {
+  it('calls the shape that condemned A1b quiet - hours of quiet, a spike at the end', () => {
     const run = sampledRun({
       samples: [...quiet(300), A1B_SPIKE, A1B_SPIKE],
       loadavg1: A1B_SPIKE,
@@ -707,60 +555,57 @@ describe('the idle-machine rule samples the run (R4)', () => {
       over: 2,
       max: A1B_SPIKE,
     });
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
     expect(run.machine.quiet).toBe(true);
-    // The same instant, read the way the guard used to read it, is a refusal.
-    expect(loadBlocker({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })).toContain(
-      'load average 7.60'
-    );
+    expect(
+      loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
+    ).toContain('load average 7.60');
   });
 
-  it('refuses a run that was busy for more than half of it', () => {
+  it('calls a run busy that was busy for more than half of it', () => {
     const run = sampledRun({
       samples: [...quiet(45), ...busy(55)],
       loadavg1: 3.0, // the last minute was fine; the run was not
     });
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('busy for half the run');
-    expect(reasons[0]).toContain('median load average');
+    const reason = loadOverCeiling(run.machine);
+    expect(reason).toContain('busy for half the run');
+    expect(reason).toContain('median load average');
     expect(run.machine.quiet).toBe(false);
   });
 
   /**
-   * The case a single sample cannot see at all: the machine settles down again, so
-   * the end-of-run load average is quiet, but a seventh of the run was spent over
-   * the ceiling. This is the test the old rule fails on its own terms.
+   * The machine settles down again, so the end-of-run load average is quiet,
+   * but a seventh of the run was spent over the ceiling.
    */
-  it('refuses a run with more than 10 % of its samples over the ceiling', () => {
+  it('calls a run busy with more than 10 % of its samples over the ceiling', () => {
     const run = sampledRun({
       samples: [...quiet(88), ...busy(12)],
       loadavg1: 2.9,
     });
     expect(run.machine.loadSamples.overFraction).toBeCloseTo(0.12, 10);
     expect(CEILING).toBeCloseTo(7, 10);
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('12 of 100 load samples');
-    expect(reasons[0]).toContain('12% of the run');
+    const reason = loadOverCeiling(run.machine);
+    expect(reason).toContain('12 of 100 load samples');
+    expect(reason).toContain('12% of the run');
     expect(run.machine.quiet).toBe(false);
   });
 
   /**
-   * Boundary: the allowance is *more than* 10 %, so exactly a tenth stays mintable
-   * and the sample after it does not.
+   * Boundary: the allowance is *more than* 10 %, so exactly a tenth is still quiet
+   * and the sample after it is not.
    */
   it('allows exactly 10 % of the samples over the ceiling and refuses the next one', () => {
     expect(LOAD_OVER_CEILING_FRACTION).toBeCloseTo(0.1, 10);
-    const exactlyTen = baselineBlockers(
+    const exactlyTen = loadOverCeiling(
       sampledRun({ samples: [...quiet(90), ...busy(10)], loadavg1: 2.9 })
+        .machine
     );
-    expect(exactlyTen).toEqual([]);
-    const eleven = baselineBlockers(
+    expect(exactlyTen).toBeNull();
+    const eleven = loadOverCeiling(
       sampledRun({ samples: [...quiet(89), ...busy(11)], loadavg1: 2.9 })
+        .machine
     );
-    expect(eleven).toHaveLength(1);
-    expect(eleven[0]).toContain('of the run');
+    expect(eleven).toContain('of the run');
   });
 
   /**
@@ -773,40 +618,27 @@ describe('the idle-machine rule samples the run (R4)', () => {
       loadavg1: CEILING,
     });
     expect(run.machine.loadSamples).toMatchObject({ over: 0, median: CEILING });
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
   });
 
   it('keeps the single-sample rule for files recorded before the sampler', () => {
-    // The two real A1b numbers, read from a file that has no samples at all.
     expect(
-      baselineBlockers({
-        ...baselineRun(),
-        machine: { cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE },
-      })
-    ).toEqual([
-      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
-    ]);
+      loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
+    ).toContain(
+      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)'
+    );
+    expect(loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: 2.39 })).toBeNull();
+    // A file with no load recorded at all still says so, samples or not.
+    expect(loadOverCeiling({ cpuCount: CPU_COUNT })).toContain(
+      'the run did not record a load average'
+    );
     expect(
-      baselineBlockers({
-        ...baselineRun(),
-        machine: { cpuCount: CPU_COUNT, loadavg1: 2.39 },
-      })
-    ).toEqual([]);
-    // A file with no load recorded at all is still refused, samples or not.
-    expect(
-      baselineBlockers({ ...baselineRun(), machine: { cpuCount: CPU_COUNT } })
-    ).toContain('the run did not record a load average');
-    const withEmptySamples = {
-      ...baselineRun(),
-      machine: {
+      loadOverCeiling({
         cpuCount: CPU_COUNT,
         loadavg1: A1B_SPIKE,
         loadSamples: null,
-      },
-    };
-    expect(baselineBlockers(withEmptySamples)).toEqual([
-      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
-    ]);
+      })
+    ).toContain('load average 7.60');
   });
 
   it('samples the load every 30 s', () => {
@@ -851,8 +683,7 @@ describe('the idle-machine rule samples the run (R4)', () => {
 });
 
 /**
- * The same verdict through the shipped binary, so the exit code that CI keys on
- * is covered too - `run.mjs` uses the identical `comparisonSections()`.
+ * The same verdict through the shipped binary, so the exit code is covered too.
  */
 describe('bench report CLI', () => {
   const script = resolve(process.cwd(), 'scripts/bench/report.mjs');
@@ -913,10 +744,8 @@ describe('bench report CLI', () => {
 
 describe('memory aggregation', () => {
   /**
-   * Round 2 regression: the Android heap breakdown stored an undefined variable,
-   * which killed the runner *after* it had measured 48 launches. iOS reports -1
-   * for both heaps, so no iOS run - and no iOS-shaped fixture - ever reached that
-   * line. Android has to be in the fixture for that to be worth testing.
+   * iOS reports -1 for both heaps, so only an Android-shaped fixture reaches
+   * the heap breakdown.
    */
   it('folds the Android heap breakdown into per-instance bytes', () => {
     const n = 200;
@@ -949,12 +778,10 @@ describe('memory aggregation', () => {
   });
 });
 
-describe('a gated arm with no baseline value', () => {
+describe('a gated arm with no base value', () => {
   /**
-   * The first run after a component lands has ratios to `rn-core` but no ratio to
-   * regress against, because the baseline cell was skipped. Silently reporting
-   * that as `ok` reads like a pass, so the gate labels it and prints how the arm
-   * compares to the control.
+   * The first run after a component lands has ratios to `rn-core` but no base
+   * ratio to regress against. The gate labels that rather than reporting `ok`.
    */
   it('is labelled, not silently passed', () => {
     const base = makeRun();
@@ -973,8 +800,7 @@ describe('a gated arm with no baseline value', () => {
     const markdown = comparisonSections({
       run: { platform: 'ios', cells: makeRun().cells },
       base: { platform: 'ios', cells: base.cells },
-      mode: 'check',
-      label: 'baseline',
+      label: 'v0.9.0',
     }).markdown;
     expect(markdown).toContain('new arm');
     expect(markdown).toContain('rn-core');
@@ -984,8 +810,8 @@ describe('a gated arm with no baseline value', () => {
 describe('native perf marks (--perf-marks)', () => {
   /**
    * The marks a `--perf-marks` launch writes: one `perf` record per measured
-   * iteration, folded per instance. `propsPerFlip = 2` is the interesting case -
-   * it is what a redundant commit looks like from the inside.
+   * iteration, folded per instance. `propsPerFlip = 2` is what a redundant
+   * commit looks like.
    */
   function markRecords({
     implementation = 'nitro-ui',
@@ -1050,19 +876,6 @@ describe('native perf marks (--perf-marks)', () => {
     );
   });
 
-  it('never gates, so a marks run cannot mint a baseline', () => {
-    const reasons = baselineBlockers({
-      ...makeRun(),
-      dirty: false,
-      plan: 'full',
-      launches: 8,
-      problems: [],
-      machine: { loadavg1: 1, cpuCount: 14 },
-      perfMarks: true,
-    });
-    expect(reasons.some((reason) => reason.includes('perf marks'))).toBe(true);
-  });
-
   it('narrows the schedule to the arm that has marks, and keeps :marks out of the cell key', () => {
     const schedule = buildSchedule({ plan: 'quick', perfMarks: true });
     expect([...new Set(schedule.map((entry) => entry.implementation))]).toEqual(
@@ -1082,11 +895,9 @@ describe('native perf marks (--perf-marks)', () => {
 
 describe('sample completeness (round 4)', () => {
   /**
-   * Round 3's Android mount table printed `presented` medians built from 35 of
-   * 80 iterations (`rn-core`) and 13 of 80 (`expo-ui-shared-host`), and quoted
-   * "1.15x" from them. A signal that arrives on a third of the iterations is
-   * broken, not slow, and the survivors are not a sample of the cell (review
-   * rounds 2-3, fix 2). Such a metric is now `n/a` everywhere and ungated.
+   * A latency signal that arrives on a minority of the iterations is broken,
+   * not slow, and the survivors are not a sample of the cell: such a metric is
+   * `n/a` everywhere and ungated.
    */
   it('drops a latency metric whose samples are mostly missing', () => {
     const run = makeRun({ 'nitro-ui': { missingPresented: 12 } });
@@ -1122,8 +933,8 @@ describe('sample completeness (round 4)', () => {
   });
 
   it('will not divide an arm by an incomplete control', () => {
-    // The exact round-3 shape: the arm drew 80 of 80 presenting frames while
-    // `rn-core` drew 13, so the ratio was a survivor over a survivor.
+    // The control is missing most of its presenting frames, so a ratio would be
+    // a full sample over a survivor.
     const run = makeRun({ 'rn-core': { missingPresented: 20 } });
     expect(ratioTable(run)['mount:nitro-ui:50'].metrics).not.toHaveProperty(
       'presentedNs'
@@ -1143,97 +954,18 @@ describe('sample completeness (round 4)', () => {
     expect(summaryTable(run)).toContain('n/a');
     expect(MAX_MISSING_SAMPLE_RATIO).toBe(0.1);
   });
-
-  it('never mints a baseline from a cell with an unreportable metric', () => {
-    const blockers = baselineBlockers(
-      baselineRun({ 'nitro-ui': { missingPresented: 12 } })
-    );
-    expect(
-      blockers.some((reason) => reason.includes('n/a because too few'))
-    ).toBe(true);
-  });
-});
-
-describe('--check against a committed baseline', () => {
-  // `--check` reads `bench/baselines/<machine-label>/<deviceKey>.json` through
-  // `baselineTable()`/`baselineNoise()` rather than a run, and until round 4 no
-  // test went down that path - the reviewer had to script it by hand to prove
-  // the gate fires there at all.
-
-  it('mints a ratio-only baseline from a clean full-plan run', () => {
-    const baseline = buildBaseline(baselineRun());
-    expect(baseline.platform).toBe('ios');
-    expect(baseline.deviceKey).toBe('ios27-sim-testdevice');
-    const cell = baseline.cells['mount:nitro-ui:50'];
-    expect(cell.metrics.mountedNs.ratio).toBeCloseTo(1.1, 1);
-    // Ratio-only (D9): a baseline stores no absolute nanoseconds at all.
-    expect(JSON.stringify(baseline)).not.toContain('launchMedians');
-    expect(baselineBlockers(baselineRun())).toEqual([]);
-  });
-
-  /**
-   * The per-component entry carries the plan and the launch count of the run it
-   * describes. A row that said `full` because the code wanted `full` would tell a
-   * reader a row is gateable when it was measured on the quick plan.
-   */
-  it('records, per component, the plan and launch count of the run that measured it', () => {
-    const baseline = buildBaseline({
-      ...baselineRun(),
-      plan: 'quick',
-      launches: 4,
-    });
-    const entry = baseline.components.switch;
-    expect([entry.plan, entry.launches]).toEqual(['quick', 4]);
-    expect(entry.component).toBe('switch');
-    expect(entry.sha).toBe('abc1234');
-    expect(entry.cellKeys).toEqual(Object.keys(baseline.cells).sort());
-    expect(entry.cellKeys.length).toBeGreaterThan(0);
-  });
-
-  it('fails a 2x nitro-ui regression against that baseline', () => {
-    const baseTable = baselineTable(buildBaseline(baselineRun()));
-    const baseNoise = baselineNoise(buildBaseline(baselineRun()));
-    const result = gate({
-      head: baselineRun({
-        'nitro-ui': { mounted: 220_000, presented: 260_000 },
-      }),
-      base: { cells: {} },
-      baseTable,
-      baseNoise,
-    });
-    expect(result.conclusiveFailure).toBe(true);
-    const failure = result.conclusiveFailures.find(
-      (entry) => entry.metric === 'mountedNs'
-    );
-    expect(failure.implementation).toBe('nitro-ui');
-    expect(failure.ratio).toBeCloseTo(2, 1);
-  });
-
-  it('passes the same baseline when nothing moved', () => {
-    const baseline = buildBaseline(baselineRun());
-    const result = gate({
-      head: baselineRun(),
-      base: { cells: {} },
-      baseTable: baselineTable(baseline),
-      baseNoise: baselineNoise(baseline),
-    });
-    expect(result.conclusiveFailures).toEqual([]);
-    expect(result.failures).toEqual([]);
-  });
 });
 
 /**
- * `--component` (`bun bench --component button`, task G2): a component is part of the
- * scenario cell (`mount.button`), and the filter schedules one whole component.
+ * A component is part of the scenario cell (`mount.button`), and the filter
+ * schedules one whole component.
  */
 describe('the Button cells (--component button)', () => {
   /**
-   * A cell is paired with the `rn-core` control of the **same cell**. Two components
-   * in one run, with controls far apart (`mount` 100 us, `mount.button` 200 us) and
-   * arms that sit at different ratios over their own control (1.1x and 1.5x): a
-   * Button arm divided by the Switch control reads 3.0x, and a Switch arm divided by
-   * the Button control 0.55x, so neither expected number is reachable by a crossed
-   * pairing.
+   * A cell is paired with the `rn-core` control of the same cell. The two
+   * controls are far apart (100 us and 200 us) and the arms sit at different
+   * ratios over their own control (1.1x and 1.5x), so a crossed pairing reads
+   * 3.0x or 0.55x.
    */
   it('divides a Button arm by the Button control, never the Switch control', () => {
     const records = [
@@ -1272,9 +1004,8 @@ describe('the Button cells (--component button)', () => {
 
   it('schedules one complete component per --component, never a mix', () => {
     const button = buildSchedule({ plan: 'quick', component: 'button' });
-    // Every cell is a Button cell, and all four arms are there - including the
-    // control, or the ratios would be computed against an arm that is never
-    // measured.
+    // All four arms are there, including the control the ratios are computed
+    // against.
     expect([...new Set(button.map((entry) => entry.scenario))]).toEqual([
       'mount.button',
       'update.button',
@@ -1288,9 +1019,6 @@ describe('the Button cells (--component button)', () => {
       true
     );
     // `null` stays "every component", which is what a plain `bun bench` runs.
-    // G3's Progress cells are the fourth component, so this list and the count
-    // grow with every component that lands - a cell missing from the plan shows
-    // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
     const QUICK_COMPONENTS = [
       'switch',
@@ -1308,20 +1036,11 @@ describe('the Button cells (--component button)', () => {
       new Set(QUICK_COMPONENTS)
     );
     /**
-     * Ten components in the quick plan (G13's TextField and G24's Form are benched
-     * but not hostable, so the Host arm's scope stays at eight), each with the cells
-     * of that component's own plan entry run through the four unscoped arms, plus one
-     * scoped arm's cells for each component it renders. Both halves are measured
-     * rather than folded into a product: a component losing a cell moves the first
-     * number, and an arm escaping (or losing) its scope moves the second. Summed
-     * per component rather than one component's length times ten, because a Form's
-     * `n` is rows inside one container and it is priced at two row counts (20 and
-     * 50, S6's question 6) where every other component is priced at one.
-     * Since H2b every bench control is hostable, so no component's schedule is naturally
-     * free of the Host arm any more: the baseline is that same schedule with the scoped
-     * arms taken out, which measures the quantity instead of assuming a probe. The half
-     * that rode on the probe is asserted in its own right below — the Host arm is scoped
-     * to Android, so an iOS schedule must not carry one.
+     * Each component's own plan cells through the four unscoped arms, plus one
+     * scoped arm's cells for each component it renders. Summed per component,
+     * because a Form is priced at two row counts where every other component is
+     * priced at one. The Host arm is scoped to Android, so an iOS schedule must
+     * not carry one.
      */
     const unscopedCells = QUICK_COMPONENTS.reduce(
       (total, component) =>
@@ -1350,23 +1069,15 @@ describe('the Button cells (--component button)', () => {
 });
 
 /**
- * The DatePicker cells (`bun bench --component date-picker`, task G5): the arms that
- * have no DatePicker cell on Android (`ARMS_WITHOUT_COMPONENT`).
+ * The arms that have no DatePicker cell on Android (`ARMS_WITHOUT_COMPONENT`).
  */
 describe('the DatePicker cells (--component date-picker)', () => {
   /**
-   * `@expo/ui` has no mountable date *field* on Android: its only picker form is
-   * the inline M3 calendar, whose month pager is horizontally scrollable, so the
-   * `matchContents` host every self-sizing arm gets measures it with infinite
-   * width and the app dies with `IllegalStateException`. Bounding the width makes
-   * it mountable but prices a full-screen calendar against a compact field at
-   * ~2.45 s per mount iteration, past the runner's per-launch budget. So those
-   * cells do not exist on Android, and the schedule says so instead of burning
-   * 180 s timeouts per launch.
-   *
-   * `nitro-ui-host` is on this list's other side: a hosted date field is a Compose
-   * `Dialog` opened from the Host's composition, which mounts on Android (H2b), so its
-   * cells are here. The two names this test is about stay out either way.
+   * `@expo/ui` has no mountable date field on Android: its only picker form is
+   * the inline Material 3 calendar, whose horizontally scrollable month pager
+   * cannot be measured by the `matchContents` host with infinite width. A
+   * hosted nitro-ui date field does mount there, so `nitro-ui-host` keeps its
+   * cells.
    */
   it('omits the Android arms that cannot mount a DatePicker', () => {
     const android = buildSchedule({
@@ -1404,15 +1115,9 @@ describe('the DatePicker cells (--component date-picker)', () => {
 });
 
 /**
- * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a and to seven by H2b).
- *
- * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button,
- * SegmentedControl, Picker, DatePicker - and refuses what a Host refuses (an RN view, a
- * nested Host); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
- * cell outside that scope is a launch that measures nothing under a name that promises
- * something, so the claim these tests hold is that such cells are never scheduled - and
- * that the arm is still measured where it *does* apply, or the D15 ratio against
- * `expo-ui-shared-host` would silently lose its head row for a whole component.
+ * The arm composes what a `<Host>` can draw; on iOS `<Host>` is a passthrough
+ * rather than a shared composition. A cell outside that scope would be a launch
+ * that measures nothing, so such cells are never scheduled.
  */
 describe('the shared-Host arm is scheduled only where it renders something', () => {
   const HOST = 'nitro-ui-host';
@@ -1429,16 +1134,11 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   ];
 
   /**
-   * The arm's scope, as two files write it.
-   *
-   * `ARM_SCOPES` decides which cells are scheduled and
-   * `bench/src/implementations/index.ts` repeats the same list as the arm's
-   * `components`, which is what the report prints and what `NitroUiHostList` holds
-   * itself to (it throws for anything else). A schedule widened without the list is a
-   * cell that launches and throws, which reads as a broken bench run rather than as
-   * drift, so the pair is asserted here. The bench app cannot be imported into this
-   * file - its `@expo/ui` arm is ESM that jest cannot transform - so the second list
-   * is read from the source it is written in.
+   * `ARM_SCOPES` decides which cells are scheduled, and
+   * `bench/src/implementations/index.ts` repeats the list as the arm's
+   * `components`. The bench app cannot be imported here (its `@expo/ui` arm is
+   * ESM that jest cannot transform), so the second list is read from its
+   * source.
    */
   it('keeps its component scope in one place across the two lists', () => {
     const scoped = ARM_SCOPES[HOST].components;
@@ -1464,8 +1164,7 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     expect(
       listed[1]
         .split('\n')
-        // the generated region's markers live inside this array (X3); the list itself
-        // is what the assertion is about
+        // The generated region's markers are comment lines inside this array.
         .filter((line) => !line.trim().startsWith('//'))
         .join('\n')
         .split(',')
@@ -1474,11 +1173,6 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     ).toEqual(scoped);
   });
 
-  /**
-   * Every hostable control gets its cells, per launch, like every other
-   * arm. A component quietly dropping out of the arm is how a ratio table loses a
-   * head row without any test going red.
-   */
   it('schedules a full set of cells for every control a Host can draw', () => {
     for (const component of ARM_SCOPES[HOST].components) {
       const schedule = buildSchedule({
@@ -1503,11 +1197,8 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   });
 
   /**
-   * Since H2b the arm covers every planned control, so the loop below walks an empty
-   * list. That is asserted out loud rather than left to pass silently: an empty loop is
-   * exactly how a scope grows without any test noticing, and the rule the loop guards -
-   * never schedule a cell for an arm that would render nothing - still has to hold for
-   * whatever a future plan adds that a Host cannot draw.
+   * The arm covers every planned control today, so the loop below walks an
+   * empty list, and that is asserted rather than left to pass silently.
    */
   it('schedules no cell of a control a Host refuses', () => {
     const refused = EVERY_COMPONENT.filter(
@@ -1525,10 +1216,6 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
         expect(
           schedule.filter((entry) => entry.implementation === HOST)
         ).toEqual([]);
-        // The refused component keeps its other arms: the scope is one arm's
-        // property, not a hole in the cell. (`armsFor` is not asserted here because
-        // `ARMS_WITHOUT_COMPONENT` already removes the Expo arms from Android's
-        // date-picker cells, which is a different rule with its own tests.)
       }
     }
   });
@@ -1552,9 +1239,8 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   );
 
   /**
-   * Asking for nothing but the scoped arm on a platform it does not exist on has
-   * to be an error, not an empty schedule: an empty schedule exits green, and a
-   * green run that measured nothing is the failure mode this file exists for.
+   * An empty schedule exits green, so asking for only the scoped arm on a
+   * platform it does not exist on has to be an error.
    */
   it('refuses an --only that the platform leaves nothing to measure', () => {
     for (const component of ARM_SCOPES[HOST].components) {

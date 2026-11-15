@@ -48,11 +48,9 @@ missing.
 ## Reports and the ledger
 
 - `gate.mjs table` prints the gate table for a report.
-- `gate.mjs export --task <ID>` writes the ledger to `docs/tasks/<ID>/gates.jsonl` by merging:
-  lines already in the file stay byte for byte, this branch's lines are appended, and a line
-  already present (same time, gate and code tree) is not written twice.
-- The per-branch ledger `.gates/<branch>.jsonl` is removed with its worktree. Export it before
-  cleanup.
+- The per-branch ledger `.gates/<branch>.jsonl` is local evidence and is never committed. A
+  report carries the table, and its red proofs as lines of its own.
+- The ledger is removed with its worktree, after "Cleanup" below has copied it.
 
 ## Logs
 
@@ -69,3 +67,6 @@ missing.
 `node scripts/worktrees.mjs --prune` removes the worktrees that are safe to remove. Before it
 removes one, it copies that worktree's `.gates/` records, except `logs/`, to
 `~/.nitro-ui/gate-archive/<branch>-<time>/`.
+
+`node scripts/task-records.mjs --archive` copies a merged task's records to
+`~/.nitro-ui/task-archive/<ID>/` and stages their removal from `docs/tasks`.

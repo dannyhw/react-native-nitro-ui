@@ -10,10 +10,7 @@ import {
 import type { NitroUiDialogAction } from './Dialog.nitro';
 import { NativeNitroUiDialog } from './NativeNitroUiDialog';
 
-/**
- * One button of a dialog. The actions are data, as a Menu's items are: never
- * child views, never JSON.
- */
+/** One button of a dialog. */
 export interface DialogAction {
   /**
    * What `onAction` reports. Unique across the dialog's actions, and stable: a
@@ -37,10 +34,9 @@ export interface DialogAction {
 /**
  * The props both dialogs share.
  *
- * `isPresented` is controlled and required: the parent decides whether the dialog
- * is up, and every open or close the user causes is reported through
- * `onIsPresentedChange` - the same event-count handshake a Switch's `value` uses
- * (`docs/architecture/core.md` §4).
+ * `isPresented` is controlled and required: the parent decides whether the
+ * dialog is up, and every close the user causes is reported through
+ * `onIsPresentedChange`.
  */
 export interface DialogProps extends ViewProps {
   /** Whether the dialog is presented. */
@@ -65,8 +61,8 @@ export interface DialogProps extends ViewProps {
    */
   actions: readonly DialogAction[];
   /**
-   * Called with an action's `id` when the user taps it - always before the
-   * `onIsPresentedChange(false)` the same tap causes (DECISIONS D32).
+   * Called with an action's `id` when the user taps it, always before the
+   * `onIsPresentedChange(false)` the same tap causes.
    */
   onAction?: ((id: string) => void) | undefined;
   /**
@@ -77,10 +73,9 @@ export interface DialogProps extends ViewProps {
   /** The buttons' colour. Default: each platform's theme. */
   tintColor?: ColorValue | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for tests and benchmarks.
    *
-   * @internal Not app API (DECISIONS D14). The shape is written inline for the
-   * reason `DatePickerProps.hybridRef` gives.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -97,9 +92,9 @@ export interface DialogProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks. Benchmark only.
+   * Instance id for native performance marks; `null` turns them off.
    *
-   * @internal Benchmark and diagnostics only - not app API.
+   * @internal
    */
   nuiPerfId?: number | null | undefined;
 }
@@ -121,14 +116,9 @@ export interface ConfirmationDialogProps extends DialogProps {
 const ROLES: readonly string[] = ['default', 'cancel', 'destructive'];
 
 /**
- * The actions as native wants them: every member filled in, roles resolved, and
- * the rules a platform would otherwise crash or guess on applied.
- *
- * `UIAlertController` raises for a second `.cancel` action, so a second cancel
- * can never reach native: a dev build throws here, and a release build demotes
- * every cancel after the first to `'default'`. An empty list and a repeated id
- * throw in dev too - a dialog with no buttons cannot be closed by an action, and
- * `onAction` could not say which of two equal ids was tapped.
+ * `UIAlertController` raises for a second `.cancel` action, so a dev build
+ * throws on one and a release build demotes every cancel after the first to
+ * `'default'`.
  */
 function toNativeActions(
   actions: readonly DialogAction[] | undefined
@@ -176,10 +166,6 @@ function toNativeActions(
   });
 }
 
-/**
- * What makes one action list the same as another, for the cache below. Fields
- * are joined by a character no title can forge into a field boundary.
- */
 function actionsSignature(actions: readonly NitroUiDialogAction[]): string {
   return actions
     .map(
@@ -190,12 +176,8 @@ function actionsSignature(actions: readonly NitroUiDialogAction[]): string {
 }
 
 /**
- * The native actions, with a stable identity.
- *
- * A caller who writes `actions={[...]}` inline makes a new array every render,
- * and props diff by identity, so without this an unrelated parent re-render
- * would re-send and re-convert the whole struct array. Keyed on content, the way
- * `Menu`'s `useMenuRows` is.
+ * Keeps the array's identity while its content is unchanged: an inline
+ * `actions={[...]}` is a new array every render, and props diff by identity.
  */
 function useNativeActions(
   actions: readonly DialogAction[] | undefined
@@ -215,12 +197,9 @@ function useNativeActions(
 }
 
 /**
- * The box React Native lays out: nothing.
- *
- * The presented window is the platform's and is not in React Native's layout at
- * all, so the view is a `0 x 0` anchor that takes no touches. An app may still
- * place it with `style` - absolutely over the button that opens a confirmation
- * dialog, say - and on iPad that box is where the action sheet's arrow points.
+ * The dialog is a platform window outside React Native's layout, so the view is
+ * a `0 x 0` anchor that takes no touches. On iPad the action sheet's arrow
+ * points at this box.
  */
 const ANCHOR_BASE_STYLE = {
   position: 'absolute',
@@ -228,7 +207,7 @@ const ANCHOR_BASE_STYLE = {
   height: 0,
 } as const;
 
-/** A module-level no-op, so `onAction` is always sent with one identity (D7b). */
+/** A module-level no-op, so `onAction` is always sent with one identity. */
 function onActionNotProvided(): void {
   // Intentionally empty: the caller asked for nothing.
 }
@@ -243,7 +222,6 @@ function normaliseTitleVisibility(
     : 'automatic';
 }
 
-/** The implementation both exports share; `variant` is the only difference. */
 function NitroDialog({
   variant,
   isPresented,
@@ -262,8 +240,6 @@ function NitroDialog({
   ...restProps
 }: ConfirmationDialogProps & { variant: DialogVariant }) {
   const presented = isPresented === true;
-  // Whether the newest native event was a dismissal, for the refusal check below.
-  // Written by the handler `useControlled` calls after it has echoed the count.
   const lastNativeWasDismissal = useRef(false);
   const controlled = useControlled<boolean>(presented, false, (next) => {
     lastNativeWasDismissal.current = !next;
@@ -276,12 +252,9 @@ function NitroDialog({
   const nativeActions = useNativeActions(actions);
   const processedTint = useProcessedColor(tintColor);
 
-  // A dismissal the app refused (DECISIONS D33): native has said `false`, JS has
-  // echoed that event, and `isPresented` is still `true` *in the commit that
-  // echoes it*. Native presents the dialog again on that same commit; the warning
-  // is the developer's half. Only that commit counts: a parent that followed the
-  // dismissal to `false` and opens the dialog again later re-runs this effect with
-  // the same echoed count, and that is an ordinary open, not a refusal.
+  // Warns when the app refused a dismissal: native reported `false`, and
+  // `isPresented` is still `true` in the commit that echoes that event. Only
+  // that commit counts; a later re-open runs this with the same echoed count.
   const warnedRefusal = useRef(false);
   const echoedAtLastCheck = useRef(0);
   const echoed = controlled.mostRecentEventCount;
@@ -341,8 +314,8 @@ function NitroDialog({
  * />
  * ```
  *
- * It has no size of its own: the dialog is a window the platform lays out, and
- * the view React Native sees is a `0 x 0` anchor.
+ * It takes no space in the layout: the dialog is a window the platform lays
+ * out.
  */
 export function AlertDialog(props: AlertDialogProps) {
   return <NitroDialog {...props} variant="alert" />;

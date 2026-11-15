@@ -1,9 +1,3 @@
-/**
- * Button stories (S1). Props and events: `docs/components/button.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { Button } from 'react-native-nitro-ui';
@@ -73,7 +67,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Every public prop on the Controls panel, with `onPress` logging to Actions. */
 export const Playground: Story = {
   render: function PlaygroundStory({ onPress, ...props }) {
     const handlePress = useCallback(() => onPress?.(), [onPress]);
@@ -88,12 +81,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * The five variants and the three sizes, side by side, then all five disabled.
- *
- * Every row takes the `title` row from the Controls panel, because the label is
- * part of what decides each button's width.
- */
 export const Variants: Story = {
   render: ({ title }) => (
     <Showcase>
@@ -127,7 +114,6 @@ export const Variants: Story = {
   ),
 };
 
-/** Tints, and what a tint means per variant on each platform. */
 export const Tints: Story = {
   render: ({ title }) => (
     <Showcase>
@@ -162,13 +148,6 @@ export const Tints: Story = {
   ),
 };
 
-/**
- * `systemImage`, which is iOS-only in v0.1.
- *
- * It is in the sizing key on both platforms so the two cannot drift apart when
- * Android implements it - the icon'd button is the same sizing question on both,
- * even while only one answers it.
- */
 export const Icons: Story = {
   render: () => (
     <Showcase>
@@ -208,10 +187,6 @@ export const Icons: Story = {
   ),
 };
 
-/**
- * The echo a caller actually builds: presses counted in React state, so the
- * label can only ever read taps that really arrived in JS.
- */
 export const PressCounter: Story = {
   render: function PressCounterStory({ title }) {
     const [presses, setPresses] = useState(0);
@@ -249,12 +224,6 @@ export const PressCounter: Story = {
   },
 };
 
-/**
- * Sizing (README "Sizing"): a Button measures itself, so a parent width leaves it
- * at its measured size and `alignSelf: 'stretch'` is what asks for the fill. A
- * `width` narrower than the label truncates it (one line, tail) instead of
- * painting outside the box.
- */
 export const Sizing: Story = {
   render: ({ title }) => (
     <Showcase>
@@ -279,11 +248,6 @@ export const Sizing: Story = {
   ),
 };
 
-/**
- * The buttons as the current appearance draws them, plus the note about why a
- * story cannot show two appearances at once. A component (not an inline
- * `render`) because it reads the appearance with a hook.
- */
 function AppearancePanel({ title }: { title: string }) {
   const scheme = useColorScheme();
   return (
@@ -309,19 +273,8 @@ function AppearancePanel({ title }: { title: string }) {
 }
 
 /**
- * The button palette comes from the OS appearance, and this story shows the one
- * the device is set to.
- *
- * It used to draw the same row twice, the second time on a black card labelled
- * "on a dark surface". That was not dark mode: only the card's background
- * changed, so the light-palette buttons - a *disabled* one most of all, which is
- * light-on-light by design - were near-invisible against the black. React Native
- * 0.88 has no per-subtree appearance override (no `overrideAppearance` prop;
- * `Appearance.setColorScheme()` is app-wide), so a story cannot honestly paint a
- * dark panel. Change the device appearance instead - `xcrun simctl ui <udid>
- * appearance dark` on iOS, `adb -s <serial> shell cmd uimode night yes` on
- * Android - and this screen follows. `docs/components/button.md` has the real
- * light/dark pair, captured that way.
+ * Shows the one appearance the device is set to: React Native has no
+ * per-subtree appearance override, so a story cannot draw a dark panel.
  */
 export const Appearances: Story = {
   render: ({ title }) => <AppearancePanel title={title} />,

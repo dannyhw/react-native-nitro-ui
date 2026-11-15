@@ -1,27 +1,3 @@
-/**
- * On-device tests for the Android theme (task X18, DECISIONS D39 item 3).
- *
- * Android draws every control with Material 3 Expressive unless the app calls
- * `setMaterialTheme('baseline')`. The question each case asks is the one the opt-out
- * has to answer for: does the choice reach *every* composition the library owns - a
- * control's own (one per Hybrid View) and a `<Host>`'s, which its children compose
- * inside - and does it reach the ones already on screen, both ways?
- *
- * The reading is `nitroUiCore.materialThemeReport()`: the setting, how many theme roots
- * have composed under each Material motion scheme, and how many content subtrees were
- * created under a root (`created`). A switch must *recompose* what is on screen, never
- * rebuild it: a rebuild ends a presented sheet's presentation, closes an open menu and
- * drops a focused field's focus (X18 fix round 1), so the live cases hold `created` still
- * and watch a sheet, a context menu and a field through the switch. The count is taken inside
- * the theme from `MaterialTheme.motionScheme` - what Material hands a control's
- * content, not what the root meant to choose - so a root that ignored the setting
- * shows up as a count under the wrong scheme. Every case reads the change across
- * its own window, because the totals belong to the process and other suites mount
- * controls too.
- *
- * iOS has no Material theme: there the report is empty and the call is a no-op, and
- * the last case holds it to that.
- */
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
 import {
@@ -80,7 +56,6 @@ function delta(before: Report, after: Report) {
   };
 }
 
-/** Poll until `done(report)` holds; fail with the last report if it never does. */
 async function waitForReport(
   done: (report: Report) => boolean,
   what: string,
@@ -106,7 +81,6 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** Poll `read` until it hands back something; fail naming `what`. */
 async function waitFor<T>(
   read: () => T | null,
   what: string,
@@ -123,7 +97,6 @@ async function waitFor<T>(
   }
 }
 
-/** The BottomSheet's handle and report (declared, not imported - D14). */
 type SheetHandle = { nuiTestStateReport(): string };
 let sheet: SheetHandle | null = null;
 const captureSheet = (handle: SheetHandle): void => {
@@ -139,7 +112,6 @@ function sheetReport(): SheetReport {
   }
   return report;
 }
-/** Everything the sheet told the app. A switch must tell it nothing. */
 const sheetEvents: string[] = [];
 const onSheetPresentedChange = (next: boolean): void => {
   sheetEvents.push(`presented:${String(next)}`);
@@ -153,7 +125,6 @@ const onSheetDetentChange = (index: number): void => {
 };
 let sheetSetOpen: ((next: boolean) => void) | null = null;
 
-/** A sheet presented from the first render, at `medium` of `medium`/`large`. */
 function SheetScreen() {
   const [open, setOpen] = useState(true);
   sheetSetOpen = setOpen;
@@ -172,7 +143,6 @@ function SheetScreen() {
   );
 }
 
-/** The ContextMenu's handle (declared, not imported - D14). */
 type MenuHandle = {
   nuiTestA11yLongClick(): void;
   nuiTestSelectRow(id: string): void;
@@ -197,7 +167,6 @@ const MENU_GROUP: MenuGroup = {
     { id: 'second', title: 'Second' },
   ],
 };
-/** Everything the menu told the app after it opened. A switch must tell it nothing. */
 const menuEvents: string[] = [];
 const onMenuOpen = (): void => {
   menuEvents.push('open');
@@ -224,7 +193,6 @@ function MenuScreen() {
   );
 }
 
-/** The TextField's handle (declared, not imported - D14). */
 type FieldHandle = {
   focus(): void;
   blur(): void;
@@ -235,7 +203,6 @@ const captureField = (handle: FieldHandle): void => {
   field = handle;
 };
 const FIELD_TEXT = 'kept through a switch';
-/** Everything the field told the app after it took focus. A switch must tell it nothing. */
 const fieldEvents: string[] = [];
 const onFieldFocus = (): void => {
   fieldEvents.push('focus');
@@ -341,7 +308,6 @@ describe('MaterialTheme', () => {
     );
     await settle();
 
-    // Out: every live root recomposes under the baseline theme.
     const beforeOut = readReport();
     setMaterialTheme('baseline');
     await waitForReport(
@@ -352,10 +318,8 @@ describe('MaterialTheme', () => {
     const out = delta(beforeOut, readReport());
     console.log(`[theme] live out: ${JSON.stringify(out)}`);
     expect(out.expressive).toBe(0);
-    // Recomposed, not rebuilt: no root created its content again.
     expect(out.created).toBe(0);
 
-    // And back: the same roots return to Expressive.
     const beforeBack = readReport();
     setMaterialTheme('expressive');
     await waitForReport(
