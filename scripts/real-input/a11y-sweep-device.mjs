@@ -103,9 +103,7 @@ class SweepDevice {
   async startFromLaunch() {
     this.adbShell(`am force-stop ${this.appId}`);
     this.adbShell('cmd statusbar collapse');
-    this.adbShell(
-      `monkey -p ${this.appId} -c android.intent.category.LAUNCHER 1`
-    );
+    this.adbShell(`am start -n ${this.appId}/.MainActivity`);
     const firstTab = () =>
       this.hierarchy().some((node) => node.resourceId === 'tab-strip');
     const deadline = Date.now() + 120_000;

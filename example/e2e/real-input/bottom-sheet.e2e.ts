@@ -125,11 +125,14 @@ test('a drag down dismisses an ordinary sheet and moves nothing else', async ({
   }
   // A drag that starts above the sheet's own chrome is taken by the system as the
   // gesture that pulls down the notification shade, and the shade takes the screen with
-  // it: every later read of the tree then sees SystemUI instead of the app.
+  // it: every later read of the tree then sees SystemUI instead of the app. The 180 ms is
+  // the swipe the prop documents - a 700 ms drag over the same 600 px is taken as a drag
+  // of the content and springs the sheet back without a word to JS.
   await drag(
     screen,
     { x: chrome.x + chrome.width / 2, y: chrome.y + 12 },
-    { x: chrome.x + chrome.width / 2, y: chrome.y + 600 }
+    { x: chrome.x + chrome.width / 2, y: chrome.y + 600 },
+    180
   );
   await fit.waitFor({ state: 'detached' });
   await expect(log).toContainText('dismiss');
@@ -176,7 +179,8 @@ test('a drag down dismisses an ordinary sheet and moves nothing else', async ({
   await drag(
     screen,
     { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 12 },
-    { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 600 }
+    { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 600 },
+    180
   );
   await sticky.getByTestId('sheet-sticky-title').waitFor({ state: 'visible' });
   await sticky.getByTestId('sheet-sticky-close').tap();
