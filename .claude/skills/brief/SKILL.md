@@ -57,7 +57,8 @@ if it exists. Read the files the brief names before you reason about structure, 
 Devices only from `node scripts/lease.mjs acquire --task <ID> --boot`.
 Before review run exactly what `node scripts/gate.mjs need --for review` asks for. Do
 not run real-input gates unless the brief's Proof names one; they run at merge.
-Commit after each item. Do not push. Never `pkill` or `killall`.
+Commit after each item of code. The report, ledger export and mutation record go in
+one final commit. Do not push. Never `pkill` or `killall`.
 Budget: <N> hours. At the budget, commit, write the report with what is and is not
 done, and stop.
 End with the report's summary and the final commit SHA.

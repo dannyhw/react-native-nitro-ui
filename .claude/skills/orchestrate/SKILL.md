@@ -45,6 +45,12 @@ unblocks a merge today, which you do yourself, gated, and report; and the single
 task the `flake` skill starts for a quarantined test, which is a follow-up and queues
 behind components.
 
+Process tooling has a ceiling of 10% of agent hours in a week. The gate and lease code
+takes bug fixes only. Removing a tool or a test that has not earned its place is not
+tooling work in this sense: propose it with what it has caught and what it costs.
+
+Benchmarks run before a release, not per task.
+
 ## Capacity
 
 Device tasks in flight never exceed device pairs (`node scripts/lease.mjs list`). A task
@@ -55,7 +61,8 @@ When a pair frees, hand it to the next task in the same turn.
 
 ## One task
 
-1. **Brief** it with the `brief` skill. Push the brief.
+1. **Brief** it with the `brief` skill. The brief is the first commit of the task
+   branch, not a commit on `main`.
 2. **Delegate** to a fresh worker in its own worktree. A fix round is also a fresh
    worker, given the brief, the review and the branch. Resume an existing one only when
    it holds state that cannot move (a running process, uncommitted work).
@@ -99,9 +106,10 @@ or provider error. After that, replan around it.
   stranger.
 - For tooling that behaves differently per platform (paths, temp directories,
   CocoaPods, CI workflows), look at CI for the branch before merging it.
-- The merge commit says what changed for users, with the PR number. The STATUS row and
-  ledger export go inside it, and `STATUS.md` and `RECOVERY.md` are updated in the same
-  push.
+- The merge commit says what changed for users, with the PR number. The STATUS row,
+  follow-up lines, decisions and ledger export go inside it. Make no commit on `main`
+  that only updates task records: between merges, what you know lives in the pull
+  requests and in your thread. The exception is the resume line under "Stopping".
 - After the push: wait for CI on that SHA and read it; run
   `node scripts/worktrees.mjs --prune`; check `npm view` before saying anything about a
   release.
