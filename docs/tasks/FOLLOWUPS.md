@@ -1,5 +1,16 @@
 # Follow-ups (not blocking v0.1, see D19)
 
+## Flaky tests
+
+One line per test that went red and then green on the same tree: test name, date, log
+path, times seen. Copied from task reports at merge. The rules are in `.claude/skills/flake/SKILL.md`.
+
+## Quarantined tests
+
+Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
+A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
+is raised with the owner once.
+
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
 - **F1 — Determinism.** Done (`F1-determinism.report.md`, merged `2d58ca6`). Its re-review left four low items, listed below; its dwell probe opened F7.
@@ -311,14 +322,5 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - X32 merge (2026-11-13), all green on the same tree's re-run: iOS `FormFidelity` E2 question 4 read `the Form lays rows out at 0 pt and draws them at 340 pt` (8 cell reports) at load 17–28, as S6b saw at 0 reports. Passed twice filtered and in the full re-run. Android `HostPopups` "opens two popup owners in one Host" (menu `live` 1, not 0) and isolated `BottomSheetModalHazard` (render timeout 1000 ms) failed at load peaks ~35, the same run. All load-sensitive.
 - `real-input:android` `search-field`: "timed out waiting for the prop to change (search-switching-echo="switching: number-pad")" right after the switching field opens with its text keyboard. Seen in X31 (2026-11-12 17:29) and the X32 merge (2026-11-14), unrelated to either diff; G27 hit the same step while building it. The prop change after a focused keyboard restart is slow to echo under load.
 - `real-input:ios` `testRealInputForm`: "tap 1 of 10 on the Switch inside a form row should make "form-switch-changes" read 1; it reads "0" after 8s" in the X33+X34 merge run (2026-11-15), green on the re-run of the same tree; the same Form code passed twice in X32's runs. The HID first-tap drop of FOLLOWUPS:50, now seen on a Switch inside a Form row.
-
-## Flaky tests
-
-One line per test that went red and then green on the same tree: test name, date, log
-path, times seen. Copied from task reports at merge. The rules are in `.claude/skills/flake/SKILL.md`.
-
-## Quarantined tests
-
-Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
-A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
-is raised with the owner once.
+- `scripts/__tests__/lease-queue.test.js` "hands a freed pair to the older ticket and shows the queue in `list`" still flakes after X34's fix: the Release run on the 0.9.1 commit (2026-11-15) read leases `["X24","X25"]` where `["X24"]` was expected (line 538), green on the re-run. CI on 8e5155c4 and 6d1ceac7 passed it.
+- `scripts/__tests__/gate-runner.test.js` killed-gate sweep: the test read the log before the supervisor's last line on the Linux CI runner (2026-11-15, twice in a row on 6d1ceac7). Done in af9d697f: it now waits for the sweep's outcome line.
