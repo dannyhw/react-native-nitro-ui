@@ -7,26 +7,8 @@ import { Pressable, Text } from 'react-native';
 import { nitroUiHybridObjects } from '../../../__mocks__/react-native-nitro-modules';
 import { Picker } from './Picker';
 
-/**
- * The render contract of the `Picker` wrapper, measured by Reassure inside
- * `bun run check` (docs/architecture/benchmarks.md, "Render counts").
- *
- * A controlled `selectedIndex`, so the contract is SegmentedControl's and
- * Switch's rather than Button's:
- * - **advance** moves the selection through three of four options. The index and
- *   the `options` array are the wrapper's only rendered inputs, so a wrapper that
- *   stopped passing the index down would freeze the control, and one that derived
- *   a fresh object per render would show up as a redundant commit;
- * - **bump** renders the parent without touching the control's inputs, so the
- *   wrapper must not churn. The counter is drawn, because Reassure's redundancy
- *   check compares whole rendered trees.
- *
- * Opening the menu is deliberately not driven here: it is a native gesture into a
- * control the platform presents, and Reassure cannot see it
- * (`docs/architecture/core.md` §4). What it *can* see is that a re-render with an
- * unchanged selection and an unchanged `options` array costs nothing - which is the
- * claim a `Picker` in a list row most often needs.
- */
+// The bump counter is drawn because Reassure's redundancy check compares
+// rendered trees: a parent commit that changed nothing visible is flagged.
 const OPTIONS = ['One', 'Two', 'Three', 'Four'] as const;
 
 function Harness() {
@@ -52,9 +34,7 @@ function Harness() {
   );
 }
 
-// A self-sizing wrapper asks native for its sizing id (`useSizingId`), so
-// rendering one needs a core to exist. It is asked exactly once per mounted
-// instance - the hook keeps the answer in a ref - so this cannot move the count.
+// `useSizingId` asks the native core for an instance id.
 beforeAll(() => {
   let issued = 0;
   nitroUiHybridObjects.NitroUiCore = () => ({

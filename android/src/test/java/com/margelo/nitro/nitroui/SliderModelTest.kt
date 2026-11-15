@@ -5,31 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * JVM unit test for one Slider's drag, on the Android twin of the harness's drag
- * tests - and the only place the frame pump can be observed at all.
- *
- * [NitroUiFramePump] is an interface so this file can hold a drag still: on a
- * device the tick arrives on a `Choreographer` between frames, which makes "one
- * sample, one event" a race to time, and `Choreographer` does not exist on the
- * JVM. Here a frame is a call to [FakePump.tick], so the questions the round-1
- * review asked - does a pump stop when its drag ends, can a complete arrive
- * without a start, where does a screen reader's increment land - have answers
- * that do not depend on when the emulator felt like drawing.
- *
- * The value *rule* itself is [NitroUiSliderValueTest]'s job; what matters here is
- * which values the model reports and when.
- *
- * The second half of this file is what a screen reader is handed. A reader's action
- * arrives as a `Float` computed from the progress this control's semantics node
- * publishes — also a `Float` — while the model holds a `Double`, and on any grid whose
- * stops are not exact in binary those two numbers are not equal. Comparing the target
- * with the `Double` therefore turns "the value you are showing" into a step, in one
- * direction or the other depending on how the rounding fell; the tests under
- * "The progress a reader is given is a Float" are that arithmetic, which is the same
- * bug X32 found in the Stepper (G25 review) and which no device can be asked to produce
- * on demand.
- */
 class SliderModelTest {
   /** A pump the test drives, with the arming the real one has. */
   private class FakePump : NitroUiFramePump {
@@ -55,14 +30,12 @@ class SliderModelTest {
       armed = false
     }
 
-    /** One display frame. */
     fun tick() {
       frames++
       onFrame?.invoke()
     }
   }
 
-  /** The three callbacks, as the app sees them. */
   private class Recorder {
     val starts = mutableListOf<Double>()
     val changes = mutableListOf<Double>()
@@ -125,8 +98,7 @@ class SliderModelTest {
     world.model.dragTo(4.0)
     assertTrue("a drag in flight is served by the pump", world.model.isFramePumpArmed)
 
-    // The review's actual question: a pump that outlives its drag emits nothing,
-    // so nothing in the event stream shows it. Only this can.
+    // A pump that outlives its drag emits nothing, so only this flag can show it.
     world.model.endDrag()
     assertFalse("a drag that ended must not leave a tick running", world.model.isFramePumpArmed)
 
@@ -148,8 +120,7 @@ class SliderModelTest {
 
   @Test
   fun aSecondEndIsSilent() {
-    // Continuous so the numbers say what they mean: `dragTo(4.0)` on a stepped
-    // range would end at 3, and this test is about the guard, not the grid.
+    // Continuous, so `dragTo(4.0)` is not snapped to a step.
     val world = fixture(0.0, 10.0, 0.0, 0.0)
     world.model.beginDrag()
     world.model.dragTo(4.0)
@@ -165,8 +136,6 @@ class SliderModelTest {
     world.model.beginDrag()
     world.model.dragTo(4.0)
     world.model.cancelDrag()
-    // The recycle happened; whatever arrives from the abandoned gesture next must
-    // not be a completion delivered to whoever owns this instance now.
     world.model.endDrag()
     assertEquals("a cancelled drag has no complete", emptyList<Double>(), world.events.completes)
     assertFalse(world.model.isFramePumpArmed)
@@ -174,9 +143,7 @@ class SliderModelTest {
 
   @Test
   fun anAccessibilityStepMovesToTheNextLegalValueInItsDirection() {
-    // `0..10 step 3` is the docs' own example of a range that does not end on a
-    // step, which is why the platform's own fraction-of-the-range increment cannot
-    // be the rule: the next two tests are that fact.
+    // `0..10 step 3` does not end on a step.
     val world = fixture(0.0, 10.0, 3.0, 0.0)
     assertTrue(world.model.accessibilityStepToward(0.5))
     assertEquals(3.0, world.model.displayed, 0.0)
@@ -196,14 +163,8 @@ class SliderModelTest {
 
   @Test
   fun anAccessibilityStepTakesItsDirectionFromTheProgressTheReaderWasShown() {
-    // X21's flake. `ProgressBarRangeInfo` is written by composition and republished a
-    // frame later, so a press can be aimed at the progress the reader was *shown* while
-    // the model has already moved on. `0..12 step 3` gets its ticks from the grid, so
-    // the delegate's stride is one whole step and two presses posted in one frame both
-    // send 3 - up from the published 0. Weighed against the model's own 3 that is "no
-    // direction", which is a reader's second press doing nothing at all; weighed
-    // against a model holding 6 it is "down", which is the recurring
-    // `expected [3, 6, 3] to deeply equal [3, 6, 9]`.
+    // The semantics node is republished a frame after the model moves, so a press can be
+    // aimed at the progress the reader was shown while the model is already ahead.
     val oneBehind = fixture(0.0, 12.0, 3.0, 3.0)
     assertTrue(
       "the reader said up from 0, so the value moves up from where it is",
@@ -223,8 +184,6 @@ class SliderModelTest {
     )
     assertEquals(listOf(9.0), twoBehind.events.completes)
 
-    // A target equal to the published progress is still no direction, however far the
-    // model has travelled since: the platform asked for a move that is not one.
     val still = fixture(0.0, 12.0, 3.0, 6.0)
     assertFalse(still.model.accessibilityStepToward(3.0, publishedProgress = 3.0))
     assertEquals(6.0, still.model.displayed, 0.0)
@@ -234,27 +193,14 @@ class SliderModelTest {
 
   // MARK: - The progress a reader is given is a Float
 
-  /**
-   * The progress the semantics node gives a reader for [displayed].
-   *
-   * `SliderTrack` publishes `ProgressBarRangeInfo(displayed.toFloat(), range, ticks)`,
-   * and the target of a reader's action is computed *from that float*, so the
-   * comparison [SliderModel.accessibilityStepToward] makes has to be against the same
-   * round-trip. This is the test's spelling of that one line; the arithmetic it
-   * reproduces is exactly what the node carries, which is why it needs no Compose tree
-   * (TalkBack does not run on the JVM).
-   */
+  // The progress the semantics node publishes for [displayed]: through a `Float`.
   private fun published(
     displayed: Double,
   ): Double = displayed.toFloat().toDouble()
 
   @Test
   fun aReaderAskingForThePublishedProgressMovesNothing() {
-    // X32's Stepper bug (G25 review) on the Slider's own path. A `0..1 step 0.1`
-    // control showing 0.3 publishes 0.3 through a Float, and that comes back as
-    // 0.30000001192092896 — *above* the 0.3 the model holds. A reader that asks for the
-    // value it can already read therefore asks for something higher, and the control
-    // steps: a whole gesture emitted and a number announced that nobody asked for.
+    // 0.3 through a `Float` is 0.30000001192092896, above the model's 0.3.
     val world = fixture(0.0, 1.0, 0.1, 0.3)
     assertFalse(
       "0.3 through a Float is the value on screen, not a step above it",
@@ -268,12 +214,7 @@ class SliderModelTest {
 
   @Test
   fun aReaderAskingForThePublishedProgressDoesNotStepDownEither() {
-    // The side of the same round-trip that costs a person the value they were shown:
-    // 0.7 through a Float is 0.699999988079071, *below* the 0.7 the model holds, so a
-    // reader asking for what it was shown reads as a decrement and the control answers
-    // with the value before it. Weighed against the Double the two `assertFalse` tests
-    // above are one step up and one step down; weighed against the Float the node
-    // published, both are the same thing — no direction.
+    // 0.7 through a `Float` is 0.699999988079071, below the model's 0.7.
     val world = fixture(0.0, 1.0, 0.1, 0.7)
     assertFalse(
       "0.7 through a Float is the value on screen, not a step below it",
@@ -286,9 +227,7 @@ class SliderModelTest {
 
   @Test
   fun theFloatRoundTripIsWhatMakesThoseFixturesMeanAnything() {
-    // If a refactor ever made a tenth exact in a Float, the two tests above would pass
-    // for free. They need these two numbers to be different, and on opposite sides —
-    // which is why both directions are asserted rather than one.
+    // The two tests above need these numbers to differ, on opposite sides.
     assertTrue("0.3 through a Float is above 0.3", 0.3f.toDouble() > 0.3)
     assertTrue("0.7 through a Float is below 0.7", 0.7f.toDouble() < 0.7)
     assertEquals(0.3f.toDouble(), published(0.3), 0.0)
@@ -297,12 +236,6 @@ class SliderModelTest {
 
   @Test
   fun theSameTargetIsAStepWhenItIsNotTheValueOnScreen() {
-    // The fix must not blunt the action it exists to serve. The tempting wrong shape
-    // is a band: "close enough to the published progress is not a direction" — and a
-    // band wide enough to cover the float noise on a tenth's grid is wide enough to
-    // swallow the twentieth-of-the-range stride a continuous or stepped control is
-    // asked to move by. So the same number has to stay a step when it is not what the
-    // reader was shown.
     val shown = 0.3f.toDouble()
 
     val atThatValue = fixture(0.0, 1.0, 0.1, 0.3)
@@ -313,9 +246,6 @@ class SliderModelTest {
     assertEquals(0.3, oneStopAbove.model.displayed, 0.0)
     assertEquals(listOf(0.3), oneStopAbove.events.completes)
 
-    // The delegate's own destination for a scroll forward on `0..1` is a twentieth of
-    // the range above the published progress, and it lands on the next stop of a grid
-    // that is nowhere exact in binary.
     val above = fixture(0.0, 1.0, 0.1, 0.3)
     assertTrue(above.model.accessibilityStepToward(0.35f.toDouble()))
     assertEquals(0.4, above.model.displayed, 0.0)
@@ -324,12 +254,7 @@ class SliderModelTest {
 
   @Test
   fun aReaderAskingForWhatAStaleTreeStillShowsMovesNothing() {
-    // X21's window and this comparison together, which is the case neither alone
-    // catches: the a11y tree still shows 0.3 while the model has moved to 0.4, and the
-    // reader asks for the number it is looking at — a Float, so it arrives as
-    // 0.30000001192092896. Against the Double 0.3 the node was built from that is a
-    // direction; against the Float the node *carried*, it is the progress the reader is
-    // looking at, and X21's rule stands: no direction, nothing moves.
+    // The semantics tree still shows 0.3 while the model has moved to 0.4.
     val world = fixture(0.0, 1.0, 0.1, 0.4)
     assertFalse(
       "the stale progress the reader was shown is not a direction either",
@@ -338,8 +263,6 @@ class SliderModelTest {
     assertEquals(0.4, world.model.displayed, 0.0)
     assertEquals(emptyList<Double>(), world.events.completes)
 
-    // A stale tree still carries a real direction when the reader asks for one: this
-    // target is a whole step above the progress shown, whatever the rounding.
     assertTrue(
       "up from the progress that was shown",
       world.model.accessibilityStepToward(0.4f.toDouble(), publishedProgress = 0.3),
@@ -350,15 +273,7 @@ class SliderModelTest {
 
   @Test
   fun aStrideTooSmallForTheFloatIsNotADirection() {
-    // A Slider over a large offset with a narrow range — an epoch-milliseconds window
-    // is the everyday shape — publishes its progress where a Float is 64 apart.
-    // `1000000010` is not one of those numbers: the node shows 1000000000, and the
-    // range the reader strides is itself only 192 wide once it has been through the
-    // float, so a twentieth of it lands back on 1000000000. That number is *below* the
-    // 1000000010 the model holds, and the comparison against the Double read it as
-    // "down" — a reader pressing up answered with the previous value, on the real
-    // platform path, every time. In float space it is the progress the reader was
-    // shown, which is the rule the four tests above pin down.
+    // At 1e9 adjacent `Float`s are 64 apart, so the node shows 1000000000 for 1000000010.
     val world = fixture(1_000_000_000.0, 1_000_000_200.0, 10.0, 1_000_000_010.0)
     val target = published(world.model.displayed)
     assertTrue(
@@ -370,8 +285,6 @@ class SliderModelTest {
     assertEquals(emptyList<Double>(), world.events.starts)
     assertEquals(emptyList<Double>(), world.events.completes)
 
-    // Same magnitude, a range wide enough for the float to stride: the press steps, so
-    // the refusal above is about the target and not about the control being dead.
     val wide = fixture(1_000_000_000.0, 1_000_100_000.0, 10.0, 1_000_000_010.0)
     val publishedStride = (1_000_100_000.0f - 1_000_000_000.0f) / 20f
     val wideTarget = (1_000_000_010.0f + publishedStride).toDouble()
@@ -398,9 +311,7 @@ class SliderModelTest {
 
   @Test
   fun aPlatformFractionStillLandsOnTheGrid() {
-    // The bug this exists for: the platform's increment is a twentieth of the
-    // range - 0.5 here - and quantising 0.5 on `0..10 step 3` gives back 0. The
-    // direction is the platform's, the destination is native's.
+    // The platform's stride is a twentieth of the range (0.5), which quantises back to 0 here.
     val world = fixture(0.0, 10.0, 3.0, 0.0)
     assertTrue(world.model.accessibilityStepToward(0.5))
     assertEquals(3.0, world.model.displayed, 0.0)
@@ -412,8 +323,6 @@ class SliderModelTest {
 
   @Test
   fun aContinuousRangeStridesByATwentiethOfItself() {
-    // No step: there is no grid to follow, so the platform's own stride is the
-    // rule - and it is already a legal value, so it does not snap back.
     val world = fixture(0.0, 1.0, 0.0, 0.0)
     assertTrue(world.model.accessibilityStepToward(0.05))
     assertEquals(0.05, world.model.displayed, 1e-12)
@@ -434,16 +343,12 @@ class SliderModelTest {
 
   @Test
   fun anAccessibilityStepDoesNotOvertakeAnUnreportedSample() {
-    // The a11y path writes through the same handshake as a finger, so a sample JS
-    // has not seen yet still refuses React's write (core.md §4, §11).
     val world = fixture(0.0, 10.0, 0.0, 0.0)
     world.model.dragTo(4.0)
     world.model.state.js = 8.0
     assertFalse("the write is refused while the sample is unreported", world.model.state.reconcile())
     world.pump.tick()
-    // JS confirms the event it was just given, which is the other half of what
-    // makes a write fresh enough to apply (the Hybrid View echoes it as
-    // `mostRecentEventCount`).
+    // JS confirms the event, as the echoed `mostRecentEventCount` does.
     world.model.state.jsEvents = world.model.state.nativeEvents
     assertTrue(world.model.state.reconcile())
     assertEquals(8.0, world.model.state.displayed, 0.0)
@@ -451,17 +356,7 @@ class SliderModelTest {
 
   @Test
   fun anAccessibilityStepInsideAFingerDragIsASampleNotAGesture() {
-    // A screen reader's increment while a finger is on the track. Two sources can
-    // drive one Slider, and the a11y path opens and closes its own one-gesture
-    // triple because nothing tells it whether a drag is already open. If it closes
-    // the *finger's* drag, the app gets an `onSlidingComplete` for a thumb that is
-    // still under the user's finger, the pump that drag armed is stopped so the
-    // finger's next sample waits for no frame, and the lift reports a second
-    // complete for one gesture.
-    //
-    // Inside a drag there already is a gesture, so the step is a sample of it: the
-    // value moves at once, the change reaches JS on the drag's own next frame like
-    // any other sample, and the gesture edges stay with the finger that owns them.
+    // A screen reader's step while a finger holds the thumb must not end the finger's drag.
     val world = fixture(0.0, 10.0, 3.0, 0.0)
     world.model.dragTo(1.0)
     assertEquals("the finger opened a drag", listOf(0.0), world.events.starts)
@@ -472,7 +367,6 @@ class SliderModelTest {
     assertEquals("…and without closing the finger's drag", emptyList<Double>(), world.events.completes)
     assertTrue("…and without disarming the pump that drag armed", world.model.isFramePumpArmed)
 
-    // The finger keeps going, and the drag behaves as if the step were another move.
     world.model.dragTo(7.0)
     world.pump.tick()
     assertEquals(
@@ -489,8 +383,6 @@ class SliderModelTest {
     )
     assertFalse(world.model.isFramePumpArmed)
 
-    // With no finger on the track, a step still makes its own complete triple - the
-    // contract the two tests above pin, and this must not lose it.
     assertTrue(world.model.accessibilityStepToward(6.5))
     assertEquals(listOf(0.0, 6.0), world.events.starts)
     assertEquals(listOf(6.0, 9.0), world.events.changes)

@@ -6,15 +6,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * JVM unit test for the Compose twin of the event-count handshake
- * (`docs/architecture/core.md` §4), run by `bun run test:native:android`.
- *
- * The vectors are the same ones as `src/__tests__/useControlled.test.tsx` (JS)
- * and `scripts/native-tests/handshake.test.swift` (iOS): three copies of this
- * logic have to agree, and stale drops / rejected reverts / rapid interactions
- * are exactly the cases an on-device test only catches by accident.
- */
+// The same cases as `src/__tests__/useControlled.test.tsx` (JS) and
+// `scripts/native-tests/handshake.test.swift` (iOS). Keep the three in step.
 class NitroUiControlledValueTest {
   @Test
   fun startsUncontrolledAndChangesNothingOnReconcile() {
@@ -86,7 +79,6 @@ class NitroUiControlledValueTest {
     assertEquals(2, value.nativeEvents)
     assertEquals("uncontrolled interactions leave JS behind", 0, value.jsEvents)
     assertFalse(value.reconcile())
-    // What the seeded `mostRecentEventCount` now sends (see useControlled.ts).
     value.js = true
     value.jsEvents = 2
     assertTrue("the first controlled write after a mode switch applies", value.reconcile())
@@ -105,14 +97,8 @@ class NitroUiControlledValueTest {
     assertEquals(0.5, value.displayed, 0.0)
   }
 
-  /**
-   * A continuous control holds the newest input sample until the frame tick emits
-   * it (Slider, `core.md` §11). The counts cannot see that: [nativeEvents] only
-   * advances when we emit, so a parent commit in that window looks fully echoed
-   * while native is actually ahead by an unreported value. Accepting it paints the
-   * app's number for a frame and then emits the interaction's own value under it -
-   * the thumb jumping back mid-drag, found on iOS and closed on both platforms.
-   */
+  // A continuous control holds its newest sample until the frame tick emits it. The event
+  // counts look caught up in that window, so the write must be refused on `unreported`.
   @Test
   fun writeIsRefusedWhileNativeHasAnUnreportedSample() {
     val value = NitroUiControlledValue(0.0)
@@ -129,10 +115,6 @@ class NitroUiControlledValueTest {
     assertEquals(0.2, value.displayed, 0.0)
   }
 
-  /**
-   * The guard is narrow, not a drag-mode switch: an un-emitted sample does not
-   * stop an interaction from taking effect, it only defers React's write.
-   */
   @Test
   fun unreportedSampleRefusesWritesAndNothingElse() {
     val value = NitroUiControlledValue(0.0)

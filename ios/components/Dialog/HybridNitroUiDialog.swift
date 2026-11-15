@@ -1,21 +1,10 @@
-//
-//  HybridNitroUiDialog.swift
-//  react-native-nitro-ui
-//
-//  AlertDialog and ConfirmationDialog (G11, DECISIONS D33): one native view behind
-//  both exports, presenting UIKit's `UIAlertController` (`.alert` or `.actionSheet`)
-//  through the core ``NitroUiPresentation`` helper factored out of DatePicker.
-//
-//  There is no `NitroSwiftUIHost` and no hosting controller here: a closed dialog in
-//  every row of a list should cost a view, not a SwiftUI graph (Q5 B2). The view React
-//  Native lays out is a `0 x 0` anchor that takes no touches and is invisible to
-//  VoiceOver; the presented window belongs to UIKit.
-//
+// AlertDialog and ConfirmationDialog: one native view behind both, presenting UIKit's
+// `UIAlertController`. No SwiftUI host: the view React Native lays out is a 0 x 0 anchor, so a
+// closed dialog costs only a view.
 
 import NitroModules
 import UIKit
 
-// Perf ring buffer, shared with C++/Kotlin (cpp/core/NitroUiPerf.hpp).
 private typealias NitroUiDialogPerf = margelo.nitro.nitroui.NitroUiPerf
 
 /// The view React Native lays out: nothing to draw, no touches, no accessibility, and
@@ -43,13 +32,9 @@ final class NitroUiDialogAnchorView: UIView {
   }
 }
 
-/// A `UIAlertController` that says when it went away, whoever took it down.
-///
-/// UIKit reports nothing to anyone when an alert leaves the screen because of an
-/// action tap or because the controller under it was dismissed with it on top (an RN
-/// `Modal` closing under an open dialog). The live count and the "the dialog closed"
-/// event both depend on knowing, and `viewDidDisappear` during a dismissal is the one
-/// place that always runs. The subclass adds that witness and nothing else.
+/// A `UIAlertController` that says when it went away, whoever took it down. UIKit reports nothing
+/// when an alert leaves because of an action tap or because the controller under it was dismissed;
+/// `viewDidDisappear` during a dismissal is the one place that always runs.
 final class NitroUiAlertController: UIAlertController {
   var onDismissed: (() -> Void)?
 
@@ -63,9 +48,7 @@ final class NitroUiAlertController: UIAlertController {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiDialog`.
 final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
-  /// How many dialogs this process has on screen. See ``NitroUiPresentationCounter``.
   static let live = NitroUiPresentationCounter()
 
   private let anchor = NitroUiDialogAnchorView()
@@ -85,8 +68,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
   private var presentedChange: ((_ presented: Bool, _ eventCount: Double) -> Void)?
   private var actionHandler: ((_ id: String) -> Void)?
 
-  /// Whether the dialog is up, behind the handshake: `js` is `presented` as React sent
-  /// it, `displayed` is what native shows (core.md §4).
+  /// Whether the dialog is up, behind the event-count handshake: `js` is `presented` as React sent
+  /// it, `displayed` is what native shows.
   private var state = NitroUiControlledValue<Bool>(displayed: false)
 
   // MARK: What is on screen
@@ -98,7 +81,7 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
   /// Whether this mount has ended (`onDropView`) - the deferred window-loss check and
   /// the transition retry both stand down once it has.
   private var dropped = false
-  /// How many times this mount presented, for the harness (B7 test 5).
+  /// How many times this mount presented (test read-out).
   private var presentCount = 0
   /// What the app had presented on top when this dialog last presented (an RN
   /// `Modal`'s controller, say) - the dialog itself is always in a window of its own.
@@ -192,8 +175,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
 
   func afterUpdate() {
     mark(.propsApplied)
-    // The handshake decides whether React's `presented` wins - including a dismissal JS
-    // refused, which is how a refused dismissal presents again (D33).
+    // The handshake decides whether React's `presented` wins, including a dismissal JS refused,
+    // which presents again.
     _ = state.reconcile()
     applyInPlace()
     sync()
@@ -279,16 +262,15 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
   @MainActor
   private func presentIfPossible() {
     guard !dropped, anchor.window != nil else {
-      // `didMoveToWindow` calls back here when the view gets one: a dialog presented at
-      // mount opens once, when its view first has a window (B1).
+      // `didMoveToWindow` calls back here: a dialog presented at mount opens when its view first
+      // has a window.
       return
     }
     let controller = buildAlert()
     appTopClass = Self.topPresentedClass(in: anchor.window)
     presentCount += 1
-    // A window of its own, never the app's presentation chain: see
-    // ``NitroUiPresentation/presentInOwnWindow(_:over:animated:prepare:onShown:)`` for the
-    // RN `Modal` it would otherwise strand on screen.
+    // A window of its own, never the app's presentation chain, where closing an RN `Modal` under it
+    // would take the dialog down and strand the Modal.
     let presented = presentation.presentInOwnWindow(
       controller,
       over: anchor,
@@ -309,16 +291,15 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     }
   }
 
-  /// A fresh controller for the current props. `UIAlertController` cannot drop an
-  /// action, so the action set is built per presentation (B2).
+  /// A fresh controller for the current props. `UIAlertController` cannot drop an action, so the
+  /// action set is built per presentation.
   @MainActor
   private func buildAlert() -> NitroUiAlertController {
     detachAlert()
     let isSheet = variantValue == "confirmation"
     let showsTitle: Bool
     if isSheet {
-      // SwiftUI's `Visibility` for a confirmation dialog: `automatic` hides the title
-      // of an iOS action sheet, which is SwiftUI's own default (Q5 B2).
+      // Like SwiftUI's confirmation dialog, `automatic` hides the title of an iOS action sheet.
       showsTitle = titleVisibilityValue == "visible"
     } else {
       showsTitle = true
@@ -334,8 +315,7 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
       let style: UIAlertAction.Style
       switch action.role {
       case "cancel" where !hasCancel:
-        // `UIAlertController` raises for a second `.cancel`; the wrapper never sends
-        // one, and this is the native half of that rule.
+        // `UIAlertController` raises for a second `.cancel`.
         style = .cancel
         hasCancel = true
       case "destructive":
@@ -353,8 +333,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
       ids.append(id)
     }
     if isSheet, !hasCancel, dismissibleValue {
-      // SwiftUI's confirmation dialog adds a Cancel button when the caller gave none;
-      // so does this one, and its tap is a dismissal without an action (B1).
+      // Like SwiftUI's confirmation dialog, add a Cancel button when the caller gave none. Its tap
+      // is a dismissal without an action.
       let cancel = UIAlertAction(title: Self.cancelTitle, style: .cancel) { [weak self, weak controller] _ in
         guard let self, let controller else { return }
         self.userDismissed(from: controller)
@@ -384,9 +364,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     alert?.onDismissed = nil
   }
 
-  /// Title, message and `isEnabled` follow the props while the alert is up (B2). The
-  /// action set does not: adding, removing or renaming an action applies at the next
-  /// presentation, because `UIAlertController` cannot drop an action.
+  /// Title, message and `isEnabled` follow the props while the alert is up. The action set does
+  /// not: `UIAlertController` cannot drop an action, so a change applies at the next presentation.
   private func applyInPlace() {
     guard let alert, alertIsUp else { return }
     let showsTitle = alert.preferredStyle == .alert || titleVisibilityValue == "visible"
@@ -408,16 +387,15 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
 
   // MARK: - What the user did
 
-  /// An action was tapped (or `nuiTestPerformAction` ran its handler): report the
-  /// action, then the close - D32's order - and close it if UIKit is not already.
+  /// An action was tapped: report the action, then the close, and close it if UIKit is not already
+  /// doing so.
   private func performAction(_ id: String, from controller: UIAlertController) {
     guard controller === alert, state.displayed else { return }
     actionHandler?(id)
     let count = state.user(false)
     presentedChange?(false, Double(count))
     if presentation.isOnScreen, !controller.isBeingDismissed {
-      // A tap - and the test seam, which does what a tap does - is already on its way
-      // out; this is for a handler run while the alert is still up.
+      // A tapped alert is already on its way out; this is for a handler run while it is still up.
       presentation.dismissAnimated()
     }
     publishReport()
@@ -457,12 +435,10 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     publishReport()
   }
 
-  /// The anchor gained or lost its window.
-  ///
-  /// Gained: a dialog React wants up and that is not up yet is presented now. Lost
-  /// while up: one turn later - after an unmount's `onDropView`, which runs in the same
-  /// mount transaction, and after a reparent that puts the view straight back - the
-  /// dialog is closed without animation and the close is reported (B2).
+  /// The anchor gained or lost its window. Gained: a dialog React wants up is presented now. Lost
+  /// while up: one turn later (after an unmount's `onDropView` in the same mount transaction, or a
+  /// reparent that puts the view straight back) the dialog is closed without animation and the
+  /// close is reported.
   private func windowChanged(_ hasWindow: Bool) {
     if hasWindow {
       sync()
@@ -485,9 +461,7 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
   // MARK: - Methods
 
   func nuiTestStateReport() throws -> String {
-    // Refresh on main for the next read - never wait for it (`NitroUiMainThread`): the
-    // harness polls, and `topPresented` is the one field nothing else republishes when
-    // a dropped mount's carried dismissal finishes.
+    // Refresh on main for the next read, never wait for it: tests poll this.
     DispatchQueue.main.async { [weak self] in self?.publishReport() }
     reportLock.lock()
     defer { reportLock.unlock() }
@@ -502,11 +476,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
       }
       // A disabled action does nothing, as a tap on it would.
       guard alert.actions[index].isEnabled else { return }
-      // What a tap does: the alert takes itself down - a dismissal UIKit runs, not one
-      // the helper asked for - and the handler finds it already on its way out. Going
-      // through the helper instead hid a window left up by a view dropped during that
-      // exit (G11 review, round 2). The handler still runs in this turn, so the events
-      // reach JS before the count comes down, as they did.
+      // Do what a tap does: the alert dismisses itself (a dismissal UIKit runs, not one the helper
+      // asked for), and the handler runs in the same turn.
       if alert.presentingViewController != nil, !alert.isBeingDismissed {
         alert.dismiss(animated: true)
       }
@@ -557,9 +528,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     fields.append("ownWindow=\(alert.map { presentation.isInOwnWindow($0) } == true ? 1 : 0)")
     fields.append("topPresented=\(Self.topPresentedClass(in: anchor.window))")
     fields.append("windows=\(Self.visibleWindowCount(near: anchor.window))")
-    // What the dialog's own window says about the status bar and orientations, next to
-    // what the app's top controller says: the window is above the app's, so its root
-    // is the one UIKit asks while the dialog is up.
+    // The dialog's window is above the app's, so its root is the one UIKit asks about the status
+    // bar and orientations while the dialog is up.
     if let alert, let root = presentation.ownWindowRoot(of: alert) {
       fields.append("chrome=\(Self.chrome(of: root))")
     } else {

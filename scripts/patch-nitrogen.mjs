@@ -1,53 +1,20 @@
 #!/usr/bin/env node
+// Post-processes nitrogen's generated code. Called by `bun run nitrogen`, which
+// builder-bob's `custom` target also runs, so a packed tarball ships patched code.
 //
-// patch-nitrogen.mjs
+// 1. Base ViewProps on Android: Nitro 0.37.1's generated Props constructor never
+//    calls `Props::initializeDynamicProps`, which drops backgroundColor, opacity,
+//    testID and the rest (fixed upstream in margelo/nitro#1749, nightlies only).
+// 2. Intrinsic sizing: for every view in `nitro-ui.sizing.json`, the generated
+//    state, shadow node and component descriptor aliases are repointed at this
+//    library's types, with a state hook in the iOS `.mm` and the Android manager.
+// 3. Content children: for every view in `CONTENT_CHILDREN_VIEWS`, the generated
+//    iOS `.mm` mounts React Native children into the view's `contentView`.
+// 4. Scroll-corrected shadow node: for every view in `SCROLL_SHADOW_VIEWS`, the
+//    shadow-node alias is repointed at `nitroui::ScrollShadowNode`.
 //
-// Nitro 0.37.1 drops RN's base ViewProps on Android for Hybrid Views
-// (backgroundColor, opacity, transform, testID, accessibility, ...) because the
-// generated Props constructor never calls `Props::initializeDynamicProps`.
-// Upstream fixed this in margelo/nitro#1749, but only in nightlies
-// (react-native-nitro-modules >= 0.37.2-nightly), so codegen output that relies
-// on it cannot build for users on 0.37.1. Instead we post-process nitrogen's
-// output and ship the helper ourselves in cpp/NitroUiPropsCompat.hpp.
-//
-// Rules:
-// - idempotent: run it twice, nothing changes;
-// - skips files that already contain upstream's call;
-// - hard-fails (exit 1) if a generated *Component.cpp has neither the upstream
-//   call nor our anchor, so a nitrogen upgrade can never silently drop the fix;
-// - no-op when there are no Hybrid Views (the views folder is missing/empty).
-// - a view listed in the sizing config that nitrogen does not generate fails
-//   too, so a renamed spec cannot silently lose its sizing.
-//
-// Second patch: intrinsic sizing (T11). Nitrogen hardcodes a view's shadow node,
-// state and component descriptor, and all three have to change for a hosted
-// control to report its real size to Yoga (`nitro::ViewComponentDescriptor` and
-// `nitro::ViewPropsHolderState` are both `final`). For every view listed in
-// `nitro-ui.sizing.json` we repoint the three generated aliases at our own types,
-// add an `updateState:oldState:` hook to the generated iOS `.mm`, and one bind
-// line to the generated Android manager. The aliases are what the rest of the
-// generated code refers to, so nothing else has to change. See
-// docs/architecture/sizing.md.
-//
-// Third patch: content children (G14). `RCTViewComponentView` mounts a view's
-// React Native children into `currentContainerView` - the component view itself -
-// *beside* the Hybrid View's `contentView`. For a view whose children are its
-// content and whose content view is presented elsewhere (a BottomSheet's sheet
-// adopts it), they have to be mounted *into* the content view, as RN's own `Modal`
-// mounts into its controller's view. For every view in `CONTENT_CHILDREN_VIEWS` the
-// generated iOS `.mm` gains the two overrides. Android needs no patch: its
-// hand-written `ViewGroupManager` already redirects the children.
-//
-// Fourth patch: a scroll-corrected shadow node (G24). A `Form`'s rows are laid out by Yoga at
-// their position in the list's content and drawn at that position minus the list's scroll
-// offset, and `measure` never asks a platform view where a view ended up - it walks the shadow
-// tree. So for every view in `SCROLL_SHADOW_VIEWS` the generated shadow-node alias is repointed
-// at `nitroui::ScrollShadowNode`, which answers `getContentOriginOffset` the way React Native's
-// own `ScrollViewShadowNode` does. Unlike the sizing patch this keeps nitrogen's state: the
-// offset is a prop.
-//
-// Called by `bun run nitrogen`, which bob's `custom` target also runs, so
-// `prepare`/`npm pack` always ship patched code.
+// Idempotent. Exits 1 when a generated file has neither the upstream fix nor the
+// expected anchor, or when a listed view is not generated.
 
 import {
   existsSync,
@@ -113,7 +80,7 @@ export function patchComponentSource(source, fileName = 'Component.cpp') {
 }
 
 // ---------------------------------------------------------------------------
-// Intrinsic sizing (T11)
+// Intrinsic sizing
 // ---------------------------------------------------------------------------
 
 export const SIZING_MARKER = '// nitro-ui: intrinsic sizing';
@@ -172,9 +139,8 @@ function escapeRegExp(value) {
 
 /**
  * Point the three generated aliases at our state, shadow node and component
- * descriptor. Their names are what the rest of the generated code uses, so
- * everything else - the iOS `.mm`, the Android JNI, the descriptor provider -
- * keeps working untouched. See docs/architecture/sizing.md.
+ * descriptor. The rest of the generated code refers to the aliases, so nothing
+ * else has to change.
  *
  * @param {string} source contents of a generated `*Component.hpp`
  * @param {string} className spec class name, e.g. `HybridNitroUiSwitch`
@@ -304,10 +270,9 @@ export function patchSizingObjC(source, className, fileName = 'Component.mm') {
       error: `${fileName}: "@implementation ${className}Component" not found - nitrogen changed its output shape, update patch-nitrogen.mjs.`,
     };
   }
-  // Hard-fail rather than insert a second one: a nitrogen that starts generating
-  // this override itself would otherwise get a duplicate method - which Objective-
-  // C++ accepts and resolves to whichever implementation the linker picks, so the
-  // sizing bind would silently stop happening.
+  // Hard-fail instead of inserting a second one: Objective-C++ accepts a
+  // duplicate method and resolves it to whichever implementation the linker
+  // picks.
   if (source.includes('- (void)updateState:')) {
     return {
       code: source,
@@ -348,8 +313,7 @@ export function patchSizingObjC(source, className, fileName = 'Component.mm') {
 
 /**
  * Hand the generated Android manager's `StateWrapper` to the sizing engine.
- * Mirrors the iOS `updateState:oldState:` hook; the JNI side unwraps the
- * `StateWrapperImpl` the way @lodev09/react-native-true-sheet does.
+ * Mirrors the iOS `updateState:oldState:` hook.
  *
  * @param {string} source contents of a generated `*Manager.kt`
  * @param {string} className
@@ -408,23 +372,15 @@ export function patchSizingKotlin(source, className, fileName = 'Manager.kt') {
 }
 
 // ---------------------------------------------------------------------------
-// Content children (G14)
+// Content children
 // ---------------------------------------------------------------------------
 
 export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
 
 /**
  * The Hybrid Views whose React Native children are mounted into their content
- * view (see the file header). A list here rather than a manifest key: it is a fact
- * about how the generated iOS component mounts, which only this file changes.
- *
- * `Form` and `FormSection` are in this list because on iOS both are *models*: a Form's
- * children are its sections and a Section's are its rows, and in both cases what holds them
- * is this library's own content view (a hidden holding view), not the component view that
- * also carries the list.
- *
- * A Popover's React Native children are its content too, and iOS presents them from a
- * popover controller's content view: the same redirect, for the same reason (G22).
+ * view, because that view is presented elsewhere (a sheet, a popover) or holds
+ * the children for a list (`Form`, `FormSection`).
  */
 export const CONTENT_CHILDREN_VIEWS = [
   'HybridNitroUiBottomSheet',
@@ -535,29 +491,23 @@ export function patchContentChildrenObjC(
 }
 
 // ---------------------------------------------------------------------------
-// Scroll-corrected shadow node (G24)
+// Scroll-corrected shadow node
 // ---------------------------------------------------------------------------
 
 export const SCROLL_SHADOW_MARKER = '// nitro-ui: scroll-corrected shadow node';
 const SCROLL_SHADOW_INCLUDE = '#include "NitroUiScrollShadow.hpp"';
 
 /**
- * The Hybrid Views whose React Native descendants live in content that their platform view
- * scrolls without React Native knowing (see the file header). A `Form`'s rows are laid out by
- * Yoga at their position in the list's content and drawn at that position minus the scroll
- * offset, so its shadow node has to answer `getContentOriginOffset` the way React Native's own
- * `ScrollViewShadowNode` does - otherwise `measure` on a row after a scroll reports where the
- * row would be unscrolled (D45 items 3-4).
+ * The Hybrid Views whose platform view scrolls their React Native descendants
+ * without React Native knowing. `measure` walks the shadow tree, so the shadow
+ * node has to answer `getContentOriginOffset` the way React Native's own
+ * `ScrollViewShadowNode` does.
  */
 export const SCROLL_SHADOW_VIEWS = ['HybridNitroUiForm'];
 
 /**
- * Repoint the generated shadow-node alias at `nitroui::ScrollShadowNode`.
- *
- * Deliberately *not* the sizing patch: a `Form` is not self-sizing (`sizing: null`), so
- * nitrogen's own `nitro::ViewPropsHolderState` stays, the descriptor keeps pointing at the
- * alias, and the only thing that changes is the class of the node. The scroll offset is a
- * prop, so this node needs no state, no descriptor and no push path.
+ * Repoint the generated shadow-node alias at `nitroui::ScrollShadowNode`. Unlike
+ * the sizing patch this keeps nitrogen's state: the scroll offset is a prop.
  *
  * @param {string} source contents of a generated `*Component.hpp`
  * @param {string} className spec class name, e.g. `HybridNitroUiForm`
@@ -747,7 +697,7 @@ export function patchGeneratedViews(root = process.cwd(), options = {}) {
     }
   }
 
-  // 2. Intrinsic sizing (T11), only for the configured views.
+  // 2. Intrinsic sizing, only for the configured views.
   const { views, error } = readSizingConfig(options.sizingConfigRoot ?? root);
   if (error != null) {
     console.error(`patch-nitrogen: ${error}`);
@@ -787,10 +737,9 @@ export function patchGeneratedViews(root = process.cwd(), options = {}) {
     }
   }
 
-  // 3. Content children (G14). The sizing step's rule: a tree with no `nitro.json`
-  // (read from where the sizing config is) declares no views and is not asked for
-  // any; in a tree that has one, every listed view must be declared *and* generated,
-  // so a renamed or dropped spec fails here instead of quietly losing the patch.
+  // 3. Content children. A tree with no `nitro.json` declares no views and is
+  // not asked for any. In a tree that has one, every listed view must be
+  // declared and generated.
   const declared = declaredHybridViews(options.sizingConfigRoot ?? root);
   for (const className of declared == null ? [] : CONTENT_CHILDREN_VIEWS) {
     if (!declared.has(className.slice('Hybrid'.length))) {
@@ -820,8 +769,7 @@ export function patchGeneratedViews(root = process.cwd(), options = {}) {
     );
   }
 
-  // 4. Scroll-corrected shadow node (G24). Same rule as the two steps above: in a tree that
-  // has a `nitro.json`, every listed view must be declared *and* generated.
+  // 4. Scroll-corrected shadow node, under the same rule.
   for (const className of declared == null ? [] : SCROLL_SHADOW_VIEWS) {
     if (!declared.has(className.slice('Hybrid'.length))) {
       record(className, {

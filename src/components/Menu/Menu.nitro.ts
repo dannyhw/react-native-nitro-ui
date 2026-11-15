@@ -6,406 +6,149 @@ import type {
 
 import type { NitroUiIntrinsicProps } from '../../core/NitroUiIntrinsicProps';
 
-/**
- * One row of a menu, as the native side sees it.
- *
- * The caller writes a nested `group` (`Menu.tsx`); the wrapper flattens it into
- * one ordered array of these, because:
- *
- * - a struct **array** is the one composite prop shape this repo has generation
- *   for (`HybridNitroUiPickerComponent.hpp` carries `ReactProp<std::vector<std::string>>`,
- *   compared after conversion), and nitrogen keeps a struct vector equatable, so
- *   `rows` is a real `ReactProp` and never a JSON string (lint
- *   `no-json-string-prop`, `no-anymap-in-spec`);
- * - the nesting the public API has is exactly two levels deep, so a parent
- *   pointer carries it: `parentId` is the submenu's or section's id, `null` at
- *   the top level. Depth stays capped at one submenu level (DECISIONS D29);
- * - every member is required, so no row can arrive half-built. A struct with
- *   optional members would make the native side ask "absent or false?" for a row
- *   that a JS spread produced, and D7 exists to keep that question out of props.
- *
- * `kind` is a `string` rather than a union because that is how this repo names an
- * enumerated native prop (`variant` on Button, Picker and Progress): nitrogen has
- * no string-literal unions, and the wrapper resolves anything unrecognised before
- * it sends.
- */
 export interface NitroUiMenuRow {
-  /**
-   * The row's stable id, unique across the menu's rows. A pick reports it, and a
-   * re-ordered list keeps each row's identity - which is what makes a harness
-   * gate name a row instead of an index.
-   */
+  /** Unique across the menu's rows. A pick reports it. */
   id: string;
-  /**
-   * `'action'`, `'submenu'` or `'section'`. Anything else behaves as `'action'`.
-   *
-   * A `'submenu'` owns the rows whose `parentId` is its id: iOS nests them,
-   * Android paints them inline as a group of their own (D29). A `'section'` is a header
-   * row that owns rows the same way, and renders as a group on both platforms.
-   */
+  /** 'action' | 'submenu' | 'section'. Anything else behaves as 'action'. */
   kind: string;
-  /** The row's text. */
   title: string;
   /**
-   * The id of the `'submenu'` or `'section'` this row belongs to, or `null` for a
-   * top-level row. The array is in render order, so a child directly follows its
-   * parent; the pointer is what says so rather than hoping.
+   * The id of the owning submenu or section, or `null` at the top level. A
+   * child directly follows its parent in the array.
    */
   parentId: string | null;
-  /** Disable this row. It draws disabled and reports nothing. */
   disabled: boolean;
-  /** Draw the row as destructive (iOS red, Material 3 error colour). */
   destructive: boolean;
-  /** Leading SF Symbol name, or `null`. iOS only - Android ignores it. */
+  /** Leading SF Symbol name. iOS only. */
   systemImage: string | null;
-  /**
-   * Leading glyph for the row on Android, or `null`: the same string `Button`'s
-   * `androidIcon` is sent, built the same way by the wrapper - a drawable the app
-   * ships named by its resource name, or a `url:` marker in front of the dev-server
-   * file Metro serves for a `require`'d `.xml` (`src/iconSource.ts`).
-   *
-   * Android only, exactly as `Button`'s is: iOS draws `systemImage` and ignores this,
-   * so a row that wants a glyph on both platforms sends both names and needs no
-   * `Platform.select`. It is Material's own leading icon - `MenuDefaults.LeadingIconSize`,
-   * 20 dp in material3 1.5.0-beta02 - in the row's own content colour, and on a checkable Android row the
-   * leading check keeps its slot: a checked row draws the check, which is what the
-   * row *means*, and the glyph is what an unchecked one draws.
-   *
-   * Like `systemImage`, it is never in the trigger's sizing key - a row lives in a
-   * popup of its own and cannot move the trigger's box.
-   */
+  /** A drawable resource name or `url:<file>`. Android only. */
   androidIcon: string | null;
-  /**
-   * The row's second line, or `null` for none (the wrapper sends `null` for `''`):
-   * iOS `UIAction.subtitle`, Android the row's supporting text. Always `null` on a
-   * `'submenu'` or `'section'` row.
-   */
+  /** Second line. `null` on a submenu or section row. */
   subtitle: string | null;
-  /**
-   * `null` for a plain row; a boolean makes the row checkable and says whether it is
-   * checked: iOS a menu `Toggle` (`UIAction.state`), Android a selected row with a
-   * check. Not a value: a pick still only reports the id. Always `null` on a
-   * `'submenu'` or `'section'` row.
-   */
+  /** A boolean makes the row checkable. `null` on a submenu or section row. */
   checked: boolean | null;
 }
 
 /**
- * Native props of the `NitroUiMenu` Hybrid View.
- *
- * No member is optional (DECISIONS D7 / nitro#1184) except the callbacks
- * (D7b): Fabric sends `null` for a prop that JS removed and Nitro only treats
- * `undefined` as "unset", so an optional prop that goes away crashes. The JS
- * wrapper (`Menu.tsx`) always sends every prop, using `null` for "not set" and
- * `[]` for "no rows" - a missing `rows` would leave a recycled view showing the
- * previous row's menu.
- *
- * There is **no** controlled value and no event-count handshake: a menu reports
- * gestures (`onSelect`), not a state change JS can reject - Button's reasoning
- * (`Button.nitro.ts:17-19`, `docs/architecture/core.md` §12). Open state is not a
- * prop either (D29: no imperative `open()`/`close()` in 0.4).
- *
- * Setters must not interpret one prop against another (Nitro does not order
- * props inside a batch - core.md §3), so `rows`, `disabled` and
- * `hasPrimaryAction` are stored raw and applied together in `afterUpdate()`.
+ * No prop is optional: Fabric sends `null` for a removed prop, which crashes
+ * an optional one (nitro#1184). Callbacks are the exception: Nitro only
+ * accepts a callback prop typed as a function, never `fn | null`.
  */
 export interface NitroUiMenuProps
   extends HybridViewProps, NitroUiIntrinsicProps {
-  /**
-   * The trigger's text - the same label a Button draws, sized the same way. Also
-   * the default accessibility label.
-   */
+  /** The trigger's text. Also the default accessibility label. */
   title: string;
-  /**
-   * One of `'filled' | 'tonal' | 'outlined' | 'text' | 'elevated'`, resolved to
-   * one of those five by the wrapper. The trigger reuses Button's label
-   * composition, so the box *is* a Button's box.
-   */
+  /** 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated'. */
   variant: string;
-  /**
-   * One of `'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge'`, resolved by the
-   * wrapper. SwiftUI `.controlSize` / Android content padding + label typography.
-   *
-   * The same ladder `Button` sends, because the trigger *is* a Button on both
-   * platforms: `docs/components/menu.md` measures a Menu's box against a Button's,
-   * and D42 item 4 widened both at once (G19 fix round 2). A Menu that clamped
-   * three of the five rungs would type-check and quietly draw `medium`.
-   */
+  /** 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge'. */
   size: string;
-  /**
-   * Disable interaction. No row is reachable, no event fires, and an open menu
-   * closes (DECISIONS D29, D32) - a control that answers nothing cannot own a live
-   * popup, the rule Picker and DatePicker already keep.
-   *
-   * Closing an open menu is **Android only**. There the popup is our own window; on
-   * iOS SwiftUI owns the presentation, so nothing here can dismiss it and nothing can
-   * report that it did. That is a platform limit, not a choice, and D32 accepts it as
-   * one - see `docs/components/menu.md` ("Limits").
-   */
+  /** Also closes an open menu on Android. iOS cannot dismiss one. */
   disabled: boolean;
-  /**
-   * The items, flattened and in render order by the wrapper. Always sent; `[]`
-   * renders a trigger with an empty menu.
-   *
-   * Deliberately **not** part of `nuiSizingKey`: the items never change the
-   * trigger's box (they live in a popup), and free-form text in the key would
-   * fragment the size cache (`docs/components/menu.md`).
-   */
+  /** Flattened, in render order. `[]` renders a trigger with an empty menu. */
   rows: NitroUiMenuRow[];
-  /**
-   * RN-processed (`processColor`) ARGB color for the trigger, or `null` for the
-   * platform default: SwiftUI `.tint()` / the variant's container colour.
-   */
+  /** A `processColor` ARGB int, or `null` for the platform default. */
   tintColor: number | null;
-  /**
-   * Leading SF Symbol name on the trigger, or `null`. iOS only - ignored on
-   * Android, exactly as it is on Button, so it never changes the label's text.
-   */
+  /** Leading SF Symbol name on the trigger. iOS only. */
   systemImage: string | null;
-  /**
-   * Leading glyph on the trigger for Android, or `null`: the same string `Button`
-   * is sent, built the same way by the wrapper — a drawable the app ships named by
-   * its resource name, or a `url:` marker in front of the dev-server file Metro
-   * serves for a `require`'d `.xml` (`src/iconSource.ts`).
-   *
-   * Android only, like the prop it matches: iOS draws `systemImage` and ignores
-   * this, so a Menu with a glyph on both platforms sends both names and needs no
-   * `Platform.select`. It is drawn on the trigger — on the leading half when
-   * `hasPrimaryAction` makes Android draw the split button.
-   *
-   * It joins `nuiSizingKey`, exactly as it does on `Button`: a glyph before the
-   * label makes the control wider, so two Menus that differ only in this prop must
-   * not share one cached size.
-   */
+  /** A drawable resource name or `url:<file>`. Android only. */
   androidIcon: string | null;
   /**
-   * Whether `primaryAction` means anything (DECISIONS D29, E3). Both platforms
-   * draw it, each in its own idiom: iOS keeps one button where a tap runs the
-   * action and a long-press opens the menu; Android draws a Material 3 Expressive
-   * split button - the leading half runs the action, the trailing half opens the
-   * menu. Because the second half is a second container, this prop changes the
-   * trigger's box on Android, which is why it is in the sizing key.
-   *
-   * This is a separate prop because `primaryAction` is *always sent* (D7b: a
-   * callback prop can never be removed), so its presence cannot be the flag - the
-   * wrapper sends a stable no-op alongside `false`.
+   * Whether the caller passed a `primaryAction`: the callback is always sent.
+   * On Android it turns the trigger into a split button.
    */
   hasPrimaryAction: boolean;
-  /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
-  /** Accessibility label of the control itself, or `null` to use `title`. */
+  /** `null` uses `title`. */
   accessibilityLabel: string | null;
-  /** Benchmark instance id for perf marks; `null` disables marks for this view. */
+  /** Instance id for perf marks; `null` disables them for this view. */
   nuiPerfId: number | null;
-  /**
-   * Called with the picked row's id. Not called for a disabled row, for a section
-   * header, for a submenu, or while the control is disabled.
-   *
-   * Callback props are the exception to the no-optional rule (D7b): Nitro only
-   * unwraps `{ f: fn }` for a prop whose type *is* a function, so this must never
-   * become `fn | null`. The wrapper always sends one - a stable no-op when the
-   * caller passed nothing - so removing a handler cannot leave the previous one
-   * behind.
-   */
+  /** Called with the picked row's id. Never for a disabled row. */
   onSelect?: (id: string) => void;
-  /**
-   * Called when the menu opens. **Android only**: a Compose `Popup` is our own
-   * window, so `expanded` is model state we set. SwiftUI hands a `Menu` to the
-   * system's presentation and its `Menu` has no open binding in the iPhoneOS SDK,
-   * so **iOS never fires this** - see `docs/components/menu.md` and DECISIONS D32.
-   */
+  /** Android only: SwiftUI's `Menu` does not report opening. */
   onOpen?: () => void;
-  /**
-   * Called when the menu closes, whichever way it closed - a pick, an outside
-   * tap, the back gesture, a layout move, or the control being disabled while it
-   * was open. **Android only**, for the same reason as `onOpen`: **iOS never fires
-   * either of them** (DECISIONS D32).
-   *
-   * A pick fires it too, so an open never goes unpaired. It fires *after*
-   * `onSelect`: the choice is reported first, then the close, so a listener that
-   * acts on the pick is never handed a menu that is still up (DECISIONS D32).
-   * `docs/tasks/Q1-menu-design.md` §5 worded the pairing as "never for a pick" and
-   * D32 supersedes that: every open is paired with one close, including the open a
-   * pick ends.
-   */
+  /** Android only. After `onSelect` when a pick closed the menu. */
   onClose?: () => void;
   /**
-   * The primary action. On iOS a tap runs it and a long-press opens the menu; on
-   * Android the leading half of the split button runs it and never opens the menu
-   * (DECISIONS D29, E3). Only consulted while `hasPrimaryAction` is `true`, and
-   * never called while `disabled` is set - a disabled control disables both halves.
+   * iOS: a tap runs it and a long-press opens the menu. Android: the leading
+   * half of the split button runs it.
    */
   primaryAction?: () => void;
 }
 
 export interface NitroUiMenuMethods extends HybridViewMethods {
-  /**
-   * The size of the hosted control, as measured on the UI thread during the last
-   * layout/commit. Never calls into SwiftUI/Compose: JS reads a cached value, so
-   * this is safe to call from the JS thread (core.md §5).
-   */
+  /** Reads a size cached on the UI thread; safe to call from the JS thread. */
   measureContent(): NitroUiMenuSize;
 
-  /**
-   * TEMPORARY, test-only: press the row `id` through the same code path a popup
-   * row press uses - refused while the control or the row is disabled, no-op for
-   * an id that is not there - so a harness can assert a *real* pick without a
-   * touch injector that can reach a row in a popup.
-   *
-   * Goes through the *selection* path, not the props path, and on Android it is the
-   * row's own pick: the choice is reported, then the popup closes (DECISIONS D32).
-   * Runs on the UI thread like a real press (core.md §5), so a call from JS hops
-   * there.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can press a
-   * popup row.
-   */
+  /** Test-only: picks the row through the path a row press takes. @internal */
   nuiTestSelectRow(id: string): void;
 
   /**
-   * TEMPORARY, test-only: what this Menu's *popup* and its anchor are, as the
-   * side that renders them measured them. One line:
+   * Test-only: the popup and its anchor as the rendering side measured them,
+   * as one line:
    *
    * ```
    * expanded=<0|1|-1>;live=<n|-1>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n|-1>;drawn=<tree|-1>;split=<0|1|-1>;leading=<l>,<t>,<r>,<b>;trailing=<l>,<t>,<r>,<b>
    * ```
    *
-   * `expanded` is the model's own flag. `live` is how many menus this **process**
-   * has composed right now - process-wide on purpose, because the question the
-   * number answers is "did a popup outlive the view that opened it?", and a mount
-   * dropped mid-menu has nothing left to ask: the next mount reads the leak.
-   * `anchor`/`menu` are screen pixel rects as the composing side measured them, and
-   * `rows` is how many rows the menu has. `drawn` is what ``nuiTestMenuProbe`` last
-   * found in the platform's own menu. `-1` means "this platform cannot measure
-   * that".
+   * `-1` means the platform cannot measure that: iOS answers only `rows` and
+   * `drawn`. `live` counts the menus composed in the whole process. Rects are
+   * screen pixels. `split` is whether a split trigger was composed, and
+   * `leading`/`trailing` are its halves.
    *
-   * `split` is whether the *composition* drew E3's split trigger, which is what
-   * "the trigger is a split button" means on Android - deliberately not
-   * `hasPrimaryAction`, which is only what JS sent. `leading`/`trailing` are the two
-   * halves' screen pixel rects, in the same space as `anchor`, so a harness can press
-   * one; both are `-1,-1,-1,-1` when no split trigger is composed.
-   *
-   * Android answers all nine: `rows` is read from the rows the popup composed, and
-   * `drawn` from the open popup's own semantics tree - the rows TalkBack reaches - at
-   * its last layout, once any report or probe has been asked for. iOS answers `rows`
-   * from its model, `drawn` from the probe, and `-1` for the other seven: SwiftUI keeps
-   * a `Menu`'s open state and its window to itself, so there is no popup here to
-   * measure - the same answer `HybridNitroUiPicker.nuiTestMenuReport` gives, and
-   * never a `0` that would read as "checked". iOS answers `split=-1` rather than `0`
-   * for the same reason: its `primaryAction` is a gesture on one button, so the
-   * question "did a second hit target get composed" has no answer there - `0` would
-   * claim a layout iOS chose.
-   *
-   * `drawn`'s tree, written in the menu's order with `,` between siblings: a row is
-   * its title, then `@<subtitle>` when it has one, `+` when it is checked, `=` when it
-   * is checkable and unchecked (Android only: UIKit gives an unchecked toggle and a
-   * plain row the same `.off` state), `!` when it is destructive (iOS only: on Android
-   * that is a colour, nothing in the tree) and `~` when it is disabled. A group is
-   * `(<title>:<rows>)`, with an empty title for an untitled one: on iOS a section, on
-   * Android every Material group, top-level actions included. A submenu is
-   * `{<title>:<rows>}` (iOS; Android draws it as a group), a menu's own title
-   * `#<title>` (Android ContextMenu), and anything else `?`. Titles are written as they
-   * are, so a fixture that reads this keeps `,`, `:`, `;`, `@`, `#`, `+`, `=`, `!`,
-   * `~` and brackets out of its titles and subtitles.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * `drawn` is what `nuiTestMenuProbe()` last read, in menu order with `,`
+   * between siblings. A row is its title, then `@<subtitle>`, `+` when
+   * checked, `=` when checkable and unchecked (Android only), `!` when
+   * destructive (iOS only) and `~` when disabled. A group is
+   * `(<title>:<rows>)`, a submenu `{<title>:<rows>}` (iOS only), a menu's own
+   * title `#<title>`, anything else `?`. Titles are not escaped.
+   * @internal
    */
   nuiTestMenuReport(): string;
 
   /**
-   * TEMPORARY, test-only: read the menu the platform itself builds from this
-   * control's rows, for ``nuiTestMenuReport``'s `drawn` field.
-   *
-   * On iOS a SwiftUI `Menu` is drawn by UIKit: SwiftUI turns the content into a
-   * `UIMenu` on the trigger's `UIButton`, and only when the menu is presented, so
-   * that tree - not the model's rows - is what a person sees. The probe opens the
-   * menu with `UIControl.performPrimaryAction()` (iOS 17.4), copies the tree, and
-   * dismisses it again in the same main-thread turn. A Menu with a
-   * `primaryAction`, a disabled one, an OS below 17.4, or a trigger whose button
-   * cannot be found leaves `drawn` at `-1`, because pressing those would act
-   * rather than open, or cannot be done. Runs on the UI thread, so a call from JS
-   * hops there; poll the report for the answer.
-   *
-   * On Android the popup's witness already reads `drawn` from the popup's semantics
-   * tree on each layout of its window; the probe re-reads it from the open popup now,
-   * for a change that repaints without a layout. With no popup open it does nothing.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can open a
-   * SwiftUI `Menu` and read its rows itself.
+   * Test-only: reads the menu the platform builds, for the `drawn` field of
+   * `nuiTestMenuReport()`. On iOS it opens and dismisses the menu, and leaves
+   * `drawn` at `-1` below iOS 17.4, when disabled, or with a `primaryAction`.
+   * @internal
    */
   nuiTestMenuProbe(): void;
 
   /**
-   * TEMPORARY, test-only: sample the pixels this control's **trigger** is drawing,
-   * looking for `color`, and keep the answer for ``nuiTestPixelReport``. Returns at
-   * once - the sampling needs the UI thread and a Nitro method may not block for it
-   * - so the answer is polled, the way Button's pair works.
-   *
-   * It exists because `androidIcon` on the split trigger is a *drawing* contract, for
-   * Button's reason: every other reading of the prop is an echo, and only drawn pixels
-   * tell a glyph tinted with the control's content colour from one tinted with a
-   * constant. This is that half; ``nuiTestMenuPixelProbe`` is the rows.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   * Test-only: samples the trigger's drawn pixels for `color` on the UI thread
+   * and stores the answer for `nuiTestPixelReport()`.
+   * @internal
    */
   nuiTestPixelProbe(color: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last ``nuiTestPixelProbe`` found, in Button's
-   * shape - `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
-   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which has no Android glyph
-   * in its trigger to sample. Empty before the first probe.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * Test-only: the last probe's result, empty before the first probe -
+   * `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS.
+   * @internal
    */
   nuiTestPixelReport(): string;
 
   /**
-   * TEMPORARY, test-only: sample the pixels the **open menu** is drawing, looking for
-   * `color`, and keep the answer for ``nuiTestMenuPixelReport``. Returns at once.
-   *
-   * The rows are not in this control's view: a Material `DropdownMenuPopup` is a
-   * window of its own, so sampling the trigger says nothing about a row's glyph. What
-   * is sampled is the popup's own view - the one ``nuiTestMenuProbe``'s witness
-   * already records for the menu's frame - and with no popup open there is nothing to
-   * sample, which the report says as `no popup`.
-   *
-   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   * Test-only: samples the open menu's drawn pixels for `color` and stores the
+   * answer for `nuiTestMenuPixelReport()`. The popup is a separate window.
+   * @internal
    */
   nuiTestMenuPixelProbe(color: number): void;
 
   /**
-   * TEMPORARY, test-only: what the last ``nuiTestMenuPixelProbe`` found, in Button's
-   * shape with one extra refusal: `n=<probes> no popup` when no menu of this mount is
-   * composed, and `n=<probes> no pixels` on iOS, whose menu is drawn by UIKit in a
-   * window this process cannot draw into a bitmap. Empty before the first probe.
-   *
-   * @internal Not app API (DECISIONS D14).
+   * Test-only: the last menu probe's result, in the format of
+   * `nuiTestPixelReport()`, or `n=<probes> no popup` when no menu is open.
+   * iOS always answers `n=<probes> no pixels`.
+   * @internal
    */
   nuiTestMenuPixelReport(): string;
 }
 
-/**
- * A size in platform units (iOS points / Android density-independent pixels).
- *
- * @internal Only reachable through a Hybrid View, which v0.1 does not expose
- * publicly (DECISIONS D14).
- *
- * The shape is per-component on purpose, like `NitroUiButtonSize` and
- * `NitroUiPickerSize`: nitrogen generates one struct per name, and a shared type
- * in one component's spec file would make every other component import that
- * component's spec.
- */
+/** In platform units (iOS points, Android dp). @internal */
 export interface NitroUiMenuSize {
   width: number;
   height: number;
 }
 
-/**
- * The Hybrid View React renders as `NitroUiMenu`.
- *
- * @internal v0.1 does not expose Hybrid Views or their settable props publicly
- * (DECISIONS D14): it is exported for this repo's example, harness, bench and
- * smoke apps, and for the typed `hybridRef` handle, and is not semver surface.
- */
+/** @internal */
 export type NitroUiMenu = HybridView<NitroUiMenuProps, NitroUiMenuMethods>;

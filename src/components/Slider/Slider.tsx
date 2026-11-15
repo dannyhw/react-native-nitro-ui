@@ -7,22 +7,16 @@ import { useStableCallback } from '../../core/useStableCallback';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { NativeNitroUiSlider } from './NativeNitroUiSlider';
 
-/** The shape native gesture callbacks have, minus Nitro's `{ f: ... }` box. */
 type SlideHandler = (value: number, eventCount: number) => void;
 
 /**
- * Props of {@link Slider}.
- *
- * `value`/`defaultValue`/`minimumValue`/`maximumValue`/`step`/`disabled`/
- * `onValueChange`/`onSlidingStart`/`onSlidingComplete` follow
- * `@react-native-community/slider`, the de-facto naming for this control;
- * `tintColor` follows our own `Switch`, and everything else from `ViewProps`.
+ * Props of {@link Slider}. The names follow `@react-native-community/slider`;
+ * everything not listed comes from `ViewProps`.
  */
 export interface SliderProps extends ViewProps {
   /**
    * The value. Pass it to control the Slider; leave it `undefined` for an
-   * uncontrolled one (native then owns the displayed value, and dragging costs
-   * no React render).
+   * uncontrolled one, where dragging causes no React render.
    */
   value?: number | undefined;
   /**
@@ -38,49 +32,33 @@ export interface SliderProps extends ViewProps {
    * Increment the value snaps to, in the Slider's own units. `0` (the default)
    * means continuous. Use e.g. `1` for whole numbers, or `0.1` for tenths.
    *
-   * Quantising happens natively, before any event is emitted, so what JS is told
-   * is always exactly what the thumb is showing — including when the range is not
-   * a whole number of steps, where the maximum stays reachable.
+   * Reported values are always snapped. When the range is not a whole number
+   * of steps, the maximum stays reachable.
    */
   step?: number | undefined;
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
-   * Accent colour of the filled track and thumb: SwiftUI `.tint()` on iOS, the
-   * M3 active track + thumb on Android. Default: the platform accent / Material
-   * 3 colour scheme.
+   * Accent colour of the filled track and thumb. Default: the platform accent
+   * on iOS, the Material 3 colour scheme on Android.
    */
   tintColor?: ColorValue | undefined;
   /**
-   * During a drag, at most once per frame, with the value native now displays.
-   *
-   * Coalescing is native and deliberate: a touch stream samples faster than the
-   * display draws, and every emission here is a JS entry plus the user's handler
-   * plus a React render plus a props commit back (`docs/architecture/core.md`
-   * §11). Use {@link onSlidingComplete} for the value a gesture settled on.
+   * Called during a drag, at most once per frame, with the value now displayed.
+   * Use {@link onSlidingComplete} for the value a gesture settled on.
    */
   onValueChange?: ((value: number) => void) | undefined;
-  /** When a drag begins, with the value it began at. */
+  /** Called when a drag begins, with the value it began at. */
   onSlidingStart?: ((value: number) => void) | undefined;
   /**
-   * When a drag ends, always with the final value — even when the last frame
-   * already emitted that value through {@link onValueChange}.
+   * Called when a drag ends, always with the final value, even when
+   * {@link onValueChange} already reported that value.
    */
   onSlidingComplete?: ((value: number) => void) | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for tests and benchmarks.
    *
-   * @internal Not app API (DECISIONS D14): props must flow through React, so a
-   * direct write here runs the native setter off the UI thread and never commits.
-   * Reading props and calling `measureContent()` is all it is for (plus the
-   * test-only `nuiTestDrag` and the accessibility/frame-pump probes), and the
-   * callback runs once, when the view mounts —
-   * a new function does not re-run it.
-   *
-   * The shape is written inline rather than named: it is the same read-only
-   * handle as `NitroUiSliderHandle` in `NativeNitroUiSlider.ts`, and naming it
-   * here would make api-extractor demand that a v0.1-hidden native type be
-   * exported from the entry point.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -99,65 +77,31 @@ export interface SliderProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`). Benchmark
-   * only; `null` turns marks off for this view.
+   * Instance id for native performance marks, for benchmarks; `null` turns
+   * marks off for this view.
    *
-   * @internal Benchmark and diagnostics only — not app API.
+   * @internal
    */
   nuiPerfId?: number | null | undefined;
 }
 
 /**
- * The size configuration of a Slider, as the sizing engine sees it.
- *
- * Every prop that can change a Slider's size has to appear in this variant
- * (`docs/architecture/sizing.md` §5). A Slider has none: `minimumValue`,
- * `maximumValue`, `step`, `value`, `disabled` and `tintColor` move the thumb or
- * repaint — none of them changes the *height*, and the width is the Yoga box
- * (`fillWidth`). The only thing that can change the height is the environment
- * (the OS control size, the text size), and native folds that in itself through
- * the environment epoch. So the variant is empty — one configuration, one cached
- * height for the whole app, and the one `prewarm(['NitroUiSlider'])` can
- * pre-warm, because an empty variant *is* the default configuration.
+ * Every prop that can change the control's size must appear in the sizing
+ * variant. A Slider has none: its props move the thumb or repaint, and its
+ * width is the layout box.
  */
 const SIZING_VARIANT = '';
 
 /**
- * What a `fillWidth` control is laid out with, before any `style`.
- *
- * A Slider is the opposite shape from a Switch: its width *is* the box, and the
- * only size it measures for itself is its height. `alignSelf: 'stretch'` is what
- * hands it that width — the sizing engine's `fillWidth` policy overrides the
- * measured width with the box's, but only when the box has a finite width, so a
- * control that is never stretched would fall back to a measured width instead.
- * `alignSelf` is the one thing that decides a Yoga cross-axis size
- * (`docs/architecture/sizing.md` §6), so it has to be the base style here.
- *
- * That is the opposite of `Switch`'s `{ alignSelf: 'flex-start' }`, and for the
- * same reason in reverse: a Switch must not be stretched, a Slider must be. An
- * explicit `width`, `flex` or `alignSelf` in the caller's `style` still wins,
- * because their styles are applied after this.
+ * A Slider takes its width from its box and measures only its height, so it
+ * must be stretched by default. The caller's `style` is applied after this and
+ * still wins.
  */
 const FILL_WIDTH_BASE_STYLE = { alignSelf: 'stretch' } as const;
 
 /**
- * The handler a Slider installs when the app passed no `onSlidingStart` or
- * `onSlidingComplete`.
- *
- * Both callbacks are always sent, like every other prop here. Two reasons:
- *
- * - **D7b**: a callback prop may never become `null` while the view is mounted,
- *   and a prop that goes missing between commits is exactly how that happens
- *   (nitro#1184). `useControlled` does the same for `onValueChange`.
- * - **identity**: the wrapper `useStableCallback` returns changes when a handler
- *   is added or removed, so an absent handler and a present one are two
- *   different props. With one always-installed wrapper the prop never churns.
- *
- * Native emits `(value, eventCount)`; a handler taking fewer arguments is a
- * valid handler for more, so the arity difference needs no adapter - and the
- * count belongs to the handshake, not to the app. Only `onValueChange` is
- * echoed back (through `useControlled`), because only it changes what native
- * displays.
+ * Sent when the app passes no `onSlidingStart` or `onSlidingComplete`: a
+ * callback prop must never go missing between commits (nitro#1184).
  */
 const NO_SLIDE_HANDLER: (value: number) => void = () => {
   /* installed so the prop always has one stable identity */
@@ -171,9 +115,7 @@ const NO_SLIDE_HANDLER: (value: number) => void = () => {
  * <Slider value={volume} onValueChange={setVolume} />
  * ```
  *
- * Native owns the displayed value during a drag, so the thumb tracks the finger
- * even when JS is slow; a `value` written by React while a drag is in flight is
- * reconciled per the event-count handshake (`docs/architecture/core.md` §11).
+ * The thumb tracks the finger during a drag even when JS is slow.
  */
 export function Slider({
   value,
@@ -193,9 +135,6 @@ export function Slider({
   style,
   ...restProps
 }: SliderProps) {
-  // An uncontrolled Slider with no `defaultValue` starts at the bottom of its
-  // own range, not at a literal 0 — `<Slider minimumValue={20} />` starting at 0
-  // would show a thumb outside its track.
   const controlled = useControlled(
     value,
     defaultValue ?? minimumValue,
@@ -203,10 +142,8 @@ export function Slider({
   );
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  // The cast states what `?? NO_SLIDE_HANDLER` above already guarantees:
-  // `useStableCallback` answers `null` only when it was handed no handler, and
-  // here it always is handed one - but its signature is one union for both
-  // cases, so the always-wired half has to be said at each call site.
+  // `useStableCallback` returns `null` only when handed no handler, which
+  // cannot happen here; its return type is one union for both cases.
   const startCallback = useStableCallback(
     onSlidingStart ?? NO_SLIDE_HANDLER
   ) as NitroCallbackProp<SlideHandler>;

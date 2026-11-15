@@ -7,17 +7,11 @@ import { useStableCallback } from '../../core/useStableCallback';
 import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiSwitch } from './NativeNitroUiSwitch';
 
-/**
- * Props of {@link Switch}.
- *
- * `value`/`defaultValue`/`onValueChange`/`disabled`/`tintColor` follow the
- * platform controls they wrap (UIKit `UISwitch`, SwiftUI `Toggle`, Compose
- * `Switch`, RN's own `Switch`); everything else comes from `ViewProps`.
- */
+/** Props of {@link Switch}. Everything not listed comes from `ViewProps`. */
 export interface SwitchProps extends ViewProps {
   /**
    * Selected state. Pass it to control the Switch; leave it `undefined` for an
-   * uncontrolled one (native then owns the displayed value).
+   * uncontrolled one.
    */
   value?: boolean | undefined;
   /** Initial value of an uncontrolled Switch. Default: `false`. */
@@ -27,22 +21,14 @@ export interface SwitchProps extends ViewProps {
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
-   * Accent color of the "on" state: SwiftUI `.tint()` on iOS, the checked track
-   * color on Android. Default: the platform accent / Material 3 scheme.
+   * Accent color of the "on" state: the tint on iOS, the checked track color
+   * on Android. Default: the platform accent / Material 3 scheme.
    */
   tintColor?: ColorValue | undefined;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for tests and benchmarks.
    *
-   * @internal Not app API (DECISIONS D14): props must flow through React, so a
-   * direct write here runs the native setter off the UI thread and never commits.
-   * Reading props and calling `measureContent()` is all it is for, and the
-   * callback runs once, when the view mounts - a new function does not re-run it.
-   *
-   * The shape is written inline rather than named: it is the same read-only
-   * handle as `NitroUiSwitchHandle` in `NativeNitroUiSwitch.ts`, and naming it
-   * here would make api-extractor demand that a v0.1-hidden native type be
-   * exported from the entry point.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -57,41 +43,29 @@ export interface SwitchProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks (`nitroUiCore.drainPerf()`). Benchmark
-   * only; `null` turns marks off for this view.
+   * Instance id for native performance marks, for benchmarks; `null` turns
+   * marks off for this view.
    *
-   * @internal Benchmark and diagnostics only - not app API.
+   * @internal
    */
   nuiPerfId?: number | null | undefined;
   /**
-   * TEMPORARY, test-only: the control's width in platform units, so a harness can
-   * drive a real size change through a prop and prove that a `nuiSizingKey` change
-   * re-measures (review S1). A Switch has no size-affecting public prop, and
-   * DECISIONS D16 gives the real R3 test to the G2 Button.
+   * Test-only: the control's width in platform units.
    *
-   * @internal Not app API. Deleted once the G2 Button test exists.
+   * @internal
    */
   nuiTestWidth?: number | null | undefined;
 }
 
 /**
- * The size configuration of a Switch, as the sizing engine sees it.
- *
- * Every prop that can change a Switch's size has to appear in this variant
- * (`docs/architecture/sizing.md`). A Switch has none: `value`, `disabled` and
- * `tintColor` repaint, they do not resize - the only thing that changes a
- * control's size is the environment (the OS's control size, the text size), and
- * native folds that in itself through the environment epoch. So the variant is
- * empty, which is the cheapest possible answer - one configuration, one cached
- * size for the whole app - and the one `prewarmSizing(['NitroUiSwitch'])` can
- * pre-warm, because an empty variant *is* the default configuration.
+ * Every prop that can change the control's size must appear in the sizing
+ * variant. A Switch has none: `value`, `disabled` and `tintColor` only repaint.
  */
 const SIZING_VARIANT = '';
 
 /**
- * The sizing variant for one Switch, given the temporary test width. Setting a
- * width makes it a different configuration, which is the point: two instances
- * that are laid out at different sizes must never share one cache entry.
+ * A test width is its own variant: instances laid out at different sizes must
+ * never share one cached size.
  */
 function sizingVariantFor(testWidth: number | null | undefined): string {
   return testWidth == null

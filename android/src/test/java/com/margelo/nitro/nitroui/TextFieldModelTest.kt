@@ -3,20 +3,8 @@ package com.margelo.nitro.nitroui
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * JVM unit test for what the Android TextField does with an edit, composing or not
- * (`TextFieldModel.observe`).
- *
- * The on-device suite cannot hold an IME composition open on the lease's emulator: a
- * composition opened through an `InputConnection` from outside the IME is committed
- * again before the app sees it (G13 report). Gboard, though, keeps every Latin word in
- * a composing region while autocorrect is on, so what the field does *during* a
- * composition is what most Android typing is. `observe` takes the composition flag as
- * an argument for exactly this test; the field passes `TextFieldState.composition`. That
- * flag cannot be opened from a JVM test at all: a composing region is put on the state by
- * the IME through `InputConnection`, and nothing on the public `TextInput` surface sets
- * one - so these cases pass the flag, and the on-device suite cannot hold one open either.
- */
+// An IME composition cannot be held open from a test, on the JVM or on a device, so
+// `observe` takes the composing flag as an argument. Gboard composes every Latin word.
 class TextFieldModelTest {
   private class Harness {
     val model = TextFieldModel()
@@ -61,11 +49,9 @@ class TextFieldModelTest {
     h.type("hel", composing = true)
     h.type("hell", composing = true)
     h.type("hello", composing = true)
-    // The composition keeps what it holds: writing into it would close it and drop the
-    // IME's undo state with the half-typed word inside. Every step still reached JS.
+    // Writing into an open composition would close it and drop the IME's undo state.
     assertEquals("hello", h.text)
     assertEquals(listOf("h#1", "he#2", "hel#3", "hell#4", "hello#5"), h.events)
-    // Space commits the word, and the cap is applied the moment it is safe to be.
     h.type("hello", composing = false)
     assertEquals("hel", h.text)
     assertEquals(listOf("h#1", "he#2", "hel#3", "hell#4", "hello#5", "hel#6"), h.events)
@@ -78,16 +64,11 @@ class TextFieldModelTest {
     h.type("hell", composing = true)
     h.type("hello", composing = true)
     h.type("hello\u306A", composing = true)
-    // Three units past the cap, and nothing written back into the field: `textState.edit`
-    // inside a composition closes it and drops the IME's undo state, taking the half-typed
-    // word with it. The word still reached JS, which is what the cap can afford to wait for.
     assertEquals("hello\u306A", h.text)
     assertEquals(listOf("hell#1", "hello#2", "hello\u306A#3"), h.events)
-    // The composition commits: the text does not change, and the cap is applied at last.
     h.type("hello\u306A", composing = false)
     assertEquals("hello", h.text)
     assertEquals(listOf("hell#1", "hello#2", "hello\u306A#3", "hello#4"), h.events)
-    // The cut is not owed twice: a further observation of the same text sends nothing.
     h.type("hello", composing = false)
     assertEquals(4, h.model.state.nativeEvents)
   }
@@ -97,7 +78,6 @@ class TextFieldModelTest {
     val h = Harness()
     h.model.maxLength = 5
     h.type("hello\u306A", composing = true)
-    // The user deletes the syllable: the text is under the cap, so nothing is owed.
     h.type("hello", composing = false)
     assertEquals("hello", h.text)
     assertEquals(listOf("hello\u306A#1", "hello#2"), h.events)
@@ -122,7 +102,6 @@ class TextFieldModelTest {
     h.model.accounted = "abcdefgh"
     h.model.observe(h.text, isComposing = false)
     assertEquals("abcdefgh", h.text)
-    // A deletion from it is an edit like any other, and is not cut either.
     h.type("abcdefg", composing = false)
     assertEquals("abcdefg", h.text)
     assertEquals(listOf("abcdefg#1"), h.events)
@@ -136,8 +115,6 @@ class TextFieldModelTest {
     // `afterUpdate()` dropped a write while the composition was open.
     h.model.lastWrite = "composing"
     assertEquals(0, h.settled)
-    // The user deletes the composition: the text is what native already counted, so
-    // no edit is reported - and the held-back write still has to be decided.
     h.type("abc", composing = false)
     assertEquals(1, h.settled)
   }

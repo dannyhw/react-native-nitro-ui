@@ -4,16 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * JVM unit test for the shared menu rows' data half (E2): the wrapper's flat array as
- * the rows the popup draws ([parseMenuRows]), and those rows as Material groups
- * ([menuGroupsOf]).
- *
- * The device harness reads the same two things back out of the open popup's semantics
- * tree (`Menu.harness.tsx`, "draws groups, subtitles and checks"), which is where a
- * mistake shows to a person; this is the same rule without an emulator, so a parse that
- * drops `subtitle`/`checked` or a grouping that merges two sections is red in seconds.
- */
 class MenuRowsTest {
   private fun row(
     id: String,
@@ -63,8 +53,7 @@ class MenuRowsTest {
     val entries =
       parseMenuRows(
         arrayOf(
-          // Both forms the wrapper builds, kept verbatim: a resource name and a
-          // dev-server file. Neither is native's to rewrite.
+          // A resource name and a dev-server URL, both kept verbatim.
           row("share", androidIcon = "share_24px"),
           row("star", androidIcon = "url:http://localhost:8081/assets/star_24px"),
           row("plain"),

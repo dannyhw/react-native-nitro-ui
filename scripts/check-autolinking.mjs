@@ -1,20 +1,7 @@
 #!/usr/bin/env node
-// Regression guard for consumer autolinking.
-//
-// Both Android autolinkers detect our `ReactPackage` class by running a regex
-// over the RAW source file - no compiler involved:
-//   - React Native CLI: @react-native-community/cli-config-android
-//     findPackageClassName.js `matchClassName`
-//   - Expo: expo-modules-autolinking reactNativeConfig/androidResolver.js
-//     `matchNativePackageClassName` (two regexes)
-// Both regexes are greedy across newlines, so a KDoc sentence shaped like a
-// declaration (`class X … :` / `implements … ReactPackage`) anywhere before the
-// real class wins, and every consumer build then fails on a phantom class name
-// (Expo silently drops the library instead). That bit us once; see the note in
-// android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt.
-//
-// This script runs the real RN CLI detector plus Expo's regexes over our
-// android/ tree and fails if anything other than NitroUiPackage is detected.
+// Fails unless the Android autolinkers (React Native CLI and Expo) detect only
+// NitroUiPackage. Both find the `ReactPackage` class with a regex over the raw
+// source, so a doc comment shaped like a class declaration can win.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -27,7 +14,7 @@ const androidDir = path.join(repoRoot, 'android');
 const EXPECTED = 'NitroUiPackage';
 
 // Copy of expo-modules-autolinking's two regexes
-// (build/reactNativeConfig/androidResolver.js:195 and :203).
+// (build/reactNativeConfig/androidResolver.js).
 const EXPO_REGEXES = [
   /class\s+(\w+[^(\s]*)[\s\w():]*(\s+implements\s+|:)[\s\w():,]*[^{]*ReactPackage/,
   /class\s+(\w+[^(\s]*)[\s\w():]*(\s+extends\s+|:)[\s\w():,]*[^{]*(Base|Turbo)ReactPackage/,

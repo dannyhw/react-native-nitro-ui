@@ -2,16 +2,12 @@ import { processColor, type ColorValue } from 'react-native';
 import { useMemo } from 'react';
 
 /**
- * `processColor` for a Nitro `number | null` color prop, memoized.
+ * `processColor` for a Nitro `number | null` color prop, memoized so a color is
+ * converted once per value rather than once per render.
  *
- * Nitro specs carry colors as the ARGB integer RN's `processColor` produces, so
- * it stays off the native side and every color conversion happens once per
- * value, not once per render.
- *
- * @returns the processed color, or `null` for "use the platform default". A
- * dynamic/rounded color that cannot be represented as a single integer (for
- * example an iOS dynamic provider) also yields `null`, with a warning in the
- * debug build.
+ * @returns the ARGB integer, or `null` for "use the platform default". A color
+ * that is not a single integer (for example an iOS dynamic color) also yields
+ * `null`, with a warning in development.
  */
 export function useProcessedColor(
   color: ColorValue | undefined | null

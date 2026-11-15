@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Consumer smoke test: fresh React Native CLI app (RN=$RN, default 0.88.0, the
-# supported floor - DECISIONS D39), installed with npm from the packed tarball,
-# Release build, launched, ready line + screenshot. PLATFORM=ios|android|both.
+# supported floor), installed with npm from the packed tarball, Release build,
+# launched, ready line + screenshot. PLATFORM=ios|android|both.
 SCRIPT_NAME=rn-cli.sh
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -35,9 +35,8 @@ timer "npm-install" "$START"
 
 if [ "$PLATFORM" != android ]; then
   START=$(date +%s)
-  # The RN template ships a Gemfile that pins CocoaPods - keep using it when
-  # present (COCOAPODS_BIN), and go through the repo's one pod entry point either
-  # way so both paths pick a CocoaPods deliberately and say which.
+  # The RN template ships a Gemfile that pins CocoaPods: use that one when present
+  # (COCOAPODS_BIN), through the repo's pod entry point either way.
   if [ -f "$APP/ios/Gemfile" ]; then
     ( cd "$APP/ios" && bundle install )
     ( cd "$APP/ios" && COCOAPODS_BIN='bundle exec pod' \

@@ -16,47 +16,43 @@ type HybridRefHandler = (view: NitroUiDialogHandle) => void;
 /**
  * The read side of the native dialog - what a `hybridRef` callback gets.
  *
- * Read-only for the reason every handle here is (DECISIONS D14): a prop written
- * from JS runs the native setter off the UI thread and never commits. The three
- * methods are the test seams, and each hops to the main thread itself.
+ * Read-only: a prop written from JS runs the native setter off the UI thread and
+ * never commits. The three methods are test seams, and each hops to the main
+ * thread itself.
  *
- * @internal v0.1 does not publish Hybrid View types; this alias exists so
+ * @internal Hybrid View types are not published; this alias exists so
  * `hybridRef` can be typed for this repo's harness and benchmarks.
  */
 export interface NitroUiDialogHandle {
-  /** `'alert'` or `'confirmation'`, as React sent it. */
+  /** `'alert'` or `'confirmation'`. */
   readonly variant: string;
-  /** What React last asked for. */
   readonly presented: boolean;
-  /** The event count JS has echoed. */
   readonly mostRecentEventCount: number;
   readonly title: string;
   readonly message: string | null;
   readonly dismissible: boolean;
   readonly tintColor: number | null;
   /**
-   * Test-only readback - see `NitroUiDialogMethods.nuiTestStateReport`.
+   * Test-only state readback.
    * @internal
    */
   nuiTestStateReport(): string;
   /**
-   * Test-only action seam - see `NitroUiDialogMethods.nuiTestPerformAction`.
+   * Test-only action seam.
    * @internal
    */
   nuiTestPerformAction(id: string): void;
   /**
-   * Test-only dismissal seam - see `NitroUiDialogMethods.nuiTestDismiss`.
+   * Test-only dismissal seam.
    * @internal
    */
   nuiTestDismiss(): void;
 }
 
 /**
- * Props of the raw host component: **every** spec prop, always sent, with
- * callbacks in Nitro's `{ f: … }` wrapper (DECISIONS D7, D7b). `Dialog.tsx` is
- * the friendly API.
- *
- * No `NitroUiIntrinsicProps`: a dialog is not self-sizing (`sizing: null`).
+ * Props of the raw host component: every spec prop, always sent, with callbacks
+ * in Nitro's `{ f: … }` wrapper. A dialog is not self-sizing, so there are no
+ * sizing props.
  */
 export interface NativeNitroUiDialogProps extends HybridViewProps {
   variant: string;
@@ -76,8 +72,8 @@ export interface NativeNitroUiDialogProps extends HybridViewProps {
 }
 
 /**
- * The host component for the `NitroUiDialog` Hybrid View. Only the props type is
- * corrected here, as for every other control (`NativeNitroUiMenu.ts`).
+ * The host component for the `NitroUiDialog` Hybrid View. The cast corrects only
+ * the props type, which `getHostComponent` intersects with `ViewProps`.
  */
 export const NativeNitroUiDialog = getHostComponent<
   NativeNitroUiDialogProps,

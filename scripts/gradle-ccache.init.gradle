@@ -1,19 +1,6 @@
-// Put ccache in front of the C/C++ compilers of every native build in this
-// Gradle invocation (docs/tasks/X6-build-speed.md).
-//
-// Why an init script: the CMake projects that need it are `android/build.gradle`
-// of the published package and `react-native-nitro-modules`, and neither may be
-// edited for a build-speed reason - the package a library user installs has to
-// stay byte-identical. `scripts/build-app.mjs` therefore passes this file with
-// `-I`, and only when ccache is installed, so CI and machines without it
-// configure exactly what they configured before.
-//
-// The launcher path comes from the environment (`CCACHE_GRADLE_LAUNCHER`, set by
-// the same script that looked for the binary), so this file never has to guess
-// where a toolchain is. ccache's cross-worktree settings (CCACHE_BASEDIR,
-// CCACHE_NOHASHDIR) are environment too - see ccacheEnv() in
-// scripts/build-speed-lib.mjs, which puts them where they win over every config
-// file, including the one React Native's ccache-clang.sh selects.
+// Puts ccache in front of the C/C++ compilers of every native build in this
+// Gradle invocation. `scripts/build-app.mjs` passes it with `-I` when ccache is
+// installed, with the launcher path in `CCACHE_GRADLE_LAUNCHER`.
 
 def launcher = System.getenv('CCACHE_GRADLE_LAUNCHER')
 if (launcher == null || launcher.trim().isEmpty()) {
@@ -27,16 +14,9 @@ def launcherArgs = [
 ]
 
 /**
- * Append to a module's CMake arguments.
- *
- * `defaultConfig` is where AGP keeps the argument list it hands to CMake for
- * every ABI and variant (the module-level `externalNativeBuild.cmake` is the
- * `path`/`buildStagingDirectory` block and has no arguments at all, which is the
- * wrong end of the DSL to reach for). AGP has had this list as a varargs method,
- * as a plain list and as a `ListProperty`, and the modules in one RN build are
- * not all on the same one, so the shapes are tried in order. A module none of
- * them fits is left alone: a cache that skips one library is a slower build, a
- * failed hook is a broken one.
+ * Appends to a module's CMake arguments. AGP has exposed that list as a varargs
+ * method, a plain list and a `ListProperty`, and the modules in one build are
+ * not all on the same one, so each shape is tried. A module none fits is left alone.
  */
 def addTo = { extension, moduleName ->
     def cmake = extension.defaultConfig.externalNativeBuild.cmake

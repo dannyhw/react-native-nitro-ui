@@ -29,24 +29,8 @@ import { Switch } from '../components/Switch/Switch';
 import { TextField } from '../components/TextField/TextField';
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 
-/**
- * Which children a `<Host>` may hold, and what its box is (task H1).
- *
- * On Android the Host composes its direct nitro-ui children and *skips* every
- * other child, so an unsupported one is invisible rather than loud - and the
- * native side can only see a `View`, never which component made it. These tests are
- * the JS half of that contract: the check must name the child, and it must fire for
- * the shapes that reach the native tree (`ScrollView`, `Text`, a raw string) as well
- * as for a nitro-ui control the Host has not been measured with.
- *
- * The rule runs on iOS too, where a `<Host>` is a passthrough and a `View` child
- * would render: one contract, so an app cannot pass on the platform it tested and
- * fail on the other.
- */
-
 beforeEach(() => {
-  // `useSizingId` asks native for an instance id; the root mock keeps a registry
-  // of fakes for exactly that.
+  // `useSizingId` asks the native core for an instance id.
   nitroUiHybridObjects.NitroUiCore = () => ({ nextSizingId: () => 1 });
 });
 
@@ -55,12 +39,8 @@ afterEach(() => {
 });
 
 /**
- * Catches a render error so the reconciler unwinds the way it does in an app.
- *
- * Letting the throw escape instead would be a tidier assertion, but React keeps a
- * failed root: the next `render` in the same file then returns an empty tree, and
- * an unrelated test fails. This is also the honest shape — in a real app the throw
- * is caught by something.
+ * Catches a render error. Letting the throw escape leaves React with a failed
+ * root, and the next `render` in this file would return an empty tree.
  */
 class Boundary extends Component<
   { children?: ReactNode; onCatch: (error: Error) => void },
@@ -81,12 +61,7 @@ class Boundary extends Component<
   }
 }
 
-/**
- * The error for a child a Host cannot compose, or `null` when it accepted them.
- *
- * It passes `Host` as the second argument the way the component does, so a nested
- * `<Host>` is checked here under the same identity rule it has in an app.
- */
+/** The error for a child a Host cannot compose, or `null` when it accepted them. */
 function errorFor(children: ReactNode): Error | null {
   try {
     assertHostChildren(children, Host);
@@ -109,7 +84,6 @@ describe('Host children', () => {
     ).toBeNull();
   });
 
-  /** `null`/`false`/`undefined` are how a conditional child arrives. */
   it('ignores the children RN renders as nothing', () => {
     expect(errorFor(null)).toBeNull();
     expect(errorFor(false)).toBeNull();
@@ -118,22 +92,12 @@ describe('Host children', () => {
     ).toBeNull();
   });
 
-  /**
-   * `{label && <Switch/>}` with an empty `label` gives React the string `''`, which
-   * it renders as nothing. Refusing it would throw about a child that draws no
-   * pixels - and a Host that throws for a shape `View` accepts is a Host nobody can
-   * use in a list.
-   */
+  // `{label && <Switch/>}` with an empty `label` gives React the string `''`.
   it('ignores an empty string, which React draws as nothing too', () => {
     expect(errorFor('')).toBeNull();
     expect(errorFor(['', <Switch value />])).toBeNull();
   });
 
-  /**
-   * Nesting was the one shape that passed JS and reached the native tree as a
-   * control: a `<Host>` is a child of a Host, where it measures nothing, draws a
-   * nested composition, and answers to no box of its own (review M2).
-   */
   it('refuses a Host inside a Host, by name', () => {
     const error = errorFor(
       <>
@@ -149,7 +113,6 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/side by side/);
   });
 
-  /** The refusal has to be reachable from the component, not only the helper. */
   it('refuses a nested Host through the component apps render', async () => {
     const caught: Error[] = [];
     const errors = captureErrors();
@@ -164,19 +127,14 @@ describe('Host children', () => {
     );
     expect(caught).toHaveLength(1);
     expect(caught[0]?.message).toMatch(/another <Host>/);
-    // React also logs what the boundary caught, so the same refusal is what the
-    // developer would see in Metro. Nothing else may be in there: a second error
-    // would mean the outer Host or the Switch failed for its own reason too.
+    // React also logs what the boundary caught. A second logged error would mean
+    // the outer Host or the Switch failed for a reason of its own.
     const logged = errors();
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatch(/another <Host>/);
   });
 
-  /**
-   * The case the spike reported as silently wrong: an RN view inside a Host draws
-   * nothing on Android, because the only thing that could draw it is the
-   * composition it was never invited into.
-   */
+  // An RN view inside a Host draws nothing on Android.
   it('names an RN view', () => {
     const error = errorFor(
       <>
@@ -190,11 +148,6 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/Move it outside/);
   });
 
-  /**
-   * `Chip` (G12) is refused too: it was built without a round that measured it inside
-   * a Host. The refusal names it, and says whose `<Chip>` it is - an app may well have
-   * a chip of its own.
-   */
   it('names the Chip, which no round has measured inside a Host', () => {
     expect([...UNHOSTABLE_CONTROLS.values()]).toContain('Chip');
     const error = errorFor(<Chip label="Vegan" />);
@@ -202,22 +155,15 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/react-native-nitro-ui's <Chip>/);
   });
 
-  /**
-   * The refusal sentence for a nitro-ui control that has not been measured inside a
-   * Host. From H2b until G13 no shipped control was refused, so this used a stand-in;
-   * the TextField is the first real row (`UNHOSTABLE_CONTROLS`), and the sentence is
-   * asked of it directly.
-   */
   it('names a control the Host does not render yet', () => {
     expect([...UNHOSTABLE_CONTROLS.values()]).toContain('TextField');
     const error = errorFor(<TextField placeholder="Name" />);
     expect(error).not.toBeNull();
     expect(error?.message).toMatch(/<TextField>/);
-    // "nitro-ui's", so the sentence says whose control it is before saying what is
-    // wrong with it - `TextField` and `Switch` exist in more than one library.
+    // The message names the owning package: `TextField` and `Switch` exist in
+    // more than one library.
     expect(error?.message).toMatch(/react-native-nitro-ui's <TextField>/);
-    // The allowlist is consulted first, so a table cannot take back a permission the
-    // other granted: a control on both is accepted.
+    // The allowlist is consulted first, so a control on both tables is accepted.
     HOSTABLE_CONTROLS.set(TextField, 'TextField');
     try {
       expect(errorFor(<TextField placeholder="Name" />)).toBeNull();
@@ -226,10 +172,7 @@ describe('Host children', () => {
     }
   });
 
-  /**
-   * `BottomSheet` (G14) is refused by design rather than for want of a measurement: its
-   * content is React Native views, which a Host has no place for. The same sentence.
-   */
+  // `BottomSheet` is refused by design: its content is React Native views.
   it('names a control the Host refuses by design', () => {
     expect([...UNHOSTABLE_CONTROLS.values()]).toContain('BottomSheet');
     expect(HOSTABLE_CONTROLS.has(BottomSheet)).toBe(false);
@@ -239,12 +182,6 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/react-native-nitro-ui's <BottomSheet>/);
   });
 
-  /**
-   * All seven shipped controls are accepted, by identity. The `Picker` row is H2b's:
-   * a control whose menu is a window of its own is accepted because the composition
-   * that opens the window is the one that closes it, which is what the device suite
-   * for the hosted popup measures.
-   */
   it.each(['SegmentedControl', 'Picker', 'DatePicker'] as const)(
     'accepts the control H2b hosted: <%s>',
     (name) => {
@@ -254,39 +191,29 @@ describe('Host children', () => {
     }
   );
 
-  /**
-   * The controls H2a put on the allowlist must be accepted by *identity*, not by a
-   * name match: this is the row that would go red if a table keyed on `displayName`,
-   * because RN's own Slider/Button/Progress carry the same names.
-   */
+  // Accepted by identity, not by a name match: other packages export controls
+  // with the same names.
   it.each(['Slider', 'Progress', 'Button', 'Switch'] as const)(
     'accepts its own <%s> (H1/H2a rows)',
     (name) => {
       const Control = (lib as Record<string, unknown>)[name];
       expect(typeof Control).toBe('function');
-      // No props: the check never mounts the child, so it only has to survive
-      // element creation. A crash here would be the control's, not the Host's.
+      // No props: the check never mounts the child, it only creates the element.
       expect(errorFor(createElement(Control as never))).toBeNull();
     }
   );
 
-  /**
-   * Matching on `displayName` would host RN's own Switch - same name, different
-   * component, and a view the composition has never seen. It would render nothing.
-   */
+  // Matching on `displayName` would accept RN's own Switch, which the Host
+  // cannot compose.
   it('names a plain RN Switch, which is not ours', () => {
     const error = errorFor(<RNCoreSwitch value />);
     expect(error).not.toBeNull();
-    // Saying `<Switch>` here reads as "your Switch is wrong" to a person who
-    // imported the right-looking one from the wrong package; the message has to
-    // name the package that owns the child (review N3).
+    // The message names the package that owns the child.
     expect(error?.message).toMatch(/react-native's <Switch>/);
-    // Never the bare `<Switch>`, which is how ours is named when it is refused for
-    // some other reason and would read as "your Switch is not hostable".
+    // Never the bare `<Switch>`, which is how ours is named when it is refused.
     expect(error?.message).not.toMatch(/ is <Switch>/u);
   });
 
-  /** Text is a child too, and the one a person is most likely to type by habit. */
   it('names a text child', () => {
     const error = errorFor('Settings');
     expect(error).not.toBeNull();
@@ -304,11 +231,8 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/<Text>/);
   });
 
-  /**
-   * Fragments and arrays do not exist in the native tree, so a child under one *is*
-   * a direct child of the Host. A check that stopped at the fragment would let the
-   * `items.map(...)` shape through unvalidated.
-   */
+  // Fragments and arrays do not exist in the native tree, so a child under one
+  // is a direct child of the Host.
   it('walks through fragments and arrays', () => {
     for (const children of [
       <Fragment key="f">
@@ -329,19 +253,10 @@ describe('Host children', () => {
     ).toBeNull();
   });
 
-  /**
-   * The check has to be on the component, not merely exported: `Host` is the only
-   * thing an app renders, and this is the render that would have painted half a
-   * screen. Driven through `render`, because `Host` is a component with state and
-   * calling it by hand is not rendering it.
-   *
-   * iOS is what `Platform.OS` reports under jest, i.e. the branch that would have
-   * laid the child out happily, so a pass here means the check fires even where the
-   * native Host would not have needed it.
-   */
+  // `Platform.OS` is `ios` under jest, where a Host is a passthrough view, so
+  // this shows the check runs even where the native Host would not need it.
   it('is wired into the component that apps render', async () => {
-    // React reports an uncaught render error through its own logger; this is about
-    // the throw, not about the noise around it.
+    // React logs an uncaught render error; keep it out of the test output.
     const errors = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -365,20 +280,10 @@ describe('Host children', () => {
     expect(view.getByTestId('settings')).toBeTruthy();
   });
 
-  /**
-   * A hosted control reports no size (D24), so a Host with no height gets none, and
-   * that has to be *said*. The box is only knowable at layout, which is what this
-   * drives: the `onLayout` the component installs must warn, and must still call the
-   * app's own `onLayout` - replacing an app's callback to add a dev warning would be
-   * a worse bug than the one it reports.
-   *
-   * One layout event per test. The repeated-layout case (warn once, then fall quiet
-   * after a correction) is in `hostLayoutWarning.test.tsx`: this version of
-   * `@testing-library/react-native` leaves the act queue dirty after a *second*
-   * `fireEvent` in a test, and the next `render` in the same file then comes back
-   * empty. Reproduced with a plain RN `View` and no Host in sight, so the workaround
-   * belongs to the tests, not to the component.
-   */
+  // One layout event per test: this version of `@testing-library/react-native`
+  // leaves the act queue dirty after a second `fireEvent`, and the next `render`
+  // in the file comes back empty. The repeated-layout case is in
+  // `hostLayoutWarning.test.tsx`.
   it('warns when a Host with children measures no height', async () => {
     const warnings = captureWarnings();
     const seen: number[] = [];
@@ -393,11 +298,10 @@ describe('Host children', () => {
     fireLayout(view.getByTestId('settings'), { width: 360, height: 0 });
     expect(warnings()).toHaveLength(1);
     expect(warnings()[0]).toMatch(/measured 0 tall/);
-    // The app's callback still ran, exactly as it would have without us.
+    // The app's own `onLayout` still ran.
     expect(seen).toEqual([0]);
   });
 
-  /** The other half of the warning: a Host that was given a height is fine. */
   it('says nothing about a Host that has a height', async () => {
     const warnings = captureWarnings();
     const seen: number[] = [];
@@ -414,7 +318,6 @@ describe('Host children', () => {
     expect(seen).toEqual([96]);
   });
 
-  /** An empty Host is legitimately 0 tall, and says nothing. */
   it('stays quiet about a Host with no children', async () => {
     const warnings = captureWarnings();
     const view = await render(<Host testID="empty" />);
@@ -422,12 +325,8 @@ describe('Host children', () => {
     expect(warnings()).toEqual([]);
   });
 
-  /**
-   * `{show && <Switch/>}` with `show = false` is `false`, which is not `null`, and a
-   * `map` over an empty array is `[]`. Both draw nothing, and warning about them
-   * would train a person to ignore the warning about the Host that really has no
-   * height.
-   */
+  // `{show && <Switch/>}` with `show = false` is `false`, and a `map` over an
+  // empty array is `[]`. Both draw nothing.
   it('stays quiet when the children are a conditional that is off', async () => {
     const warnings = captureWarnings();
     const show = false;
@@ -443,11 +342,7 @@ describe('Host children', () => {
     expect(warnings()).toEqual([]);
   });
 
-  /**
-   * `gap`/`flexDirection`/`pointerEvents` and friends size a Host's box in Yoga and
-   * do nothing in Compose, which is the shape of a bug nobody finds. Dev-only, once
-   * per instance (review S3).
-   */
+  // These styles size the Host's box in Yoga and do nothing in Compose.
   it('says which of its styles a Host will not draw', async () => {
     const warnings = captureWarnings();
     const view = await render(
@@ -458,12 +353,10 @@ describe('Host children', () => {
     expect(warnings()).toHaveLength(1);
     expect(warnings()[0]).toMatch(/`gap`/);
     expect(warnings()[0]).toMatch(/`alignItems`/);
-    // The row is still laid out by Yoga, so the Host keeps its box either way.
     fireLayout(view.getByTestId('spaced'), { width: 360, height: 96 });
     expect(warnings()).toHaveLength(1);
   });
 
-  /** `flexDirection: 'row'` is the inert one that also changes the box height. */
   it('says a Host lays its rows in a column only', async () => {
     const warnings = captureWarnings();
     await render(
@@ -475,7 +368,6 @@ describe('Host children', () => {
     expect(warnings()[0]).toMatch(/only a column is drawn/);
   });
 
-  /** `padding` is honoured (the view manager forwards it), so it must stay quiet. */
   it('says nothing about the styles a Host does draw', async () => {
     const warnings = captureWarnings();
     await render(
@@ -499,12 +391,7 @@ function captureErrors(): () => string[] {
   return () => seen;
 }
 
-/**
- * Tap `console.warn` for this test. `afterEach` restores it.
- *
- * A tap rather than `toBeCalledWith`: the assertion wants the whole text, and two of
- * the three cases assert that nothing arrived.
- */
+/** Tap `console.warn` for this test. `afterEach` restores it. */
 function captureWarnings(): () => string[] {
   const seen: string[] = [];
   jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
@@ -513,7 +400,6 @@ function captureWarnings(): () => string[] {
   return () => seen;
 }
 
-/** Send the Host a layout event, the way RN does. */
 function fireLayout(
   host: Parameters<typeof fireEvent>[0],
   layout: { width: number; height: number }
@@ -523,15 +409,9 @@ function fireLayout(
   });
 }
 
-/**
- * What the check may *not* refuse: a component the library has never seen.
- *
- * React flattens components out of the native tree, so `<Host><Row/></Host>` puts
- * whatever `Row` returns directly under the Host — a `Row` that renders a `Switch`
- * is hosted, and the harness suite mounts exactly that shape. Refusing it for not
- * being literally `<Switch>` would reject working code, and an app that wrapped a
- * control once would have to stop wrapping it on one platform only.
- */
+// React flattens components out of the native tree, so a child component that
+// renders a `Switch` is hosted. The check cannot see through a component, so it
+// must not refuse one it does not know.
 describe('Host children · components the library does not know', () => {
   it('accepts an app component that renders a Switch', () => {
     function Row({ id }: { id: string }) {
@@ -541,9 +421,7 @@ describe('Host children · components the library does not know', () => {
   });
 
   it('accepts a third-party component, leaving the decision to the native Host', () => {
-    // No name here is ours, and nothing here renders: the check cannot see through
-    // a component, so it must not claim to. What the child returns is decided by
-    // the native Host, which refuses a child it cannot compose in dev.
+    // What an unknown component returns is judged by the native Host, not here.
     expect(
       errorFor(
         (() => {
@@ -555,17 +433,13 @@ describe('Host children · components the library does not know', () => {
   });
 });
 
-/**
- * The two tables in `HostChildren.ts` are the whole rule, so they must not fall
- * behind the library. Read off the filesystem rather than a second hand-written
- * list: a control added without a row in one of them is exactly the drift this
- * guards (`Host` is the row that is not a control).
- */
+// The control list is read from the filesystem, so a control added without a
+// row in `HostChildren.ts` fails here.
 describe('Host children · tables cover the library', () => {
   it('has an opinion on every control in src/components', () => {
     const componentsDir = join(__dirname, '..', 'components');
-    // A directory exports the names its manifest lists (`exports`, G11's two dialogs over
-    // one native view), or its own name - the same rule the registry uses.
+    // A directory exports the names its manifest lists under `exports`, or its
+    // own name.
     const controls = readdirSync(componentsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name !== 'Host')
       .flatMap((entry) => {
@@ -582,13 +456,11 @@ describe('Host children · tables cover the library', () => {
       expect.arrayContaining(['AlertDialog', 'ConfirmationDialog'])
     );
     for (const name of controls) {
-      // Imported through the index an app uses, so a component that stops being
-      // exported there cannot hide from this.
+      // Imported through the public index, so a control that stops being
+      // exported there fails here.
       const exported = (lib as Record<string, unknown>)[name];
       expect(exported).toBeDefined();
       const refused = errorFor(createElement(exported as never));
-      // Read the answer off the table rather than a second hand-written list, so
-      // this cannot drift when H2b moves another control across.
       if (HOSTABLE_NAMES.includes(name)) {
         expect(refused).toBeNull();
       } else {

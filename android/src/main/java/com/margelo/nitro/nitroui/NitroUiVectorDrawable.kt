@@ -15,48 +15,16 @@ import org.xml.sax.Attributes
 import org.xml.sax.InputSource
 import org.xml.sax.helpers.DefaultHandler
 
-/*
- * The development half of `androidIcon`: an Android vector drawable read from a
- * file rather than from the app's compiled resources
- * (`docs/components/button.md`, "Android icons").
- *
- * A release build never comes here. By then the same `.xml` is an entry in the
- * resource table and `aapt` has turned it into the binary form the platform draws
- * with. In development the file is only ever the source the developer wrote,
- * served over HTTP by Metro — React Native refuses to serve `.xml` assets itself
- * (`assetSupportsNetworkLoads` in `AssetSourceResolver.js`) — so something has to
- * read that source, and it is this file.
- *
- * The output is an `ImageVector`, because that is what Compose draws natively:
- * every Material icon in the app reaches the screen as one, so the development
- * glyph goes through the same `VectorPainter` as the release glyph's neighbours,
- * stays sharp at whatever size the size ladder asks for, and costs no bitmap.
- *
- * Two rules shape the parser:
- *
- *  - **The tree it builds is data.** The SAX handler fills plain classes, and
- *    [toImageVector] is the only place `ImageVector.Builder` is called. That is
- *    what lets `android/src/test` run this against Google's own Material Symbols
- *    files and against broken ones, on a JVM, with no emulator and no device —
- *    and a parser that only runs on a device can only ever be shown to pass
- *    (AGENTS, "Every new test or gate must be shown to fail").
- *  - **Colours are resolved the way the caller can still use them.** A real file
- *    references `@android:color/white` or `?attr/colorControlNormal`, and only the
- *    resource table can answer those. nitro-ui tints every icon it draws to the
- *    control's own content colour (`NitroUiIconGlyph`), which replaces the RGB of
- *    every pixel and keeps the alpha — so the only thing a colour has to get right
- *    here is whether it is painted at all. See [parseColor].
- */
+// Reads an Android vector drawable from its XML source into an `ImageVector`. Only a
+// development build needs it: Metro serves the icon as a file there, not as a resource.
 
 /** A file that is not an Android vector drawable, or is one we cannot draw. */
 internal class NitroUiVectorUnsupported(
   reason: String,
 ) : RuntimeException(reason)
 
-/** Something a `<vector>` contains: a path to paint, or a group of them. */
 internal sealed interface NitroUiVectorNode
 
-/** What one `<path>` element asks to be drawn. */
 internal class NitroUiVectorPath(
   val pathData: String,
   /** ARGB to fill with; a fully transparent value means "no fill". */
@@ -75,7 +43,6 @@ internal class NitroUiVectorPath(
   val trimPathOffset: Float,
 ) : NitroUiVectorNode
 
-/** What one `<group>` element wraps: paths and nested groups, moved as one. */
 internal class NitroUiVectorGroup(
   val rotation: Float,
   val pivotX: Float,
@@ -88,26 +55,16 @@ internal class NitroUiVectorGroup(
   val children: MutableList<NitroUiVectorNode> = mutableListOf(),
 ) : NitroUiVectorNode
 
-/**
- * A parsed vector drawable: the box it claims to be, the viewport its paths are
- * written in, and the tree inside it.
- */
 internal class NitroUiVectorDrawable(
   val widthDp: Float,
   val heightDp: Float,
   val viewportWidth: Float,
   val viewportHeight: Float,
   val roots: List<NitroUiVectorNode>,
-  /** How many `<path>`s the file asked to draw. For the log line and the tests. */
+  /** How many `<path>` elements the file has. */
   val nodeCount: Int,
 ) {
-  /**
-   * The same drawing as a Compose image.
-   *
-   * `name` is what a layout-inspection dump and a11y tree show for the icon, so it
-   * is the URL the file arrived from rather than a generated number: when two
-   * glyphs are mixed up on screen, the answer is in the dump.
-   */
+  /** [name] shows in layout-inspection dumps, so pass something that identifies the file. */
   fun toImageVector(
     name: String,
   ): ImageVector {
@@ -189,22 +146,15 @@ internal class NitroUiVectorDrawable(
 /** Opaque black — the fill `aapt` gives a path whose colour it cannot read. */
 internal const val OPAQUE_BLACK: Int = -0x1000000 // 0xFF000000
 
-/** Nothing to paint with. */
 internal const val TRANSPARENT: Int = 0
 
-/** The alpha channel of an ARGB int, without an `android.graphics` call. */
 internal fun alphaOf(
   argb: Int,
 ): Int = (argb ushr 24) and 0xFF
 
 /**
- * Vector drawables read from a stream — the files an `androidIcon` names in
- * development.
- *
- * [read] is the whole API. It throws [NitroUiVectorUnsupported] for a file that
- * is not a vector drawable, is truncated, or uses a feature this parser does not
- * implement; the caller treats all three the way an unresolvable icon name is
- * treated — nothing drawn, one line in the log.
+ * [read] throws [NitroUiVectorUnsupported] for a file that is not a vector drawable, is
+ * truncated, or uses a feature this parser does not implement.
  */
 internal object NitroUiVectorDrawableReader {
   private const val TAG_VECTOR = "vector"
@@ -213,15 +163,8 @@ internal object NitroUiVectorDrawableReader {
   private const val TAG_CLIP_PATH = "clip-path"
 
   /**
-   * Gradient fills, which arrive as an `<aapt:attr name="android:fillColor">`
-   * wrapping a `<gradient>`.
-   *
-   * These are the one thing in the format this parser refuses, and the refusal is
-   * louder than silence would be: a gradient drawn as one flat colour is a glyph
-   * that looks right until it is compared with a release build, and nitro-ui
-   * tints every icon anyway, which would flatten the gradient it had just gone to
-   * trouble to reproduce. An icon that uses one therefore draws in a release build
-   * and not in development, and the log says which of the two it is doing.
+   * A gradient fill arrives as an `<aapt:attr>` wrapping a `<gradient>`. It is refused rather
+   * than drawn as one flat colour.
    */
   private const val TAG_GRADIENT = "gradient"
   private const val TAG_AAPT_ATTR = "attr"
@@ -229,14 +172,10 @@ internal object NitroUiVectorDrawableReader {
   fun read(source: InputStream): NitroUiVectorDrawable {
     val factory =
       SAXParserFactory.newInstance().apply {
-        // Namespace-aware parsing would report attributes as `pathData` with the
-        // prefix moved elsewhere, and the prefix is exactly how the file says
-        // "Android's attribute, not mine". Off keeps qualified names as written,
-        // and [attributesOf] strips the prefix on its own terms.
+        // Not namespace-aware, so attribute names keep the prefix as written; [attributesOf]
+        // strips it.
         isNamespaceAware = false
-        // The bytes arrive over HTTP from a dev server. A vector drawable has no
-        // doctype and includes nothing, so a document that tries either is
-        // refused rather than having the parser go and read something else.
+        // The bytes come over HTTP: refuse doctypes and external entities.
         refuse("http://apache.org/xml/features/disallow-doctype-decl", true)
         refuse("http://xml.org/sax/features/external-general-entities", false)
         refuse("http://xml.org/sax/features/external-parameter-entities", false)
@@ -247,13 +186,8 @@ internal object NitroUiVectorDrawableReader {
     } catch (unsupported: NitroUiVectorUnsupported) {
       throw unsupported
     } catch (malformed: Exception) {
-      // A truncated download, a `package.json`, an `.svg`. SAX has the detail; the
-      // caller adds which icon it was.
-      //
-      // SAX is also what the handler's own refusals travel through: a throw from
-      // inside `startElement` comes back wrapped, and the refusal is the reason the
-      // developer needs ("uses a gradient fill", not "is not well-formed"). So a
-      // wrapped refusal is unwrapped rather than reported as the wrapper.
+      // A refusal thrown inside the handler comes back wrapped by SAX; unwrap it so the
+      // developer sees the real reason.
       val wrapped = generateSequence<Throwable>(malformed) { it.cause }
         .firstOrNull { it is NitroUiVectorUnsupported }
       if (wrapped != null) {
@@ -274,14 +208,10 @@ internal object NitroUiVectorDrawableReader {
     try {
       setFeature(feature, enabled)
     } catch (_: Exception) {
-      // Not every SAX implementation knows every feature, and Android's is not the
-      // JDK's. Neither the doctype nor the entities can reach a file the dev server
-      // did not send, so an implementation that cannot be told is not a hole; it is
-      // not worth failing to draw an icon over.
+      // Not every SAX implementation knows every feature; that is not worth failing over.
     }
   }
 
-  /** The elements seen so far, and the numbers the root element carried. */
   private class VectorHandler : DefaultHandler() {
     private var widthDp = Float.NaN
     private var heightDp = Float.NaN
@@ -371,9 +301,7 @@ internal object NitroUiVectorDrawableReader {
           }
 
         else -> {
-          // Ignored: an attribute set nitro-ui cannot read, or an element that says
-          // nothing about what to draw. The platform ignores what it does not know
-          // rather than refusing to draw, and so this does too.
+          // Unknown elements are ignored, as the platform does.
         }
       }
     }
@@ -384,11 +312,8 @@ internal object NitroUiVectorDrawableReader {
       qName: String?,
     ) {
       if (qName?.substringAfter(':') == TAG_GROUP && stack.size > 1) {
-        // Pop first, then attach: `stack.last().children.add(stack.removeLast())`
-        // reads the stack twice and would hand the group to *itself* - Kotlin
-        // evaluates the receiver before the argument, so the group being closed is
-        // still on top when the receiver is read. The glyph would then lose every
-        // path inside the group and still report the right path count.
+        // Pop first, then attach. `stack.last().children.add(stack.removeLast())` evaluates
+        // the receiver first, while the closing group is still on top, and adds it to itself.
         val closing = stack.removeLast()
         stack.last().children.add(closing)
       }
@@ -398,22 +323,14 @@ internal object NitroUiVectorDrawableReader {
       if (!seenRoot) {
         throw NitroUiVectorUnsupported("has no <vector> element")
       }
-      // A `<vector>` with nothing in it is well-formed XML and not an icon. Without
-      // this, the caller would reserve a slot for a glyph that is never painted —
-      // the one thing the sizing rule says not to do.
+      // An empty `<vector>` is not an icon; the caller must not reserve a slot for it.
       if (nodeCount == 0) {
         throw NitroUiVectorUnsupported("has no <path> to draw")
       }
-      // `aapt` requires a width and a height, but a hand-edited file can leave one
-      // out, and the viewport is the only other thing that says how big the drawing
-      // is. 24 is what the format's own examples use, and what a control draws an
-      // icon at anyway.
+      // A hand-edited file can omit a size; fall back to the viewport, then to 24.
       val width = firstOf(widthDp, viewportWidth, 24f)
       val height = firstOf(heightDp, viewportHeight, 24f)
-      // The viewport is the coordinate space the path data is written in: Google's
-      // Material Symbols draw in 960x960 inside a 24 dp box. A file with neither a
-      // viewport nor a size has no space to scale into, and scaling a path by
-      // nothing draws nothing — which would be silent.
+      // The viewport is the coordinate space of the path data; without one nothing scales.
       val viewportW = firstOf(viewportWidth, width, 0f)
       val viewportH = firstOf(viewportHeight, height, 0f)
       if (viewportW <= 0f || viewportH <= 0f) {
@@ -437,12 +354,8 @@ internal object NitroUiVectorDrawableReader {
     fun string(name: String): String? = values[name]?.takeIf { it.isNotEmpty() }
 
     /**
-     * A number, with its unit taken off.
-     *
-     * Sizes in this format carry a unit (`24dp`) and everything else is in viewport
-     * units. `px` is read as `dp`: the icon's box comes from the size ladder and
-     * never from this file, so the only thing a size decides is the ratio between
-     * the two axes — and a file that mixes units has already lost that argument.
+     * A number with its unit removed. `px` reads as `dp`: the control sets the icon's size, so
+     * a size here only decides the aspect ratio.
      */
     fun float(
       name: String,
@@ -473,10 +386,7 @@ internal object NitroUiVectorDrawableReader {
     return AttributesMap(values)
   }
 
-  /**
-   * The fill of a `<path>`, defaulting the way the format does: no colour at all
-   * means nothing is filled, which is how a stroke-only icon is drawn.
-   */
+  /** No colour means no fill. A resource reference cannot be resolved here and reads as opaque. */
   private fun parseFillColor(
     value: String?,
   ): Int =
@@ -488,15 +398,8 @@ internal object NitroUiVectorDrawableReader {
     value != null && (value.startsWith('@') || value.startsWith('?'))
 
   /**
-   * A colour literal as ARGB, or `null` for anything else.
-   *
-   * `#RGB`, `#ARGB`, `#RRGGBB` and `#AARRGGBB`. Google's own files write
-   * `@android:color/white`, which is not one of those and has no answer here —
-   * only the app's resource table does, and it is not on this thread. Callers
-   * choose a default, and the default that matters is the *alpha*: the drawable is
-   * tinted with the control's content colour afterwards, which replaces the RGB of
-   * every pixel and leaves the coverage alone. A reference answered as opaque
-   * therefore paints the same glyph a release build paints.
+   * A `#RGB`, `#ARGB`, `#RRGGBB` or `#AARRGGBB` literal as ARGB, or `null` for anything else.
+   * Only the alpha matters to callers: the glyph is tinted afterwards, which replaces the RGB.
    */
   internal fun parseColor(value: String?): Int? {
     if (value == null || value.length < 4 || value[0] != '#') {
@@ -507,10 +410,8 @@ internal object NitroUiVectorDrawableReader {
     if (parsed < 0) {
       return null
     }
-    // Parenthesised per channel. `or` and `shl` are both infix calls in Kotlin and
-    // so share one precedence, evaluated left to right: written without these
-    // brackets, `OPAQUE_BLACK or red shl 16 or green shl 8 or blue` shifts the
-    // accumulator each time and `#FFF` comes out green. Found by the colour test.
+    // Shift each channel separately: `or` and `shl` are infix calls with one precedence,
+    // evaluated left to right, so an unparenthesised chain shifts the accumulator.
     val red = expandNibble(parsed, 2) shl 16
     val green = expandNibble(parsed, 1) shl 8
     val blue = expandNibble(parsed, 0)

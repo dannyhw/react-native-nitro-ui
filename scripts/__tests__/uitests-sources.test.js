@@ -1,27 +1,3 @@
-/**
- * Every Swift file in the UI-test folder has to be *compiled* by the UI-test target.
- *
- * The iOS real-input suite lives in `example/ios/NitroUiExampleUITests/`, and the Xcode
- * project lists its sources by hand. A helper that is not added to the target's Sources
- * phase still sits in the folder, still parses on its own, and still looks shipped in
- * `git status`. What actually happens is a build failure of the least obvious kind -
- * `cannot find 'A11yFrameStability' in scope` - reported against the file that *uses* the
- * helper, in a gate that takes minutes to reach the compile step and prints a log path
- * rather than a reason.
- *
- * X34 paid for that twice in one round: adding `GestureSettlement.swift` *replaced* the
- * four lines that named `A11yFrameStability.swift` instead of adding to them, and every
- * real-input run after it died in the test build - twice with an error naming a file
- * nothing had touched in weeks, once underneath an unrelated failure that hid it.
- * Nothing in `check` could see it: the file was on disk, and `test:native` parses the
- * UITests sources by folder listing, which is exactly the check that cannot fail here.
- *
- * So this guard reads the project the way Xcode does - which sources does the target that
- * compiles `RealInputTests.swift` actually compile? - and compares that with the folder.
- * Both directions are a failure: a file on disk that nobody compiles (the missing helper)
- * and a compiled entry with no file reference behind it (the stale half of the same edit).
- */
-
 import { describe, expect, it } from '@jest/globals';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -37,12 +13,8 @@ const PBXPROJ = join(
 const ANCHOR = 'RealInputTests.swift';
 
 /**
- * The source names each `PBXSourcesBuildPhase` compiles.
- *
- * Three sections of the project file are stitched together: a phase lists build-file ids,
- * a build file names a file reference, and a file reference carries the name Xcode opens.
- * Skipping a hop is how a file ends up "in the project" but not compiled, which is the
- * bug class this guards, so the stitching is what has to be checked.
+ * The source names each `PBXSourcesBuildPhase` compiles: a phase lists build-file ids,
+ * a build file names a file reference, and a file reference carries the file's name.
  *
  * @param {string} pbxproj
  * @returns {Array<{id: string, names: string[]}>}
@@ -72,8 +44,7 @@ function sourcesPhases(pbxproj) {
       const entry = line.match(/([0-9A-Fa-f]{8,}) \/\* (.+?) in Sources/);
       if (entry == null) continue;
       const buildFile = buildFiles.get(entry[1]);
-      // A phase entry whose build file or file reference is gone names a source Xcode
-      // cannot open: broken the same way, for the same reason, so it reads as a name here.
+      // An entry whose build file or file reference is gone is reported by name too.
       if (buildFile == null || !references.has(buildFile.fileRef)) {
         names.push(`(unresolvable: ${entry[2]})`);
         continue;
@@ -202,14 +173,10 @@ describe('the iOS UI-test target compiles every file in its folder', () => {
 
     const compiled = uiTestSources(readFileSync(PBXPROJ, 'utf8'));
     expect(compiled).not.toBeNull();
-    // Set equality: a helper nobody compiles, and a compiled line whose file is gone, are
-    // the same broken target seen from either end of the same bad edit.
     expect(compiled).toEqual(onDisk);
   });
 
   it('catches a target that compiles one helper and not the other', () => {
-    // The X34 failure itself: the new helper went in by replacing the old helper's lines,
-    // so the folder held both files and the target compiled one.
     const compiled = uiTestSources(
       fakeProject({
         folder: [ANCHOR, 'A11yFrameStability.swift', 'GestureSettlement.swift'],
@@ -232,8 +199,6 @@ describe('the iOS UI-test target compiles every file in its folder', () => {
   });
 
   it('refuses to answer when no target compiles the anchor', () => {
-    // A project file that lost the anchor is not evidence that the folder is empty: the
-    // guard has to say "I could not find the target", not "nothing to compile".
     expect(
       uiTestSources(fakeProject({ folder: [ANCHOR], compiled: [] }), ANCHOR)
     ).toBeNull();

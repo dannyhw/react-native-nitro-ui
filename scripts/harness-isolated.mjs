@@ -1,20 +1,8 @@
 /**
- * The isolated harness suites: `example/__tests__/isolated/`, run in an app instance
- * of their own after the shared run of a `harness:<platform>` gate (G14).
- *
- * A file goes there when a regression in what it tests would break every file after
- * it in the same app process - the stranded-Modal case (DECISIONS D35 item 5) leaves
- * RN's `Modal` host over the app for good. The shared run leaves the directory out
- * (`example/jest.harness.config.mjs`), so without this the files would run nowhere.
- * `NITRO_UI_HARNESS_ISOLATED=1` is what makes the Jest config select only them, and a
- * second `react-native-harness` run is a second app launch.
- *
- * Only a full platform run adds the isolated run: a filtered run
- * (`harness:ios -- Switch`) asked for its own files, and one that wants the isolated
- * files names them with the variable set (`docs/components/bottom-sheet.md`).
- *
- * The decision lives here, away from the spawning, so it is tested on the host
- * (`scripts/__tests__/harness-isolated.test.js`).
+ * Decides when a `harness:<platform>` run adds a second app launch for the
+ * isolated suites in `example/__tests__/isolated/`. A file goes there when a
+ * regression in what it tests would break every file after it in the same app
+ * process. Only a full platform run adds the isolated run.
  */
 
 /** The variable `example/jest.harness.config.mjs` reads. */

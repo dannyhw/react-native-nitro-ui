@@ -1,16 +1,4 @@
-//
-//  NitroUiSizingJni.cpp
-//
-//  The Android half of intrinsic sizing (docs/architecture/sizing.md).
-//
-//  Two directions:
-//   - `nBind`: the generated manager hands us the view's `StateWrapper`, which we
-//     unwrap the way the generated state updater does (and the way
-//     @lodev09/react-native-true-sheet does) to reach the Fabric `State` a
-//     measured size can be pushed into.
-//   - `nReport` / `nFlush`: the Compose host reports what it measured, and the
-//     `OnPreDrawListener` applies the batch before the frame is drawn.
-//
+// JNI bindings between the Kotlin `NitroUiSizing` object and the C++ sizing engine.
 
 #include "NitroUiSizingJni.hpp"
 
@@ -31,12 +19,7 @@ namespace margelo::nitro::nitroui {
 
   namespace {
 
-    /**
-     * The `State` behind a Kotlin `StateWrapper`, or `nullptr` if there is none.
-     *
-     * A `StateWrapper` is an interface object whose implementation is
-     * `StateWrapperImpl`; the generated state updater does the same downcast.
-     */
+    // A `StateWrapper` is an interface whose Fabric implementation is `StateWrapperImpl`.
     NitroUiStateRef stateFromWrapper(jni::alias_ref<JStateWrapper::javaobject> stateWrapper) {
       if (stateWrapper.get() == nullptr) {
         return nullptr;
@@ -56,8 +39,6 @@ namespace margelo::nitro::nitroui {
       }
       const char* chars = env->GetStringUTFChars(value, nullptr);
       if (chars == nullptr) {
-        // An out-of-memory or interrupted call: report it, and carry on with an
-        // empty name rather than a pending exception at the next JNI boundary.
         return {};
       }
       std::string result(chars);

@@ -1,6 +1,3 @@
-// Gate for scripts/patch-nitrogen.mjs (margelo/nitro#1656 workaround).
-// The fixtures under ./fixtures are real nitrogen 0.37.1 output, so a nitrogen
-// upgrade that changes the generated Props constructor shape fails here loudly.
 import { beforeAll, describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
@@ -22,11 +19,8 @@ const fixtures = join(repoRoot, 'scripts/__tests__/fixtures');
 const VIEWS = 'nitrogen/generated/shared/c++/views';
 
 /**
- * A list the script configures itself, read out of its own source.
- *
- * Importing would be nicer, but a suite that hardcodes these lists goes red for the wrong
- * reason the day one grows: the fixture tree stops being the tree the step is being asked
- * about. Reading them keeps every tree below a whole one.
+ * A list the script configures itself, read out of its own source so the
+ * fixture trees below always declare every listed view.
  *
  * @param {string} name e.g. `CONTENT_CHILDREN_VIEWS`
  * @returns {string[]}
@@ -87,10 +81,6 @@ const generatedHeader = (className) =>
 /**
  * A scratch tree that declares and generates every view the content-children step is
  * configured for, overriding the BottomSheet's `.mm` with `mm`.
- *
- * The step reads its own list, so a tree that declares one listed view has to declare and
- * generate all of them — refusing a missing one is the guard tested below, and a tree that
- * is a fragment of the real tree would be red for the wrong reason every time the list grows.
  */
 function withContentViewTree(mm, fn, { declare = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'patch-nitrogen-sheet-'));
@@ -228,9 +218,8 @@ describe('patch-nitrogen', () => {
     });
   });
 
-  // Regression: the CLI used to compare `import.meta.url` with a raw
-  // `file://` + argv[1] string, which never matches once the checkout path
-  // needs URL percent-encoding - so both the patch and its hard-fail vanished.
+  // The entry-point check must survive a checkout path that needs URL
+  // percent-encoding.
   it.each([
     ['a space', 't01 review space'],
     ['a hash', 't01#review'],
@@ -285,9 +274,8 @@ describe('patch-nitrogen: intrinsic sizing', () => {
   const KT =
     'nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchManager.kt';
   const SIZED = [HPP, MM, KT];
-  // Kept in sync with SIZING_MARKER in scripts/patch-nitrogen.mjs. It is what a
-  // successful patch leaves behind, so its absence proves a refused patch wrote
-  // nothing.
+  // The same text as SIZING_MARKER in scripts/patch-nitrogen.mjs. Its absence
+  // proves a refused patch wrote nothing.
   const MARKER = '// nitro-ui: intrinsic sizing';
 
   it('repoints the state, shadow node and component descriptor aliases', () => {
@@ -385,10 +373,8 @@ describe('patch-nitrogen: intrinsic sizing', () => {
   });
 
   it('refuses to add updateState: when nitrogen already generates it', () => {
-    // A future nitrogen that generates the hook itself must not end up with two
-    // `updateState:oldState:` implementations in one @implementation: Objective-C++
-    // takes that, and which one wins is a link-order detail. Failing loudly is the
-    // only safe answer, because the wrong outcome is sizing silently not binding.
+    // Objective-C++ accepts two `updateState:oldState:` implementations in one
+    // @implementation, and which one wins is a link-order detail.
     withFixture('sizing', (root) => {
       const path = join(root, MM);
       const source = readFileSync(path, 'utf8');
@@ -489,9 +475,7 @@ describe('patch-nitrogen: content children (G14)', () => {
 
   /**
    * A scratch tree that declares every listed view, with `mm` as the BottomSheet's
-   * generated view and a valid one for each of the others. The list grew with the
-   * Popover (G22), and a fixture that declares only the first entry would fail every run
-   * for a view it never wrote.
+   * generated view and a valid one for each of the others.
    */
   function withSheetTree(mm, fn, { declare = true } = {}) {
     const root = mkdtempSync(join(tmpdir(), 'patch-nitrogen-sheet-'));
@@ -622,13 +606,8 @@ describe('patch-nitrogen: content children (G14)', () => {
   });
 
   it('is applied to every view that mounts React Native children', () => {
-    // The list here is written out rather than read back from the script, and that is the
-    // point: a check that asks the list whether the list is right can only agree with it.
-    // Dropping a view from `CONTENT_CHILDREN_VIEWS` is the mistake — its React Native
-    // children would then mount beside the content view and stay in the app's window,
-    // which no unit test can see and which `nitrogen:check` also catches (it regenerates
-    // the `.mm` and diffs it, so the drift is red from the other side). Both halves are
-    // asserted: the script still lists the view, and the committed file still carries it.
+    // Written out, not read back from the script: a check that asks the list
+    // whether the list is right can only agree with it.
     const mountsReactNativeChildren = [
       'HybridNitroUiBottomSheet',
       'HybridNitroUiPopover',

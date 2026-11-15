@@ -1,4 +1,3 @@
-// RuleTester coverage for the local perf/API guardrails (eslint-rules/index.js).
 import { RuleTester } from 'eslint';
 import * as tsParserModule from '@typescript-eslint/parser';
 
@@ -43,8 +42,8 @@ ruleTester.run(
         code: '<Switch {...props} />;',
       },
       {
-        // Known gap (documented): a callback hoisted into a variable is not
-        // tracked. Module-scope `callback()` is also the recommended pattern.
+        // A callback hoisted into a variable is not tracked. Module-scope
+        // `callback()` is the recommended pattern anyway.
         filename: 'App.tsx',
         code: "import { callback } from 'react-native-nitro-modules';\nconst onChange = callback(fn);\n<Switch onValueChange={onChange} />;",
       },

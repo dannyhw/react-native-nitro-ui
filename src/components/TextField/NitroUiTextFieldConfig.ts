@@ -3,11 +3,8 @@ import type { ViewConfig } from 'react-native-nitro-modules';
 import type { NativeNitroUiTextFieldProps } from './NativeNitroUiTextField';
 
 /**
- * The Fabric view config of the `NitroUiTextField` Hybrid View.
- *
- * A copy of `nitrogen/generated/shared/json/NitroUiTextFieldConfig.json`, kept
- * inline for the reasons `NitroUiSwitchConfig.ts` gives;
- * `src/__tests__/viewConfigs.test.ts` fails when the two disagree.
+ * Fabric view config of `NitroUiTextField`: a copy of nitrogen's generated
+ * JSON, which `src/` cannot import. A unit test fails when the two differ.
  */
 export const NitroUiTextFieldConfig: ViewConfig<NativeNitroUiTextFieldProps> = {
   uiViewClassName: 'NitroUiTextField',

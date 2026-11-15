@@ -1,23 +1,3 @@
-/**
- * The consumer smoke app's ready line must not be able to pass on a bare token.
- *
- * Until A2 the smoke gate was "the line appeared, nothing crashed, and the
- * screenshot is red", which said nothing about the controls having a box:
- * a control that mounted at 0x0 - a sizing regression, a hosting change, a
- * `measureContent()` that answers 0 - passed. These fixtures are the regression
- * test for that, with no device involved (same shape as
- * `scripts/__tests__/bench-gate.test.js`): the committed contract is one
- * `name=WxH` box per control, each greater than zero, and every weaker line the
- * app could have produced has to fail.
- *
- * The `passes` case is deliberately the *only* green one, and it is not a
- * coincidental match with what the app emits: `scripts/smoke/App.tsx` builds the
- * line from its `SMOKE_CONTROLS` list, and the test below compares that
- * fixture's control list against the one App.tsx renders, so a control added to
- * the app without a box in these fixtures fails here rather than passing on a
- * shorter line.
- */
-
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -39,30 +19,8 @@ const READY_LINE =
   'search-field=310x37 checkbox=40x40 icon-button=32x32 button-group=310x48 ' +
   'stepper=94x32 list-item=310x56 host=310x96';
 
-/**
- * What the two platforms printed for the eight controls this fixture predates:
- * Android scales dp by the display density, iOS sizes a Button from its font.
- * Integer fixtures like `READY_LINE` are the common case, not the whole contract,
- * and a contract written against integers alone called both of these runs a
- * failure with every control laid out.
- *
- * The `menu=` token is the exception: it was **written by hand** when Menu joined
- * `SMOKE_CONTROLS` (G7b), from the same density-scaled shape as its neighbours,
- * because no smoke run has been made since. It exercises the parser, not a
- * measurement; a real device line for it is a one-line follow-up. `chip=` (G12) is
- * written the same way, from the 66.29 x 48 dp the harness measured for a short
- * unselected filter chip on `nitroui_t03`. `search-field=` (G17) is written from the
- * height the Android control measures - Material 3's 56 dp `InputFieldHeight`, which is
- * also its declared fallback (iOS's own field is 28 pt, and the line is an Android
- * logline) - so it is the box a smoke run prints unless the device disagrees.
- * `stepper=` (G25) is written the same way, from the two boxes the harness measures:
- * 94x32 pt on iOS (SwiftUI's own `Stepper` with its label hidden) and 104x48 dp on
- * Android (two 48 dp targets and the 8 dp between them), which are also the two
- * numbers `DECLARED_FALLBACKS.NitroUiStepper` carries. `list-item=` (G30) is written the
- * same way, from the one-line row both platforms declare — 56 dp on Android
- * (`ItemOneLineContainerHeight`) and 52 pt on iOS — at the width this fixture scales every
- * other control by.
- */
+// Fractional sizes: Android scales dp by the display density, and iOS sizes a
+// Button from its font.
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
   `${READY_PREFIX} switch=52.19047546386719x48 slider=363.4285583496094x48 ` +
@@ -89,8 +47,6 @@ describe('smoke ready line', () => {
   });
 
   it('fails the bare line the app used to print', () => {
-    // This is the old contract. If this fixture ever goes green, the gate has
-    // stopped asserting anything about layout.
     const verdict = checkReadyLine(`${READY_PREFIX}`);
     expect(verdict.ok).toBe(false);
     expect(verdict.problems).toHaveLength(SMOKE_CONTROLS.length);
@@ -115,8 +71,6 @@ describe('smoke ready line', () => {
       width: 280,
       height: 56.09523010253906,
     });
-    // The Host container, measured like any other control: a Host whose
-    // children are drawn by the composition still has to lay out its own box.
     expect(verdict.sizes.host).toEqual({
       width: 363.4285583496094,
       height: 96,
@@ -131,8 +85,6 @@ describe('smoke ready line', () => {
   });
 
   it('fails a fractional control that never grew, on the fractional line', () => {
-    // The same tolerance in both directions: a fraction is a measurement, and a
-    // measurement of nothing is still the failure this gate exists for.
     const zeroed = READY_LINE_FRACTIONAL.replace(
       'progress=363.4285583496094x4.19049072265625',
       'progress=363.4285583496094x0.0'
@@ -165,8 +117,6 @@ describe('smoke ready line', () => {
   });
 
   it('does not count a mention of the control as its box', () => {
-    // A log line that only *names* the controls (or measures a different one)
-    // must not satisfy the contract for the missing one.
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 progress=310x4 ` +
         'date-picker=138x34 picker=72x35 ' +
@@ -177,7 +127,6 @@ describe('smoke ready line', () => {
   });
 
   it('is per-control: no control may satisfy the contract with another id', () => {
-    // One token cannot cover two controls, and a box cannot move between them.
     const verdict = checkReadyLine(
       `${READY_PREFIX} switch=30x20x1 slider=310x20 button=88x36 ` +
         'progress=310x4 segmented-control=214x32 ' +
@@ -209,9 +158,8 @@ describe('smoke ready line', () => {
   });
 
   it('agrees with the control list the smoke app renders', () => {
-    // `App.tsx` is copied into a generated consumer app, so it cannot import
-    // this module - the lists are a deliberate copy, and this is what keeps the
-    // copy honest: a control added to one and not the other fails `check`.
+    // `App.tsx` is copied into a generated consumer app and cannot import this
+    // module, so the two control lists are a deliberate copy.
     const app = readFileSync(join(__dirname, '..', 'smoke', 'App.tsx'), 'utf8');
     for (const control of SMOKE_CONTROLS) {
       expect(app).toContain(`testID="SMOKE-${control}"`);

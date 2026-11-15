@@ -362,8 +362,8 @@ const noOptionalViewProps = {
           }
           const type = member.typeAnnotation?.typeAnnotation;
           if (isFunctionType(type)) {
-            // Callbacks are the one exception to the rule below: see the
-            // `callbackProp*` messages.
+            // Callbacks are the one exception: they follow the `callbackProp*`
+            // messages instead.
             if (includesNull(type)) {
               context.report({
                 node: member,

@@ -1,13 +1,3 @@
-// Tests for the component registry (X3): the manifest schema, what the generator
-// writes, the cross-checks over files it does not own, and the drift gate itself.
-//
-// The interesting property is "a hand-edited list, or a manifest edited without
-// `bun run registry`, goes red naming the file". The drift tests work against the
-// real tree: the plan runs over the files as they are checked out, with a text overlay
-// for the one input under test. No fixture copies to fall out of step. The CLI tests
-// run the real `scripts/gen-registry.mjs` in a scratch directory holding copies, so
-// they cannot disturb the checkout either.
-
 import { beforeAll, describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
@@ -72,19 +62,11 @@ function componentDirs() {
     .sort();
 }
 
-/**
- * The component directories the tree ships today, pinned as a set only for the *shape*
- * of the list: the assertion below wants the container present and the rest manifested.
- * A test that listed these by name went red the day a new control landed, which is the
- * operation the registry exists to make cheap, so nothing here hardcodes the roster.
- */
+/** The component directories without a manifest: the `<Host>` container. */
 const NON_COMPONENT_DIRS = ['Host'];
 
 /**
  * A control name this tree does not use, for the tests that add one on the fly.
- *
- * Derived rather than hardcoded for the same reason: a test that invented `Gauge` failed
- * as soon as a real Gauge existed, and failed in a way that blamed the registry.
  */
 function spareControl() {
   const used = new Set([
@@ -146,8 +128,8 @@ describe('component manifest schema', () => {
   });
 
   it('rejects a key it knows nothing about, and lists the ones it does', () => {
-    // A manifest cannot quietly claim something nothing reads: an unknown key is
-    // usually a typo for a real one, which would silently do nothing.
+    // An unknown key is usually a typo for a real one, which would silently do
+    // nothing.
     const problems = check({ bencTitle: 'Nitro UI' }).join('\n');
     expect(problems).toMatch(/unknown key "bencTitle"/);
     expect(problems).toMatch(/smoke/);
@@ -192,18 +174,15 @@ describe('component manifest schema', () => {
   });
 
   it('rejects a label or title the generated line cannot carry', () => {
-    // Both are rendered inside single quotes (the tab bar, the real-input row), so an
-    // apostrophe would produce a file that does not parse - and the same text also
-    // goes into files the generator does not write, so it cannot be escaped in one
-    // place and left raw in the other.
+    // Both are rendered inside single quotes, so an apostrophe would produce a
+    // file that does not parse.
     expect(check({ exampleLabel: "Users' Switch" }).join('\n')).toMatch(
       /exampleLabel.*contains a quote or a line break/
     );
     expect(
       check({ realInputTitle: "a real tap flips the Switch's box" }).join('\n')
     ).toMatch(/realInputTitle.*contains a quote or a line break/);
-    // Nothing in the tree trips it, which is what makes the rule safe to enforce: a
-    // manifest edit that starts quoting would go red here rather than at `--write`.
+    // Nothing in the tree trips the rule.
     for (const directory of componentDirs()) {
       const text = readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`);
       if (text == null) continue;
@@ -212,9 +191,8 @@ describe('component manifest schema', () => {
   });
 
   it('rejects two manifests claiming one id or tab', () => {
-    // `name`, `hybridView` and `implementation` are derived from the directory, so two
-    // components can only collide on `id` or `exampleTab` - and a manifest that tried
-    // to reuse a name is caught earlier, by the name-vs-directory rule.
+    // `name`, `hybridView` and `implementation` are derived from the directory, so
+    // two components can only collide on `id` or `exampleTab`.
     const entries = componentDirs().map((directory) => ({
       directory,
       text: readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`),
@@ -293,16 +271,12 @@ describe('component manifest schema', () => {
   });
 
   it('has a manifest for every component directory except the container', () => {
-    // The registry only knows what has a manifest, so a component directory without
-    // one would be invisible to every list while still existing on disk. `<Host>` is
-    // the deliberate exception - a container, not a control - and it is named in
-    // NON_COMPONENT_EXPORTS and NON_CONTROL_AUTOLINKING rather than skipped by a rule.
+    // A component directory without a manifest would be invisible to every
+    // generated list. `<Host>` is the exception: a container, not a control.
     const withManifest = componentDirs().filter(
       (directory) =>
         readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`) != null
     );
-    // every directory except the container has one, and the container is the only one
-    // that does not - which is the property, not the size of the roster.
     expect(withManifest.sort()).toEqual(
       componentDirs().filter((name) => !NON_COMPONENT_DIRS.includes(name))
     );
@@ -336,9 +310,6 @@ describe('registry:check drift detection', () => {
   });
 
   it('a generated row edited by hand goes red, naming only that file', () => {
-    // The review scenario: someone edits one generated line and does not re-run the
-    // generator. Nothing else catches it - the file still parses, every neighbouring
-    // line is untouched, and the value it now carries is in no manifest.
     const plan = readRepo('bench/src/plan.ts');
     expect(plan).toMatch(/^ {2}'date-picker',$/m);
     const changed = plan.replace(/^ {2}'date-picker',$/m, "  'datepicker',");
@@ -360,10 +331,9 @@ describe('registry:check drift detection', () => {
   });
 
   it('a row deleted from a generated list comes back, and that is the drift it reports', () => {
-    // Entries keep the positions the file has (that is what makes a merge cheap:
-    // whichever side wins a conflict, the rows that survive stay put), so reordering is
-    // accepted by design - every list here is order-insensitive. Deleting a row is not:
-    // the generator appends what its manifest asks for, so the file drifts.
+    // Entries keep the positions the file has, so reordering is accepted: every
+    // list here is order-insensitive. A deleted row is appended again, which is
+    // drift.
     const smoke = readRepo('scripts/smoke/lib.mjs');
     const lines = smoke.split('\n');
     const start = lines.findIndex((line) => line === "  'switch',");
@@ -392,8 +362,6 @@ describe('registry:check drift detection', () => {
   });
 
   it('a component added to the manifests is appended to every list it belongs to', () => {
-    // Adding a component is the operation the manifest exists for, so nothing inside a
-    // generated region may need hand-editing to make it happen.
     const { manifests } = runPlan();
     const spare = spareControl();
     const added = jsonCopy(manifests.find((m) => m.name === 'Progress'));
@@ -441,9 +409,8 @@ describe('registry:check drift detection', () => {
         SIZING_TABLE_FILE,
         new RegExp(`"HybridNitroUi${spare.name}": "fillWidth"`),
       ],
-      // The entry nitrogen needs, written by the registry rather than hand-added:
-      // nitrogen reads `nitro.json` and throws for a view missing from it, so this has
-      // to exist before `regen`'s nitrogen half runs.
+      // nitrogen reads `nitro.json` and throws for a view missing from it, so the
+      // registry writes the entry.
       ['nitro.json', new RegExp(`"NitroUi${spare.name}": \\{`)],
     ]) {
       expect(files[path] ?? `MISSING ${path}`).toMatch(pattern);
@@ -470,8 +437,6 @@ describe('registry:check drift detection', () => {
   });
 
   it('generating twice in a row changes nothing', () => {
-    // Otherwise `bun run registry` would dirty the tree on every run, and a gate that
-    // is always red proves nothing.
     const first = runPlan();
     expect(first.drift).toEqual([]);
     const overlays = Object.fromEntries(
@@ -488,8 +453,7 @@ describe('the generated tables cover what they claim', () => {
   const { manifests } = runPlan();
 
   it('every real-input control has a row in the hand-written union', () => {
-    // Only part of controls.mjs is generated (the hosted rows are hand-written), so a
-    // dropped row is coverage the generator must report rather than paper over.
+    // Only part of controls.mjs is generated: the hosted rows are hand-written.
     const ids = [
       ...readRepo('scripts/real-input/controls.mjs').matchAll(
         /^ {4}id: '([a-z0-9-]+)',$/gm
@@ -534,9 +498,8 @@ describe('the generated tables cover what they claim', () => {
       ),
     ].map((m) => m[1]);
     expect(checkIndexExports(manifests, exported)).toEqual([]);
-    // `Host` is exported with no manifest, and allowed by name; a control nobody
-    // declared is not, which is what makes "add a component, forget the manifest" red.
-    // The name has to be one the tree does not use, or the check is right to stay quiet.
+    // `Host` is exported with no manifest, and allowed by name. A control nobody
+    // declared is not. The name must be one the tree does not use.
     expect(exported).toContain('Host');
     const spare = spareControl();
     expect(
@@ -589,11 +552,9 @@ describe('the generated tables cover what they claim', () => {
     expect(checkAutolinking(manifests, missing).join('\n')).toMatch(
       /no autolinking entry for NitroUiSwitch/
     );
-    // The sizing table has no cross-check of its own because it needs none: the whole
-    // file is written from the manifests, so both ways it can be wrong are drift the
-    // plan reports - a row whose policy is not the manifest's, and a row for a
-    // component the registry does not list as self-sizing (that key is not wanted, so
-    // it is dropped). Both go through the writer, on the real file.
+    // The whole sizing table is written from the manifests, so a row with the
+    // wrong policy and a row for a component that is not self-sizing are both
+    // drift the plan reports.
     const table = readRepo(SIZING_TABLE_FILE);
     const wrong = runPlan(null, {
       [SIZING_TABLE_FILE]: table.replace(
@@ -617,12 +578,9 @@ describe('the generated tables cover what they claim', () => {
   });
 
   it('names an autolinking entry no manifest declares, and keeps it in the file', () => {
-    // The registry writes this section, so a leftover from a deleted component would
-    // otherwise vanish with no trace: nitrogen would keep generating glue for a view
-    // nothing in the registry knows about. Half of that is a report (this), half is
-    // that `--write` must not silently eat someone's config (the `keep` rule, and the
-    // `--check` test below) - but an entry that is neither a manifest's nor one of the
-    // named non-controls is drift: `--write` refuses it and keeps the entry.
+    // An entry that is neither a manifest's nor one of the named non-controls is
+    // drift: `--write` refuses it and keeps the entry, so nobody's config is
+    // silently deleted.
     const disk = JSON.parse(readRepo('nitro.json'));
     disk.autolinking.NitroUiDeleted = disk.autolinking.NitroUiSwitch;
     expect(checkAutolinking(manifests, disk, disk).join('\n')).toMatch(
@@ -639,9 +597,8 @@ describe('the generated tables cover what they claim', () => {
 
   it('a sizing table that no longer parses is refused, not re-sorted from nothing', () => {
     // A merge conflict left in the file parses as nothing, and "nothing" plus the
-    // manifests is a valid-looking table in manifest order. `--write` on its way to
-    // fixing something else would then quietly re-order a shipped file, and the later
-    // `registry:check` would call the result clean, because order is accepted.
+    // manifests is a valid-looking table in manifest order, which a later check
+    // would call clean.
     const conflicted = readRepo(SIZING_TABLE_FILE).replace(
       /^ {2}"HybridNitroUiButton.*$/m,
       (line) => `<<<<<<< HEAD\n${line}\n=======\n>>>>>>> theirs`
@@ -657,18 +614,14 @@ describe('the generated tables cover what they claim', () => {
   });
 
   it('a control that stops being hostable keeps its import', () => {
-    // `UNHOSTABLE_CONTROLS` in HostChildren.ts names the controls a Host refuses, and
-    // a row there needs the import as much as a hostable row does - the file's own
-    // comment says the next control "starts here, refused". An imports region that
-    // wanted only the hostable ones would therefore delete the import of a control
-    // that flips the flag, and `tsc` would not find the name (review M2).
+    // `UNHOSTABLE_CONTROLS` in HostChildren.ts names the controls a Host refuses,
+    // and a row there needs its import as much as a hostable row does.
     const table = (text, name) =>
       text.slice(
         text.indexOf(`export const ${name}`),
         text.indexOf(']);', text.indexOf(`export const ${name}`))
       );
-    // Both tables: a refused control (G13's TextField) is imported for its row in
-    // UNHOSTABLE_CONTROLS, so "one import per row" reads the two together.
+    // Both tables: a refused control is imported for its row in UNHOSTABLE_CONTROLS.
     const host = (text) =>
       table(text, 'HOSTABLE_CONTROLS') + table(text, 'UNHOSTABLE_CONTROLS');
     // One import per component directory, naming every export its manifest lists
@@ -686,8 +639,7 @@ describe('the generated tables cover what they claim', () => {
         (m) => m[1]
       );
     const before = readRepo('src/components/Host/HostChildren.ts');
-    // One import per row of either table, in whatever order the two lists happen to
-    // keep: three controls are refused now (TextField, Chip, BottomSheet).
+    // One import per row of either table, in whatever order the two lists keep.
     expect([...imports(before)].sort()).toEqual([...rows(before)].sort());
 
     const flipped = repoManifests().map((m) =>
@@ -717,15 +669,9 @@ describe('the generated tables cover what they claim', () => {
   });
 
   it('the host-arm regions list the hostable *and* benched controls', () => {
-    // `hostArm()` in scripts/registry-core.mjs fills two regions - the arm's own
-    // `components` list and `ARM_SCOPES` - and both are about cells: an arm is only
-    // scheduled for a control it has cells to render. `hostable` alone means "a
-    // `<Host>` composes this", which `HostChildren.ts` reads; a control that is
-    // hostable with `bench: false` has no cell to scope, so listing it would make the
-    // scheduler promise a cell the plan does not have and name a `ComponentName` the
-    // bench union does not carry. G7a shipped Menu in exactly that state (arm on G7b's
-    // list); G7b's flip is the other half of the rule, so this asserts both: the
-    // control with cells is listed, and a control whose `bench` flips off leaves.
+    // `hostArm()` in scripts/registry-core.mjs fills the arm's `components` list
+    // and `ARM_SCOPES`. An arm is only scheduled for a control it has cells to
+    // render, so a hostable control with `bench: false` is not listed.
     const armIds = (text) => {
       const begin = text.indexOf('region: host-arm-components');
       expect(begin).toBeGreaterThan(-1);
@@ -739,16 +685,12 @@ describe('the generated tables cover what they claim', () => {
         (path) => [path, armIds(files[path] ?? readRepo(path))]
       );
 
-    // The tree in front of us: every hostable-and-benched control is listed, Menu
-    // included now that its bench arm exists.
+    // Every hostable-and-benched control is listed.
     const shipped = runPlan();
     for (const [path, ids] of regions(shipped.files)) {
       expect([path, ids.length > 0]).toEqual([path, true]);
       expect([path, ids.includes('menu')]).toEqual([path, true]);
     }
-    // And no hostable control escapes the region: the list is the whole hostable-and-
-    // benched set, which is what makes an unlisted control's cell a schedule miss
-    // rather than a launch that renders nothing.
     const hostableAndBenched = shipped.manifests
       .filter((m) => m.hostable && m.bench)
       .map((m) => m.id)
@@ -757,10 +699,8 @@ describe('the generated tables cover what they claim', () => {
       expect([path, [...ids].sort()]).toEqual([path, hostableAndBenched]);
     }
 
-    // And the rule itself: flip a hostable control's `bench` off and its row leaves
-    // both regions, while `HostChildren.ts` keeps it (that half is `hostable`'s). The
-    // same flip on Menu is the state G7a shipped in, so it is the case that proves the
-    // rule still refuses an arm-less control.
+    // Flip a hostable control's `bench` off and its row leaves both regions,
+    // while `HostChildren.ts` keeps it.
     const { manifests } = shipped;
     const flipped = manifests.map((m) =>
       m.name === 'Switch' ? { ...m, bench: false } : m
@@ -783,11 +723,10 @@ describe('the generated tables cover what they claim', () => {
   });
 
   it('an entry already in a shipped region is copied, not re-rendered', () => {
-    // The published-bytes rule, and the one shipped region where it is not a no-op:
-    // `nitro.json` accepts two spellings of an entry (`checkAutolinking` reads either
-    // a per-platform pair or a shared `all` entry, because that is what nitrogen
-    // itself emits), so an entry can be correct, ship in the published bytes, and not
-    // be what `render` would produce. Copying is what keeps the artifact still.
+    // `nitro.json` accepts two spellings of an entry (a per-platform pair or a
+    // shared `all` entry, both of which nitrogen emits), so a shipped entry can
+    // be correct and still not be what `render` would produce. Copying keeps the
+    // published bytes still.
     const spec = regionsFor(repoManifests()).find(
       (region) => region.path === 'nitro.json'
     );
@@ -821,18 +760,15 @@ describe('the generated tables cover what they claim', () => {
     const result = replaceRegion(allShape, spec);
     expect(result.changed).toBe(false);
     expect(result.content).toBe(allShape);
-    // The same file with the rule off in spirit: render does produce the other shape,
-    // which is why the copy is load-bearing rather than a no-op.
+    // `render` does produce the other shape, so the copy is not a no-op.
     expect(
       spec.render(manifests.find((m) => m.id === 'switch')).join('\n')
     ).not.toContain('"iosLanguage"');
   });
 
   it('an autolinking entry the registry does not own keeps its bytes and its place', () => {
-    // `NitroUiCore` and `NitroUiHost` are autolinked but are not controls, and their
-    // entries are hand-written config (`NitroUiCore` is a plain HybridObject: a
-    // shared `all` entry, `language: "c++"`, which no manifest could render). A region
-    // that dropped everything it has no manifest for would delete them.
+    // `NitroUiCore` and `NitroUiHost` are autolinked but are not controls, and
+    // their entries are hand-written config that no manifest could render.
     const spec = regionsFor(repoManifests()).find(
       (region) => region.path === 'nitro.json'
     );
@@ -849,10 +785,9 @@ describe('the generated tables cover what they claim', () => {
   });
 
   it('accepts either shape nitrogen reads for an autolinking entry', () => {
-    // Per-platform entries and a shared `all` entry state their languages differently
-    // (`all` uses `language` for the primary platform and `iosLanguage` for iOS), and
-    // which shape appears is nitrogen's business, not the manifests'. Getting this
-    // wrong reads as "your spec is wrong" about a spec that is fine.
+    // Per-platform entries and a shared `all` entry state their languages
+    // differently: `all` uses `language` for the primary platform and
+    // `iosLanguage` for iOS.
     const one = (entry) => ({
       autolinking: {
         NitroUiButton: entry,
@@ -1287,10 +1222,9 @@ describe('gen-registry on a scratch tree', () => {
   });
 
   it('--write completes for a component that has no entry in nitro.json yet', () => {
-    // The operation the registry exists for, and the reason the autolinking check runs
-    // on the text the generator produces rather than on the file: nitrogen reads
-    // `nitro.json` and throws for a view missing from it, so `--write` is what puts the
-    // entry there. Checking the bytes on disk would refuse the run that adds it.
+    // nitrogen reads `nitro.json` and throws for a view missing from it, so
+    // `--write` is what adds the entry. The autolinking check therefore runs on
+    // the text the generator produces, not on the file.
     const dir = scratchTree();
     const spare = spareControl();
     try {
@@ -1352,9 +1286,8 @@ describe('gen-registry on a scratch tree', () => {
   });
 
   it('the anchored regions in shipped files are byte-identical to what was there', () => {
-    // `etc/package-files.txt` says these files ship, so a marker comment in one of
-    // them would be a change to the published artifact. Running --write over a fresh
-    // copy and diffing every shipped path is the whole proof.
+    // `etc/package-files.txt` says these files ship, so a marker comment in one
+    // of them would change the published artifact.
     const dir = scratchTree();
     try {
       const shipped = [

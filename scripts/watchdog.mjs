@@ -1,20 +1,14 @@
 #!/usr/bin/env node
 /**
- * Looks at the machine and the project from outside the orchestrator, and speaks
- * only when something changed.
+ * Reports on the machine and the project, and speaks only when something changed.
  *
  *   node scripts/watchdog.mjs                 exit 0 and "quiet", or exit 10 and the lines to pass on
  *   node scripts/watchdog.mjs --status        every fact as it is now; remembers nothing
  *   node scripts/watchdog.mjs --fact 'orchestrator=alert:hung:no turn started for 3 h'
  *                                             add a fact the caller observed (repeatable)
  *
- * It reads: free disk, removable worktrees, leases that expired without being
- * released, CI on `main`, the published npm version, open issues, and open PRs with
- * failing checks. What it said last time is in `~/.nitro-ui/watchdog.json`, and the
- * rule for speaking is in `scripts/watchdog-core.mjs`.
- *
- * It changes nothing but that file. A check it cannot make (no network, no `gh`) is
- * skipped, which is neither an alert nor a recovery.
+ * It writes only `~/.nitro-ui/watchdog.json`, its record of what it said last time. A check
+ * it cannot make (no network, no `gh`) is skipped: neither an alert nor a recovery.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -37,7 +31,7 @@ import {
   worktreesFact,
 } from './watchdog-core.mjs';
 
-/** `wait`'s "still running" is 13; this is the watchdog's "there is something to say". */
+/** Exit code for "there is something to say". */
 const SOMETHING_TO_SAY_EXIT = 10;
 
 const USAGE =
@@ -91,7 +85,7 @@ function packageJson() {
 }
 
 /**
- * Recent finished runs on `main`, asked of each workflow separately (see `ciFact`).
+ * Recent finished runs on `main`, asked of each workflow separately.
  * Push runs only: a scheduled or dispatched run says nothing about the last merge.
  *
  * @returns {object[] | null} `null` when GitHub could not be asked at all

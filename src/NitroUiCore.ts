@@ -12,11 +12,9 @@ import type {
 let core: NitroUiCore | null = null;
 
 /**
- * The native core object, created on first use.
- *
- * Lazily created on purpose: importing `react-native-nitro-ui` must not touch
- * native code before the app is up (and unit tests must be able to import the
- * package without a native runtime).
+ * The native core object. Created on first use: importing the package must not
+ * touch native code, because the app may not be up yet and unit tests have no
+ * native runtime.
  */
 function getCore(): NitroUiCore {
   if (core == null) {
@@ -26,23 +24,20 @@ function getCore(): NitroUiCore {
 }
 
 /**
- * Access to the shared native core runtime.
+ * The shared native core: a clock, performance marks and sizing diagnostics.
  *
- * `now()` is the clock every measurement in this repo uses (DECISIONS D1:
- * `CLOCK_UPTIME_RAW` on Apple, `CLOCK_MONOTONIC` on Android - the same time base
- * as Choreographer frame times). The perf-mark methods feed the native hosts'
- * `propsApplied` / `firstFrame` events, which are off until `setPerfEnabled` and
- * are meant for benchmarks (T02 measures black box with `BenchProbe`).
+ * `now()` is a monotonic clock in milliseconds on the same time base as the
+ * display's frame times (`CLOCK_UPTIME_RAW` on Apple, `CLOCK_MONOTONIC` on
+ * Android). The perf-mark methods record native `propsApplied` / `firstFrame`
+ * events; they are off until `setPerfEnabled(true)` and are meant for benchmarks.
  *
- * The sizing methods are the seam `docs/architecture/sizing.md` describes for
- * tests and diagnostics: `sizingStats()` counts corrections and flush times,
- * `setSizingTraceEnabled`/`drainSizingTrace` log every size a node was laid out
- * with, `invalidateSizingEnvironment`/`seedSizingSize` force a cold or warm
- * cache, and `prewarmSizing` adopts a component's declared size as this
- * environment's cached answer. None of them is app API except pre-warming, which
- * an app may want at startup: that is `prewarm`, exported on its own.
+ * The sizing methods are for tests and diagnostics: `sizingStats()` counts
+ * corrections and flush times, `setSizingTraceEnabled` / `drainSizingTrace` log
+ * every size a control was laid out with, and `invalidateSizingEnvironment` /
+ * `seedSizingSize` force a cold or warm cache. To pre-warm sizes at startup, call
+ * `prewarm`.
  *
- * `materialThemeReport()` is the Android theme's reading for tests: the setting
+ * `materialThemeReport()` is the Android theme's state for tests: the setting
  * `setMaterialTheme` chose and how many theme roots composed under each Material
  * motion scheme (`'setting=expressive;expressive=3;baseline=0;other=0'`), or `''`
  * on iOS.
@@ -107,22 +102,17 @@ export const nitroUiCore: {
 };
 
 /**
- * Adopt each named component's declared size as this environment's cached size,
- * so its first mount is laid out at that size and - when the size is right -
- * costs no correction.
+ * Pre-warm the size of each named component, so its first mount is laid out at
+ * the library's declared size instead of being corrected after it measures.
  *
  * Call it once, early - after the imports, before the first screen renders - for
- * the components the first screen uses. It is a guess with the library's own
- * declared number behind it (`docs/architecture/sizing.md`), not a measurement,
- * and the engine treats it as such: the entry is provisional, so the first
- * control that really measures that configuration replaces it and any instance
- * laid out at the wrong size is corrected. A wrong guess therefore costs at most
- * the correction a cold mount would have paid anyway - it cannot leave a layout
- * wrong for the rest of the session.
+ * the components the first screen uses. Names are native component names such as
+ * `'NitroUiSwitch'`. The declared size is only a first guess: a control whose
+ * real size differs is still corrected, so a wrong guess cannot leave a layout
+ * wrong.
  *
- * Returns how many components were seeded. A name the library does not know
- * costs nothing and counts as zero, which is what makes it safe to list a
- * component this version of the library does not have.
+ * Returns how many components were seeded. An unknown name costs nothing and
+ * counts as zero.
  */
 export function prewarm(componentNames: readonly string[]): number {
   return nitroUiCore.prewarmSizing(componentNames);

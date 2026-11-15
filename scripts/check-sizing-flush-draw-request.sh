@@ -1,33 +1,8 @@
 #!/usr/bin/env bash
-# Static guard for review T14/1: a queued sizing correction must ask for the draw
-# it needs.
-#
-# Android's flush is a `ViewTreeObserver.OnPreDrawListener`
-# (`NitroComposeHost.scheduleSizingFlush`). That listener is a request to be
-# *consulted* at the next draw, not a request *for* one - and a window that has
-# already drawn its last frame does not schedule another. A size measured after
-# that moment (measured: a control inside an RN `Modal`, whose dialog stops
-# drawing once it has been presented) leaves its correction queued in the engine
-# until some unrelated redraw comes along. So registering the listener and
-# requesting the traversal belong together: `postInvalidateOnAnimation()` on the
-# host, whose observer is the window the correction has to reach.
-#
-# Why a grep and not a test: whether the correction lands is a race between the
-# report and the window's last traversal, and the race cannot be produced from
-# JS. Every report a real control produces comes out of a Compose measure (the
-# only caller of `reportToSizingEngine`), and the traversal that runs that
-# measure is always followed by at least one more in an RN dialog - instrumented
-# on `nitroui_t01`: report at t, next dialog traversal at t+4 ms and t+11 ms; the
-# harness's own Modal test passed 9 runs out of 9 with the draw request removed.
-# The on-device test (`example/__tests__/Sizing.harness.tsx`
-# `Sizing › sizes a control inside a Modal`) therefore asserts the *behaviour* -
-# a correction made against a presented dialog reaches the tree, and a lost one
-# fails it - and this guard asserts the *mechanism*, which is the half no device
-# can pin. It costs 5 ms of a gate that already runs 3 of them.
-#
-# Scoped to the one function body rather than the file: `invalidate()` is the
-# right call for other reasons elsewhere, and the kdoc here names both candidates
-# while explaining the choice - so comments are stripped before matching.
+# Static check: Android's sizing flush must request a draw as well as register
+# its `OnPreDrawListener`. The listener is only consulted at the next draw, and a
+# window that has drawn its last frame (an RN Modal's dialog) schedules no other.
+# A grep because the race with the window's last draw cannot be made in a test.
 set -euo pipefail
 
 file="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt"

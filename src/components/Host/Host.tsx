@@ -12,130 +12,30 @@ import { assertHostChildren } from './HostChildren';
 import { NativeNitroUiHost } from './NativeNitroUiHost';
 
 /**
- * Props of {@link Host}.
- *
- * A Host is a container: it takes layout props like any other view and nothing
- * else - no `count`, no `renderItem`, no per-child options. Those would make it a
- * second list component, and this is a container.
+ * Props of {@link Host}: the layout props of any view, and its children.
  */
 export interface HostProps extends ViewProps {
   children?: ReactNode;
 }
 
 /**
- * Renders its nitro-ui children into one shared native composition (Android).
+ * Renders its nitro-ui children into one shared native composition on Android,
+ * which lowers mount memory and UI-thread time at some JS-thread cost. On iOS
+ * it is a plain `View`.
  *
- * Every control outside a Host brings its own Compose runtime with it: one
- * `Composition`, one owner view and one native view tree per control, which is
- * exactly what Android mount memory and mount UI-thread time pay for. A Host gives
- * all of its direct children **one** composition instead, so 50 Switches cost one
- * composition rather than fifty. Measured on the shipping container (H1, `quick`,
- * `speed-profile`): **0.86x** `expo-ui-shared-host` on mount memory (44.5 KiB per
- * Switch against its 51.9 KiB) and **0.87x** on mount UI CPU per op, against 2.75x and
- * 1.39x without a Host. What it pays with is the JS thread - a hosted control is still
- * an RN node *plus* a child of somebody else's composition: **1.18x** the shared host
- * on mount JS CPU per op. Opt-in for that reason, not a default.
- *
- * Seven controls are hosted today - `Switch` (H1), `Slider`, `Progress` and `Button`
- * (H2a), and `SegmentedControl`, `Picker` and `DatePicker` (H2b) - which is every
- * control this library ships, and the rule is held on both sides of the bridge. A direct
- * child that JS can prove is not one (a text node, an RN view, a `Modal`, another
- * `<Host>`) throws in development rather than rendering half a screen. React
- * flattens components away, so JS cannot see through a `memo`: what arrives as an
- * unknown child is decided by the native allowlist (`NitroComposeHost.isHostable`),
- * which says yes to those seven and - in a debuggable build - reports what it refused
- * to JavaScript as a `console.error`, not only to logcat. Hosting another control
- * means a row in `HostChildren.ts`, an `isHostable` override, and a bench arm for it.
- * The last three are the ones a Host was said not to be able to hold because each
- * presents a popup or a dialog: a Compose popup opened inside a Host's composition is
- * that composition's window, so it anchors to the row the Host drew and goes away with
- * the composition - which is why hosting them needed a measurement, not a waiver.
- *
- * ## What a Host cannot contain
- *
- * Each of these is a property of who owns the pixels, not a bug to fix later:
- *
- * - **Anything that is not a hosted control.** No RN views (`View`, `Text`,
- *   `ScrollView`, `Image`, `Modal`), no third-party native views, no plain text, and no
- *   nitro-ui control a future version ships without a row in `HOSTABLE_CONTROLS`. A direct
- *   child is composed by
- *   the Host or drawn by nobody, so an unsupported one throws in dev (see
- *   `HostChildren.ts`) instead of rendering invisibly on Android and normally on
- *   iOS.
- * - **No interleaving.** RN cannot lay a hosted control next to an RN view, or put
- *   an RN view between two hosted ones: RN hands the Host one rectangle and
- *   everything inside it is Compose's.
- * - **No RN scrolling, clipping or transforming of the children.** A
- *   `ScrollView` around a Host moves the Host's whole rectangle; RN cannot scroll
- *   the content inside it, clip part of it (`removeClippedSubviews`) or transform
- *   one child. A list that virtualises has to add and remove whole children, and
- *   the Host recomposes its block when the set changes.
- * - **No React Native `Modal`**, or any other RN view that owns a window. A hosted
- *   control's own popup or dialog is not this: a Compose popup opened from inside the
- *   Host's composition is that composition's window, so it anchors under the row the
- *   Host drew and closes with the composition (`docs/components/host.md`, "Popups and
- *   dialogs"). What is refused is a window owned by React Native beside the Host, whose
- *   pixels this container would never own.
- * - **No nesting.** A `<Host>` cannot hold another `<Host>`: the inner one would be a
- *   row of the outer one's column, measuring nothing, drawing a composition of its
- *   own and answering to no box. Put Hosts side by side, each with its own height.
- * - **No per-child size** - see the sizing rule below.
- * - **Only some of its own styles reach the drawing.** `width`, `height`, `flex`,
- *   `padding` and `alignSelf` do, and `borderWidth` insets the drawing the way
- *   `padding` does (Fabric sends border + padding as one `contentInsets`) without
- *   drawing a border. `gap`, `rowGap`, `columnGap`, `alignItems`, `alignContent`,
- *   `justifyContent` and `pointerEvents` do not, because Compose arranges the rows and
- *   Compose takes the touches - while Yoga still honours each of them in the *box*.
- *   Dev builds warn once per instance about each of them.
- *
- * Components are transparent here, in both directions. React flattens them out of
- * the native tree, so a wrapper that renders a `Switch` *is* a direct child of the
- * Host and is hosted - wrapping a control in your own component does not opt it
- * out. The flip side is the rule rather than a gap: a `Switch` inside an RN `View`
- * inside a Host is not hosted, because that `View` is the direct child, and a
- * `View` is what the check above refuses.
- *
- * ## Sizing (D24)
- *
- * A hosted control never measures **its content**, and so never reports: while a
- * Host composes it, its own measure is declined and it builds no composition, so
- * the sizing engine gains no cache entry, no correction, and nothing for D17's
- * first-frame rule to govern.
- *
- * What does not stop is Yoga asking. The engine still answers a measure call per
- * hosted child - the same count as the same children unhosted - from the cached
- * size or the declared fallback, never from Compose. The frame that produces is
- * real (it is what the Host's own height is made of) and decorative (no pixel is
- * placed by it; on Android the view behind it declines to measure, so it is `0 x 0`
- * for the pass that mounts it and gets its RN frame from any later pass over it -
- * measured, F8 - and neither is where the control is drawn). So
- * `alignSelf: 'stretch'`, `width: '100%'` or a `height` on a hosted control moves the
- * frame RN computes, not what Compose draws, and does not space the rows.
- *
- * The Host places its children itself: one Compose `Column`, in mount order, at
- * the Host's own width, from the top-leading edge of its box, clipped to the box.
- *
- * Inside that column a control's sizing policy says what its box *means*, and the
- * answer is per control (H2a): a `fillWidth` control - `Slider`, and `Progress` with
- * `variant: 'linear'` - fills the **Host's inner width** (its `width` minus padding),
- * not the width RN's frame gave the child; an `intrinsic` control - `Button`,
- * `Switch`, and `Progress` with `variant: 'circular'` - draws at its own size at the
- * column's leading edge and is not stretched by a wide Host. So a Host's `width` is
- * the width of every hosted Slider in it, and a `width` on the Slider itself changes
- * only its decorative frame.
- *
- * The Host measures nothing either. Its box is Yoga's: its own `style`, plus its
- * children's decorative boxes. Give it a `height` or `flex: 1` and that is the box;
- * give it neither and its height is the sum of its children's sizing-engine sizes -
- * a row of Compose controls only for as long as those declared sizes match what
- * Compose draws. Dense lists should therefore say how tall they are: when the two
- * disagree, Compose clips to the Host's box, so an over-tall list loses its bottom
- * rows rather than its top. A Host that ends up 0 tall (a `height: 0`, or a parent
- * that gave it none) says so once in development.
- *
- * @see docs/components/host.md for the same rule with the harness cases that hold
- * it, and docs/architecture/sizing.md §10 (D24) for where it sits in the sizing
- * story.
+ * - Every direct child must be a nitro-ui control that a Host supports; a
+ *   component that renders one counts. Anything else - an RN view, text, a
+ *   `Modal`, another `<Host>` - throws in development.
+ * - The children are drawn as one column, in order, at the Host's width, and
+ *   clipped to its box. A style on a child moves its React Native frame, not
+ *   what is drawn.
+ * - Of the Host's own styles, `width`, `height`, `flex`, `padding` and
+ *   `alignSelf` apply, and `borderWidth` insets like `padding` without drawing
+ *   a border. `gap`, `alignItems`, `alignContent`, `justifyContent`, a
+ *   non-column `flexDirection` and `pointerEvents` do not reach the drawing;
+ *   development builds warn about them.
+ * - Give the Host a `height` or `flex: 1`. Without one its height is the sum of
+ *   its children's sizes, and content taller than the box is clipped.
  *
  * @example
  * ```tsx
@@ -149,29 +49,16 @@ export function Host({ children, ...props }: HostProps) {
   assertHostChildren(children, Host);
   const warnedAboutHeight = useRef(false);
   const warnedAboutStyle = useRef(false);
-  /**
-   * Dev-only: a Host that was given no height has nothing to draw into.
-   *
-   * It is D24 rather than a bug - a Host measures nothing, and a hosted control
-   * reports no size - but it is a consequence that looks like one: an empty
-   * rectangle where the controls should be, on Android, with the same JSX drawing
-   * fine through the iOS passthrough. This says out loud what the box came from.
-   *
-   * `onLayout` is the only place the box is knowable: `style` says what was asked
-   * for, not what Yoga decided (`flex: 1`, or a parent with no height of its own,
-   * gets there too). Once per instance - a re-layout per frame would be a new
-   * warning per frame about the same mistake.
-   */
+  // Warns once when the Host ends up 0 tall. Only `onLayout` knows the box:
+  // `style` says what was asked for, not what Yoga decided.
   const onLayout = (event: LayoutChangeEvent) => {
     props.onLayout?.(event);
     if (warnedAboutHeight.current) {
       return;
     }
     const { width, height } = event.nativeEvent.layout;
-    // `Children.toArray` rather than `children != null`: `{show && <Switch/>}` with
-    // `show = false`, and `items.map(...)` returning `[]`, are both non-null and both
-    // perfectly correct ways to have nothing to draw - and warning about them teaches
-    // a person to ignore the warning that matters.
+    // `Children.toArray`, not `children != null`: `{show && <Switch />}` and an
+    // empty `map` are non-null and legitimately draw nothing.
     if (height === 0 && width > 0 && Children.toArray(children).length > 0) {
       warnedAboutHeight.current = true;
       console.warn(
@@ -184,10 +71,8 @@ export function Host({ children, ...props }: HostProps) {
     }
   };
 
-  // Dev-only by construction (S4). Attaching a layout handler costs a layout event to
-  // JS on every relayout of every Host in a release build, and JS is the one axis a
-  // Host already loses on; in release the caller's handler is wired as if this
-  // component were not here, which is what its absence in the props table promises.
+  // Dev-only: a layout handler sends a layout event to JS on every relayout, so
+  // a release build wires only the caller's own.
   const layoutHandler = __DEV__ ? onLayout : props.onLayout;
 
   if (__DEV__) {
@@ -195,12 +80,7 @@ export function Host({ children, ...props }: HostProps) {
   }
 
   if (Platform.OS !== 'android') {
-    // iOS passthrough, and permanent (D23's outcome, measured by T17): an iOS Host
-    // was built and measured, and it lost D23's rule - memory lower, mount UI CPU
-    // 1.40x on Switch and unmount UI CPU 6.27x - so H3 is not built and this `View`
-    // is what `<Host>` means there. Not a placeholder for a later port: an app that
-    // writes `<Host>` gets the same *rule* on both platforms and the mechanism only
-    // on one, which is the trade D23 decided to ship.
+    // iOS has no shared composition to host into.
     return (
       <View {...props} onLayout={layoutHandler} testID={props.testID}>
         {children}
@@ -215,28 +95,9 @@ export function Host({ children, ...props }: HostProps) {
 }
 
 /**
- * The Host's own styles that reach the drawing, and the ones that do not (review S3).
- *
- * A Host sizes its box in Yoga and arranges its children in Compose, and only some of
- * `ViewStyle` survives the trip. `padding` does: the view manager forwards it, so the
- * column starts inside it. What does not is listed here, because Yoga *does* honour
- * each of them when it computes the Host's height - the props buy a box and no
- * arrangement, which is the shape of a layout bug nobody debugs.
- *
- * Two styles that look like they belong here are deliberately **not** listed, because
- * warning about them would be a false claim (H1 review F5/F6):
- *
- * - `alignSelf` positions the Host inside *its* parent, which moves the box, and the
- *   drawing is inside the box. `<Host style={{ alignSelf: 'stretch' }}>` does exactly
- *   what it looks like.
- * - `borderWidth` insets the drawing. Fabric's padding mount item sends
- *   `layoutMetrics.contentInsets`, which is border *plus* padding, and the Host's view
- *   manager forwards `setPadding` - so a `borderWidth: 2` moves the column in by 2 dp.
- *   What it does not do is draw a border, which is a different sentence and not worth
- *   a warning about a prop that mostly works.
- *
- * `alignContent` stays: it arranges *lines* of a wrapping container, and Compose draws
- * one column with no lines to arrange.
+ * Styles that size the Host's box in Yoga but do not reach what Compose draws.
+ * `alignSelf` and `borderWidth` are left out on purpose: the first moves the
+ * box and the drawing with it, the second insets the drawing like `padding`.
  */
 const INERT_HOST_STYLES: readonly (keyof ViewStyle)[] = [
   'gap',
@@ -248,11 +109,8 @@ const INERT_HOST_STYLES: readonly (keyof ViewStyle)[] = [
 ];
 
 /**
- * Say once per Host instance that some of its `style` will not be drawn.
- *
- * Dev-only, and it can only see plain style objects: a `StyleSheet.create` id is a
- * number to JS, and resolving it would mean reading the stylesheet registry for a
- * warning. That is why `host.md` lists the same set rather than relying on this.
+ * Warns once per Host. It sees only plain style objects: a `StyleSheet.create`
+ * id is a number to JS.
  */
 function warnAboutInertStyles(
   style: StyleProp<ViewStyle> | undefined,
@@ -290,10 +148,8 @@ function warnAboutInertStyles(
 
 /**
  * The style as a plain object, or `null` when JS cannot see into it.
- *
- * `StyleSheet.flatten` would resolve registered ids, but it also runs for every Host
- * render to serve a dev warning; this reads only what is already an object, which is
- * the common shape for the props this warns about.
+ * `StyleSheet.flatten` would resolve registered ids, but is too costly to run
+ * on every render for a warning.
  */
 function flattenStyleForWarning(
   style: StyleProp<ViewStyle> | undefined

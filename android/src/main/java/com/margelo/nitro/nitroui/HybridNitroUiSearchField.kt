@@ -51,84 +51,17 @@ import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
-/*
- * The SearchField component (G17): Material 3's search input field -
- * `SearchBarDefaults.InputField(TextFieldState, SearchBarState, …)` in a plain
- * `Surface`, held collapsed (G27, and the shape G17's review asked for).
- *
- * Why not `SearchBar`/`DockedSearchBar`: material3 1.5's `SearchBar` routes its
- * `inputField` slot through `SearchBarImpl`, which wraps the field in
- * `DisableSoftKeyboard`, so no soft keyboard ever opens for a field the app types
- * into (`InterceptPlatformTextInput` whose interceptor never returns, so the field is
- * handed no input session at all): the harness and `adb input text` could type into it
- * anyway, because both send key events, which is why the gap stayed invisible. What the
- * bar added around the field was a `Surface` - same shape (`inputFieldShape`), same
- * colours (`SearchBarDefaults.colors()`), no tonal or shadow elevation (both `Level0`, so
- * its defaults were nothing) - and that Surface is drawn here instead. The bar's own value
- * is the expand/collapse motion around a results view, which this component does not have.
- *
- * The one thing not copied from the bar is its `Modifier.imePadding()`. With no input
- * session the bar never had an IME inset, so that padding was always zero and nobody
- * noticed; a field that really does open a keyboard finds its box grown by the keyboard's
- * own height, which is not what a search field in an app's layout asks for - `TextField`
- * has no such padding either. The box stays the field's own height whatever the keyboard
- * does (`SearchField.harness.tsx` keeps it honest); room for the keyboard is the app's
- * `KeyboardAvoidingView` or `ScrollView`, as it is for every other control here.
- *
- * The stateful `InputField` is the thing the 1.4 call could not do: it takes
- * `keyboardOptions`, so `keyboardType`, `autoCapitalize` and `autoCorrect` reach the
- * field (D38 item 2 held them back until this API existed). Material still merges
- * `KeyboardOptions(imeAction = Search)` over whatever is passed, which keeps this
- * component's "the Return key is always Search" rule Material's own rather than ours.
- *
- * The bar used to expand on focus and collapse back; the field's own `SearchBarState`
- * still advances when it takes focus - that is what `InputField` does with the state it
- * is handed - and nothing is drawn from it, so [SearchFieldHost.expanded] stays false
- * and the box never moves under a keyboard.
- *
- * The model is TextField's (`TextFieldModel`), so the whole controlled-value half of the
- * component is shared rather than copied: the `TextFieldState`, the `snapshotFlow` that
- * counts and reports edits, the `afterUpdate()` catch-up, `NitroUiTextLimit`, the focus
- * ticks and the composition guard (D38 item 2). What this file decides is what a
- * *search* field looks like: the Search IME action (which Material fixes for this
- * input), a leading search glyph, a clear button that appears with the text, and the
- * platform's own localized "Search…" for a placeholder nobody asked for.
- *
- * It is its own Hybrid View rather than `variant="search"` on TextField because a
- * declared fallback is keyed by component (docs/architecture/sizing.md §5): as a
- * variant, every cold SearchField would lay out at TextField's 24 dp line for one frame
- * and then correct to the 56 dp bar - a jump at the top of a search screen.
- */
+// The SearchField component: Material's search `InputField` in a `Surface`, sharing
+// TextField's model. Not `SearchBar`: material3 1.5's `SearchBar` disables the soft keyboard.
 
-/**
- * The test tag on the search glyph, so the example app's pixel probe can find the icon's
- * box (`NitroUiProbe.searchGlyphPixels`) and check it draws a magnifier's ring rather than
- * a filled disc - the shape the hand-typed path 0.7.0 shipped got wrong.
- *
- * Both glyphs are Google's Material Symbols (`nitroui_search`, `nitroui_close`; see
- * `core/NitroUiIcons.kt`). The search glyph is decorative - the field next to it says
- * what it is - and the close glyph carries the localized "clear" label instead.
- */
+/** Test tag on the search glyph, so the example app's pixel probe can find its box. */
 internal const val SEARCH_FIELD_GLYPH_TAG = "nitroui.searchfield.glyph"
 
 /**
- * The platform's own localized words for a search field.
- *
- * The library writes no English literal of its own: Android ships "Search…" and "Clear
- * query" as framework string resources (`search_hint`,
- * `searchview_description_clear`), which the platform translates into every locale.
- * Both are private to the framework, so there is no `android.R.string` constant to name
- * - checked against the android-35 stub, whose `android.R.string` offers only
- * `search_go` of the search family - and a name lookup is the only way to reach a
- * private resource. So each name is resolved once, on the first field drawn, and an
- * answer of 0 (the shape a device without them gives) falls back to the English the
- * platform itself uses, which is what the value above says in en-US.
- *
- * The hint falls back to plain "Search" rather than "Search…": a placeholder with an
- * ellipsis no other locale is known to use is a worse guess than the word.
+ * The platform's localized "Search…" and "Clear query". Both are private framework
+ * strings, so they are looked up by name once, with English fallbacks.
  */
 private object SearchFieldStrings {
-  /** Framework resource lookup, cached for the process; 0 means "not on this device". */
   private fun frameworkResId(name: String): Int =
     FRAMEWORK_RESOURCES.getIdentifier(name, "string", "android")
 
@@ -146,13 +79,8 @@ private object SearchFieldStrings {
 }
 
 /**
- * The bar's and the input's colours, one pair per colour scheme.
- *
- * Material's factories return a fresh object graph per call, and a hosted control is its
- * own composition, so `remember` could not share them even if this were hosted
- * (`docs/architecture/core.md` §3, "Shared objects"). Both factories are composables, so
- * the cache is *filled* inside the composition and read outside it - see
- * [SearchFieldContent].
+ * The bar's and the input's colours, one pair per colour scheme. Material's factories
+ * build new objects per call and are composables, so the cache is filled in composition.
  */
 private object SearchFieldColorsCache {
   private var scheme: ColorScheme? = null
@@ -180,7 +108,6 @@ private object SearchFieldColorsCache {
   fun input(): TextFieldColors? = input
 }
 
-/** The bar's host: [NitroComposeHost] plus the composable, plus what it drew. */
 private class SearchFieldHost(
   context: ThemedReactContext,
   activity: Activity?,
@@ -192,34 +119,17 @@ private class SearchFieldHost(
     get() = false
 
   /**
-   * `nuiTestSubmit()` as a tick, the way TextField does its `focus()`/`blur()`: the
-   * Search key's handler lives in the composition (it needs the focus manager), and a
-   * call made before this view is attached must not throw.
+   * A test submit arrives as a tick: the Search handler lives in the composition, and a
+   * call made before the view is attached must not throw.
    */
   var submitTick by mutableIntStateOf(0)
     internal set
 
-  /**
-   * Whether a results view is drawn under the field. There is none, so this stays
-   * `false` for the life of the view - and it is state rather than a literal because a
-   * results view is what would have to change it, and because the harness reports what
-   * the composition drew, not what a constant said.
-   *
-   * What this is *not*: the field's own `SearchBarState` does advance to expanded when
-   * it takes focus, because that is what `SearchBarDefaults.InputField` does with the
-   * state it is handed. Nothing here is drawn from it, so the box does not move and
-   * this stays false.
-   */
+  /** Whether a results view is drawn under the field. There is none, so this stays false. */
   var expanded by mutableStateOf(false)
     internal set
 
-  /**
-   * The field asking to expand, read off its own `SearchBarState`. With no results view
-   * to expand *into*, the request is dropped and the box never moves under a keyboard.
-   * Storing `next` in [expanded] - and drawing a column under the field from it - is the
-   * one change a results view would make, and the harness's "the box did not change
-   * height while focused" case is what says so out loud if it ever happens by accident.
-   */
+  /** The field asks to expand when it takes focus. With no results view this is dropped. */
   fun onExpandedRequest(next: Boolean) {
     // Intentionally drops `next`: collapsed is the only shape this component draws.
   }
@@ -237,11 +147,7 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
 
-  // One pair of Material colour objects per scheme, not one per recomposition. Both
-  // factories are composables, so this is where they may be called - guarded, so a
-  // recomposition under the same scheme builds nothing (core.md §3). The bar's pair is
-  // no longer a `SearchBar`'s: it is the box's container and content colours, which are
-  // the same two values the collapsed bar drew the box with.
+  // Both colour factories are composables, so the cache is filled here, once per scheme.
   val scheme = MaterialTheme.colorScheme
   if (!SearchFieldColorsCache.holds(scheme)) {
     SearchFieldColorsCache.fill(
@@ -254,23 +160,16 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   val inputColors = SearchFieldColorsCache.input()
   val boxColors = barColors ?: SearchBarDefaults.colors()
   val barColor = boxColors.containerColor
-  // What the collapsed bar passed its Surface: the content colour resolved from the
-  // container it drew, not a colour of its own.
   val contentColor = contentColorFor(barColor)
 
-  // A user edit is counted and emitted from here, exactly as TextField does it:
-  // `snapshotFlow` sees every change to the state's text, the IME's and the clear
-  // button's included; a React write is not a user edit, and `catchUp` tells the two
-  // apart. `afterUpdate()` calls the same function, so an edit this collector has not
-  // reached yet is counted before a write can land over it.
+  // `snapshotFlow` sees every change to the text, the IME's and the clear button's
+  // included. `catchUp` tells a user edit from a React write.
   LaunchedEffect(state) {
     snapshotFlow { state.text.toString() to (state.composition != null) }
       .collect { model.catchUp() }
   }
 
-  // `focus()`/`blur()` arrive as ticks on the model, shared with TextField
-  // (`TextFieldModel.focusTick`), so a call made before this composable is attached
-  // cannot throw and one made before it exists is still honoured once it does.
+  // `focus()` and `blur()` arrive as ticks, so a call made before attach is honoured later.
   var seenFocus by remember { mutableIntStateOf(0) }
   var seenBlur by remember { mutableIntStateOf(model.blurTick) }
   LaunchedEffect(model.focusTick) {
@@ -299,10 +198,7 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
     onDispose { model.focused = false }
   }
 
-  // The Search key, as the input's own `onSearch`. Two rules live here:
-  // - an empty query never submits, which is iOS's `enablesReturnKeyAutomatically`
-  //   turned into a statement rather than left to two platforms' defaults;
-  // - a submit gives focus up, as TextField's single-line rule does.
+  // An empty query never submits, and a submit gives focus up.
   val onSearch: (String) -> Unit = { text ->
     if (text.isNotEmpty()) {
       model.onSubmit?.invoke(text)
@@ -313,7 +209,6 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   LaunchedEffect(submitTick) {
     if (submitTick != seenSubmit) {
       seenSubmit = submitTick
-      // The same handler a keyboard press reaches, guard included.
       onSearch(state.text.toString())
     }
   }
@@ -321,32 +216,21 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   val label = model.accessibilityLabel
   val modifier =
     Modifier
-      // The name goes on the field, never on the host around it (core.md §3, "testID and
-      // accessibility"): the editable node publishes these semantics as a child of the
-      // same box, which is the shape `scripts/real-input/a11y.mjs` reads as one named
-      // control.
+      // The name goes on the field, not on the host view around it.
       .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
       .focusRequester(focusRequester)
       .onFocusChanged { focus -> model.focusMoved(focus.isFocused) }
 
-  // The clear button is the trailing slot, and it appears with the text: Material 3's
-  // search input has no built-in one, and an always-present clear would sit in an empty
-  // field taking a tap. `clearText()` is what the button does; the `snapshotFlow` above
-  // reports it as the edit it is, and focus stays.
+  // Material's search input has no clear button. This one appears only with text, so it
+  // never takes a tap in an empty field.
   val hasText by derivedStateOf { state.text.isNotEmpty() }
   val trailing: (@Composable () -> Unit)? =
     if (hasText && model.editable) {
       {
         IconButton(
           onClick = { state.clearText() },
-          // The name goes on the button, not on the glyph inside it. Compose publishes the
-          // clickable box and the icon as two accessibility nodes and does not merge the
-          // glyph's name into the box, so naming the glyph leaves the node TalkBack can act
-          // on silent - measured in a dump of this screen: the clickable box reads
-          // `content-desc=""` around a child reading `content-desc="Clear query"`. The glyph
-          // is decorative (`null`) so the name is stated once, on the node that answers the
-          // tap. iOS needs no equivalent line: UIKit's own clear button already carries the
-          // system's localized "Clear text".
+          // The name goes on the button, not the glyph: Compose does not merge the glyph's
+          // description into the clickable node, which would leave that node unnamed.
           modifier = Modifier.semantics { contentDescription = SearchFieldStrings.clear },
         ) {
           Icon(imageVector = nitroUiIcon(R.drawable.nitroui_close), contentDescription = null)
@@ -356,11 +240,7 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       null
     }
 
-  // The keyboard, from the same three model values and the same two mapping functions
-  // `HybridNitroUiTextField` uses (`docs/components/text-field.md`'s table is the only
-  // mapping table in the library). `imeAction` is stated rather than left out because
-  // `InputField` overwrites it with `Search` either way: writing it here keeps the
-  // options this composition holds honest about the key it will produce.
+  // `InputField` overwrites `imeAction` with `Search` regardless; stated so the options match.
   val keyboardOptions =
     KeyboardOptions(
       capitalization = capitalizationOf(model.autoCapitalize),
@@ -369,11 +249,8 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       imeAction = ImeAction.Search,
     )
 
-  // The field's own expand/collapse state. Nothing is drawn from it - see
-  // [SearchFieldHost.expanded] - but it is what `InputField` drives when the field
-  // takes focus, and mirroring it into the host is where a results view would one day
-  // hook in. LaunchedEffect rather than a read during composition: watching the state
-  // must not subscribe this composition to the animation behind it.
+  // `InputField` drives this state when the field takes focus. Observed in an effect, not
+  // read in composition, so the composition does not subscribe to its animation.
   val searchBarState = rememberSearchBarState()
   LaunchedEffect(searchBarState) {
     // `isExpanded` is internal to material3; `currentValue` is its public twin.
@@ -381,11 +258,8 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       .collect { onExpandedRequest(it) }
   }
 
-  // The box, which is what `DockedSearchBar` used to draw around this field: a `Surface`
-  // in the input field's shape with the search-bar colours and no elevation. No
-  // `imePadding()` - see the file header: the bar could never see an IME inset, and a
-  // field that can see one must not grow its own box by the keyboard's height. The field
-  // paints its own container inside it, exactly as it did inside the bar.
+  // The box `SearchBar` would draw: a `Surface` in the input field's shape. No
+  // `imePadding()`: it would grow the box by the keyboard's height.
   Surface(
     modifier = Modifier.fillMaxWidth(),
     shape = SearchBarDefaults.inputFieldShape,
@@ -398,10 +272,6 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       onSearch = onSearch,
       modifier = modifier,
       enabled = model.editable,
-      // The app's word when it gave one, the platform's when it did not. Reading
-      // `model.placeholder` here (a `mutableStateOf`) is what makes a `placeholder`
-      // change recompose the slot, and `SearchFieldStrings.hint` is the framework's
-      // own localized prompt, not a literal written here.
       placeholder = { Text(model.placeholder ?: SearchFieldStrings.hint) },
       leadingIcon = {
         Icon(
@@ -418,7 +288,6 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   }
 }
 
-/** The Hybrid View React renders as `NitroUiSearchField`. */
 class HybridNitroUiSearchField(
   reactContext: ThemedReactContext,
 ) : HybridNitroUiSearchFieldSpec(), RecyclableView {
@@ -439,7 +308,6 @@ class HybridNitroUiSearchField(
 
   init {
     host.wantsContentSize = true
-    // Height is the field's; width is the box.
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
     declareFallback()
     model.publish = ::publishState
@@ -452,16 +320,11 @@ class HybridNitroUiSearchField(
   }
 
   companion object {
-    /** This component's name in the sizing engine. */
+    // Must match the component name in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiSearchField"
 
-    /**
-     * `SearchBarDefaults.InputFieldHeight` - 56 dp at the default font scale - and the
-     * width a field draws under a parent that gives it none (a row with no `flex`).
-     * TextField's one line is 24 dp, so the two differ by design, and
-     * `SearchField.harness.tsx` has an assertion against a SearchField that measured
-     * like a TextField.
-     */
+    // The size before anything is measured, in dp: Material's 56 dp input field height,
+    // and the width a field draws at under a parent that gives it none.
     private const val FALLBACK_WIDTH_DP = 200.0
     private const val FALLBACK_HEIGHT_DP = 56.0
 
@@ -480,18 +343,8 @@ class HybridNitroUiSearchField(
     }
   }
 
-  /**
-   * The traits a search field fixes or defaults, as the model's own values - so the
-   * shared keyboard mapping stays the one thing that decides what the field is
-   * configured with.
-   *
-   * `returnKeyType`, `multiline` and `secureTextEntry` have no prop and cannot move
-   * (D38 item 2). The other three are a search field's *defaults*: they are what v1
-   * fixed them to, so a field whose app passes no keyboard prop is configured exactly as
-   * it was, and this is also what a recycled field comes back with ([prepareForRecycle])
-   * rather than [TextFieldModel.reset]'s text-field defaults. `returnKeyType` is what
-   * the harness reads back as "the Search key was applied".
-   */
+  // The model is shared with TextField, so set a search field's fixed traits and
+  // defaults on it. Also what a recycled field comes back with.
   private fun applySearchPresets() {
     model.returnKeyType = "search"
     model.keyboardType = "default"
@@ -499,8 +352,7 @@ class HybridNitroUiSearchField(
     model.autoCorrect = true
     model.multiline = false
     model.secureTextEntry = false
-    // Not a prop write, but the same change of what the field is configured with, and a
-    // recycled view has to be read back fresh rather than reported from the last owner.
+    // Invalidates any keyboard read-back taken before this.
     keyboardStamp += 1
   }
 
@@ -630,7 +482,6 @@ class HybridNitroUiSearchField(
     set(next) {
       if (next == model.sizingKey) return
       model.sizingKey = next
-      // There is one configuration, so this only ever arms the reporting.
       host.noteSizingKeyChanged()
     }
 
@@ -676,8 +527,8 @@ class HybridNitroUiSearchField(
     if (js != null && js != model.state.displayed) {
       model.lastWrite =
         when {
-          // Q2 §2.2: a write under an open composition destroys it. Held back, not
-          // queued: `settle` decides it again when the composition ends.
+          // A write under an open IME composition destroys it. Held back, not queued:
+          // `settle` decides again when the composition ends.
           model.composing -> "composing"
           model.state.reconcile() -> "applied"
           else -> "stale"
@@ -691,14 +542,11 @@ class HybridNitroUiSearchField(
     host.prepareForRecycle()
     // The model is shared with TextField, whose defaults are a text field's.
     applySearchPresets()
-    // What the reset left the keyboard as, read off the model after the fact: the harness
-    // cannot read between this and the next owner's first prop write, which would mask a
-    // reset that kept the previous owner's keyboard.
+    // Recorded for tests, which cannot read between the reset and the next owner's first props.
     resetKeyboard = "${model.keyboardType}/${model.autoCapitalize}/${model.autoCorrect}"
     publishState()
   }
 
-  /** The keyboard [prepareForRecycle] last reset to, for [nuiTestLifetimeReport]. */
   private var resetKeyboard = "never"
 
   override fun onDropView() {
@@ -724,36 +572,22 @@ class HybridNitroUiSearchField(
     model.accounted = text
   }
 
-  /**
-   * Bumped by the three keyboard setters and by a recycle: a read-back taken under an
-   * older stamp describes options the field no longer has.
-   */
+  // Bumped whenever the keyboard configuration changes; an older read-back is stale.
   private var keyboardStamp = 0
 
-  /** [readBackKeyboard]'s last answer from a real `EditorInfo`, and the stamp it was read at. */
   private var probedKeyboard: AppliedKeyboard? = null
   private var probedStamp = -1
 
-  /** The three keyboard fields in RN's spellings. */
   private data class AppliedKeyboard(
     val keyboardType: String,
     val autoCapitalize: String,
     val autoCorrect: Boolean,
   )
 
-  /**
-   * A focused field whose `EditorInfo` has not been read yet. `keyboardType` and
-   * `autoCapitalize` say `pending`, which no prop spells, so a test waiting for a
-   * keyboard cannot be satisfied by it; `autoCorrect` carries the option, and the
-   * harness checks it only alongside a `keyboardType` that is not `pending`.
-   */
+  // A focused field whose `EditorInfo` is not read yet. `pending` is a value no prop can have.
   private val PENDING_KEYBOARD = AppliedKeyboard("pending", "pending", true)
 
-  /**
-   * The keyboard [KeyboardOptions] describe, decoded through the same mapping functions
-   * the composition uses. Cheap - no view walk - so it is what [publishState] reports
-   * for an unfocused field on every update.
-   */
+  // The keyboard the options describe, without walking the view tree.
   private fun optionsKeyboard(): AppliedKeyboard =
     AppliedKeyboard(
       keyboardType =
@@ -763,14 +597,8 @@ class HybridNitroUiSearchField(
       autoCorrect = model.autoCorrect,
     )
 
-  /**
-   * What [publishState] reports for the keyboard, without touching the view tree.
-   *
-   * Unfocused: the options. Focused: the last [readBackKeyboard] answer for the current
-   * stamp, or [PENDING_KEYBOARD] when there is none yet - never the options, because a
-   * focused field's report is the claim "this is what the IME was handed", and only
-   * [readBackKeyboard] (the test-only path `nuiTestState()` queues) may make it.
-   */
+  // Unfocused: the options. Focused: the last read-back for the current stamp, or pending.
+  // Never the options while focused: that report means "what the IME was handed".
   private fun publishedKeyboard(): AppliedKeyboard {
     if (!model.focused) {
       probedKeyboard = null
@@ -780,18 +608,8 @@ class HybridNitroUiSearchField(
     return if (probed != null && probedStamp == keyboardStamp) probed else PENDING_KEYBOARD
   }
 
-  /**
-   * The test-only read-back: while focused, the [EditorInfo] the field's own input
-   * connection hands the IME ([currentEditorInfo]), decoded. Runs only from
-   * [publishKeyboard], so an app's focus changes never walk the view tree or open an
-   * extra input connection. A focused read that finds no `EditorInfo` is not cached and
-   * reports [PENDING_KEYBOARD]: falling back to the options there would turn the
-   * read-back into an echo of the props.
-   *
-   * What this cannot say is what the IME *drew*: `onCreateInputConnection` builds a
-   * fresh `EditorInfo` from the current options whether or not the running session was
-   * restarted. The real-input suite reads the IME's own record for that.
-   */
+  // Test-only: decodes the `EditorInfo` the focused field hands the IME. It cannot say
+  // what the IME drew: a new `EditorInfo` is built from current options on every call.
   private fun readBackKeyboard(): AppliedKeyboard {
     if (!model.focused) {
       probedKeyboard = null
@@ -813,17 +631,8 @@ class HybridNitroUiSearchField(
     return read
   }
 
-  /**
-   * The `EditorInfo` the focused field would hand the IME right now, or `null` when no
-   * input connection is up.
-   *
-   * Compose draws its text fields itself and keeps the input connection on the
-   * `AndroidComposeView` under the host, so the way to ask is the same one the IME uses:
-   * find the descendant that says it is a text editor and call
-   * [View.onCreateInputConnection] on it, which fills the [EditorInfo] it is given from
-   * the field's current state. Only asked while the field holds focus: that is when a
-   * session exists, and the only time the call has anything honest to answer with.
-   */
+  // Compose keeps the input connection on the `AndroidComposeView` under the host. Ask as
+  // the IME does: find the descendant that is a text editor and create an input connection.
   private fun currentEditorInfo(): EditorInfo? {
     val queue = ArrayDeque<View>()
     queue.add(host)
@@ -859,11 +668,7 @@ class HybridNitroUiSearchField(
         model.lastWrite,
         model.editable,
         (model.maxLength ?: -1).toDouble(),
-        // What the field is *drawing*, which is the app's word or - when the app passed
-        // none - the platform's own localized prompt. iOS reports the same thing
-        // (`control.placeholder`), and the harness asserts on it: a recycle that left the
-        // previous owner's prompt on screen has to be visible from JS, and a report of
-        // `""` here would hide it behind the very fallback the control is drawing.
+        // What the field draws: the app's placeholder, or the platform's localized one.
         model.placeholder ?: SearchFieldStrings.hint,
         model.accessibilityLabel ?: "",
         model.returnKeyType,
@@ -877,7 +682,7 @@ class HybridNitroUiSearchField(
 
   // MARK: - Methods
 
-  /** The size Compose measured, from the host's cache. Never touches the UI thread. */
+  // Reads the host's cached size, so it is safe on the JS thread.
   override fun measureContent(): NitroUiSize {
     val size = host.contentSize ?: return NitroUiSize(0.0, 0.0)
     return NitroUiSize(size.width, size.height)
@@ -891,21 +696,8 @@ class HybridNitroUiSearchField(
     host.post { model.blurTick += 1 }
   }
 
-  /**
-   * The snapshot [publishState] wrote, and one more look.
-   *
-   * JS must not wait for the UI thread, so this reads the snapshot rather than the
-   * control. That is a moment behind reality in one place: the keyboard a focused field
-   * reports comes from the input session, and Compose starts that session a frame after
-   * focus lands. So asking for the state also asks the UI thread to refresh it — coalesced,
-   * because [stateWhen]-style tests poll this every 20 ms, and the harness sees what the
-   * control is configured with on the next poll instead of what was true when focus moved.
-   *
-   * The refresh re-reads the keyboard and nothing else. The text, the focus and the event
-   * counts are published where their events are emitted, so a test that waits for the
-   * state to show a change has the change's event in hand too; refreshing them here would
-   * let a poll see a cleared query or a blur before its `change:` or `blur` reached JS.
-   */
+  // Returns the last snapshot, because JS must not wait for the UI thread, and queues a
+  // refresh of the keyboard fields only: the input session starts a frame after focus.
   override fun nuiTestState(): NitroUiSearchFieldTestState {
     requestStateRefresh()
     return snapshot
@@ -924,7 +716,6 @@ class HybridNitroUiSearchField(
     }
   }
 
-  /** Bring the snapshot's three keyboard fields up to date, leaving every other field. */
   private fun publishKeyboard() {
     val keyboard = readBackKeyboard()
     val current = snapshot
@@ -943,7 +734,6 @@ class HybridNitroUiSearchField(
       )
   }
 
-  /** The clear button's own call, on the UI thread: the `snapshotFlow` reports it. */
   override fun nuiTestClear() {
     host.post {
       if (model.editable && model.textState.text.isNotEmpty()) {
@@ -952,7 +742,6 @@ class HybridNitroUiSearchField(
     }
   }
 
-  /** Runs the Search key's handler, empty-query guard included (see `onSearch`). */
   override fun nuiTestSubmit() {
     host.post { host.submitTick += 1 }
   }

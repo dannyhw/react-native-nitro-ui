@@ -9,22 +9,13 @@ import {
 import { warnAndroidIconName } from '../../iconName';
 import type { NitroUiMenuRow } from './Menu.nitro';
 
-/*
- * The rows a menu is made of, shared by `Menu` and `ContextMenu` (DECISIONS D36 item
- * 4): the public `group` types, the flattening into Menu.nitro.ts's `NitroUiMenuRow`
- * array, and the memo that keeps that array's identity stable. Both controls send the
- * same struct array, so the Android `parseMenuRows` and the iOS row builders read one
- * shape, and a change to the rows is a change to both menus.
- */
+// The rows of a menu, shared by `Menu` and `ContextMenu`: the public `group`
+// types and their flattening into the array native renders.
 
 /**
- * Resolve one row's `androidIcon` into the string native is sent.
- *
- * `Button`'s rules, applied per row (DECISIONS D43 item 2): an asset id becomes a
- * `url:`/`res:` marked string, a typed name is normalised, and a name that could never
- * be a resource name says so in development - native cannot tell that typo from a file
- * the app did not ship, since both are resource id `0`. Named once per control, so the
- * warning says which of the two menus asked.
+ * Resolves one row's `androidIcon` into the string native is sent, and warns in
+ * development about a name that cannot be a resource name. `componentName` says
+ * which control asked.
  */
 function resolveRowAndroidIcon(
   componentName: string,
@@ -41,13 +32,7 @@ function resolveRowAndroidIcon(
   return resolved;
 }
 
-/**
- * A pickable row.
- *
- * `id` is what the menu reports when the row is picked and what a test presses,
- * so it has to be stable and unique across the whole menu - a re-ordered list
- * keeps each row's identity.
- */
+/** A pickable row. Its `id` must be stable and unique across the whole menu. */
 export interface MenuAction {
   /** Unique id for this menu. Reported by `onSelect`. */
   id: string;
@@ -59,13 +44,13 @@ export interface MenuAction {
   systemImage?: string | undefined;
   /**
    * Leading glyph for Android: an app-shipped vector drawable, as
-   * `require('./icons/share.xml')` or as its resource name (`"share"`), the two forms
-   * `Button`'s `androidIcon` takes (`docs/components/button.md`, "Android icons").
+   * `require('./icons/share.xml')` or as its resource name (`"share"`), the two
+   * forms `Button`'s `androidIcon` takes.
    *
-   * Android only - iOS draws `systemImage` and ignores this, so a row with a glyph on
-   * both platforms names both and needs no `Platform.select`. It takes Material's own leading-icon slot
-   * (`MenuDefaults.LeadingIconSize`) in the row's content colour, and on a checked
-   * Android row the leading check keeps that slot: the check is what the row *means*.
+   * Android only - iOS draws `systemImage` and ignores this, so a row with a glyph
+   * on both platforms names both and needs no `Platform.select`. It is drawn in the
+   * row's content colour. A checked row on Android shows its check in place of the
+   * glyph.
    */
   androidIcon?: AndroidIconProp | undefined;
   /** Disable this one row. Default: `false`. */
@@ -87,10 +72,8 @@ export interface MenuAction {
 /**
  * A row that opens a further list.
  *
- * iOS nests it (a real submenu). Android renders its items inline, as a group of
- * their own titled with the submenu's title, because a second nested popup needs a second anchor and a second witness - the
- * same kind of documented platform difference as Picker's iOS-only `wheel`
- * (DECISIONS D29). Depth stops here: a submenu cannot contain a submenu.
+ * iOS nests it as a real submenu. Android renders its items inline, as a group
+ * titled with the submenu's title. A submenu cannot contain a submenu.
  */
 export interface MenuSubmenu {
   /** Unique id for this menu. */
@@ -100,13 +83,8 @@ export interface MenuSubmenu {
   /** Leading SF Symbol name on the parent row. iOS only. */
   systemImage?: string | undefined;
   /**
-   * The rows inside it.
-   *
-   * There is deliberately no `androidIcon` here. A submenu's own row is a *group label*
-   * on Android (`DropdownMenuGroupLabel`, DECISIONS D29) and a `UIMenu` title on iOS, and
-   * neither has a leading slot for a glyph to live in — the prop would be one a reader
-   * sets and no platform ever draws. `MenuAction` takes it; that is every row either
-   * platform can paint.
+   * The rows inside it. A submenu itself takes no `androidIcon`: Android draws
+   * its row as a group label, which has no icon.
    */
   items: MenuAction[];
 }
@@ -125,7 +103,7 @@ export interface MenuSection {
 }
 
 /**
- * The menu's items, as data: never JSON, and never child views.
+ * The menu's items, as data.
  *
  * Both fields are optional, and a group can carry both - `actions` first, then
  * `sections`, which is the order the menu draws. An empty group renders a trigger
@@ -138,7 +116,6 @@ export interface MenuGroup {
   sections?: MenuSection[] | undefined;
 }
 
-/** What a caller passed for a top-level row: an action, or a submenu. */
 type MenuActionOrSubmenu = MenuAction | MenuSubmenu;
 
 /** Is this row a submenu? `items` is the field an action does not have. */
@@ -147,13 +124,9 @@ function isSubmenu(row: MenuActionOrSubmenu): row is MenuSubmenu {
 }
 
 /**
- * The nested `group`, flattened into the one ordered array native renders.
- *
- * `actions` come first, then `sections`; inside a submenu or a section the children
- * follow their parent and carry its id as `parentId`. A submenu inside a submenu is
- * not representable (D29 caps the depth at one), and a submenu in a section reads
- * as its own group on Android - the shape the public type already refuses is
- * documented rather than silently redrawn.
+ * Flattens the nested `group` into the one ordered array native renders:
+ * `actions` first, then `sections`. Children follow their parent and carry its
+ * id as `parentId`.
  */
 export function flattenGroup(
   group: MenuGroup | undefined,
@@ -189,8 +162,8 @@ export function flattenGroup(
       disabled: false,
       destructive: false,
       systemImage: row.systemImage ?? null,
-      // No glyph for a group label on either platform, so nothing is resolved and
-      // nothing is asked for: the field is present (nitro#1184) and `null`.
+      // A submenu's row has no icon on either platform. The field must still be
+      // present (nitro#1184).
       androidIcon: null,
       subtitle: null,
       checked: null,
@@ -210,8 +183,7 @@ export function flattenGroup(
       disabled: false,
       destructive: false,
       systemImage: null,
-      // A section header has no icon on either platform: iOS spells it a `Section`'s
-      // header text and Android a `DropdownMenuGroupLabel`, and neither has a slot.
+      // A section header has no icon on either platform.
       androidIcon: null,
       subtitle: null,
       checked: null,
@@ -222,13 +194,9 @@ export function flattenGroup(
 }
 
 /**
- * What makes one flattened menu the same as another, for the memo below.
- *
- * A row's identity and look are what native draws, so those are the fields. A
- * caller who writes `group={{ actions: [...] }}` inline gets a new object every
- * render, and props diff by identity (docs/research/nitro-patterns.md) - without
- * this, an unrelated parent re-render would re-convert the whole struct array on
- * every frame.
+ * A string that is equal for two flattened menus that draw the same. An inline
+ * `group` literal is a new object every render, so the memo below compares
+ * content rather than identity.
  */
 function groupSignature(rows: readonly NitroUiMenuRow[]): string {
   const parts: string[] = [];
@@ -250,18 +218,10 @@ function groupSignature(rows: readonly NitroUiMenuRow[]): string {
 }
 
 /**
- * The flattened rows, with a stable identity.
- *
- * The array native is handed only changes when the menu it describes changes,
- * which is what `ReactProp`'s equality check needs in order to answer "nothing
- * moved" (brief item 4, and Q1 §1 on identity). The cache is keyed on the rows'
- * own content rather than on the caller's object identity, so an inline `group`
- * literal costs one string build per render instead of a re-conversion of the
- * struct array - and a caller who did memoise its `group` pays nothing extra.
- *
- * The cache is a ref, not a `useMemo`, because the key is derived rather than
- * passed in: it holds the last result and its signature, and a render that
- * describes the same menu gets the same array back.
+ * The flattened rows, with a stable identity: the same array is returned until
+ * the menu it describes changes, so an unrelated re-render does not re-send the
+ * rows to native. A ref rather than `useMemo`, because the cache key is derived
+ * from the result.
  */
 export function useMenuRows(
   group: MenuGroup | undefined,

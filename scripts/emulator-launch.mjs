@@ -1,84 +1,17 @@
 /**
- * One Android emulator launch configuration, apart from the launchers.
- *
- * Why (X11): three paths started emulators and they did not agree.
- * `react-native-harness` booted `-gpu swiftshader_indirect` (software
- * rendering), `scripts/real-input/android.mjs` told its caller `-gpu host`, and
- * so the GPU mode depended on whoever happened to boot the emulator first -
- * which is why the Android harness took 455 s for 214 tests against iOS's 149 s
- * for 165. Whoever boots a pool device now decides it from this file, and every
- * launcher takes its arguments from here.
- *
- * The three paths:
- *
- *   - `patches/@react-native-harness%2Fplatform-android@1.6.0.patch` - the
- *     harness's own boot. It embeds, verbatim, the blocks this file renders
- *     (`harnessLaunchBlock()` / `harnessAccelBlock()` /
- *     `harnessAccelCallerLines()`), and
- *     `scripts/__tests__/emulator-launch.test.js` fails when the patch stops
- *     containing those strings or when evaluating the *installed* file stops
- *     agreeing with `emulatorLaunchArgs()` and `accelerationUsable()`. That is
- *     what makes it one source rather than a copy with a comment.
- *
- * To change the harness's launch configuration: edit this file, then run
- * `scripts/patch-harness-android.mjs`, which rebuilds the patch from a pristine
- * copy of the installed module, applies it, and leaves the package uninstalled
- * so a forgotten regeneration cannot pass with stale `node_modules`.
- *   - `scripts/lease.mjs` boots a leased pair's devices with `emulatorLaunchArgs`.
- *   - `scripts/real-input/android.mjs` prints the boot command it expects, built
- *     from `emulatorLaunchCommand`.
- *
- * **Benches are deliberately not in that list.** A baseline is a measurement of
- * one machine's device and the committed ones were minted on whatever boot the
- * bench host had, so `scripts/bench/**` still passes no launch arguments at all.
- * See `BENCH_GPU_MODE_NOTE`.
- *
- * No `import.meta` here, so `scripts/__tests__/emulator-launch.test.js` can
- * import it (the same reason `scripts/lease-core.mjs` exists next to
- * `scripts/lease.mjs`).
+ * The Android emulator launch configuration shared by the lease pool, the real-input runner
+ * and the patched `react-native-harness`. No `import.meta` here: jest imports this file.
  */
 
-/**
- * The environment variable that overrides the GPU mode, read by every launcher
- * here (including the patched harness). It exists for two reasons: X11's own
- * A/B measurement (same tree, same device, two GPU modes) has to be possible
- * without editing `node_modules`, and a bench host that needs the mode a
- * baseline was minted with can pin it for its own shell.
- */
+/** Environment variable that overrides the GPU mode for every launcher. */
 export const EMULATOR_GPU_ENV = 'NITRO_UI_EMULATOR_GPU';
 
-/**
- * The GPU mode the harness, the lease pool and real-input boot with.
- *
- * `host` renders on the machine's own GPU; `swiftshader_indirect` - what
- * `react-native-harness` hard-coded - renders in software on the CPU. The value
- * is safe on every machine this repo gates on, and the emulator falls back to
- * software itself when there is no host GPU to take.
- */
+/** Renders on the machine's own GPU. */
 export const HARNESS_GPU_MODE = 'host';
 
 /** What `react-native-harness` ships with, and the software fallback. */
 export const SOFTWARE_GPU_MODE = 'swiftshader_indirect';
 
-/**
- * What the bench path does, written down because a reader who looks here and
- * finds no bench entry will assume it was missed: `scripts/bench/**` never
- * starts an emulator and never chooses a GPU mode, so baselines keep the boot
- * the bench host's device already has.
- *
- * And the answer to the question that follows from it (X11 review N7), read off
- * git rather than remembered: neither committed Android baseline records a GPU
- * mode, and neither was minted on a tree that had one. `maintainer-mac-1`'s
- * (`3533d64`, 2026-10-25) predates even the `-port` patch; `maintainer-mac-2`'s
- * (`9cf95f3`, 2026-10-28) carries the `-port` patch but no GPU override, so both
- * devices came up on upstream's `-gpu swiftshader_indirect`. This file changes
- * that default to `host`, so from here the device a bench measures is booted
- * differently than the one its baseline was minted on - on any machine where the
- * harness or the pool does the booting. A bench host that wants to keep
- * comparing like with like pins `NITRO_UI_EMULATOR_GPU=swiftshader_indirect` in
- * the shell that mints or runs the baseline; a host that intends to move to host
- * rendering re-mints and says so in the commit that lands the new file.
- */
 export const BENCH_GPU_MODE_NOTE =
   'scripts/bench/** boots no emulator and passes no launch arguments, so a bench ' +
   'measures the device as it finds it. Pin NITRO_UI_EMULATOR_GPU in the bench ' +
@@ -87,14 +20,12 @@ export const BENCH_GPU_MODE_NOTE =
   "upstream's swiftshader_indirect, while a device booted here now defaults to " +
   'host.';
 
-/** The emulator console ports `-port` accepts: even, 5554-5682 (see lease-core). */
+/** The emulator console ports `-port` accepts: even numbers in this range. */
 export const EMULATOR_PORT_FLOOR = 5554;
 export const EMULATOR_PORT_CEILING = 5682;
 
 /**
- * Is this a console port the emulator can be told to take? The same rule
- * `checkEmulatorEnv` applies to `EMULATOR_PORT`, in one place so the harness
- * patch cannot quietly disagree with the lease about which ports are bootable.
+ * Is this a console port the emulator can be told to take?
  *
  * @param {unknown} port
  * @returns {boolean}
@@ -110,48 +41,18 @@ export function isEmulatorConsolePort(port) {
   );
 }
 
-/**
- * Environment variables that name a display server the emulator could bind to.
- *
- * Read by both the launchers and the harness patch (the list is interpolated into
- * it), so the two cannot disagree about what "headless" means.
- */
+/** Environment variables that name a display server the emulator could bind to. */
 export const DISPLAY_SERVER_ENV_VARS = Object.freeze([
   'DISPLAY',
   'WAYLAND_DISPLAY',
 ]);
 
 /**
- * The GPU mode a machine can actually honour, from its environment.
+ * The GPU mode this machine can honour.
  *
- * `host` hands the guest to the host's GPU drivers. That is the right answer on
- * every macOS box this repo gates on, and on a Linux workstation with a display:
- * it is why the Android harness stopped costing three times iOS (X11). It is the
- * wrong answer on a headless Linux CI runner, which has no display server for the
- * emulator to bind a GL context to — and the emulator does not fail fast when it
- * cannot get one. Both dispatch runs of the harness job ended the same way
- * (`41230848294`, `41234953779`, F8): `The platform did not become ready within
- * 900000ms`, the emulator process still alive at job cleanup, on a cold AVD and
- * on a cached one — so the AVD's state was not the difference, and the launch
- * arguments were the only thing about this repo's Android run that differs from
- * upstream's. Upstream ships `swiftshader_indirect`, and its own hosted Android
- * job (`.github/workflows/e2e-tests.yml`, the same action, an `ubuntu` runner)
- * boots a fresh AVD in about 40 seconds on it. That string is also what an AVD's
- * own `hw.gpu.mode` carries, which is why the emulator still accepts it although
- * `emulator -help-gpu` lists only the newer names.
- *
- * So: `host` where there is something to host-render on, upstream's mode where
- * there is not. macOS is `host` unconditionally — Hypervisor.Framework and the
- * system's Metal device are always there, and a headless Mac CI box is not a
- * configuration this repo gates on.
- *
- * This replaces the flat `host` default this file had until F8, which is what
- * made the repo's Android CI run the only one of the two that differed from
- * upstream's — and the emulator never says why it cannot render, so a boot
- * timeout was the only symptom. It is the one rule: every launcher here calls it,
- * the harness patch renders it verbatim (see {@link gpuModeExpression}), and
- * `scripts/__tests__/emulator-launch.test.js` executes both sides against the
- * same fixtures.
+ * `host` needs a display to bind a GL context to, and without one the emulator does not
+ * fail: it never finishes booting. So Linux with no display server gets software rendering.
+ * macOS always has a GPU to render on.
  *
  * @param {object} [host]
  * @param {NodeJS.ProcessEnv} [host.env] the environment to read
@@ -172,14 +73,7 @@ export function emulatorGpuModeForHost({
 }
 
 /**
- * The GPU mode one launcher should use, for every launcher that does *not* run
- * inside the harness.
- *
- * A one-line wrapper, kept because the choice it makes is the thing that broke CI:
- * the harness patch, the lease pool's boots and `real-input`'s expected command
- * all read {@link emulatorGpuModeForHost}, so no path can boot a pool device on a
- * mode the machine cannot honour. Benches are deliberately excluded — see
- * {@link BENCH_GPU_MODE_NOTE}.
+ * The GPU mode for this machine, for launchers that run outside the harness.
  *
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
@@ -206,17 +100,8 @@ export function emulatorSnapshotArgs(mode = 'cold') {
 /**
  * One emulator's full boot argv.
  *
- * `@<avd>` rather than `-avd <avd>` because that is the form the harness uses
- * and the form the emulator records in its own `emu-launch-params.txt`. The
- * form matters only in that the drift test compares the two launchers token by
- * token.
- *
- * The GPU mode is asked of a *host*, not baked: `check` runs on `ubuntu-latest`
- * and the pool boots on whatever machine a lease was taken on, and the two
- * answers differ (see {@link emulatorGpuModeForHost} for why that difference is
- * a boot that never finishes rather than an error). So a caller — or a test
- * proving what a hosted runner gets — can name the machine instead of having to
- * be one.
+ * `@<avd>` rather than `-avd <avd>`: the harness uses that form, and a test compares the
+ * two launchers' arguments token by token.
  *
  * @param {object} options
  * @param {string} options.avd the AVD name
@@ -238,16 +123,8 @@ export function emulatorLaunchArgs({
     throw new Error('emulatorLaunchArgs needs an avd name');
   }
   const args = [`@${avd}`];
-  // `-port` straight after the AVD, so the port a device claimed is the first
-  // thing a console shows: the failure this arg exists to prevent is a leased
-  // AVD coming up as somebody else's serial.
-  //
-  // A port that was *offered* and cannot be taken is an error, not a reason to
-  // leave `-port` out (X11 review N2): dropping it silently is precisely the
-  // "boot on whatever console is free" behaviour the flag exists to forbid, and
-  // it turns a mistyped devices.json into a device nobody can address. An
-  // absent port is the other case, and legitimate: upstream, and every run
-  // outside a lease, boots without one.
+  // An offered port that is not a console port is an error: leaving `-port` out would boot
+  // the AVD on whichever serial is free, which is not the one the caller will address.
   if (port != null && port !== '') {
     if (!isEmulatorConsolePort(port)) {
       throw new Error(
@@ -285,12 +162,8 @@ export function emulatorLaunchCommand(options, emulatorBinary = 'emulator') {
 }
 
 /**
- * The GPU rule as an expression, rendered into the harness patch.
- *
- * Both launchers evaluate *this* text: `emulatorGpuModeForHost` below is the
- * Node-side form, and the drift test executes the installed patched function
- * against it over the same fixtures. That is the only way one rule can live in
- * two runtimes.
+ * The GPU rule as a JS expression, rendered into the harness patch. It must stay equivalent
+ * to `emulatorGpuModeForHost`; a test runs both over the same fixtures.
  *
  * @param {string} envExpr how to reach the environment (`process.env`, or a local)
  * @param {string} platformExpr how to reach `process.platform`
@@ -309,20 +182,11 @@ function gpuModeExpression(envExpr, platformExpr) {
   ].join('\n    ');
 }
 
-/* ------------------------- the patch's rendered blocks ---------------------- */
-
 /**
- * The block the harness patch embeds to build its boot argv.
+ * The block the harness patch embeds to build its boot argv. After changing it, regenerate
+ * the patch with `scripts/patch-harness-android.mjs`; a test fails while the two disagree.
  *
- * This is the one place the harness's launch configuration is written. The drift
- * test reads the patch file, requires this exact text inside it, and checks the
- * installed file's `getEmulatorStartupArgs()` still agrees with
- * `emulatorLaunchArgs()`. Change this file without regenerating the patch, or
- * hand-edit the patch, and that test goes red either way.
- *
- * It has to be dependency-free JS: it runs inside
- * `node_modules/@react-native-harness/platform-android/dist/emulator-startup.js`,
- * which knows nothing about this repository.
+ * Dependency-free JS: it runs inside the installed `@react-native-harness/platform-android`.
  *
  * @returns {string}
  */
@@ -370,9 +234,8 @@ export function harnessLaunchBlock() {
 }
 
 /**
- * Phrases that mean the check itself said "no", whatever else it printed.
- * Rendered into the patch by `harnessAccelBlock()`, so the patch and this
- * function cannot disagree about what the words mean.
+ * Phrases in the check's output that mean "no", whatever else it printed. Rendered into the
+ * harness patch.
  */
 export const ACCELERATION_UNUSABLE_PHRASES = Object.freeze([
   'is not installed',
@@ -394,25 +257,9 @@ export const ACCELERATION_USABLE_PHRASES = Object.freeze([
 /**
  * Whether `emulator -accel-check` says hardware acceleration is usable here.
  *
- * Upstream looked for the phrase *"is installed and usable"*, which this
- * emulator version no longer prints: on the maintainer machine the check exits
- * **0** and prints `accel:` / `0` / `Hypervisor.Framework OS X Version 26.6`, so
- * every Android harness run warned that it would "fall back to very slow software
- * emulation" while it was using hardware acceleration the whole time. A warning
- * that is always wrong is worse than none - it teaches you to ignore the one line
- * that would tell you a run is being measured on software rendering.
- *
- * The rules, in order:
- *
- *   1. a known non-zero exit status means unusable, whatever was printed;
- *   2. a known zero exit status means usable - the check's own status is its
- *      answer, and an empty success still means it found nothing wrong;
- *   3. with no status to go on (a caller that only has text), the documented
- *      failure phrases mean unusable and an `accel` / `Hypervisor.Framework` /
- *      `KVM` line or upstream's old success phrase means usable.
- *
- * This is the same decision the patch embeds (see `harnessAccelBlock`), and the
- * drift test checks the installed patch against these fixtures.
+ * The exit status is the answer when it is known: current emulators exit 0 and print
+ * `Hypervisor.Framework ...` instead of the phrase "is installed and usable". With no
+ * status, the failure phrases mean unusable and the success phrases mean usable.
  *
  * @param {object} options
  * @param {string} [options.output] stdout and stderr combined
@@ -428,10 +275,8 @@ export function accelerationUsable({ output = '', exitCode = null } = {}) {
 }
 
 /**
- * The block the harness patch embeds for the accel decision: `accelerationUsable`
- * in patch-package's own indentation, with the phrase lists interpolated from the
- * constants above so the two cannot drift apart. Same contract as
- * `harnessLaunchBlock()`: the drift test requires this text inside the patch.
+ * The block the harness patch embeds for the acceleration decision: `accelerationUsable`
+ * with the phrase lists interpolated from the constants above.
  *
  * @returns {string} every line indented by four spaces, as it appears in the file
  */
@@ -478,10 +323,8 @@ export const isAccelerationUsable = (accelCheckOutput, exitCode = null) => {
 }
 
 /**
- * The lines the patch adds at the accel *call* site, where the exit status is
- * actually known (the parser alone cannot see it). The drift test requires each
- * one inside the patch, because a call site that stops passing the status is the
- * other way this warning comes back.
+ * The lines the patch adds where the harness calls the check, the only place the exit
+ * status is known.
  *
  * @returns {string[]}
  */

@@ -1,22 +1,11 @@
-//
-//  HybridNitroUiButton.swift
-//  react-native-nitro-ui
-//
-//  The Button component: SwiftUI `Button` with a `.buttonStyle(...)` per variant,
-//  on the core runtime. Structure is Switch's (`HybridNitroUiSwitch.swift`); what
-//  is new here is that the control's *size* comes from its props, which is the
-//  one thing the core runtime has to be told about - see the setters'
-//  `noteContentSizeMayHaveChanged()` calls and `docs/architecture/sizing.md` §7.
-//
+// The Button component: a SwiftUI `Button` with a `.buttonStyle(...)` per variant.
 
 import NitroModules
 import SwiftUI
 import UIKit
 
-/// The five roles, named after the Material 3 components the brief maps them to.
-///
-/// iOS has no outlined and no elevated button style, so two of these share a
-/// style with another (`docs/components/button.md` has the table and the reason).
+/// iOS has no outlined and no elevated button style, so two of these share a style with
+/// another.
 enum ButtonVariant: String {
   case filled
   case tonal
@@ -25,14 +14,8 @@ enum ButtonVariant: String {
   case elevated
 }
 
-/// `.controlSize` for the five rungs of the shared ladder.
-///
-/// iOS has four usable `.controlSize` values and the ladder has five rungs, so the
-/// top two share one: `xlarge` and `xxlarge` both draw the largest button iOS
-/// offers. `.extraLarge` is iOS 17+; before it the largest is `.large`, so on an
-/// older OS the top three rungs are one control. That collapse is the honest
-/// mapping — there is no sixth button size to point at — and
-/// `docs/components/button.md` states it next to Android's five distinct heights.
+/// `.controlSize` for the five sizes. iOS has four usable values (`.extraLarge` is iOS 17+),
+/// so `xlarge` and `xxlarge` share the largest.
 enum ButtonScale: String {
   case small
   case medium
@@ -54,13 +37,8 @@ enum ButtonScale: String {
   }
 }
 
-/// The `shape` prop: the button's corner.
-///
-/// The mapping is deliberately not "the same corner on both platforms", because
-/// iOS cannot have one: a Material `squareShape` button has no corner at all,
-/// and every iOS button style draws a rounded one. So `square` is the *nearest*
-/// border shape iOS offers, and `round` is left exactly as it was before the
-/// prop existed - `docs/components/button.md` carries the table.
+/// The button's corner. Every iOS button style draws a rounded corner, so `square` is the
+/// nearest border shape iOS offers rather than a true square.
 enum ButtonShape: String {
   case round
   case square
@@ -69,29 +47,23 @@ enum ButtonShape: String {
   static let squareCornerRadius: CGFloat = 8
 }
 
-/// State of one Button. See ``NitroUiModel`` for why this is not `@Published`.
 final class ButtonModel: NitroUiModel {
   var title: String = ""
   var variant: ButtonVariant = .filled
   var scale: ButtonScale = .medium
-  /// The corner the caller asked for; `.round` is what the platform draws by default.
   var shape: ButtonShape = .round
   var disabled = false
   var tint: UIColor?
-  /// A symbol name that resolved to an actual SF Symbol. `nuiSystemImage` may
-  /// hold a name that does not; the setter decides, so the content never renders
-  /// the "missing symbol" placeholder and never resizes after the fact.
+  /// Only ever a name that resolves to an SF Symbol; the setter drops the rest.
   var systemImage: String?
 
   /// The Android drawable name. Stored so the getter answers; never drawn on iOS.
   var androidIcon: String?
   var testID: String?
   var accessibilityLabel: String?
-  /// The size configuration React sent. The sizing engine reads the key out of
-  /// Fabric state itself; the host only needs to hear that it changed (see
-  /// ``NitroSwiftUIHost/noteSizingKeyChanged()``).
+  /// The sizing engine reads the key from Fabric state; the host only needs to hear that it
+  /// changed.
   var sizingKey = ""
-  /// `onPress`, wired through a stable JS callback.
   var onPress: (() -> Void)?
 
   override init() {
@@ -99,9 +71,7 @@ final class ButtonModel: NitroUiModel {
   }
 }
 
-/// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct ButtonContent: NitroUIContent {
-  /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: ButtonModel
 
   init(model: ButtonModel) {
@@ -109,10 +79,8 @@ struct ButtonContent: NitroUIContent {
   }
 
   var body: some View {
-    // The style is the one thing that cannot be a runtime value: `buttonStyle`
-    // takes a concrete `PrimitiveButtonStyle`, so the switch picks the branch.
-    // Everything that applies to every variant stays *outside* it, so a variant
-    // change costs one style and not a different set of modifiers.
+    // `buttonStyle` takes a concrete style type, so the variant is a switch. Modifiers that
+    // apply to every variant stay outside it.
     styledControl
       .controlSize(model.scale.controlSize)
       .disabled(model.disabled)
@@ -127,35 +95,22 @@ struct ButtonContent: NitroUIContent {
     case .tonal:
       control.buttonStyle(.bordered).buttonBorderShape(borderShape)
     case .outlined:
-      // iOS has no outlined button style. `.bordered` plus a hairline stroke is
-      // the idiomatic shape (a 1 pt stroke around the button's own corner); the
-      // stroke uses the system separator colour so it reads as an outline in both
-      // appearances, and `.tint()` still colours the label - documented, not
-      // faked in. The overlay follows `shape` rather than being a fixed `Capsule`,
-      // because a capsule stroke around a square-cornered button shows two corners.
+      // iOS has no outlined button style: `.bordered` plus a hairline stroke in the separator
+      // colour. The stroke follows `shape`, or a square button would show a capsule's corners.
       control
         .buttonStyle(.bordered)
         .buttonBorderShape(borderShape)
         .overlay(outline)
     case .text:
-      // `.borderless` draws no border, so there is no corner for `shape` to act
-      // on and the prop is ignored here - the same reading as Android, where a
-      // `text` button has no container to morph either.
+      // `.borderless` draws no border, so `shape` has nothing to act on.
       control.buttonStyle(.borderless)
     case .elevated:
-      // iOS has no elevated button style either. `.borderedProminent` is what the
-      // brief maps it to and what an iOS user reads as "the primary action",
-      // which is what `elevated` means in Material. Same control as `filled`
-      // here; the platforms differ, and that is the documented mapping.
+      // iOS has no elevated button style; `.borderedProminent` reads as the primary action.
       control.buttonStyle(.borderedProminent).buttonBorderShape(borderShape)
     }
   }
 
-  /// The border shape for the current ``NitroUiButton/ButtonModel/shape``.
-  ///
-  /// `.round` keeps each variant's own corner: `.automatic` for the bordered
-  /// styles and the capsule the outline has always used, so a Button that does
-  /// not pass `shape` draws the pixels it drew before the prop existed.
+  /// `.round` keeps each variant's own default corner.
   private var borderShape: ButtonBorderShape {
     switch (model.shape, model.variant) {
     case (.round, .outlined): return .capsule
@@ -164,7 +119,6 @@ struct ButtonContent: NitroUIContent {
     }
   }
 
-  /// The hairline the `outlined` variant strokes, on the corner it is drawn with.
   @ViewBuilder private var outline: some View {
     let stroke = AnyShapeStyle(Color(UIColor.separator))
     if model.shape == .square {
@@ -179,9 +133,8 @@ struct ButtonContent: NitroUIContent {
     Button(action: press) { label }
   }
 
-  /// The label. One line, tail-truncated: the control's intrinsic width is the
-  /// title's width, and a caller who wants a narrower box gives it a `width` -
-  /// then the label truncates instead of painting outside its box.
+  /// One line, tail-truncated: in a box narrower than the title, the label truncates instead
+  /// of painting outside it.
   @ViewBuilder private var label: some View {
     if let systemImage = model.systemImage {
       Label {
@@ -196,21 +149,17 @@ struct ButtonContent: NitroUIContent {
     }
   }
 
-  /// A tap. Nothing to reconcile: a press is a gesture, not a value React owns.
   private func press() {
     model.onPress?()
   }
 }
 
-/// `.tint()` has no "unset" form, so the default keeps SwiftUI's accent colour.
-/// For `.borderedProminent` that is the container colour; for the other styles it
-/// colours the label (and `.bordered` tints its background too).
+/// `.tint()` has no "unset" form, so it is applied only when a colour is set.
 private struct OptionalTint: ViewModifier {
   let color: UIColor?
 
   func body(content: Content) -> some View {
     if let color {
-      // `tint(_:)` takes a `ShapeStyle`, and `UIColor` is not one.
       content.tint(Color(color))
     } else {
       content
@@ -218,10 +167,9 @@ private struct OptionalTint: ViewModifier {
   }
 }
 
-/// An empty `accessibilityLabel(_:)` would silence the Button's own label - which
-/// is its title - so it is applied only when set. `testID` deliberately does *not*
-/// go in here: RN already puts it on the component view, and putting it on the
-/// SwiftUI element too would make the view match a testID query twice.
+/// An empty `accessibilityLabel(_:)` would silence the Button's own label (its title), so it
+/// is applied only when set. `testID` is not applied here: React Native already puts it on
+/// the component view, and a second copy would match a testID query twice.
 private struct OptionalAccessibility: ViewModifier {
   let label: String?
 
@@ -234,7 +182,6 @@ private struct OptionalAccessibility: ViewModifier {
   }
 }
 
-/// The Hybrid View React renders as `NitroUiButton`.
 final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ButtonContent>
 
@@ -242,61 +189,32 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   /// whichever thread Nitro called.
   private let pixelProbesLock = NSLock()
 
-  /// This component's name in the sizing engine: `HybridNitroUiButtonComponentName`
-  /// in the generated C++, and `getName()` in the generated Kotlin.
+  /// Must match the component name in the generated C++ and Kotlin.
   private static let sizingComponentName = "NitroUiButton"
 
-  /// The size to lay a Button out with before anything has been measured, in
-  /// points.
-  ///
-  /// A Button has *many* configurations (title, variant, size, symbol), while the
-  /// engine's fallback is keyed by component alone (`NitroUiSizing::setFallback`),
-  /// so this can only be one number: this OS's medium filled button with a
-  /// six-letter title. Every other configuration is a first instance of its own
-  /// configuration and gets corrected the same turn it measures
-  /// (`docs/architecture/sizing.md` §9 - "a text-sized control's first frame of a
-  /// new string is its own problem").
-  ///
-  /// Measured on iOS 27 (iPhone Air simulator), rounded up to the point: medium +
-  /// filled + "Cancel" is 76.7 x 34.3 pt. Rounded *up* rather than to nearest on
-  /// purpose - a fallback smaller than the control makes SwiftUI paint outside its
-  /// box (`core.md` §7), and a rounded-down height also shifts the row. The height
-  /// is the part worth getting right: this OS's medium control is 34.3 pt tall at
-  /// any title, while the width moves with the string (4-letter 61.0, 6-letter
-  /// 76.7, 8-letter 92.7), so a wrong width costs a row's worth of horizontal
-  /// gap and a wrong height costs every row. `docs/components/button.md` has the
-  /// variant x size table this came from.
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, fallbackSize.width, fallbackSize.height, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
   }()
 
-  /// Hand this control's declared size to the sizing engine, once per process
-  /// (the static above is lazy and thread-safe, so repeat calls cost nothing).
-  ///
-  /// ``NitroUiDeclaredFallbacks`` calls this at startup, which is the point that
-  /// matters: Fabric measures a Button's shadow node before it creates any Button
-  /// view, so a fallback declared from `init` is one measure too late for the
-  /// first instance (T14). `init` still calls it, as the backstop.
+  /// Registers the fallback once per process. Called at startup, because Fabric measures a
+  /// Button's shadow node before it creates any Button view; `init` calls it as a backstop.
   static func declareFallback() {
     _ = Self.declaresFallback
   }
 
-  /// The declared fallback - see ``declaresFallback``.
+  /// In points. The engine keeps one fallback per component, so this is a medium filled
+  /// button with a six-letter title, rounded up: a fallback smaller than the control makes
+  /// SwiftUI paint outside its box.
   private static let fallbackSize = (width: 77.0, height: 35.0)
 
-  /// The Nitro `view` - created once here and never replaced.
   override init() {
     host = NitroSwiftUIHost(model: ButtonModel())
     super.init()
-    // The fitting size is both measured and pushed (docs/architecture/sizing.md).
     host.wantsContentSize = true
     host.sizingPolicy = .intrinsic
     // A Button presents nothing, so it needs no view-controller containment.
     host.needsContainment = false
-    // The backstop: startup normally registers this through
-    // ``NitroUiDeclaredFallbacks`` long before a Button can be measured, and a
-    // host built without that table still gets its fallback here.
     Self.declareFallback()
   }
 
@@ -316,10 +234,8 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
       guard newValue != model.title else { return }
       model.title = newValue
       host.markDirty()
-      // A different string is a different width, and nothing else will notice:
-      // no bounds change and no trait change is coming. `noteContentSizeMayHaveChanged`
-      // is the half that asks for a new measure; `markDirty` alone would repaint
-      // at the old size and leave Yoga told the old width.
+      // A different string is a different width, and no bounds or trait change follows to
+      // trigger a new measure.
       host.noteContentSizeMayHaveChanged()
     }
   }
@@ -352,9 +268,7 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
       let next = ButtonShape(rawValue: newValue) ?? .round
       guard next != model.shape else { return }
       model.shape = next
-      // Repaints only. A border shape is not a layout input on either platform,
-      // which is also why it is not in `nuiSizingKey` - asking for a re-measure
-      // per corner change would cost a measure pass for no new number.
+      // Repaints only: a border shape is not a layout input.
       host.markDirty()
     }
   }
@@ -387,23 +301,14 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     set {
       let next = newValue.asType(String.self)
       guard next != model.systemImage else { return }
-      // Only a name that resolves to a symbol reaches the content: an unknown
-      // name would render a placeholder glyph, resize on the next commit, and
-      // announce itself as nonsense to VoiceOver.
+      // An unknown name would render a placeholder glyph, so only a name that resolves is kept.
       model.systemImage = next.flatMap { UIImage(systemName: $0) == nil ? nil : $0 }
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
     }
   }
 
-  /// Accepted and ignored: `androidIcon` names an Android drawable, and iOS draws
-  /// `systemImage` instead.
-  ///
-  /// It is still *stored* rather than dropped, for two reasons. `hybridRef` reads
-  /// it back, so a test can assert what React sent; and a prop that vanishes
-  /// between commits is the nitro#1184 crash, which the wrapper avoids by always
-  /// sending it — the native side has to keep whatever it is handed either way.
-  /// No `markDirty()`: nothing observes it, so a write must not cost a render.
+  /// Android only. Stored so the getter answers, without `markDirty()`: nothing draws it.
   var androidIcon: Variant_NullType_String {
     get { model.androidIcon.map { .second($0) } ?? .first(.null) }
     set { model.androidIcon = newValue.asType(String.self) }
@@ -412,10 +317,8 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
-      // Nothing to apply: `testID` is an RN base prop too, and
-      // `RCTViewComponentView` already puts it on the component view as
-      // `accessibilityIdentifier`. It stays in the spec because Android needs it
-      // as a `tag`.
+      // Nothing to apply: React Native already puts `testID` on the component view as
+      // `accessibilityIdentifier`.
       model.testID = newValue.asType(String.self)
     }
   }
@@ -426,8 +329,7 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
       return .second(label)
     }
     set {
-      // Rendered, not bookkeeping: the label is on the SwiftUI element, so it
-      // needs a commit or a late-set label never reaches VoiceOver.
+      // The label is on the SwiftUI element, so it needs a commit to reach VoiceOver.
       let next = newValue.asType(String.self)
       guard next != model.accessibilityLabel else { return }
       model.accessibilityLabel = next
@@ -448,11 +350,8 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     set {
       guard newValue != model.sizingKey else { return }
       model.sizingKey = newValue
-      // The engine has no answer for a key it has not seen, so it lays this out at
-      // the declared fallback; the new configuration may measure exactly what the old
-      // one did, and that is the size the host's dedupe would swallow the correcting
-      // report against (review F1). Guarded, because React re-sends an unchanged key
-      // on every render and the reset costs a measure.
+      // A new key may measure exactly what the old one did, and the host would drop that
+      // report as a duplicate. Guarded, because React re-sends an unchanged key every render.
       host.noteSizingKeyChanged()
     }
   }
@@ -470,8 +369,6 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   // MARK: - Lifecycle
 
   func afterUpdate() {
-    // No controlled value, so nothing to reconcile: one commit per React commit
-    // (`docs/architecture/core.md` §12).
     host.commit()
   }
 
@@ -498,10 +395,8 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
 
   // MARK: - Methods
 
-  /// The size SwiftUI wants for this Button, from the host's cache.
-  ///
-  /// Never touches the main thread: this can be called from JS, and SwiftUI may
-  /// only be measured on main (core-architecture §1.4).
+  /// Reads the host's cache: this can be called from JS, and SwiftUI may only be measured
+  /// on main.
   func measureContent() throws -> NitroUiButtonSize {
     guard let size = host.contentSize else {
       return NitroUiButtonSize(width: 0, height: 0)
@@ -509,19 +404,10 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     return NitroUiButtonSize(width: Double(size.width), height: Double(size.height))
   }
 
-  /// Probes answered since the view mounted, so the report's `n=` counts the
-  /// caller's own probe rather than a previous control's. Kept here rather than in
-  /// the model because there is nothing in the model for it to describe.
   private var pixelProbes = 0
 
-  /// Records that a probe was asked for, and answers nothing.
-  ///
-  /// iOS has no glyph to sample: `androidIcon` is Android's prop and iOS draws
-  /// `systemImage` instead, so an iOS probe of an Android icon is a test that should
-  /// not be running there. The report below therefore says `no pixels`, which the
-  /// harness's probe helper already treats as a hard failure rather than an answer
-  /// (`pixelProbe` in `example/__tests__/SegmentedControl.harness.tsx`) - the honest
-  /// outcome is a red test, not a green one about nothing.
+  /// iOS has no Android icon glyph to sample, so the report says `no pixels`, which the
+  /// tests treat as a failure.
   func nuiTestPixelProbe(color: Double) throws {
     pixelProbesLock.lock()
     pixelProbes += 1

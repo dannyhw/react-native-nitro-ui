@@ -10,16 +10,6 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * JVM unit test for [MenuRowIcons] (G21): the rows' `androidIcon`s as one slot per row.
- *
- * The device harness proves a glyph reaches the screen (`Menu.harness.tsx`); this proves
- * the half an emulator cannot see clearly - *how often* a name is looked up and *when* a
- * file load is retired. Both are perf-contract items rather than drawing ones: a lookup
- * per row per unrelated prop (AGENTS) and a recycled menu painted by its previous
- * owner's in-flight read are the two ways this class is wrong without any pixel
- * disagreeing on the day it is introduced.
- */
 class MenuRowIconsTest {
   private fun rowsOf(
     vararg pairs: Pair<String, String?>,
@@ -43,8 +33,6 @@ class MenuRowIconsTest {
       NitroUiIconContent.Absent,
       icons.contentOf("nobody"),
     )
-    // The row that asks is the row that draws: one shared slot would put one glyph in
-    // both rows, and one row's late file would overwrite the other's.
     assertTrue(
       "two rows, two slots",
       icons.slots.getValue("share") !== icons.slots.getValue("star"),
@@ -60,12 +48,7 @@ class MenuRowIconsTest {
     assertEquals("one lookup per row that asked", listOf("share_24px", "star_24px"), artwork.asked)
     val published = icons.slots
 
-    // A re-sent menu - the same rows, the same order, which is what every unrelated prop
-    // batch hands `afterUpdate()`. Two rules make that cheap, and this is both: each row
-    // kept its slot, so `resolve` sees a source it already holds and asks the resource
-    // table nothing, and the map it publishes is equal to the one it replaces, which
-    // `mutableStateOf` refuses to write. A menu that handed every row a new slot per
-    // commit would reload every glyph for a change that did not happen.
+    // The same rows re-sent, as every unrelated props batch does.
     icons.apply(rowsOf("share" to "share_24px", "star" to "star_24px"), artwork)
     assertSame(
       "an unchanged menu writes no state and resolves nothing",
@@ -74,8 +57,6 @@ class MenuRowIconsTest {
     )
     assertEquals("and asks the resource table nothing new", 2, artwork.asked.size)
 
-    // One row changes icon: exactly one new lookup, and the row that did not change is
-    // not asked twice.
     icons.apply(rowsOf("share" to "star_24px", "star" to "star_24px"), artwork)
     assertEquals(
       "only the row that changed is looked up",
@@ -116,12 +97,9 @@ class MenuRowIconsTest {
     val icons = MenuRowIcons()
     icons.apply(rowsOf("copy" to "url:http://localhost:8081/star"), load)
     assertEquals(NitroUiIconContent.Pending, icons.contentOf("copy"))
-    // The slot itself, held past the menu that owned it: dropping it from the map hides
-    // the bug rather than proving it gone, because the load still holds this object and
-    // answers to it. A dropped-but-not-retired slot is artwork alive after its view.
+    // Keep the slot itself: the in-flight load still holds it after the row is gone.
     val orphan = icons.slots.getValue("copy")
 
-    // The row is gone from the menu - a re-sent group with one row less.
     icons.apply(rowsOf("paste" to null), load)
     assertEquals(NitroUiIconContent.Absent, icons.contentOf("copy"))
 
@@ -162,16 +140,11 @@ class MenuRowIconsTest {
     assertEquals(NitroUiIconContent.Absent, icons.contentOf("share"))
     assertEquals("no tint is left to read", "-", icons.tintsReport())
 
-    // A recycled menu answers for its next owner, so the previous owner's read that was
-    // still in flight must not paint this one.
     load.answerWith(artworkImage)
     assertEquals("the retired slot draws nothing", NitroUiIconContent.Absent, icons.contentOf("copy"))
     assertEquals("and holds no artwork", NitroUiIconContent.Absent, orphan.content)
 
-    // And the same menu, given the list it had just before the recycle, resolves it again:
-    // [apply]'s "already asked for exactly this" guard has to be forgotten by `reset`, or
-    // the next owner of this view is handed a menu with no icons in it forever. The same
-    // list, in the same order, deliberately - that is exactly what the guard is keyed on.
+    // The same list again must resolve again: `reset` has to clear the "already applied" guard.
     icons.apply(rowsOf("copy" to "url:http://localhost:8081/star"), load)
     assertEquals(
       "the recycled menu resolves what it is handed, again",
@@ -193,8 +166,6 @@ class MenuRowIconsTest {
     assertTrue("both rows are named, with their colour: $report", report.contains("paste#ABCDEF"))
     assertEquals("one entry per row", 2, report.split(",").size)
 
-    // The last colour a row drew with is the one reported - a row that redrew disabled
-    // must not report the enabled tint it drew first.
     icons.noteTint("copy", androidx.compose.ui.graphics.Color(0xFF00_00_00))
     assertEquals(
       "the tint a row last drew is the one reported",
@@ -204,11 +175,10 @@ class MenuRowIconsTest {
   }
 }
 
-/** Artwork that answers names from a set, and counts every lookup - the number a test asserts on. */
+/** Artwork that answers names from a set and counts every lookup. */
 private class FakeRowArtwork(
   private val drawables: Set<String>,
 ) : NitroUiIconArtwork {
-  /** The names handed to the resource table, in order, duplicates included. */
   val asked = mutableListOf<String>()
 
   override fun forName(
@@ -280,16 +250,8 @@ private val artworkImage: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
   NitroUiVectorDrawableReader.read(FileInputStream(path)).toImageVector("share")
 }
 
-/**
- * Compile-only proof for the shape G21 gave [MenuRow]: the caller that holds an icon slot
- * of its own - ButtonGroup's overflow rows, one `NitroUiIconContent` per item - names
- * neither icon parameter and still compiles.
- *
- * This is never run: a `@Composable` cannot be invoked without a composer, and the claim
- * was never about runtime. It is about the signature, and the way a signature is asserted
- * is the compiler. Drop either default from [MenuRow] and this file stops building, which
- * is the red this note is here to make available.
- */
+// Never run: it only has to compile. It calls [MenuRow] without either icon parameter,
+// so removing a default from the signature breaks the build.
 @Composable
 internal fun overflowRowCompilesWithoutTheIconParameters(
   item: MenuActionItem,

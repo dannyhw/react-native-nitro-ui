@@ -1,11 +1,4 @@
-//
-//  slider-value.test.swift
-//
-//  Host-side vectors for the Slider's value rule (see
-//  ios/components/Slider/NitroUiSliderValue.swift). The Kotlin twin is
-//  android/src/test/java/com/margelo/nitro/nitroui/NitroUiSliderValueTest.kt and
-//  the vectors are the same set: change one semantics, change all three.
-//
+// The same vectors as the Kotlin twin, NitroUiSliderValueTest.kt: change one, change both.
 import Foundation
 
 /// `@main` because `swiftc` only allows top-level statements in a file named
@@ -23,9 +16,7 @@ struct SliderValueTest {
     }
   }
 
-  /// Asserts *exact* `Double` equality on purpose. The whole point of tidying is
-  /// that the value native holds is bit-for-bit the value React holds, so a test
-  /// that allowed an epsilon would pass the bug it exists to catch.
+  /// Exact `Double` equality on purpose: native's value must be bit-for-bit React's.
   private static func checkEquals(_ actual: Double, _ expected: Double, _ what: String) {
     check(actual == expected, "\(what) (got \(actual), want \(expected))")
   }
@@ -41,14 +32,12 @@ struct SliderValueTest {
   static func main() {
     print("NitroUiSliderValue")
 
-    // Continuous: clamp, and nothing else.
     checkEquals(quantize(0.4, 0, 1, 0), 0.4, "continuous keeps a value in range")
     checkEquals(quantize(-3, 0, 1, 0), 0, "continuous clamps below the minimum")
     checkEquals(quantize(3, 0, 1, 0), 1, "continuous clamps above the maximum")
     checkEquals(quantize(0.4, 0, 1, -1), 0.4, "a negative step is continuous")
     checkEquals(quantize(0.4, 0, 1, .nan), 0.4, "a NaN step is continuous")
 
-    // The tidying case this file exists for: three binary tenths are not 0.3.
     check(0.1 + 0.1 + 0.1 != 0.3, "the float noise is real (fixture sanity)")
     checkEquals(quantize(0.1 + 0.1 + 0.1, 0, 1, 0.1), 0.3, "three tenths are 0.3")
     checkEquals(quantize(0.34, 0, 1, 0.1), 0.3, "0.34 snaps down to 0.3")
@@ -56,8 +45,6 @@ struct SliderValueTest {
     checkEquals(quantize(0.04, 0, 1, 0.1), 0, "the minimum is reachable")
     checkEquals(quantize(1, 0, 1, 0.1), 1, "the maximum of a range that ends on a step")
     checkEquals(quantize(5, 0, 1, 0.1), 1, "clamped before it is snapped")
-    // A minimum that is not itself a multiple of the step: snapping counts up
-    // from the bottom of the range, not from zero.
     checkEquals(quantize(0.4, -0.75, 1, 0.5), 0.25, "snapping is measured from the minimum")
 
     // A range that does NOT end on a step keeps the maximum as an extra stop.
@@ -68,12 +55,10 @@ struct SliderValueTest {
     checkEquals(quantize(1, 0, 1, 0.3), 1, "...including at the very end")
     checkEquals(quantize(0.5, 0, 1, 0.3), 0.6, "mid-range still snaps to a step")
 
-    // A step larger than the range: the two endpoints are the only values.
     checkEquals(quantize(0.4, 0, 1, 5), 0, "a step bigger than the range: below the middle")
     checkEquals(quantize(0.6, 0, 1, 5), 1, "a step bigger than the range: above it")
     checkEquals(quantize(0.5, 0, 1, 5), 1, "a tie goes up")
 
-    // Degenerate ranges have one value; nonsense input has no NaN in it.
     checkEquals(quantize(0.4, 2, 2, 0), 2, "an empty range answers its minimum")
     checkEquals(quantize(0.4, 5, 1, 0), 5, "an inverted range answers its minimum")
     checkEquals(quantize(.nan, 0, 1, 0.1), 0, "a NaN in does not come out as NaN")
@@ -82,7 +67,6 @@ struct SliderValueTest {
     checkEquals(quantize(.nan, 2, 5, 0), 2, "a NaN lands on the minimum")
     checkEquals(quantize(0.4, .nan, 1, 0), 0.4, "an unbounded range keeps the value")
 
-    // Tidying beyond the tenth.
     checkEquals(quantize(512.33999999999993, 0, 1000, 0.01), 512.34, "a noisy hundredth tidies")
     checkEquals(quantize(0.7 + 0.1, 0, 1, 0.1), 0.8, "seven tenths plus a tenth is 0.8")
     checkEquals(quantize(1.00000000000001e+20, 0, 1e+21, 0), 1.00000000000001e+20,
@@ -91,10 +75,8 @@ struct SliderValueTest {
                 "a 16th significant digit is the one shed")
     checkEquals(NitroUiSliderValue.tidy(1e20), 1e20, "tidying leaves a clean huge value alone")
 
-    // Ties. Kotlin's `round` is `Math.rint`, which rounds a tie to the **even**
-    // neighbour; Swift's `.rounded()` goes away from zero. The rule is
-    // `roundHalfAway`, spelled the same on both platforms — see that function's
-    // comment — and these are the vectors that caught the divergence.
+    // Ties round away from zero on both platforms; Kotlin's own `round` would go to the even
+    // neighbour.
     checkEquals(NitroUiSliderValue.roundHalfAway(0.5), 1, "0.5 goes to 1, not to the even 0")
     checkEquals(NitroUiSliderValue.roundHalfAway(2.5), 3, "2.5 goes to 3, not to the even 2")
     checkEquals(NitroUiSliderValue.roundHalfAway(-0.5), -1, "a negative tie goes away from zero")
@@ -104,19 +86,12 @@ struct SliderValueTest {
     checkEquals(NitroUiSliderValue.roundHalfAway(-0.6), -1, "...including below zero")
     checkEquals(quantize(0.5, 0, 2, 1), 1, "a mid-range tie goes up")
     checkEquals(quantize(2.5, 0, 10, 1), 3, "a mid-range tie goes up, not to the even 2")
-    // The steps are counted *up from the minimum*, so -2.5 in -5...5 is 2.5 steps
-    // in: the tie is in the step count, and it goes up (old Kotlin answered -3).
     checkEquals(quantize(-2.5, -5, 5, 1), -2, "a tie in a negative range counts steps up from the minimum")
     checkEquals(quantize(0.25, 0, 1, 0.5), 0.5, "a tie in a fraction goes up to the next stop")
     checkEquals(quantize(1.5, 0, 3, 1), 2, "an integer-valued tie is the same either way")
 
-    // A tie *minus one bit* is not a tie. `floor(x + 0.5)` — the spelling Kotlin
-    // carried until 2026-11 — perturbs the value before rounding it, and the
-    // perturbation rounds: `(0.21 - 0.1) / 0.22` is 0.49999999999999994, nearer 0
-    // than 1, and `+ 0.5` on it is exactly 1.0 because the sum has no room for the
-    // difference. Android therefore answered one whole step above iOS on these
-    // ranges. The three vectors below are the same rule seen through `quantize`;
-    // the ladder after them is the class, not the instance.
+    // A tie minus one bit is not a tie: `(0.21 - 0.1) / 0.22` is 0.49999999999999994, and
+    // `floor(x + 0.5)` would round it up to 1 because the sum cannot hold the difference.
     let justUnder = (0.21 - 0.1) / 0.22
     check(justUnder < 0.5, "the step count is a hair under a tie, not one")
     check(justUnder + 0.5 == 1.0, "...and adding a half first is what loses the difference")
@@ -126,25 +101,9 @@ struct SliderValueTest {
     checkEquals(quantize(-0.89, -1, 2, 0.22), -1, "...including on a grid that starts below zero")
     checkEquals(quantize(0.31, 0.2, 2.2, 0.22), 0.2, "...and on a grid with a fractional minimum")
 
-    // A ladder through a tie at every magnitude the rule can be asked about, with
-    // each rung's two neighbours. The rung rounds away from zero, the bit below it
-    // rounds down and the bit above rounds up — which is what a rule that shifts
-    // the value before rounding it cannot survive, however it is spelled. Kotlin's
-    // twin uses `BigDecimal` as the reference because there is no `BigDecimal`
-    // here; both are the same definition.
-    // A ladder through ties at every magnitude the rule can be asked about, each
-    // rung with its two neighbouring doubles. The rung rounds away from zero; the
-    // neighbour on the near side rounds back down to the integer below it and the
-    // one on the far side rounds up. A rule that shifts the value before rounding
-    // it — `floor(x + 0.5)`, the spelling Kotlin carried until now — cannot survive
-    // the near-side rung at any magnitude where the shift is comparable to one ulp,
-    // which is what the rungs approaching 2^51 are for. Kotlin's twin uses
-    // `BigDecimal` as the reference because there is no `BigDecimal` in Swift; both
-    // are the same definition.
-    //
-    // The rungs are half-integers, `odd / 2`, because those are the only ties a
-    // double can hold: `(k + 0.5) * 2^n` is a whole number for n >= 1, and a whole
-    // number is not a tie. Every odd numerator below 2^53 is exact.
+    // A ladder of ties at every magnitude, each rung with its two neighbouring doubles: the
+    // rung rounds away from zero, the near neighbour down and the far one up. The rungs are
+    // `odd / 2` because those are the only ties a double can hold.
     var oddNumerators: [Int64] = Array(stride(from: Int64(1), through: 81, by: 2))
     // A few rungs around each power of two, up to where the ulp of a double reaches
     // the half that makes a tie in the first place.
@@ -191,13 +150,8 @@ struct SliderValueTest {
     check(NitroUiSliderValue.division(minimum: 1, maximum: 1, step: 0.1) == nil,
           "an empty range is not stepped")
 
-    // The accessibility increment: the next legal value in one direction.
-    //
-    // `0...10 step 3` is the docs' own example and the range that breaks a
-    // platform's own increment - it does not end on a step, so the control is
-    // continuous, the platform moves by a fraction of the range, and quantising
-    // that fraction lands back on the value it started from. Every one of these
-    // is a value `quantize` accepts, and the ends must be reachable.
+    // The accessibility increment: the next legal value in one direction. `0...10 step 3`
+    // does not end on a step, and both ends must still be reachable.
     checkEquals(stepped(0, true, 0, 10, 3), 3, "0...10 step 3: up from the bottom")
     checkEquals(stepped(3, true, 0, 10, 3), 6, "0...10 step 3: up again")
     checkEquals(stepped(6, true, 0, 10, 3), 9, "0...10 step 3: up again")
@@ -210,8 +164,6 @@ struct SliderValueTest {
     checkEquals(stepped(0, false, 0, 10, 3), 0, "0...10 step 3: nothing below the minimum")
     checkEquals(stepped(0.5, true, 0, 10, 3), 3, "a step is always a whole step, whatever it starts from")
 
-    // A range that *does* end on a step, where the platform could have drawn the
-    // stops itself - the answer must be the same grid either way.
     checkEquals(stepped(0, true, 0, 100, 25), 25, "0...100 step 25: up")
     checkEquals(stepped(50, true, 0, 100, 25), 75, "0...100 step 25: up from the middle")
     checkEquals(stepped(75, true, 0, 100, 25), 100, "0...100 step 25: up to the top")
@@ -219,29 +171,24 @@ struct SliderValueTest {
     checkEquals(stepped(100, false, 0, 100, 25), 75, "0...100 step 25: down")
     checkEquals(stepped(0, false, 0, 100, 25), 0, "0...100 step 25: no undershoot")
 
-    // A fractional grid. `(0.3 - 0) / 0.1` is 2.9999999999999996, so without the
-    // tolerance an increment from 0.3 computes 0.30000000000000004 -> quantised
-    // back to 0.3, which is the stuck increment again.
+    // `(0.3 - 0) / 0.1` is 2.9999999999999996: without a tolerance, an increment from 0.3
+    // lands back on 0.3.
     checkEquals(stepped(0.3, true, 0, 1, 0.1), 0.4, "tenths: up from 0.3 clears the binary fraction")
     checkEquals(stepped(0.3, false, 0, 1, 0.1), 0.2, "tenths: down from 0.3")
     checkEquals(stepped(0.9, true, 0, 1, 0.1), 1, "tenths: up to the top")
 
-    // Continuous (step 0): a fraction of the range, and the bounds hold.
     checkEquals(stepped(0, true, 0, 1, 0), 0.05, "continuous: one twentieth of the range up")
     checkEquals(stepped(0.05, false, 0, 1, 0), 0, "continuous: back down to the bottom")
     checkEquals(stepped(1, false, 0, 1, 0), 0.95, "continuous: down from the top")
     checkEquals(stepped(1, true, 0, 1, 0), 1, "continuous: nothing above the top")
     checkEquals(stepped(0, false, 0, 1, 0), 0, "continuous: nothing below the bottom")
 
-    // Degenerate ranges must not move, and a step larger than the range leaves
-    // exactly the two ends.
     checkEquals(stepped(0, true, 0, 0, 1), 0, "an empty range cannot be incremented")
     checkEquals(stepped(5, true, 5, 1, 1), 5, "an inverted range cannot be incremented")
     checkEquals(stepped(0, true, 0, 1, 5), 1, "a step past the range has two stops: up")
     checkEquals(stepped(1, false, 0, 1, 5), 0, "...and down")
     checkEquals(stepped(1, true, 0, 1, 5), 1, "...and nothing past the top")
 
-    // A negative range: the grid is counted from the minimum here too.
     checkEquals(stepped(-10, true, -10, -1, 3), -7, "-10...-1 step 3: up")
     checkEquals(stepped(-4, true, -10, -1, 3), -1, "-10...-1 step 3: up to the maximum")
     checkEquals(stepped(-1, false, -10, -1, 3), -4, "-10...-1 step 3: down")

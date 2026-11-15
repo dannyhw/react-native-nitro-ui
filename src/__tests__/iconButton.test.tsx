@@ -7,18 +7,6 @@ import {
   resetIconButtonWarningsForTests,
 } from '../components/IconButton/IconButton';
 
-/**
- * Wrapper-level tests for IconButton (task G23).
- *
- * These are the facts the device suite cannot see, because they are about *which
- * props leave JS*: the two forms of the control are not two components, they are
- * two readings of `checked`/`defaultChecked`, and a wrapper that sends a toggle's
- * props for a press button composes a toggle on both platforms — which no on-device
- * test can tell from a control the caller asked to be a toggle. The size
- * configuration is the other one: two configurations that share a key share one
- * cached box, and a platform that ignores a field (iOS ignores `width`) is exactly
- * where a key would otherwise be trimmed.
- */
 beforeEach(() => {
   nitroUiHybridObjects.NitroUiCore = () => ({
     nextSizingId: () => 1,
@@ -45,8 +33,6 @@ describe('IconButton · the two forms', () => {
     );
     const props = nativeProps(view, 'press');
     // Both null is what tells native to compose a Button rather than a Toggle.
-    // `defaultChecked` used to be defaulted to `false` in the destructuring, which
-    // made every IconButton a toggle.
     expect(props.checked).toBeNull();
     expect(props.defaultChecked).toBeNull();
   });
@@ -106,8 +92,6 @@ describe('IconButton · the two forms', () => {
       [toggle, 'cb-toggle'],
     ] as const) {
       const props = nativeProps(view, id);
-      // Nitro's callback prop, not a bare function - and the point is that it is
-      // *sent*: an absent callback prop is what D7b forbids between two commits.
       expect(props.onPress).toBeDefined();
       expect(props.onPress).not.toBeNull();
       expect(props.onCheckedChange).toBeDefined();
@@ -133,8 +117,8 @@ describe('IconButton · the size configuration', () => {
     const wide = await render(
       <IconButton accessibilityLabel="Search" width="wide" testID="key-wide" />
     );
-    // iOS ignores `width`, and a key trimmed to what iOS acts on would hand a wide
-    // Android box to the next narrow control of every other configuration.
+    // iOS ignores `width`, but the key keeps it: Android's wide and uniform boxes
+    // differ.
     expect(nativeProps(wide, 'key-wide').nuiSizingKey).toBe(
       'standard|medium|wide|press||'
     );
@@ -229,9 +213,8 @@ describe('IconButton · the size configuration', () => {
     expect(nativeProps(on, 'key-on').nuiSizingKey).toBe(base);
     expect(nativeProps(disabled, 'key-disabled').nuiSizingKey).toBe(base);
     expect(nativeProps(square, 'key-square').nuiSizingKey).toBe(base);
-    // All four are the *same form*: `form` is in the key (see the test below), so a
-    // press button of the same variant/size/glyph is deliberately a different key, and
-    // comparing across the two forms here would test that instead.
+    // All four are toggles. The form is part of the key, so a press button of the
+    // same configuration has a different one.
     expect(base).toBe('standard|medium|uniform|toggle||');
   });
 
@@ -243,8 +226,7 @@ describe('IconButton · the size configuration', () => {
         testID="key-forged"
       />
     );
-    // A symbol name is free-form text. Unescaped, it would make two different
-    // configurations read as one (Button's rule, and its escape).
+    // A symbol name is free-form text, so a separator inside it is escaped.
     expect(nativeProps(forged, 'key-forged').nuiSizingKey).toBe(
       'standard|medium|uniform|press|a\\|filled\\|large|'
     );
@@ -270,10 +252,8 @@ describe('IconButton · the size configuration', () => {
         variant="tonal"
       />
     );
-    // Measured on iOS in `IconButton.harness.tsx`: the same `tonal`/`large`
-    // configuration is 31.67 x 30.00 pt as a `Button` and 41.67 x 30.00 pt as a
-    // `Toggle(.button)`. One cached size cannot serve both, so the two forms must not
-    // read one key.
+    // On iOS one configuration measures differently as a `Button` and as a
+    // `Toggle(.button)`, so the two forms need two keys.
     expect(nativeProps(toggle, 'key-toggle-form').nuiSizingKey).toBe(
       'tonal|large|uniform|toggle||'
     );

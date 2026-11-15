@@ -9,15 +9,9 @@ import {
 import type { NitroUiTooltipAction } from './Tooltip.nitro';
 import { NativeNitroUiTooltip } from './NativeNitroUiTooltip';
 
-/**
- * One button of a tooltip. The actions are data, as a dialog's are: never child
- * views, never JSON.
- */
+/** One button of a tooltip. */
 export interface TooltipAction {
-  /**
-   * What `onAction` reports. Unique across the tooltip's actions, and stable: a
-   * re-ordered list keeps each button's identity.
-   */
+  /** What `onAction` reports. Must be unique across the tooltip's actions. */
   id: string;
   /** The button's text. */
   title: string;
@@ -27,23 +21,21 @@ export interface TooltipAction {
 export type TooltipPlacement = 'auto' | 'above' | 'below';
 
 /**
- * Props of {@link Tooltip}.
- *
- * `isPresented` is controlled and required: the app decides when the tooltip is up,
- * and every close the user causes is reported through `onIsPresentedChange` - the
- * event-count handshake a dialog uses (`docs/architecture/core.md` §4).
+ * Props of {@link Tooltip}. `isPresented` is controlled and required: the app
+ * decides when the tooltip is up, and every close the user causes is reported
+ * through `onIsPresentedChange`.
  */
 export interface TooltipProps extends ViewProps {
   /** Whether the tooltip is presented. */
   isPresented: boolean;
   /**
-   * Called when the tooltip closes for a reason the app did not write: a tap outside
-   * it, an action, Back (Android, a tooltip with actions), or its anchor leaving its
-   * window. A layout move or a scroll is not a close: the tooltip follows its anchor.
-   * Not called when `isPresented` changes because the app changed it.
+   * Called when the tooltip closes without the app asking: a tap outside it,
+   * an action, Back (Android, a tooltip with actions), or its anchor leaving
+   * its window. A layout move or a scroll is not a close: the tooltip follows
+   * its anchor. Not called when the app changes `isPresented`.
    *
-   * Keep `isPresented` in step with it. A parent that leaves `isPresented` true after
-   * a close gets the tooltip back (and a dev warning).
+   * Keep `isPresented` in step with it: a parent that leaves `isPresented`
+   * true after a close gets the tooltip back (and a dev warning).
    */
   onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
   /** The tooltip's text. Also what screen readers announce. */
@@ -60,7 +52,7 @@ export interface TooltipProps extends ViewProps {
   actions?: readonly TooltipAction[] | undefined;
   /**
    * Called with an action's `id` when the user taps it - always before the
-   * `onIsPresentedChange(false)` the same tap causes (DECISIONS D32).
+   * `onIsPresentedChange(false)` the same tap causes.
    */
   onAction?: ((id: string) => void) | undefined;
   /**
@@ -72,10 +64,9 @@ export interface TooltipProps extends ViewProps {
   /** The anchor: what the tooltip points at, laid out in place. */
   children?: ReactNode;
   /**
-   * Access to the native Hybrid Object, for this repo's harness and benchmarks.
+   * Read-only access to the native view, for tests and benchmarks.
    *
-   * @internal Not app API (DECISIONS D14). The shape is written inline for the
-   * reason `DatePickerProps.hybridRef` gives.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -90,20 +81,19 @@ export interface TooltipProps extends ViewProps {
       }) => void)
     | undefined;
   /**
-   * Instance id used by native perf marks. Benchmark only.
+   * Instance id for native performance marks, for benchmarks.
    *
-   * @internal Benchmark and diagnostics only - not app API.
+   * @internal
    */
   nuiPerfId?: number | null | undefined;
 }
 
-/** The most actions a tooltip takes: Material's rich tooltip has room for two. */
+/** Material's rich tooltip has room for two. */
 const MAX_ACTIONS = 2;
 
 /**
- * The actions as native wants them. A dev build throws for a third action and for a
- * repeated id - `onAction` could not say which of two equal ids was tapped; a
- * release build keeps the first two.
+ * A dev build throws for a third action or a repeated id; a release build
+ * keeps the first two.
  */
 function toNativeActions(
   actions: readonly TooltipAction[] | undefined
@@ -131,16 +121,13 @@ function toNativeActions(
 }
 
 /**
- * The native actions, with a stable identity: an inline `actions={[...]}` is a new
- * array every render, and props diff by identity, so without this an unrelated
- * parent re-render would re-send the struct array. Keyed on content, as Dialog's
- * `useNativeActions` is.
+ * Keeps the array's identity while its content is unchanged: props diff by
+ * identity, and an inline `actions={[...]}` is a new array every render.
  */
 function useNativeActions(
   actions: readonly TooltipAction[] | undefined
 ): NitroUiTooltipAction[] {
   const next = toNativeActions(actions);
-  // Joined by characters no title can forge into a field boundary.
   const signature = next.map((a) => `${a.id}\u0000${a.title}`).join('\u0001');
   const cache = useRef<{
     signature: string;
@@ -160,22 +147,21 @@ function normalisePlacement(
   return placement === 'above' || placement === 'below' ? placement : 'auto';
 }
 
-/** A module-level no-op, so `onAction` is always sent with one identity (D7b). */
+/** A module-level no-op, so `onAction` is always sent with one identity. */
 function onActionNotProvided(): void {
   // Intentionally empty: the caller asked for nothing.
 }
 
 /**
- * The wrapper hugs its anchor. Without this, React Native's default `alignItems:
- * 'stretch'` would widen a wrapper around an icon to the whole row, and the tooltip
- * would point at the row's middle. An app `style` wins.
+ * The wrapper hugs its anchor: stretched to the row's width, as React Native
+ * would by default, the tooltip would point at the row's middle.
  */
 const WRAPPER_BASE_STYLE = { alignSelf: 'flex-start' } as const;
 
 /**
- * A tooltip the app opens next to a view: a message, an optional title and up to two
- * actions. Material 3's `PlainTooltip` / `RichTooltip` on Android; a UIKit popover
- * with SwiftUI content on iOS, which has no tooltip control.
+ * A tooltip the app opens next to a view: a message, an optional title and up
+ * to two actions. Material 3's plain or rich tooltip on Android; a popover on
+ * iOS, which has no tooltip control.
  *
  * ```tsx
  * const [tip, setTip] = useState(true);
@@ -190,10 +176,11 @@ const WRAPPER_BASE_STYLE = { alignSelf: 'flex-start' } as const;
  * </Tooltip>
  * ```
  *
- * The children are the anchor, laid out in place inside a plain `View` that hugs
- * them (`alignSelf: 'flex-start'`); the tooltip points at that view's box. It opens
- * only when the app sets `isPresented` - there is no long-press or hover trigger -
- * and stays up until the user or the app closes it: it never times out.
+ * The children are the anchor, laid out in place inside a `View` that hugs
+ * them (`alignSelf: 'flex-start'`); the tooltip points at that view's box. It
+ * opens only when the app sets `isPresented` - there is no long-press or hover
+ * trigger - and stays up until the user or the app closes it: it never times
+ * out.
  */
 export function Tooltip({
   isPresented,
@@ -211,8 +198,6 @@ export function Tooltip({
   ...viewProps
 }: TooltipProps) {
   const presented = isPresented === true;
-  // Whether the newest native event was a close, for the refusal check below.
-  // Written by the handler `useControlled` calls after it has echoed the count.
   const lastNativeWasClose = useRef(false);
   const controlled = useControlled<boolean>(presented, false, (next) => {
     lastNativeWasClose.current = !next;
@@ -224,11 +209,9 @@ export function Tooltip({
   const hybridRefCallback = useStableCallback(hybridRef);
   const nativeActions = useNativeActions(actions);
 
-  // A close the app refused (DECISIONS D33, as a dialog's): native has said `false`,
-  // JS has echoed that event, and `isPresented` is still `true` in the commit that
-  // echoes it. Native presents the tooltip again on that same commit; the warning is
-  // the developer's half. Only that commit counts: an app that followed the close to
-  // `false` and opens the tooltip again later is an ordinary open, not a refusal.
+  // Warns once when the app leaves `isPresented` true after a user close. Only
+  // the commit that confirms a native event is checked: reopening later is an
+  // ordinary open.
   const warnedRefusal = useRef(false);
   const echoedAtLastCheck = useRef(0);
   const echoed = controlled.mostRecentEventCount;

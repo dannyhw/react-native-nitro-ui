@@ -42,106 +42,31 @@ import java.lang.ref.WeakReference
 data class NitroUiDpSize(val width: Double, val height: Double)
 
 /**
- * The one place in this library that hosts Compose. Every component's Hybrid View
- * owns exactly one of these, created with it and never replaced
- * (`docs/research/core-architecture.md` §3).
- *
- * It is a `FrameLayout` with one [AbstractComposeView] child, and the wrapper is
- * load-bearing: RN measures a view before that view has a window, and
- * `AbstractComposeView` is not written for it. Its `onMeasure` is `final`, it
- * resolves a `CompositionContext` there, and the only source for one is the
- * window's `ViewRecomposer`, so measuring it detached throws
- * "Cannot locate windowRecomposer; View ... is not attached to a window" - inside
- * the mount batch, which aborts the update and takes the app down. Fabric does
- * exactly that: it measures every view it lays out, and it lays out a `Modal`'s
- * tree before `Dialog.show()` gives that tree a window (measured on API 35: the
- * app died in the mount batch). A `FrameLayout` measured before its window has got
- * nothing to measure yet, and it owns a non-final `onMeasure`/`onLayout` to say so
- * with - see [onMeasure], [onLayout] and [measureNow].
- *
- * Who measures the Compose view, then: nobody but us. Fabric is the only thing
- * that measures an RN view (`SurfaceMountingManager.updateLayout` calls
- * `measure(EXACTLY(w), EXACTLY(h))` once per layout update, then lays the view out
- * itself), and `requestLayout()` reaches nobody either: the parent above is a
- * `ReactViewGroup`, whose `onMeasure` does nothing, because RN drives its
- * children's frames from C++. So whenever a measure was declined, the first moment
- * there is a window and a frame runs it - from the child's own
- * [onAttachedToWindow] if the frame came first, from [onLayout] if the window came
- * first. Either way the control composes in the same UI-thread turn it was laid
- * out in; no `post`ed retry.
- *
- * The price of the wrapper is one extra `View` per hosted control. The gain is
- * that no component has to know which window RN mounted it in.
- *
- * Lifetime:
- * - prop setters write snapshot state on the model and call [markDirty];
- * - [commit] runs once per `updateState` and sends one apply notification;
- * - the composition's strategy is armed at [onAttachedToWindow], which is the first
- *   moment anything can compose, and unarmed at [drop];
- * - [drop] disposes the composition;
- * - [prepareForRecycle] resets the model and the flags, ready for the next
- *   attach.
- *
- * Recycling, precisely (RN 0.88): a view only reaches [prepareForRecycle] when the
- * app turns on `ReactNativeFeatureFlags.enableViewRecycling()` (off by default)
- * *and* the Hybrid implements `RecyclableView`, because that is what makes
- * Nitro's generated manager call `setupViewRecycling()`. Even then the generated
- * `onDropViewInstance` runs `onDropView()` - so [drop], and
- * `disposeComposition()` - *before* `prepareToRecycleView`. The composition
- * therefore never survives a recycle: the next attach builds a new one. What
- * recycling does save is everything around it - this View, the child, the Hybrid
- * Object, the model and the owner wiring. We keep the dispose rather than leaving
- * compositions alive: not disposing would leak one per real unmount, and with the
- * flag off every unmount is a real one. Measuring a keep-it-alive variant is
- * T02's job (docs/architecture/core.md §6).
- *
- * A pooled view therefore holds nothing this host registered: the pool is RN's, it
- * is unbounded, and RN empties it without telling the views in it (`ViewManager`
- * drops the whole map on `trimMemory` and on `onSurfaceStopped`), so arming
- * anything at pool entry would put a host that is never reused back into the
- * activity. Hence arming at attach rather than at recycle.
+ * Hosts one component's Compose content: a `FrameLayout` around one [AbstractComposeView].
+ * Fabric measures a view before it has a window, and `AbstractComposeView` throws when
+ * measured detached, so the wrapper declines those measures and runs them after attach.
  */
 abstract class NitroComposeHost<M : NitroUiModel>(
   context: Context,
   /** `reactContext.currentActivity`, for the owners RN may not have set. */
   private val activity: Activity?,
-  /** The component's state. Never replaced. */
   protected val model: M,
 ) : FrameLayout(context) {
 
-  /** `nuiPerfId` of the owning view, or [NitroUiPerf.NO_INSTANCE]. */
   var perfInstanceId: Int = NitroUiPerf.NO_INSTANCE
 
-  /**
-   * `nuiSizingId` of the owning view, or [NitroUiSizing.NO_INSTANCE].
-   *
-   * The other half of [wantsContentSize]: a measured size is only useful if it
-   * can be pushed somewhere, and this says which Fabric node owns it
-   * (`docs/architecture/sizing.md`). Reset on every recycle, so a reused host can
-   * never report a size into a dead instance's state.
-   */
   var sizingInstanceId: Long = NitroUiSizing.NO_INSTANCE
 
   /**
-   * Declared by the component: [NitroUiSizing.POLICY_INTRINSIC] when the control's
-   * own size is its size, [NitroUiSizing.POLICY_FILL_WIDTH] when the width comes
-   * from Yoga's box. It decides the question [NitroUiMeasuredRoot] asks Compose
-   * (see there), so getting it wrong makes a control report its box.
+   * [NitroUiSizing.POLICY_INTRINSIC] when the control sizes itself,
+   * [NitroUiSizing.POLICY_FILL_WIDTH] when its width comes from Yoga's box.
    */
   var sizingPolicy: Int = NitroUiSizing.POLICY_INTRINSIC
 
-  /**
-   * Set by components that want [contentSize] maintained (T11's sizing, plus
-   * `measureContent()`). Off by default: recording costs a Compose measure
-   * bookkeeping step on every pass.
-   */
+  /** Whether [contentSize] is recorded. Off by default because it costs every measure pass. */
   var wantsContentSize: Boolean = false
 
-  /**
-   * Last measured content size in dp, or `null` if never measured. Fabric's
-   * measure pass fills it in; `measureContent()` reads it from any thread. An
-   * immutable value behind a `@Volatile` is what makes that legal (§1.4).
-   */
+  /** Last measured content size in dp, or null. Written on the UI thread, read from any. */
   @Volatile var contentSize: NitroUiDpSize? = null
     private set
 
@@ -149,257 +74,94 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private var hasMarkedFirstFrame = false
   private var firstFrameWatchRegistered = false
 
-  /**
-   * What this object has been through, and the post-drop rule. See the class for why
-   * the counters survive a recycle and why the rule is a separate type.
-   */
   private val lifetime = NitroUiLifetimeGate()
 
-  /** See [NitroUiLifetimeGate.drops]. */
   val lifetimeDrops: Int
     get() = lifetime.drops
 
-  /** See [NitroUiLifetimeGate.recycles]. */
   val lifetimeRecycles: Int
     get() = lifetime.recycles
 
-  /** Post-drop measure asks by **every** host in this process, not just this one. */
   val measuresAfterDrop: Int
     get() = processMeasuresAfterDrop
 
-  /// [measuresAfterDrop], for the layout pass.
   val layoutsAfterDrop: Int
     get() = processLayoutsAfterDrop
 
-  /**
-   * Whether a pre-draw listener is registered for this mount, with the observer it
-   * was registered on.
-   *
-   * The pair, not just the flag: a `View` that is no longer attached answers
-   * `viewTreeObserver` with a *fresh* floating observer, so removing through the
-   * current one after a detach removes nothing and leaves the listener on the
-   * window's observer - which holds it, and through it this host, for the life of
-   * the window. [unregisterPreDraw] is the only way back.
-   */
+  // Kept with the observer it was registered on: a detached view's `viewTreeObserver` is a new
+  // floating one, so removing through it would leave the listener on the window's observer.
   private var firstFrameWatch: PreDrawWatch? = null
 
-  /** The same, for the sizing flush. See [firstFrameWatch]. */
   private var flushWatch: PreDrawWatch? = null
 
-  /**
-   * Whether a composition strategy is currently installed for this host.
-   *
-   * A strategy is a registration on the activity, not a property of the view
-   * ([armCompositionStrategy]), so it is armed only when there is something to
-   * guard - the moment this host is attached - and never while this host is sitting
-   * in RN's recycling pool, which RN empties without telling the views inside it.
-   */
   private var strategyArmed = false
 
-  /**
-   * Whether this mount has *ever* armed each of the two own-composition guards,
-   * outliving the live flags above going false again.
-   *
-   * [armedGuardsReport] reads these instead of the live pair. Arming is what costs,
-   * and a first-frame listener that has already marked is still a listener that was
-   * armed and then had to be taken out; a probe that reads only what is live right
-   * now cannot tell "never armed" from "armed and released", which makes it a race
-   * with the first frame rather than a gate. Both are reset with the live flags in
-   * [prepareForRecycle], so the answer is about the mount, as the report is.
-   */
+  // Whether this mount ever armed each guard, even if it has been released since.
   private var everArmedStrategy = false
   private var everArmedPreDraw = false
 
-  /**
-   * The size the sizing engine already has from this host, in dp. Compared with an
-   * epsilon so a measure that wobbles by a fraction of a dp does not become a
-   * Fabric commit (risk R12). This only skips the JNI call - the engine drops a
-   * duplicate report by itself.
-   */
+  // The size last sent to the sizing engine, in dp. Only saves the JNI call for a repeat.
   private var lastReportedSize: NitroUiDpSize? = null
 
-  /**
-   * Whether a sizing key has arrived whose box the engine has not been asked about
-   * yet. Set by [noteSizingKeyChanged], consumed by [onLayout].
-   */
   private var sizingKeyChangePending = false
-  /**
-   * Whether this host is holding its size reports back until the next props batch.
-   *
-   * Set by [holdSizingReports]: the component calls it when *native* moved something
-   * that changes the control's size, which is the one moment a new `nuiSizingKey` is
-   * on its way but has not arrived. The engine files a report under the key of the
-   * last shadow measure (G6 review M1), so a size measured in that window belongs to
-   * the content that was just replaced and would be filed against the configuration
-   * it replaced - poisoning the cache entry of the title the control no longer shows.
-   *
-   * Held reports still update [contentSize], so `measureContent()` goes on answering
-   * what the control measures; only the engine is left out, and only until the batch
-   * that carries the new key lands.
-   */
+  // While set, measured sizes are not sent to the sizing engine. The engine files a report
+  // under the key of the last shadow measure, which between a native-side change and the next
+  // props batch still names the content that was replaced.
   private var sizingReportsHeld = false
 
-  /**
-   * The last size measured while [sizingReportsHeld] was on, and null when nothing
-   * has measured behind the hold (or no hold is on).
-   *
-   * This is the answer the hold was for. A choice paints first and is re-keyed by
-   * the next batch, and every measure between those two moments measures the content
-   * the choice painted - which is exactly what the batch that arrives is about to
-   * name. [releaseSizingReports] files it then, instead of asking for a fresh
-   * measure and hoping the composition has caught up by the time it runs.
-   *
-   * The last one wins: several passes over the same content agree, and the one that
-   * matters is the newest.
-   */
+  // The last size measured while reports were held, filed when the hold is released.
   private var heldContentSize: NitroUiDpSize? = null
 
-  /**
-   * Bumped when an armed sizing key change lands ([onLayout]) and read by
-   * [NitroUiMeasuredRoot]'s measure block. A measure block observes the snapshot
-   * state it reads, so writing this marks that node measure-dirty - which is the
-   * only way this host can ask a *mounted* Compose control to measure again:
-   * Compose leaves it alone when only the box moved (measured by T14 on a mounted
-   * control re-laid-out at a wrong guess), and a report only ever comes out of a
-   * measure.
-   *
-   * It is written at the layout, not at the prop: reporting a size while the engine
-   * still has the *previous* configuration's box is a correction on a box that this
-   * same transaction was already going to fix, which breaks D17's rule that a warm
-   * configuration costs nothing.
-   */
+  // Read by the measure block of [NitroUiMeasuredRoot], so a write marks that node
+  // measure-dirty. Compose does not re-measure a mounted control when only its box moved.
   private val remeasureToken = mutableIntStateOf(0)
 
-  /**
-   * How many times this host's rendered content has been marked changed, for
-   * [NitroUiMeasuredRoot]'s placement guard.
-   *
-   * [remeasureToken] moves when the *box* says something; this moves when the
-   * *content* does. Content placed at its box's width answers that width whatever it
-   * is, so an arming that outlived the content it was made for would keep the drawing
-   * and lose every later correction - and a measure block cannot notice that by
-   * reading this live, because a prop batch measures the host before its recomposition
-   * has run (measured on `nitroui_t01`: setters, `commit()`, then Fabric's measure,
-   * all in one message, with the recomposition dispatched after it). A measure taken
-   * in the prop turn is still measuring the *old* content while this counter already
-   * says new, so the number has to come from the composition that rendered it:
-   * [NitroUiMeasuredRoot] reads it and gives the measure block the revision that
-   * content was composed at.
-   *
-   * That is also what makes a stale pass harmless rather than fatal, which is why this
-   * is a revision and not a flag the pass clears: a measure that arrives before the
-   * recomposition measures content that is about to be replaced, so its verdict gets no
-   * revision to stamp, and the guard refuses to place an unattributed arming bounded.
-   * The first pass over the *new* content therefore still asks the unbounded question -
-   * and reporting is the one thing a pass may never skip, since a bounded answer is the
-   * box, and the box in the cache is the pre-T11 bug.
-   *
-   * Who reads it is the cost story: only a group that is placed at its box's width
-   * reads it, so for content that fits its box - the whole bench corpus, and every
-   * Switch on a plain screen - a bump here has no reader. It restarts no group, hands
-   * `Layout` no new measure block and asks for no measure. What it costs every host is
-   * the write: one snapshot record, the same kind the model's own prop writes make.
-   */
+  // Counts content changes. The composition reads it, not the measure block: a props batch
+  // measures the host before it recomposes, so a live read would name content not yet rendered.
   private val contentRevision = mutableIntStateOf(0)
 
-  /**
-   * The host's own note of whether this control's content overruns its box, and
-   * whether to place it at the box's width (see [NitroUiOverWidePlacement]).
-   *
-   * Without it, an `intrinsic` control that wants more width than Yoga gave it is
-   * drawn at its own width, centred, and cut off at both ends by the host's bounds
-   * (G4 review F2): the visible part of an outer segment belongs to its neighbour,
-   * so the ends of a long `SegmentedControl` row are both invisible and untappable.
-   * iOS has no equivalent - SwiftUI lays a control *into* the box it is offered and
-   * truncates - so this is the Android half of matching it.
-   */
+  // Tracks content wider than its box. Left alone, an `intrinsic` control would draw at its
+  // own width, centred, and be clipped at both ends by the host's bounds.
   private val overWidePlacement = NitroUiOverWidePlacement()
 
-  /**
-   * [noteOverWideContent] as one stable object.
-   *
-   * Held rather than written as `::noteOverWideContent` at the call site so that
-   * passing it cannot itself be a reason for [NitroUiMeasuredRoot] to recompose: a
-   * fresh lambda per recomposition is a changed argument per recomposition, which is
-   * the cost this pass is careful not to add to controls that never overran.
-   */
+  // One stable reference: a new lambda per recomposition would recompose [NitroUiMeasuredRoot].
   private val noteOverWide: (Boolean) -> Unit = ::noteOverWideContent
 
-  /** Whether a pre-draw flush is already queued for this host. */
   private var flushScheduled = false
 
-  /**
-   * Whether the measure that arrives for this mount still has to happen. True at
-   * the start (there is no composition yet) and again after a measure declined for
-   * want of a window; cleared by the run that was not declined.
-   */
+  // True until a measure has run with a window; set again whenever one is declined.
   private var isMeasurePending = true
 
-  /**
-   * What to dispose the composition with. An `Activity` in an RN app is a
-   * `ComponentActivity`, so it is a `LifecycleOwner`; if it somehow is not, the
-   * default strategy stays and only the composition's lifetime is affected.
-   */
+  // Null when the activity is not a `LifecycleOwner`; Compose's default strategy then stays.
   private val owner: LifecycleOwner? = activity as? LifecycleOwner
 
-  /**
-   * The same activity, seen as the other owner Compose requires.
-   *
-   * Asked for separately, not cast from [owner]: an `Activity` in an RN app is a
-   * `ComponentActivity`, which is both, but a host that hands us only one of the
-   * two roles should still get the one it can give.
-   */
   private val savedStateOwner: SavedStateRegistryOwner? =
     activity as? SavedStateRegistryOwner
 
-  /** The one Compose view of this host, made with it and never replaced. */
   private val composeContent: ComposeContent = ComposeContent(context)
 
   init {
-    // No strategy is installed here: a strategy is a registration on the activity,
-    // and nothing can compose until this host is attached, so
-    // [onAttachedToWindow] arms it and nothing here has to. Arming any earlier would
-    // make a host that is preallocated and then discarded - RN preallocates views -
-    // a registration with no composition behind it.
     addView(
       composeContent,
       LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
     )
   }
 
-  /** The component's composable. Called from [ComposeContent], never replaced. */
   @Composable
   protected abstract fun Component(model: M)
 
-  // MARK: - Hosted mode (T16)
+  // MARK: - Hosted mode
 
   /**
-   * Whether a [NitroUiHostView] composes this control instead of [composeContent].
-   *
-   * A direct-parent rule, deliberately the same one `@expo/ui` enforces with
-   * `validateHostingAncestor()`: the view above either renders us or does not. A
-   * grandchild of a Host is a plain view of its own, which keeps the surprising
-   * case (an RN `View` wrapping a control inside a Host) behaving like the
-   * unhosted control it looks like, rather than rendering in a composition two
-   * levels away that no one asked for.
-   *
-   * Read from the view tree rather than cached: RN owns when a child moves, and a
-   * flag we maintained could only be wrong after a re-parent we did not see.
+   * Whether a [NitroUiHostView] composes this control instead of [composeContent]. Only a direct
+   * parent counts. Read from the view tree because RN can re-parent a view at any time.
    */
   internal val isHostedByParent: Boolean
     get() = parent is NitroUiHostView
 
   /**
-   * Render this control into the Host's composition. Called only by
-   * [NitroUiHostView], once per child, inside that Host's `Column`.
-   *
-   * Just [Component] - no [NitroUiMeasuredRoot] and no [NitroUiTheme] of our own:
-   * the Host's composition already sits inside one theme, and a hosted control
-   * has no box to report, because Yoga is not laying it out. Recomposition stays
-   * per child: the group that observes this model is this child's own `key` scope
-   * in the Host, so flipping one Switch recomposes that Switch, not the batch.
-   * [commit] stays ours to call and still sends one apply notification - the
-   * snapshot system routes it to whichever composition is observing.
+   * Renders this control inside the Host's composition. No theme or measured root of its own:
+   * the Host provides the theme, and Yoga does not lay a hosted control out.
    */
   @Composable
   internal fun HostedContent() {
@@ -407,21 +169,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * Whether a [NitroUiHostView] may compose this control.
-   *
-   * The native half of the allowlist rule (review M2) - one control in H1, four in
-   * H2a, all seven since H2b. JS names the hostable controls in
-   * `src/components/Host/HostChildren.ts`, but React flattens components out of the
-   * native tree, so a `Picker` behind a `memo` arrives as a direct child of a Host
-   * that JS never saw a `Picker` in. Only this side can
-   * decide then, and the decision is this property: `false` on the base class, so a
-   * control opts in by overriding it and everything else - including another
-   * `<Host>`, which is a `NitroComposeHost` too - is composed by nobody and
-   * reported by [NitroUiHostView.reportUncomposableChild].
-   *
-   * `false` is the default because it is the honest answer for a control nobody has
-   * measured inside a Host: it is the state the round-1 report called "renders
-   * silently wrong", and an allowlist is what makes it a refusal instead.
+   * Whether a [NitroUiHostView] may compose this control. Decided natively because React
+   * flattens wrapper components, so JS cannot always see what becomes a Host's direct child.
    */
   internal open val isHostable: Boolean
     get() = false
@@ -430,24 +179,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   private var visibilityRequestedByRn: Int = VISIBLE
 
   /**
-   * Whether RN hid this child, so a Host must not draw it either (review S2).
-   *
-   * A Host draws its children, so RN's `display: none` cannot be honoured by hiding
-   * the child's own view - there are no pixels there to hide. It has to take the
-   * child out of the composition, or a hidden row goes on drawing while the
-   * content-sized Host shrinks by a row and clips what it still shows.
+   * Whether RN hid this child. A Host draws its children, so hiding the child's own view does
+   * nothing: the Host has to leave it out of the composition.
    */
   internal val isHiddenByReact: Boolean
     get() = visibilityRequestedByRn == INVISIBLE
 
-  /**
-   * Record what RN asked for, and tell a Host that its drawn content moved.
-   *
-   * RN never asks a view to hide: `display: none` reaches Android as `INVISIBLE`
-   * (RN 0.88's `SurfaceMountingManager.updateLayout`), and for a hosted child that
-   * has to mean "do not compose this one". Recorded before the delegate, so no hook
-   * can observe a stale answer.
-   */
   override fun setVisibility(visibility: Int) {
     val changedByRn = visibilityRequestedByRn != visibility
     visibilityRequestedByRn = visibility
@@ -457,22 +194,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
   }
 
-  /**
-   * Tell Android this control's own view has no drawing of its own to do, while a
-   * Host composes it.
-   *
-   * This is *not* what keeps a hosted child out of the way, and round 1 said it was
-   * (review S1). The child is never set to `GONE`: Fabric re-asserts the visibility
-   * it believes in on the child in every layout pass
-   * (`SurfaceMountingManager.updateLayout` ends by coercing the view to
-   * `VISIBLE`/`INVISIBLE` and laying it out at its RN frame), so a write here would
-   * be undone before the next frame was drawn. The measure gate is the mechanism:
-   * [onMeasure] declines to `0 × 0`, so the child builds no composition of its own,
-   * draws nothing and is not a hit target. It is laid out at `0 × 0` by the pass that
-   * mounts it and at its RN frame by any later pass over it - measured, F8 - which is
-   * why the frame must not be read as a place: the pixels are the Host's and the view
-   * has no content of its own.
-   */
+  // Not what hides a hosted child: Fabric re-asserts visibility and the RN frame on every
+  // layout pass, so the child is kept out of the way by measuring it 0 x 0 in [onMeasure].
   private fun applyHostedDrawFlag() {
     if (isHostedByParent) {
       setWillNotDraw(true)
@@ -480,22 +203,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * Whether this host's content is centred inside the box RN gave it.
-   *
-   * True for every control: the box is the size the sizing engine gave the control,
-   * the composable may answer something smaller (an M3 Switch is 51x31 inside a 48dp
-   * interactive box), and centring is what sits the drawing inside the frame RN
-   * believes it has. A `<Host>` overrides this (see `NitroUiHostView`): it is a
-   * container, and a container that centres its children shows the middle of a list
-   * when it is shorter than the list.
+   * Whether content is centred in the box RN gave it. A composable may be smaller than its box
+   * (a Material 3 Switch inside its 48 dp touch target). A container overrides this.
    */
   protected open val centersContent: Boolean
     get() = true
 
-  /**
-   * The composition's root: built once, for the lifetime of the instance. There
-   * is no `setContent` per props update, which is the perf contract's main rule.
-   */
+  // Built once per instance: there is no `setContent` per props update.
   @Composable
   private fun Content() {
     NitroUiTheme {
@@ -514,7 +228,6 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
   }
 
-  /** The one Compose view of this host. It never becomes the host itself - see the class docs. */
   private inner class ComposeContent(
     context: Context,
   ) : AbstractComposeView(context) {
@@ -526,42 +239,18 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     override fun onAttachedToWindow() {
       super.onAttachedToWindow()
       if (isHostedByParent) {
-        // A control moved *into* a Host mid-mount already built a composition while
-        // it was unhosted, and the flag below only stops a new one. Drop the stale
-        // one so "hosted => no composition of its own" holds for every transition
-        // and the control is composed in exactly one place. Idempotent, and a no-op
-        // when nothing was ever composed.
+        // A control that moved into a Host after composing still holds its own composition
+        // and guards. Drop them so it is composed in exactly one place.
         disposeComposition()
-        // Same for the two registrations an unhosted mount armed (H1 N4): a control
-        // that moves *into* a Host mid-mount holds an activity lifecycle observer and
-        // possibly a pre-draw listener for a composition that has just been disposed.
-        // The steady state is handled by [armCompositionStrategy] and
-        // [watchForFirstFrame] declining; this is the transition that finds them
-        // already armed. Both are idempotent for the same reason as the dispose.
         releaseOwnCompositionGuards()
       }
-      // The first moment this view has a window, which is the first moment
-      // Compose can resolve a composition against one. If Yoga already gave the
-      // control a frame - the usual case, since Fabric measures and lays out
-      // before it attaches a fresh subtree - that is everything the measure that
-      // was declined needed, so run it now rather than a frame later.
+      // The first moment with a window. If Fabric already laid this view out, run the
+      // measure that was declined.
       runPendingMeasure()
     }
 
-    /**
-     * A hosted control never builds a composition of its own.
-     *
-     * `AbstractComposeView` composes eagerly on attach by default, and attach is
-     * not something a Host can avoid - `addView` attaches its children whatever
-     * their visibility, and Fabric lays each child out from the frame C++ computed
-     * (review S1). So the flag is the seam the class offers for exactly this case -
-     * "subclasses may choose to override this property to prevent this eager initial
-     * composition". The only other trigger is the first measure, and a hosted control
-     * never gets one either: [NitroComposeHost.onMeasure] declines it before Compose
-     * sees a size spec. Both gates are load-bearing, and they are what makes it one
-     * `Composition` per Host instead of one per control - the entire point of a Host,
-     * and the difference this library measures.
-     */
+    // `AbstractComposeView` composes on attach by default. A hosted control must not build
+    // a composition of its own, and attach cannot be avoided.
     override val shouldCreateCompositionOnAttachedToWindow: Boolean
       get() = !isHostedByParent
   }
@@ -570,36 +259,21 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   /** Called by prop setters: record that something rendered changed. */
   fun markDirty() {
-    // Every setter that changes what is drawn arrives here, and only when its value
-    // actually changed (they compare first), so this is the host's one generic
-    // "the content may be different now" signal. See [contentRevision].
     contentRevision.intValue += 1
     isDirty = true
   }
 
   /**
-   * Push model writes made *outside* Compose's own event handling into the
-   * composition.
-   *
-   * A row press writes model state and returns inside Compose's input handling,
-   * which applies the snapshot its handler touched, so the press repaints on the
-   * next frame. A write from a plain UI-thread post (a `hybridRef` call, say) lands
-   * in the global snapshot with nothing to apply it: the paint would wait for the
-   * next [commit], which is a props batch. Callers that are not a Compose event call
-   * this so their write paints when an equivalent press would.
+   * Applies model writes made outside a Compose event handler or a props batch. Such a write
+   * lands in the global snapshot, and nothing repaints it until the next [commit].
    */
   fun applyModelWrites() {
     Snapshot.sendApplyNotifications()
   }
 
   /**
-   * Apply the batch. Called once, from the generated `updateState`.
-   *
-   * Snapshot writes are already visible; sending the apply notification here is
-   * what makes them land in this UI-thread turn instead of the next global apply.
-   * The mark is made whether or not anything was dirty, so that `propsApplied`
-   * counts one `updateState` on both platforms (iOS marks every commit) rather
-   * than one *visible* update on Android only.
+   * Applies the batch; called once per `updateState`. The apply notification makes the writes
+   * land in this UI-thread turn. The perf mark is made even when nothing was dirty, as on iOS.
    */
   fun commit() {
     NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_PROPS_APPLIED)
@@ -610,24 +284,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     Snapshot.sendApplyNotifications()
   }
 
-  /**
-   * Reset for reuse: the model is already reset by the Hybrid, and the flags say
-   * "this mount has rendered nothing yet". The composition was disposed by
-   * [drop], which Nitro calls first, so the next measure rebuilds it and reads
-   * this model from scratch.
-   */
+  /** Resets for reuse. [drop] has already disposed the composition; the next attach rebuilds it. */
   fun prepareForRecycle() {
-    // First, and while [perfInstanceId] still holds the mount that just ended: the pair
-    // of marks a gate counts to show recycling is live on this platform (`dropped` from
-    // [drop], `recycled` here). `NitroUiPerf.mark` returns at once for `NO_INSTANCE`, so
-    // a host that cleared its id first - which is what every component used to do, one
-    // line each - made the mark invisible.
+    // Mark before clearing the id: `NitroUiPerf.mark` ignores `NO_INSTANCE`.
     lifetime.onRecycle()
     NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_RECYCLED)
     perfInstanceId = NitroUiPerf.NO_INSTANCE
-    // No strategy is re-armed and the dropped window stays shut, deliberately: this is
-    // pool entry, and the pool is where a host may never be reused. [onAttachedToWindow]
-    // arms the guard and opens the host to composing again, for the mount that follows.
+    // Nothing is armed here: RN may empty its recycling pool without ever reusing this view.
     model.reset()
     isDirty = true
     isMeasurePending = true
@@ -636,8 +299,6 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     heldContentSize = null
     contentSize = null
     overWidePlacement.reset()
-    // A recycled mount still paints its first frame for itself, and has to watch
-    // for it again: the listener it registered for the previous mount is gone.
     hasMarkedFirstFrame = false
     firstFrameWatchRegistered = false
     everArmedStrategy = false
@@ -646,43 +307,17 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * Release the composition.
-   *
-   * Called from `onDropViewInstance`, which RN uses for a real unmount *and* as
-   * the front door of recycling (see the class docs), so this is not only the
-   * unmount path. Disposing is still the right call: with the recycling flag
-   * off - the default - every call here is an unmount, and a composition left
-   * alive would be retained until the activity dies.
-   *
-   * Disposing is not enough on its own. `AbstractComposeView` installs a
-   * [ViewCompositionStrategy] when it is set and uninstalls it from nowhere else -
-   * not from `disposeComposition()`, not from a detach - so the strategy armed for a
-   * mount outlives its composition by the whole life of the activity. What it
-   * installs is an observer on the activity's `LifecycleRegistry`, which holds its
-   * observers strongly: one unmounted host, one strong path
-   * `activity -> LifecycleRegistry -> observer -> ComposeView`, holding the view,
-   * its `AndroidComposeView` and the disposed composition's residue - three `View`s
-   * per control (host, `ComposeContent`, `AndroidComposeView`) and ~42 KiB. Measured
-   * on the churn gate at 8.18 MiB retained per cycle of 200 Switches, which is how
-   * `mount.<component>:nitro-ui:200` ran a 192 MiB heap out
-   * (`docs/tasks/A1-baselines.report.md`,
-   * `docs/tasks/B1-android-mount-oom.report.md`). Hence [unarmCompositionStrategy].
+   * Disposes the composition. RN calls this for a real unmount and as the first step of
+   * recycling, so the composition never survives a recycle.
    */
   fun drop() {
-    // The mount is over, and this is the one call site every component's `onDropView`
-    // funnels through - unmount and recycle-front-door both. A `dropped` with no
-    // `recycled` after it is a real unmount; with one, the instance went to the pool.
     lifetime.onDrop()
     NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_DROPPED)
     composeContent.disposeComposition()
-    // After the dispose, not before: a strategy must be set with no composition
-    // in flight, and the guard is worth nothing once the composition is gone.
+    // `disposeComposition()` does not uninstall the composition strategy, whose observer on
+    // the activity's lifecycle would hold this view until the activity dies.
     unarmCompositionStrategy()
-    // Same rule as the strategy, different registrar: a pre-draw listener is held
-    // by the observer it was registered on, which is the *window's* when the host
-    // was attached, and a window outlives a control. A host dropped before its
-    // listener ran has to take it out itself or the window keeps the host - the
-    // same retention shape as the strategy, one per mount.
+    // A pre-draw listener is held by the window's observer, which outlives this view.
     unregisterPreDraw(firstFrameWatch)
     firstFrameWatch = null
     firstFrameWatchRegistered = false
@@ -695,19 +330,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     releaseSizingInstance()
   }
 
-  /**
-   * Install [DisposeOnLifecycleDestroyed] as the composition's guard.
-   *
-   * Compose's own default disposes on detach, which RN's detach behaviour makes
-   * wrong for us (see [onAttachedToWindow]), and the alternative
-   * `DisposeOnViewTreeLifecycleDestroyed` resolves the owner from the view tree -
-   * which is not the activity whenever something else owns the view tree, as
-   * react-native-screens does for a screen's fragment. The strategy is the one
-   * Compose offers for a view with a 1-1 relationship with a [LifecycleOwner], and
-   * we do have that - for one mount. Keeping it installed after the mount is what
-   * leaks, so it is armed at attach and taken out again in
-   * [unarmCompositionStrategy]; no-op without a `LifecycleOwner`, as before.
-   */
+  // Compose's default strategy disposes on detach, but RN detaches views it will re-attach.
+  // `DisposeOnViewTreeLifecycleDestroyed` is wrong too: the view-tree owner can be a
+  // fragment (react-native-screens), not the activity.
   private fun armCompositionStrategy() {
     if (strategyArmed) {
       // Re-attaching a host that was detached without being dropped (a screen
@@ -715,22 +340,11 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       return
     }
     if (isHostedByParent) {
-      // A hosted child builds no composition of its own ([ComposeContent.
-      // shouldCreateCompositionOnAttachedToWindow] and [onMeasure] both decline it),
-      // so there is nothing for this guard to guard: the observer it installs is
-      // keyed to *this* view's composition, and the composition that can leak here
-      // is the Host's - which arms one for itself, as the attach of a view it owns.
-      // Arming one per hosted child was H1's follow-up N4: 200 hosted Switches meant
-      // 200 `LifecycleRegistry` registrations and 200 removals per mount, to protect
-      // nothing. `parent` is already the Host here - `ViewGroup.addViewInner` assigns
-      // it before it dispatches the attach - so this is decided, not guessed.
+      // A hosted child builds no composition of its own, so there is nothing to guard.
       return
     }
     val owner = owner ?: return
-    // `installFor` throws rather than skip when the owner is already DESTROYED, and
-    // a view can be attached while an activity is being torn down (a surface that is
-    // stopping still lays its tree out). A guard for a dead activity is worth nothing
-    // regardless, so refuse it here instead of paying for its exception.
+    // `installFor` throws for a DESTROYED owner, and a view can attach during activity teardown.
     if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
       return
     }
@@ -739,28 +353,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     everArmedStrategy = true
   }
 
-  /**
-   * Uninstall whatever strategy is installed, by installing one that observes
-   * nothing.
-   *
-   * Setting a strategy runs the previous strategy's uninstaller first, and that is
-   * the only call site for it in `AbstractComposeView` - which is why [drop] has to
-   * do this itself rather than trust `disposeComposition()` to let the host go.
-   * [DisposeWithTheHost] then leaves nothing registered: a dropped host is not in
-   * the activity any more, whether it is reused from the pool (whose only way back
-   * is an attach, and [onAttachedToWindow] arms) or thrown away.
-   */
+  // A strategy is only uninstalled when another is set, so set one that observes nothing.
   private fun unarmCompositionStrategy() {
     composeContent.setViewCompositionStrategy(DisposeWithTheHost)
     strategyArmed = false
   }
 
-  /**
-   * Give up the two registrations that only this view's *own* composition needs.
-   *
-   * The pair [drop] releases, minus the sizing bookkeeping: this is for a control that
-   * is still mounted and still has state, but is no longer the one drawing itself.
-   */
   private fun releaseOwnCompositionGuards() {
     unarmCompositionStrategy()
     unregisterPreDraw(firstFrameWatch)
@@ -768,21 +366,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     firstFrameWatchRegistered = false
   }
 
-  /**
-   * What a harness asks about (F6): `drops=<n> recycles=<m> measuresAfterDrop=<n>
-   * layoutsAfterDrop=<n> giveUps=<n> floatingFlushes=<n>`.
-   *
-   * Only the first two are about this object. The other four are process-wide totals —
-   * deliberately not per-host, because the run whose leak-path question they answer is a
-   * churn of controls this probe has no handle for: a per-host counter on the 200 dropped
-   * Switches could never be read by anything, and the question B1 asked is whether the
-   * branch happened *anywhere in the process*. A freshly mounted host contributes
-   * nothing to them, so the numbers a test reads are the process's, and it is the one
-   * probe line a harness can read without a new native surface.
-   *
-   * Neither per-object counter is cleared by [prepareForRecycle]; see [lifetimeDrops]
-   * for why that is the entire mechanism.
-   */
+  /** Read by the test harness. Only `drops` and `recycles` are per host, not process-wide. */
   internal fun lifetimeReport(): String =
     "drops=${lifetimeDrops} recycles=${lifetimeRecycles}" +
       " measuresAfterDrop=${measuresAfterDrop}" +
@@ -791,27 +375,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       " floatingFlushes=${floatingFlushSchedules}"
 
   /**
-   * What a harness asks about (H1 N4): the guards this mount armed for a composition of
-   * its own, as one line - `strategy` for an installed [ViewCompositionStrategy] (the
-   * activity `LifecycleRegistry` observer), `preDraw` for the first-frame listener once
-   * it is on its observer.
-   *
-   * The line has two halves, `ever|live:<live>`:
-   *
-   * - the **ever** half is what this mount has armed at any point, surviving the live
-   *   flags going false again. Arming is what costs, and a first-frame listener that has
-   *   already marked is still a listener that was armed and had to be taken out; a probe
-   *   that read only the live pair could not tell "never armed" from "armed and
-   *   released", which made it a race with the first frame - round 1's mutation of the
-   *   hosted early-return stayed green under a live-only probe for exactly that reason.
-   * - the **live** half is what is installed *now*, which is the only way to see the
-   *   other direction: a control that moves into a Host mid-mount has armed both and must
-   *   give both back ([releaseOwnCompositionGuards]). Without this half that release path
-   *   could be deleted and nothing would notice.
-   *
-   * So a hosted control answers `|live:` - nothing armed, nothing installed - and the same
-   * control outside a Host answers `strategy,preDraw|live:strategy` once its first frame
-   * has been marked. Read-only; both halves answer from fields the arming writes.
+   * Read by the test harness: the guards this mount ever armed, then those installed now, as
+   * `<ever>|live:<live>`. Each half lists `strategy` and/or `preDraw`.
    */
   internal fun armedGuardsReport(): String {
     val ever = mutableListOf<String>()
@@ -831,18 +396,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     return ever.joinToString(",") + "|live:" + live.joinToString(",")
   }
 
-  /**
-   * Take [watch] off the observer that holds it, if it is still on it.
-   *
-   * The observer captured at registration is the one holding the listener, so that
-   * is the one to ask - while it is alive. A `ViewTreeObserver` dies when a
-   * detached view's floating observer is merged into a window's, and the merge
-   * copies the listeners into the live destination, which is the current observer
-   * for a view that is now attached: hence the fallback. A merged listener that
-   * ended up in some *other* window's observer is beyond reach from here, and
-   * `ViewTreeObserver` throws for a listener it does not hold, so this stays a
-   * best-effort removal rather than one that can crash an unmount.
-   */
+  // Removes through the observer captured at registration. If that one died in a merge into
+  // a window's observer, the listener moved to the view's current observer, so try that.
   private fun unregisterPreDraw(watch: PreDrawWatch?) {
     if (watch == null) {
       return
@@ -853,8 +408,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       } else if (isAttachedToWindow) {
         viewTreeObserver
       } else {
-        // The one case with no way back from here, and it is now counted rather than
-        // assumed: see `giveUpUnregisters`.
+        // Detached and the captured observer is dead: no reachable observer holds the listener.
         giveUpUnregisters += 1
         return
       }
@@ -865,21 +419,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
   }
 
-  /**
-   * Tell the sizing engine this instance is finished, then forget its id.
-   *
-   * The engine's per-instance maps otherwise keep an entry for every mount the
-   * process ever made, which leaks for the life of a list that scrolls: expiry of
-   * the Fabric `State` is not a signal it can wait for (review S3). Idempotent, so
-   * the recycle path (which goes through [drop] first) is fine.
-   */
+  // The engine keeps per-instance entries until told to forget them. Safe to call twice.
   private fun releaseSizingInstance() {
     val instanceId = sizingInstanceId
     sizingInstanceId = NitroUiSizing.NO_INSTANCE
     lastReportedSize = null
-    // A flush listener that never ran would leave this true forever, and a host
-    // that is recycled would then never schedule a flush again. [drop] has already
-    // taken the listener off its observer; clearing the flag keeps the two in step.
+    // A flush listener that never ran would otherwise block every flush after a recycle.
     flushScheduled = false
     if (instanceId != NitroUiSizing.NO_INSTANCE) {
       NitroUiSizing.forget(instanceId)
@@ -889,29 +434,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   // MARK: - View lifecycle
 
   override fun onAttachedToWindow() {
-    // The dropped window closes here and not in [prepareForRecycle]: a host may only
-    // compose when it has a window and a strategy, and this is the one moment both are
-    // true. Pool entry has neither, and a pooled host may never be reused, so opening
-    // the window there is what let the post-drop guard be deleted on Android without
-    // anything noticing (see [NitroUiLifetimeGate]).
+    // Composing is allowed again only here, where the host has both a window and a strategy.
     lifetime.onAttach()
-    // The guard goes on before anything can compose, and this is the first moment
-    // it can: the child's attach - which is where `AbstractComposeView` creates its
-    // composition - is dispatched by `super`, and a measure while detached is
-    // declined by [onMeasure]. Arming here instead of in [prepareForRecycle] is
-    // what keeps a host that is in RN's recycling pool out of the activity's
-    // `LifecycleRegistry`: the pool is unbounded and RN empties it without a word
-    // to the views inside it, so a guard installed at pool entry would be a leak
-    // with no unmount to explain it (review B1 M1).
+    // Arm before `super`, which dispatches the child's attach, where the composition is created.
     armCompositionStrategy()
-    // Compose needs both owners and fails if either is missing, so fill any gap
-    // first - and fill each gap separately, since a parent could set one and not
-    // the other. Usually `ReactActivity`/react-native-screens already set both
-    // (RN 0.88's `Modal` is a `ComponentDialog`, whose window does too), so this
-    // stays a fallback for a parent that provides neither. Unlike Expo we never
-    // override an owner that is already set - it may be a fragment's, not the
-    // activity's. Deliberately before `super`: the child's attach is dispatched
-    // after this returns, and it resolves the owners as it attaches.
+    // Compose needs both owners. RN and react-native-screens usually set them; fill only a
+    // gap, and never replace one that is set (it may be a fragment's). Before `super`, because
+    // the child resolves the owners as it attaches.
     if (owner != null && findViewTreeLifecycleOwner() == null) {
       setViewTreeLifecycleOwner(owner)
     }
@@ -919,52 +448,30 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       setViewTreeSavedStateRegistryOwner(savedStateOwner)
     }
     super.onAttachedToWindow()
-    // After `super`: a hosted child is attached by its Host's `addView`, so by now
-    // `parent` is the Host and this is the first moment the answer is known.
     applyHostedDrawFlag()
     watchForFirstFrame()
   }
 
   override fun onDetachedFromWindow() {
-    // A control that leaves the window also stops being composited, whether or not
-    // it is still a child of the Host (a list scrolling off detaches both). Re-read
-    // here, so a control that moved out of a Host is not left flagged by the attach
-    // that went in.
     applyHostedDrawFlag()
     super.onDetachedFromWindow()
   }
 
   // MARK: - Measuring
 
-  /**
-   * Decline to measure the Compose view while this host has no window.
-   *
-   * A `ViewGroup` measured before its window is normal in Android and simply
-   * means "nothing yet"; the trouble is only that Compose answers a measure by
-   * building a composition, and a composition needs the window's
-   * `ViewRecomposer`. The size RN gets here is ignored anyway: Fabric lays this
-   * view out from the frame C++ computed, it does not read the measured dimension.
-   */
+  // Compose answers a measure by building a composition, which needs a window. The size set
+  // here is not used: Fabric lays this view out from the frame C++ computed.
   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
     if (lifetime.declineMeasure()) {
-      // B1 review N5: `stopSurface` drops views before the root is taken out, so a
-      // dropped host can still be measured while it is attached. Its composition is
-      // disposed and its strategy is un-armed, so a measure here would build a
-      // composition with nothing to dispose it - the leak the drop path exists to
-      // prevent, arriving through the other door. Counted into the process-wide total
-      // *before* the decline, so the number answers "did the path happen" and not merely
-      // "did the guard fire" ([processMeasuresAfterDrop]).
+      // A dropped host can still be measured while attached (`stopSurface` drops views before
+      // it removes the root). Measuring would build a composition that nothing disposes.
       processMeasuresAfterDrop += 1
       isMeasurePending = true
       setMeasuredDimension(0, 0)
       return
     }
     if (isHostedByParent) {
-      // A Host draws us; measuring would build a second composition for content
-      // that is already in the Host's. Fabric measures every node it lays out,
-      // whatever the view's visibility, so this is the gate that matters: declining
-      // here is what keeps one `Composition` per Host instead of one per control, and
-      // the 0 x 0 it measures is what lays the child out of the way (review S1).
+      // A Host composes this control; measuring would build a second composition for it.
       isMeasurePending = true
       setMeasuredDimension(0, 0)
       return
@@ -978,53 +485,15 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     super.onMeasure(widthMeasureSpec, heightMeasureSpec)
   }
 
-  /**
-   * Record that this content overruns the box it was just measured under, or that it
-   * no longer does, and ask for the measure that can place it at the box's width.
-   *
-   * Called by [NitroUiMeasuredRoot]'s measure block, in the pass that found out, and
-   * nowhere else. That is the whole point of it being a callback rather than a flag
-   * this host reads after `super.onMeasure`, which is how the first version of the
-   * placement pass worked: a host's `onMeasure` runs only when Fabric measures it with
-   * a spec it has not seen (`View.measure` skips `onMeasure` for one it has), and the
-   * passes that matter most never come through there at all - the one after a prop
-   * batch, the one an armed sizing key change asks for, the one Compose runs from
-   * `dispatchDraw` because a child changed size. An overrun noticed by one of those
-   * and left for a later `onMeasure` is an overrun nobody hears about, because nothing
-   * else is going to measure a view whose box did not move.
-   *
-   * The token is the same lever an armed sizing key change uses (see
-   * [remeasureToken]), and this is a write to the state the calling measure block
-   * reads, from inside that block. Compose routes that as a request to measure the node
-   * again in three steps, not one: the write schedules the global apply notification, that
-   * notification runs on `AndroidUiDispatcher` and invalidates the node, and the
-   * invalidation is answered by the next frame. Which is exactly the ask -
-   * a later measure of this node, on the UI thread, off the current pass. It is only made
-   * when there is something to place, and the bounded pass that answers it writes nothing,
-   * so the asking stops with that pair.
-   *
-   * One traversal's worth of the unbounded drawing does reach the screen first, and it
-   * cannot be avoided here: a `Measurable` may be measured exactly once per pass
-   * (`MeasurePassDelegate` throws for a second `measure()`, checked against the
-   * bytecode of Compose UI 1.12.1), so the pass that learns of an overrun has nothing
-   * else to place. It is why a prop change to a fitted control costs a clipped frame,
-   * and only ever for a control whose content does not fit.
-   *
-   * Only the arming is written here. The two stamps beside it belong to the measure
-   * block, the only place that knows both the box the content was asked under and the
-   * content the composition actually rendered.
-   */
+  // Called from the measure block that found (or cleared) an overrun. Writing the token that
+  // block reads schedules one more measure of the node, which places the content at the box's
+  // width. It cannot happen in this pass: a `Measurable` may be measured only once per pass.
   private fun noteOverWideContent(overruns: Boolean) {
     overWidePlacement.armed.value = overruns
     if (overruns) remeasureToken.intValue += 1
   }
 
-  /**
-   * Same rule as [onMeasure], other way round: a frame can also arrive before the
-   * window does, which is what RN does to a `Modal`'s tree. Lay out whatever has
-   * been measured, and if the window is here now, measure first so that there is
-   * something to lay out.
-   */
+  // RN can deliver a frame before the window (a `Modal`'s tree). Measure first if one is pending.
   override fun onLayout(
     changed: Boolean,
     left: Int,
@@ -1033,19 +502,12 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     bottom: Int,
   ) {
     if (lifetime.declineLayout()) {
-      // N5 again, the other door: `ViewGroup.layout` can reach a dropped host that is
-      // still attached without measuring it first, so a counter on [onMeasure] alone
-      // would call the case unreachable when it only went unmeasured. Nothing here is
-      // worth laying out - the composition is disposed - and `measureNow` below would
-      // only ask a dropped host to compose.
+      // A dropped host that is still attached can be laid out without being measured first.
       processLayoutsAfterDrop += 1
       return
     }
     if (isHostedByParent) {
-      // Nothing to lay out: the only child is the never-measured `composeContent`,
-      // and the box RN computed is decorative - Compose places the control inside
-      // the Host. Also skips the sizing-key block, which is right for the same
-      // reason: a hosted control measures nothing, so it has no report to make.
+      // The Host places this control; its only child view was never measured.
       return
     }
     if (isMeasurePending && isAttachedToWindow) {
@@ -1053,11 +515,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
     super.onLayout(changed, left, top, right, bottom)
     if (changed && sizingKeyChangePending) {
-      // This frame is the engine's answer for the new key, so whatever the control
-      // now measures is a report about the right configuration: reset the dedupe and
-      // ask for the measure that produces it (review F1). `changed` matters twice -
-      // it proves the engine has answered, and a key change that moved no box has
-      // nothing to correct.
+      // This layout carries the engine's box for the new key. Clear the dedupe and ask for a
+      // measure, so the control reports its size under that key.
       sizingKeyChangePending = false
       lastReportedSize = null
       overWidePlacement.reset()
@@ -1065,14 +524,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
   }
 
-  /**
-   * Measure and lay the Compose view out with the frame RN gave this host.
-   *
-   * Called at the first moment there is both a window and a frame, from the
-   * child's attach and from [onLayout] - see the class docs. Only [isMeasurePending]
-   * decides, so the two callers cannot double-measure: a measure this host
-   * completes clears the flag, and a declined one (no window) sets it again.
-   */
+  // Nothing else measures the Compose view: Fabric measures once per layout update, and
+  // `requestLayout()` stops at `ReactViewGroup`, whose `onMeasure` does nothing.
   private fun runPendingMeasure() {
     if (isHostedByParent) {
       return
@@ -1085,7 +538,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 
   private fun measureNow(width: Int, height: Int) {
     if (width == 0 || height == 0) {
-      // No frame yet. The layout that gives this view one is the other caller.
+      // No frame yet; [onLayout] measures when one arrives.
       return
     }
     measure(
@@ -1095,25 +548,13 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     layout(left, top, right, bottom)
   }
 
-  /**
-   * Mark the first frame this mount draws. The pre-draw callback is the closest
-   * thing to a frame boundary available to a `ViewGroup` here, and the listener
-   * removes itself once it has marked - but only then: a pass that finds a size
-   * correction still queued is a frame about to be cancelled by
-   * [scheduleSizingFlush], so unregistering there would mean this mount never
-   * marks a first frame at all (measured: no `firstFrame`, no `drew` trace event).
-   * [firstFrameWatchRegistered] keeps one listener per mount, since attaching a
-   * view repeatedly would otherwise stack them and record the same box twice.
-   */
+  // Marks the first frame this mount draws, from a pre-draw listener that then removes itself.
   private fun watchForFirstFrame() {
     if (hasMarkedFirstFrame || firstFrameWatchRegistered) {
       return
     }
     if (isHostedByParent) {
-      // Same rule as [armCompositionStrategy], different registrar (H1 N4). What this
-      // listener marks is the first frame *this view* drew, and records the box it
-      // drew into (D24: for a hosted child that box is `0 x 0`, and the pixels are the
-      // Host's). The Host arms one for itself, which is the frame anyone can read.
+      // A hosted child draws nothing itself; the Host marks its own first frame.
       return
     }
     val observer = viewTreeObserver
@@ -1126,21 +567,14 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       object : ViewTreeObserver.OnPreDrawListener {
         override fun onPreDraw(): Boolean {
           if (NitroUiSizing.hasPendingReports()) {
-            // A size measured this turn has not reached Yoga yet, and this frame
-            // is the one [scheduleSizingFlush] cancels when it does flush. Staying
-            // registered is what makes "first frame" mean the first frame a user
-            // could have seen; the next pass decides again. Which of the two
-            // listeners the observer runs first is not something to rely on, so
-            // this does not: pending reports are enough either way.
+            // A size correction is still queued, so [scheduleSizingFlush] will cancel this
+            // frame. Stay registered: the first frame is the first one a user could see.
             return true
           }
           unregister()
           hasMarkedFirstFrame = true
           NitroUiPerf.mark(perfInstanceId, NitroUiPerf.KIND_FIRST_FRAME)
-          // What this frame actually drew into, for the sizing trace: the host
-          // is the RN view, so its size here is Yoga's box in px. `onPreDraw`
-          // runs after layout, so the box is final for this frame. dp, because
-          // that is the unit the engine and the JS side speak.
+          // The host's size after layout is Yoga's box in px; the engine works in dp.
           val density = resources.displayMetrics.density
           if (density > 0f) {
             NitroUiSizing.recordDrawnSize(
@@ -1163,23 +597,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * Forget the size the engine already has from this host, so the next measure is
-   * reported even when it matches the last one, and ask for that measure.
-   *
-   * For a component whose *configuration* changed, where the new configuration may
-   * measure the same size as the old one. The engine has no answer for a key it has
-   * not seen, so it lays the instance out at the component's declared fallback, and
-   * this instance's own report is the only thing that can move the box back. The
-   * epsilon in [reportToSizingEngine] compares with the size last reported - which
-   * belongs to the configuration being replaced - so without this the correcting
-   * report is the one it skips and the instance stays at the fallback, control
-   * centred inside it (review F1: setting `systemImage` on Android measures the same
-   * size, and its setter does not even recompose anything).
-   *
-   * Both halves wait for the layout that carries the new box, for the reason on
-   * [remeasureToken]. An instance that has never measured has reported nothing, so
-   * there is nothing to reset and its own first measure covers it - that is why the
-   * first key of a mount does not arm this.
+   * Call when the configuration behind the sizing key changed. The new configuration may
+   * measure the same size as the old one, and the dedupe in [reportToSizingEngine] would then
+   * skip the report the engine needs for the new key. Takes effect at the next layout.
    */
   fun noteSizingKeyChanged() {
     if (contentSize == null) {
@@ -1189,13 +609,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * Stop reporting sizes until the next props batch lands (see
-   * [sizingReportsHeld]), which the component calls the moment it paints a
-   * user's choice.
-   *
-   * The pair is the whole rule a report has to respect: it may only be filed under
-   * a key that names the content it measured. Between the choice and the batch that
-   * re-keys the instance, that key names the content being replaced.
+   * Stops size reports until [releaseSizingReports]. Call when native changes the content
+   * before React has sent the matching sizing key.
    */
   fun holdSizingReports() {
     sizingReportsHeld = true
@@ -1203,37 +618,9 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   }
 
   /**
-   * End the hold at the end of the props batch the choice was waiting for - so call
-   * it after the setters have been interpreted - and file what the hold held when
-   * that batch is the batch the held size belongs to. The caller decides that: it has
-   * just interpreted the index React sent, which may be the choice, or a different
-   * one, or the same one it never gave up on.
-   *
-   * The held size is filed here rather than re-measured, because a measure asked for
-   * at this moment answers the wrong content both ways round. Asked for here, it can
-   * run in a pass that precedes the batch's own recomposition - a props batch measures
-   * this host before the recomposition it belongs to, which is the whole reason
-   * [contentRevision] exists - so it reports the title the choice replaced under the
-   * key that replaces it: the damage the hold exists to prevent. And on Android it can
-   * also report nothing at all: content wider than its box is placed *at* the box, and
-   * a bounded pass answers the box's width rather than the content's, so it never
-   * reaches [NitroUiMeasuredRoot]'s `record` gate. Both were measured on
-   * `nitroui_t01`: asking for a measure at the release left the real-input picker laid
-   * out at its old width, ellipsising the title it was painting for the rest of the
-   * mount, because every pass after it answered at the box; and where the pass did run
-   * first, it filed the replaced title's width under the new key - the frame at the
-   * declared fallback that "re-keys the size of an uncontrolled pick" in
-   * `Picker.harness.tsx` refuses.
-   *
-   * Filing the held size needs neither half. It is the size of the content the choice
-   * painted, it is filed under the key the batch brought, and a batch that held nothing
-   * changes nothing here, so no ordinary props turn pays anything. A choice React
-   * refused comes through with `heldSizeBelongsToBatch` false and is dropped unfiled:
-   * the configuration the key names is the one the engine already has, measured before
-   * the choice, and the rollback reports it again in the ordinary course. An accepted
-   * choice whose new title measures what the old one measured held nothing back either,
-   * and that case is a key change like any other - the key setter already armed the
-   * correction this host owes it (see [noteSizingKeyChanged]).
+   * Ends the hold; call after the props batch's setters have run. Files the size measured
+   * during the hold when [heldSizeBelongsToBatch] says the batch describes that content.
+   * A fresh measure here could run before the batch recomposes and report the old content.
    */
   fun releaseSizingReports(heldSizeBelongsToBatch: Boolean) {
     if (!sizingReportsHeld) {
@@ -1245,9 +632,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     if (held == null || !heldSizeBelongsToBatch) {
       return
     }
-    // Clearing the dedupe is not incidental: the size it holds belongs to the
-    // configuration this batch replaced, and a new title that happens to measure the
-    // same width still has to reach an engine that has never seen this key.
+    // The dedupe holds the previous configuration's size; an equal size must still be filed.
     lastReportedSize = null
     reportToSizingEngine(held)
   }
@@ -1269,15 +654,6 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     }
   }
 
-  /**
-   * Hand the measured size to the sizing engine, which decides whether it deserves
-   * a Fabric state update at all.
-   *
-   * The engine drops a report that agrees with its cache, so a pre-warmed mount
-   * costs no commit; the epsilon here only skips the JNI call. When a correction
-   * *is* queued, the frame that is about to be drawn would show the old size, so
-   * [scheduleSizingFlush] asks for it to be skipped.
-   */
   private fun reportToSizingEngine(size: NitroUiDpSize) {
     val instanceId = sizingInstanceId
     if (!NitroUiSizing.isSized(instanceId)) {
@@ -1295,18 +671,8 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     scheduleSizingFlush()
   }
 
-  /**
-   * Apply the queued size corrections before the next frame is drawn.
-   *
-   * Returning `false` from `onPreDraw` cancels that one draw pass, which is how
-   * Android skips the wrong-size frame: the correction is a Fabric state update,
-   * so Yoga re-lays-out and RN draws again with the right frame. One listener per
-   * host, dropped as soon as it has run; [flushScheduled] keeps a burst of reports
-   * from stacking listeners up. A host that detaches first does not get a free pass:
-   * the listener it left on that window's observer is removed by [drop], because the
-   * observer outlives the host and would otherwise hold it (review B1 M2). A lost
-   * flush only means one frame drawn at the fallback size.
-   */
+  // Applies queued size corrections before the next frame. Returning false from `onPreDraw`
+  // cancels that draw, so the frame at the old size is never shown.
   private fun scheduleSizingFlush() {
     if (flushScheduled) {
       return
@@ -1316,9 +682,7 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       return
     }
     if (!isAttachedToWindow) {
-      // The precondition of the leak B1 filed as "near-unreachable": a listener on a
-      // floating observer, which dies when it merges into a window's. Counted so the
-      // claim stays a measurement; the listener itself is still removed by [drop].
+      // The listener goes on a floating observer, which dies when it merges into a window's.
       floatingFlushSchedules += 1
     }
     flushScheduled = true
@@ -1333,54 +697,22 @@ abstract class NitroComposeHost<M : NitroUiModel>(
       }
     flushWatch = PreDrawWatch(listener, observer)
     observer.addOnPreDrawListener(listener)
-    // A pre-draw listener only runs when the window next traverses, and a quiet
-    // window never decides to do that on its own: the listener above is a request
-    // to be consulted at the next draw, not a request for one. A report that
-    // arrives after an idle window's last draw - measured with a control inside
-    // an RN `Modal`, whose dialog stops drawing once presented - would otherwise
-    // leave its correction queued until some unrelated redraw came along.
-    // `postInvalidateOnAnimation` is the cheapest traversal request that reaches
-    // the window this host actually lives in (a `Modal` host's observer is the
-    // dialog's, so anything rooted in the main window would miss it entirely):
-    // it is vsync-aligned, coalesces with any invalidation already pending, and
-    // its cost is usually cancelled outright, because a flush that applies a
-    // correction returns `false` from `onPreDraw` and this very frame is skipped.
-    // `requestLayout()` would also traverse, but re-measures the native subtree
-    // for a size the traversal is about to correct anyway; a bare
-    // `postOnAnimation` block runs without scheduling a traversal, so it does
-    // not guarantee the listener is ever reached.
+    // A pre-draw listener does not request a draw, and an idle window (an RN `Modal` once
+    // presented) never draws again by itself. This is the cheapest request that reaches the
+    // window this host is in; `requestLayout()` would re-measure the native subtree.
     postInvalidateOnAnimation()
   }
 
-  /**
-   * Font scale, screen size, locale or density changed: every cached size was
-   * measured under the old environment, so all of them are suspect - not just this
-   * view's (`docs/architecture/sizing.md`). Compose re-measures the content by
-   * itself after a configuration change, and the new measure arrives as a report.
-   */
   override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
     super.onConfigurationChanged(newConfig)
     lastReportedSize = null
-    // A new font scale or locale changes what the content wants, which is the one
-    // thing the sticky placement flag must not hide: the next measure has to ask the
-    // unbounded question again to find out.
+    // Font scale or locale can change what the content wants: ask the unbounded question again.
     overWidePlacement.reset()
-    // ...and something has to *be* that next measure. Compose re-measures for its own
-    // reasons after a configuration change, but it is not obliged to re-measure a node
-    // whose measured size it has no reason to doubt, and the arming lost above is only
-    // re-made by a pass that asks the unbounded question. Ask for that pass.
+    // Compose need not re-measure a node whose size it has no reason to doubt.
     remeasureToken.intValue += 1
-    // Only the parts of a configuration that can move a control's size belong in
-    // the signature. A rotation is a configuration change that moves no size, and
-    // this fires once per mounted view, so bumping unconditionally would clear a
-    // cache another control had just filled (review S2). Compose re-measures the
-    // content by itself after a real change, and the new measure arrives as a
-    // report; the engine decides whether the epoch moves.
-    // `LocaleList` is not an `Iterable`, so the tags come out as the platform
-    // already renders them: one comma-separated string, in priority order.
-    // The dynamic colours come from resource overlays, and a configuration
-    // change can swap them (night mode certainly does). Cheaper to rebuild the
-    // one scheme than to key it on every part of a Configuration.
+    // Only what can move a control's size goes in the signature: a rotation moves none, and
+    // this runs once per mounted view. Dynamic colours come from resource overlays that a
+    // configuration change can swap.
     NitroUiColorSchemes.invalidate()
     val locales = newConfig?.locales?.toLanguageTags() ?: ""
     NitroUiSizing.invalidateEnvironmentIfChanged(
@@ -1392,89 +724,22 @@ abstract class NitroComposeHost<M : NitroUiModel>(
     /** Sub-dp wobble that is not a size change. */
     private const val SIZING_EPSILON_DP = 0.5
 
-    /**
-     * Times **any** host in this process declined a measure because it was dropped.
-     *
-     * Process-wide for the same reason as [giveUpUnregisters]: the question B1's review
-     * N5 asks is whether the path exists at all, and the host whose guard fired is the
-     * one object a harness holds no handle for — a per-host count of it could only be
-     * read through the leaked view itself. Reported by [lifetimeReport], so any run can
-     * raise it and none can quietly leave it at zero.
-     *
-     * `@Volatile` because the four totals here are written by the view system, on the UI
-     * thread, and read through [lifetimeReport] by a harness call that arrives on another
-     * one: without it the reader is not promised a writer's value, and a gate that read a
-     * stale zero would pass for the wrong reason. The increments are not atomic either, so
-     * these numbers are for "did it ever happen", never a rate to be divided.
-     */
+    // Test-harness counters, totalled across every host in the process. `@Volatile` because
+    // they are written on the UI thread and read from another; the increments are not atomic.
     @Volatile internal var processMeasuresAfterDrop = 0
 
-    /// [processMeasuresAfterDrop], for the layout pass.
     @Volatile internal var processLayoutsAfterDrop = 0
 
-    /**
-     * Times [unregisterPreDraw] had to give up: the captured observer was dead **and**
-     * this host was detached, so no observer it can reach holds the listener.
-     *
-     * A process-wide total, not a per-host count, because the branch is about the one
-     * leak shape this file cannot close from here (see the KDoc's last sentence), and
-     * the question is whether that shape ever happens rather than how often one host
-     * sees it. B1 measured the *divergent-observer* case at 0 of 3200 removals; this
-     * counter is the permanent version of that measurement - a harness run that leaves
-     * it at 0 is a run in which the unreachable branch stayed unreachable, and a
-     * non-zero value is a live leak path with a name.
-     *
-     * `@Volatile` for the same reason as [processMeasuresAfterDrop].
-     */
     @Volatile internal var giveUpUnregisters = 0
 
-    /**
-     * Times a sizing flush was scheduled while this host had no window, so its listener
-     * went on a floating observer.
-     *
-     * The precondition of the "near-unreachable listener leak" B1 filed (schedule while
-     * detached, then attach, then detach before a frame, then drop). Counted as a
-     * process-wide total for the same reason as [giveUpUnregisters], `@Volatile` for the
-     * same reason as the two post-drop totals.
-     */
     @Volatile internal var floatingFlushSchedules = 0
   }
 }
 
 /**
- * The library's Material theme: Material 3 Expressive - its motion scheme, and its
- * shapes and type as Material defines them - over dynamic colour on Android 12+ and
- * the default M3 schemes below, both following the system dark mode (D39).
- *
- * The app can opt out to the baseline Material 3 theme, process-wide
- * ([NitroUiMaterialTheme], `setMaterialTheme('baseline')` in JS).
- *
- * **One call site, whatever the setting.** The setting only chooses the motion scheme
- * handed to the one `MaterialExpressiveTheme` below. Two call sites - one theme
- * composable per setting - would be two different groups. Switching would then dispose
- * every control's composition and build it again: a presented sheet ends its
- * presentation, a focused field loses its focus and its IME, an open menu closes and a
- * drag loses its end (X18 fix round 1). With one call site a switch changes values and
- * recomposes; nothing is disposed.
- *
- * That this is still exactly the baseline theme when the setting says so is a fact
- * about material3 1.5.0-beta02, checked rather than assumed:
- * - `MaterialExpressiveTheme(colorScheme, motionScheme, shapes, typography)` at the root
- *   is `MaterialTheme` with the same four values, plus the internal
- *   `LocalUsingExpressiveTheme = true`;
- * - a root `MaterialTheme(colorScheme)` resolves to `Shapes()`, `Typography()` and
- *   `MotionScheme.standard()`, and those shapes and type are passed explicitly here;
- * - the internal flag is read by nothing but `MaterialExpressiveTheme` itself, and this
- *   library never nests one.
- *
- * So the motion scheme is the whole difference. `NitroUiMaterialThemeLibraryTest` fails
- * the day another material3 class, or another method of `MaterialTheme.kt`, reads that
- * flag.
- *
- * A Hybrid View is its own composition, so it cannot inherit the app's theme;
- * this is the closest equivalent to what the surrounding app sees. Every composition
- * this library owns starts here - each control's own, and each `<Host>`'s, whose
- * children compose inside it - so this is the one place the theme is chosen.
+ * Material 3 Expressive over dynamic colour (Android 12+) or the default schemes. The
+ * baseline opt-out only swaps the motion scheme: a separate theme call site would be a
+ * different group, so switching would dispose and rebuild every control's composition.
  */
 @Composable
 fun NitroUiTheme(content: @Composable () -> Unit) {
@@ -1483,47 +748,27 @@ fun NitroUiTheme(content: @Composable () -> Unit) {
   MaterialExpressiveTheme(
     colorScheme = NitroUiColorSchemes.forContext(context, dark),
     motionScheme = if (NitroUiMaterialTheme.expressive) MotionScheme.expressive() else MotionScheme.standard(),
-    // Passed rather than left to `MaterialExpressiveTheme`'s null defaults: a later
-    // material3 that gave the Expressive theme its own shapes or type by default would
-    // otherwise carry them into the baseline opt-out too. These are what a root
-    // `MaterialTheme` resolves to.
+    // Passed explicitly so the baseline opt-out keeps a root `MaterialTheme`'s shapes and type.
     shapes = NitroUiBaselineShapes,
     typography = NitroUiBaselineTypography,
   ) {
-    // The harness's readings: a content subtree created (once per root, unless a theme
-    // switch rebuilt it), and the motion scheme Material handed it.
+    // Read by the test harness.
     remember { NitroUiMaterialTheme.noteContentCreated() }
     NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
     content()
   }
 }
 
-/** `Shapes()` and `Typography()`, built once for the process rather than per root composition. */
 private val NitroUiBaselineShapes = Shapes()
 private val NitroUiBaselineTypography = Typography()
 
 /**
- * The key of [NitroUiColorSchemes], held weakly.
- *
- * A process-wide cache that keeps its key strongly keeps everything the key keeps.
- * Here the key is the `Context` the colours were read from - RN's
- * `ThemedReactContext`, whose base context is the `Activity` - so a strong key
- * would pin a destroyed Activity and its whole view hierarchy in every process
- * that ever mounts a control, until some later control composes against a
- * different context (which may be never). The value may stay strong: a
- * `ColorScheme` is a bag of colour longs and reaches nothing.
- *
- * Collected is not wrong, just a miss: [matches] compares the referent, so once
- * the context is gone the next control rebuilds the scheme. Nothing has to be
- * unregistered, and no entry outlives the thing it describes.
- *
- * Identity, not `equals`, as before: resource overlays are per-context, and two
- * `ThemedReactContext`s that compare equal can still be themed differently.
+ * A cache key held weakly and compared by identity. The key is a `Context` whose base is the
+ * `Activity`, so a strong reference from a process-wide cache would leak a destroyed one.
  */
 internal class WeakKey<T : Any>(value: T) {
   private val reference = WeakReference(value)
 
-  /** Whether this key is still alive and *is* [candidate]. */
   fun matches(candidate: T): Boolean = reference.get() === candidate
 
   /** The referent, or null once it has been collected. For tests of the contract. */
@@ -1532,35 +777,9 @@ internal class WeakKey<T : Any>(value: T) {
 }
 
 /**
- * The one Material colour scheme of the process, shared by every hosted control.
- *
- * `remember` cannot do this job, which is what an earlier version of
- * [NitroUiTheme] assumed: a `remember` lives in one composition, and every
- * hosted control *is* its own composition (D8 - one host per view). So the
- * dynamic scheme, which reads ~50 framework resources and allocates a
- * `ColorScheme` with ~30 colours, was built once per mounted control, and
- * `SwitchColorsCache` (the tinted-colour cache), keyed by scheme identity - could never hit across
- * controls. Both costs are per instance, which is the wrong shape for a
- * value that is the same for every control on screen.
- *
- * The key is the `Context` the resources were read from (identity: resource
- * overlays are per-context) plus what the build actually branches on. A
- * configuration change can move those colours, so [invalidate] drops the entry
- * and the next control to compose rebuilds it; `uiMode` is also in the key
- * because the cached scheme can outlive every mounted control, and reading the
- * live `Configuration` is a field read, not a copy
- * (`ResourcesImpl#getConfiguration`).
- *
- * The context half of the key is a [WeakKey]: this object lives for the process,
- * and the context it is keyed on is the host's `Activity`. See [WeakKey] for why
- * that is a leak and why losing the entry to the collector is only a miss.
- *
- * Residual, measured as cosmetic rather than fixed: a dynamic-colour change the
- * platform delivers *without* a configuration change (a wallpaper swap on
- * Android 12+) keeps the old scheme until the next configuration change.
- * Material's own `DynamicColors` closes that with a process-wide receiver for
- * `ACTION_WALLPAPER_CHANGED` that bumps a version; silently registering another
- * receiver on the host app for a cosmetic case is a worse trade.
+ * One colour scheme for the process. Every hosted control is its own composition, so a
+ * `remember` would build the dynamic scheme (about 50 resource reads) once per control.
+ * A wallpaper change that arrives without a configuration change keeps the old scheme.
  */
 internal object NitroUiColorSchemes {
   private class Entry(
@@ -1594,70 +813,16 @@ internal object NitroUiColorSchemes {
     return built
   }
 
-  /** A configuration change can move the dynamic colours: build the next one fresh. */
   fun invalidate() {
     entry = null
   }
 }
 
 /**
- * Records the control's intrinsic size during Compose's own measure pass and
- * centres it in the box RN gave it.
- *
- * Exactly one `measure()` call per pass, and that is a hard rule rather than a
- * preference: measuring the same `Measurable` twice throws
- * `IllegalStateException: measure() may not be called multiple times on the same
- * Measurable` (`androidx.compose.ui.node.MeasurePassDelegate`), which takes the
- * whole host down at mount time - a first version of this function asked the
- * question twice (bounded for placement, unbounded for the record) and every
- * hosted Switch on Android died before its first frame.
- *
- * So the one question has to be the right one, and it cannot be the incoming
- * constraints as they arrive: the host lays the composition out `MATCH_PARENT`,
- * Fabric measures the host `EXACTLY`, and `AndroidComposeView` turns `EXACTLY`
- * into `minWidth == maxWidth`. A `Placeable`'s size is always coerced into its
- * constraints, so measuring with them reports the box back - the recorded size
- * would be 90x50 dp for a 90x50 dp box no matter what the control is, and the
- * centring offset would always be 0.
- *
- * [unbounded] picks which of the two questions to ask, and the component decides
- * it through its sizing policy (`docs/architecture/sizing.md`):
- *
- * - `true` (policy `intrinsic`, the whole library today): ask
- *   `Constraints()`, no minimum and no maximum - the same question iOS asks with
- *   `sizeThatFits(in: .infinity)`. A control that wants more than the box was
- *   given reports what it wants rather than the box, which is the only answer
- *   Yoga can act on. Capping it at the box maximum instead (what this did before
- *   T11) means a box *smaller* than the control records the box, and that number
- *   then goes in the cache under this configuration - every later Switch with the
- *   same key would be laid out at the wrong size. The layout this returns is
- *   still the box, so the control is centred in what Yoga gave it and a
- *   user-specified width or height still wins.
- * - `false` (policy `fillWidth` - a Slider, whose width *is* the box): keep the
- *   width maximum, unbind the height. The width maximum is the question - a
- *   Slider's height is what it is at *that* width. The height maximum must go for
- *   the same reason the width minimum goes: a box that is temporarily the wrong
- *   height (a `seedSize`-style guess, a stale cache, a correction still in flight)
- *   would otherwise clamp the answer to itself, and the wrong height would
- *   confirm itself forever - the report agrees with the layout, so the engine is
- *   never told and never corrects. iOS asks the same question the same way
- *   (`NitroSwiftUIHost.fittingSizeProposal`: box width, unbounded height).
- *
- *   The `else` arm covers a `fillWidth` control in a genuinely unbounded parent:
- *   with no width to fill there is nothing to ask but the unbounded question.
- *
- * When the honest question comes back wider than the box - a long `SegmentedControl`
- * row under a caller's `width`, or one the engine clamped to its parent - the pass
- * that learned it asks for a second question, this one with the box's width (its
- * height still free), and the control then lays itself out the way it would in a
- * Compose layout of that width: labels ellipsize, a row's segments share the space.
- * That pass is for placement only and reports nothing, so the size the engine is
- * given stays the control's own; a `height` too small for the control still clips it
- * centred, as it did before and as the caller's `height` always meant.
- *
- * Material's `minimumInteractiveComponentSize` (a 48 dp touch target) is part of
- * the size by design, and only [NitroComposeHost.wantsContentSize] pays for
- * recording at all.
+ * Measures the content once per pass (a second `measure()` on a `Measurable` throws) and
+ * centres it in the box RN gave it. The incoming constraints are exact, so measuring with
+ * them would only report the box back: [unbounded] asks with no bounds (`intrinsic`),
+ * otherwise with the box's width and a free height (`fillWidth`).
  */
 @Composable
 internal fun NitroUiMeasuredRoot(
@@ -1671,21 +836,9 @@ internal fun NitroUiMeasuredRoot(
   onOverWide: (Boolean) -> Unit,
   content: @Composable () -> Unit,
 ) {
-  // Both reads are gated on the arming, and that gate is the whole cost story of the
-  // placement work: content that never overran its box never arms, so it observes
-  // neither of these and a prop batch through [NitroComposeHost.markDirty] neither
-  // restarts this group nor hands `Layout` a different measure block for it. Only
-  // content that is placed at its box's width pays, which is the content that needs it.
-  //
-  // [contentRevision] has to be read *here* rather than in the measure block, and that
-  // is not a style choice: a block reading the live value reads the revision of content
-  // it has not rendered yet (the reason is on the field), and content placed at a box's
-  // width answers that width whatever it is, so Compose has no child-size change to
-  // propagate and never asks again. The composition is the only thing that knows what it
-  // rendered, so the revision has to travel with it - and reading
-  // [NitroUiOverWidePlacement.armed] is what makes the gating possible, because writing
-  // it at an overrun restarts this group, which is the moment this group starts
-  // observing the revision.
+  // Both reads are gated on the arming, so content that never overran its box observes
+  // neither and is not recomposed by a props batch. The revision is read here, not in the
+  // measure block, because the composition is what knows which content it rendered.
   val armedAtComposition = if (unbounded) overWide.armed.value else false
   val revision =
     if (armedAtComposition) {
@@ -1694,34 +847,9 @@ internal fun NitroUiMeasuredRoot(
       NitroUiOverWidePlacement.NO_REVISION
     }
   Layout(content) { measurables, constraints ->
-    // Which of the two questions to ask the content.
-    //
-    // The arming and its width are read live rather than captured above because this
-    // block is what makes and unmakes them, and a decision taken from a
-    // composition-time copy would always be a pass late. The two stamps are plain fields,
-    // and that matters: a measure block that observes what it writes dirties the node it
-    // runs in, which here would be a measure → arm → measure loop that never settles.
-    // [NitroUiOverWidePlacement.armed] is the one placement value read here that is snapshot
-    // state. Observing it is safe because every write from a pass is a verdict written once:
-    // the unbounded pass that finds an overrun arms, the unbounded pass that finds a fit
-    // releases, and a pass confirming the verdict it already held writes the same value, which
-    // is not a state write. [NitroUiOverWidePlacement.reset] writes `false` outside any pass,
-    // from [onLayout], [onConfigurationChanged], [prepareForRecycle] and [drop], and is the
-    // same no-op unless the host was armed - which is the case that has to be heard. So the
-    // most this read can cost is one further measure of this node: a measure block dirties the
-    // node it runs in, not the composition, and the group restart that starts observing the
-    // revision is the read above. The bounded pass that places at the box writes nothing here.
-    //
-    // The one write that has to reach Compose is the ask for the next measure, and that
-    // goes through [remeasureToken], which this block already reads.
-    //
-    // The revision is the exception, and it is what keeps a stale pass from doing
-    // damage. Honour an arming only for the content that made it: `NO_REVISION` on
-    // either side says the same thing - the pass that armed could not say what it had
-    // measured, which is what a measure inside the prop batch that is about to be
-    // recomposed means - and an arming that cannot name its content is never placed.
-    // Such an arming exists to buy one more unbounded pass, and that is exactly the
-    // pass the content it could not see needs in order to be reported at all.
+    // The arming is read live because this block sets and clears it. The two stamps are plain
+    // fields: a measure block that observes state it writes re-dirties its own node and would
+    // loop. An arming is honoured only for the box width and content it was made for.
     val placeAtBoxWidth =
       unbounded &&
       overWide.armed.value &&
@@ -1731,11 +859,8 @@ internal fun NitroUiMeasuredRoot(
       revision == overWide.armedRevision
     val childConstraints =
       if (unbounded && !placeAtBoxWidth) {
-        // The unbounded question. See the kdoc: this is what makes the recorded
-        // size the control's, not the box's.
         Constraints()
       } else if (constraints.hasBoundedWidth) {
-        // The fill-width question: measure at the box's width, at any height.
         constraints.copy(
           minWidth = 0,
           minHeight = 0,
@@ -1747,31 +872,15 @@ internal fun NitroUiMeasuredRoot(
     val placeable = measurables.firstOrNull()?.measure(childConstraints)
     val measuredWidth = placeable?.width ?: 0
     val measuredHeight = placeable?.height ?: 0
-    // Reading the token is the whole reason it is passed: measure blocks run under
-    // `Snapshot.observeMeasure`, so a write to what they read marks *this* node
-    // measure-dirty. That is the host's only lever to ask a mounted control to
-    // measure again (see [NitroComposeHost.remeasureToken]), and a fresh measure is
-    // the only thing that can produce the report a new sizing key is waiting for.
+    // Always true. The read is the point: it subscribes this measure block to the token, so
+    // the host can force a re-measure by writing it.
     val remeasureRequested = remeasureToken.value >= 0
     if (record && remeasureRequested && placeable != null && !placeAtBoxWidth) {
       onMeasured(measuredWidth, measuredHeight)
     }
     if (unbounded && !placeAtBoxWidth && constraints.hasBoundedWidth) {
-      // Only the unbounded question can answer this, and it answers it every time: a
-      // row that fits says so, which is what releases the arming when a box grows back
-      // to the control's size. The stamps are written by the pass that has the facts -
-      // the box this content was asked under, and the revision this composition
-      // rendered, which may be no revision at all - and the host is told from here
-      // rather than looked at afterwards, because the pass that discovers an overrun is
-      // the only one that will: Fabric has no reason to measure this view again for a
-      // box that did not move, and Compose has no child size change to propagate once
-      // the content answers the box's width. Being told from inside the pass is what
-      // makes the second measure happen.
-      //
-      // An unbounded box skips the verdict entirely: there is nothing to overrun, and
-      // an arming made against a narrower box is still true of the content. And a
-      // verdict that changes nothing - the content fits, and nothing was armed - says
-      // nothing to the host, which is every control that fits its box.
+      // Only an unbounded pass can tell whether the content overruns the box. The host is told
+      // from inside the pass because nothing else will measure a view whose box did not move.
       val overruns = measuredWidth > constraints.maxWidth
       overWide.armedWidthPx = if (overruns) constraints.maxWidth else -1
       overWide.armedRevision = revision
@@ -1779,9 +888,7 @@ internal fun NitroUiMeasuredRoot(
         onOverWide(overruns)
       }
     }
-    // What this returns is Yoga's box, not the control's size - the control gets
-    // centred inside it. `resolveSize` keeps an explicit `EXACTLY` from Fabric
-    // winning, and falls back to the measured size when a dimension is unbounded.
+    // Returns Yoga's box, not the control's size; the control is placed inside it.
     val width =
       if (constraints.hasBoundedWidth) constraints.maxWidth else measuredWidth
     val height =
@@ -1800,65 +907,23 @@ internal fun NitroUiMeasuredRoot(
 }
 
 /**
- * What the host knows about content that is wider than the box RN gave it.
- *
- * One snapshot value and two plain fields, and the split is load-bearing rather than
- * tidy. [armed] is observed by [NitroUiMeasuredRoot]'s composition, which is what both
- * starts the placement and lets content that never overran observe nothing at all: the
- * write that flips it restarts that group, and the restarted group is the one that can
- * say which content it rendered. The two stamps are written by the measure block, which
- * runs under `Snapshot.observeMeasure`: a block that observes what it writes dirties
- * the node it runs in, which here would be a permanent dirty → measure → honest → arm →
- * dirty loop. Everyone is on the UI thread.
+ * What the host knows about content wider than its box. [armed] is snapshot state so the
+ * composition can observe it; the two stamps are plain fields because the measure block
+ * writes them and must not observe what it writes. UI thread only.
  */
 internal class NitroUiOverWidePlacement {
   /**
-   * Whether this content is currently placed at its box's width.
-   *
-   * Sticky rather than per-pass, and it has to be: asking the unbounded question,
-   * seeing that it does not fit, and then placing at the box is already two measures.
-   * Clearing it after each pass would make that pair the steady state: every pass would
-   * start with the question that cannot fit and answer it again.
-   *
-   * It is a property of one content at one box, so it is *made* by the first unbounded
-   * pass that overruns - [armedWidthPx] records the box it overran and [armedRevision]
-   * the content it measured, which may be [NO_REVISION] - and *unmade* by the first
-   * unbounded pass that fits. A pass under any other box, or over any other content,
-   * asks the unbounded question instead, which is the only question that can both find
-   * the overrun again and report a size; and the pass that finds it is the one that asks
-   * for the placement measure, because nothing else is going to measure a view whose box
-   * did not move. It is reset outright when the environment it was measured in changes
-   * ([NitroComposeHost.onConfigurationChanged]), when a new sizing key arrives
-   * ([NitroComposeHost.onLayout]) and with the mount.
+   * Whether the content is placed at its box's width. Sticky: clearing it after each pass
+   * would repeat the unbounded measure and the placement measure on every pass.
    */
   val armed = mutableStateOf(false)
 
-  /**
-   * The box width [armed] was made against, in the px the measure block saw it, or -1
-   * (a box width is never negative).
-   *
-   * The arming is only honoured while the box still has that width, which is what stops
-   * two wrong drawings from surviving: content that overran the engine's *first* guess
-   * at a box (Yoga's provisional fallback, before the control's own report corrects it)
-   * would otherwise be placed at that too-small width forever, and content that has
-   * since been given room would stay squeezed into a width it no longer needs. A pass
-   * under any other width asks the unbounded question, and that pass either releases
-   * the arming or makes a new one for the width it was asked under.
-   */
+  /** The box width in px that [armed] was set against, or -1. Any other width voids it. */
   var armedWidthPx = -1
 
   /**
-   * The [NitroComposeHost.contentRevision] of the content this arming was made against,
-   * or [NO_REVISION] when the pass that made it could not tell.
-   *
-   * The other half of "the box the control overran is still the box it has": props
-   * change what the content wants without moving the frame at all, and content measured
-   * at a box's width answers that width for *any* content, so an arming that outlived
-   * its content would keep the drawing and swallow every later correction. A group
-   * placed at the box is subscribed to the revision ([NitroUiMeasuredRoot]), so the pass
-   * after a prop change is the one that finds the mismatch and asks again. An arming
-   * stamped [NO_REVISION] is never honoured, and re-making it costs one more unbounded
-   * pass - the pass that has to happen anyway for new content to be reported.
+   * The content revision [armed] was set against, or [NO_REVISION]. Content placed at a box's
+   * width answers that width whatever it is, so an arming must not outlive its content.
    */
   var armedRevision = NO_REVISION
 
@@ -1869,43 +934,17 @@ internal class NitroUiOverWidePlacement {
   }
 
   internal companion object {
-    /**
-     * "this pass cannot say which content it measured".
-     *
-     * [NitroComposeHost.contentRevision] starts at 0 and only grows, so -1 is never a
-     * revision. A composition only subscribes to the revision once it is placing at its
-     * box's width, so a pass before that - and above all the one that runs inside the
-     * prop batch, before the recomposition it belongs to - reads this instead. Stamped
-     * onto an arming it means the arming is not attributable to any content, so
-     * [NitroUiMeasuredRoot]'s guard will not place it, and the next pass asks the
-     * unbounded question. There is no adopting a stamp later: an arming is good for the
-     * content that measured it, and for nothing else.
-     */
+    /** The pass could not tell which content it measured. Such an arming is never honoured. */
     const val NO_REVISION = -1
   }
 }
 
-/**
- * A `ViewTreeObserver.OnPreDrawListener` and the observer it was registered on.
- *
- * The two belong together: `View.getViewTreeObserver()` hands a detached view a
- * *new* floating observer, so the only handle on the observer that is actually
- * holding the listener is the one taken when the listener went on it.
- */
 private class PreDrawWatch(
   val listener: ViewTreeObserver.OnPreDrawListener,
   val observer: ViewTreeObserver,
 )
 
-/**
- * A [ViewCompositionStrategy] that neither observes nor disposes.
- *
- * It exists so that installing it can uninstall something else: a strategy's
- * uninstaller only ever runs when the next strategy is installed, and this is the
- * cheapest strategy to be left with. The host owns the composition's lifetime and
- * ends it in `NitroComposeHost.drop`, which is what the composition is disposed by
- * from here on.
- */
+/** Observes and disposes nothing. Installing it uninstalls the previous strategy. */
 private object DisposeWithTheHost : ViewCompositionStrategy {
   override fun installFor(view: AbstractComposeView): () -> Unit = {}
 }
