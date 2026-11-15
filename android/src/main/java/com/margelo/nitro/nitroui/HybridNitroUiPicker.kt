@@ -115,7 +115,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * This is also the library's first control whose UI leaves the host's window: the
  * menu is a Compose `Popup` with its own `PopupWindow`. It is disposed with the
  * composition, which is what `NitroComposeHost.drop()` ends, so it cannot outlive
- * the mount - and that is the case `MountChurn.harness.tsx` and
+ * the mount - and that is the case `MountChurn.android.harness.tsx` and
  * `scripts/real-input` exist to keep true (B1).
  *
  * This file must stay in the package `com.margelo.nitro.nitroui`: the generated

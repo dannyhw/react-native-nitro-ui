@@ -21,7 +21,7 @@ import com.facebook.react.uimanager.ViewManager
  * Test-only memory probe for the harness suite (task B1).
  *
  * Lives in the example app, not in the library: it is instrumentation for
- * `example/__tests__/MountChurn.harness.tsx`, and nothing a consumer can reach.
+ * `example/__tests__/MountChurn.android.harness.tsx`, and nothing a consumer can reach.
  * The question it answers - "is the Java heap still held after a full collect the
  * same size it was before mounting and unmounting N controls K times?" - needs a
  * number from inside the process, which JS has no way to ask for (Hermes reports

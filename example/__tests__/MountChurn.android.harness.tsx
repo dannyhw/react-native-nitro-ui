@@ -37,8 +37,8 @@
  * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
  * views with a different lifetime, so there is nothing to assert there. X37 removed the
  * `it.skip` that used to stand in for that branch: a sentence as a test title is a
- * placeholder, not a gate. The note under the `if` says what the file registers on iOS
- * and why registering nothing is allowed here.
+ * placeholder, not a gate. The scoping is in the *file name* — `.android.harness.tsx` —
+ * for the reason at the bottom of this file: iOS must not collect the file at all.
  */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -684,8 +684,22 @@ if (Platform.OS === 'android') {
     });
   });
 }
-// Android only, and iOS registers nothing from this file: a harness file with no tests
-// is not an error on this runner (the summary is built from the events the device sends,
-// and a platform that sends none simply contributes none), so the platform that is not
-// gated is simply absent from the report instead of carrying a pending test titled with
-// a sentence about why it did not run.
+// Why the platform lives in the file name and not in the `if` above.
+//
+// X37 item 1 deleted this file's `it.skip`, which left iOS collecting a file with no
+// tests in it, and that is an error, not an empty pass: `@jest/core`'s TestScheduler
+// fails a file that reports zero tests with "Your test suite must contain at least one
+// test." unconditionally — there is no flag for it, and `--passWithNoTests` covers "no
+// files matched", not "a matched file has no tests". It was shown red as
+// `harness:ios -- MountChurn` on 2026-11-15, before the rename below fixed it.
+//
+// So the file is named for its platform: `react-native-harness` turns the other
+// platforms' ids into a `--testPathIgnorePatterns` argument (its
+// `jest-platform-ignore-pattern.js`, pushed from the CLI's own entry), which means
+// iOS never collects it and Android collects it normally. The runner reads the id from
+// the `applePlatform`/`androidPlatform` factories in `rn-harness.config.mjs`, and
+// `jest.harness.config.mjs` already relies on that argument existing.
+//
+// The `Platform.OS` guard above is therefore redundant, and kept anyway: it is the
+// sentence that says what the suite gates when someone reads the file on the platform
+// that skips it, and it costs nothing.

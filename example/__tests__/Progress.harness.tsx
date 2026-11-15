@@ -357,7 +357,7 @@ const CONFIGURATIONS: ReadonlyArray<Configuration> = [
  * what an assertion needs to compare with a Yoga box; the rest stays raw, which is
  * also what makes the fill-density assertions dimensionless.
  *
- * Fetched lazily, the way `MountChurn.harness.tsx` fetches the heap probe: on iOS the
+ * Fetched lazily, the way `MountChurn.android.harness.tsx` fetches the heap probe: on iOS the
  * module does not exist and this file still has to load there.
  */
 type Ink = {

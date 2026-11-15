@@ -14,7 +14,7 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // Test-only probe for example/__tests__/MountChurn.harness.tsx (task B1).
+          // Test-only probe for example/__tests__/MountChurn.android.harness.tsx (task B1).
           add(NitroUiProbePackage())
         },
     )
