@@ -1,0 +1,72 @@
+# Failure excerpt — real-input:ios:--control:popover
+
+- Ran: 2026-11-13T13:55:31.465Z on code tree `f5595b32bbdb` at HEAD `fa5994c` (branch `task/X34-gate-hygiene`)
+- Command: `node scripts/real-input/ios.mjs --control popover`
+- Result: fail, exit 1, 6619 ms
+- Load: start 10.39, end 10.12, median 10.25, max 10.39
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `X34-vv27s`
+- Full log: `task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T13-55-30.926Z.log` (<store>/task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T13-55-30.926Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-resources-Debug-input-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')`
+- `error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-resources-Debug-output-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')`
+- `error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-frameworks-Debug-input-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')`
+- `error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-frameworks-Debug-output-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T13-55-30.926Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X34-vv27s (still live)
+  |   X33-tjat0                X33          both              pair-a
+  |   X34-vv27s                X34          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.12 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 24 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: real-input:ios:--control:popover
+gate: node scripts/real-input/ios.mjs --control popover (cwd .)
+gate: code tree f5595b32bbdb at HEAD fa5994cf
+gate: git tree 4db8a5126ff8
+gate: log task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T13-55-30.926Z.log
+gate:       <store>/task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T13-55-30.926Z.log
+real-input (ios): nitro-ui B · 3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 · Metro 8293 · scheme NitroUiExampleUITests
+metro: started on 8293 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-resources-Debug-input-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')
+    error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-resources-Debug-output-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')
+    error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-frameworks-Debug-input-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')
+    error: Unable to load contents of file list: '/Target Support Files/Pods-NitroUiExample/Pods-NitroUiExample-frameworks-Debug-output-files.xcfilelist' (in target 'NitroUiExample' from project 'NitroUiExample')
+    ** TEST BUILD FAILED **
+
+real-input (ios): Error: real-input: building for testing failed (65). See <repo>/.real-input/ios/xcodebuild-build.log.
+gate: real-input:ios:--control:popover FAIL in 6.6 s
+gate: recorded in .gates/task/X34-gate-hygiene.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X34-gate-hygiene/real-input+ios+--control+popover-2026-11-13T13-55-30.926Z.log (4 probe(s))
+
+```

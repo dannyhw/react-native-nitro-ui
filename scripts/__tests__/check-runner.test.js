@@ -34,6 +34,8 @@ import {
   validateCheckSteps,
 } from '../check-steps.mjs';
 
+import { childEnv } from './helpers/scrubbed-env.js';
+
 const root = process.cwd();
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(root, 'package.json'), 'utf8')
@@ -779,13 +781,12 @@ function runRunner(argv, steps = {}, stepsFile = null) {
       cwd: root,
       encoding: 'utf8',
       timeout: 120_000,
-      env: {
-        ...process.env,
+      env: childEnv({
         PATH: `${path.join(dir, 'bin')}${path.delimiter}${process.env.PATH}`,
         X10_FAKE_STEPS: JSON.stringify(steps),
         X10_FAKE_TRACE: trace,
         ...(stepsFile == null ? {} : { NITRO_UI_CHECK_STEPS_FILE: stepsFile }),
-      },
+      }),
     }
   );
   return {
@@ -1064,12 +1065,11 @@ describe('the runner runs itself from any path (M3)', () => {
         cwd: dir,
         encoding: 'utf8',
         timeout: 120_000,
-        env: {
-          ...process.env,
+        env: childEnv({
           PATH: `${bin}${path.delimiter}${process.env.PATH}`,
           X10_FAKE_STEPS: '{}',
           X10_FAKE_TRACE: trace,
-        },
+        }),
       }
     );
     expect(run.stdout).toContain('steps, 1 job(s) of');
