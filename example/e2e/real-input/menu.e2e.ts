@@ -13,7 +13,10 @@ const NAME = 'Real-input menu';
  * two dismissals after a disabled row was tapped. The count is not what this suite
  * is for and asserting one number would turn an unresolved question into a gate, so
  * the dismissal is a loop with a ceiling, and the ceiling is what fails if the
- * popup has become undismisable.
+ * popup has become undismisable. Each round asks with `waitFor`, not `count`:
+ * `count` answers from the observation the last step left behind and never
+ * re-observes, so a popup that has already come down still counts, and the loop
+ * spends its Backs on the page beneath and reports a popup that is not there.
  */
 async function dismissPopup(
   app: App,
@@ -22,14 +25,24 @@ async function dismissPopup(
   tries = 3
 ): Promise<void> {
   const gone = screen.getByText(row);
-  for (let press = 0; press < tries; press += 1) {
-    if ((await gone.count()) === 0) return;
+  for (let press = 0; press <= tries; press += 1) {
+    const down = await gone
+      .waitFor({ state: 'detached', timeout: DISMISS_SETTLE_MS })
+      .then(
+        () => true,
+        () => false
+      );
+    if (down) return;
+    if (press === tries) break;
     await app.back();
   }
   throw new Error(
     `real-input: the menu popup was still up after ${String(tries)} Backs.`
   );
 }
+
+/** How long one Back is given to bring the popup down, in ms. */
+const DISMISS_SETTLE_MS = 2_500;
 
 test('a real tap opens the Menu, a row reaches JS, and a disabled row takes nothing', async ({
   app,

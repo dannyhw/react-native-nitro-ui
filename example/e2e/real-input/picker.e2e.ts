@@ -1,7 +1,7 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
-import { drag, isInBand, openScreen, reveal } from './support';
+import { boxOf, drag, openScreen, reveal, textOf } from './support';
 import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input picker';
@@ -33,50 +33,54 @@ test('a wheel drum inside a side-scroller keeps the drags it owns (G29)', async 
 }) => {
   await app.open();
   await openScreen(screen, 'picker');
-  const drum = screen.getByLabel('Real-input wheel in a scroller');
-  const index = screen.getByTestId('real-input-wheel-index');
-  await reveal(screen, drum);
-
-  const box = await drum.boundingBox();
-  if (box == null || !(await isInBand(screen, box))) {
+  // The drum is a hosted node, and asking a hosted node where it is inside a
+  // scroller asks the driver to scroll a composition into view, which never
+  // settles. The two React Native nodes either side of it are honest, so the drum
+  // is aimed at between them and its row's travel is read off the tail.
+  const row = screen.getByTestId('real-input-wheel-scroller-row');
+  const tail = screen.getByTestId('real-input-wheel-scroller-tail');
+  await reveal(screen, row);
+  const rowBox = await boxOf(row);
+  const atRest = await boxOf(tail);
+  if (rowBox == null || atRest == null) {
     throw new Error(
-      `real-input: the wheel in the scroller has no box to drag; it reads ${JSON.stringify(box)}.`
+      `real-input: the side-scroller row has no box to aim at; the row reads ` +
+        `${JSON.stringify(rowBox)} and its tail ${JSON.stringify(atRest)}.`
     );
   }
-  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+  // The drum is the row's first child, so it runs from the row's left edge to the
+  // tail's, and those two edges give a centre no hosted box has to be trusted for.
+  const centre = {
+    x: (rowBox.x + atRest.x) / 2,
+    y: rowBox.y + rowBox.height / 2,
+  };
 
   // G29, twice over. A vertical drag belongs to the drum even though a scroller
   // ancestor could take it: if the page eats the roll, the index never moves.
-  // And a sideways drag belongs to the *scroller* — the drum hands its
-  // disallowIntercept back on the first sideways move (`nuiOwnVerticalDrags`), so
-  // the row has to slide while the drum stays put. Both halves are the same
-  // arbitration, read from the two things only geometry can tell apart.
   await drag(screen, centre, { x: centre.x, y: centre.y - 220 });
-  const rolled = await index.textContent();
+  // A drum reports once it has settled on a row, not under the finger, so the roll
+  // is awaited; reading the echo straight away races the snap.
+  await expect(index).not.toHaveText('-');
+  const rolled = await textOf(screen, 'real-input-scroller-index');
   expect(
     rolled,
     'a vertical drag rolled nothing: the scroller above the drum kept the ' +
       'gesture, which is the G29 defect (a fling scrolled the page)'
   ).not.toBe('-');
 
-  const afterRoll = await drum.boundingBox();
-  expect(
-    afterRoll,
-    'the drum has no box to compare after the roll'
-  ).not.toBeNull();
+  // And a sideways drag belongs to the *scroller* — the drum hands its
+  // disallowIntercept back on the first sideways move (`nuiOwnVerticalDrags`) — so
+  // the row has to slide while the drum stays put, which is the tail moving left.
   await drag(screen, centre, { x: centre.x - 260, y: centre.y });
-  const afterSwipe = await drum.boundingBox();
+  const afterSwipe = await boxOf(tail);
   expect(
-    afterSwipe != null &&
-      afterRoll != null &&
-      Math.abs(afterSwipe.x - afterRoll.x) > 20,
+    afterSwipe != null && atRest.x - afterSwipe.x > 20,
     `a sideways swipe left the scroller where it was: the drum kept a gesture ` +
-      `that belongs to the row (box ${String(afterRoll?.x)} → ` +
+      `that belongs to the row (the tail ran ${String(atRest.x)} → ` +
       `${String(afterSwipe?.x)} px)`
   ).toBe(true);
-  const stillRolled = await index.textContent();
-  expect(
-    stillRolled,
-    "the sideways swipe also rolled the drum: it took the row's gesture"
-  ).toBe(rolled);
+  // And it stays where it was: a sideways gesture the drum kept would land on
+  // another row, and the report arrives late rather than not at all.
+  await expect(index).toHaveText(rolled);
 });
