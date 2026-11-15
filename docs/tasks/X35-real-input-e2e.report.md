@@ -45,24 +45,31 @@ and be discovered. What is missing, and what it would take, is in the next secti
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1958 tests / 84 suites | `2ba6fa4f0209` | 1 m 50 s | start 14.1 / med 26.0 / max 33.1 |
-| `harness:ios` | missing | — | — | — | — |
-| `harness:android` | missing | — | — | — | — |
+| `check` | **PASS** | 1958 tests / 84 suites | `d57238538d8c` | 1 m 37 s | start 5.1 / med 9.5 / max 11.5 |
+| `harness:ios` | **PASS** | 632 tests / 32 suites + isolated 6 tests / 3 suites | `d57238538d8c` (ios tree) | 15 m 05 s | start 6.2 / med 5.6 / max 13.4 |
+| `harness:android` | **PASS** | 688 tests / 32 suites + isolated 6 tests / 3 suites | `d57238538d8c` (android tree) | 18 m 60 s | start 7.7 / med 4.1 / max 7.7 |
 | `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `d57238538d8c` (android tree) | 16 m 03 s | start 4.9 / med 4.6 / max 6.4 |
+| `real-input:android:--control:form` | stale | — | 8c8934082790 (not this tree) | 1 m 55 s | start 6.1 / med 5.0 / max 6.1 |
 | `real-input:android:--control:form:--control:hosted-slider:--control:list-item` | stale | — | 687c78861633 (not this tree) | 4 m 05 s | start 10.9 / med 6.4 / max 10.9 |
 | `real-input:android:--control:form:--control:hosted-slider:--control:list-item:--control:search-field` | stale | — | 059b28bd0b4c (not this tree) | 5 m 23 s | start 174.7 / med 26.3 / max 174.7 |
-| `real-input:android:--control:hosted-slider:--control:list-item` | stale | — | 95e9f1e3a98d (not this tree) | 3 m 09 s | start 30.4 / med 20.8 / max 42.5 |
+| `real-input:android:--control:hosted-button` | stale | — | 1e1cb3626351 (not this tree) | 38.2 s | start 6.3 / med 5.6 / max 6.3 |
+| `real-input:android:--control:hosted-slider` | stale | — | e680dd40b2d1 (not this tree) | 39.4 s | start 4.4 / med 14.9 / max 17.9 |
+| `real-input:android:--control:hosted-slider:--control:list-item` | stale | — | 2ba6fa4f0209 (not this tree) | 1 m 53 s | start 9.4 / med 9.4 / max 11.8 |
+| `real-input:android:--control:menu:--control:picker` | stale | — | ed563bcbf078 (not this tree) | 4 m 46 s | start 9.3 / med 6.9 / max 9.7 |
+| `real-input:android:--control:picker` | **PASS** | — | `d57238538d8c` (android tree) | 44.7 s | start 7.8 / med 7.6 / max 7.8 |
+| `real-input:android:--control:popover` | stale | — | e26dcb82b1ec (not this tree) | 39.4 s | start 3.0 / med 4.1 / max 4.6 |
+| `real-input:android:--control:switch:--control:hosted-switch` | stale | — | 4436768e392a (not this tree) | 8 m 10 s | start 4.8 / med 4.6 / max 5.9 |
 
-`need --for review`: need: 2 gate(s) missing for review: harness:ios, harness:android — both are device gates, and no lease was available (see
-"What the lease did not let me prove"). The four `real-input:android:--control:*` rows are from the earlier
-lease on this branch and read `stale` because the tree has moved since, which is exactly why they
-are not offered as evidence for today's code.
+`need --for review` is satisfied on this tree: check, `harness:ios` (on the ios half) and
+`harness:android` (on the android half). The `--control:*` rows are the round-2 mutation runs and
+round 1's filtered runs, recorded under their own names, so they satisfy nothing else; the two
+`real-input:android` greens and the red between them are in `docs/tasks/X35/gates.jsonl`.
 
 ## Red proofs
 
-No device this round (see "What the lease did not let me prove"), so only the CPU-only proof below
-was run. The four device mutations are prepared, anchored and revertible; they were not run.
+Round 1 ran the CPU-only proof below and no device mutation. All four device mutations ran in
+round 2, red then restored; the lines that went red are listed under "Fix round 1".
 
 - `scripts/__tests__/component-coverage.test.js` -> `example/e2e/real-input/hosted-picker.e2e.ts`
   removed from the tree -> `expected "present", received "example/e2e/real-input/hosted-picker.e2e.ts
@@ -148,6 +155,25 @@ block the pool; the next round has to `acquire` again.
   placed by geometry. That is the driver's limitation recorded, not the library's.
 - `scripts/real-input/uiautomator.mjs` is still imported by `a11y.mjs`, which `ios.mjs` uses — an
   Android tree parser on the iOS path. Pre-existing, and outside this brief.
+- Round 2, mutation anchors: `HybridNitroUiForm.noteImeInsetPx`'s dp report is unguarded on
+  Android — forcing it to `0` kept the suite green, because under `adjustResize` the window keeps
+  the field clear and the Form's JS-facing `ime=` number is read by no Android check.
+- `HybridNitroUiFormRow.kt:336`'s slop check only releases the *ink*; the press is withheld by the
+  `ACTION_CANCEL` arm at 350. A flick-mutation at 336 is invisible — the arbitration lives at 350.
+- `reveal()` spends its whole drag budget when a locator matches nothing: the renamed Switch label
+  burned the 240 s ceiling instead of reaching `actsOnOneNamedNode`'s "announced on 0 node(s)"
+  assertion one `count()` away. A no-match bail would turn that red into a 5 s red.
+- Incident: one `build-app` ran in the main checkout (a `cd -` slip in a chained command). It
+  rebuilt that checkout's own APK for its own tree; no tracked file changed there.
+- `harness:ios` went red twice, in two different tests, then green: `Slider.harness.tsx:722` read
+  `handles.get('unbounded')!` before that instance's ref arrived, and `Conformance`'s Stepper
+  declared-fallback read `measured 0x0`. Both are the `hybrid?.measureContent()` race recorded in
+  `docs/tasks/FOLLOWUPS.md:66`; the first two ran while another task's iOS harness held the box, the
+  green one at load 6.2. The race itself was not reproduced as a defect of this diff, and no harness
+  test was changed here.
+- `gate.mjs export --task X35` merged 33 ledger lines but wrote no `failures/` excerpts: the five red
+  round-2 runs carry `logInStore` and `failureLogPath: null`, so the committed evidence for a red run
+  is its ledger line only.
 
 ## Design changes
 
@@ -258,3 +284,24 @@ why `reader.ts` stays a device check.
    screencap taken outside its own input path and passed. The reading above is that the capture was
    the problem, not the ink. If the check goes red again on a frame that is genuinely taken under
    the finger, that is a live G30 regression and belongs to whoever owns Form rows, not to X35.
+
+## Fix round 1
+
+Device time at last: lease `X35-wvvh4` (`nitroui_b`), one gate at a time.
+
+`real-input:android` is green twice in a row: **970.7 s** then **962.7 s** (16 m 11 s / 16 m 03 s),
+28/28 controls and 36 tests each, `retries: 0`, no input sequence retried — inside the brief's
+20 minutes. Both round-1 fixes hold on device: the hosted Slider reveals and drags (21 s), and both
+G30 press-ink reads come through `device-read.ts`. A third fix was needed — round 1's rewritten
+wheel check read an undefined locator, so the first full run died at `picker.e2e.ts:64`
+(`index is not defined`), fixed in `cf550fe1`.
+
+Four mutations, one per kind, each red then restored (recorded in `docs/tasks/X35/mutations.json`):
+
+- ignores touches — `HybridNitroUiButton.kt:675` → `hosted-button.e2e.ts:26`, expected `1`, observed `0`
+- presses on a flick — `HybridNitroUiFormRow.kt:350`, the `ACTION_CANCEL` arm made to fire the press → `form.e2e.ts:69`, `0` → `1`
+- label moves — `HybridNitroUiSwitch.kt:250` → `switch.e2e.ts:17` and `hosted-switch.e2e.ts:14`: no node answers the name, so both die at the 240 s ceiling
+- keyboard avoidance — `HybridNitroUiPopover.kt:511` (`val imePx = 0`) → `keyboard.ts:233`: field bottom 1972 px against the keyboard's top 1541 px
+
+`check` green with the manifest unchanged at 1246 files, and both harness gates green on this tree;
+`harness:ios` needed a third attempt.
