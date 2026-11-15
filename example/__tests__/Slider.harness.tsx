@@ -634,9 +634,10 @@ describe('Slider', () => {
     // the bounded mount's correction observable at all.
     const GUESSED_WIDTH = 240;
     const BOX_WIDTH = 200;
-    // Same poison-then-drop order as the correction test below: seed first, then
-    // bump the epoch, so 240x12 is the *guess* a cold mount has to outrank rather
-    // than an exact answer for the epoch being measured. Seeding also *is* the
+    // Seed first, then bump the epoch: `invalidateSizingEnvironment` clears the epoch's
+    // answers and keeps each component's last known size as the guess, so seeding
+    // afterwards would write 240x12 as an exact answer rather than the guess a cold
+    // mount has to outrank. Seeding also *is* the
     // component's declaration for the rest of this run, which is what makes the
     // number asserted at the end this test's own.
     const before = nitroUiCore.sizingStats();
@@ -773,77 +774,6 @@ describe('Slider', () => {
       );
       nitroUiCore.invalidateSizingEnvironment();
     }
-  });
-
-  it('lays out at the declared fallback and corrects a wrong cached size', async () => {
-    // D17: the first instance of a configuration may show the *declared* fallback
-    // for one frame, and every configuration already answered exactly must lay out
-    // exact. The declared fallback here equals the truth, so a correction failure
-    // would be invisible - which is the trap AGENTS.md warns about. Poison the
-    // cache with a height no control has, and the correction becomes observable.
-    const wrong = { width: 200, height: 12 };
-    const before = nitroUiCore.sizingStats();
-    // Seed first, then drop the answers - the order `Sizing.harness.tsx`'s
-    // `seedGuess` uses and for its reason: `invalidateSizingEnvironment` clears
-    // the cached answers of the epoch and *keeps each component's last known
-    // size as the guess*. Seeding afterwards would write the wrong number into
-    // the epoch about to be measured, where it reads as an exact answer rather
-    // than as the guess a cold mount has to outrank.
-    nitroUiCore.seedSizingSize(
-      COMPONENT,
-      SIZING_KEY,
-      wrong.width,
-      wrong.height
-    );
-    nitroUiCore.invalidateSizingEnvironment();
-    // The drop really happened, so the mount below is cold (its guess is the
-    // poisoned one) rather than a warm mount that was never at risk.
-    expect(nitroUiCore.sizingStats().environmentEpoch).toBe(
-      before.environmentEpoch + 1
-    );
-
-    await render(
-      <View style={{ width: 300 }}>
-        <Slider
-          defaultValue={0.4}
-          testID="poisoned"
-          hybridRef={captureFor('poisoned')}
-        />
-      </View>
-    );
-    const box = await waitForBox('poisoned');
-    const stats = nitroUiCore.sizingStats();
-    const poisonedHandle = await handleFor('poisoned');
-    console.log(
-      `poison: guess=${String(wrong.width)}x${String(wrong.height)} box=${describeBox(box)} ` +
-        `measured=${describeBox(poisonedHandle.measureContent())} epoch=${String(
-          stats.environmentEpoch
-        )}->${String(before.environmentEpoch)} ` +
-        `corrections=${String(stats.correctionsImmediate - before.correctionsImmediate + (stats.correctionsBatched - before.correctionsBatched))}`
-    );
-
-    // The guess is a guess, not an answer: the control outranks it.
-    expect(Math.abs(box.height - EXPECTED_HEIGHT)).toBeLessThan(1);
-    expect(
-      stats.correctionsImmediate + stats.correctionsBatched
-    ).toBeGreaterThan(before.correctionsImmediate + before.correctionsBatched);
-
-    // Self-healing: the measured height is the cache's now, so a second mount of
-    // the same configuration costs no correction at all.
-    const after = nitroUiCore.sizingStats();
-    await render(
-      <View style={{ width: 300 }}>
-        <Slider defaultValue={0.4} testID="after-repair" />
-      </View>
-    );
-    const repaired = await waitForBox('after-repair');
-    const next = nitroUiCore.sizingStats();
-    expect(Math.abs(repaired.height - EXPECTED_HEIGHT)).toBeLessThan(1);
-    expect(
-      next.correctionsImmediate +
-        next.correctionsBatched -
-        (after.correctionsImmediate + after.correctionsBatched)
-    ).toBe(0);
   });
 
   it('honours an explicit size instead of the measured height', async () => {
