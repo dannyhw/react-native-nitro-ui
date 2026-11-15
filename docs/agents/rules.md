@@ -68,7 +68,7 @@ These depend on an agent reading and obeying. They are the candidates for the ne
 | Process tooling under 10 % of agent hours a week; gate and lease code takes bug fixes only | orchestrate    | 2026-10-26 week: 69,000 lines of process scripts, 9,600 of library |
 | Benchmarks run before a release, not per task                         | orchestrate    | 16 recorded runs, 7 red, none a regression caught by the baseline check |
 | No commit on `main` only updates task records                         | orchestrate    | 433 of 478 direct commits on `main` touched only `docs/tasks`, about three per merge |
-| Task records leave git 14 days after their task merges (`task-records.mjs --archive`, staged into the next merge commit); failure logs are never committed | orchestrate    | 2026-11-15: after three weeks `docs/tasks` held 2,300 files and 40 MB, 1,643 of them failure logs |
+| Task records leave git 14 days after their task merges, counted from the day they reached `main` (`task-records.mjs --archive`, run where HEAD contains `main`, staged into the next merge commit); failure logs are never committed | orchestrate    | 2026-11-15: after three weeks `docs/tasks` held 2,300 files and 40 MB, 1,643 of them failure logs |
 | A tool or test nothing calls, or that never caught a defect, is removed | working agreements | 2026-11-15 audit                                  |
 | Nothing reaches `main` ungated                                        | orchestrate    | 2026-11-12: a one-line CI fix cost a 2.5 h re-run |
 | Look at every screenshot before merge                                 | orchestrate    | 2026-11-06: a search icon that drew a key shipped |
