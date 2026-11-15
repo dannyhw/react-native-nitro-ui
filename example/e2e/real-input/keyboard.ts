@@ -130,8 +130,13 @@ function realIme(): string {
   return first;
 }
 
-/** Switch the device to `component`, and refuse to continue if it did not stick. */
-function useIme(component: string): void {
+/**
+ * Switch the device to `component`, and refuse to continue if it did not stick.
+ *
+ * Not `useIme`: a helper named like a React hook is read as one by the lint rule,
+ * and this is a call to `adb ime set` in a device gate, three files away from React.
+ */
+function selectIme(component: string): void {
   adb(['ime', 'set', component]);
   const now = currentIme();
   if (now !== component) {
@@ -154,7 +159,7 @@ export async function withRealKeyboard<T>(body: () => Promise<T>): Promise<T> {
   const ime = realIme();
   const previousIme = currentIme();
   const previousHardKeyboard = setting('show_ime_with_hard_keyboard');
-  if (previousIme !== ime) useIme(ime);
+  if (previousIme !== ime) selectIme(ime);
   if (previousHardKeyboard !== '1') {
     adb(['settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '1']);
   }
@@ -170,7 +175,7 @@ export async function withRealKeyboard<T>(body: () => Promise<T>): Promise<T> {
         previousHardKeyboard ?? '0',
       ]);
     }
-    if (previousIme !== ime && previousIme != null) useIme(previousIme);
+    if (previousIme !== ime && previousIme != null) selectIme(previousIme);
   }
 }
 
