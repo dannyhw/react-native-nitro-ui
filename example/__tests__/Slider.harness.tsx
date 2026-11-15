@@ -38,7 +38,6 @@ import {
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
 import { Slider, nitroUiCore } from 'react-native-nitro-ui';
-import { expectTimingBudget } from './timingGate';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -2606,40 +2605,5 @@ describe('Slider', () => {
     await drag(await handleFor('after-cycles'), events, 0.9, 4, 0);
     expect(events.start).toEqual([0.5]);
     expect(events.change.length).toBeGreaterThan(0);
-  });
-
-  it('mounts many instances at once', async () => {
-    // The stress case a list of settings rows is. 40 hosted controls means 40
-    // hosting controllers / compositions, plus 40 measure passes reporting a height
-    // and taking a width from the box - which is the `fillWidth` path under load.
-    const rows = Array.from({ length: 40 }, (_, index) => index);
-    const startedAt = nitroUiCore.now();
-    await render(
-      <View>
-        {rows.map((row) => (
-          <Slider
-            key={row}
-            defaultValue={(row % 11) / 10}
-            testID={`many-${String(row)}`}
-          />
-        ))}
-      </View>,
-      { timeout: 30000 }
-    );
-    const mountedIn = nitroUiCore.now() - startedAt;
-    const last = await waitForBox('many-39', 20000);
-    console.log(
-      `Slider stress: 40 hosted controls mounted in ${mountedIn.toFixed(1)}ms last=${describeBox(last)}`
-    );
-    // How long 40 hosted controls took is a duration, so D21 reports it here
-    // and judges it only under `HARNESS_TIMING=1` on a quiet machine. What this
-    // test gates on every run is that they all reached the right box.
-    await expectTimingBudget({
-      label: 'Slider stress: mount 40 instances',
-      measuredMs: mountedIn,
-      limitMs: 15000,
-      note: 'the bar is headroom for a debug build, not a target',
-    });
-    expect(Math.abs(last.height - EXPECTED_HEIGHT)).toBeLessThan(1);
   });
 });

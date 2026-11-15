@@ -740,8 +740,9 @@ if (Platform.OS === 'android') {
 } else {
   /**
    * iOS has no recycling leak gate, and the reason is that **no native iOS probe has been
-   * written yet — and the retention to gate is native**, not JS. Registered as pending
-   * rather than deleted so the gap is in the run's output, with the reason attached.
+   * written yet — and the retention to gate is native**, not JS. X37 removed the pending
+   * test that used to stand here: the gate is the absence of a probe, and this comment is
+   * where the reason lives, beside the FOLLOWUPS line it names.
    *
    * ## Why that is the reason, and what earlier drafts of this comment got wrong
    *
@@ -771,11 +772,4 @@ if (Platform.OS === 'android') {
    * gated on is the recycle machinery itself — the marks and the per-object identity
    * checks above run on both platforms, and they are the part of the rule that broke.
    */
-  describe('recycling · churn does not leak (iOS)', () => {
-    it.skip(
-      'is pending: no native iOS probe has been written yet, and the retention to ' +
-        'gate is native (see the comment above, and the iOS line in FOLLOWUPS)',
-      () => {}
-    );
-  });
 }

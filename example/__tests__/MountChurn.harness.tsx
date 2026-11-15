@@ -35,9 +35,10 @@
  * "the Switch case is green" is not evidence about a Slider's gesture state.
  *
  * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
- * views with a different lifetime, so there is nothing to assert there. The iOS
- * branch registers one pending test that says so - see the `else` below, which also
- * records why it cannot register nothing.
+ * views with a different lifetime, so there is nothing to assert there. X37 removed the
+ * `it.skip` that used to stand in for that branch: a sentence as a test title is a
+ * placeholder, not a gate. The note under the `if` says what the file registers on iOS
+ * and why registering nothing is allowed here.
  */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -682,21 +683,9 @@ if (Platform.OS === 'android') {
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
     });
   });
-} else {
-  /**
-   * A gate with nothing to gate still has to register something.
-   *
-   * Jest fails a suite that registers no test at all - "Your test suite must
-   * contain at least one test" - and measured on this repo's runner, a file whose
-   * only `describe` is behind a platform check fails the *other* platform's run
-   * rather than being skipped. So the platform that is not gated says so as a
-   * pending test: visible in the report, and honest about why it did not run.
-   */
-  describe('Mount churn (B1)', () => {
-    it.skip(
-      'is Android-only: the gate measures the Compose hosting lifecycle, ' +
-        'Picker popup included',
-      () => {}
-    );
-  });
 }
+// Android only, and iOS registers nothing from this file: a harness file with no tests
+// is not an error on this runner (the summary is built from the events the device sends,
+// and a platform that sends none simply contributes none), so the platform that is not
+// gated is simply absent from the report instead of carrying a pending test titled with
+// a sentence about why it did not run.
