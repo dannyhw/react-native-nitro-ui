@@ -9,8 +9,6 @@ Device numbers **inform review**. They block only on a clear regression on the
 canonical device (D9). The gates that always block are static: lint, typecheck,
 nitrogen drift, autolinking, manifest, Jest, and the Reassure render-count gate.
 
-Implements `docs/research/setup-decisions.md` §6.
-
 ## Layout
 
 ```
