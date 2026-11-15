@@ -40,14 +40,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  foundingDependencies,
-  openBaselineForMerge,
-  mintBaselineFileFor,
-  openBaselineForCheck,
-} from './baseline.mjs';
+import { mintBaselineFileFor, openBaselineForCheck } from './baseline.mjs';
 import { formatCommittedJsonFile } from './format.mjs';
-import { tryExec } from './machine.mjs';
 
 import {
   SCHEMA_VERSION,
@@ -56,8 +50,6 @@ import {
   baselineTable,
   buildBaseline,
   isCompatibleBaseline,
-  mergeBaselineProblems,
-  mergeComponentBaseline,
   newestResultsName,
   skippedCellNotes,
 } from './lib.mjs';
@@ -107,68 +99,21 @@ export function resolveCompareTarget(value, platform) {
 /**
  * Baseline write, with the D9 guards. Returns the block reasons, if any.
  *
- * Two shapes, and the difference is the whole of X14:
+ * `buildBaseline(run)` replaces the file. That is what makes a *filtered* mint
+ * dangerous - it would write one component's cells and delete every other row,
+ * which reads to `--check` as "not measured in base" - so `narrowingProblem()`
+ * refuses a narrowed schedule for it, before the run.
  *
- * - **full mint** (no `component`): `buildBaseline(run)` replaces the file. This
- *   is what makes a *filtered* full mint dangerous - it would write one
- *   component's cells and delete every other row, which reads to `--check` as
- *   "not measured in base" - so `narrowingProblem()` refuses a narrowed schedule
- *   for it, before the run.
- * - **merge** (`component`, plus the `existing` file the caller already checked it
- *   against): only that component's cells are written and everything else is
- *   carried through from the file unchanged, with one `components` entry added.
- *
- * `baselineBlockers()` guards both. `--force` overrides those per-run judgements
- * (load, cleanliness, plan, completeness) and nothing else: the comparability and
- * already-has-cells refusals come from `mergeBaselineProblems()`, which the caller
- * runs whether or not `--force` was passed.
+ * `--force` overrides `baselineBlockers()`'s per-run judgements (load, cleanliness,
+ * plan, completeness).
  */
-export function writeBaseline(
-  file,
-  run,
-  {
-    force = false,
-    component = null,
-    existing = null,
-    componentsBase = null,
-    dependencies = null,
-    comparabilityNotes = [],
-  } = {}
-) {
+export function writeBaseline(file, run, { force = false } = {}) {
   const blockers = force ? [] : baselineBlockers(run);
   if (blockers.length > 0) {
     return { written: false, blockers, baseline: null, skippedCellNotes: [] };
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const built = buildBaseline(run);
-  let merged = null;
-  if (component != null) {
-    if (existing == null) {
-      throw new Error(
-        `writeBaseline: merging --component ${String(
-          component
-        )} needs the file it merges into, and none was given`
-      );
-    }
-    merged = mergeComponentBaseline({
-      baseline: existing,
-      run,
-      component,
-      built,
-      componentsBase,
-      dependencies,
-      comparabilityNotes,
-    });
-  }
-  // A merge that would add nothing was refused a moment ago by
-  // `mergeBaselineProblems()` -> `missingComponentCells()`, which asks it of any record
-  // that is not the pre-flight's stand-in (review F2). There is no second guard here on
-  // `merged.addedCells === 0` deliberately: `report.mjs` is the only caller of this
-  // function and it always asks that question first, so a guard here could not be run
-  // red, and a branch nobody can demonstrate failing is not a guard. The same reasoning
-  // that keeps `missingComponentCells()` honest — it is in `lib.mjs`, where a test can
-  // reach it — is why that is where the rule lives.
-  const baseline = merged?.baseline ?? built;
+  const baseline = buildBaseline(run);
   const text = `${JSON.stringify(baseline, null, 2)}\n`;
   // Write, format, then rename — in that order (review L2). The committed file is
   // every machine's gate table, and prettier runs on it *after* the write: writing
@@ -206,8 +151,6 @@ export function writeBaseline(
       // The note tells a human to run prettier on the file, and it was written for
       // the temp name it has just lost: re-point it at the path that now exists.
       note: note == null ? null : note.split(tempFile).join(file),
-      merged,
-      changedCells: merged?.changedCells ?? null,
       skippedCellNotes: skippedCellNotes(baseline, {
         display: path.relative(REPO_ROOT, file),
       }),
@@ -259,7 +202,7 @@ if (
   if (resultsFile == null) {
     process.stderr.write(
       'usage: node scripts/bench/report.mjs <results.json> [--compare <ref|file>] [--check]\n' +
-        '                                 [--update-baseline [--component <name>]] [--force]\n'
+        '                                 [--update-baseline] [--force]\n'
     );
     process.exit(2);
   }
@@ -274,12 +217,6 @@ if (
     );
     process.exit(2);
   }
-  // Read-only git, for recovering the app versions a pre-X14 baseline's founding
-  // commit pinned (X14). Same shape `run.mjs` passes, and the same failure rule:
-  // an unreadable revision comes back null and the merge refuses rather than
-  // matching a version invented from the working tree.
-  const gitShow = (args) => tryExec('git', args);
-
   process.stdout.write(`${renderMarkdown(run)}\n`);
 
   let exitCode = Array.isArray(run.problems) && run.problems.length > 0 ? 1 : 0;
@@ -306,67 +243,17 @@ if (
   }
 
   if (argv.includes('--update-baseline')) {
-    const component = flag('--component');
     const mint = mintBaselineFileFor({ baselinesDir: BASELINES_DIR, run });
     if (mint.refusal != null) {
       process.stderr.write(`\n${mint.refusal}\n`);
       exitCode = Math.max(exitCode, 2);
-    } else if (component != null) {
-      // The merge path (X14): the results file holds one component's cells and the
-      // committed file holds the rest. Everything the guards need is asked of the
-      // file here, so a re-report of an old results file cannot append a cell that
-      // does not belong in this machine's table.
-      const opened = openBaselineForMerge({
-        baselinesDir: BASELINES_DIR,
-        run,
-        component,
-        isCompatibleBaseline,
-        readJson,
-        display: (file) => path.relative(REPO_ROOT, file),
-        resolved: (baseline) =>
-          foundingDependencies({ baseline, git: gitShow }),
-        mergeProblems: (input) => mergeBaselineProblems(input),
-      });
-      if (opened.refusal != null) {
-        process.stderr.write(`\n${opened.refusal.message}\n`);
-        exitCode = Math.max(exitCode, 2);
-      } else if (opened.problems.length > 0) {
-        process.stderr.write(
-          `\n--update-baseline --component ${String(
-            component
-          )} refused: this run's numbers cannot live in ${String(opened.display)}\n${opened.problems
-            .map((reason) => `  - ${reason}`)
-            .join('\n')}\n`
-        );
-        exitCode = Math.max(exitCode, 2);
-      } else {
-        const outcome = writeBaseline(opened.file, run, {
-          force: argv.includes('--force'),
-          component,
-          existing: opened.baseline,
-          componentsBase: opened.seeded,
-          // The founding run's versions as recovered from its own commit, which is
-          // what the file's top-level `dependencies` may claim; the merged
-          // component's entry takes the measuring run's versions from `run`.
-          dependencies: opened.foundingDependencies,
-          comparabilityNotes: opened.unverified,
-        });
-        if (outcome.written) {
-          process.stdout.write(
-            `\nMerged baseline ${path.relative(REPO_ROOT, opened.file)}: ${String(
-              outcome.merged.addedCells
-            )} \`${String(component)}\` cell(s)\n` +
-              (outcome.note == null ? '' : `  ${outcome.note}\n`)
-          );
-        } else {
-          process.stderr.write(
-            `\n--update-baseline refused (pass --force to override):\n${outcome.blockers
-              .map((reason) => `  - ${reason}`)
-              .join('\n')}\n`
-          );
-          exitCode = Math.max(exitCode, 2);
-        }
-      }
+    } else if (argv.includes('--component')) {
+      // A mint replaces the whole file, so one component's results would delete
+      // every other row. This spelling used to merge; refuse it rather than ignore it.
+      process.stderr.write(
+        '\n--update-baseline --component: a mint replaces the whole baseline file and takes no --component.\n'
+      );
+      exitCode = Math.max(exitCode, 2);
     } else {
       const outcome = writeBaseline(mint.file, run, {
         force: argv.includes('--force'),

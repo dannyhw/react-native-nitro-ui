@@ -88,8 +88,7 @@ example/**/__image_snapshots__/*.bak
 # Where `harness-android`'s diagnostics step writes what it collected from a boot
 # that never became ready, and where the upload step reads it from. `upload-artifact`
 # v4 excludes dot-directories unless `include-hidden-files: true`, so this is not a
-# dot-directory; the ignore is for running the step's body locally, which is what
-# `scripts/__tests__/ci-workflows.test.js` does to prove it exits 0.
+# dot-directory; the ignore is for running the step's body locally.
 harness-diag/
 # Machine state a harness run publishes for its own wall-clock gates (D21): a
 # load average a running test may read, never evidence anyone reviews.

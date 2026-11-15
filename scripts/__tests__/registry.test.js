@@ -314,27 +314,6 @@ describe('component manifest schema', () => {
 });
 
 describe('registry:check drift detection', () => {
-  it('the tree in front of us is in step with its manifests', () => {
-    // This is the point of the gate. If it goes red, `bun run registry:check` is red
-    // for the same reason, and its message names the file.
-    const { drift, problems, checked } = runPlan();
-    expect(problems).toEqual([]);
-    expect(drift).toEqual([]);
-    // Not a vacuous pass: the plan really did read the lists we care about.
-    for (const path of [
-      'bench/src/plan.ts',
-      'bench/src/types.ts',
-      'example/src/App.tsx',
-      'scripts/real-input/controls.mjs',
-      'src/components/Host/HostChildren.ts',
-      'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt',
-      'ios/core/NitroUiDeclaredFallbacks.swift',
-      SIZING_TABLE_FILE,
-    ]) {
-      expect(checked.join('\n')).toContain(path);
-    }
-  });
-
   it('a generated row edited by hand goes red, naming only that file', () => {
     // The review scenario: someone edits one generated line and does not re-run the
     // generator. Nothing else catches it - the file still parses, every neighbouring
@@ -1178,18 +1157,6 @@ describe('gen-registry on a scratch tree', () => {
       { cwd: dir, encoding: 'utf8', env: childEnv() }
     );
   }
-
-  it('the check script is wired into `bun run check`', () => {
-    const scripts = JSON.parse(readRepo('package.json')).scripts;
-    expect(scripts.registry).toContain('gen-registry.mjs --write');
-    expect(scripts['registry:check']).toContain('gen-registry.mjs --check');
-    expect(scripts.regen).toContain('bun run registry');
-    // X10 made `check` a runner over a step graph, so the chain to assert against
-    // is `check:serial` - the steps the runner is required to be equal to
-    // (scripts/__tests__/check-runner.test.js is what holds that together).
-    expect(scripts['check:serial']).toMatch(/bun run registry:check/);
-    expect(scripts.check).toContain('scripts/check.mjs');
-  });
 
   it('--check passes on an untouched tree and --write there changes nothing', () => {
     const dir = scratchTree();

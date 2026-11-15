@@ -163,24 +163,7 @@ normal run - they are simply not mintable. `--update-baseline` refuses a narrowe
 before booting anything: a baseline file *is* the whole table `--check` gates against, and
 minting one from one cell would leave the other 41 reading `not measured in base` - which
 looks like a passing gate. `--force` overrides that narrowing refusal, for a local
-experiment.
-
-Two refusals `--force` does **not** override, because neither is a judgement about the
-measurement. The first is comparability: schema version, machine, device key, CPU, runtime,
-Android API and system image, ART state, the waiting rule *the file recorded against the one
-the run waited under*, and the react-native and `@expo/ui` versions all survive `--force`, in
-the pre-flight and at write time. (Asking for a non-default rule in the first place is a
-different refusal, and `--force` does wave that through — it is a statement about the run.)
-The second
-is `--component <name> --update-baseline` itself: writing one component's cells into an
-existing file *is* a narrowed schedule, so the narrowing guard is replaced for that shape
-by the question "may this file take this component's cells at all" - and its refusals are
-absolute. `--force` means "I know the machine was busy", not "I know this is a different
-simulator", and it cannot buy a partial block: what counts as the component's block *whole*
-is counted against **the file's** plan, so `--plan quick --component menu --force` is refused
-(12 of menu's 28 rows) even though `--force` does wave the quick-plan judgement through for a
-plain `--update-baseline`. A merge writes a component whole, or refuses. See
-`bench/baselines/README.md`, "Adding one component".
+experiment, except for `--component`: with `--update-baseline` it is refused outright.
 
 `--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
 by machine as well as device, so without a usable label both refuse before the run
@@ -585,27 +568,6 @@ signal** in an `update` cell, so that cell's `mountedNs`/`presentedNs` are
 unreportable by construction (`MAX_MISSING_SAMPLE_RATIO`) and each of its
 iterations pays the probe's timeout - visible in the log as
 `N without a mount signal`, which is expected rather than a fault.
-
-## CI (dispatch-only)
-
-`bench.yml` is the one workflow, with `smoke.yml`, that is `workflow_dispatch`
-only — its schedule and label triggers are off and it has never run, so the local
-runs above are the only bench evidence. What follows is what it is written to do
-once it is enabled.
-
-`.github/workflows/bench.yml` is **report-only**: an on-demand `bench` label or a
-`/bench` comment (restricted to `OWNER`/`MEMBER`/`COLLABORATOR` commenters) builds
-base and head in one job on the `xcode-27` runner, runs them **sequentially** -
-two separate fresh processes per cell per revision, not interleaved - and comments
-the ratio table. Android uses `ReactiveCircus/android-emulator-runner` so the
-system image, AVD and KVM actually exist, and `--prebuild` forces a fresh native
-project between base and head so head's native config changes cannot be tested
-against base's generated directories. Concurrency is keyed per pull request, so
-two PRs do not cancel each other. The nightly runs one revision twice and labels
-it a noise sample - same-sha ratios are by definition ~1.00x, so what it reports
-is run-to-run variation. It never fails a PR: hosted runners are too noisy for
-that, which is why the hard gates are the static ones plus Reassure render counts.
-Raw results are uploaded as artifacts instead of going into git.
 
 ## Troubleshooting
 

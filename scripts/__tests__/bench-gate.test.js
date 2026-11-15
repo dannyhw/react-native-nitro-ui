@@ -1171,6 +1171,25 @@ describe('--check against a committed baseline', () => {
     expect(baselineBlockers(baselineRun())).toEqual([]);
   });
 
+  /**
+   * The per-component entry carries the plan and the launch count of the run it
+   * describes. A row that said `full` because the code wanted `full` would tell a
+   * reader a row is gateable when it was measured on the quick plan.
+   */
+  it('records, per component, the plan and launch count of the run that measured it', () => {
+    const baseline = buildBaseline({
+      ...baselineRun(),
+      plan: 'quick',
+      launches: 4,
+    });
+    const entry = baseline.components.switch;
+    expect([entry.plan, entry.launches]).toEqual(['quick', 4]);
+    expect(entry.component).toBe('switch');
+    expect(entry.sha).toBe('abc1234');
+    expect(entry.cellKeys).toEqual(Object.keys(baseline.cells).sort());
+    expect(entry.cellKeys.length).toBeGreaterThan(0);
+  });
+
   it('fails a 2x nitro-ui regression against that baseline', () => {
     const baseTable = baselineTable(buildBaseline(baselineRun()));
     const baseNoise = baselineNoise(buildBaseline(baselineRun()));
@@ -1204,80 +1223,44 @@ describe('--check against a committed baseline', () => {
 });
 
 /**
- * The Button cells (`bun bench --component button`, task G2).
- *
- * A component is part of the scenario cell (`mount.button`), so the one thing a
- * reviewer cannot see from the schedule alone is whether the gate still pairs a
- * cell with the `rn-core` control of the **same cell**. Cross that wire and every
- * Button ratio is computed against a Switch: a number, a confident one, and
- * meaningless. These fixtures are the case that must not silently happen, and the
- * reason the Button cells are gated at all (D15's targets are per `nitro-ui` arm).
+ * `--component` (`bun bench --component button`, task G2): a component is part of the
+ * scenario cell (`mount.button`), and the filter schedules one whole component.
  */
 describe('the Button cells (--component button)', () => {
   /**
-   * A Button run, plus a Switch run mixed into the same file.
-   *
-   * Both are here on purpose, and their controls are deliberately far apart
-   * (`mount` 100 us, `mount.button` 200 us): a gate that paired a Button arm with
-   * the Switch control would read 2.2x or 0.55x instead of 1.1x, so the ratios
-   * below are only reachable through the correct pairing.
+   * A cell is paired with the `rn-core` control of the **same cell**. Two components
+   * in one run, with controls far apart (`mount` 100 us, `mount.button` 200 us) and
+   * arms that sit at different ratios over their own control (1.1x and 1.5x): a
+   * Button arm divided by the Switch control reads 3.0x, and a Switch arm divided by
+   * the Button control 0.55x, so neither expected number is reachable by a crossed
+   * pairing.
    */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const scenario of ['mount', 'mount.button']) {
-        const scale = scenario === 'mount' ? 1 : 2;
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-      }
-      records.push(...memoryRecords({ implementation, ...values }));
-      records.push(
-        ...memoryRecords({
-          scenario: 'memory.button',
-          implementation,
-          ...values,
-        })
-      );
-    }
-    return {
+  it('divides a Button arm by the Button control, never the Switch control', () => {
+    const records = [
+      ...cellRecords({ scenario: 'mount', implementation: 'rn-core' }),
+      ...cellRecords({
+        scenario: 'mount',
+        implementation: 'nitro-ui',
+        mounted: 110_000,
+      }),
+      ...cellRecords({
+        scenario: 'mount.button',
+        implementation: 'rn-core',
+        mounted: 200_000,
+      }),
+      ...cellRecords({
+        scenario: 'mount.button',
+        implementation: 'nitro-ui',
+        mounted: 300_000,
+      }),
+    ];
+    const table = ratioTable({
       platform: 'ios',
       cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the Button component, as `--component button` runs it. */
-  function makeButtonRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) => componentOf(cell.scenario ?? key) === 'button'
-        )
-      ),
-    };
-  }
-
-  it('divides a Button arm by the Button control, never the Switch control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 220 us over a 200 us control. The Switch arm is also 1.1x over its own
-    // control, so a crossed wire shows up as 2.2x / 0.55x on one of these rows.
+    });
     expect(
       table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
+    ).toBeCloseTo(1.5, 4);
     expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
       1.1,
       4
@@ -1285,40 +1268,6 @@ describe('the Button cells (--component button)', () => {
     expect(table['mount.button:rn-core:50'].metrics.mountedNs.control).toBe(
       true
     );
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({ head: makeButtonRun(), base: makeButtonRun() });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the Button arm doubles', () => {
-    const result = gate({
-      head: makeButtonRun({
-        'nitro-ui': { mounted: 440_000, presented: 520_000 },
-      }),
-      base: makeButtonRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    // The Button cell is the one that moved; the Switch cell of the same arm is
-    // absent from a `--component button` run rather than quietly passing.
-    expect(mounted.key).toBe('mount.button:nitro-ui:50');
-  });
-
-  it('never gates a Button reference arm', () => {
-    const result = gate({
-      head: makeButtonRun({
-        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
-      }),
-      base: makeButtonRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
   });
 
   it('schedules one complete component per --component, never a mix', () => {
@@ -1401,295 +1350,10 @@ describe('the Button cells (--component button)', () => {
 });
 
 /**
- * The SegmentedControl cells (`bun bench --component segmented-control`, task G4).
- *
- * The same three claims the Button block makes, with a third component in the
- * file: a gate that pairs an arm with a *different* component's `rn-core` control
- * still produces confident, meaningless numbers, and G4 is the first component
- * added since that rule was written - so it is the one that has to prove the rule
- * still holds with five components in the plan rather than two.
- */
-describe('the SegmentedControl cells (--component segmented-control)', () => {
-  /**
-   * A run holding Switch, Button and SegmentedControl cells at once.
-   *
-   * Three components with controls deliberately far apart (`mount` 100 us,
-   * `mount.button` 200 us, `mount.segmented-control` 300 us), and every arm
-   * exactly 1.1x over the control of *its own* cell. A gate that crossed the
-   * pairing would read 3.3x or 0.3x on the rows below, so 1.1 is only reachable
-   * through the right one.
-   */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const scenarios = [
-      ['mount', 1],
-      ['mount.button', 2],
-      ['mount.segmented-control', 3],
-    ];
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const [scenario, scale] of scenarios) {
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-        const action = scenarioActionOf(scenario);
-        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
-        records.push(
-          ...memoryRecords({
-            scenario: `memory${suffix}`,
-            implementation,
-            ...values,
-          })
-        );
-      }
-    }
-    return {
-      platform: 'ios',
-      cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the SegmentedControl component, as `--component segmented-control` runs it. */
-  function makeSegmentedRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) =>
-            componentOf(cell.scenario ?? key) === 'segmented-control'
-        )
-      ),
-    };
-  }
-
-  it('divides a SegmentedControl arm by the SegmentedControl control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 330 us over a 300 us control - and *not* 330 over the 100 us Switch
-    // control (3.3x) or the 200 us Button one (1.65x).
-    expect(
-      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.segmented-control:rn-core:50'].metrics.mountedNs.control
-    ).toBe(true);
-    // The other two components are still paired with their own controls, so this
-    // is a fourth row joining the table rather than a row that moved the others.
-    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
-    expect(
-      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({
-      head: makeSegmentedRun(),
-      base: makeSegmentedRun(),
-    });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the SegmentedControl arm doubles', () => {
-    const result = gate({
-      head: makeSegmentedRun({
-        'nitro-ui': { mounted: 440_000, presented: 520_000 },
-      }),
-      base: makeSegmentedRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    expect(mounted.key).toBe('mount.segmented-control:nitro-ui:50');
-  });
-
-  it('never gates a SegmentedControl reference arm', () => {
-    const result = gate({
-      head: makeSegmentedRun({
-        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
-      }),
-      base: makeSegmentedRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
-  });
-
-  it('schedules every segmented cell and every arm', () => {
-    const segmented = buildSchedule({
-      plan: 'quick',
-      component: 'segmented-control',
-    });
-    expect([...new Set(segmented.map((entry) => entry.scenario))]).toEqual([
-      'mount.segmented-control',
-      'update.segmented-control',
-      'memory.segmented-control',
-    ]);
-    expect(new Set(segmented.map((entry) => entry.implementation))).toEqual(
-      armsFor('segmented-control')
-    );
-  });
-});
-
-/**
- * The DatePicker cells (`bun bench --component date-picker`, task G5).
- *
- * The same four claims as the SegmentedControl block, now with a *fourth*
- * component in the fixture: `componentOf` is what pairs an arm with the
- * `rn-core` control of its own cell, and a plan that grows is exactly when a
- * pairing bug would start dividing a date arm by a segmented control's number.
- * Scales are 1/2/3/4 microseconds apart per component, so a crossed pairing is
- * arithmetically unreachable: 1.1x only comes from the right control.
+ * The DatePicker cells (`bun bench --component date-picker`, task G5): the arms that
+ * have no DatePicker cell on Android (`ARMS_WITHOUT_COMPONENT`).
  */
 describe('the DatePicker cells (--component date-picker)', () => {
-  /**
-   * A run holding Switch, Button, SegmentedControl and DatePicker cells at once.
-   *
-   * Every arm is exactly 1.1x over the control of *its own* cell, and each
-   * component's control is a different size, so a ratio can only be 1.1 when the
-   * pairing is right.
-   */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const scenarios = [
-      ['mount', 1],
-      ['mount.button', 2],
-      ['mount.segmented-control', 3],
-      ['mount.date-picker', 4],
-    ];
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const [scenario, scale] of scenarios) {
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-        const action = scenarioActionOf(scenario);
-        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
-        records.push(
-          ...memoryRecords({
-            scenario: `memory${suffix}`,
-            implementation,
-            ...values,
-          })
-        );
-      }
-    }
-    return {
-      platform: 'ios',
-      cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the DatePicker component, as `--component date-picker` runs it. */
-  function makeDateRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    return {
-      platform: 'ios',
-      cells: Object.fromEntries(
-        Object.entries(run.cells).filter(
-          ([key, cell]) => componentOf(cell.scenario ?? key) === 'date-picker'
-        )
-      ),
-    };
-  }
-
-  it('divides a DatePicker arm by the DatePicker control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 440 us over a 400 us control - and not 440 over the Switch (4.4x), Button
-    // (2.2x) or SegmentedControl (1.47x) controls.
-    expect(
-      table['mount.date-picker:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.date-picker:rn-core:50'].metrics.mountedNs.control
-    ).toBe(true);
-    // The three earlier components keep their own pairings, so this is a fifth
-    // row joining the table rather than a row that moved the others.
-    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
-    expect(
-      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({ head: makeDateRun(), base: makeDateRun() });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the DatePicker arm doubles', () => {
-    const result = gate({
-      head: makeDateRun({
-        'nitro-ui': { mounted: 440_000, presented: 520_000 },
-      }),
-      base: makeDateRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    expect(mounted.key).toBe('mount.date-picker:nitro-ui:50');
-  });
-
-  it('never gates a DatePicker reference arm', () => {
-    const result = gate({
-      head: makeDateRun({
-        'expo-ui-shared-host': { mounted: 640_000, presented: 780_000 },
-      }),
-      base: makeDateRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
-  });
-
-  it('schedules every date-picker cell and every arm', () => {
-    const datePicker = buildSchedule({
-      plan: 'quick',
-      component: 'date-picker',
-    });
-    expect([...new Set(datePicker.map((entry) => entry.scenario))]).toEqual([
-      'mount.date-picker',
-      'update.date-picker',
-      'memory.date-picker',
-    ]);
-    expect(new Set(datePicker.map((entry) => entry.implementation))).toEqual(
-      armsFor('date-picker')
-    );
-  });
-
   /**
    * `@expo/ui` has no mountable date *field* on Android: its only picker form is
    * the inline M3 calendar, whose month pager is horizontally scrollable, so the
@@ -1735,157 +1399,6 @@ describe('the DatePicker cells (--component date-picker)', () => {
     });
     expect(new Set(androidSwitch.map((entry) => entry.implementation))).toEqual(
       new Set(IMPLEMENTATIONS)
-    );
-  });
-});
-
-/**
- * The Picker cells (`bun bench --component picker`, task G6).
- *
- * The same four claims the SegmentedControl block makes, with a fourth component
- * in the file: G6 is the first component added since the pairing rule was
- * written against six components, and the claim that has to survive that is that
- * a Picker arm is divided by a *Picker* control - a crossed wire would read a
- * ratio no arm in here can produce.
- */
-describe('the Picker cells (--component picker)', () => {
-  /**
-   * A run holding Switch, Button, SegmentedControl and Picker cells at once.
-   *
-   * Four components whose controls are deliberately far apart (`mount` 100 us,
-   * `mount.button` 200 us, `mount.segmented-control` 300 us, `mount.picker`
-   * 400 us), and every arm exactly 1.1x over the control of *its own* cell. A
-   * gate that crossed the pairing would read 4.4x or 0.25x on the Picker rows,
-   * so 1.1 is only reachable through the right one.
-   */
-  function makeMixedRun(overrides = {}) {
-    const arms = {
-      'rn-core': {},
-      'expo-ui-host-per-control': { mounted: 210_000 },
-      'expo-ui-shared-host': { mounted: 80_000 },
-      'nitro-ui': { mounted: 110_000 },
-      ...overrides,
-    };
-    const scenarios = [
-      ['mount', 1],
-      ['mount.button', 2],
-      ['mount.segmented-control', 3],
-      ['mount.picker', 4],
-    ];
-    const records = [];
-    for (const [implementation, values] of Object.entries(arms)) {
-      for (const [scenario, scale] of scenarios) {
-        const action = scenarioActionOf(scenario);
-        const suffix = scenario === action ? '' : `.${componentOf(scenario)}`;
-        records.push(
-          ...cellRecords({
-            scenario,
-            implementation,
-            mounted: (values.mounted ?? 100_000) * scale,
-            presented: (values.presented ?? 130_000) * scale,
-          })
-        );
-        if (action === 'mount') {
-          records.push(
-            ...memoryRecords({
-              scenario: `memory${suffix}`,
-              implementation,
-              ...values,
-            })
-          );
-        }
-      }
-    }
-    return {
-      platform: 'ios',
-      cells: aggregateRecords(records, { keepRaw: true }),
-    };
-  }
-
-  /** `makeMixedRun` restricted to the Picker component, as `--component picker` runs it. */
-  function makePickerRun(overrides = {}) {
-    const run = makeMixedRun(overrides);
-    const cells = Object.fromEntries(
-      Object.entries(run.cells).filter(
-        ([key, cell]) => componentOf(cell.scenario ?? key) === 'picker'
-      )
-    );
-    // A run that came back empty would make every `gate()` assertion below pass
-    // by saying nothing, so the filter itself is part of what is under test.
-    if (Object.keys(cells).length === 0) {
-      throw new Error(
-        'the component-scoped filter found no Picker cells - ' +
-          '`componentOf` is crossed, and these cases would be vacuous'
-      );
-    }
-    return { platform: 'ios', cells };
-  }
-
-  it('divides a Picker arm by the Picker control, never another control', () => {
-    const table = ratioTable(makeMixedRun());
-    // 440 us over a 400 us control - and *not* 4.4x over the Switch control or
-    // 2.2x over the Button one.
-    expect(
-      table['mount.picker:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(table['mount.picker:rn-core:50'].metrics.mountedNs.control).toBe(
-      true
-    );
-    // The other three components keep their own pairing, so this is a fifth row
-    // joining the table rather than a row that moved the others.
-    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
-      1.1,
-      4
-    );
-    expect(
-      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-    expect(
-      table['mount.segmented-control:nitro-ui:50'].metrics.mountedNs.ratio
-    ).toBeCloseTo(1.1, 4);
-  });
-
-  it('is silent when nothing changed', () => {
-    const result = gate({ head: makePickerRun(), base: makePickerRun() });
-    expect(result.failures).toEqual([]);
-  });
-
-  it('fails conclusively when the Picker arm doubles', () => {
-    const result = gate({
-      head: makePickerRun({
-        'nitro-ui': { mounted: 880_000, presented: 1_040_000 },
-      }),
-      base: makePickerRun(),
-    });
-    const mounted = result.failures.find(
-      (failure) => failure.metric === 'mountedNs'
-    );
-    expect(mounted).toBeDefined();
-    expect(mounted.implementation).toBe('nitro-ui');
-    expect(mounted.key).toBe('mount.picker:nitro-ui:50');
-  });
-
-  it('never gates a Picker reference arm', () => {
-    const result = gate({
-      head: makePickerRun({
-        'expo-ui-shared-host': { mounted: 1_280_000, presented: 1_560_000 },
-      }),
-      base: makePickerRun(),
-    });
-    expect(
-      result.failures.filter((failure) => failure.implementation === 'nitro-ui')
-    ).toEqual([]);
-  });
-
-  it('schedules every picker cell and every arm', () => {
-    const picker = buildSchedule({ plan: 'quick', component: 'picker' });
-    expect([...new Set(picker.map((entry) => entry.scenario))]).toEqual([
-      'mount.picker',
-      'update.picker',
-      'memory.picker',
-    ]);
-    expect(new Set(picker.map((entry) => entry.implementation))).toEqual(
-      armsFor('picker')
     );
   });
 });

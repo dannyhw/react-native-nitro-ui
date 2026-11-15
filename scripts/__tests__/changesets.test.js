@@ -1,8 +1,8 @@
 // Releases are cut by Changesets (DESIGN.md D27) and staged on npm (D28). These
 // assertions keep that setup honest: the workspaces that must never be versioned
-// or published stay excluded, the release-it scaffold is really gone, the
-// changelog stays in the shape the release notes are read out of, and the
-// workflows keep the rights they need and no more than that.
+// or published stay excluded, the changelog stays in the shape the release notes
+// are read out of, and the workflows keep the rights they need and no more than
+// that.
 import { describe, expect, it } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -131,6 +131,31 @@ function changelogProblems(changelog) {
   return problems;
 }
 
+describe('publishing', () => {
+  it('has no way to publish from the repo', () => {
+    // Publishing is not a thing a checkout can do: CI stages, and a person
+    // approves on npmjs.com. `changeset publish` would try `npm publish`, which
+    // the trusted publisher rejects, and `npm stage publish` needs an
+    // identity a contributor's laptop must not carry.
+    expect(pkg.scripts['release:publish']).toBeUndefined();
+    const forbidden = /\bchangeset (publish|tag|release)\b/;
+    for (const [name, script] of Object.entries(pkg.scripts)) {
+      expect([name, script]).toEqual([
+        name,
+        expect.not.stringMatching(forbidden),
+      ]);
+    }
+    for (const [name, source] of Object.entries(SOURCES)) {
+      for (const body of runBodies(source)) {
+        expect([name, body]).toEqual([
+          name,
+          expect.not.stringMatching(forbidden),
+        ]);
+      }
+    }
+  });
+});
+
 describe('changesets configuration', () => {
   it('versions from main and publishes publicly', () => {
     expect(config.baseBranch).toBe('main');
@@ -221,43 +246,6 @@ describe('changelog shape', () => {
     expect(changelogProblems(changelogWith(['0.1.1']))).toEqual([
       expect.stringContaining('must be 0.1.0'),
     ]);
-  });
-});
-
-describe('release-it is gone', () => {
-  it('removes the dependency, the config and the script', () => {
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    expect(
-      Object.keys(deps).filter((d) => d.startsWith('@release-it/'))
-    ).toEqual([]);
-    expect(deps['release-it']).toBeUndefined();
-    expect(pkg['release-it']).toBeUndefined();
-    expect(pkg.scripts.release).toBeUndefined();
-  });
-
-  it('has changesets commands instead, and no way to publish from here', () => {
-    expect(pkg.devDependencies['@changesets/cli']).toBeDefined();
-    expect(pkg.scripts.changeset).toBe('changeset');
-    // `changeset version` touches package.json and CHANGELOG.md only, so the same
-    // script also refreshes `example/ios/Podfile.lock` — the action commits the tree
-    // straight after this script, so that is the only moment the Version Packages
-    // commit can be made internally consistent. `bun run check` then guards it.
-    //
-    // The `--preflight` first is the part to keep: `changeset version` writes, so a
-    // refusal after it leaves a half-versioned tree on a machine that only wanted a
-    // preview. `example-lock.test.js` proves the refusal itself writes nothing.
-    expect(pkg.scripts['release:version']).toBe(
-      'node scripts/sync-example-lock.mjs --preflight && changeset version && ' +
-        'node scripts/sync-example-lock.mjs --fix'
-    );
-    // Publishing is not a thing a checkout can do: CI stages, and a person
-    // approves on npmjs.com. `changeset publish` would try `npm publish`, which
-    // the trusted publisher rejects, and `npm stage publish` needs an
-    // identity a contributor's laptop must not carry.
-    expect(pkg.scripts['release:publish']).toBeUndefined();
-    for (const script of Object.values(pkg.scripts)) {
-      expect(script).not.toMatch(/\bchangeset (publish|tag|release)\b/);
-    }
   });
 });
 

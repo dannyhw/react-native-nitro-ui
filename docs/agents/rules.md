@@ -21,7 +21,6 @@ shorten its sentence in `AGENTS.md` to one line.
 | A component ships its README row, usage and both screenshots | `readme-components.test.js` | A component is not shipped until it is documented |
 | README examples compile | `readme:check` | A copied example that does not build is the first thing a user meets |
 | A report cites files that exist and a table that is current | `bun run task-ready`: the worker runs it before hand-in and the orchestrator asks for its line. It is not part of `check` | A report must describe the tree it is handed in with |
-| Exported failure logs carry no secret or machine identity | The scrubber in `gate.mjs export` (`gate-logs.test.js`) | The repository is public |
 | A file listed as check-only tooling is not imported by a device run | `gate-check.test.js` searches for importers of the files it names, not of the whole list | A wrong entry makes a real change look like it needs no device run |
 | A worktree is removed only when nothing can be lost and nobody is in it | `worktrees.mjs --prune` and its rule in `worktrees-core.mjs` (`worktrees.test.js`) | A checkout in use must never be removed |
 

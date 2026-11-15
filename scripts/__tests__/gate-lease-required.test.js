@@ -949,8 +949,8 @@ describe('the bench runner measures on one device or none', () => {
   });
 
   it('still resolves a CI bench that only names an AVD', () => {
-    // The other direction: this file must not break the job that boots its own
-    // emulator and has no lease to source (.github/workflows/bench.yml).
+    // The other direction: this file must not break a run that boots its own
+    // emulator and has no lease to source.
     const stub = adbStub({ attached: ['emulator-5599'], avdOf: 'nitroui-ci' });
     const out = resolve({ __root: stub.root, ANDROID_AVD: 'nitroui-ci' });
     expect(out).toContain('DEVICE');

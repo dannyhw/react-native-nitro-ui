@@ -39,7 +39,6 @@ import {
   ledgerFileName,
   ledgerLineFromRun,
   ledgerRelativePath,
-  latestByGate,
   listByGate,
   ownMetroPids,
   parseLedger,
@@ -212,19 +211,9 @@ describe('ledger lines', () => {
     );
     expect(parsed).toHaveLength(2);
     expect(parsed.every((entry) => entry.corrupt === true)).toBe(true);
-    expect(latestByGate(parsed)).toEqual({});
     expect(
       gateStateFor({ gate: 'check', tree: TREE_A, entry: undefined }).state
     ).toBe('missing');
-  });
-
-  it('takes the last line per gate by append order, not by clock', () => {
-    const older = { ...line({ gate: 'check', result: 'fail' }) };
-    older.ts = '2099-01-01T00:00:00.000Z';
-    const newer = line({ gate: 'check', result: 'pass' });
-    const latest = latestByGate([older, newer]);
-    expect(latest.check.result).toBe('pass');
-    expect(latestByGate([newer, older]).check.result).toBe('fail');
   });
 
   it('puts one file per branch under .gates, no separator to collide', () => {
@@ -705,8 +694,8 @@ describe('summarizeLoad', () => {
       median: 3,
       max: 9,
       count: 5,
-      // X12: the last sample, so a failure excerpt can say what load the run
-      // *ended* under and not just how it averaged.
+      // X12: the last sample, what load the run *ended* under and not just how
+      // it averaged.
       end: 3,
     });
     // Even count: the middle two, so a run that was busy for half its length is
@@ -2737,9 +2726,9 @@ describeCli('gate.mjs --background and wait', () => {
     // X16 item 3. `gate.mjs bench --help` used to resolve as the bench gate with a
     // `--help` filter, run `run.mjs --help` - which prints usage and exits 2 - and
     // append `bench:--help FAIL` to the branch ledger. A FAIL row is evidence that a
-    // gate ran and lost: `table` puts it first, `status` reports the branch as red,
-    // and `export --task` writes a scrubbed failure excerpt for a command that never
-    // measured anything. Asking how a gate is spelled is not a run.
+    // gate ran and lost: `table` puts it first and `status` reports the branch as
+    // red, for a command that never measured anything. Asking how a gate is spelled
+    // is not a run.
     //
     // `FAKE_EXIT=2` keeps the fixture honest about the shape of the bug: the real
     // runner's help does exit non-zero, so a pre-fix probe lands a *FAIL* row, the
@@ -3199,7 +3188,7 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
    * belongs is not a syntax error: the assignment ends at the semicolon and every
    * literal after it is a no-op expression statement that lints and formats clean.
    * X30's `--background` edit did that four times, so the help stopped mid-sentence
-   * and the flag, the merge-reuse rule, `export` and `logs` had no explanation
+   * and the flag, `export` and `logs` had no explanation
    * anywhere — including in the usage error about a misplaced `--background`, which
    * prints the same truncated string. Asserting the *tail* is what catches the shape:
    * a string that was cut short has no tail, and no amount of middle text shows it.
@@ -3208,11 +3197,10 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
     const dir = makeCheckout({ ...CHECKOUT, 'ios/a.swift': 'v1' });
     cleanup.push(dir);
     const help = runCli(dir, ['--help']).stdout;
-    // The four paragraphs that went missing, by the words only the whole string has.
+    // The paragraphs that went missing, by the words only the whole string has.
     for (const section of [
       'never\n        after `--`, where the arguments belong to the gate',
       '--background starts a gate detached and returns at once',
-      "at merge, `check` may be satisfied by another branch's ledger",
       'Export *merges*',
       "(`logs` lists this clone's stored gate logs",
     ]) {
@@ -3220,7 +3208,7 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
     }
     // And the end really is the end: the `logs` line and the last clause of the file.
     expect(help).toContain('node scripts/gate.mjs logs [--branch <b>]');
-    expect(help.trimEnd().endsWith('retention without listing)')).toBe(true);
+    expect(help.trimEnd().endsWith('--all shows every branch)')).toBe(true);
   });
 
   it('and the refusal for a misplaced --background carries all of it', () => {
@@ -3232,7 +3220,7 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
     // Whoever mistyped the flag is reading this text to find the right form, so the
     // half of it that explains `--background` and `wait` has to be in there.
     expect(run.stderr).toContain('--background starts a gate detached');
-    expect(run.stderr).toContain('retention without listing)');
+    expect(run.stderr).toContain('--all shows every branch)');
   });
 
   it('and eslint is set to catch the shape of the bug itself', () => {

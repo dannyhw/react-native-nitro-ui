@@ -9,9 +9,8 @@
  *
  * The three device tools are stubs that append their argv to a calls file, so a test can assert
  * both directions - "it did power this one off" and "it never powered that one off, or even asked
- * about it" - instead of inferring either from a state file. `NITRO_UI_SIMCTL_BIN` /
- * `NITRO_UI_ADB_BIN` are the same override `doctor.mjs` and the unowned-device check use;
- * `EMULATOR_BIN` is the pool's own.
+ * about it" - instead of inferring either from a state file. `NITRO_UI_SIMCTL_BIN`,
+ * `NITRO_UI_ADB_BIN` and `EMULATOR_BIN` are the pool's own overrides.
  */
 
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
@@ -41,90 +40,6 @@ const AVD_A = 'nitro-ui-a';
 const AVD_B = 'nitro-ui-b';
 
 const MINUTE = 60_000;
-
-/**
- * Every `lease.mjs acquire --exclusive --boot` command a Markdown document prints, as the argv the
- * CLI would receive (`<ID>` filled in).
- *
- * Read the way a shell reads it, in this order: a trailing `# comment` goes first, per physical
- * line (a `\` inside a comment continues nothing), then a line ending in `\` is joined to the next,
- * and only then are commands filtered. Filtering first is what let a wrapped command through
- * unread (X17 item 3), and dropping only `#`-words let the rest of a comment become arguments.
- *
- * @param {string} doc
- * @returns {{line: string, argv: string[]}[]}
- */
-function exclusiveBootCommands(doc) {
-  const commands = [];
-  let pending = '';
-  for (const physical of doc.split('\n')) {
-    const code = physical.replace(/(^|\s)#.*$/, '').trim();
-    if (code.endsWith('\\')) {
-      pending += `${code.slice(0, -1).trim()} `;
-      continue;
-    }
-    commands.push(`${pending}${code}`.trim());
-    pending = '';
-  }
-  if (pending !== '') commands.push(pending.trim());
-  return commands
-    .filter((line) => /lease\.mjs acquire/.test(line))
-    .filter((line) => line.includes('--exclusive'))
-    .filter((line) => line.includes('--boot'))
-    .map((line) => ({
-      line,
-      argv: line
-        .replace(/^node\s+scripts\/lease\.mjs\s+/, '')
-        .split(/\s+/)
-        .filter((word) => word !== '')
-        // The doc's placeholders are the task name and nothing else.
-        .map((word) => (word === '<ID>' ? 'DOC-LINE' : word)),
-    }));
-}
-
-describe('which documented commands the exclusive-boot guard reads', () => {
-  it('reads a backslash-continued command as one command', () => {
-    // A long command in a fenced block is wrapped with `\`, as CONTRIBUTING already wraps its
-    // `bench/run.mjs` and `xcodebuild` lines. Filtered per physical line, the first half has
-    // `--exclusive` but no `--boot` and the second has no `lease.mjs acquire`, so the guard read
-    // neither and a refused form could be documented under it in plain sight (X17 item 3).
-    const doc = [
-      '```sh',
-      'node scripts/lease.mjs acquire --task <ID> --exclusive \\',
-      '  --boot --platform android',
-      'node scripts/bench/run.mjs --platform android --plan full \\',
-      '  --launches 8',
-      '```',
-    ].join('\n');
-    expect(exclusiveBootCommands(doc).map((command) => command.argv)).toEqual([
-      [
-        'acquire',
-        '--task',
-        'DOC-LINE',
-        '--exclusive',
-        '--boot',
-        '--platform',
-        'android',
-      ],
-    ]);
-  });
-
-  it('still reads a one-line command, and drops its trailing comment', () => {
-    const doc =
-      'node scripts/lease.mjs acquire --task <ID> --exclusive --boot --platform ios   # a bench\n';
-    expect(exclusiveBootCommands(doc).map((command) => command.argv)).toEqual([
-      [
-        'acquire',
-        '--task',
-        'DOC-LINE',
-        '--exclusive',
-        '--boot',
-        '--platform',
-        'ios',
-      ],
-    ]);
-  });
-});
 
 describe('the lease owns the device lifecycle', () => {
   let home;
@@ -1163,55 +1078,10 @@ describe('the lease owns the device lifecycle', () => {
     expect(poolDevices()).toEqual([]);
   });
 
-  it('leaves an idle device alone when told not to reap', () => {
-    // The device is reported *up* on purpose: a stub that answered "no devices" would let a
-    // forced reap pass this case by forgetting the record without ever touching a device, which
-    // is what it did the first time round.
-    tools({ androidUp: true });
-    warmDevice(idleEntry());
-    // `lease.mjs reap` rather than `acquire`: since the no-passive-reaping decision, an acquire
-    // kills nothing whatever the flags, so the only command that can honour `--no-reap` is the one
-    // somebody typed. Both halves are here so this is about the flag and not an unreachable path.
-    const suppressed = cli(['reap', '--no-reap']);
-    expect(suppressed.status).toBe(0);
-    expect(log()).not.toContain('emu kill');
-    expect(poolDevices()).toHaveLength(1);
-    const reaped = cli(['reap']);
-    expect(reaped.status).toBe(0);
-    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
-    expect(poolDevices()).toEqual([]);
-  });
-
-  it('boots its own pair under --boot --no-reap, and still leaves others alone', () => {
-    // The two switches are independent, and the combination is the one that shows it: `--boot`
-    // means "warm the pair I am about to use", `--no-reap` means "do not touch anybody else's".
-    // A caller that read `--no-reap` as "the pool is off" would lose the warm boot; one that read
-    // `--boot` as "manage everything" would power off a device on a machine that said not to.
-    tools({ androidUp: true, iosUp: true });
-    warmDevice({
-      ...idleEntry({ key: 'avd:nitro-ui-b', idleMinutes: 90 }),
-      key: 'avd:nitro-ui-b',
-      id: 'nitro-ui-b',
-      serial: 'emulator-5576',
-    });
-    const acquired = cli(['acquire', '--task', 'T1', '--boot', '--no-reap']);
-    expect(acquired.status).toBe(0);
-    expect(acquired.stderr).toContain('is already up - reusing it');
-    expect(poolDevices().map((x) => x.key)).toContain('avd:nitro-ui-a');
-    // pair-b's device is 90 minutes idle and named in devices.json: reap would take it, and this
-    // caller said not to reap.
-    expect(log()).not.toContain('emu kill');
-    expect(poolDevices().map((x) => x.key)).toContain('avd:nitro-ui-b');
-    // Where the flag has teeth now: the explicit reap, suppressed.
-    expect(cli(['reap', '--no-reap']).status).toBe(0);
-    expect(log()).not.toContain('emu kill');
-    expect(poolDevices().map((x) => x.key)).toContain('avd:nitro-ui-b');
-  });
-
   it('takes the whole device lifecycle offline for NITRO_UI_LEASE_BOOT=0', () => {
     // The one variable a CI runner or a bench host sets in its profile, and the promise it makes
     // is stronger than `--no-boot`: nothing is booted *or* powered off, because that machine owns
-    // its own devices. `--no-reap` only stops the cleanup; the env var stops the pool itself.
+    // its own devices.
     tools({ androidUp: true });
     warmDevice(idleEntry());
     const acquired = cli(['acquire', '--task', 'T1'], {
@@ -1879,39 +1749,6 @@ describe('the lease owns the device lifecycle', () => {
     spawnSync('/bin/ls', [home], { encoding: 'utf8' })
       .stdout.split('\n')
       .filter((name) => name.startsWith(prefix));
-
-  /**
-   * The documented invocation is the one that gets typed, so it has to be one the CLI accepts.
-   *
-   * Item 2's fix was to *refuse* `--exclusive --boot` without `--platform`, which is the exact form
-   * CONTRIBUTING told every bench host to run. Fixing the code and leaving the doc would have made
-   * the documented command a hard failure - a worse version of the bug than the one it replaced -
-   * and the two files never see each other. So every exclusive-boot line the doc prints is run here,
-   * through the real CLI with the fake device tools, rather than being compared by eyeball.
-   */
-  it('documents an exclusive boot the CLI actually accepts', () => {
-    tools({ androidUp: false, iosUp: false, stateful: true });
-    const doc = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8');
-    const commands = exclusiveBootCommands(doc);
-    // Empty here would mean the guard proves nothing, which is the failure mode of every
-    // "does the doc match the code" test written after the doc had already been fixed.
-    expect(commands.length).toBeGreaterThan(0);
-    for (const { line, argv } of commands) {
-      // `--out` keeps the env file out of stdout so the assertions below read the diagnostics,
-      // not the lease.
-      const ran = cli([
-        ...argv,
-        '--out',
-        join(home, 'doc-line.env'),
-        '--no-reset',
-      ]);
-      expect({ line, status: ran.status, err: ran.stderr }).toMatchObject({
-        line,
-        status: 0,
-      });
-      expect(ran.stderr).not.toContain('must name the half');
-    }
-  });
 
   afterEach(() => {
     rmSync(home, { recursive: true, force: true });

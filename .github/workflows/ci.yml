@@ -17,7 +17,7 @@ permissions:
 #
 # Everything that needs a simulator or an emulator stays `workflow_dispatch`
 # only: the two Harness jobs below, the Android release build, and the on-device
-# jobs in `bench.yml` and `smoke.yml`. Hosted runners make those slow and noisy,
+# jobs in `smoke.yml`. Hosted runners make those slow and noisy,
 # and the device gates that decide a task run locally (docs/DESIGN.md D22,
 # D25). The steps stay here so a maintainer can still start them on demand.
 #
@@ -65,8 +65,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The bench-deps tests read bun.lock at an earlier commit, as a merge
-          # mint does at a baseline's founding sha, so `check` needs history.
+          # Full history: a bench test that read bun.lock at an earlier commit
+          # needed it. That test is gone; a depth-1 `check` has not been tried since.
           fetch-depth: 0
 
       - name: Setup
@@ -292,8 +292,8 @@ jobs:
           # blocked on a tool, and a preflight that hangs costs the run its evidence *and*
           # its harness job. `timeout(1)` is the obvious answer and the wrong one here for
           # the reason `scripts/ci-emulator-diagnostics.mjs` gives: it is not installed
-          # everywhere this repo's tests execute step bodies, and a guard nobody can run is
-          # not a guard. The budget is one knob, overridable so a test can prove the bound
+          # on macOS, where this step body may also be run, and a guard nobody can run is
+          # not a guard. The budget is one knob, overridable so the bound can be shown
           # in seconds rather than half a minute.
           bounded() {
             local secs=$1; shift

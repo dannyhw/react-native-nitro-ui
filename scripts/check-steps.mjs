@@ -7,19 +7,14 @@
  * (`test:native:android`); the steps are the same, in the same
  * order, but expressed here as a dependency graph so independent ones can overlap.
  *
- * Two rules keep this honest:
+ * One rule keeps this honest:
  *
- *   1. **The step list is the chain.** `serialChainFromSteps(CHECK_STEPS)` must
- *      equal `package.json`'s `scripts["check:serial"]` byte for byte, and
- *      `scripts/__tests__/check-runner.test.js` asserts it. Adding a step to one
- *      side and not the other fails a unit test, which is the only way a
- *      "same steps, faster" claim stays true.
- *   2. **Shared outputs are ordered, not hoped about.** Each step declares the
- *      regions it `writes` and the ones it `reads` (see `FINDINGS` below), and
- *      `findOutputConflicts` returns any pair that neither a `needs` edge nor a
- *      shared `group` separates. That is a structural check, so a new step that
- *      writes into `lib/` without ordering itself after `prepare` is caught here
- *      rather than as a flaky gate three tasks from now.
+ *   **Shared outputs are ordered, not hoped about.** Each step declares the
+ *   regions it `writes` and the ones it `reads` (see `FINDINGS` below), and
+ *   `findOutputConflicts` returns any pair that neither a `needs` edge nor a
+ *   shared `group` separates. That is a structural check, so a new step that
+ *   writes into `lib/` without ordering itself after `prepare` is caught here
+ *   rather than as a flaky gate three tasks from now.
  *
  * No `import.meta` and no `node:os` here, so `scripts/__tests__/check-runner.test.js`
  * can import it (same reason `gate-core.mjs` exists next to `gate.mjs`).
@@ -88,9 +83,6 @@ export const FINDINGS = Object.freeze({
  * `needs` is a hard order (the earlier step must have passed), `group` means "never
  * at the same time as another member". `writes`/`reads` are the regions from
  * `FINDINGS`; `findOutputConflicts` is what enforces them.
- *
- * Order is load-bearing for one test, not for correctness: the step names must stay
- * equal to `check:serial`'s, so the declaration order *is* the serial chain's.
  */
 export const CHECK_STEPS = Object.freeze([
   {
@@ -271,49 +263,6 @@ export const CHECK_STEPS = Object.freeze([
 /** The command each step runs, spelled the way `package.json`'s chain spelled it. */
 export function commandForStep(step) {
   return ['bun', 'run', step.name];
-}
-
-/**
- * The serial chain this graph stands in for - i.e. the old `check` script.
- *
- * `check:serial` in `package.json` is this string, kept literal rather than
- * generated at run time so `bun run check:serial` works with no tooling and a
- * person can read the chain. The equality test is what binds the two.
- */
-export function serialChainFromSteps(steps = CHECK_STEPS) {
-  return steps.map((step) => commandForStep(step).join(' ')).join(' && ');
-}
-
-/**
- * The step names a `&&` chain of `bun run <name>` calls runs, in order.
- *
- * Parsing rather than eyeballing, so `check:serial`'s real content is what the
- * equality test compares. Anything in the chain that is *not* a plain
- * `bun run <name>` is returned as a problem rather than skipped: a step that
- * takes an argument (`bun run perf:renders -- --update-baseline`) is exactly the
- * kind of change the runner would have to know about, and quietly dropping it
- * would let the two lists agree while the work differed.
- *
- * @param {string} chain
- * @returns {{names: string[], problems: string[]}}
- */
-export function stepsFromSerialChain(chain) {
-  const names = [];
-  const problems = [];
-  for (const raw of String(chain ?? '').split('&&')) {
-    const part = raw.trim();
-    if (part === '') {
-      problems.push('an empty `&&` section');
-      continue;
-    }
-    const match = /^bun run ([A-Za-z0-9:._-]+)$/.exec(part);
-    if (match == null) {
-      problems.push(`not a plain "bun run <script>": ${JSON.stringify(part)}`);
-      continue;
-    }
-    names.push(match[1]);
-  }
-  return { names, problems };
 }
 
 /**
@@ -530,37 +479,16 @@ export function unknownCheckArguments(argv = []) {
  * than in `check.mjs` for the same reason the rest of the logic does: jest cannot
  * import a file that uses `import.meta`).
  *
- * The graph is only trustworthy while it *is* the chain, so the runner checks that
- * against `check:serial` before spawning anything: a step added to the chain and
- * not to the graph would otherwise mean `check` proved less than CI and every
- * report say it did, silently, from the day it was merged.
- *
  * @param {object[]} steps
- * @param {string} serialChain `package.json`'s `scripts["check:serial"]`
  * @returns {string[]} problems; empty means the run may start
  */
-export function planProblems(steps = CHECK_STEPS, serialChain = '') {
+export function planProblems(steps = CHECK_STEPS) {
   const problems = validateCheckSteps(steps).map(
     (problem) => `step list: ${problem}`
   );
   for (const conflict of findOutputConflicts(steps)) {
     problems.push(
       `shared output: ${conflict.kind} - add a needs edge or a shared group`
-    );
-  }
-  const parsed = stepsFromSerialChain(serialChain);
-  const declared = steps.map((step) => step.name);
-  for (const problem of parsed.problems) {
-    problems.push(`check:serial: ${problem}`);
-  }
-  if (
-    parsed.problems.length === 0 &&
-    parsed.names.join('\n') !== declared.join('\n')
-  ) {
-    problems.push(
-      `the chain and the graph are different steps:\n` +
-        `    check:serial runs ${parsed.names.join(', ')}\n` +
-        `    the graph runs    ${declared.join(', ')}`
     );
   }
   return problems;
@@ -575,7 +503,7 @@ export function planProblems(steps = CHECK_STEPS, serialChain = '') {
  *
  *   - **no interleaving**: a step's log arrives in one `flush` event, and flushes
  *     go out in declaration order as they become available. A log's document order
- *     is therefore the same as the serial chain's, which is what lets the ledger
+ *     is therefore the same as a serial run's, which is what lets the ledger
  *     quote the *unit-test* summary rather than whichever Jest finished first
  *     (X2's M3). The per-step summary line goes out live, at the moment the step
  *     ends, so a long first step does not look like a hang.
