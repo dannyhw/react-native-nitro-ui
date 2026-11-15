@@ -637,7 +637,11 @@ function Row({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  page: { padding: 16, gap: 6 },
+  // The extra bottom room is for the last Host block: a dev build docks React
+  // Native's LogBox against the bottom of the window and swallows touches meant for
+  // whatever is behind it, so a check has to be able to scroll a composition up out
+  // of that strip rather than press through it. (X35)
+  page: { padding: 16, paddingBottom: 460, gap: 6 },
   title: { fontSize: 18, fontWeight: '600' },
   note: { color: '#888', marginBottom: 8 },
   section: {

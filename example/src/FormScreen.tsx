@@ -325,10 +325,41 @@ export default function FormScreen() {
             </View>
           </Form.Row>
         </Form.Section>
+
+        {/*
+          Tail content below the note field. A dev build docks React Native's
+          LogBox against the bottom of the window, where it swallows touches meant
+          for the row behind it, and a list that *ends* at the note field has no
+          scroll left to lift that field clear of it: the check that focuses it
+          could only ever tap the warning box. More rows to look at is what a
+          settings screen has anyway, and they are the scroll room. (X35)
+        */}
+        <Form.Section title="Diagnostics">
+          {TAIL.map((row) => (
+            <Form.Row key={row}>
+              <View style={styles.rowContent}>
+                <Text style={styles.label}>{row}</Text>
+              </View>
+            </Form.Row>
+          ))}
+        </Form.Section>
       </Form>
     </View>
   );
 }
+
+/**
+ * Rows below the note field, so the list has room left to scroll a field clear of
+ * the bottom of the window (`Form.Section` above, where they are inserted).
+ */
+const TAIL = [
+  'Build',
+  'Bundle',
+  'Renderer',
+  'Session',
+  'Cache',
+  'Diagnostics log',
+];
 
 /** Enough rows that the note field starts below the fold: question 5 needs a scroll. */
 const FILLER = [
