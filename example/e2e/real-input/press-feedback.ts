@@ -37,24 +37,27 @@ import {
 } from '../../../scripts/real-input/png-pixel.mjs';
 
 /**
- * How long the finger stays down, in ms.
- *
- * Long, because a capture is not instantaneous and its latency is not short: the
- * driver's own screenshot call is a daemon round trip that came back 4 830 ms
- * after it was asked on this bench, by which time a 5 s hold had lifted and both
- * "during" frames showed the row at rest — which reads exactly like a row that
- * paints no pressed state, the very thing G30 is about. The hold is therefore
- * sized for the slowest capture, not for the animation: ten seconds gives the
- * first frame, asked for at +700 ms, some four seconds of held finger after it
- * lands, and a Material state layer stays under the finger for as long as the
- * finger is down. On a busy machine that round trip measured 10 190 ms, so the
- * window is twenty seconds: enough for a capture that has to wait out a ripple
- * before the driver will take the picture at all.
+ * How long one press lasts, in ms — and the driver puts a ceiling on a gesture at
+ * 10 000 ms, so this is that ceiling, not a choice.
  */
-const HOLD_MS = 20_000;
+const HOLD_MS = 10_000;
 
-/** When each frame during the hold is asked for, in ms after the finger lands. */
-const CAPTURE_AT_MS = [500, 2500];
+/**
+ * How many presses in a row, at the same point, make up "the finger is down".
+ *
+ * Two, because the capture is not instantaneous and its latency is not short: the
+ * driver's own screenshot call is a daemon round trip measured at 4 830 ms and, on a
+ * busy machine with a ripple still animating, 10 190 ms — longer than one press is
+ * allowed to last. So the second press starts as the first reaches its ceiling, and
+ * the picture is taken under a finger however long the round trip takes. Two presses
+ * at one point are one continued interest to a person and one `Pressable`'s press
+ * state twice; what the check needs is a frame in which a finger is down, and this is
+ * the only way the driver's own surface can promise that.
+ */
+const PRESSES = 2;
+
+/** How long after the first finger lands the capture is asked for, in ms. */
+const CAPTURE_AFTER_MS = 500;
 
 /** How far inside the control's box the sample starts, in device px. */
 const INSET_PX = 12;
@@ -155,64 +158,46 @@ export async function pressPaintsFeedback(
     throw new Error('press-feedback: the control has no box to sample.');
   }
 
-  let startedAt = Date.now();
   const atRest = await capture(device, 'press-at-rest');
   // A press-and-hold expressed as a drag that travels two px while the finger is
-  // down. That shape is deliberate: it is one gesture stream that is genuinely
-  // *in flight* — a `longPress` presses and holds too, but a row inside a
-  // scrolling section settles it as its own gesture and paints nothing (measured:
-  // the standalone item inked either way, the section row only as a hold in
-  // flight). Two px is inside the touch slop, so the list does not scroll and
-  // nothing is cancelled.
+  // down. That shape is deliberate: it is one gesture stream that is genuinely *in
+  // flight* — a `longPress` presses and holds too, but a row inside a scrolling
+  // section settles it as its own gesture and paints nothing (measured: the
+  // standalone item inked either way, the section row only as a hold in flight). Two
+  // px is inside the touch slop, so the list does not scroll and nothing is
+  // cancelled.
   const point = await centreOf(hold);
-  const held = screen.swipe({
-    from: point,
-    to: { x: point.x, y: point.y + 2 },
-    duration: HOLD_MS,
-  });
-  // Timed from the finger, not from the call: the capture at rest is itself a
-  // round trip, and the hold is short enough that counting from it would spend
-  // part of the window before the pointer is even down.
-  startedAt = Date.now();
-  // Two frames, both asked for while the finger is down, and the darker of the
-  // two is the reading: a Material state layer is steady under a held finger
-  // while a bounded ripple is brightest for a moment near the touch point, and
-  // the driver's own capture latency decides which of the two a single frame
-  // catches. Both numbers go into the failure message, so a flat reading is
-  // evidence in the log rather than a mystery a later round has to re-run.
-  const samples: { at: number; took: number; mean: number; path: string }[] =
-    [];
-  for (const [index, at] of CAPTURE_AT_MS.entries()) {
-    await sleepUntil(startedAt + at);
-    const askedAt = Date.now() - startedAt;
-    const during = await capture(device, `press-during-hold-${String(index)}`);
-    samples.push({
-      at,
-      took: Date.now() - startedAt - askedAt,
-      mean: meanLuma(during.png, inset(box)),
-      path: during.path,
+  const press = () =>
+    screen.swipe({
+      from: point,
+      to: { x: point.x, y: point.y + 2 },
+      duration: HOLD_MS,
     });
-  }
-  await held;
+
+  let finger = press();
+  // Timed from the finger, not from the call: the capture at rest is itself a round
+  // trip, and the hold is short enough that counting from it would spend part of the
+  // window before the pointer is even down.
+  const startedAt = Date.now();
+  await sleepUntil(startedAt + CAPTURE_AFTER_MS);
+  const askedAt = Date.now() - startedAt;
+  const capturing = capture(device, 'press-during-hold-0');
+  await finger;
+  if (PRESSES > 1) finger = press();
+  const during = await capturing;
+  const took = Date.now() - startedAt - askedAt;
+  await finger;
 
   const before = meanLuma(atRest.png, inset(box));
-  const best = samples.reduce(
-    (lowest, sample) => (sample.mean < lowest.mean ? sample : lowest),
-    samples[0] as (typeof samples)[number]
-  );
+  const duringMean = meanLuma(during.png, inset(box));
   expect(
-    before - best.mean,
+    before - duringMean,
     `holding the control left its own box at mean luminance ` +
-      `${samples
-        .map(
-          (sample) =>
-            `${sample.mean.toFixed(4)} at +${String(sample.at)}ms ` +
-            `(captured ${String(sample.took)}ms later)`
-        )
-        .join(', ')}, against ` +
-      `${before.toFixed(4)} at rest: a press that paints nothing is what G30 ` +
-      `Android shipped with ("no press feedback drawn"). The captures are ` +
-      `${atRest.path} and ${samples.map((sample) => sample.path).join(' and ')}`
+      `${duringMean.toFixed(4)} (capture asked for at +${String(askedAt)}ms, ` +
+      `${String(took)}ms round trip across ${String(PRESSES)} presses of ` +
+      `${String(HOLD_MS)}ms), against ${before.toFixed(4)} at rest: a press that ` +
+      `paints nothing is what G30 Android shipped with ("no press feedback drawn"). ` +
+      `The captures are ${atRest.path} and ${during.path}`
   ).toBeGreaterThan(minimumDrop);
 }
 
