@@ -43,6 +43,8 @@ import {
   withSubViews,
 } from '../registry-core.mjs';
 
+import { childEnv } from './helpers/scrubbed-env.js';
+
 const repoRoot = resolve(process.cwd());
 
 /** Reads a real file of the repo, so the plan under test is the shipped one. */
@@ -940,7 +942,7 @@ function runIn(dir, ...args) {
   return spawnSync(
     process.execPath,
     [join(repoRoot, 'scripts', 'gen-registry.mjs'), ...args],
-    { cwd: dir, encoding: 'utf8' }
+    { cwd: dir, encoding: 'utf8', env: childEnv() }
   );
 }
 
@@ -1152,7 +1154,7 @@ describe('gen-registry on a scratch tree', () => {
     return spawnSync(
       process.execPath,
       [join(repoRoot, 'scripts', 'gen-registry.mjs'), ...args],
-      { cwd: dir, encoding: 'utf8' }
+      { cwd: dir, encoding: 'utf8', env: childEnv() }
     );
   }
 
