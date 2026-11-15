@@ -1,6 +1,6 @@
 # W1 — a workflow that runs without being watched
 
-**Branch:** `task/W1-workflow` (rebased on `main` at `23136b9d`) · **Round:** 1 of up to 3 (D19) ·
+**Branch:** `task/W1-workflow` (with `main` merged in at `8e5155c4`) · **Round:** 1 of up to 3 (D19) ·
 **Lease:** none (no device used)
 
 ## Summary
@@ -45,7 +45,7 @@ entry was restored, and the 284 commits that lost reflog protection are pinned u
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2221 tests / 91 suites | `cc2665c48066` | 2 m 50 s | start 3.4 / med 12.1 / max 20.7 |
+| `check` | **PASS** | 2287 tests / 93 suites | `f0ebb417b41b` | 2 m 51 s | start 4.7 / med 10.1 / max 16.5 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
