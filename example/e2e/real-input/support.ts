@@ -131,27 +131,19 @@ export async function reveal(
   locator: Locator,
   options: { swipes?: number } = {},
 ): Promise<void> {
-  const swipes = options.swipes ?? 8;
-  let stalled = 0;
+  const swipes = options.swipes ?? 12;
   for (let attempt = 0; attempt <= swipes; attempt += 1) {
+    // The tree is read with the node *absent* until it is near the viewport: a row
+    // four screens down is not in the tree a reader gets at all, so "no box" is the
+    // normal answer at the start and not a reason to stop.
     const box = await locator.boundingBox();
     if (box != null && (await isInBand(screen, box))) return;
     if (attempt === swipes) break;
-    const before = box?.y ?? null;
-    // One engine-level scroll per attempt, and once the page has twice refused
-    // to answer it, a finger path down the middle of the content instead: what a
-    // person who cannot see a row does. Counting the stalls is also what stops a
-    // page that cannot scroll at all from burning eight gestures.
-    if (stalled >= 2) {
-      await pathScrollUp(screen);
-    } else {
-      await screen.swipe({ direction: 'up' });
-    }
-    const after = box == null ? null : (await locator.boundingBox())?.y ?? null;
-    stalled = before != null && after === before ? stalled + 1 : 0;
+    await pathScrollUp(screen);
   }
   throw new Error(
-    `real-input: the control never reached the tappable band; its box reads ` +
+    `real-input: the control never reached the tappable band after ` +
+      `${String(swipes)} drags; its box reads ` +
       `${JSON.stringify(await locator.boundingBox())}.`,
   );
 }
@@ -162,11 +154,15 @@ async function pathScrollUp(screen: Screen): Promise<void> {
   if (content == null) {
     throw new Error('real-input: the content view has no box to scroll along.');
   }
+  // One drag moves a little over half the viewport. Less and the deep screens take
+  // twenty gestures; more, and the gesture outruns the tree read that follows it —
+  // a control can only be stopped at inside the band if no single drag can cross
+  // the whole band without being seen.
   const x = content.x + content.width / 2;
   await screen.swipe({
-    from: { x, y: content.y + content.height * 0.72 },
-    to: { x, y: content.y + content.height * 0.34 },
-    duration: SWIPE_DURATION,
+    from: { x, y: content.y + content.height * 0.78 },
+    to: { x, y: content.y + content.height * 0.24 },
+    duration: SWIPE_DURATION + 100,
   });
 }
 
