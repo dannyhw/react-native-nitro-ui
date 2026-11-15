@@ -39,7 +39,7 @@ export are outside the 1,285-file tree that row is keyed to, so committing them 
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1947 tests / 88 suites | `b1b892bb1575` | 1 m 58 s | start 8.6 / med 22.5 / max 31.6 |
+| `check` | **PASS** | 1947 tests / 88 suites | `fd5699874854` | 1 m 45 s | start 5.5 / med 27.8 / max 43.2 |
 | `harness:ios` | missing | — | — | — | — |
 | `harness:android` | missing | — | — | — | — |
 | `real-input:ios` | missing | — | — | — | — |
@@ -85,3 +85,14 @@ mutation, so the narrowing lost no coverage with the reset tests.
 - CONTRIBUTING now says a warm pooled device keeps app data, keychain and TCC grants; a test that
   needs clean app state must create its own device. Nothing in the harness does that today.
 - `docs/DECISIONS.md` D42 item 1 is annotated, not amended — the owner may want the entry rewritten.
+
+## Fix round 1
+
+The review (`docs/tasks/X38.review.md`) found one false statement, and it came from the brief: the
+older-iOS-runtime simulators were not unused. ButtonGroup's look check ran on them once, on iOS 26.5
+and 27.1, and its screenshots are cited in `docs/components/button-group.md`. The removal stands: a
+hand-booted simulator with `IOS_SIM_UDID` does the same check, and nothing else has used the
+feature. The brief, the note in `docs/DECISIONS.md` and one test comment are corrected, the trimmed
+follow-up line has its closing step back, and `mutations.json` says that its first mutation turns
+eight tests red, not one. No code changed in this round.
+

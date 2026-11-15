@@ -6,16 +6,16 @@ other tasks; this change is exercised by every later device run).
 
 ## Goal
 
-The device lease pool loses two features that have no recorded use, so there is less of it to keep
+The device lease pool loses two features that are barely used, so there is less of it to keep
 working.
 
 ## Why
 
-An audit of the lease and pool code (20,600 lines) found two features with no evidence of use:
+An audit of the lease and pool code (20,600 lines) found two features with little or no evidence of use:
 
 - Older-iOS-runtime simulators (about 905 lines of code and tests): built so one task could check a
-  control on an older iOS; that task's report says the check was not done, and nothing has asked for
-  it since. A hand-booted simulator and `IOS_SIM_UDID` do the same job.
+  control on an older iOS. It was used once, for ButtonGroup's screenshots on iOS 26.5 and 27.1, and
+  nothing has asked for it since. A hand-booted simulator and `IOS_SIM_UDID` do the same job.
 - The app reset between tasks (about 1,030 lines): it clears the example app's storage when a pair
   changes hands. The audit found no case of inherited app state breaking a run.
 

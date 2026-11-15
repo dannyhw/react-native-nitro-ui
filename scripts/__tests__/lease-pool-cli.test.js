@@ -391,11 +391,7 @@ describe('the lease owns the device lifecycle', () => {
     }
   });
 
-  // X20 item 2. Q9 took a lease for iOS only, and the pool answered for the whole pair. The
-  // emulator may be another task's Android device at that moment, and an iOS lease has no business
-  // asking it anything - not to boot it, not to power it off, not to clear it. The pair is *down*
-  // here on purpose: with a warm pair nothing is started on either half and every `not.toContain`
-  // below would pass with or without the narrowing.
+  // An iOS-only lease must not address the emulator: it may be another task's device.
   it('touches only the simulator for an iOS-only lease', () => {
     tools({ androidUp: false, iosUp: false });
     const acquired = cli([
