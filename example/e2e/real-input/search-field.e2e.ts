@@ -1,8 +1,12 @@
 import { test } from '@e2e-dev/mobile';
-import { expect } from 'e2e';
+import { expect, type Locator } from 'e2e';
 
-import { openScreen, reveal } from './support';
-import { fieldAboveKeyboard, focusAndExpectKeyboard } from './keyboard';
+import { boxOf, editableField, openScreen, reveal } from './support';
+import {
+  fieldAboveKeyboard,
+  focusAndExpectKeyboard,
+  withRealKeyboard,
+} from './keyboard';
 
 const TYPING = 'Typing search field';
 const FOCUS = 'Focus search field';
@@ -13,7 +17,7 @@ test('real keystrokes reach the field, and the clear button reports the empty qu
 }) => {
   await app.open();
   await openScreen(screen, 'searchfield');
-  const field = screen.getByLabel(TYPING);
+  const field = editableField(screen, TYPING);
   const echo = screen.getByTestId('search-typing-echo');
   await reveal(screen, field);
 
@@ -28,7 +32,40 @@ test('real keystrokes reach the field, and the clear button reports the empty qu
   await field.pressSequentially('abc');
   await expect(echo).toHaveText('query: abc (3)');
 
-  await screen.getByLabel('Clear query').tap();
+  // Every field with a query draws Material's own clear button, and two fields on
+  // this screen hold a query at once, so the label names two nodes. Scoping by the
+  // row they sit in does not work on Android: React Native lifts the children of a
+  // view that carries nothing but a testID up to the nearest accessibility-
+  // important ancestor, so the row's own node has no children for a locator to
+  // look inside. The field's box is the window instead, and the button that
+  // belongs to this field is the one on this field's own line — and the echo below
+  // then says which of the two the finger actually pressed.
+  const fieldBox = await boxOf(field);
+  if (fieldBox == null) {
+    throw new Error(
+      'real-input: the typing field has no box to aim a clear at.'
+    );
+  }
+  const line = fieldBox.y + fieldBox.height / 2;
+  const onThisLine: Locator[] = [];
+  for (const clear of await screen.getByLabel('Clear query').all()) {
+    const box = await boxOf(clear);
+    if (
+      box != null &&
+      Math.abs(box.y + box.height / 2 - line) < fieldBox.height
+    ) {
+      onThisLine.push(clear);
+    }
+  }
+  const clear = onThisLine[0];
+  if (clear == null || onThisLine.length > 1) {
+    throw new Error(
+      `real-input: exactly one "Clear query" node may sit on the typing ` +
+        `field's own line (y ${String(Math.round(line))} px); ` +
+        `${String(onThisLine.length)} do.`
+    );
+  }
+  await clear.tap();
   await expect(echo).toHaveText('query:  (0)');
 });
 
@@ -38,7 +75,7 @@ test('a real tap on a search field brings up the keyboard and keeps the field ab
 }) => {
   await app.open();
   await openScreen(screen, 'searchfield');
-  const field = screen.getByLabel(FOCUS);
+  const field = editableField(screen, FOCUS);
   const echo = screen.getByTestId('search-focus-echo');
   await reveal(screen, field);
 
@@ -46,7 +83,9 @@ test('a real tap on a search field brings up the keyboard and keeps the field ab
   // keyboard the app asked for, Search key included"); what is left for the device
   // is that focusing really raises an IME and does not lose the field behind it.
   await expect(echo).toHaveText('focus: 0 blur: 0 submitted: -');
-  await focusAndExpectKeyboard(screen, field);
-  await fieldAboveKeyboard(screen, field);
+  await withRealKeyboard(async () => {
+    await focusAndExpectKeyboard(field);
+    await fieldAboveKeyboard(field);
+  });
   await expect(echo).toContainText('focus: 1');
 });
