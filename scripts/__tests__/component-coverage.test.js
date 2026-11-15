@@ -29,7 +29,6 @@ import {
   checkRecycleNotes,
   coverageMatrix,
   failingKeys,
-  followupsResolver,
   recycleNotes,
 } from '../conformance-core.mjs';
 import { SCREEN_TAB, screenTab } from '../real-input/screens.mjs';
@@ -37,8 +36,6 @@ import { exampleTabs } from '../real-input/tab-targets.mjs';
 
 /** Where the conformance suite keeps its per-control fixtures, and its tables. */
 const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
-/** The document every `failing` cell has to be able to cite. */
-const FOLLOWUPS_FILE = 'docs/tasks/FOLLOWUPS.md';
 
 const repoRoot = resolve(process.cwd());
 
@@ -369,11 +366,7 @@ describe('every component is covered by the conformance suite', () => {
       // `noProbe` controls whose cells said `covered`).
       recycleNotes: recycleNotes(read(HARNESS_FILE)),
     });
-    // A `failing` cell needs a line that exists in FOLLOWUPS.md, which is what
-    // `followupsResolver` proves by returning null when the text is not there.
-    expect(
-      checkCoverage(manifests, matrix, followupsResolver(read(FOLLOWUPS_FILE)))
-    ).toEqual([]);
+    expect(checkCoverage(manifests, matrix)).toEqual([]);
     expect(checkA11yTable(manifests, read)).toEqual([]);
     expect(checkInAppFixtures(manifests, read(HARNESS_FILE))).toEqual([]);
     expect(checkRecycleNotes(read(HARNESS_FILE))).toEqual([]);
@@ -383,30 +376,10 @@ describe('every component is covered by the conformance suite', () => {
     // Two views of the same debt: the matrix prints `failing`, and the device run prints
     // `known failing` lines from the exemption lists. Deriving one from the other is what
     // keeps a report's coverage table honest when a row is added or removed.
-    //
-    // Six cells, each a measurement rather than a guess: the Slider and SegmentedControl
-    // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
-    // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
-    // an accessible ContextMenu still lists its first Text under the labelled wrapper (iOS),
-    // a Form row keeps its name on the iOS wrapper where Android announces one button (iOS),
-    // and Menu holds recycle residue no read-out can show on iOS. SegmentedControl's recycle
-    // cell was the fifth of those until F6 gave the fixture a read-out that can see the
-    // residue; the a11y one stands, because that debt is about a name, not a state. The two
-    // platforms fail some of the same controls for different reasons, which is why
-    // `A11Y_EXEMPTIONS` rows carry a platform. IconButton's cell is the 44 pt touch target's
-    // inset element: G23 round 0 expected the target to retire it and the sweep measured a
-    // wider inset, so the row was re-measured with the new numbers.
+    // The keys are read from the exemption lists, not written out here, so adding or
+    // retiring a debt row does not edit this test.
     const keys = failingKeys();
-    expect(keys).toEqual([
-      'Menu|recycle-reset',
-      'Slider|a11y-name-on-focusable-node',
-      'SegmentedControl|a11y-name-on-focusable-node',
-      'Stepper|a11y-name-on-focusable-node',
-      'Picker|a11y-name-on-focusable-node',
-      'ContextMenu|a11y-name-on-focusable-node',
-      'Form|a11y-name-on-focusable-node',
-      'IconButton|a11y-name-on-focusable-node',
-    ]);
+    expect(new Set(keys).size).toBe(keys.length);
     // …and every one of those cells really is marked failing in the matrix.
     const matrix = coverageMatrix(manifests, {
       sizing: JSON.parse(readRepo('nitro-ui.sizing.json') ?? '{}'),

@@ -41,8 +41,7 @@ export const DEFAULT_TTL_MINUTES = 240;
  * The default for an `--exclusive` lease. A bench or baseline mint runs 8 to 14
  * hours (PROCESS review §4), so inheriting the 4-hour default would expire
  * mid-run and let a device task start next to the very measurement that needs a
- * quiet machine (D21). Sixteen hours covers the longest run so far, and `renew`
- * covers anything longer.
+ * quiet machine (D21). Sixteen hours covers the longest run so far.
  */
 export const EXCLUSIVE_TTL_MINUTES = 960;
 
@@ -137,33 +136,6 @@ export const DEVICE_SETTLE_TIMEOUT_MS = 420_000;
  * itself has, because a boot that outlives its own timeout is no longer a boot in progress.
  */
 export const BOOTING_PROTECTION_MS = DEVICE_SETTLE_TIMEOUT_MS;
-
-/**
- * One pool record per physical device: when it was booted, last handed to a run, and which runs
- * are holding it right now.
- */
-export function newPoolEntry({
-  key,
-  kind,
-  id,
-  leaseId,
-  idleShutdownMinutes,
-  nowMs,
-  bootedMs = nowMs,
-}) {
-  return {
-    key,
-    kind,
-    id,
-    leaseId,
-    bootedAtMs: bootedMs,
-    lastUsedMs: nowMs,
-    idleShutdownMinutes: idleShutdownMinutes ?? IDLE_SHUTDOWN_DEFAULT_MINUTES,
-    serial: null,
-    udid: null,
-    claims: [],
-  };
-}
 
 /**
  * Is a device in use? A gate claims the devices of the lease it runs under for the duration of
@@ -971,7 +943,7 @@ export function metroPreflightFromEnv(env = process.env, run) {
     };
   }
   const reason = metroPortReason(
-    { id: env.NITRO_UI_LEASE_PAIR ?? 'leased', metroPort: port },
+    { id: 'leased', metroPort: port },
     answer.listeners
   );
   // The listeners travel with the answer (X34 item 2): a caller that has to explain *why* the port

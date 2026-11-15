@@ -23,13 +23,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { machineLabelFromEnv } from './baseline.mjs';
-import { installedVersion } from './deps.mjs';
-import {
-  BASELINE_TIMEOUTS_MS,
-  baselineTimeoutRecord,
-  isNumber,
-  loadBlocker,
-} from './lib.mjs';
+import { installedVersion, resolvedDependencies } from './deps.mjs';
+import { isNumber, loadBlocker } from './lib.mjs';
 
 /** Bounded best-effort command execution: null rather than a throw or a hang. */
 export function tryExec(command, args) {
@@ -47,13 +42,8 @@ export function tryExec(command, args) {
  * The two installed packages a run measured, read from `node_modules`.
  *
  * Beside the lock because the measured thing is the install, and the two
- * disagreeing is worth a line — a merged cell has to be comparable with the file
- * it joins, and a stale install would otherwise smuggle an unrecorded app into
- * the comparison. X14's first version of this lived in `machine.mjs` as
- * `collectDependencies()` and also parsed `bun.lock` with strict `JSON.parse`;
- * that half was never read by its one caller (which resolves the lock through
- * `deps.mjs`'s tolerant reader) and carried the exact bug that reader exists to
- * fix, so it is gone and only the install read remains.
+ * disagreeing is worth a line: a stale install would otherwise put an unrecorded
+ * app's numbers under this commit's versions.
  *
  * A package that is not installed is null rather than a guess.
  *
@@ -80,88 +70,39 @@ export function installedPackageVersions({
 }
 
 /**
- * A run-shaped record of everything a *pre-flight* already knows, for the question
- * it can only ask of a run: "may this file take this component's cells?" (X14).
+ * The app versions a run's numbers belong to. Read from `bun.lock` because that is
+ * the version list committed with the run's own commit; the installed packages are
+ * recorded beside it because the measured thing is the install
+ * (`installedDependenciesProblem()` compares the two).
  *
- * The merge guards compare a run's regime with a file's, so answering them before a
- * device is booted needs a stand-in for the run. It carries only what is knowable
- * now - the host (`collectMachine` with no load sampler, so no `loadSamples`), the
- * device from a read-only listing or an AVD's config files, the flags, and the
- * versions in `bun.lock` - and leaves the rest null on purpose: a system-image
- * fingerprint or an ART compile state is a question for the booted device, and
- * `mergeBaselineProblems({ allowDeferred: true })` reports those as deferred rather
- * than refusing on a blank. The authoritative check happens with the measured run,
- * before a byte is written.
- *
- * @param {{
- *   platform: 'ios'|'android',
- *   plan: string,
- *   launches: number,
- *   perfMarks?: boolean,
- *   dirty?: boolean,
- *   sha?: string | null,
- *   deviceKey: string | null,
- *   device?: any,
- *   dependencies?: any,
- *   timeouts?: { mountTimeoutMs?: number|null, presentedTimeoutMs?: number|null } | null,
- *   machine?: any,
- *     the host summary to stand in for `collectMachine()`. Only `--dry-run` passes
- *     one, and for the same reason it injects a device key and a load average: its
- *     rules are unit tests rather than a machine (`bench-dry-run.test.js`). A live
- *     pre-flight passes nothing and gets the real host.
- *   now?: () => string,
- * }} input
+ * @param {{ lockPath: string, nodeModulesDir: string, read?: (file: string) => string }} input
  */
-export function mergeCandidateRun({
-  platform,
-  plan,
-  launches,
-  perfMarks = false,
-  dirty = false,
-  sha = null,
-  deviceKey,
-  device = {},
-  dependencies = null,
-  timeouts = null,
-  machine = null,
-  now = () => new Date().toISOString(),
+export function runDependencies({
+  lockPath,
+  nodeModulesDir,
+  read = (file) => fs.readFileSync(file, 'utf8'),
 }) {
-  // No `--timeout-*` flag says the app waits under its platform's default rule,
-  // which the command line does know; a *measured* run's record is read back from
-  // its launches instead. `timeouts` arrives as `{ mountTimeoutMs: null, ... }` when
-  // no flag was passed, so the default has to be reached for field by field - a `??`
-  // over the whole object never fires, and a file that predates the field would then
-  // look unanswerable at pre-flight time and be refused for the wrong reason.
-  const ruleFor = (name) =>
-    timeouts?.[name] ?? (BASELINE_TIMEOUTS_MS[platform] ?? {})[name] ?? null;
+  const tryRead = (file) => {
+    try {
+      return read(file);
+    } catch {
+      return null;
+    }
+  };
+  const resolved = resolvedDependencies({
+    lockText: tryRead(lockPath),
+    manifestText: tryRead(
+      path.join(path.dirname(lockPath), 'bench', 'package.json')
+    ),
+    source: 'bun.lock in the working tree',
+  });
+  const installed = installedPackageVersions({ nodeModulesDir, read });
   return {
-    // This record is a *stand-in* for a measurement that has not happened (X14). The
-    // merge guards ask it the questions they will ask the real run, and some of those
-    // questions have answers only a measured run can give — "did you measure every
-    // cell?" being the obvious one, since this holds no cells at all. They read this
-    // flag rather than inferring it from emptiness (review F2): a real run whose every
-    // launch failed is empty too, and that one is a refusal, not a deferral.
-    candidate: true,
-    platform,
-    plan,
-    launches,
-    perfMarks,
-    dirty,
-    sha,
-    deviceKey,
-    deviceName: device.name ?? device.avd ?? null,
-    machine: machine ?? collectMachine(platform, device, null),
-    // Null, not 'verify': the state the app is in is decided by the install, which
-    // has not happened yet, and inventing one would make the guard pass on it.
-    art: null,
-    dependencies,
-    timeouts: baselineTimeoutRecord({
-      timeouts: {
-        mountTimeoutMs: ruleFor('mountTimeoutMs'),
-        presentedTimeoutMs: ruleFor('presentedTimeoutMs'),
-      },
-    }),
-    createdAt: now(),
+    reactNative: resolved.reactNative,
+    expoUi: resolved.expoUi,
+    installedReactNative: installed.reactNative,
+    installedExpoUi: installed.expoUi,
+    source: resolved.source,
   };
 }
 
