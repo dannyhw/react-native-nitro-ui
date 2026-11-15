@@ -306,7 +306,6 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - X31 fix round 1: `MENU_ROOM_SLOP_DP` is 48 dp (126 px), the window margin alone; the X31 review estimated Material's surface at the rows plus ~170 px (padding included), so a ~40 px band just above `menuHeight + slop` can still demand "below" from a menu that honestly opened above. Only reachable when `centreOnScreen` falls back to an off-centre anchor; widen the band by the menu's vertical padding if it ever reds there.
 - X32 review: iOS `assertDragFromRowIsNotAPress` (`RealInputTests.swift` ~7257) asserts no press but never that the list moved; compare the row's `frame.minY` before and after and require > 60 pt, as Android does.
 - X32 review: Android's "the flick really scrolled the list" check passes when the row "left the dump" or "left a readable box", so the guard against a page that never moved passes on exactly the reads it cannot verify; fall back to a second marker or the Form's scroll position and fail when nothing readable moved. Related (X32 report): a scrolled `Form.Row`'s box in the uiautomator dump reads inverted (`32,644 → 1049,236`), and `HybridNitroUiForm.kt:233` reports `offset=0.00`.
-- X32 report: `scripts/__tests__/bench-baseline-merge.test.js` inherits `EMULATOR_PORT` from the environment and dies on "ANDROID_SERIAL and EMULATOR_PORT disagree", so `check` fails from a shell with a lease exported. The test should scrub the lease variables from the child environment.
 - X32 incident: a detached `gate.mjs real-input:android` lost its parent and left no ledger line, while its runner and Metro (this worktree's) kept the emulator and Metro port. A detached gate's runner should not outlive its gate (process group, or a parent-death check).
 - X32 review: the press-travel rule cancels the moment the finger leaves the row's box by one point, stricter than UIKit's own slop (true of ListItem since G30 too). Leave unless someone reports a dropped tap.
 - X32 merge (2026-11-13), all green on the same tree's re-run: iOS `FormFidelity` E2 question 4 read `the Form lays rows out at 0 pt and draws them at 340 pt` (8 cell reports) at load 17–28, as S6b saw at 0 reports. Passed twice filtered and in the full re-run. Android `HostPopups` "opens two popup owners in one Host" (menu `live` 1, not 0) and isolated `BottomSheetModalHazard` (render timeout 1000 ms) failed at load peaks ~35, the same run. All load-sensitive.
@@ -314,7 +313,7 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 
 ## Flaky tests
 
-One line per test that went red and then green on the same tree: test name, date, failure excerpt
+One line per test that went red and then green on the same tree: test name, date, log
 path, times seen. Copied from task reports at merge. The rules are in `.claude/skills/flake/SKILL.md`.
 
 ## Quarantined tests

@@ -55,7 +55,7 @@ That machine is an Apple M1 Max with 10 cores and a load ceiling of 5.0, where
 one is not a repeat of the other — read the two together for the shape, and a
 cell against its own machine's baseline for a verdict. `Menu` has no committed
 cell on either machine yet, because a mint replaces a whole baseline file and
-G7b's run covered only Menu (X14 adds the merge mint that fixes that); its
+G7b's run covered only Menu; its
 numbers are in [`G7b-menu-finish.report.md`](tasks/G7b-menu-finish.report.md)
 and in A5's tables, quoted under [the Host](#host-on-android) below.
 

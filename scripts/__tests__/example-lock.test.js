@@ -976,16 +976,13 @@ describe('node scripts/sync-example-lock.mjs', () => {
     expect(pkg.scripts['lock:check']).toBe(
       'node scripts/sync-example-lock.mjs'
     );
-    // X10: `check` is a runner now, so the ordering is asserted twice - against
-    // the serial chain the runner must equal, and against the graph it runs.
-    const check = pkg.scripts['check:serial'];
-    expect(check).toContain('bun run lock:check');
-    // A version mismatch costs a string compare, not a ten-minute `prepare`.
-    expect(check.indexOf('bun run lock:check')).toBeLessThan(
-      check.indexOf('bun run prepare')
-    );
-    // ...and the same intent in the graph: `prepare` waits for the cheap guard, so
-    // a stale lock never starts a build.
+    // X10: `check` is a runner now, so the ordering is asserted against the graph
+    // it runs.
+    const names = CHECK_STEPS.map((step) => step.name);
+    expect(names).toContain('lock:check');
+    // A version mismatch costs a string compare, not a ten-minute `prepare`:
+    // `prepare` waits for the cheap guard, so a stale lock never starts a build.
+    expect(names.indexOf('lock:check')).toBeLessThan(names.indexOf('prepare'));
     const prepare = CHECK_STEPS.find((step) => step.name === 'prepare');
     expect(prepare.needs).toContain('lock:check');
   });

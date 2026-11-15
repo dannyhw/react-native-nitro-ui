@@ -32,6 +32,7 @@ import { spawnSync } from 'node:child_process';
 
 import { describe, expect, it } from '@jest/globals';
 
+import { scrubLeaseEnv } from './helpers/jest-global-setup.js';
 import {
   LEASE_SCOPED_PROBE_NAMES,
   isLeaseScopedEnvName,
@@ -50,6 +51,63 @@ const RENDERED_NAMES = [
     .readFileSync(`${__dirname}/../lease-core.mjs`, 'utf8')
     .matchAll(/exportLine\(\s*'([A-Z0-9_]+)'/g),
 ].map((match) => match[1]);
+
+describe('jest starts with no lease in its environment', () => {
+  // The one place the lease is removed: `jest.globalSetup` runs before any worker starts, so no
+  // suite has to remember to scrub. Shown red by running this file from a shell that exports
+  // `NITRO_UI_LEASE_ID`, `METRO_PORT` and `ANDROID_SERIAL` with the `globalSetup` line taken out of
+  // `package.json`: the second and third cases then print the inherited names.
+  it('removes every lease-scoped name and nothing else', () => {
+    const env = {
+      PATH: '/usr/bin',
+      ANDROID_HOME: '/sdk',
+      ANDROID_AVD_HOME: '/avd',
+      NITRO_UI_LEASE_ID: 'G8-abc',
+      NITRO_UI_GATE_LOG: '/tmp/somebody-elses-run.log',
+      METRO_PORT: '8295',
+      ANDROID_SERIAL: 'emulator-5574',
+      IOS_SIM_UDID: 'poisoned-udid',
+    };
+    expect(scrubLeaseEnv(env).sort()).toEqual([
+      'ANDROID_SERIAL',
+      'IOS_SIM_UDID',
+      'METRO_PORT',
+      'NITRO_UI_GATE_LOG',
+      'NITRO_UI_LEASE_ID',
+    ]);
+    expect(env).toEqual({
+      PATH: '/usr/bin',
+      ANDROID_HOME: '/sdk',
+      ANDROID_AVD_HOME: '/avd',
+    });
+  });
+
+  it('is the setup jest is configured to run', () => {
+    const configured = require('../../package.json').jest.globalSetup;
+    expect(
+      require('node:path').resolve(
+        configured.replace('<rootDir>', `${__dirname}/../..`)
+      )
+    ).toBe(require.resolve('./helpers/jest-global-setup.js'));
+  });
+
+  it('hands a child that was given no `env` an environment with no lease in it', () => {
+    // No `env` option, so the child inherits what this jest process really has - not the copy a
+    // test file sees as `process.env`. This is the spawn no helper call can cover.
+    const printed = LEASE_SCOPED_PROBE_NAMES.map(
+      (name) => `printf '%s=[%s]\\n' '${name}' "\${${name}-unset}"`
+    ).join('\n');
+    const child = spawnSync('/bin/sh', ['-c', printed], { encoding: 'utf8' });
+    expect(child.status).toBe(0);
+    const seen = String(child.stdout)
+      .trim()
+      .split('\n')
+      .filter((line) => !line.endsWith('=[unset]'));
+    expect(seen).toEqual([]);
+    // And the copy a test file reads has none either, so `{ ...process.env, X }` is clean too.
+    expect(Object.keys(process.env).filter(isLeaseScopedEnvName)).toEqual([]);
+  });
+});
 
 describe('a test child does not inherit this shell’s lease', () => {
   it('scrubs every name lease.mjs prints into an env file', () => {

@@ -13,7 +13,7 @@ used.
 | The hourly check from outside the orchestrator           | `.claude/skills/watchdog/SKILL.md`, `scripts/watchdog.mjs`  |
 | Standing agreements                                      | `docs/agents/working-agreements.md`                         |
 | Every rule, its enforcer and the incident behind it      | `docs/agents/rules.md`                                      |
-| Reusing a `check` at merge (was "The loop" step 5), logs | `docs/agents/gates.md`                                      |
+| The merge step (was "The loop" step 5), logs             | `docs/agents/gates.md`                                      |
 | Live state                                               | `STATUS.md` (task table), `RECOVERY.md` (what is in flight) |
 
 Older briefs and reports cite this file by step number ("The loop" step 1b, 3, 5). Step 1b is the

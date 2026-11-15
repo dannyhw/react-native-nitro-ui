@@ -4,13 +4,10 @@
  *
  *   bun run check               the graph, as many steps at once as the machine fits
  *   bun run check -- --jobs 1   the same steps, one at a time
- *   bun run check:serial        the old `&&` chain, for comparing the two
  *
- * The steps are the same seventeen and no more - `package.json`'s `check:serial` is
- * the reference, and a unit test fails if the two ever disagree
- * (`scripts/__tests__/check-runner.test.js`). What changed is *when* they run:
- * `scripts/check-steps.mjs` says what each step needs and what it writes, so
- * independent work overlaps and the parts that touch the same output do not.
+ * The steps are the seventeen the old chain ran and no more. What changed is *when*
+ * they run: `scripts/check-steps.mjs` says what each step needs and what it writes,
+ * so independent work overlaps and the parts that touch the same output do not.
  *
  * Output rules, in the order the brief asked for them:
  *
@@ -115,7 +112,7 @@ export function stepTimingPayload(summary) {
 /**
  * @param {string[]} argv `process.argv.slice(2)`
  * @param {{env?: NodeJS.ProcessEnv, out?: (text: string) => void, err?: (text: string) => void,
- *   serialChain?: string, cores?: number, stepsFile?: string | null,
+ *   cores?: number, stepsFile?: string | null,
  *   run?: (step: object) => Promise<object>}} [io] every outside world a test can swap
  * @returns {Promise<number>} the exit code
  */
@@ -141,26 +138,11 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     return 2;
   }
 
-  let serialChain = io.serialChain;
-  if (serialChain == null) {
-    try {
-      serialChain = JSON.parse(
-        fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')
-      ).scripts?.['check:serial'];
-    } catch (error) {
-      err(
-        `check: could not read package.json to compare the step list: ${String(error?.message ?? error)}\n`
-      );
-      return 2;
-    }
-  }
-  const problems = planProblems(CHECK_STEPS, serialChain);
+  const problems = planProblems(CHECK_STEPS);
   if (problems.length > 0) {
     err(
-      `check: refusing to run - the graph does not describe the chain:\n` +
-        `${problems.map((problem) => `  - ${problem}`).join('\n')}\n` +
-        "check: scripts/check-steps.mjs and package.json's `check:serial` are\n" +
-        'check: the same steps and must change together.\n'
+      `check: refusing to run - the step list in scripts/check-steps.mjs is not runnable:\n` +
+        `${problems.map((problem) => `  - ${problem}`).join('\n')}\n`
     );
     return 2;
   }

@@ -401,6 +401,19 @@ describe('opening a machine baseline for --check', () => {
     );
   });
 
+  it('still reads a v2 ratio baseline', () => {
+    const opened = open({
+      run: makeRun({ label: MINE }),
+      files: {
+        [`bench/baselines/${MINE}/${DEVICE_KEY}.json`]: JSON.stringify({
+          ...makeBaseline(makeRun({ label: MINE })),
+          schemaVersion: 2,
+        }),
+      },
+    });
+    expect(opened.refusal).toBeNull();
+  });
+
   it('refuses a baseline that records no machine at all', () => {
     const orphan = makeBaseline(makeRun({ label: MINE }));
     delete orphan.machine;
@@ -537,6 +550,93 @@ describe('the bench CLIs on a per-machine baseline', () => {
       expect(minted.deviceKey).toBe(DEVICE_KEY);
       // Nothing landed at the old top-level path.
       expect(readdirSync(baselinesDirOf(ws)).sort()).toEqual([MINE]);
+    });
+  });
+
+  /**
+   * The atomicity of the write (review L2).
+   *
+   * `writeBaseline` runs prettier on what it wrote, so whoever gets that command
+   * wrong — or whose machine has no prettier — reaches the committed file *after*
+   * the bytes are already there. The mint formats a temp file and renames it, so
+   * what prettier is handed is not the committed path, and a formatter that damages
+   * its input cannot leave a damaged baseline.
+   */
+  it('formats a temp file, and leaves a readable baseline when the formatter damages it', () => {
+    withWorkspace((ws) => {
+      const results = writeResults(ws.root, makeRun({ label: MINE }));
+      const committed = path.join(
+        baselinesDirOf(ws),
+        MINE,
+        `${DEVICE_KEY}.json`
+      );
+      // A prettier that scribbles on the file it is handed and fails. It also
+      // records the path it was asked to format, which is only observable from
+      // inside the formatter.
+      writeFileSync(
+        path.join(ws.bin, 'bunx'),
+        [
+          '#!/bin/sh',
+          `last=""`,
+          'for arg in "$@"; do last="$arg"; done',
+          `printf '%s\\n' "$last" > "${path.join(ws.root, 'prettier-target')}"`,
+          ': > "$last"',
+          'echo "prettier died" >&2',
+          'exit 1',
+          '',
+        ].join('\n')
+      );
+      chmodSync(path.join(ws.bin, 'bunx'), 0o755);
+      const out = cli(ws, 'report.mjs', [results, '--update-baseline']);
+      expect(out.status).toBe(0);
+      expect(out.all).toContain('Wrote baseline');
+
+      // 1. Prettier never saw the committed path.
+      const target = readFileSync(
+        path.join(ws.root, 'prettier-target'),
+        'utf8'
+      ).trim();
+      expect(path.basename(target)).toContain('.tmp.json');
+      expect(target).not.toBe(committed);
+
+      // 2. What arrived at the committed path still parses and still holds the
+      // mint: the scribble was undone by re-serialising, then renamed in.
+      const after = JSON.parse(readFileSync(committed, 'utf8'));
+      expect(after.machine.hostname).toBe(MINE);
+      expect(Object.keys(after.cells).length).toBeGreaterThan(0);
+
+      // 3. The note tells a human to format the file that *exists*, not the temp
+      // name prettier was handed and that no longer exists.
+      expect(out.all).toContain('bun run format:write');
+      expect(out.all).toContain(path.basename(committed));
+      expect(out.all).not.toContain('.tmp.json');
+
+      // 4. And the formatter's scratch file did not stay in the committed dir.
+      expect(
+        readdirSync(path.dirname(committed)).filter((name) =>
+          name.includes('.tmp')
+        )
+      ).toEqual([]);
+    });
+  });
+
+  it('refuses --component on a mint instead of replacing the file with one component', () => {
+    withWorkspace((ws) => {
+      const file = writeBaselineFile(ws.root, MINE, makeRun({ label: MINE }));
+      const before = readFileSync(file, 'utf8');
+      const results = writeResults(
+        ws.root,
+        makeRun({ label: MINE, nitroUi: 130_000 })
+      );
+      const out = cli(ws, 'report.mjs', [
+        results,
+        '--update-baseline',
+        '--component',
+        'switch',
+      ]);
+      expect(out.status).toBe(2);
+      expect(out.all).toContain('takes no --component');
+      expect(readFileSync(file, 'utf8')).toBe(before);
     });
   });
 
