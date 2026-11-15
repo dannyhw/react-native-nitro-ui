@@ -250,7 +250,7 @@ function upsertDevice(state, key, fields) {
 /**
  * Device operations, overridable so a test can prove the rules without a machine. The defaults are
  * the real binaries; `NITRO_UI_ADB_BIN` / `NITRO_UI_SIMCTL_BIN` point them at a stub, exactly as
- * `scripts/doctor.mjs` and the `list` unowned-device check already do.
+ * `scripts/gate.mjs` already does.
  */
 export function deviceOperations({
   home = stateHome(),
@@ -1983,7 +1983,7 @@ export function pairFromEnv(env = process.env) {
   const port = Number(env.EMULATOR_PORT);
   const adbPort = Number(env.ANDROID_ADB_SERVER_PORT);
   return {
-    id: env.NITRO_UI_LEASE_PAIR ?? 'env',
+    id: 'env',
     ios: env.IOS_SIM_UDID ? { udid: env.IOS_SIM_UDID } : null,
     android: env.ANDROID_AVD
       ? {

@@ -446,44 +446,6 @@ export function newBuildSlot({
 }
 
 /**
- * Write `slot` into `builds.json`, pruned, inside the lock.
- *
- * @param {object} options
- * @param {string} options.buildsFile
- * @param {string} options.lockFile
- * @param {object} options.slot
- * @param {number} options.now
- * @param {(pid: number) => boolean} options.isAlive
- * @param {string} options.host
- * @param {typeof import('node:fs')} [options.fsImpl]
- * @returns {object} what was written
- */
-export function recordBuildSlot({
-  buildsFile,
-  lockFile,
-  slot,
-  now,
-  isAlive,
-  host,
-  fsImpl,
-}) {
-  return withLock({
-    lockFile,
-    ...(fsImpl == null ? {} : { fsImpl }),
-    mutate: () => {
-      const state = pruneBuildSlots(readJson(buildsFile, { builds: [] }), {
-        now,
-        isAlive,
-        host,
-      });
-      const next = { ...state, builds: [...state.builds, slot] };
-      writeJsonAtomic(buildsFile, next);
-      return slot;
-    },
-  });
-}
-
-/**
  * Take one slot out of `builds.json`, by the id `newBuildSlot` gave it.
  *
  * By **id**, deliberately, not by task name: two builds run by the same leased

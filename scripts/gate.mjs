@@ -27,8 +27,7 @@
  * of this clone shares and `git worktree remove` never deletes (X12). `.gates/`
  * goes with the checkout, and Q3 could not read the failing runs of a merged
  * branch for exactly that reason. `gate.mjs logs` lists the store; the ledger's
- * `logPath` is relative to it, and old `.gates/logs/...` paths still resolve (and
- * are copied in on the next run). The store is kept to 35 days and 64 MiB.
+ * `logPath` is relative to it. The store is kept to 35 days and 64 MiB.
  *
  * Each line also carries `trees: {ios, android}` - that same digest restricted to
  * the files belonging to each platform. At `review` a device gate is accepted on
@@ -73,12 +72,8 @@ import {
   DEVICE_CONTEXT_END,
   DEVICE_CONTEXT_START,
   explainNeedRow,
-  failureExcerptName,
-  findReusableCheck,
   gateLogStoreDir,
-  groupLedgerLinesByBranch,
   isDeviceGate,
-  isFailedRunWithLog,
   isUsageProbe,
   lookLeaseRefusal,
   lastLogLine,
@@ -87,7 +82,6 @@ import {
   ledgerLogCandidates,
   ledgerPairs,
   ledgerRelativePath,
-  localPathRedactions,
   logNameFor,
   logRelativePath,
   LOG_RETENTION_DAYS,
@@ -104,7 +98,6 @@ import {
   platformsOwningFile,
   platformsTouchedByPaths,
   redactForeignDeviceIds,
-  renderFailureExcerpt,
   renderGateTable,
   renderStepTimings,
   resolveGate,
@@ -134,6 +127,7 @@ import {
   suiteTimingPath,
 } from './harness-suite-timing.mjs';
 import { claimDevicesFromEnv } from './device-pool.mjs';
+import { diskRefusal, freeDiskGbFrom, isCiRunner } from './doctor-core.mjs';
 import {
   emulatorSerial,
   isReservedSerial,
@@ -155,10 +149,10 @@ const USAGE =
   'usage: node scripts/gate.mjs <gate> [-- <args>] [--background]\n' +
   '       node scripts/gate.mjs wait [--gate <name>] [--timeout-minutes N]\n' +
   '       node scripts/gate.mjs status [--for review|merge]\n' +
-  '       node scripts/gate.mjs need --for review|merge [--base <ref>] [--no-reuse]\n' +
-  '       node scripts/gate.mjs table [--for review|merge] [--full] [--no-reuse]\n' +
-  '       node scripts/gate.mjs export --task <ID> [--out <file>]\n' +
-  '       node scripts/gate.mjs logs [--branch <b>] [--failed] [--all] [--prune]\n' +
+  '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
+  '       node scripts/gate.mjs table [--for review|merge] [--full]\n' +
+  '       node scripts/gate.mjs export --task <ID>\n' +
+  '       node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]\n' +
   '\n' +
   'gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |\n' +
   '       smoke:<pack|expo|rn-cli> | bench\n' +
@@ -181,29 +175,15 @@ const USAGE =
   '        code either way, so a backgrounded gate is evidence exactly as a\n' +
   '        foreground one is)\n' +
   '\n' +
-  "       (at merge, `check` may be satisfied by another branch's ledger when it\n" +
-  '        passed on this exact git tree, with a clean worktree, and its commit is\n' +
-  '        merged here - the same tree hash means a run here would read the same\n' +
-  '        files. Docs included, so a merge that changes anything re-owns the run.\n' +
-  '        `check` only: a device gate is evidence about a binary. `--no-reuse` asks\n' +
-  '        the strict question instead)\n' +
-  '\n' +
-  '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl and, for every\n' +
-  '        FAILED run, a scrubbed excerpt in docs/tasks/<ID>/failures/ - the failing\n' +
-  '        test names, the assertion messages, the last 150 lines, the device\n' +
-  '        context and the load at both ends. Passing runs get no file. Export ' +
-  '*merges*:\n' +
-  '        lines already in the committed file stay, and an excerpt already ' +
-  'committed is\n' +
-  "        left alone, so a fix round adds its runs instead of erasing round 1's. " +
-  'A line is\n' +
-  '        the same line as another by ts + gate + code tree)\n' +
+  '       (`export --task <ID>` writes docs/tasks/<ID>/gates.jsonl. Export *merges*:\n' +
+  '        lines already in the committed file stay, so a fix round adds its runs\n' +
+  "        instead of erasing round 1's. A line is the same line as another by ts +\n" +
+  '        gate + code tree. Logs are not exported: they stay in the log store)\n' +
   '\n' +
   "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
   '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
   "        list to runs the store's own record says failed (a log it cannot judge is\n" +
-  '        reported as unknown, not silently skipped), --all shows every branch, --prune\n' +
-  '        applies the 35-day / 64-MiB retention without listing)\n';
+  '        reported as unknown, not silently skipped), --all shows every branch)\n';
 
 /**
  * How often a running gate samples the load average. R4's lesson is that one
@@ -273,9 +253,7 @@ function ledgerFile(branch) {
  * written under `.gates/` in a worktree died with the worktree, so Q3 could not
  * read the failing runs of the branch it was diagnosing.
  *
- * Layout: `<common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`, with a
- * pre-X12 log migrated to `<common-dir>/nitro-ui-gates/.gates/logs/<branch>/...` so
- * an old ledger line's relative path resolves unchanged in the new home too.
+ * Layout: `<common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`.
  *
  * A run's log, its background record and its step timings all go here, and the
  * record says which worktree started the run: the store is shared by every worktree
@@ -306,8 +284,7 @@ function store(env = process.env) {
         commonDir == null
           ? path.join(repoRoot, LEDGER_DIR, 'logs')
           : gateLogStoreDir(commonDir),
-      // Whether that is a real shared store or the worktree fallback: the
-      // difference decides whether the migration below runs at all.
+      // Whether that is a real shared store or the worktree fallback.
       shared: commonDir != null,
       commonDir,
       // The absolute path of *this* checkout. The store cannot tell two worktrees
@@ -328,16 +305,11 @@ function storeLogsDir() {
  *
  * Both halves of a backgrounded gate need them - the launcher opens the file and
  * writes a record naming it, the runner writes into it and the ledger line names it -
- * and they used to be derived twice. The consequence was real: an older launcher
- * points `NITRO_UI_GATE_LOG` at this checkout's `.gates/logs/`, the runner joined
- * that *name* onto the store, and the run wrote `<store>/<name>` while the record and
- * any reader looked for `.gates/logs/<name>`. The log a reader was sent to had never
- * been written.
+ * and they used to be derived twice.
  *
- * So: the absolute path is the truth, and the ledger's `logPath` is derived from it.
- * A path inside the store is spelled store-relative (the current format); a legacy
- * one keeps its `.gates/logs/...` spelling, which `ledgerLogCandidates` resolves. The
- * record, the ledger line and `wait` therefore cannot point at three different files.
+ * So: the absolute path is the truth, and the ledger's `logPath` is derived from it,
+ * spelled store-relative. The record, the ledger line and `wait` therefore cannot
+ * point at three different files.
  *
  * @param {{branch: string, gate: string, startedAt: number, fromEnv?: string | null}} run
  * @returns {{logPath: string, absolute: string, recordPath: string, backgrounded: boolean}}
@@ -383,7 +355,6 @@ function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
   // prefix-match the other, and the checks below are prefix tests. Comparing mixed
   // spellings can turn a *legitimate* launcher path into an apparent intrusion.
   const storeDir = realpathOrResolved(storeLogsDir());
-  const legacy = realpathOrResolved(path.join(repoRoot, LEDGER_DIR, 'logs'));
   let absolute = null;
   if (fromEnv != null && fromEnv !== '') {
     const candidate = realpathOrResolved(path.resolve(fromEnv));
@@ -393,7 +364,6 @@ function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
       // sets this variable ever writes (`logPathsFor` with no `fromEnv`).
       ledgerFileName(branch).replace(/\.jsonl$/, '')
     );
-    const inside = (dir) => candidate.startsWith(`${dir}${path.sep}`);
     // Narrower than round 1's "anywhere in the store" (review N8): the store is one
     // directory shared by the whole clone, so that rule admitted another worktree's
     // run and another branch's. An inherited or leaked `NITRO_UI_GATE_LOG` would then
@@ -401,7 +371,8 @@ function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
     // line, and mark that run's `.gate.json` done - which is how one task's `wait`
     // ends up returning while its own gate is still running.
     const allowed =
-      candidate.endsWith('.log') && (inside(ownBranchDir) || inside(legacy));
+      candidate.endsWith('.log') &&
+      candidate.startsWith(`${ownBranchDir}${path.sep}`);
     if (!allowed) {
       process.stderr.write(
         `gate: ignoring NITRO_UI_GATE_LOG=${fromEnv} - a background gate's log has to be a .log inside ${ownBranchDir}\n`
@@ -417,9 +388,7 @@ function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
       logRelativePath(branch, logNameFor(gate, startedAt))
     );
   }
-  const logPath = absolute.startsWith(`${legacy}${path.sep}`)
-    ? `${LEDGER_DIR}/logs/${path.relative(legacy, absolute).split(path.sep).join('/')}`
-    : path.relative(storeDir, absolute).split(path.sep).join('/');
+  const logPath = path.relative(storeDir, absolute).split(path.sep).join('/');
   return {
     logPath,
     absolute,
@@ -431,35 +400,11 @@ function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
 /**
  * Every path a ledger line's log could be at, first existing first. Order and the
  * reasoning behind it are in `ledgerLogCandidates`.
- *
- * The line's own `branch` is passed as the legacy copy's directory: after
- * `git worktree remove` there is no checkout left to ask which worktree wrote a
- * `.gates/logs/...` path, and the branch the line carries is what the migration
- * keyed that directory by.
  */
 function resolveLedgerLog(entry) {
-  const branch =
-    typeof entry?.branch === 'string' && entry.branch !== ''
-      ? entry.branch
-      : currentBranch();
-  // The log name is derivable from the line alone: `ts` *is* the `startedAt` the
-  // name was made from. So a line whose `logPath` was spelled by older code - the
-  // N7 case, where a legacy launcher's path was joined onto the store and the file
-  // was never written - can still be offered its canonical path.
-  const startedAt = Date.parse(String(entry?.ts ?? ''));
-  const own = logPathsFor({
-    branch,
-    gate: entry?.gate ?? 'gate',
-    startedAt: Number.isFinite(startedAt) ? startedAt : 0,
-  });
   return ledgerLogCandidates(entry, {
     storeDir: storeLogsDir(),
     repoRoot,
-    logBranch: branch,
-    // Offered last: a line whose `logPath` predates this function can name a file
-    // that was never written (N7), and the canonical path for that run is worth one
-    // more stat before `export` says it found no log.
-    extraCandidates: own.absolute,
     existsSync: (file) => {
       try {
         return fs.statSync(file).isFile();
@@ -468,174 +413,6 @@ function resolveLedgerLog(entry) {
       }
     },
   });
-}
-
-/**
- * Copies a worktree's pre-X12 `.gates/logs/` into the shared store, once per
- * worktree.
- *
- * Migration rather than only fallback-resolution, and the brief lets me choose and
- * say which: *copy*, not move. A run in flight may still hold one of these files
- * open (a `--background` gate started by an older `gate.mjs`), and evidence that
- * vanishes from under a reader is the failure this whole task is about. The copy is
- * idempotent - an existing file of the same name and size is left alone - and it
- * keeps the original's mtime, because a 35-day rule that starts at the copy date
- * would give last month's logs a fresh month of life and sort them as new under the
- * size cap.
- *
- * **Per worktree, not per clone** (review M3): the store is shared, and one marker
- * there meant the first worktree to migrate stopped every other worktree from ever
- * doing so - the other tasks' legacy logs stayed in `.gates/logs/` and died with
- * them, which is the exact loss this task exists to prevent. The marker therefore
- * lives *with the logs it covers*, in the worktree's own `.gates/logs/.migrated`:
- * it is gitignored, it cannot outlive the directory it describes, and it needs no
- * worktree hash to name.
- *
- * The copies land under `<store>/.gates/logs/<branch>/`, keyed by the branch that
- * wrote them: that is the one identity a pre-X12 ledger line still carries after
- * `git worktree remove`, so `ledgerLogCandidates` can find the file from the line
- * alone. Two worktrees cannot check out the same branch, so the key is per worktree
- * in practice; the branch namespacing also stops two worktrees' same-named legacy
- * logs colliding. A genuine same-name-different-bytes conflict leaves the stored
- * copy alone and is counted, rather than overwriting evidence with evidence.
- *
- * The original is left in place: it is gitignored, it is inside a worktree the
- * owner will delete, and deleting someone's files as a side effect of running a
- * gate is not this script's business.
- *
- * @returns {{copied: string[], skipped: number, conflicts: number}}
- */
-function migrateWorktreeLogs() {
-  const location = store();
-  if (!location.shared)
-    return { copied: [], skipped: 0, conflicts: 0, stale: 0 };
-  const legacy = path.join(repoRoot, LEDGER_DIR, 'logs');
-  if (!fs.existsSync(legacy) || !fs.statSync(legacy).isDirectory()) {
-    return { copied: [], skipped: 0, conflicts: 0, stale: 0 };
-  }
-  const copied = [];
-  let skipped = 0;
-  let conflicts = 0;
-  let stale = 0;
-  // Anything this old is deleted by retention the moment it lands in the store, so
-  // copying it achieves nothing except a delete: before this check, every run
-  // re-migrated an expired legacy log, watched retention remove it, and appended two
-  // more lines to `.migrated` about having done so (review N7). The age is measured
-  // against the same rule retention uses, not a copy of it.
-  const retentionCutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-  const destination = path.join(
-    location.dir,
-    LEDGER_DIR,
-    'logs',
-    // The branch keeps two worktrees' legacy logs apart, and it is the one thing an
-    // old ledger line still names after its worktree is gone - so the key has to be
-    // exactly what `ledgerLogCandidates` can rebuild from the line. Two worktrees
-    // cannot check out the same branch, so this is per-worktree in practice; two
-    // detached ones are the case the conflict counter below covers.
-    currentBranch()
-  );
-  const walk = (dir, prefix) => {
-    let names;
-    try {
-      names = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of names) {
-      const absolute = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(absolute, `${prefix}${entry.name}/`);
-        continue;
-      }
-      // The `.migrated` note is not evidence, and neither is anything else here.
-      if (entry.name === MIGRATION_NOTE) continue;
-      // Both the log and its `.gate.json` record: a `wait` on a backgrounded run
-      // reads the record from the same directory as the log, so migrating one
-      // without the other loses a run mid-flight.
-      if (!/\.(log|gate\.json|steps\.json)$/.test(entry.name)) continue;
-      try {
-        // Expired evidence does not become evidence by being copied.
-        if (fs.statSync(absolute).mtimeMs < retentionCutoff) {
-          stale += 1;
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      const target = path.join(destination, `${prefix}${entry.name}`);
-      try {
-        const [from, to] = [fs.statSync(absolute), fs.statSync(target)];
-        if (to.size === from.size) {
-          skipped += 1;
-          continue;
-        }
-        // Same name, different bytes: two runs that disagree about what happened.
-        // Keep the one already in the store and say so - a copy that silently
-        // replaces stored evidence is the bug, not the collision.
-        conflicts += 1;
-        continue;
-      } catch {
-        /* not there yet - copy it */
-      }
-      try {
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.copyFileSync(absolute, target);
-        // Retention reads mtime, so a migrated log has to keep the one it earned.
-        const from = fs.statSync(absolute);
-        fs.utimesSync(target, from.atime, from.mtime);
-        copied.push(path.relative(location.dir, target));
-      } catch {
-        // A log we could not copy is still resolvable through the worktree
-        // fallback, so this is a note rather than a failure.
-        skipped += 1;
-      }
-    }
-  };
-  walk(legacy, '');
-  // Only a run that moved something has anything to report, so the note cannot grow
-  // one line per gate run on a worktree that settled long ago. Expired files counted
-  // as *moved* before, which is how `.migrated` grew by two lines per run on a
-  // worktree with a legacy log past retention (review N7).
-  if (copied.length > 0 || conflicts > 0) {
-    writeMigrationNote(
-      path.join(legacy, MIGRATION_NOTE),
-      repoRoot,
-      copied,
-      conflicts
-    );
-  }
-  return { copied, skipped, conflicts, stale };
-}
-
-/** The name of the provenance note `migrateWorktreeLogs` leaves behind. */
-const MIGRATION_NOTE = '.migrated';
-
-/**
- * Appends this run's line to the note inside the directory it just copied.
- *
- * Provenance only - a reader asking "did this worktree's old logs make it?" finds the
- * answer here, beside the files it describes, in a gitignored directory that dies with
- * the worktree exactly when the question stops mattering. It is deliberately *not* read
- * back as a gate on the copy: that is what made the old per-clone marker lose the other
- * worktrees' logs (review M3), and an idempotent copy needs no permission.
- *
- * Tolerant of failure: a note that cannot be written costs a line of history, not
- * evidence.
- */
-function writeMigrationNote(file, worktree, copied, conflicts) {
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(
-      file,
-      `# migrated ${new Date().toISOString()} from ${worktree}\n` +
-        `${copied.map((name) => `# copied ${name}`).join('\n')}${copied.length > 0 ? '\n' : ''}` +
-        (conflicts > 0
-          ? `# ${String(conflicts)} name conflict(s) left alone\n`
-          : '')
-    );
-  } catch {
-    /* provenance, not evidence */
-  }
 }
 
 /**
@@ -745,12 +522,18 @@ function listStoredLogs(dir) {
         continue;
       }
       // The `.gate.json` records travel with their log, `steps.json` with the run that
-      // wrote it (X10) and `suites.json` with the harness run that wrote it (X11), so
-      // all four are swept together - a directory of orphaned records is not evidence
-      // either. Anything named `<log>.<something>.json` that is left out of this list
-      // is a file that can never be deleted: it sits in the store forever, growing past
-      // the cap retention is supposed to hold.
-      if (!/\.(log|gate\.json|steps\.json|suites\.json)$/.test(entry.name))
+      // wrote it (X10), `suites.json` with the harness run that wrote it (X11), its
+      // `suites.json.isolated.json` with the isolated launch of that run, and a run's
+      // `runner.json` record, so all of them are swept together - a directory of
+      // orphaned records is not evidence either. Anything named
+      // `<log>.<something>.json` that is left out of this list is a file that can never
+      // be deleted: it sits in the store forever, growing past the cap retention is
+      // supposed to hold.
+      if (
+        !/\.(log|gate\.json|steps\.json|suites\.json|isolated\.json|runner\.json)$/.test(
+          entry.name
+        )
+      )
         continue;
       try {
         const stats = fs.statSync(absolute);
@@ -796,9 +579,8 @@ function appendLedgerLine(branch, line) {
  *   - `adb -s <leased serial> get-state` — the same question for an emulator, asked
  *     of *one* device: the one this run's lease names. Nothing here lists devices.
  *     A host-side `adb devices` reports every emulator the adb server can see, the
- *     maintainer's `emulator-5560` among them, and that output would then be
- *     committed in an excerpt; the whole discipline of X1 is that a script names its
- *     own device and asks nothing about anyone else's;
+ *     maintainer's `emulator-5560` among them; the whole discipline of X1 is that a
+ *     script names its own device and asks nothing about anyone else's;
  *   - the lease list, read from the lease file (no subprocess, no mutation) — which
  *     task holds what, and whether this run's lease is even still live;
  *   - `load1`, beside the samples the ledger already carries;
@@ -942,9 +724,7 @@ function collectDeviceContext({
   // identifiers this run does not own (review N6). The questions are host-wide -
   // `simctl list devices booted` answers with every simulator on the Mac, and adb
   // puts a serial in its own error text - so without this the block names another
-  // task's device, or the maintainer's, and the block is copied verbatim into a
-  // committed excerpt. Done here rather than in `renderDeviceContext` so the *log*
-  // is clean as well, since that is what `export` reads.
+  // task's device, or the maintainer's.
   const own = deviceFromEnv(env, platform);
   return probes.map((probe) => ({
     ...probe,
@@ -1096,15 +876,11 @@ function adbFromSdk(env) {
 /**
  * The lease list, from the lease file.
  *
- * Read rather than `lease.mjs list`, which would shell out to `simctl`/`adb` again
- * and print warnings about devices nobody asked about; and read *without pruning*,
- * because the run that just failed may have been pruned for a ttl it exceeded and
- * that is exactly the fact worth recording.
+ * Read *without pruning*, because the run that just failed may have been pruned for
+ * a ttl it exceeded and that is exactly the fact worth recording.
  *
- * The file is named as `<lease file>`, not as an absolute path: this block ends up in
- * a committed excerpt, and `~/.nitro-ui/leases.json` under a maintainer's home is the
- * kind of line D25 keeps out of the repo. A reader on the machine that ran the gate
- * knows where the lease file is.
+ * The file is named as `<lease file>`, not as an absolute path: a reader on the
+ * machine that ran the gate knows where the lease file is.
  */
 function describeLeases({ lease, leaseFile, now }) {
   try {
@@ -1132,9 +908,9 @@ function describeLeases({ lease, leaseFile, now }) {
  *
  * Starts with the two paths a reader wants and must not have to guess: where this
  * log's full copy is, and which checkout ran it. Both in placeholder form
- * (`<store>/task/X3/check-….log`, `<repo>`) for the same D25 reason as the lease
- * file above — and the store-relative half is the useful half, because it is what a
- * `gate.mjs logs` invocation takes.
+ * (`<store>/task/X3/check-….log`, `<repo>`), like the lease file above — and the
+ * store-relative half is the useful half, because it is what a `gate.mjs logs`
+ * invocation takes.
  */
 function renderDeviceContext(probes, { logPath = null } = {}) {
   const lines = [
@@ -1306,6 +1082,31 @@ function deviceGateLeaseBlock(resolved, env = process.env) {
 }
 
 /**
+ * A device gate does not start on a disk too full to finish it.
+ *
+ * Read from the worktree the gate runs in, because that is the volume its build,
+ * its Metro cache and its log are written to.
+ *
+ * @param {object} resolved `resolveGate`'s answer
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | null} the message to print, when the gate must not start
+ */
+function deviceGateDiskBlock(resolved, env = process.env) {
+  if (!isDeviceGate(resolved)) return null;
+  let measuredGb = null;
+  try {
+    const stats = fs.statfsSync(process.cwd());
+    measuredGb = Math.floor((stats.bavail * stats.bsize) / 2 ** 30);
+  } catch {
+    // Best effort: an unreadable volume is not a refusal (see `diskRefusal`).
+  }
+  return diskRefusal({
+    freeGb: freeDiskGbFrom(env, measuredGb),
+    ci: isCiRunner(env),
+  });
+}
+
+/**
  * Starts a gate detached, and returns straight away.
  *
  * Why (X9): implementers polled background gates with `sleep N; tail` loops, which
@@ -1332,7 +1133,6 @@ async function startBackgroundGate(name, resolved) {
   // `git worktree remove` of the worktree that started the run (X12). They are *not*
   // shared between worktrees in the sense that matters to `wait`: the record names
   // the worktree that started it, and only that worktree waits for it (M1).
-  migrateWorktreeLogs();
   pruneStoredLogs('gate');
   const logsDir = storeLogsDir();
   fs.mkdirSync(logsDir, { recursive: true });
@@ -1559,19 +1359,11 @@ async function commandWait({ gate, timeoutMinutes }) {
  * top level would report "no background gate" for every run anyone started after
  * X12 - the exact wrong answer for a tool whose whole job is not polling.
  *
- * Also reads a worktree's own `.gates/logs/` when it still has one: a run started
- * by an older `gate.mjs` writes its record there, and `wait` may be the next
- * command anyone types after the upgrade.
- *
  * @param {string} logsDir the store root
  * @returns {object[]}
  */
 function listBackgroundRecords(logsDir) {
-  const roots = [logsDir];
-  const legacy = path.join(repoRoot, LEDGER_DIR, 'logs');
-  if (logsDir !== legacy) roots.push(legacy);
   const found = [];
-  const seen = new Set();
   const walk = (dir) => {
     let entries;
     try {
@@ -1586,21 +1378,17 @@ function listBackgroundRecords(logsDir) {
         continue;
       }
       if (!entry.name.endsWith('.gate.json')) continue;
-      if (seen.has(absolute)) continue;
-      seen.add(absolute);
       found.push(absolute);
     }
   };
-  for (const root of roots) walk(root);
+  walk(logsDir);
   return found
     .map((file) => readBackgroundRecord(file))
     .filter((record) => record != null);
 }
 
 /**
- * The digests a decision needs: the full code tree, the two platform halves of it,
- * and the two fields merge reuse reads (git's own hash of the tracked tree, and
- * whether the worktree matches it).
+ * The digests a decision needs: the full code tree and the two platform halves of it.
  *
  * The halves are built here rather than in `app-stamp.mjs` so the stamp stays
  * what it is (one digest for one binary, X1) and `build-app.mjs` - which task X6
@@ -1609,18 +1397,7 @@ function listBackgroundRecords(logsDir) {
  * hash-the-link-target cases, so a platform digest is the same hash function over
  * a subset of the same file set and nothing else.
  *
- * `fullTree` is git's answer, not ours: `rev-parse HEAD^{tree}` hashes everything
- * tracked, `docs/` and `bench/` included, which is the blindness `tree` deliberately
- * has and reuse cannot afford. It is null in a repository with no commit, and reuse
- * treats null as "not reusable" rather than as a wildcard.
- *
- * `worktreeClean` is `git status --porcelain --untracked-files=all` coming back empty
- * at the moment this was read. Inside a gate that is genuinely true (every step's
- * output lands in a gitignored path - `lib/`, `.turbo/`, `.reassure/`, `.gates/`), and
- * it is false the moment someone has an unsaved edit, which is exactly when a recorded
- * tree stops describing what was run.
- *
- * @returns {{tree: string, head: string, files: number, trees: Record<string, string>, fullTree: string | null, worktreeClean: boolean}}
+ * @returns {{tree: string, head: string, files: number, trees: Record<string, string>}}
  */
 function readTrees() {
   const full = currentCodeTree({ repoRoot });
@@ -1658,26 +1435,7 @@ function readTrees() {
   return {
     ...full,
     trees: platformTreesFromEntries(entries),
-    fullTree: git(['rev-parse', 'HEAD^{tree}'], null) || null,
-    worktreeClean: gitStatusIsClean(),
   };
-}
-
-/**
- * Whether the working tree matches HEAD, untracked files included.
- *
- * One `--porcelain=v1` call, and the answer is `false` whenever git could not be
- * asked: an unknown worktree is not a clean one, and this gates a claim that a tree
- * was checked on its own.
- *
- * @returns {boolean}
- */
-function gitStatusIsClean() {
-  const status = git(
-    ['status', '--porcelain=v1', '--untracked-files=all'],
-    null
-  );
-  return status != null && status.trim() === '';
 }
 
 /**
@@ -2067,7 +1825,6 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // launcher opened, passed down as an absolute path, and `logPathsFor` derives the
   // ledger's spelling from it - one function for both, so the record, the ledger line
   // and the file cannot name three things (N7).
-  migrateWorktreeLogs();
   pruneStoredLogs('gate');
   const logsDir = storeLogsDir();
   fs.mkdirSync(logsDir, { recursive: true });
@@ -2092,7 +1849,7 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // `<repo>/.gates/suite-timing/<gate>-<ts>-<pid>.json` — in the worktree, outside the
   // retention walk, and named by a second function. Nothing in a ledger cites the old
   // path (the line carries the parsed record, not a pointer), so those files die with
-  // their worktree instead of needing a migration.
+  // their worktree.
   const suiteTimingFile =
     resolved.platform == null ? null : suiteTimingPath(absoluteLog);
   // Appending for a backgrounded run: the launcher already has that file open in
@@ -2144,11 +1901,6 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     `gate: ${name}\n` +
       `gate: ${resolved.argv.join(' ')} (cwd ${path.relative(repoRoot, cwd) || '.'})\n` +
       `gate: code tree ${before.tree.slice(0, 12)} at HEAD ${git(['rev-parse', '--short', 'HEAD'], '?')}\n` +
-      // Recorded on the line and the thing reuse compares, so "why was my pass not
-      // reusable" is answerable from the transcript rather than by reading the code.
-      `gate: git tree ${String(before.fullTree ?? '<no commit>').slice(0, 12)}${
-        before.worktreeClean ? '' : ' with a DIRTY worktree (not reusable)'
-      }\n` +
       // Store-relative, and the absolute path beside it: `logPath` is what the
       // ledger and `table --full` print, and the absolute one is what you actually
       // open - which is no longer inside the worktree you are standing in.
@@ -2452,17 +2204,6 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     tree: before.tree,
     trees: before.trees,
     treeAfter: after.tree,
-    // The pair merge reuse reads, measured at the *start* of the run, which is the
-    // tree the child actually began with. Two conservatisms here: if git's tree moved
-    // during the run - a docs commit landing mid-flight moves `fullTree` and nothing
-    // else - no tree is claimed, because the run spanned two of them; and cleanliness
-    // has to hold at both ends, so a line cannot certify a tree that was being edited
-    // underneath it (M3).
-    fullTree:
-      before.fullTree != null && after.fullTree === before.fullTree
-        ? before.fullTree
-        : null,
-    worktreeClean: before.worktreeClean && after.worktreeClean,
     head: before.head,
     branch,
     platform: device.platform,
@@ -2596,19 +2337,12 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   return exit.code ?? 0;
 }
 
-function printCodeTree({ tree, trees, head, files, fullTree, worktreeClean }) {
+function printCodeTree({ tree, trees, head, files }) {
   process.stderr.write(
     `ledger: code tree ${tree.slice(0, 12)} at HEAD ${String(head ?? '?').slice(0, 7)} (branch ${currentBranch()}, ${String(files)} files)\n`
   );
   process.stderr.write(
     `ledger: platform trees ${PLATFORMS.map((platform) => `${platform} ${String(trees?.[platform] ?? '?').slice(0, 12)}`).join(' ')}\n`
-  );
-  // The two fields merge reuse reads, printed next to the digest they are not: a
-  // reader deciding whether a borrow is owed should see what the rule will see.
-  process.stderr.write(
-    `ledger: git tree ${String(fullTree ?? '<no commit>').slice(0, 12)} (what reuse compares), worktree ${
-      worktreeClean === true ? 'clean' : 'DIRTY - nothing here is reusable'
-    }\n`
   );
 }
 
@@ -2668,15 +2402,13 @@ function formatMaybe(ms) {
 }
 
 /**
- * Every branch ledger in `.gates/` except one, for merge reuse.
+ * Every branch ledger in `.gates/` except one, for `logs --failed`.
  *
- * A merge's evidence usually lives on the branch that was merged, so `need --for
- * merge` on `main` has to look outside `main`'s own ledger. Branch names nest
- * (`task/X10-check-throughput` becomes `.gates/task/X10-….jsonl`), which is why
- * this walks rather than globs a flat directory; the name it returns is the branch,
- * recovered from the path, because that is what the note has to cite.
+ * Branch names nest (`task/X10-check-throughput` becomes
+ * `.gates/task/X10-….jsonl`), which is why this walks rather than globs a flat
+ * directory; the name it returns is the branch, recovered from the path.
  *
- * @param {string} exceptBranch the branch whose own ledger is not "other"
+ * @param {string | null} exceptBranch a branch whose own ledger is left out
  * @returns {Array<{branch: string, entries: object[], source: string}>}
  */
 function otherBranchLedgers(exceptBranch) {
@@ -2715,29 +2447,16 @@ function otherBranchLedgers(exceptBranch) {
 }
 
 /**
- * The ledgers committed beside task reports: `docs/tasks/<ID>/gates.jsonl`.
+ * The ledgers committed beside task reports: `docs/tasks/<ID>/gates.jsonl`, for
+ * `logs --failed`.
  *
- * A committed ledger travels; a live one does not, and that is the whole difference. `.gates/` is
- * gitignored, so in the checkout where a merge is confirmed - `main`, often a different worktree
- * altogether - no branch's `.gates/` lines exist; the export from `gate.mjs export --task <ID>` is
- * the copy that arrived with the merge commit. A reuse rule that read only `.gates/` would be right
- * in a test and useless in the flow it was written for.
+ * A committed ledger travels; a live one does not. `.gates/` is gitignored, so in
+ * another checkout no branch's `.gates/` lines exist; the export from
+ * `gate.mjs export --task <ID>` is the copy that does.
  *
- * What a committed line proves is narrower than its wording suggests, and the rules know it (X10
- * review N4). Ancestry ties a line to *this history*, and an equal `fullTree` is the actual evidence
- * that the code was checked; neither of them authenticates the file - anyone who can commit can edit
- * a `gates.jsonl` line, give it some ancestor `head` and today's tree hash, and be believed. Two
- * things make that a poor attack: the forger has to commit the same tree they are certifying, so
- * anything they could have gained by lying was already checked by an honest run of the same bytes or
- * not at all; and an export is written by the machine that ran the gate, so a false one is
- * attributable in a way a stale claim in prose is not. Trusting the committed ledger is the
- * alternative to re-running `check` after every merge, which is the cost this rule exists to remove;
- * it is stated plainly in ORCHESTRATOR rather than papered over.
- *
- * @param {string} exceptBranch the branch whose own ledger is not "other"
- * @returns {Array<{branch: string, entries: object[], source: string}>}
+ * @returns {Array<{entries: object[], source: string}>}
  */
-function committedTaskLedgers(exceptBranch) {
+function committedTaskLedgers() {
   const found = [];
   const tasksDir = path.join(repoRoot, 'docs', 'tasks');
   let names;
@@ -2757,72 +2476,12 @@ function committedTaskLedgers(exceptBranch) {
     }
     const entries = parseLedger(text).filter((line) => !line.corrupt);
     if (entries.length === 0) continue;
-    // One file, one group **per branch**: the merging export (X30 item 2) put two
-    // rounds' lines in the same `gates.jsonl`, each with its own `branch`, and
-    // labelling the whole file by the first line's branch both silenced the
-    // "not this branch's own ledger" filter and made the reuse note credit the wrong
-    // task with a run it never did (X30 fix round 1). A line with no `branch` is
-    // labelled with the file, which is also what the note cites.
-    found.push(
-      ...groupLedgerLinesByBranch(
-        entries,
-        path.relative(repoRoot, file),
-        exceptBranch
-      )
-    );
+    found.push({ entries, source: path.relative(repoRoot, file) });
   }
   return found;
 }
 
-/**
- * Whether `commit` is in the history of the tree being asked about.
- *
- * This is the difference between "some branch once had this code" and "this
- * evidence came from the work that produced it". A line whose head cannot be
- * resolved here (a squash-merged branch, a different machine) is not evidence, so
- * an unreadable commit is a `false`, not a guess.
- */
-function commitIsAncestorOfHead(commit) {
-  const sha = String(commit ?? '').trim();
-  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return false;
-  if (git(['cat-file', '-e', `${sha}^{commit}`], null) == null) return false;
-  const result = spawnSync(
-    'git',
-    ['merge-base', '--is-ancestor', sha, 'HEAD'],
-    {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    }
-  );
-  return result.status === 0;
-}
-
-/**
- * The `check` reuse available for this tree, or null. `--no-reuse` turns it off, which is how a
- * reviewer re-derives the strict answer when they do not believe the reuse.
- *
- * Everything git is asked here is a read: the tree hash and worktree state come from `readTrees`,
- * and the only other question is ancestry. There is no diff, because comparing two hashes makes the
- * question redundant - and that is the whole point of the rewrite (X10 round 2): the diff is where
- * the allowlist lived, and the allowlist is what could be fooled.
- *
- * @param {string} branch the branch whose own ledger is already being read
- * @param {{fullTree: string | null, worktreeClean: boolean}} read the caller's `readTrees()` result
- * @param {string[]} [diagnostics] filled with why each candidate was refused, so `need` can print the
- *   reason instead of a shrug
- * @returns {{branch: string, entry: object, source: string} | null}
- */
-function reusableCheckFor(branch, read, diagnostics = null) {
-  return findReusableCheck({
-    ledgers: [...otherBranchLedgers(branch), ...committedTaskLedgers(branch)],
-    fullTree: read.fullTree,
-    worktreeClean: read.worktreeClean,
-    headIsAncestor: commitIsAncestorOfHead,
-    diagnostics,
-  });
-}
-
-function commandNeed({ stage, base, reuse = true }) {
+function commandNeed({ stage, base }) {
   const branch = currentBranch();
   const read = readTrees();
   const { entries, exists } = readLedger(branch);
@@ -2831,11 +2490,6 @@ function commandNeed({ stage, base, reuse = true }) {
     ? { platforms: [...PLATFORMS], unmapped: [], tooling: [] }
     : platformsTouchedByPaths(diff.paths);
 
-  // Why reuse was declined, kept to print: "this tree was never checked" is a claim a
-  // reviewer can only audit if the reason is on the page (the pass was recorded over a
-  // dirty worktree, its commit is not merged, a newer fail outranks it), and silence
-  // would look like the reuse rule never fired.
-  const reuseRefusals = [];
   const decision = decideNeed({
     entries,
     tree: read.tree,
@@ -2845,11 +2499,6 @@ function commandNeed({ stage, base, reuse = true }) {
     unmappedPaths: touched.unmapped,
     toolingPaths: touched.tooling,
     diffUnknown: diff.unknown,
-    reusedCheck:
-      stage === 'merge' && reuse
-        ? reusableCheckFor(branch, read, reuseRefusals)
-        : null,
-    reuseRefusals: reuseRefusals,
   });
 
   printCodeTree(read);
@@ -2876,17 +2525,12 @@ function commandNeed({ stage, base, reuse = true }) {
   return 1;
 }
 
-function commandTable({ stage, full, reuse = true }) {
+function commandTable({ stage, full }) {
   const branch = currentBranch();
   const read = readTrees();
   const { entries, exists } = readLedger(branch);
   printCodeTree(read);
-  const reusedCheck =
-    stage === 'merge' && reuse ? reusableCheckFor(branch, read) : null;
-  if (!exists && reusedCheck == null) {
-    // "Nothing recorded yet" is only the whole answer when no other branch's ledger
-    // can account for this tree either - on `main` right after a merge, the merge
-    // bar is exactly what this table has to show.
+  if (!exists) {
     process.stderr.write('table: nothing recorded yet - run a gate first.\n');
     return 1;
   }
@@ -2896,7 +2540,6 @@ function commandTable({ stage, full, reuse = true }) {
     trees: read.trees,
     stage,
     required: MERGE_GATES,
-    reusedCheck,
     evidence:
       full === true
         ? (entry) => `log \`${String(entry.logPath ?? '')}\``
@@ -2932,7 +2575,7 @@ function commandTable({ stage, full, reuse = true }) {
   return 0;
 }
 
-function commandExport({ task, out }) {
+function commandExport({ task }) {
   const branch = currentBranch();
   // `file`, not `entries`: the export copies raw lines, so nothing here re-reads
   // them through the parser (a corrupt line has to leave as corrupt as it arrived).
@@ -2941,18 +2584,11 @@ function commandExport({ task, out }) {
     process.stderr.write('export: nothing recorded yet - run a gate first.\n');
     return 1;
   }
-  const target =
-    out ??
-    (task != null ? path.join('docs', 'tasks', task, 'gates.jsonl') : null);
-  if (target == null) {
-    process.stderr.write(
-      `export: name the task (--task X2) or the file (--out <file>).\n${USAGE}`
-    );
+  if (task == null) {
+    process.stderr.write(`export: name the task (--task X2).\n${USAGE}`);
     return 1;
   }
-  const absolute = path.isAbsolute(target)
-    ? target
-    : path.join(repoRoot, target);
+  const absolute = path.join(repoRoot, 'docs', 'tasks', task, 'gates.jsonl');
   fs.mkdirSync(path.dirname(absolute), { recursive: true });
 
   // The evidence has to survive its author: each line is copied **verbatim** rather
@@ -2977,29 +2613,11 @@ function commandExport({ task, out }) {
     existing: ledgerPairs(existingText),
     incoming: ledgerPairs(rawText),
   });
+  // Only the ledger is committed. A run's log stays in the clone's log store
+  // (`gate.mjs logs --failed` lists the failed ones), so a failed line is copied
+  // like any other and nothing is written beside the file.
   const lines = merged.map((row) => row.raw);
-
-  // Item 2 (X12): a red row in the committed ledger used to arrive with no evidence
-  // attached, so the reader had to go to the machine that ran the gate - which is
-  // the thing X12 item 1 fixes for the owner and this fixes for everyone else.
-  // Written *before* the ledger, because the ledger is about to name these files.
-  const failuresDir =
-    task != null ? path.join('docs', 'tasks', task, 'failures') : null;
-  const {
-    lines: exported,
-    written,
-    kept: keptExcerpts,
-    missing,
-  } = exportFailureExcerpts({
-    rawLines: lines,
-    entries: merged.map((row) => row.entry),
-    failuresDir,
-  });
-  // What the excerpt writer hands back, not `lines`: it is the one place that
-  // re-emits a failed line with its `failureLogPath` added, and writing the merged
-  // input instead would publish red rows with no evidence attached - the exact hole
-  // X12 item 2 closed.
-  fs.writeFileSync(absolute, `${exported.join('\n')}\n`);
+  fs.writeFileSync(absolute, `${lines.join('\n')}\n`);
   const real = merged.filter((row) => row.entry?.corrupt !== true).length;
   process.stdout.write(
     `export: ${String(real)} gate line(s) -> ${path.relative(repoRoot, absolute)} ` +
@@ -3008,253 +2626,14 @@ function commandExport({ task, out }) {
         duplicates > 0 ? `, ${String(duplicates)} already there` : ''
       })\n`
   );
-  if (keptExcerpts.length > 0) {
-    process.stdout.write(
-      `export: ${String(keptExcerpts.length)} failure excerpt(s) already committed, left as they are\n`
-    );
-  }
-  if (failuresDir != null) {
-    const failed = merged.filter((row) => isFailedRunWithLog(row.entry)).length;
-    process.stdout.write(
-      `export: ${String(written.length)} failure excerpt(s) in ${failuresDir}${
-        written.length === 0 ? ' (no failed runs in this ledger)' : ''
-      }\n`
-    );
-    for (const w of written) {
-      process.stdout.write(
-        `export:   ${w.relative} (${String(w.scrubbed)} value(s) scrubbed${
-          w.truncated ? ', truncated' : ''
-        })\n`
-      );
-    }
-    for (const m of missing) {
-      // Loud, not silent: a red row whose log cannot be found is exactly the hole
-      // this feature exists to close, and the reader has to be able to tell "no
-      // failure happened" from "we could not find the evidence".
-      process.stdout.write(
-        `export:   NOTE no log for the failed \`${m.gate}\` run (${String(m.logPath)}); looked in:\n${m.candidates
-          .map((candidate) => `export:           ${candidate}`)
-          .join('\n')}\n`
-      );
-    }
-    if (failed > 0 && written.length === 0 && failuresDir != null) {
-      process.stdout.write(
-        `export:   full logs live in ${storeLogsDir()} of the clone that ran them\n`
-      );
-    }
-  }
   return 0;
-}
-
-/**
- * Writes one excerpt per **failed** run in the exported ledger, and returns the
- * ledger lines with `failureLogPath` filled in.
- *
- * Passing runs are passed through **byte-verbatim** and get no file (the brief's
- * "never copies a passing run's log"): a directory of green logs is not evidence, it
- * is a disk charge, and re-serialising the other lines would quietly rewrite a
- * corrupt line into a plausible one. Only a failed line is re-emitted, and only to
- * add `failureLogPath` - the run could not know the name of the file that would
- * carry its excerpt.
- *
- * A failed line whose log cannot be found keeps its original text and produces a
- * note instead of a file.
- *
- * An excerpt that is **already committed** is left alone (X30 item 2): a failed
- * line that already carries `failureLogPath`, and whose file is in the checkout, is
- * evidence a previous round published. Re-writing it from a store log that may no
- * longer exist would drop the pointer and orphan the file - and the whole point of
- * exporting across rounds is that an earlier round's red row keeps its evidence.
- * When the pointer is set but the file is not there (it was deleted, or this
- * checkout never had it), the run below re-creates it from the store if the store
- * still has the log, and notes the miss if it does not.
- *
- * @param {{rawLines: string[], entries: object[], failuresDir: string | null}} options
- * @returns {{lines: string[], written: Array<{relative: string, scrubbed: number, truncated: boolean}>, kept: string[], missing: Array<{gate: string, logPath: string, candidates: string[]}>}}
- */
-function exportFailureExcerpts({ rawLines, entries, failuresDir }) {
-  const lines = [];
-  const written = [];
-  const kept = [];
-  const missing = [];
-  // Every path this excerpt could leak into a public commit (D25). The header's
-  // store path, the lease file in the device block, and the home path in a jest
-  // stack trace all become placeholders, so nothing in `docs/tasks/` says whose
-  // machine ran the gate.
-  const redactions = localPathRedactions({
-    repoRoot,
-    storeDir: storeLogsDir(),
-    leaseFile: path.join(statePaths(stateHome(process.env)).leases),
-    home: os.homedir(),
-    hostname: os.hostname(),
-    // The bare name, because `$HOME` only gives it as part of a path: `whoami`,
-    // `ps -o user`, `ssh <user>@host` and `USER=` print it on its own, and review
-    // N5 found all of them in an excerpt that carried no home path at all.
-    username: process.env.USER ?? os.userInfo().username,
-    // Both spellings of the scratch dir: jest prints resolved paths (`/private/var/…`
-    // on macOS) while `os.tmpdir()` returns the symlink, and a log fixture lives
-    // under the resolved one.
-    tmpDir: [os.tmpdir(), fs.realpathSync(os.tmpdir())],
-  });
-  // Per-name counter: the excerpt's file name is second-granular, so two failed runs
-  // of one gate in the same second have the same name and would share one file - the
-  // later export overwriting the earlier excerpt while both ledger lines pointed at
-  // it. Counting by the name itself is what makes that impossible (review N2).
-  //
-  // It starts by counting the names this checkout has *already spent*. The merging
-  // export (X30 item 2) hands this function round 1's lines as well as this round's,
-  // and round 1's lines point at committed excerpts; counting only the writes below
-  // handed a round-2 failure in round 1's second the same `--01.log` and wrote over
-  // evidence that was already published, while the merged ledger line - kept
-  // byte-for-byte, as the merge must - went on pointing at it (X30 fix round 1).
-  const publishedByIndex = entries.map((entry) => committedExcerptPath(entry));
-  const sequenceByName = new Map();
-  publishedByIndex.forEach((published, index) => {
-    if (published == null) return;
-    // Both spellings of the name count: the one in the file (authoritative - that is
-    // the file that must not be written again) and the one this line would be given
-    // today, which is what the loop below allocates. They differ when a line was
-    // exported under one ts and carries another now.
-    const named = path.basename(published).replace(/--\d+\.log$/, '--01.log');
-    for (const key of new Set([named, failureExcerptName(entries[index], 1)])) {
-      sequenceByName.set(key, (sequenceByName.get(key) ?? 0) + 1);
-    }
-  });
-  rawLines.forEach((raw, index) => {
-    const entry = entries[index];
-    if (!isFailedRunWithLog(entry)) {
-      lines.push(raw);
-      return;
-    }
-    const published = publishedByIndex[index];
-    if (published != null) {
-      // Already in the checkout, already pointing here: nothing to write, and the
-      // line's own `failureLogPath` is the pointer we must not lose.
-      kept.push(published);
-      lines.push(raw);
-      return;
-    }
-    const found = resolveLedgerLog(entry);
-    if (found.file == null) {
-      lines.push(raw);
-      missing.push({
-        gate: String(entry.gate ?? '?'),
-        logPath: String(entry.logPath),
-        candidates: found.candidates,
-      });
-      return;
-    }
-    if (failuresDir == null) {
-      // `--out <file>` with no `--task`: nowhere to put an excerpt, and inventing a
-      // directory beside someone's chosen file name would be worse than saying so.
-      lines.push(raw);
-      missing.push({
-        gate: String(entry.gate ?? '?'),
-        logPath: String(entry.logPath),
-        candidates: [
-          'no --task, so there is no docs/tasks/<ID>/failures/ to write to',
-        ],
-      });
-      return;
-    }
-    let text;
-    try {
-      // Capped: a hung harness run's log can be enormous and an excerpt reads its
-      // head and tail, not all of it. See `readLogForExcerpt`.
-      text = readLogForExcerpt(found.file);
-    } catch (error) {
-      lines.push(raw);
-      missing.push({
-        gate: String(entry.gate ?? '?'),
-        logPath: String(entry.logPath),
-        candidates: [`unreadable: ${String(error?.message ?? error)}`],
-      });
-      return;
-    }
-    // Keyed on the *name*, not the raw `ts`: the name is what two runs must not
-    // share, and `failureExcerptName` drops the milliseconds that make the ts
-    // different. Keying on `ts` (round 1) gave two runs in one second the same
-    // sequence, so the second export wrote over the first excerpt and both ledger
-    // lines pointed at it (review N2).
-    const key = failureExcerptName(entry, 1);
-    const sequence = (sequenceByName.get(key) ?? 0) + 1;
-    sequenceByName.set(key, sequence);
-    const relative = path
-      .join(failuresDir, failureExcerptName(entry, sequence))
-      .split(path.sep)
-      .join('/');
-    const excerpt = renderFailureExcerpt({
-      entry,
-      logText: text,
-      // Redacted to `<store>/…` by `redactions`, which is the form worth committing:
-      // it says where the original is without saying who the machine belongs to.
-      logLocation: found.file,
-      redactions,
-    });
-    const absolute = path.join(repoRoot, relative);
-    fs.mkdirSync(path.dirname(absolute), { recursive: true });
-    fs.writeFileSync(absolute, excerpt.content);
-    written.push({
-      relative,
-      scrubbed: excerpt.scrubbed,
-      truncated: excerpt.truncated,
-    });
-    lines.push(JSON.stringify({ ...entry, failureLogPath: relative }));
-  });
-  return { lines, written, kept, missing };
-}
-
-/**
- * The committed excerpt a failed line already points at, or null.
- *
- * `failureLogPath` is written by `export` as a repo-relative path beside
- * `gates.jsonl`, so "is it there" is a question about this checkout. Null for a
- * line with no pointer, and for a pointer whose file is not in the tree - in which
- * case the caller re-creates the evidence rather than trusting the pointer.
- *
- * @param {object | null | undefined} entry
- * @returns {string | null} the repo-relative path, as the line spells it
- */
-function committedExcerptPath(entry) {
-  const listed = entry?.failureLogPath;
-  if (typeof listed !== 'string' || listed === '') return null;
-  if (path.isAbsolute(listed)) return null;
-  const absolute = path.join(repoRoot, listed);
-  try {
-    return fs.statSync(absolute).isFile() ? listed : null;
-  } catch {
-    return null;
-  }
-}
-
-/** The largest log an excerpt will read. 200 MiB; see the call site. */
-const EXCERPT_MAX_LOG_BYTES = 200 * 1024 * 1024;
-
-function readLogForExcerpt(file) {
-  const stats = fs.statSync(file);
-  if (stats.size <= EXCERPT_MAX_LOG_BYTES) return fs.readFileSync(file, 'utf8');
-  // Head and tail of an over-large log, so a scrubbed excerpt still shows the
-  // failure and the end rather than an arbitrary 200 MiB prefix.
-  const fd = fs.openSync(file, 'r');
-  try {
-    const head = Buffer.alloc(8 * 1024 * 1024);
-    fs.readSync(fd, head, 0, head.length, 0);
-    const tail = Buffer.alloc(64 * 1024 * 1024);
-    fs.readSync(fd, tail, 0, tail.length, stats.size - tail.length);
-    return `${head.toString('utf8')}\n… skipped ${String(
-      Math.round((stats.size - head.length - tail.length) / 1024 / 1024)
-    )} MiB of log …\n${tail.toString('utf8')}`;
-  } finally {
-    fs.closeSync(fd);
-  }
 }
 
 /**
  * `gate.mjs logs` — what is in this clone's log store, newest first.
  *
  * The command the brief asks for, and the answer to "where are my logs" now that
- * they are not in the worktree: it prints the store's location in its header so a
- * reader who has never seen this change is not left looking in `.gates/logs/`.
+ * they are not in the worktree: it prints the store's location in its header.
  *
  * Two things the orchestrator's cleanup step depends on, both from review M2:
  *
@@ -3268,9 +2647,9 @@ function readLogForExcerpt(file) {
  *     neither is available the command says it cannot tell rather than printing a
  *     silent "0 log file(s) that failed", which reads as "nothing failed".
  *
- * @param {{branch: string | null, failedOnly: boolean, all: boolean, prune: boolean}} options
+ * @param {{branch: string | null, failedOnly: boolean, all: boolean}} options
  */
-function commandLogs({ branch, failedOnly, all, prune }) {
+function commandLogs({ branch, failedOnly, all }) {
   const storeDir = storeLogsDir();
   const location = store();
   // Listing the store is the moment someone is thinking about disk, so the
@@ -3285,12 +2664,6 @@ function commandLogs({ branch, failedOnly, all, prune }) {
         `(${pruning.removed.map((victim) => victim.reason).join(', ')}) — ` +
         `${String(LOG_RETENTION_DAYS)} days, ${formatBytes(LOG_RETENTION_MAX_BYTES)} cap\n`
     );
-  }
-  if (prune === true) {
-    process.stdout.write(
-      `logs: ${String(pruning.scanned)} file(s) scanned, ${String(pruning.removed.length)} removed, ${formatBytes(pruning.bytes)} kept\n`
-    );
-    return 0;
   }
 
   const wanted = branch != null ? [branch] : all ? null : [currentBranch()];
@@ -3358,8 +2731,7 @@ function outcomeOfStoredLogs(storeDir) {
   const put = (key, value, entry) => {
     if (typeof key !== 'string' || key === '') return;
     const previous = byLogPath.get(key);
-    // A judgement beats a gap, and a later record beats an earlier one: a legacy
-    // `.gate.json` names the worktree path while the store holds the migrated copy.
+    // A judgement beats a gap.
     byLogPath.set(
       key,
       previous === undefined || previous == null ? value : previous
@@ -3372,13 +2744,6 @@ function outcomeOfStoredLogs(storeDir) {
     if (typeof record?.logPath !== 'string' || record.logPath === '') continue;
     const verdict = storedLogFailed(record, null);
     put(record.logPath, verdict, null);
-    // N1: a pre-X12 record names `.gates/logs/<name>`, and its copy in the store is
-    // under `.gates/logs/<branch>/<name>`. Both spellings have to reach the verdict.
-    put(
-      migratedStorePath(record.logPath, record.branch ?? null),
-      verdict,
-      null
-    );
   }
   // A ledger line is evidence about a run even when its record is gone (a run from
   // before this task wrote a record for every gate), so the lines fill the gaps -
@@ -3387,17 +2752,13 @@ function outcomeOfStoredLogs(storeDir) {
   const entriesByLogPath = new Map();
   for (const ledger of [
     ...otherBranchLedgers(null),
-    ...committedTaskLedgers(null),
+    ...committedTaskLedgers(),
     { entries: readLedger(currentBranch()).entries },
   ]) {
     for (const entry of ledger.entries ?? []) {
       if (typeof entry?.logPath !== 'string' || entry.logPath === '') continue;
       if (!entriesByLogPath.has(entry.logPath)) {
         entriesByLogPath.set(entry.logPath, entry);
-      }
-      const migrated = migratedStorePath(entry.logPath, entry.branch ?? null);
-      if (migrated != null && !entriesByLogPath.has(migrated)) {
-        entriesByLogPath.set(migrated, entry);
       }
     }
   }
@@ -3424,56 +2785,18 @@ function outcomeOfStoredLogs(storeDir) {
  * segment" (M2), and it needs no list of known branches - which is exactly why it
  * still works for a branch whose worktree, and whose ledger, is gone.
  *
-/**
- * Which branch a store-relative log path belongs to.
- *
- * A migrated pre-X12 log lives at `.gates/logs/<branch>/<name>`, because
- * `migrateWorktreeLogs` files it under the branch it found it on - so the branch
- * *is* in the path, and round 1's claim that it was not was wrong. Reading the
- * `.gates/` prefix as "no branch here" is what made every legacy log invisible to
- * `logs --branch`, which is review N1: A4 and X11 have legacy logs right now.
- *
- * A log still loose in `.gates/logs/` (the fallback layout, or one someone dropped
- * there) has no branch to report and says so.
+ * A log loose in the store's root (one someone dropped there) has no branch to
+ * report and says so.
  *
  * @param {string} relative store-relative path, `/`-separated
  */
 function branchOfStoredLog(relative) {
-  const normalised = String(relative ?? '')
+  const segments = String(relative ?? '')
     .split(path.sep)
     .join('/')
-    .replace(/^\.gates\/logs\//, '');
-  const segments = normalised.split('/');
+    .split('/');
   // Everything but the file name: `task/a/b/check-….log` is branch `task/a/b`.
   return segments.length > 1 ? segments.slice(0, -1).join('/') : '(unknown)';
-}
-
-/**
- * The path a legacy log's copy has in the store, or null when `logPath` is not
- * legacy spelling.
- *
- * `outcomeOfStoredLogs` keys its judgements by stored path, and a pre-X12 ledger
- * line or `.gate.json` names `.gates/logs/check-….log` - the *worktree's* path,
- * which is not where the migrated copy sits. Without this the store knows the run
- * failed and cannot say which file that was, and `--failed` reports the log as
- * unjudgeable while its own line says `fail` (review N1).
- *
- * @param {string} logPath the path a record or ledger line names
- * @param {string | null} branch the branch that line or record carries
- */
-function migratedStorePath(logPath, branch) {
-  const prefix = `${LEDGER_DIR}/logs/`;
-  const normalised = String(logPath ?? '')
-    .split(path.sep)
-    .join('/');
-  if (!normalised.startsWith(prefix)) return null;
-  const name = normalised.slice(prefix.length);
-  // Only a loose file migrates to `<branch>/<name>`; anything already in a
-  // subdirectory keeps that subdirectory, and this is not the path to guess at it.
-  if (name === '' || name.includes('/') || branch == null || branch === '') {
-    return null;
-  }
-  return `${prefix}${branch}/${name}`;
 }
 
 function formatBytes(bytes) {
@@ -3494,14 +2817,12 @@ function parseStageOption({ rest, command }) {
   let stage = 'review';
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
-    if (argument === '--for' || argument === '--stage') {
+    if (argument === '--for') {
       stage = rest[index + 1] ?? null;
       index += 1;
     } else if (argument.startsWith('--for=')) {
       stage = argument.slice('--for='.length);
     } else if (argument === '--full' && command === 'table') {
-      continue; // read by the caller
-    } else if (argument === '--no-reuse' && command === 'table') {
       continue; // read by the caller
     } else {
       process.stderr.write(
@@ -3525,8 +2846,8 @@ async function main(argv) {
   // bench --help` used to resolve as the bench gate with a `--help` filter, launch
   // `scripts/bench/run.mjs --help` - which prints its usage and exits 2 - and append
   // `bench:--help FAIL` to the branch ledger (X16 item 3, twice: G7b's and A6b's tables). A
-  // FAIL row is *evidence*: `table` sorts it first, `status` calls the branch red, and
-  // `export --task` writes a scrubbed failure excerpt for a command that measured nothing.
+  // FAIL row is *evidence*: `table` sorts it first and `status` calls the branch red, for
+  // a command that measured nothing.
   // `rest` is every argument on either side of `--`, which is the point: a probe is the user
   // asking how to spell something, so where they put the flag decides nothing. The answer is
   // this script's own usage, because that is the file they were holding; the runner's own
@@ -3544,19 +2865,14 @@ async function main(argv) {
     if (stage == null) return 2;
     return command === 'status'
       ? commandStatus({ stage })
-      : commandTable({
-          stage,
-          full: rest.includes('--full'),
-          reuse: !rest.includes('--no-reuse'),
-        });
+      : commandTable({ stage, full: rest.includes('--full') });
   }
   if (command === 'need') {
     let stage = null;
-    let base = process.env.NITRO_UI_GATE_BASE ?? 'main';
-    let reuse = true;
+    let base = 'main';
     for (let index = 0; index < rest.length; index += 1) {
       const argument = rest[index];
-      if (argument === '--for' || argument === '--stage') {
+      if (argument === '--for') {
         stage = rest[index + 1] ?? null;
         index += 1;
       } else if (argument.startsWith('--for=')) {
@@ -3566,8 +2882,6 @@ async function main(argv) {
         index += 1;
       } else if (argument.startsWith('--base=')) {
         base = argument.slice('--base='.length);
-      } else if (argument === '--no-reuse') {
-        reuse = false;
       } else {
         process.stderr.write(`need: unknown argument ${argument}\n${USAGE}`);
         return 2;
@@ -3579,7 +2893,7 @@ async function main(argv) {
       );
       return 2;
     }
-    return commandNeed({ stage, base, reuse });
+    return commandNeed({ stage, base });
   }
   if (command === 'wait') {
     let gate = null;
@@ -3619,29 +2933,24 @@ async function main(argv) {
     return await commandWait({ gate, timeoutMinutes });
   }
   if (command === 'export') {
-    let task = process.env.NITRO_UI_TASK ?? null;
-    let out = null;
+    let task = null;
     for (let index = 0; index < rest.length; index += 1) {
       const argument = rest[index];
       if (argument === '--task') {
         task = rest[index + 1] ?? null;
-        index += 1;
-      } else if (argument === '--out') {
-        out = rest[index + 1] ?? null;
         index += 1;
       } else {
         process.stderr.write(`export: unknown argument ${argument}\n${USAGE}`);
         return 2;
       }
     }
-    return commandExport({ task, out });
+    return commandExport({ task });
   }
 
   if (command === 'logs') {
     let branch = null;
     let failedOnly = false;
     let all = false;
-    let prune = false;
     for (let index = 0; index < rest.length; index += 1) {
       const argument = rest[index];
       if (argument === '--branch') {
@@ -3657,14 +2966,12 @@ async function main(argv) {
         failedOnly = true;
       } else if (argument === '--all') {
         all = true;
-      } else if (argument === '--prune') {
-        prune = true;
       } else {
         process.stderr.write(`logs: unknown argument ${argument}\n${USAGE}`);
         return 2;
       }
     }
-    return commandLogs({ branch, failedOnly, all, prune });
+    return commandLogs({ branch, failedOnly, all });
   }
 
   // A gate is a name in this table, not a shell command: passing through whatever
@@ -3735,9 +3042,12 @@ async function main(argv) {
   // The look-check refusal first: it is the more specific answer (this lease may
   // never run a device gate, whatever else is right about it), and the store check
   // would otherwise report a lease that *is* live as merely unverifiable.
+  // The disk is asked last: a run with no lease is the more useful thing to be told,
+  // and a full disk is true for every task on the machine rather than this one.
   const leaseBlock =
     lookLeaseRefusal(process.env, resolved) ??
-    deviceGateLeaseBlock(resolved, process.env);
+    deviceGateLeaseBlock(resolved, process.env) ??
+    deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {
     process.stderr.write(`gate: refused before the run - ${leaseBlock}\n`);
     return 1;
@@ -3750,9 +3060,7 @@ async function main(argv) {
  * The log a detached run was told to write, read from the variable the launcher set.
  *
  * Only the path travels: `logPathsFor` turns it into the ledger's spelling and the
- * record path, so a run launched by an older `gate.mjs` - which points it at
- * `.gates/logs/` - records the file it actually wrote instead of one that was never
- * opened (N7). Validation lives there too, in the one place that knows both roots.
+ * record path. Validation lives there too.
  */
 function backgroundOptions(env = process.env) {
   const fromEnv = env.NITRO_UI_GATE_LOG;

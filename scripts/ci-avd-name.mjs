@@ -13,10 +13,9 @@
  * that reports what a job is about to boot, and an empty name there would show
  * up as "no such AVD directory" two lines later. The previous shape of this was
  * a shell one-liner whose helper took file *contents* where it took a path, and
- * it died of `ENAMETOOLONG` — see `scripts/__tests__/ci-workflows.test.js`, which
- * runs the workflow's own line rather than reading it.
+ * it died of `ENAMETOOLONG`.
  *
- * `NITRO_UI_HARNESS_CONFIG` overrides the file, for that test.
+ * `NITRO_UI_HARNESS_CONFIG` overrides the file.
  */
 
 import { readFileSync } from 'node:fs';

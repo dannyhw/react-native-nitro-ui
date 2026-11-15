@@ -9,8 +9,7 @@
  *
  * Checks: Xcode and its iOS runtime, CocoaPods, Node (`.nvmrc`) through fnm, bun
  * (`packageManager`), JDK 17, the Android SDK pieces `example/android` builds
- * with, the emulator system image, git/gh push access, the agent CLIs, disk,
- * load, and whether `~/.nitro-ui/devices.json` describes devices that exist.
+ * with, the emulator system image, git/gh push access, disk, load, and whether `~/.nitro-ui/devices.json` describes devices that exist.
  *
  * `--setup` only ever *adds*: it creates simulators named `nitro-ui A`/`nitro-ui B`
  * and AVDs `nitroui_a`/`nitroui_b` (reusing them if present), then writes
@@ -488,20 +487,6 @@ function checkGitAndAgents() {
         push.stdout === 'true'
           ? 'allowed'
           : 'not allowed (fine for a worker, not for the orchestrator)',
-    });
-  }
-  for (const [cli, why] of [
-    ['claude', 'reviewer / orchestrator'],
-    ['opencode', 'implementer'],
-  ]) {
-    const version = run(cli, ['--version']);
-    results.push({
-      area: 'agents',
-      name: cli,
-      status: version.ok ? 'ok' : 'warn',
-      detail: version.ok
-        ? version.stdout.split('\n')[0]
-        : `not on PATH (${why})`,
     });
   }
   const ccacheVersion = run('ccache', ['--version']);
