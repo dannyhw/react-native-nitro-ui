@@ -159,7 +159,7 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G18: a page-sheet `Modal` opened over an open iOS tooltip is unmeasured (expected: the tooltip stays above the sheet).
 - G18: `scripts/__tests__/conformance.test.js` "is complete for the ten controls today" now lists thirteen.
 - G16 ContextMenu bench arm (N = 200) not built: `bench: false`. Its mount is a `View` plus an empty 0 × 0 composition on Android and one interaction on iOS, so the arm would need its own bench screen and baseline cells; owed with the next bench pass.
-- G16: the iOS touch cancel (`RCTSurfaceTouchHandler` reset at `willDisplayMenu`, D37 item 1) is kept (orchestrator, fix round 1) but unproven below iOS 27: the lease pool is iOS 27 only, where UIKit already ends React Native's touch at the lift.
+- G16: the iOS touch cancel (`RCTSurfaceTouchHandler` reset at `willDisplayMenu`, D37 item 1) is kept (orchestrator, fix round 1) but unproven below iOS 27: the lease pool is iOS 27 only, where UIKit already ends React Native's touch at the lift. Prove the reset red on a hand-booted iOS 26.x simulator.
 - G16: Android ContextMenu has no mouse or stylus right-click (`performContextClick`); iOS gets a pointer's secondary click from UIKit.
 - G16: ContextMenu with react-native-gesture-handler (a swipeable row with a context menu) is not measured.
 - G16: React Native's own Android recycle reset (`BaseViewManager.prepareToRecycleView`) clears the label's tag and never the view's `contentDescription`, so a recycled plain `View` whose new owner has no label keeps the old one (`enableViewRecyclingForView` defaults to true on RN 0.88). ContextMenu resets it itself; report upstream.

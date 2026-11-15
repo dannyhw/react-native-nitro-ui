@@ -10,7 +10,8 @@
       "after": "      ? !!w.serial &&\n          (this.ops.adb(\n            ['-s', w.serial, 'shell', 'pm', 'clear', 'nitroui.example'],\n            w.adbPort\n          ),\n          true) &&\n          this.ops.bootComplete(w.serial, w.adbPort)",
       "redTests": [
         "boots the pair it hands out when told to, from the shared launch config"
-      ]
+      ],
+      "note": "Seven more tests in the same file go red under this mutation; the one listed is the case rewritten for it."
     },
     {
       "test": "scripts/__tests__/lease-pool-cli.test.js",
