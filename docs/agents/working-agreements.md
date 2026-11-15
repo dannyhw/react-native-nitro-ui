@@ -80,6 +80,9 @@ quoting anyone.
   task branch carries one records commit per round at most. (2026-11-15)
 - A replacement for an existing tool is proven in a side install before the flow changes to it.
   (2026-11-04)
+- Driving a device outside the on-device harness uses e2e or agent-device, never a driver written
+  here. Real-touch tests assert only what the harness cannot: hit-testing and gesture arbitration,
+  the screen-reader tree, keyboard avoidance and drawn press feedback. (2026-11-15)
 
 ## How to report
 
