@@ -178,12 +178,12 @@ export async function boxOf(locator: Locator): Promise<Box | null> {
  *   engine's own visibility is the check on that: a node the screen reader cannot
  *   see — off screen, or behind a LogBox — reads hidden, and a hidden
  *   node has not been revealed however good its box looks.
- * - **a page with no scroll left.** The last row of a short list is sometimes the
- *   only thing a check can press, and it travels no further than the bottom of
- *   that list. Two drags that move nothing say the page is done travelling, and a
- *   visible control wholly inside the band is then as revealed as it will ever
- *   be: the Form's Note field parked there, and twelve drags of nothing later the
- *   check gave up on a control the finger could have reached all along.
+ * - **a page with no scroll left.** Two drags that move the control nowhere mean
+ *   the page has reached its end, and going on dragging is twelve reads of nothing
+ *   — which is what it cost to learn that the control was never going to arrive.
+ *   The band still has to be satisfied before that is accepted: a short list ends
+ *   wherever it ends, and its last row can just as well end behind the LogBox a dev
+ *   build docks against the bottom of the window, where a tap goes missing.
  *
  * `reads` names the nodes a test still has to read once the control is in
  * position — the echo row above a hosted control, say, which is a real React
@@ -212,14 +212,11 @@ export async function reveal(
     if (shown && inSafeBand && readsShown) {
       if (await settleIntoBand(screen, locator)) return;
     }
-    if (
-      shown &&
-      inBand &&
-      readsShown &&
-      stuck >= STUCK_DRAGS &&
-      box != null &&
-      (await isFullyInBand(screen, box))
-    ) {
+    if (shown && inSafeBand && readsShown && stuck >= STUCK_DRAGS) {
+      // Two drags that moved nothing: the page is done travelling. Accepting here
+      // is not a lower bar — the control is already where the band says a tap
+      // lands — it is only the refusal to spend the remaining drags on a page that
+      // cannot move.
       return;
     }
     if (attempt === swipes) break;
@@ -298,12 +295,6 @@ async function countUnshown(locators: Locator[]): Promise<number> {
     if (!(await isShown(locator))) missing += 1;
   }
   return missing;
-}
-
-/** Is a whole box inside the band, rather than only its centre? */
-async function isFullyInBand(screen: Screen, box: Box): Promise<boolean> {
-  const { top, bottom } = await tapBand(screen);
-  return box.y >= top && box.y + box.height <= bottom;
 }
 
 /** Is a box's centre in the top half of the band? */
