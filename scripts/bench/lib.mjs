@@ -2229,6 +2229,26 @@ export function narrowingProblem({ scheduled, wholePlan, filters }) {
 }
 
 /**
+ * Why `--component` cannot be combined with `--update-baseline`, or null.
+ *
+ * A mint replaces the whole file, so a run narrowed to one component would delete
+ * every other component's rows. Unlike `narrowingProblem()`, `--force` does not
+ * override this: the spelling used to merge one component into the file, and it must
+ * not become a replace.
+ */
+export function componentMintProblem(component) {
+  if (component == null) {
+    return null;
+  }
+  return (
+    `--update-baseline --component ${String(component)}: a narrowed run cannot write a baseline - ` +
+    "a mint replaces the whole file, so this would delete every other component's rows. " +
+    'Drop --component to mint, or drop --update-baseline for a diagnostic run. ' +
+    '--force does not override this.'
+  );
+}
+
+/**
  * The waiting rule a run measured under: the largest timeout any of its cells was
  * asked to wait for, and 0 when a results file predates the field.
  *

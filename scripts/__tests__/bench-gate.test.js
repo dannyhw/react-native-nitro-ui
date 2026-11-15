@@ -1227,6 +1227,49 @@ describe('--check against a committed baseline', () => {
  * scenario cell (`mount.button`), and the filter schedules one whole component.
  */
 describe('the Button cells (--component button)', () => {
+  /**
+   * A cell is paired with the `rn-core` control of the **same cell**. Two components
+   * in one run, with controls far apart (`mount` 100 us, `mount.button` 200 us) and
+   * arms that sit at different ratios over their own control (1.1x and 1.5x): a
+   * Button arm divided by the Switch control reads 3.0x, and a Switch arm divided by
+   * the Button control 0.55x, so neither expected number is reachable by a crossed
+   * pairing.
+   */
+  it('divides a Button arm by the Button control, never the Switch control', () => {
+    const records = [
+      ...cellRecords({ scenario: 'mount', implementation: 'rn-core' }),
+      ...cellRecords({
+        scenario: 'mount',
+        implementation: 'nitro-ui',
+        mounted: 110_000,
+      }),
+      ...cellRecords({
+        scenario: 'mount.button',
+        implementation: 'rn-core',
+        mounted: 200_000,
+      }),
+      ...cellRecords({
+        scenario: 'mount.button',
+        implementation: 'nitro-ui',
+        mounted: 300_000,
+      }),
+    ];
+    const table = ratioTable({
+      platform: 'ios',
+      cells: aggregateRecords(records, { keepRaw: true }),
+    });
+    expect(
+      table['mount.button:nitro-ui:50'].metrics.mountedNs.ratio
+    ).toBeCloseTo(1.5, 4);
+    expect(table['mount:nitro-ui:50'].metrics.mountedNs.ratio).toBeCloseTo(
+      1.1,
+      4
+    );
+    expect(table['mount.button:rn-core:50'].metrics.mountedNs.control).toBe(
+      true
+    );
+  });
+
   it('schedules one complete component per --component, never a mix', () => {
     const button = buildSchedule({ plan: 'quick', component: 'button' });
     // Every cell is a Button cell, and all four arms are there - including the

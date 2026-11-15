@@ -242,7 +242,7 @@ describe('a test child does not inherit this shell’s lease', () => {
  * The same property, asked of the shape the X32/X33 reports actually named.
  *
  * Those two tasks did not lose a Metro pre-flight: a unit suite died on
- * `lease: ANDROID_SERIAL=… and EMULATOR_PORT=… disagree` because `bench-baseline-merge.test.js`
+ * `lease: ANDROID_SERIAL=… and EMULATOR_PORT=… disagree` because a bench suite (since removed)
  * gave its child `ANDROID_SERIAL: 'emulator-5599'` *on top of* the sourced lease's
  * `EMULATOR_PORT`. The fixture has to be that shape — a fixture with only `NITRO_UI_LEASE_ID` set
  * would pass without the scrub, which is the direction a guard must not be able to fake.
@@ -333,9 +333,9 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
 
   it('scrubs the lease a suite overrides half of (the X32/X33 shape)', () => {
     withFakeLease(() => {
-      // Exactly the fixture shape that died: the test's own serial, the shell's port. The
-      // comment in `bench-baseline-merge.test.js` is now the contract; before X34 the suite
-      // inherited the port and `checkEmulatorEnv` refused the pair it was being handed.
+      // Exactly the fixture shape that died: the test's own serial, the shell's port. Before
+      // X34 the suite inherited the port and `checkEmulatorEnv` refused the pair it was being
+      // handed.
       const child = spawnLeaseProbe(
         childEnv({ ANDROID_SERIAL: 'emulator-5599' })
       );
