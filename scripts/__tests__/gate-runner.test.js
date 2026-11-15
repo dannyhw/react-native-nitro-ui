@@ -472,12 +472,16 @@ describe('pidIsAlive / pgidIsAlive (the questions the watchdog may ask)', () => 
     expect(pidIsAlive(0)).toBe(false);
     expect(pgidIsAlive(0)).toBe(false);
     expect(pgidIsAlive(-7)).toBe(false);
-    expect(pidIsAlive('42')).toBe(false);
+    // A string that is not a whole number is not a pid. (A numeric string is one: ids come back
+    // from the environment as text — and '42' is a live kernel thread on a Linux runner.)
+    expect(pidIsAlive('4.2')).toBe(false);
+    expect(pidIsAlive('not-a-pid')).toBe(false);
     expect(pgidIsAlive(Number.NaN)).toBe(false);
   });
 
   it('says this process and its group are here, and a group nobody leads is not', () => {
     expect(pidIsAlive(process.pid)).toBe(true);
+    expect(pidIsAlive(String(process.pid))).toBe(true);
     const group = groupId(process.pid);
     expect(group).not.toBeNull();
     expect(pgidIsAlive(group)).toBe(true);
