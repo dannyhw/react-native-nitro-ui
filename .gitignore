@@ -73,8 +73,8 @@ ios/generated
 android/generated
 
 # React Native Nitro Modules
-# nitrogen/generated IS committed on purpose (docs/research/setup-decisions.md §1):
-# generated code must be reviewable, and `bun run nitrogen:check` guards drift.
+# nitrogen/generated is committed on purpose: generated code is reviewed, and
+# `bun run nitrogen:check` guards drift.
 
 # real-input suite evidence: the xcodebuild/adb logs, hierarchy dumps and
 # screenshots a failing run leaves behind. Nothing in it is reviewable, and the

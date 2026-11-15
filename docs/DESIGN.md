@@ -305,6 +305,17 @@ The steps and commands are in CONTRIBUTING, "Adding a component". What the desig
   registered fallback whose correction can be seen, and a full recycle reset.
 - A new test is shown to fail once, by breaking what it guards, before it is trusted.
 
+### 3.13 Build constraints
+
+- The Compose compiler plugin version equals the host app's Kotlin version
+  (`android/build.gradle`).
+- The podspec's iOS target is React Native's `min_ios_version_supported`. A target above the
+  app's is rejected by CocoaPods, so newer SwiftUI API is gated with `#available`.
+- The example app's Gradle paths point at the repository root's `node_modules`, and a release
+  build needs `hermesCommand` set there (`example/android/app/build.gradle`).
+- A Swift file that uses Nitro's `NullType` imports `NitroModules`.
+- The Nitro peer range `^0.37.1` means below 0.38.0: a Nitro minor is a breaking change here.
+
 ## 4. Components
 
 All are exported from the package root, and each has a page in `docs/components/` with its

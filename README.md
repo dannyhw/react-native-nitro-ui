@@ -45,9 +45,9 @@ the layout engine, and React never sees a native node.
 one Compose composition on Android instead of one each. It holds every control
 except `Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`,
 `BottomSheet`, `ContextMenu`, `Tooltip` and `Popover`, and refuses those nine with an
-error that names them. The first five wait for a round that measures them inside a
-Host; the last four are refused by design, because each is a `View` around React
-Native children, not a control a composition could draw.
+error that names them. The first five are not supported inside a Host; the last
+four are refused by design, because each is a `View` around React Native
+children, not a control a composition could draw.
 See [Performance](#performance) for what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
@@ -863,9 +863,8 @@ A checkbox: `checked` is controlled the way a Switch's `value` is, and
 of its size, and the whole row is tappable. iOS has no checkbox —
 `CheckboxToggleStyle` is unavailable there — so a Checkbox there is a `Toggle`
 wearing a style that draws Apple's own checklist glyph, the one Reminders and
-Notes draw; `iosStyle` picks between that circle, a square, and the
-`'switch'` look this component shipped with. Android ignores the prop: Material 3
-has a checkbox.
+Notes draw; `iosStyle` picks between that circle, a square, and a
+`'switch'` look. Android ignores the prop: Material 3 has a checkbox.
 
 ```tsx name=checkbox
 export function CheckoutOptions({
@@ -1479,7 +1478,7 @@ width is the box their parent gives them and only their height is their own.
   particular Button title, option list or DatePicker.
 - **A control inside `<Host>` is not measured at all** on Android: the Host
   draws its children in one column at its own width, so the box to get right is
-  the Host's. See [host.md](docs/components/host.md#sizing-d24).
+  the Host's. See [host.md](docs/components/host.md#sizing).
 
 [sizing.md](docs/architecture/sizing.md) has the rule, the counters and the
 traps; [core.md](docs/architecture/core.md) has the hosting model underneath it.
@@ -1511,7 +1510,7 @@ divided by `@expo/ui`, so below 1× is better:
   one run, too noisy to call). Memory per instance is 1.34–1.48× on `Slider`,
   `Progress`, `Button` and `Menu`, because each control owns a SwiftUI hosting
   controller where `@expo/ui` shares one, and at parity or below on the rest.
-  There is no known fix: a shared iOS host was built and measured, and it made
+  There is no known fix: a shared iOS host lowers memory but makes
   mount and unmount CPU worse. UI-thread CPU is lower on `Switch`, `Slider`,
   `SegmentedControl`, `DatePicker` and `Picker`, and 1.13–1.38× on `Progress`,
   `Button` and `Menu`.
@@ -1531,8 +1530,8 @@ cell, and at 50 controls an iOS mount often fits inside one 16 ms frame for
 every library, so 1.00× there is the frame, not a tie. `Chip`, `TextField`, the
 dialogs and `BottomSheet` have no published comparison yet.
 
-[docs/performance.md](docs/performance.md) has every cell, the runs they came
-from, and the readings behind these lines.
+[docs/performance.md](docs/performance.md) has every cell, the conditions it
+holds under, and the readings behind these lines.
 
 ## Known limitations
 
