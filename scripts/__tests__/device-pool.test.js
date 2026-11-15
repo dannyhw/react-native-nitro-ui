@@ -1,23 +1,3 @@
-/**
- * The warm device pool (X11): who may power a device off, and when.
- *
- * Every case here exists because a warm pool turns one bug into background load on a shared
- * machine:
- *
- *   - reaping a device a run is using, which shows up as a flake nobody can reproduce;
- *   - never reaping one whose task died, which is the load that moves the *next* task's numbers;
- *   - powering off something outside `devices.json`, which is how a script ends up shutting down
- *     the person's own device (`emulator-5560`);
- *   - a claim that outlives its process, which would wedge a device as "in use" forever.
- *
- * The clock, the load average and the device binaries are all injected, so these cases run the
- * same on a Mac, a Linux runner and a machine with no Android SDK - and, unlike a real boot, they
- * can say "41 minutes have passed" in one line.
- *
- * Numbers are deliberately not round (41 minutes against a 30-minute limit, a 7.5 load against a
- * 5 ceiling): a fixture that coincides with a boundary makes an off-by-one invisible.
- */
-
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import {
   mkdtempSync,
@@ -66,9 +46,8 @@ const DEVICES = {
       ...PAIR_A,
       id: 'pair-b',
       ios: { udid: 'UDID-B' },
-      // Its own console port and adb server, deliberately not the ones pair-a's records carry: half
-      // of M4 is a reaper killing the serial it *read* rather than the one the AVD it means lives
-      // on, and a fixture where both pairs share a serial would make that invisible.
+      // Its own console port and adb server, not pair-a's: with a shared serial, a reaper that
+      // kills the serial it read instead of the pair's own would be invisible.
       android: { avd: 'nitro-ui-b', emulatorPort: 5576, adbPort: 5045 },
     },
   ],
@@ -92,11 +71,8 @@ function lease(id = 'X1-1', { task = 'X1', pairId = 'pair-a' } = {}) {
 }
 
 /**
- * A pool record as the pool would have written it. `bootedAgo` defaults to `usedAgo` because a
- * device cannot have been booted *after* it was last used, and a record that says otherwise reads
- * as freshly started: idleness is measured from the later of the two. That is exactly how this
- * helper first hid a "41 minutes idle" device from the reaper - the fixture said `bootedAt: now`,
- * so the correct answer to the first case below was "keep", and the test was right to be red.
+ * A pool record as the pool would have written it. `bootedAgo` defaults to `usedAgo`: idleness
+ * is measured from the later of the two, so a later boot would read as freshly started.
  */
 function entryOf({
   key,
@@ -151,8 +127,7 @@ describe('the reap decision', () => {
         }
       )
     ).toMatchObject({ action: 'reap', reason: 'lease-gone' });
-    // A record that names a lease which is no longer in the file is the same case: the task
-    // released, or its lease expired, and the boot it left behind is nobody's to keep.
+    // A record naming a lease that is no longer in the file is the same case.
     expect(
       poolReapDecision(
         entryOf({
@@ -166,20 +141,11 @@ describe('the reap decision', () => {
   });
 
   it('never powers off a device a live lease holds, however idle it is', () => {
-    // X11 review M3. The brief's rule is "devices with *no lease* are shut down after
-    // idleShutdownMinutes", and the first version of this function reaped leased devices anyway,
-    // attributing that to the brief. It matters because a live lease with no in-flight claim is
-    // the ordinary state of a working task: `build-app.mjs`, Metro, `bun run harness:*`, a
-    // direct real-input run, or simply a person thinking between two commands. None of those
-    // claim a device, so a timestamp was the only protection - and 31 minutes of debugging is
-    // well past 30.
     const held = entryOf({ key: 'avd:nitro-ui-a', usedAgo: 31 * MINUTE });
     expect(
       poolReapDecision(held, { nowMs: NOW, leases: [lease()] })
     ).toMatchObject({ action: 'keep', reason: 'lease-held', protected: true });
-    // The operator's `--idle-minutes 0` does not reach it either (review M3's alternative): the
-    // answer to "power the pool off now" is that somebody is *using* that device, and the way to
-    // change it is their `release`, not a flag on someone else's command.
+    // The operator's `--idle-minutes 0` does not reach it either.
     expect(
       poolReapDecision(held, {
         nowMs: NOW,
@@ -190,8 +156,6 @@ describe('the reap decision', () => {
   });
 
   it('reaps a leased device whose lease has expired', () => {
-    // The protection is for a *live* lease. One that has run out its TTL is what `list` calls
-    // "abandoned", and nobody is coming back for that emulator.
     const staleLease = { ...lease(), acquiredAt: NOW - 300 * MINUTE };
     expect(
       poolReapDecision(
@@ -205,11 +169,8 @@ describe('the reap decision', () => {
   });
 
   it('protects a device that is booting, before anyone has used it', () => {
-    // `phase: 'booting'` is what the pool writes before it starts a boot and waits up to
-    // `settleTimeoutMs` for the device and the machine's load. The record's timestamps are the
-    // *previous* holder's, which can be past the idle limit already, and `notePair` refreshes
-    // them only once the wait ends - so without this the boot itself is the window in which
-    // another task's reaper powers the device off mid-air.
+    // A booting record still carries the previous holder's timestamps, which can already be
+    // past the idle limit.
     expect(
       poolReapDecision(
         entryOf({
@@ -233,8 +194,6 @@ describe('the reap decision', () => {
   });
 
   it('never reaps a device whose claim is live, however idle the clock says it is', () => {
-    // The pid check is the whole protocol: a 50-minute run whose last write was at the start is
-    // "idle" to a timestamp and very much in use to the process holding it.
     const busy = entryOf({
       key: 'avd:nitro-ui-a',
       usedAgo: 90 * MINUTE,
@@ -252,9 +211,7 @@ describe('the reap decision', () => {
   });
 
   it('treats a claim from a dead pid as no claim at all', () => {
-    // An unleased device, because a live lease protects its device on the idle clock whatever the
-    // claims say (M3), and that is not the subject here: the question is whether a claim whose
-    // process is gone still counts as a claim, and the answer is no.
+    // Unleased, because a live lease protects its device whatever the claims say.
     const stale = entryOf({
       key: 'avd:nitro-ui-a',
       leaseId: null,
@@ -276,8 +233,6 @@ describe('the reap decision', () => {
   });
 
   it('counts idleness from the last release, not from boot', () => {
-    // A run that booted the device 80 minutes ago and released 2 minutes ago is not due for
-    // shutdown: measured from boot it would be reaped the moment it finished.
     expect(
       poolReapDecision(
         entryOf({
@@ -313,10 +268,8 @@ describe('the reap decision', () => {
     // `0` has to mean "as soon as a run lets go", so the check cannot be truthiness.
     expect(
       poolReapDecision(
-        // `null`, not `undefined`: a record the pool wrote from a config with no limit stores
-        // null, and the decision has to fall through to the caller's default (here: zero). Unleased,
-        // because a live lease would protect the device on the clock and that is not what this is
-        // testing (M3).
+        // `null`, not `undefined`: a record written from a config with no limit stores null.
+        // Unleased, because a live lease would protect the device on the clock.
         entryOf({
           key: 'avd:A',
           leaseId: null,
@@ -344,8 +297,7 @@ describe('the reap decision', () => {
   });
 
   it('lets an explicit override outrank the record, including a zero', () => {
-    // The record says 30 (that is what devices.json stamped at boot). An override of 0 is the
-    // CLI's `--idle-minutes 0`; `??` is what makes it work, and `||` is the bug this pins.
+    // The record says 30. An override of 0 is the CLI's `--idle-minutes 0`.
     const entry = entryOf({ key: 'avd:A', usedAgo: MINUTE });
     expect(
       poolReapDecision(entry, {
@@ -404,14 +356,8 @@ describe('pool keys', () => {
 
 /**
  * A pool with its device operations and clock replaced: `state` is what `adb devices` /
- * `simctl list` report, and every call is recorded so a test can say "nothing was shut down"
- * instead of inferring it from a file.
- *
- * **The injected `sleep` advances the injected clock**, because a real one does. A fixed clock
- * with a no-op sleep makes every wait loop unbounded - which is how this helper first presented:
- * as an out-of-memory crash, from a loop appending to the call log tens of millions of times.
- * Advancing the clock per sleep is what lets "the device never came up" finish in 210 iterations
- * and be asserted, instead of being a hang a reviewer has to find by hand.
+ * `simctl list` report, and every call is recorded. The injected `sleep` advances the injected
+ * clock, as a real one does; with a fixed clock every wait loop would be unbounded.
  */
 function fakePool({
   home,
@@ -440,9 +386,8 @@ function fakePool({
       return deviceState.serials;
     },
     /**
-     * The same listing, with whether the server answered (X11 N2). `adbFails: true` is the wedged
-     * server the re-review describes: the command is killed at its timeout, so there is no stdout -
-     * which is what "no emulator attached" looks like to anything that only reads the list.
+     * The same listing, with whether the server answered. `adbFails: true` is a wedged server:
+     * killed at its timeout with no stdout, which looks like "no emulator attached".
      */
     attachedSerialsResult: (port) => {
       calls.push(['attachedSerials', port ?? null]);
@@ -459,11 +404,9 @@ function fakePool({
       return deviceState.shutdownWorks;
     },
     /**
-     * What the emulator answers when asked which AVD it is (`adb -s X emu avd name`), which is the
-     * identity check in front of every kill. The default is the honest answer for a device that is
-     * up - each pool serial names the AVD devices.json puts on that port - and `avdNames` lets a
-     * fixture be the interesting case: a serial that answers to a *different* AVD than the record
-     * claims, or one that answers nothing at all.
+     * What the emulator answers when asked which AVD it is, the identity check in front of every
+     * kill. By default each pool serial names the AVD devices.json puts on that port; `avdNames`
+     * overrides that per serial.
      */
     emulatorAvdName: (serial, port) => {
       calls.push(['avd-name', serial, port ?? null]);
@@ -486,7 +429,7 @@ function fakePool({
         .filter(([, s]) => s === 'Booted')
         .map(([udid]) => udid);
     },
-    /** The same question with "did simctl answer" attached (X11 N2). */
+    /** The same question, with whether simctl answered. */
     bootedSimulatorsOrNull: () => {
       calls.push(['booted-sims']);
       return deviceState.simctlFails
@@ -520,8 +463,7 @@ function fakePool({
     readLoad: load,
     cores,
     sleep: (ms) => {
-      // Recorded as well as advanced: "it waited twice between three attempts" is the assertion
-      // that separates a retry loop from a busy-poll, and it needs the waits to be visible.
+      // Recorded as well as advanced, so a test can count the waits between attempts.
       calls.push(['sleep', ms]);
       clock.at += ms;
     },
@@ -603,17 +545,14 @@ describe('the pool state file', () => {
       read = readPool(home);
     }).not.toThrow();
     expect(read.devices).toEqual([]);
-    // Moved aside, not overwritten or ignored: that file is the only record of what was booted
-    // and by whom, and a pool that silently starts empty loses two warm devices without saying
-    // so - which reads as "nothing to reap" and leaves them running for the rest of the day.
+    // Moved aside, not overwritten: that file is the only record of what was booted and by whom.
     expect(typeof read.recovered?.reason).toBe('string');
     const kept = readdirSync(home).filter((f) =>
       f.startsWith('pool.json.corrupt-')
     );
     expect(kept).toHaveLength(1);
     expect(readFileSync(join(home, kept[0]), 'utf8')).toBe('not json');
-    // And the file is gone from the path the pool writes to, so the next command starts clean
-    // instead of failing the same way all afternoon.
+    // The path the pool writes to is clean for the next command.
     expect(readPool(home).devices).toEqual([]);
   });
 });
@@ -655,17 +594,12 @@ describe('reaping', () => {
     expect(done.reaped).toEqual([
       { key: 'avd:nitro-ui-a', reason: 'lease-gone' },
     ]);
-    // The private adb server is named on the way to the device: asking the default server would
-    // be asking about an emulator it has never seen.
+    // The pair's private adb server is named: the default server has never seen this emulator.
     expect(calls).toContainEqual(['emu-kill', 'emulator-5574', 5043]);
     expect(readPool(home).devices).toEqual([]);
   });
 
   it('never powers off a device another task holds under a live lease', () => {
-    // X11 review M3, end to end: a live lease with no claim is the ordinary state of a working
-    // task (building, running Metro, thinking), and `reap --idle-minutes 0` - the command
-    // CONTRIBUTING recommends for "power the pool off now" - used to answer it with `emu kill` on
-    // that task's emulator. The reviewer's probe case A and C in one fixture.
     withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-a' })]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: 'B7-1', usedAgo: 31 * MINUTE })
@@ -681,8 +615,7 @@ describe('reaping', () => {
     ]);
     expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
     expect(readPool(home).devices).toHaveLength(1);
-    // The exclusive hand-off's force list does not reach it either: `shutdownKeys` is an idle
-    // filter, and a bench gets an honest "that pair is leased" instead of another task's device.
+    // The exclusive hand-off's force list does not reach it either.
     const forced = pool.reap({
       shutdownKeys: ['avd:nitro-ui-a'],
       reason: 'exclusive acquire',
@@ -693,10 +626,8 @@ describe('reaping', () => {
   });
 
   /**
-   * Makes a second process appear *in the middle of* a reap: while the simulator shutdown runs, the
-   * pool files are rewritten as `acquire --boot` plus `gate.mjs` would rewrite them. This is the
-   * reviewer's race probe (`/tmp/x11-rereview/race-probe.mjs`) expressed against the real files,
-   * which is the only way a unit test can put a concurrent claim inside one lock hold.
+   * Makes a second process appear in the middle of a reap: while the simulator shutdown runs,
+   * the pool files are rewritten as an `acquire --boot` and a gate's claim would rewrite them.
    */
   const letTaskTake = (pool, { withClaim = true } = {}) => {
     const original = pool.ops.shutdownSimulator.bind(pool.ops);
@@ -762,12 +693,8 @@ describe('reaping', () => {
   };
 
   it('leaves a device a lease and a claim took during its own act pass, up', () => {
-    // X11 re-review M1, the reviewer's probe in a test. The act pass runs outside the lock, so the
-    // decision it acts on used to be as old as the previous device's I/O - `simctl shutdown` waits
-    // up to five minutes, an `adb devices` up to two - and a task that took the pair inside that
-    // window had its emulator killed under it: the record survived (pass 3 re-checked claims before
-    // *forgetting* it) and the device did not, which is the worst combination because the log looks
-    // sane. Each kill now asks again, briefly, immediately before it picks up the phone.
+    // The act pass runs outside the lock and a shutdown can take minutes, so each kill has to
+    // re-read the files immediately before it happens.
     twoIdleDevices();
     const { pool, calls } = fakePool({
       home,
@@ -797,9 +724,6 @@ describe('reaping', () => {
   });
 
   it('still kills both devices when nothing arrives in that window', () => {
-    // The control, from the same probe: the new re-read is not a reap that never reaps. Same
-    // fixture, no interleave, and both devices go down - so a mutation that makes the fresh check
-    // always refuse shows up here as well as in the case above.
     twoIdleDevices();
     const { pool, calls } = fakePool({
       home,
@@ -820,10 +744,8 @@ describe('reaping', () => {
   });
 
   it('notices a live lease that appears mid-pass even with no claim on the record', () => {
-    // The other half of the fresh read. A warm `acquire --boot` writes the lease before its gate
-    // claims anything, and an unclaimed run - a build, Metro, a direct real-input run - never
-    // writes a claim at all, so `heldIdentifiers` is the only thing that can see either of them.
-    // Without the re-read of the *leases* (as opposed to the record) this device dies.
+    // A warm `acquire --boot` writes the lease before anything is claimed, and a build or Metro
+    // never claims at all, so the lease file is the only thing that shows this device is in use.
     twoIdleDevices();
     const { pool, calls } = fakePool({
       home,
@@ -846,11 +768,8 @@ describe('reaping', () => {
   });
 
   it('marks the pair booting from inside `ensureBooted`, so a reap in the wait cannot kill it', () => {
-    // X11 re-review N3's last surviving mutation, and the one the round-1 fix left open: the phase
-    // *writer* was tested by calling the writer. Nothing guarded the call site, so deleting
-    // `this.markBooting(...)` from `ensureBooted` kept every test green while the protection it is
-    // supposed to provide stopped existing. This goes through the real path and lets a second pool -
-    // another process, same state directory - try its reap inside the boot wait.
+    // Through the real `ensureBooted`, with a second pool over the same files trying its reap
+    // inside the boot wait.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 90 * MINUTE })
@@ -859,9 +778,8 @@ describe('reaping', () => {
       home,
       state: { serials: [], simulators: new Map() },
     });
-    // A second pool over the same files, whose device *is* up: this is the reaper that runs while
-    // the boot below is still waiting, and the record it reads is already 90 minutes past its idle
-    // limit, which is exactly why the booting phase has to be there.
+    // A second pool over the same files, whose device is up. The record it reads is already 90
+    // minutes past its idle limit.
     const reaper = fakePool({
       home,
       state: { serials: ['emulator-5574'], simulators: new Map() },
@@ -890,16 +808,11 @@ describe('reaping', () => {
     expect(probe.kept[0]).toMatchObject({ reason: 'booting' });
     expect(probe.reaped).toEqual([]);
     expect(reaper.calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
-    // And the boot that finished is not stuck off the idle clock: the phase is cleared by the hand-off.
+    // The hand-off clears the phase, so the booted device is back on the idle clock.
     expect(readPool(home).devices[0].phase).toBe(null);
   });
 
   it('refuses to power a device off when a live lease holds it, asked directly', () => {
-    // X11 re-review N3: `reap` checks the hold-set before calling `shutdownDevice`, and
-    // `shutdownDevice` checks it again, so deleting either one left the suite green - they mask each
-    // other. The inner one is the one that matters when a *new* caller forgets the outer (it is also
-    // the only check `shutdownDevice` has when it is handed a `held` set from a stale plan), so it
-    // gets its own test rather than a comment saying "defence in depth".
     withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-a' })]);
     const { pool, calls } = fakePool({
       home,
@@ -935,10 +848,8 @@ describe('reaping', () => {
   });
 
   it('does not shut down an idle device the exclusive hand-off found untracked, under a lease', () => {
-    // The declared path (a pool device booted outside the pool, so it has no record), which is the
-    // one `--exclusive` uses and the one that masked the check above (`reap`'s pass 1 never sees a
-    // device with no record). B7 holds pair-a; the bench names pair-a's AVD in `shutdownKeys` and
-    // exempts its own lease, which is the only exemption it is allowed.
+    // A pool device booted outside the pool has no record. The lease holds pair-a; the bench
+    // names pair-a's AVD in `shutdownKeys` and may exempt only its own lease.
     withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-a' })]);
     writeFileSync(
       join(home, 'pool.json'),
@@ -963,12 +874,6 @@ describe('reaping', () => {
   });
 
   it('lets a live lease protect its own devices from its own reap', () => {
-    // X11 re-review M3, the rule reversed. The old test here said "your hold does not stop your
-    // reap", and the failure that claim produced: task A acquires, builds for 20 minutes, starts a
-    // 12-minute direct real-input run that makes no claim, then runs `lease.mjs list` in its sourced
-    // shell - which reaped with `exceptLeaseId` from `NITRO_UI_LEASE_ID` and killed A's emulator
-    // mid-run. A lease is the thing that says "somebody is using this pair", and it does not stop
-    // being true because the person asking is the one who holds it.
     withLeases([
       lease('X1-1'),
       lease('B7-1', { task: 'B7', pairId: 'pair-b' }),
@@ -978,8 +883,7 @@ describe('reaping', () => {
       home,
       state: { serials: ['emulator-5574'], simulators: new Map() },
     });
-    // Even with the exemption passed by hand: the caller's own lease is a hold like any other, and
-    // the only caller allowed to pass it is the exclusive power-off below.
+    // Even with the exemption passed by hand.
     const done = pool.reap({ exceptLeaseId: 'X1-1' });
     expect(done.reaped).toEqual([]);
     expect(done.kept[0]).toMatchObject({
@@ -991,9 +895,6 @@ describe('reaping', () => {
   });
 
   it('still reaps an abandoned boot under a lease that has gone', () => {
-    // The other half of the rule above, so that protecting a live lease is not the same as never
-    // reaping: the idle clock exists for the boot whose task released, expired, or died, and nobody
-    // leases those. `--idle-minutes 0` is the operator's "now", and this is what it reaches.
     withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-b' })]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 31 * MINUTE })
@@ -1033,10 +934,6 @@ describe('reaping', () => {
   });
 
   it('never powers off a device that is in the middle of booting', () => {
-    // `phase: 'booting'` is written before the pool starts a boot and waits up to `settleTimeoutMs`
-    // for the device and the machine's load, and `notePair` only refreshes the timestamps when that
-    // wait ends. On a warm reuse of a record that is already past its idle limit, the boot itself
-    // was the window in which another process's reap powered the device off mid-air.
     withLeases([]);
     withDevice(
       entryOf({
@@ -1057,11 +954,8 @@ describe('reaping', () => {
   });
 
   it('writes the booting phase before the wait, so a warm reuse cannot be reaped mid-boot', () => {
-    // X11 review M3: `phase: 'booting'` used to be read by `deviceIsBusy` and written by nobody, so
-    // the protection was a comment. The case that matters is a *warm reuse*: `markBooting` keeps the
-    // record's old timestamps on purpose (a device that was up 90 minutes ago is still 90 minutes
-    // old), so the record is already past its idle limit for the whole up-to-`settleTimeoutMs` wait,
-    // and another process's reap in that window would kill a boot in flight.
+    // `markBooting` keeps the record's old timestamps, so on a warm reuse the record is past
+    // its idle limit for the whole boot wait.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 90 * MINUTE })
@@ -1070,8 +964,7 @@ describe('reaping', () => {
       home,
       state: { serials: ['emulator-5574'], simulators: new Map() },
     });
-    // Deliberately not the same lease: the pool writes this line as it starts a boot for the lease it
-    // is handing out, and the reaper in the window is a *different* process.
+    // Not the reaping process's lease: the reap in that window comes from a different process.
     pool.markBooting(PAIR_A, lease('X9-1', { task: 'X9' }));
     expect(readPool(home).devices[0]).toMatchObject({
       phase: 'booting',
@@ -1081,8 +974,7 @@ describe('reaping', () => {
     expect(done.reaped).toEqual([]);
     expect(done.kept[0]).toMatchObject({ reason: 'booting' });
     expect(calls.filter((c) => c[0] === 'emu-kill')).toEqual([]);
-    // And the window is closed by the boot finishing, so a device that came up is never stuck off
-    // the idle clock: the same reap after `notePair` does power it off.
+    // The boot finishing closes the window: the same reap after `notePair` does power it off.
     pool.notePair(PAIR_A, lease('X9-1', { task: 'X9' }), {
       booted: ['avd:nitro-ui-a'],
     });
@@ -1094,10 +986,7 @@ describe('reaping', () => {
   });
 
   it('lets a booting phase expire, so a task that died mid-boot cannot wedge a device', () => {
-    // The bound on the protection above. A boot that outlives `settleTimeoutMs` is a crashed task,
-    // not a boot in progress, and an unbounded phase is the "never reaped, forever warm" leak the
-    // pool exists to clean up - so the phase protects for one boot's worth of time, not for ever.
-    // 31 s past the bound: not on it.
+    // A boot that outlives `settleTimeoutMs` is a crashed task. 31 s past the bound, not on it.
     withLeases([]);
     withDevice(
       entryOf({
@@ -1123,10 +1012,7 @@ describe('reaping', () => {
   });
 
   it('takes --idle-minutes over what devices.json says, for a device nobody leases', () => {
-    // devices.json in this fixture says 30, and the record carries that 30. `reap({
-    // idleMinutes: 0 })` is the operator's "power the pool off now" - the command a machine's
-    // human reaches for when they want their fans back - and it used to be answered with
-    // "keeping it up (idle, under the limit)", because the config value won the comparison.
+    // devices.json in this fixture says 30, and the record carries that 30.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 1 * MINUTE })
@@ -1236,8 +1122,6 @@ describe('reaping', () => {
   });
 
   it('powers off everything named for the hand-off, idle or not', () => {
-    // `--exclusive` (a bench) needs a quiet machine *now*, and a device that is 4 minutes into a
-    // 30-minute clock is still load it would be measuring next to.
     withLeases([]);
     withDevice(entryOf({ key: 'avd:nitro-ui-a', usedAgo: 4 * MINUTE }));
     const { pool, calls } = fakePool({
@@ -1254,9 +1138,8 @@ describe('reaping', () => {
   });
 
   it('keeps a device it could not power off, and says it failed', () => {
-    // An emulator that ignores `emu kill` is not hypothetical (a wedged guest keeps the process
-    // up), and the honest answer is "still running, still mine, try again" - dropping the record
-    // would leave a live device nobody tracks, off every idle clock, for the rest of the session.
+    // A wedged guest can ignore `emu kill`. Dropping the record then would leave a live device
+    // nobody tracks.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
@@ -1288,9 +1171,8 @@ describe('reaping', () => {
   });
 
   it('asks the device which AVD it is before powering it off', () => {
-    // X11 review M4: the reaper used to act on the serial in `pool.json`, checked only by AVD name,
-    // and the name is not what `emu kill` is addressed to. Here the record and devices.json agree,
-    // so the kill happens - after the device has answered for itself, on the pair's adb server.
+    // The record and devices.json agree, so the kill happens, after the device has answered for
+    // itself on the pair's adb server.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
@@ -1309,11 +1191,8 @@ describe('reaping', () => {
   });
 
   it('never touches another pair serial because a record named it', () => {
-    // The reviewer's probe case B: the record is `avd:nitro-ui-a` carrying serial `emulator-5576`,
-    // while pair-b (`nitro-ui_b`, 5576 on adb server 5045) is held by a live lease. The old code ran
-    // `adb -P 5045 -s emulator-5576 emu kill` - another task's emulator. Under the fix the address
-    // comes from the pair the record names, so 5576 is never even asked a question, and what does
-    // get powered off is pair-a's own device, after it answered for itself.
+    // The record is `avd:nitro-ui-a` carrying serial `emulator-5576`, which is pair-b's, and a
+    // live lease holds pair-b. The kill's address has to come from the pair the record names.
     withLeases([lease('B7-1', { task: 'B7', pairId: 'pair-b' })]);
     withDevice({
       ...entryOf({
@@ -1341,10 +1220,8 @@ describe('reaping', () => {
   });
 
   it('refuses when the device answers to a different AVD than the record names', () => {
-    // Last gate before the kill: the pair's serial is attached, and the pool is ready to power it
-    // off, but the emulator itself says it is somebody else's AVD (a hand-started `emulator
-    // @somebody_elses_avd -console-port 5574`, or devices.json edited under the pool). The device's
-    // own answer wins over the pool's arithmetic, and nothing dies.
+    // The pair's serial is attached, but the emulator says it is another AVD: one hand-started
+    // on that console port, or devices.json was edited under the pool.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
@@ -1368,9 +1245,8 @@ describe('reaping', () => {
   });
 
   it('refuses when the device will not identify itself', () => {
-    // `adb emu avd name` on a console that is not ready answers `emulator-5554` / nothing. That is
-    // an unidentified device, and an unidentified device is not one you get to power off - even
-    // though `adb devices` already says it is online.
+    // A console that is not ready does not answer with a name, even though `adb devices`
+    // already says the device is online.
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
@@ -1391,10 +1267,8 @@ describe('reaping', () => {
   });
 
   it('uses the pair from devices.json when the record disagrees about the serial', () => {
-    // devices.json is the declaration, `pool.json` is a cache of what was true at hand-out time
-    // (it gets renumbered; a task can have `ANDROID_SERIAL` set to something else in its shell).
-    // The identity the kill is addressed to comes from the declaration, and a disagreement is
-    // printed rather than silently obeyed - so a renumbering cannot aim the reaper at a neighbour.
+    // devices.json is the declaration; `pool.json` caches what was true at hand-out time and
+    // goes stale when a pair is renumbered.
     withLeases([]);
     withDevice({
       ...entryOf({
@@ -1425,9 +1299,7 @@ describe('reaping', () => {
   });
 
   it('never derives a kill from the record when devices.json renumbered the pair', () => {
-    // The same protection from the other side: pair-b is the one being renumbered here, and its
-    // record still points at the old port's serial. The kill must go to the *new* serial - and the
-    // live check is what stops it when the old emulator is the only thing that answers.
+    // Here pair-b is the one renumbered, and its record still points at the old port's serial.
     withLeases([]);
     withDevice({
       ...entryOf({
@@ -1453,11 +1325,8 @@ describe('reaping', () => {
   });
 
   it('keeps the record of an emulator whose adb server did not answer', () => {
-    // X11 re-review N2, at the reap rather than the tool. `adb devices` on a wedged server is killed
-    // at its timeout with no stdout, which is character-for-character what "no emulator is attached"
-    // looks like - and the second answer means "it is already off", which drops the record. The pool
-    // then forgets a live emulator that is still burning a core, off every idle clock, until an
-    // exclusive acquire happens to look for it in devices.json.
+    // `adb devices` on a wedged server is killed at its timeout with no stdout, which looks
+    // exactly like "no emulator is attached".
     withLeases([]);
     withDevice(
       entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 41 * MINUTE })
@@ -1481,8 +1350,7 @@ describe('reaping', () => {
   });
 
   it('keeps the record of a simulator whose simctl did not answer', () => {
-    // Same rule, iOS side, and the same two ways to fail to answer: a nonzero exit and output that
-    // is not JSON (a truncated pipe). Both are "unknown", neither is "shut down".
+    // Two ways to fail to answer: a nonzero exit and output that is not JSON. Both are "unknown".
     withLeases([]);
     withDevice(
       entryOf({
@@ -1506,12 +1374,8 @@ describe('reaping', () => {
   });
 
   it('does not hold the lease lock while it talks to devices', () => {
-    // X11 review N1: `reap` used to run `simctl list`, `simctl shutdown` and `adb emu kill` inside
-    // the same `withLock` everyone else needs to acquire a lease. That lock has a 10-second timeout
-    // and is stolen from whoever holds it past 30, so one slow shutdown used to fail every other
-    // task's `acquire` and gate claim - and could lose the reaper its own lock mid-write. The fake
-    // `emu kill` below takes the lock itself, which is exactly what a concurrent `acquire` does: it
-    // can only succeed if the reaper has released it before picking up the phone.
+    // The fake `emu kill` below takes the lease lock itself, as a concurrent `acquire` would. It
+    // can only succeed if the reaper released the lock before talking to the device.
     withLeases([]);
     withDevice(entryOf({ key: 'avd:nitro-ui-a', usedAgo: 41 * MINUTE }));
     const { pool } = fakePool({
@@ -1662,8 +1526,7 @@ describe('claiming from the lease environment', () => {
       home,
       env: {},
       devices: DEVICES,
-      // The pool a claim goes through; ops are irrelevant here (a claim writes state, it never
-      // touches a device), so an empty one keeps the case about the keys.
+      // A claim writes state and never touches a device, so the pool needs no ops.
       ops: {},
       log: () => {},
       now: () => NOW,
@@ -1694,8 +1557,6 @@ describe('claiming from the lease environment', () => {
   });
 
   it('claims nothing when the environment names no lease', () => {
-    // `bun run check`, a unit test, a CI runner: no lease in the environment, so the whole
-    // claim/release path must be a no-op rather than a half-named pair.
     expect(claimDevicesFromEnv({ pool: build(), env: {} })).toBeNull();
   });
 
@@ -1758,9 +1619,7 @@ describe('booting a pair', () => {
       home,
       load: () => (loads.length > 1 ? loads.shift() : loads[0]),
     });
-    // Nothing is up to begin with, and the devices only *appear* in `adb devices` / `simctl list`
-    // after the first wait: a pool that assumed a boot had finished the moment it asked would
-    // hand back a "warm pair" that does not exist yet.
+    // Nothing is up to begin with: the devices only appear in the listings after the first wait.
     const realSleep = pool.sleep;
     pool.sleep = (ms) => {
       realSleep(ms);
@@ -1768,10 +1627,8 @@ describe('booting a pair', () => {
       state.simulators = new Map([['UDID-A', 'Booted']]);
     };
     const result = pool.ensureBooted(PAIR_A, lease());
-    // The adb server travels with the boot, not just with the later calls: an emulator registers
-    // with the server named in its own launch environment, so a `bootEmulator` that never hears the
-    // pair's port leaves a device that comes up fine and is invisible to every poll. Found on the
-    // first cold boot on hardware (`device-ops.test.js` proves the launch env carries it).
+    // The adb server port goes to the boot itself: an emulator registers with the server named
+    // in its own launch environment.
     expect(calls).toContainEqual([
       'boot-emulator',
       { avd: 'nitro-ui-a', port: 5574, adbPort: 5043 },
@@ -1781,8 +1638,7 @@ describe('booting a pair', () => {
     expect(result.degraded).toEqual([]);
     expect(result.loadSettled).toBe(true);
     expect(result.load).toBe(3);
-    // The boot and the settle wait both happened, so time moved: 4 s polling for the devices,
-    // then 2 s per load sample. A zero wait would mean the numbers above came from nowhere.
+    // Time moved: 4 s polling for the devices, then 2 s per load sample.
     expect(clock.at - NOW).toBeGreaterThan(4000);
     expect(logs.join('\n')).toContain('booting android device nitro-ui-a:5574');
   });
@@ -1798,9 +1654,7 @@ describe('booting a pair', () => {
   });
 
   it('does not wait for a device the boot tool refused outright', () => {
-    // A mistyped AVD name in devices.json, or no emulator on PATH: `emulator` exits at once and
-    // polling `adb devices` for seven minutes for something that never started is how a lease
-    // command looks hung.
+    // A mistyped AVD name, or no emulator on PATH: `emulator` exits at once.
     const { pool, logs, clock } = fakePool({
       home,
       state: { emulatorBoots: false, simulatorBoots: false },

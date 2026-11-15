@@ -1,9 +1,3 @@
-/**
- * The versions a run records come from `bun.lock` and from `node_modules`, which can
- * disagree. The fixture keeps them apart (lock 0.80.0 / 54.1.2, install 0.79.9 /
- * 54.0.0) so a record that filled one side from the other is visible.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import { installedDependenciesProblem } from '../bench/deps.mjs';
@@ -50,7 +44,6 @@ describe('the app versions a run records', () => {
       installedExpoUi: '54.0.0',
       source: 'bun.lock in the working tree',
     });
-    // The record is what `run.mjs` hands the stale-install check.
     expect(
       installedDependenciesProblem({
         resolved: recorded,

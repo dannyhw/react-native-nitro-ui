@@ -1,19 +1,6 @@
 /**
- * What this *run* decided, read from inside the app.
- *
- * X37 deleted the wall-clock half of this module. What is left is one flag: whether
- * the run said it meant to compare a locale-dependent row in a locale other than the
- * one the shared table names. It cannot ride the launch arguments, because the
- * question is not what the app was launched with — it is whether the run that is
- * judging these numbers opted out of its own pin. So the runner publishes it and the
- * app reads it back over the dev server, which is the one host port an emulator is
- * sure to reach (see `scripts/harness-run-state.js`).
- *
- * Nothing here is trusted without checking: the publisher refreshes the file every
- * 2 s while its run lives and deletes it on exit, so a reader that finds a file from
- * another Metro port, or one older than the refresh interval allows, treats it as
- * absent. Absent means *not allowed*, which is the direction that can produce a red
- * rather than a quiet green.
+ * What the harness runner published about this run, read from the app over the dev
+ * server: whether the run opted out of the pinned locale for locale-dependent rows.
  */
 import { TurboModuleRegistry } from 'react-native';
 
@@ -26,17 +13,11 @@ const sourceCode = TurboModuleRegistry.getEnforcing(
 /** Where the runner publishes the run's state, relative to Metro's root. */
 const STATE_PATH = '/harness-run/state.json';
 
-/** A read this slow is not worth blocking a test for. */
 const READ_TIMEOUT_MS = 3000;
 
-/**
- * The publisher refreshes every 2s, so anything older than this belongs to a
- * run that is no longer alive - or to no run at all. Trusting it would be
- * reading a premise nobody is asserting.
- */
+/** The publisher refreshes every 2 s, so anything older is from a run that is gone. */
 const STALE_MS = 15000;
 
-/** What the runner publishes. */
 type PublishedState = {
   readonly metroPort: number;
   readonly updatedAt: number;
@@ -68,7 +49,6 @@ function portOf(origin: string): number | null {
   return match === null ? null : Number.parseInt(match[1] ?? '', 10);
 }
 
-/** Shape-check a published file, or say it is not one. */
 function asPublishedState(state: unknown): PublishedState | null {
   if (typeof state !== 'object' || state === null) return null;
   const candidate = state as Record<string, unknown>;
@@ -83,7 +63,6 @@ type StateRead =
   | { readonly kind: 'absent'; readonly reason: string }
   | { readonly kind: 'unreadable'; readonly reason: string };
 
-/** Read the file this run published about itself, from the app. */
 async function readState(origin: string): Promise<StateRead> {
   const fetchFn = (globalThis as { fetch?: FetchLike }).fetch;
   if (typeof fetchFn !== 'function') {
@@ -158,15 +137,9 @@ async function readState(origin: string): Promise<StateRead> {
 }
 
 /**
- * Did this run say it means to compare a locale-dependent row in a locale other than
- * the one the table names?
- *
- * `false` unless the run's own published state says otherwise, which is the only
- * direction that can produce a red rather than a quiet green: no state file, a file
- * from another run, a stale one, or a publisher too old to carry the field all answer
- * "not allowed", and the rule then compares the box and fails on a mismatch. The
- * reason travels back for the log, so an unexpected red says whether the opt-out was
- * absent or merely unreadable.
+ * Whether this run opted out of the pinned locale. `false` unless the run's own fresh
+ * state file says otherwise, so a missing, stale or foreign file fails a mismatch
+ * instead of quietly allowing it. `note` says why, for the log.
  */
 export async function localeMismatchAllowed(): Promise<{
   readonly allowed: boolean;
@@ -191,5 +164,5 @@ export async function localeMismatchAllowed(): Promise<{
   };
 }
 
-/** The variable the opt-out is set with, named in the failure message a run reads. */
+/** The environment variable the opt-out is set with. */
 export const ALLOW_LOCALE_MISMATCH_ENV = 'NITRO_UI_ALLOW_LOCALE_MISMATCH';

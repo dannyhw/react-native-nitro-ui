@@ -12,12 +12,7 @@ import {
 } from 'react-native';
 import { Slider } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance.
- *
- * `Text` gets no dynamic default colour from React Native, so a screen that has
- * to read in both light and dark mode picks its own.
- */
+/** `Text` gets no dynamic default colour from React Native. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -27,17 +22,11 @@ function useInk() {
   };
 }
 
-/**
- * Status bar height the system reserves for itself on Android.
- *
- * Android draws every app edge to edge, and RN's `SafeAreaView` only applies the
- * iOS safe area, so the top inset has to be added by hand.
- */
+/** Android draws every app edge to edge and RN's `SafeAreaView` is iOS-only. */
 function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** Busy-wait the JS thread, to make the app's handler slower than a drag. */
 function blockJs(ms: number) {
   const until = Date.now() + ms;
   while (Date.now() < until) {
@@ -45,15 +34,6 @@ function blockJs(ms: number) {
   }
 }
 
-/**
- * Every Slider configuration this task has to prove, on one screen:
- * controlled, uncontrolled, stepped, a range that does not end on a step,
- * disabled, tinted, a handler slower than the drag, and 200 sliders in a
- * scrolling list (the case `RecyclableView` exists for).
- *
- * `react-native-harness` drives the same screen in `__tests__/Slider.harness.tsx`
- * through these testIDs.
- */
 export default function SliderScreen() {
   const ink = useInk();
   const [controlled, setControlled] = useState(0.25);
@@ -62,15 +42,10 @@ export default function SliderScreen() {
   const [events, setEvents] = useState(0);
   const [lastComplete, setLastComplete] = useState<number | null>(null);
 
-  // Native moves the thumb, then reverts it: JS never accepts the change, so the
-  // event-count handshake is what brings the value back.
   const rejectChange = useCallback(() => {
     setRejections((count) => count + 1);
   }, []);
 
-  // The slow handler is the case frame coalescing exists for: native keeps the
-  // thumb under the finger and emits at most one event per frame however long JS
-  // takes to get through the last one.
   const slowChange = useCallback(
     (value: number) => {
       setEvents((count) => count + 1);
@@ -80,30 +55,14 @@ export default function SliderScreen() {
     [slowMs]
   );
 
-  // The three gesture phases, counted separately.
-  //
-  // `react-native-harness` proves the phases through Nitro callbacks. The
-  // real-input suite has to prove them with a touch synthesised by the OS, and
-  // the only thing that suite may read is what a person can see on screen, so
-  // each phase gets its own counter. The counters carry a text prefix rather
-  // than being a bare number: the Android check reads them out of a
-  // `uiautomator` dump, where a bare "1" would not say which row it came from.
+  // The counters carry a text prefix: the Android real-input check reads them
+  // out of a `uiautomator` dump, where a bare "1" would not say which row it
+  // came from.
   const [starts, setStarts] = useState(0);
   const [changes, setChanges] = useState(0);
   const [completes, setCompletes] = useState(0);
   const [phaseValue, setPhaseValue] = useState<number | null>(null);
 
-  // The three phases in the order the app was told them, as one short string
-  // (`SC`, `SVC`).
-  //
-  // The counters above say *how many* of each phase a gesture produced; they
-  // cannot say `S C V`, which is the order an app is allowed to see and the one a
-  // drag can get wrong in a way no count reveals. A `V` is written once per run of
-  // changes rather than once per sample because a gesture's samples are coalesced
-  // to one per frame and the string has to stay short enough to read out of an
-  // accessibility dump. Capped at a gesture and a half: the check reads what the
-  // last gesture did, and an unbounded string would scroll its own answer off the
-  // node.
   const [phaseOrder, setPhaseOrder] = useState('');
 
   const noteStart = useCallback((value: number) => {
@@ -179,10 +138,9 @@ export default function SliderScreen() {
           <Text style={styles.link}>set 0.5 from JS</Text>
         </Pressable>
 
-        {/* Directly under the Controlled section on purpose: the real-input
-            suite drags these controls with OS-synthesised events, and a target
-            that first needs scrolling makes the check depend on scroll position
-            instead of on the control. */}
+        {/* Directly under the Controlled section on purpose: a target that
+            first needs scrolling would make an OS-driven drag depend on scroll
+            position. */}
         <Text style={[styles.section, { color: ink.ink }]}>Drag phases</Text>
         <Slider
           defaultValue={0.5}
@@ -272,10 +230,7 @@ export default function SliderScreen() {
           testID="slider-bounded"
         />
         <Row label="0...120 step 5, tinted">
-          {/* The number the thumb is showing, not the number this file chose:
-              72 is not on the step, so native quantises it to 70 and the label
-              would have contradicted the page's own "JS is told what the thumb
-              shows". */}
+          {/* 72 is not on the step, so native quantises it to 70. */}
           <Text style={[styles.value, { color: ink.muted }]}>70</Text>
         </Row>
 
@@ -428,8 +383,6 @@ const styles = StyleSheet.create({
   link: {
     color: '#3b82f6',
   },
-  // A user style wins over the platform default box; the control fills the width
-  // it is given and keeps its own height (docs/components/slider.md).
   sizedBox: {
     alignItems: 'flex-start',
   },

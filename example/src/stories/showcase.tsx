@@ -1,12 +1,6 @@
 /**
- * Small layout helpers shared by the showcase stories.
- *
- * Stories render inside Storybook's own container, whose background is the
- * background swatch (`preview.tsx`), which a person can change from the device
- * while a story is open. The showcase stories therefore bring their own
- * surface: `Showcase` paints the pair from `useShowcaseInk()` behind its rows,
- * so a row of controls is always readable whatever swatch is selected, and the
- * component inside it still resolves its own colours from the OS appearance.
+ * Layout helpers shared by the showcase stories. They paint their own surface, because
+ * Storybook's background swatch can be changed while a story is open.
  */
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
@@ -17,13 +11,7 @@ import {
   useColorScheme,
 } from 'react-native';
 
-/**
- * Text/surface colours for the current appearance.
- *
- * The same pair the example screens use (`SwitchScreen.tsx`): RN gives `Text` no
- * dynamic default colour, so a story that has to read in both light and dark
- * mode picks its own.
- */
+/** React Native gives `Text` no dynamic default colour, so stories pick their own. */
 export function useShowcaseInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -34,7 +22,6 @@ export function useShowcaseInk() {
   };
 }
 
-/** Scrollable column the showcase stories lay their rows in. */
 export function Showcase({ children }: PropsWithChildren) {
   const ink = useShowcaseInk();
   return (
@@ -51,15 +38,6 @@ export function Showcase({ children }: PropsWithChildren) {
   );
 }
 
-/**
- * A caption on its own line, above the controls it describes.
- *
- * The controls sit in a row that wraps when they do not fit, so a long caption
- * squeezes nothing and a strip of several controls stays one strip instead of
- * turning into a column beside the label. A control whose width comes from its
- * parent (`fillWidth`: Progress, Slider, TextField, SearchField, ButtonGroup)
- * is measured against this line and so still fills the page on its own.
- */
 export function Row({
   label,
   children,
@@ -73,7 +51,6 @@ export function Row({
   );
 }
 
-/** A caption above a stack of controls (for variant/size strips). */
 export function Column({
   label,
   children,
@@ -87,13 +64,6 @@ export function Column({
   );
 }
 
-/**
- * A parent with a declared width.
- *
- * The sizing stories need to show what a control does inside a box it does not
- * choose: an intrinsic control keeps its measured size inside this, a
- * `fillWidth` control takes the width and only measures its height.
- */
 export function Frame({
   label,
   width,
@@ -116,7 +86,6 @@ export function Frame({
   );
 }
 
-/** A line of running text, for the notes a story needs to the reader. */
 export function Note({ children }: PropsWithChildren<{ children: ReactNode }>) {
   const ink = useShowcaseInk();
   return <Text style={[styles.note, { color: ink.muted }]}>{children}</Text>;

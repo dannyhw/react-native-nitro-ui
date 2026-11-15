@@ -1,19 +1,3 @@
-/**
- * `bun bench --dry-run` — what a run would resolve, decided without a device.
- *
- * A bench session burns hours before anyone learns that its device key was built from
- * the simulator's *name*, or that the ref it is comparing against is the commit under
- * review. A pre-flight is only worth having if its answer
- * is the run's real answer, so the cases below are about the three ways it could lie:
- *
- *   - booting or starting something while "checking" (it must read a listing only);
- *   - disagreeing with the run about a refusal (so it calls the run's own functions);
- *   - treating a flag that was never passed as a reason not to run.
- *
- * Nothing here touches a simulator or an emulator: the device answers come in as
- * fixtures, and the AVD's files are an injected `read`.
- */
-
 import { afterAll, describe, expect, it } from '@jest/globals';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -63,8 +47,6 @@ const LISTING = {
 describe('the iOS half of a dry run', () => {
   it('builds the key from the runtime and the device type, not the name', () => {
     const out = iosDryRunDevice({ udid: 'UDID-AIR', listing: LISTING });
-    // `nitro-ui B` is the simulator's *name* and must not appear in the key: that
-    // rename-a-simulator-and-change-your-device-key bug is the reason this exists.
     expect(out.deviceKey).toBe('ios27-sim-iphone17');
     expect(out.detail).toContain('nitro-ui B');
     expect(out.detail).toContain('Shutdown');
@@ -72,9 +54,6 @@ describe('the iOS half of a dry run', () => {
   });
 
   it('reads a stopped simulator as a valid answer, not a problem', () => {
-    // The point of a pre-flight is that the device is usually not booted yet, and a
-    // dry run that booted it would break the "never touch a device you did not
-    // start" rule on its first use.
     expect(
       iosDryRunDevice({ udid: 'UDID-AIR', listing: LISTING }).problem
     ).toBeNull();
@@ -94,9 +73,8 @@ describe('the iOS half of a dry run', () => {
 });
 
 describe('the Android half of a dry run', () => {
-  // API 33 and `pixel_7` rather than this repo's own API 35 / pixel_9 requirement: a
-  // reader that answered from the requirement constant instead of the file would pass
-  // a fixture that happened to match it, which is the coincidence these avoid.
+  // API 33 and `pixel_7`, not the API 35 / pixel_9 this repo requires: a reader that
+  // answered from the requirement instead of the file must not pass.
   const CONFIG = [
     'avd.ini.encoding=UTF-8',
     'image.sysdir.1=system-images/android-33/google_apis/arm64-v8a/',
@@ -133,10 +111,8 @@ describe('the Android half of a dry run', () => {
   });
 
   it('takes the API level from the system image, and the sidecar target behind it', () => {
-    // Two sources, in that order: `image.sysdir.1` is the system image the AVD
-    // actually boots, and the sidecar `.ini`'s `target` is the fallback for a config
-    // that lacks it. API 33 and 30 - neither is a value the code could default to, so
-    // a fallback that invented a level could not pass by coincidence with either.
+    // `image.sysdir.1` names the system image the AVD boots; the sidecar `.ini`'s
+    // `target` is the fallback for a config that lacks it.
     expect(
       readAvdHardware({
         avd: 'nitroui_b',
@@ -185,13 +161,10 @@ describe('the Android half of a dry run', () => {
         attachedSerials: [],
       })
     ).toEqual({
-      // `android30-emu-` would be shaped like a real key and match no committed
-      // release ref, which reads as resolved. Null is the honest answer.
       deviceKey: null,
       detail: expect.stringContaining('profile unknown'),
       problem: expect.stringContaining('cannot be built from this AVD'),
     });
-    // The same for the other half: a profile with no API level.
     expect(
       androidDryRunDevice({
         avd: 'nitroui_a',
@@ -216,9 +189,8 @@ describe('the Android half of a dry run', () => {
 
 /**
  * A schedule shaped like the real builder's output: one cell, two arms, N launches.
- * The numbers are deliberately not round multiples of anything the plan uses, so a
- * comparison that counted the wrong thing shows up (AGENTS.md: no fixture may coincide
- * with the right answer by accident).
+ * The numbers are not round multiples of anything the plan uses, so a comparison
+ * that counted the wrong thing shows up.
  */
 function comparisonFixtureSchedule(launches) {
   const entries = [];
@@ -252,7 +224,7 @@ describe('the dry-run report and its exit code', () => {
   it('reports the device key, host and schedule it resolved', () => {
     const text = dryRunReport(base).lines.join('\n');
     expect(text).toContain('ios27-sim-iphone17');
-    // 0.5 x cores (D9), and the load it is reported beside.
+    // The quiet threshold is half the core count.
     expect(text).toContain('quiet under 5.0');
     expect(text).toContain('cells x');
     expect(text).toContain('could start');
@@ -260,10 +232,6 @@ describe('the dry-run report and its exit code', () => {
   });
 
   it('reports a busy machine as a note, and still says a run could start', () => {
-    // X36: nothing refuses a run for being busy. The load is printed with the numbers -
-    // a comparison made inside one session cancels that drift the same way the ratio to
-    // `rn-core` cancels drift between launches, so "busy" is a reason to read the noise
-    // column, not a reason the command exits non-zero.
     const out = dryRunReport({ ...base, loadavg1: 9 });
     expect(out.exitCode).toBe(0);
     expect(out.lines.join('\n')).toContain('the machine was busy');
@@ -286,8 +254,6 @@ describe('the dry-run report and its exit code', () => {
   it('refuses a component the plan has no cell for, with the run’s own message', () => {
     const out = dryRunReport({ ...base, component: 'not-a-component' });
     expect(out.exitCode).toBe(2);
-    // The runner's builder is what says no, so a component added to the plan later
-    // cannot make this test's expectation stale in the other direction.
     expect(out.problems.join('\n')).toContain('not-a-component');
   });
 
@@ -313,7 +279,7 @@ describe('the dry-run report and its exit code', () => {
     expect(text).toContain('ios27-sim-iphone17 - both sides, one session');
     expect(text).toContain('base/head');
     expect(text).toContain('compared');
-    // The cell the base ref cannot measure is named, not silently dropped.
+    // The cell the base ref cannot measure is named, not dropped.
     expect(text).toContain('head-only');
     expect(out.exitCode).toBe(0);
   });
@@ -347,10 +313,8 @@ describe('the dry-run report and its exit code', () => {
   });
 
   it('puts every answer in the same column', () => {
-    // A reader scans one column to compare plan to plan, so a row is only as good as
-    // its padding: a longer label (`Compare:`, `Dry run:`) that slips past the column
-    // is the bug. The rows under `Compare:` are indented one level and share their own
-    // column, which is why they are measured separately.
+    // The rows under `Compare:` are indented one level and share a column of their
+    // own, so they are measured separately.
     const comparison = dryRunReport({
       ...base,
       argv: ['--platform', 'ios', '--compare-release', 'v0.9.0', '--dry-run'],
@@ -370,7 +334,7 @@ describe('the dry-run report and its exit code', () => {
 
     for (const { lines } of [dryRunReport(base), comparison]) {
       for (const line of lines) {
-        // Continuation rows (`note:` under `Host:`) are deliberately indented.
+        // Continuation rows (`note:` under `Host:`) are indented.
         if (/^\s/.test(line)) continue;
         const colon = line.indexOf(':');
         expect(colon).toBeGreaterThan(0);
@@ -391,20 +355,15 @@ describe('the dry-run report and its exit code', () => {
   });
 });
 
-/**
- * The CLI, in a copy of `scripts/` with every device variable blanked.
- *
- * The point being proven is the one a unit test cannot: that the flag never reaches
- * device resolution. `resolveIosDevice` throws "No iOS simulator" on an empty
- * `IOS_SIM_UDID`, so its absence in the output is the evidence that nothing booted.
- */
+// The CLI, run in a copy of `scripts/` with every device variable blanked. Device
+// resolution throws "No iOS simulator" on an empty `IOS_SIM_UDID`, so that
+// message's absence shows the flag never reached it.
 describe('bench --dry-run (the CLI)', () => {
   const cleanup = [];
 
   /**
-   * A git command inside a throwaway fixture repository, isolated from the machine's
-   * git config the same way `gate-logs.test.js` isolates its repositories: someone who
-   * signs commits globally must not make this fixture fail for an unrelated reason.
+   * A git command inside a throwaway repository, isolated from the machine's git
+   * config: a global commit-signing setting must not fail the fixture.
    */
   function fixtureGit(root, ...args) {
     return execFileSync('git', args, {
@@ -433,16 +392,13 @@ describe('bench --dry-run (the CLI)', () => {
     );
     const tag = options.tag ?? options.tagAtHead;
     if (tag != null) {
-      // A git repository with a release tag, so `--compare-release` has something real
-      // to resolve and extract: the plan it prints is read out of that tag's own
-      // `lib.mjs`, which is the whole design of the comparison. `tag` is *older* than
-      // HEAD — the extra commit is the candidate — while `tagAtHead` leaves the tag on
-      // the only commit, which is the shape of a comparison against itself.
+      // `tag` is older than HEAD (the extra commit below is the candidate), while
+      // `tagAtHead` leaves the tag on the only commit: a comparison against itself.
       fixtureGit(root, 'init', '--quiet');
       fixtureGit(root, 'add', '-A');
       fixtureGit(root, 'commit', '--quiet', '-m', 'bench fixture');
-      // A fresh repository abbreviates to 7 characters, which is also the length a
-      // hand-written slice would pick; 12 is what neither picks by accident.
+      // Git's default abbreviation is 7 characters, which a hand-written slice
+      // would also pick; 12 is a length neither picks by accident.
       fixtureGit(root, 'config', 'core.abbrev', '12');
       if (options.annotated === true) {
         fixtureGit(root, 'tag', '-a', tag, '-m', `release ${tag}`);
@@ -478,20 +434,17 @@ describe('bench --dry-run (the CLI)', () => {
         encoding: 'utf8',
         cwd: root,
         timeout: 180_000,
-        // `childEnv` (X34 item 1): the blanks below are the suite's answer to "which device", and
-        // they only mean that if no lease arrives underneath them. `bench/run.mjs` reads a device
-        // identity out of the environment, so a *half*-blanked lease — the shell's
-        // `EMULATOR_PORT` under a blanked `ANDROID_SERIAL` — is the X32/X33 refusal again.
+        // `childEnv` drops a lease inherited from the shell, so the blanks below are
+        // the only device identity the child sees.
         env: childEnv({
-          // Blank every device variable: inherited from a leased shell, an
-          // `IOS_SIM_UDID` here would name a real simulator, and a dry run that
-          // wrongly resolved one would boot it.
+          // Inherited from a leased shell, an `IOS_SIM_UDID` would name a real
+          // simulator, and a dry run that wrongly resolved it would boot it.
           IOS_SIM_UDID: '',
           ANDROID_SERIAL: '',
           ANDROID_AVD: '',
           AVD: '',
-          // The base checkout is a cache: point it at the throwaway tree so a test
-          // can never write into the developer's real one.
+          // The base checkout is a cache: keep it inside the throwaway tree so a
+          // test never writes into the developer's real one.
           NITRO_UI_BENCH_BASE_DIR: path.join(root, 'bench-base'),
           ...env,
         }),
@@ -540,8 +493,7 @@ describe('bench --dry-run (the CLI)', () => {
       '--compare-release',
       '--dry-run',
     ]);
-    // The ref is resolved and its plan read (no device, no install, no build), and the
-    // only reason left is the one this environment cannot answer: no simulator.
+    // The only reason left not to start is the missing simulator.
     expect(out.all).toContain('Compare:   v9.9.0');
     expect(out.all).toContain('vs HEAD');
     expect(out.all).toContain('rounds:  2, order base/head head/base');
@@ -583,8 +535,6 @@ describe('bench --dry-run (the CLI)', () => {
   });
 
   it('refuses a comparison that would measure a tree against itself', () => {
-    // The tag is the commit we are standing on: every ratio would be 1.00, and a gate
-    // that cannot fail is worse than no gate (T02 review B1).
     // Twice: a plain tag, and an annotated one, which is an object of its own with an
     // id that is not the commit's.
     for (const annotated of [false, true]) {
@@ -618,9 +568,6 @@ describe('bench --dry-run (the CLI)', () => {
   });
 
   it('refuses a flag the bench no longer has, and names its replacement', () => {
-    // An unknown flag is otherwise ignored, and these three were ignored into a green:
-    // `bun bench --check` would run a plain bench, print a plain report, and exit 0 on
-    // someone believing a committed baseline had been consulted.
     const root = workspace();
     for (const [flag, replacement] of [
       ['--check', '--compare-release'],
@@ -636,9 +583,7 @@ describe('bench --dry-run (the CLI)', () => {
   });
 
   it('asks the tools read-only questions, and never a booting one', () => {
-    // The brief's hard rule, checked at the only layer where it can be: the child
-    // processes. Every tool call is recorded, so `simctl boot` showing up - or an
-    // `adb emu` command - is visible even though the answer still looks correct.
+    // Shims on PATH record every `xcrun` and `adb` call the CLI makes.
     const root = workspace();
     const calls = path.join(root, 'tool-calls.log');
     const bin = path.join(root, 'bin');
@@ -649,8 +594,7 @@ describe('bench --dry-run (the CLI)', () => {
       [
         '#!/bin/sh',
         `echo "$(basename "$0") $*" >> "${calls}"`,
-        // A listing that names the simulator, so a *successful* resolve is possible
-        // and a refusal-to-boot cannot be explained by "it bailed out early".
+        // The listing names the simulator, so a successful resolve is possible.
         target === 'xcrun'
           ? `printf '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"udid":"UDID-AIR","name":"nitro-ui B","state":"Shutdown","deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-17"}]}}\\n'\n`
           : 'printf "List of devices attached\\nemulator-5570\\tdevice\\n\\n"\n',
@@ -673,17 +617,14 @@ describe('bench --dry-run (the CLI)', () => {
       { PATH: `${bin}:${process.env.PATH}`, IOS_SIM_UDID: 'UDID-AIR' }
     );
     expect(out.all).toContain('ios27-sim-iphone17');
-    // One call, exactly: not `boot`, not `bootstatus`, not a second listing. The
-    // simulator here is *Shutdown*, so a resolve-style dry run would have booted it
-    // and recorded that boot - which is the failure this assertion is for.
+    // The simulator is Shutdown, so a dry run that resolved it as a run does would
+    // have recorded a `boot`.
     const recorded = readFileSync(calls, 'utf8').trim().split('\n');
     expect(recorded).toEqual(['xcrun simctl list devices -j']);
     expect(out.all).toContain('Shutdown');
 
-    // Android: the AVD's files answer the question, so adb is asked only whether the
-    // emulator happens to be up - and an emulator boot is never on that list. The
-    // AVD home is pointed at a directory with nothing in it, so the answer cannot
-    // depend on which AVDs happen to exist on the machine running the test.
+    // The AVD home is an empty directory, so the answer cannot depend on which AVDs
+    // exist on the machine running the test.
     rmSync(calls);
     const android = cli(
       root,

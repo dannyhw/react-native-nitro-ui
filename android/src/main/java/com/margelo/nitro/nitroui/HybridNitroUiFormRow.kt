@@ -27,28 +27,12 @@ import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
 /**
- * The `Form.Row` of the S6 spike on Android: React Native content that keeps its children
- * where Yoga put them, watches its own touches, and is the box its section's Compose layer
- * draws a segmented shape behind (Q10 Appendix C1, question 7).
+ * `Form.Row` on Android: a React Native view group whose children stay where Yoga put them.
  *
- * **Watching, not taking.** The row reads the gesture in `dispatchTouchEvent`, which runs
- * before any child sees it, and never intercepts: a `Switch` or a `Pressable` inside a row
- * keeps its own touch, and a row with `onPress` still gets its ripple and its shape morph.
- * A press that travels past the touch slop is dropped (the child is scrolling or dragging),
- * and a `CANCEL` from an ancestor drops it too. This is ContextMenu's arbitration
- * ([ContextMenuView]) with the opposite outcome: a ContextMenu *takes* the gesture on
- * recognition because the menu must own it; a row must not, because its content does.
- *
- * **The press feedback lives in the section's layer**, not here: a per-row Compose runtime
- * would cost what `docs/components/host.md` measures for an unhosted control, for one ripple.
- * So this view hands the section a `PressInteraction` on a source the section owns.
- *
- * The row does not draw and does not clip: `ListItemDefaults.segmentedShapes` gives the shape
- * and the layer draws it, one composition behind a whole section's rows.
- *
- * The row reports no position either. Here the row is where Yoga put it, so the shadow tree
- * and the screen agree without being told (the reason Android sends no scroll offset and no
- * placement of its own, and the reason iOS has to say both).
+ * The row watches the gesture in `dispatchTouchEvent` and never intercepts it, so a `Switch`
+ * or `Pressable` inside a row keeps its own touch. It draws nothing itself: the section's one
+ * Compose layer draws the shape and the ripple behind all of its rows, fed a
+ * `PressInteraction` from here.
  */
 internal class HybridNitroUiFormRow(
   private val reactContext: ThemedReactContext,
@@ -93,12 +77,7 @@ internal class HybridNitroUiFormRow(
 
   override var onPress: (() -> Unit)? = null
 
-  /**
-   * Received and never answered: iOS asks a row for the box its cell gives it because a cell
-   * shrinks its own margins for an accessory row, and there is no cell here. Android rows keep
-   * the width the list gives them and pay for their accessory with padding
-   * (`Form.tsx`'s `ANDROID_ACCESSORY_RESERVE`), so nothing per row is left to report.
-   */
+  /** Never called on Android: a row keeps the width Yoga gave it, so there is nothing to report. */
   override var onContentBox: ((width: Double) -> Unit)? = null
 
   override fun afterUpdate() {
@@ -119,28 +98,18 @@ internal class HybridNitroUiFormRow(
   }
 
   override fun nuiTestA11yClick() {
-    // The framework's own path from a double-tap to `performClick`, asked of the view rather
-    // than synthesised here: what the harness is testing is whether ACTION_CLICK reaches
-    // `onPress`, and a call that called `firePress` itself would answer that question with
-    // whatever this line did instead of with what the row does.
+    // Goes through the framework's ACTION_CLICK path, the one a screen reader's double-tap takes.
     view.post {
       view.performAccessibilityAction(AccessibilityNodeInfo.ACTION_CLICK, null)
     }
   }
 
-  /** The cell's press reached React. */
   fun firePress() {
     onPress?.invoke()
   }
 
-  /**
-   * The report as JavaScript sees it.
-   *
-   * A Nitro method runs on the JS thread and every number here is the UI thread's, so
-   * the read is eventually consistent - built on the UI thread and returned as it last
-   * stood, the rule `HybridNitroUiBottomSheet.nuiTestStateReport` sets. The harness
-   * polls a report until it says what the test is waiting for.
-   */
+  // Nitro methods run on the JS thread and the numbers are the UI thread's, so a read returns
+  // the report as the UI thread last built it. Callers poll.
   @Volatile private var report = "pending"
   private val reportHandler = Handler(Looper.getMainLooper())
 
@@ -153,7 +122,6 @@ internal class HybridNitroUiFormRow(
     return report
   }
 
-  /** Read on the UI thread only. */
   private fun buildRowReport(): String {
     val density = view.resources.displayMetrics.density
     return listOf(
@@ -168,12 +136,7 @@ internal class HybridNitroUiFormRow(
       "window=" + windowField(density),
       "h=${String.format("%.1f", view.height / density)}",
       "presses=${view.taps}",
-      // What a screen reader would read out for this row. A recycled view that still answers
-      // with the previous mount's label is invisible in every other number here.
       "desc=${view.contentDescription ?: "-"}",
-      // Whether the pool handed this instance back. A row that keeps the previous mount's
-      // name is only a finding on a view that was really reused, so the harness reads this
-      // before it reads `desc`.
       "drops=${view.lifetime.drops}",
       "recycles=${view.lifetime.recycles}",
       "pressesPending=${if (view.pressed) 1 else 0}",
@@ -183,15 +146,7 @@ internal class HybridNitroUiFormRow(
     ).joinToString(";")
   }
 
-  /**
-   * The row's box in its own window, in dp, or `-` before it is attached.
-   *
-   * iOS added this field for S6b question 4: a row there is re-parented into a
-   * `UICollectionViewListCell`, so what UIKit shows and what `measure()` reports came to be
-   * different numbers, and the harness needs both to see it. Android is the control for that
-   * case - this view is where Yoga put it, so the two answers are the same number by
-   * construction, which is exactly what the case needs to be able to say.
-   */
+  /** The row's box in its own window, in dp, or `-` before it is attached. */
   private fun windowField(density: Float): String {
     if (!view.isAttachedToWindow) return "-"
     val at = IntArray(2)
@@ -206,10 +161,6 @@ internal class HybridNitroUiFormRow(
   }
 }
 
-/**
- * The row's view. Also the thing the harness measures for question 3 (its Yoga box) and
- * question 4 (`measure()` of a view that is where Yoga put it).
- */
 internal class NitroUiFormRowView(
   context: ThemedReactContext,
   private val hybrid: HybridNitroUiFormRow,
@@ -219,25 +170,16 @@ internal class NitroUiFormRowView(
   private var downY = 0f
   private var pending = false
 
-  /**
-   * What this instance has been through, counted per object (F6's pattern).
-   *
-   * `recycles=` is what lets the harness tell a recycled row from a fresh one. The name a
-   * recycled row carries is only a bug on an instance that was really reused, and without
-   * this number an assertion about a stale `contentDescription` could pass because nothing
-   * was ever pooled (fix round 1, item 9).
-   */
   val lifetime = NitroUiLifetimeGate()
 
-  /** `onPress` calls delivered, for the harness's 10/10. */
+  /** `onPress` calls delivered. */
   var taps = 0
     private set
 
-  /** Whether a press is in flight on this row right now. */
   var pressed = false
     private set
 
-  /** Chrome the section's layer draws with. */
+  /** Read by the section's layer when it draws. */
   var rowSelected = false
     private set
   var rowAccessory = ACCESSORY_NONE
@@ -258,8 +200,8 @@ internal class NitroUiFormRowView(
         else -> ACCESSORY_NONE
       }
     rowSelected = selected
-    // A row that can be pressed is one clickable element to a screen reader, the same as
-    // iOS's cell; `isClickable` is what makes the framework offer ACTION_CLICK by itself.
+    // `isClickable` makes the framework offer ACTION_CLICK, so a pressable row is one
+    // clickable element to a screen reader.
     isClickable = pressable
     importantForAccessibility = if (pressable) IMPORTANT_FOR_ACCESSIBILITY_YES else IMPORTANT_FOR_ACCESSIBILITY_AUTO
     section?.publishRects()
@@ -271,31 +213,16 @@ internal class NitroUiFormRowView(
     pressed = false
     pending = false
     taps = 0
-    // Take the *person-facing* identity off, not just the props.
-    //
-    // React Native's `BaseViewManager.prepareToRecycleView` clears its own
-    // `accessibility_label` tag and nothing else, so a view that goes back to the pool still
-    // answers for the mount that just ended: `contentDescription` carries the old label, and
-    // `importantForAccessibility` is still `YES` because a pressable row set it. The next
-    // mount to pull this view out of the pool is then announced with a name its own app never
-    // gave it — which is what made the Form's own screen name a plain row (fix round 1). The
-    // label the *new* mount wants arrives from its own `applyChrome`, after this.
+    // React Native's `prepareToRecycleView` clears its `accessibility_label` tag but not
+    // these, so a pooled view would be announced with the previous mount's label.
     contentDescription = null
     isClickable = false
     isLongClickable = false
     importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
   }
 
-  /**
-   * Answer a screen reader's activation.
-   *
-   * `isClickable` is what makes the framework *offer* `ACTION_CLICK`, and it was the only
-   * thing this row did about accessibility — but a `ReactViewGroup` has no `OnClickListener`,
-   * so `View.performClick` had nothing to call and TalkBack's double-tap on a pressable row
-   * did nothing at all. The press only ever came from `dispatchTouchEvent`, which a screen
-   * reader never sends. This is the other half of the promise a pressable row makes: one
-   * element, and a person who cannot see it can press it (fix round 1).
-   */
+  // A screen reader's double-tap sends ACTION_CLICK, not touches, and a `ReactViewGroup` has
+  // no `OnClickListener` for `performClick` to call, so the press is fired here.
   override fun performAccessibilityAction(
     action: Int,
     args: Bundle?,
@@ -317,7 +244,7 @@ internal class NitroUiFormRowView(
     bottom: Int,
   ) {
     super.onLayout(changed, left, top, right, bottom)
-    // The row's box is the shape's box, so every move is the layer's business.
+    // The section's layer draws this row's shape at this row's box.
     section?.publishRects()
   }
 
@@ -349,7 +276,7 @@ internal class NitroUiFormRowView(
 
       MotionEvent.ACTION_CANCEL -> releasePressed()
     }
-    // The children still get everything: this is a listener, not a gate.
+    // Never consumed here: the children still get every event.
     return super.dispatchTouchEvent(event)
   }
 
@@ -381,7 +308,6 @@ internal class NitroUiFormRowView(
     }
   }
 
-  /** A coroutine scope for the interaction emits, on the main dispatcher. */
   private var scope: CoroutineScope? = null
 
   override fun onAttachedToWindow() {
@@ -402,10 +328,6 @@ internal class NitroUiFormRowView(
     pressed = false
   }
 
-  /**
-   * Whether this row is on screen, for the report. Walks the parents' clipping rather than
-   * trusting one rect, because the scroller is React Native's.
-   */
   fun isLocallyVisible(): Boolean {
     if (!isShown || width == 0 || height == 0) return false
     val bounds = android.graphics.Rect()
@@ -420,7 +342,6 @@ internal class NitroUiFormRowView(
   }
 }
 
-/** The Fabric manager of `NitroUiFormRow`. Its children are React Native's and stay in place. */
 internal class NitroUiFormRowViewManager : ReactViewManager() {
   private class Holder(
     val hybridView: HybridNitroUiFormRow,

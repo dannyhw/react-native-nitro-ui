@@ -1,16 +1,6 @@
 /**
- * Form stories (G24): grouped settings lists whose rows are React Native views.
- * Props and events: `docs/components/form.md`.
- *
- * A `Form` is not self-sizing — it takes the box it is given and scrolls inside it —
- * so every story hands it a height rather than wrapping it in another scroller: a
- * list inside a `ScrollView` would fight the list for the drag. Row text is React
- * Native's, so it colours itself from the appearance like every other showcase.
- *
- * `children` gets no Controls row: a section is a component and the on-device panel
- * cannot type one, so the Playground's rows are fixed and its Controls panel carries
- * the one prop a Form has. The internal props (`hybridRef`, `nuiPerfId`) are hidden:
- * they are harness and benchmark handles, not app API (DECISIONS D14).
+ * A `Form` is not self-sizing: it takes the box it is given and scrolls inside it, so
+ * every story gives it a height instead of wrapping it in a `ScrollView`.
  */
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -20,10 +10,6 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 
 import { Note, useShowcaseInk } from './showcase';
 
-/**
- * The height every story gives a Form: about six rows on iOS, five on Android, so a
- * short story is readable and a long one has something to scroll.
- */
 const FORM_HEIGHT = 420;
 
 const meta = {
@@ -51,15 +37,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * The two sections the README picture shows, as a component so the Playground can
- * hold their switch state while `Sections` renders the same form uncontrolled.
- *
- * The two switch rows are the bare pair the README prints: a `Text` with `flex: 1`
- * and the control after it. A row lays that pair out as one centred row across its
- * content width, so the switch sits on the trailing edge level with its label with
- * no wrapper in this file to arrange it (`docs/components/form.md`).
- */
 function NotificationSections({
   push,
   sound,
@@ -112,13 +89,6 @@ function NotificationSections({
   );
 }
 
-/**
- * Every public prop on the Controls panel, over a form that behaves.
- *
- * The switches and the press counter are React state, so what the picture shows is
- * what the app committed to: a row press moves the number below the list, a switch
- * tap moves only its own value.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ keyboardAvoidance }) {
     const ink = useShowcaseInk();
@@ -145,15 +115,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * A section header, a footer, and a group whose row goes somewhere.
- *
- * This is the README screenshot. On iOS it is UIKit's `.insetGrouped` list — the
- * card, the header, the footer and the disclosure chevron are drawn by the list, and
- * the two rows are React Native views inside its cells. On Android the rows stay
- * exactly where Yoga put them and the section draws Material 3's segmented-list
- * shapes behind them, so a group reads as one connected list with rounded ends.
- */
 export const Sections: Story = {
   render: () => (
     <View style={styles.page}>
@@ -164,7 +125,6 @@ export const Sections: Story = {
   ),
 };
 
-/** The three accessories, and the selected state. */
 function AccessoriesStory() {
   const ink = useShowcaseInk();
   const ignored = () => {};
@@ -209,12 +169,10 @@ function AccessoriesStory() {
   );
 }
 
-/** The three accessories and the selected state. */
 export const Accessories: Story = {
   render: () => <AccessoriesStory />,
 };
 
-/** Any React Native view is a row, with or without an explicit `Form.Row`. */
 function RowContentStory() {
   const ink = useShowcaseInk();
   const [on, setOn] = useState(false);
@@ -285,18 +243,10 @@ function RowContentStory() {
   );
 }
 
-/**
- * Any React Native view is a row.
- *
- * The first section's rows are a bare `Text`, a `Pressable`, a `TextField` and a
- * `View` with a `Switch` — direct children, each wrapped into a row by the section.
- * The second names `Form.Row` only to add the press and the accessory.
- */
 export const RowContent: Story = {
   render: () => <RowContentStory />,
 };
 
-/** Twenty-four rows across three sections, which is what a settings screen is. */
 function ManyRowsStory() {
   const ink = useShowcaseInk();
   const ignored = () => {};
@@ -338,12 +288,10 @@ function ManyRowsStory() {
   );
 }
 
-/** Twenty-four rows across three sections, which is what a settings screen is. */
 export const ManyRows: Story = {
   render: () => <ManyRowsStory />,
 };
 
-/** Fields below the fold, so the keyboard has something to cover. */
 function KeyboardStory() {
   const ink = useShowcaseInk();
   const [city, setCity] = useState('');
@@ -387,12 +335,6 @@ function KeyboardStory() {
   );
 }
 
-/**
- * A field near the bottom edge, with keyboard avoidance.
- *
- * `real-input` proves the same thing with a real IME: `form-field-focus` stays
- * visible above a full software keyboard on both platforms.
- */
 export const Keyboard: Story = {
   render: () => <KeyboardStory />,
 };
@@ -411,8 +353,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rowLabel: {
-    // The label takes the room the row has and the control keeps the room it
-    // measured: `flex: 1` is what puts a trailing control at the trailing edge.
     flexShrink: 1,
     fontSize: 16,
     flexGrow: 1,

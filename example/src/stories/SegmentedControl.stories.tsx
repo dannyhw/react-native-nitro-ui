@@ -1,10 +1,3 @@
-/**
- * SegmentedControl stories (S1). Props and events:
- * `docs/components/segmented-control.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { SegmentedControl } from 'react-native-nitro-ui';
@@ -15,10 +8,8 @@ import type { ArgTypes, Meta, StoryObj } from '@storybook/react-native';
 import { Column, Frame, Note, Row, Showcase } from './showcase';
 
 /**
- * The comma-separated `array` control belongs to
- * `@storybook/addon-ondevice-controls` - its own `ControlTypes` union lists it,
- * core's `ControlType` union does not - so the one entry that needs it is widened
- * through the real `argTypes` shape rather than written loosely.
+ * The comma-separated `array` control belongs to the on-device controls addon;
+ * Storybook core's `ControlType` union does not list it.
  */
 type ListControl = NonNullable<
   ArgTypes<{ options: string[] }>['options']['control']
@@ -72,12 +63,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * `selectedIndex` stays authoritative: a tap moves the local echo (so the control
- * feels alive) and reports to Actions, and moving the row moves the selection.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({
     onChange,
@@ -117,10 +102,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * No `selectedIndex` anywhere: native owns the selection, so a tap costs no
- * React render and `defaultSelectedIndex` decides where it starts.
- */
 export const Uncontrolled: Story = {
   render: ({ options }) => (
     <Showcase>
@@ -139,7 +120,6 @@ export const Uncontrolled: Story = {
   ),
 };
 
-/** The controlled contract: the Text is the prop, the control follows it. */
 export const Controlled: Story = {
   render: function ControlledStory({ options }) {
     const [index, setIndex] = useState(0);
@@ -170,7 +150,6 @@ export const Controlled: Story = {
   },
 };
 
-/** Options drive the size and the segments: short, long, many, one, duplicate. */
 export const OptionSets: Story = {
   render: () => (
     <Showcase>
@@ -199,7 +178,6 @@ export const OptionSets: Story = {
   ),
 };
 
-/** The state grid: un/controlled x enabled/disabled, plus the Android-only tint. */
 export const States: Story = {
   render: ({ options }) => (
     <Showcase>
@@ -240,11 +218,6 @@ export const States: Story = {
   ),
 };
 
-/**
- * Sizing (README "Sizing"): a SegmentedControl measures itself, so a parent width
- * leaves it at its measured size and `alignSelf: 'stretch'` is what asks for the
- * fill.
- */
 export const Sizing: Story = {
   render: ({ options }) => (
     <Showcase>
@@ -267,11 +240,6 @@ export const Sizing: Story = {
   ),
 };
 
-/**
- * The rows as the current appearance draws them, plus the note about why a story
- * cannot show two appearances at once. A component (not an inline `render`)
- * because it reads the appearance with a hook.
- */
 function AppearancePanel({ options }: { options: string[] }) {
   const scheme = useColorScheme();
   return (
@@ -302,20 +270,8 @@ function AppearancePanel({ options }: { options: string[] }) {
 }
 
 /**
- * The row palette comes from the OS appearance, and this story shows the one the
- * device is set to.
- *
- * It used to draw the same row twice, the second time on a black card labelled
- * "on a dark surface". That was not dark mode: only the card's background
- * changed, so the light-palette segments - the *disabled* group most of all -
- * were near-invisible against the black. React Native 0.88 has no per-subtree
- * appearance override (no `overrideAppearance` prop;
- * `Appearance.setColorScheme()` is app-wide), so a story cannot honestly paint a
- * dark panel. Change the device appearance instead - `xcrun simctl ui <udid>
- * appearance dark` on iOS, `adb -s <serial> shell cmd uimode night yes` on
- * Android - and this screen follows. Among the component docs only
- * `docs/components/button.md` carries a captured light/dark pair; this control's
- * doc does not.
+ * React Native has no per-subtree appearance override, so this story shows only the
+ * appearance the device is set to.
  */
 export const Appearances: Story = {
   render: ({ options }) => <AppearancePanel options={options} />,

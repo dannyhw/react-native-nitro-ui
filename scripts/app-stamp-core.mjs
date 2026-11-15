@@ -1,38 +1,12 @@
 /**
- * The pure half of `app.stamp` - the freshness gate for the example app.
- *
- * Why (docs/tasks/PROCESS-review-2026-10-26.md §4 rank 8, and G2's
- * `stale app` finding in docs/tasks/G2-button.report.md): `react-native-harness`
- * never builds, so `HARNESS_APP_PATH` happily points at an `.app` from before
- * the last source edit, and a gate then reports green for a binary nobody has.
- * Worse on Android, where gradle can call `packageDebug` up-to-date while the
- * dex is missing a generated hybrid: the suite passes against an APK that does
- * not contain the component under test.
- *
- * So a build records what it contained, and every device gate re-derives that
- * and compares:
- *
- *   app.stamp  { tree, head, artifact, counts: { Switch: 676, ... } }
- *
- * `tree` is a hash over the code that goes into the app - everything git can see
- * except `docs/`, `bench/`, `.github/` and Markdown, so writing a report does not
- * invalidate a build. With a clean working tree it *is* HEAD's code tree.
- * `counts` is how many times each registered component's name appears in the
- * binary, which is what catches the dex case the tree hash cannot.
- *
- * No `import.meta` here, so `scripts/__tests__/app-stamp.test.js` can import it
- * (same reason `scripts/lease-core.mjs` exists next to `scripts/lease.mjs`).
+ * The pure half of `app.stamp`: a build records the code tree it was built from and
+ * the components its binary contains, and every device gate re-derives and compares.
  */
 
 import { createHash } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 
-/**
- * A path that exists only at the repo root *and* is the thing this gate needs:
- * nitrogen's iOS autolinker. Walking up to it is how a caller that may be
- * `example/`, the root, or a `scripts/` entry point finds its checkout - and the
- * search doubles as a check that generated code is present.
- */
+/** A path that exists only at the repo root, and only once code is generated. */
 export const REPO_MARKER = [
   'nitrogen',
   'generated',
@@ -64,14 +38,9 @@ export function findRepoRoot({ startDir, existsSync, sep = '/' }) {
   }
 }
 
-/** Where a build leaves its stamp, relative to each build directory. */
 export const STAMP_BASENAME = 'app.stamp';
 
-/**
- * Prefixes that never change the app binary. `docs/` is the brief's exclusion;
- * `bench/` is a separate Expo app built by `scripts/bench/build.mjs`, and its
- * `results/*.json` grow during a run; `.github/` and Markdown change no build.
- */
+/** Prefixes that never change the app binary. `bench/` is a separate app. */
 export const NON_CODE_PREFIXES = ['docs/', 'bench/', '.github/', '.vscode/'];
 
 /**
@@ -83,8 +52,7 @@ export function isCodeFile(file) {
   if (file.endsWith('.md')) return false;
   if (file === STAMP_BASENAME || file.endsWith(`/${STAMP_BASENAME}`))
     return false;
-  // Build outputs are gitignored, so they are never listed; if one ever is, it
-  // is a product of the tree and not part of it.
+  // A build output is a product of the tree, not part of it.
   return !file.split('/').includes('build');
 }
 
@@ -92,15 +60,8 @@ export function isCodeFile(file) {
  * A stable digest of `path -> content hash`. Sorted, and hashed as text rather
  * than as JSON so two runs of the same tree agree regardless of key order.
  *
- * HEAD is deliberately not mixed in (review M4). It was folded in "so a merge
- * that leaves the working files identical still reads as a different tree", but
- * what it actually did was make every commit invalidate every build: a docs-only
- * commit changes HEAD, so the gate refused an app whose sources had not moved,
- * and a 10-minute rebuild became the price of editing a report. The file hashes
- * are what the compiler reads; HEAD is recorded in the stamp beside the digest,
- * where it answers "which commit produced this" without gating on it. The merge
- * case is not lost either - a merge that brings different code changes the file
- * hashes, and one that does not is the same app.
+ * HEAD is deliberately not mixed in: it would make a docs-only commit invalidate
+ * a build whose sources did not move.
  *
  * @param {Record<string, string>} entries path -> content hash (already digested)
  * @returns {string}
@@ -121,23 +82,11 @@ export function contentHash(content) {
 /**
  * The string that means "this component's *hybrid class* is in the binary".
  *
- * The plain `HybridNitroUi<Name>` is not it: on iOS it occurs ~2 200 times per
- * component because every `HybridNitroUi<Name>Spec`, `...SpecBridging` and
- * protocol mention contains it, so an app that registered nothing but the
- * generated interface would pass. Measured on the two artifacts in this repo on
- * 2026-10-26 (`example/android/.../app-debug.apk` and a Debug `.app`):
- *
- *   | needle                                    | Android | iOS  |
- *   | ----------------------------------------- | ------- | ---- |
- *   | `HybridNitroUiSwitch`                      |      61 | 2300 |
- *   | `NitroUiSwitchSpec` (the generated spec)   |      14 | 1365 |
- *   | `Lcom/margelo/nitro/nitroui/HybridNitroUiSwitch;` | 5 |    - |
- *   | `19HybridNitroUiSwitch` (length-prefixed)  |       - |    4 |
- *
- * So Android asks for the JVM class descriptor, whose leading `L` and trailing
- * `;` no spec name can borrow, and iOS for the length-prefixed name that
- * Swift's metadata reflection writes - which the spec name is not, because the
- * spec's length prefix differs (measured: 0 matches).
+ * The plain `HybridNitroUi<Name>` is not it: every generated `...Spec` name
+ * contains it, so an app that registered only the generated interface would
+ * pass. Android asks for the JVM class descriptor, whose leading `L` and
+ * trailing `;` no spec name has, and iOS for the length-prefixed name Swift's
+ * metadata writes, whose prefix differs for the spec.
  *
  * @param {'ios' | 'android'} platform
  * @param {string} name component name, e.g. `Switch`
@@ -154,8 +103,6 @@ export function componentNeedle(platform, name) {
 /**
  * The iOS registration list, read out of nitrogen's autolinker: every
  * `createNitroUi<Name>()` there is a hybrid the app can be asked to instantiate.
- * Reading the generated file instead of keeping a list here means a new
- * component joins the gate on the commit that adds it, with nothing to remember.
  *
  * @param {string} source contents of `nitrogen/generated/ios/NitroUiAutolinking.swift`
  * @returns {string[]} component names, e.g. `['Button', 'Switch', ...]`
@@ -187,8 +134,7 @@ export function parseAndroidComponentNames(fileNames) {
 /**
  * Hybrid class names are present in a binary as plain text (Swift metadata and
  * the C++ mangled names on iOS; the dex type list on Android), so a byte scan
- * finds them without `nm`, `dexdump` or `apkanalyzer` - and works the same on a
- * debug dylib and on a stripped release binary.
+ * finds them.
  *
  * @param {Buffer} buffer
  * @param {string} needle
@@ -209,13 +155,9 @@ export function countOccurrences(buffer, needle) {
 }
 
 /**
- * Read a ZIP archive's entries.
- *
- * Needed because a `.dex` is deflate-compressed in some AGP configurations, and
- * scanning the raw APK bytes for a class name would then report a component as
- * *missing* - a refusal that blocks a device gate over nothing. Enough of the
- * format to get name + bytes: end-of-central-directory, central directory, local
- * headers. Handles stored and deflated, which is all an APK contains.
+ * Reads a ZIP archive's entries: a `.dex` is deflate-compressed in some AGP
+ * configurations, and a class name cannot be found in compressed bytes. Handles
+ * stored and deflated entries, which is all an APK contains.
  *
  * @param {Buffer} buffer
  * @returns {{name: string, method: number, data: Buffer}[]}
@@ -269,8 +211,7 @@ export function zipEntries(buffer) {
 }
 
 /**
- * Every `classes*.dex` in an APK, decompressed, plus how they were obtained -
- * recorded in the stamp so a change of packaging shows up in the evidence.
+ * Every `classes*.dex` in an APK, decompressed, plus how they were obtained.
  *
  * @param {Buffer} apkBuffer
  * @param {((message: string) => void)} [warn]
@@ -289,8 +230,7 @@ export function dexBlobs(apkBuffer, warn = () => {}) {
     if (blobs.length === 0) throw new Error('no classes*.dex entry');
     return { blobs, source: 'zip' };
   } catch (error) {
-    // An APK *is* a ZIP, so the bytes of a stored dex are still in there; scan
-    // the whole file rather than refusing when the parse is the thing that failed.
+    // The bytes of a stored dex are still in the APK, so scan the whole file.
     warn(
       `could not read the APK's dex entries (${String(error.message)}); ` +
         'scanning the APK bytes instead, which misses a compressed dex'
@@ -300,12 +240,9 @@ export function dexBlobs(apkBuffer, warn = () => {}) {
 }
 
 /**
- * Which runner this process is starting, read off the command line.
- *
- * The gate has to know the platform before the harness boots a device (a
- * refusal after a boot would hold someone else's simulator), and the config
- * module is imported before the harness parses its own arguments - so `argv` is
- * the only place it is written.
+ * Which runner this process is starting, read off the command line: the config
+ * module is imported before the harness parses its own arguments, and the gate
+ * must refuse before a device boots.
  *
  * @param {string[]} argv `process.argv`
  * @returns {'ios'|'android'|null}
@@ -325,11 +262,9 @@ export function runnerFromArgv(argv) {
 }
 
 /**
- * The subcommands `harness ci …` answers to, mirrored from the pinned CLI
- * (`CI_SUBCOMMANDS` in `@react-native-harness/cli/dist/index.js`). They are the
- * only steps that read the harness config without running a device test, and
- * `scripts/__tests__/ci-harness-config.test.js` refuses a drift between this
- * list and that file, so this stays a copy of the truth rather than a guess.
+ * The subcommands `harness ci …` answers to, which must match `CI_SUBCOMMANDS` in
+ * `@react-native-harness/cli/dist/index.js`. They read the harness config without
+ * running a device test.
  */
 export const HARNESS_CI_SUBCOMMANDS = Object.freeze([
   'load-config',
@@ -340,17 +275,9 @@ export const HARNESS_CI_SUBCOMMANDS = Object.freeze([
 
 /**
  * Which runner this process is starting, read off the environment the
- * `react-native-harness` GitHub Action sets (F4).
- *
- * Why `argv` is not enough: the action's `Load React Native Harness
- * Configuration` step runs `harness ci load-config`, which names no runner on
- * its command line, and that step *imports this config to read it*. Before F4 an
- * Android CI job therefore loaded the config as iOS, looked for the iOS `.app`
- * it had never built, and refused (`bun run harness:ios: no app to test` inside
- * `Harness (Android)`, run 40382254368). The action hands the answer over twice:
- * `INPUT_RUNNER` for its `ci …` steps, `HARNESS_RUNNER` for the test run. Both
- * are facts about the pinned action's own step environment, and argv still wins
- * because that is what a local run types.
+ * `react-native-harness` GitHub Action sets: `INPUT_RUNNER` for its `ci …` steps,
+ * which name no runner on their command line, and `HARNESS_RUNNER` for the test
+ * run.
  *
  * @param {Record<string, string | undefined>} env `process.env`
  * @returns {'ios'|'android'|null}
@@ -364,30 +291,14 @@ export function runnerFromEnv(env) {
 }
 
 /**
- * What `example/rn-harness.config.mjs` should test, before any of it is refused.
+ * What `example/rn-harness.config.mjs` should test:
  *
- * The config file is where the stamp gate lives, because that is the earliest
- * point both platforms reach; it is also a file with a simulator, an emulator and
- * a Metro port behind it, so the *decision* is made here where a test can hand it
- * a fake filesystem and a fake command line.
- *
- * Three things it has to get right, each a CI failure or a local one:
- *
- *   - **which platform** (`runner`), from argv then the action's environment. A
- *     CI job for one platform loading the config as the other goes looking for
- *     an app that job never built (see {@link runnerFromEnv});
- *   - **whether this read is a device run at all** (`ciStep`). The action reads
- *     the config from four more steps whose only job is to plan a cache, one of
- *     them after a red test run; a refusal there replaces the harness's own
- *     report with a config error;
- *   - **an absolute artifact path** (`artifact`). `react-native-harness` only
- *     asks `existsSync` on `HARNESS_APP_PATH`, from the *project root* -
- *     `example/`, not where a workflow was written - so a relative path meant a
- *     run that never installed the app and died as an opaque `AbortError` (what
- *     A2 lost three runs to). A path that exists from the project root wins; one
- *     that exists only from the repo root is read that way, so both conventions
- *     a person can type work; anything else is resolved against the project root
- *     and reported by the harness as the missing file it is.
+ *   - `runner`: the platform, from argv, then the action's environment;
+ *   - `ciStep`: whether this read is a `harness ci …` step and not a device run,
+ *     so the stamp gate does not refuse it;
+ *   - `artifact`: an absolute path. `react-native-harness` resolves
+ *     `HARNESS_APP_PATH` from the project root (`example/`), so a relative path
+ *     that exists from there wins, then one that exists from the repo root.
  *
  * @param {object} options
  * @param {string[]} options.argv `process.argv`
@@ -408,10 +319,8 @@ export function selectHarnessApp({
   parentDir = null,
 }) {
   const runner = runnerFromArgv(argv) ?? runnerFromEnv(env) ?? 'ios';
-  // `harness ci <subcommand>`, matched exactly as the CLI matches it
-  // (`CI_SUBCOMMANDS` in @react-native-harness/cli/dist/index.js): argv[2] is
-  // `ci` because bin.js is argv[1]. Anything else - including a test file named
-  // `ci` - is a device run and does gate.
+  // `harness ci <subcommand>`: argv[2] is `ci` because bin.js is argv[1].
+  // Anything else, including a test file named `ci`, is a device run.
   const ciStep =
     runnerFromArgv(argv) == null &&
     argv[2] === 'ci' &&
@@ -434,8 +343,6 @@ export function selectHarnessApp({
 }
 
 /**
- * See {@link selectHarnessApp} for the rule this implements.
- *
  * @param {string} explicit what `HARNESS_APP_PATH` said
  * @param {object} options
  * @param {(file: string) => boolean} options.existsSync
@@ -454,14 +361,12 @@ export function resolveAppPath(
     const fromParent = joinPath(parentDir, explicit);
     if (existsSync(fromParent)) return fromParent;
   }
-  // Nothing answers to either base. Report it relative to the project root,
-  // which is where the harness will look and where its own message will point.
+  // Neither exists: the project root is where the harness will look.
   return fromCwd;
 }
 
 /**
- * `path.isAbsolute` / `path.join` without importing `node:path`, so these stay
- * usable with a Windows-style argument in a test that has no Windows.
+ * Not `node:path`, so a Windows-style argument works on any host.
  *
  * @param {string} file
  * @returns {boolean}
@@ -501,9 +406,6 @@ export function platformForArtifact(artifact) {
 /**
  * The gate itself: does `app.stamp` still describe this tree and this binary?
  *
- * Kept as a pure decision so the refusal wording is unit-testable and the
- * callers (harness config, real-input, `build-app.mjs`) all say the same thing.
- *
  * @param {object} options
  * @param {{tree?: string, head?: string, artifact?: string, artifactPath?: string, fingerprint?: string, counts?: Record<string, number>} | null} options.stamp
  * @param {{tree: string, head: string, files: number}} options.current
@@ -541,13 +443,8 @@ export function decideFreshness({
     );
   }
 
-  // The stamp has to describe *this file*. Two worktrees of this repo each have
-  // an `example/android/app/build/outputs/apk/debug/app-debug.apk` at the same
-  // path with different contents, and a stamp from one made the other's gate
-  // read green (review M2). Path and content both have to agree: the path alone
-  // is a copy or a symlink, the content alone is another worktree's identical
-  // build, and the pair is what makes "this binary came from this tree" mean
-  // something.
+  // The stamp has to describe this file: path and content must both agree, because
+  // another worktree has an artifact at the same relative path.
   if (stamp != null && typeof stamp.tree === 'string') {
     const stampedPath =
       typeof stamp.artifactPath === 'string' ? stamp.artifactPath : null;
@@ -555,8 +452,6 @@ export function decideFreshness({
       .split('/')
       .pop();
     if (stampedPath == null) {
-      // Written before the binding existed. Nothing about the file can be
-      // checked, which is the whole point of the stamp.
       problems.push(
         `app.stamp for ${platform} predates the artifact binding and cannot ` +
           `say which ${artifactName} it was written for`

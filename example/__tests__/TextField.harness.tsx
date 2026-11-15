@@ -1,24 +1,3 @@
-/**
- * On-device tests for the TextField (G13).
- *
- * The typing here is IME-level on both platforms, never a write into the field's
- * state:
- * - **iOS**: `HarnessUI.typeChar` calls `insertText(_:)` on the first responder -
- *   the `UITextInput` call a keyboard makes - so it runs the field's delegate
- *   (`maxLength`) and its `editingChanged`.
- * - **Android**: `HarnessUI.typeChar` only reaches an `EditText`, and a Compose
- *   field has none (Q2 §4), so the example app's `NitroUiProbe.imeInput` commits the
- *   text through the focused view's own `InputConnection`, as an IME does. The edit
- *   runs the field's `InputTransformation` like a keyboard's would.
- * The OS-level oracle - keystrokes from outside the app - is the real-input suite
- * (`CHECKS['text-field']`, `testRealInputTextField`).
- *
- * A composition (marked text) is opened the same two ways: `setMarkedText` on the
- * iOS first responder (`nuiTestSetMarkedText`), `setComposingText` on the Android
- * connection.
- *
- * @file Gates: `harness:ios`, `harness:android`.
- */
 import {
   useCallback,
   useEffect,
@@ -86,7 +65,7 @@ type FieldState = {
   accessibilityLabel: string;
 };
 
-/** The `hybridRef` handle, declared here (D14: no public Hybrid View types). */
+/** The `hybridRef` handle; the library exports no Hybrid View types. */
 type FieldHandle = {
   measureContent(): { width: number; height: number };
   focus(): void;
@@ -159,9 +138,9 @@ async function focusField(id: string) {
 }
 
 /**
- * Type `text` into the focused field one key at a time, as a keyboard does: one code
- * point per key (Hermes has no `Intl.Segmenter`), which is what a single-code-point
- * emoji key sends. A ZWJ sequence is only ever sent whole (`insertAtOnce`).
+ * Types one code point per key (Hermes has no `Intl.Segmenter`). Android commits
+ * through the probe's `InputConnection`, as an IME does: `HarnessUI.typeChar` only
+ * reaches an `EditText`, and a Compose field has none.
  */
 async function typeText(text: string) {
   for (const grapheme of Array.from(text)) {
@@ -184,7 +163,6 @@ async function insertAtOnce(text: string) {
   await sleep(30);
 }
 
-/** Open (or update) an IME composition holding `text`. */
 async function compose(id: string, text: string) {
   if (iOS) {
     (await handleOf(id)).nuiTestSetMarkedText(text);
@@ -194,7 +172,6 @@ async function compose(id: string, text: string) {
   }
 }
 
-/** Commit the open composition. */
 async function finishComposition(id: string) {
   if (iOS) {
     (await handleOf(id)).nuiTestSetMarkedText('');
@@ -203,7 +180,6 @@ async function finishComposition(id: string) {
   }
 }
 
-/** Press Return on the focused field. */
 async function pressReturn() {
   if (iOS) {
     await harnessUi.blur({ submitEditing: true });
@@ -385,8 +361,8 @@ describe('TextField', () => {
       'the revert'
     );
     expect(reverted.lastWrite).toBe('applied');
-    // The oracle that cannot be faked by a report: the next keystroke lands on the
-    // reverted text. Without the revert this would report `frozenxy`.
+    // The next keystroke lands on the reverted text; without the revert it would
+    // report `frozenxy`.
     await typeText('y');
     await waitFor(
       () => expect(eventsOf('frozen')).toContain('change:frozeny'),
@@ -439,12 +415,9 @@ describe('TextField', () => {
   });
 
   /*
-   * iOS only. Android holds a write back under `TextFieldState.composition` the same
-   * way, but a composition opened through an `InputConnection` from outside the IME
-   * is committed again before the app sees it on the lease's emulator - measured with a
-   * fresh connection per call and with one reused connection (G13 round 1) - so there
-   * is no composition to write into here. `TextFieldModelTest` holds the Android rules
-   * (emit while composing, the cap, the settle) on the JVM instead.
+   * iOS only: on the Android emulator a composition opened through an
+   * `InputConnection` from outside the IME is committed before the app sees it, so
+   * there is no composition to write into.
    */
   const itComposes = iOS ? it : it.skip;
   itComposes(
@@ -526,8 +499,7 @@ describe('TextField', () => {
       const ref = useRef<TextFieldHandle>(null);
       const onFocus = useCallback(() => log('mount-focus', 'focus'), []);
       useEffect(() => {
-        // The only autofocus there is in v1: ask on mount, before the native view has
-        // reached JS.
+        // Asked on mount, before the native view has reached JS.
         ref.current?.focus();
       }, []);
       return (
@@ -552,13 +524,10 @@ describe('TextField', () => {
   });
 
   /*
-   * The keyboard's own edit path, mid-text. `insertText` (what `typeText` uses)
-   * skips the `UITextField` delegate, so for typing at the end the post-edit
-   * backstop's tail cut and the delegate's insertion cut give the same answer; a paste
-   * into the middle is where they differ: `ab xy cd` (the part of the paste that
-   * fits) against `ab xyz c` (the end cut off). Between two spaces, because UIKit's
-   * smart insert pads a paste next to anything else with a space (measured: `xyz`
-   * arrived as ` xyz`, `-+=` as ` -+=`). iOS only - the paste hook is UIKit's.
+   * iOS only: the paste hook is UIKit's. `insertText` (what `typeText` uses) skips
+   * the `UITextField` delegate, so only a mid-text paste tells the delegate's
+   * insertion cut from a cut at the tail. The paste goes between two spaces because
+   * UIKit's smart insert pads a paste next to anything else with a space.
    */
   const itPastes = iOS ? it : it.skip;
   itPastes(
@@ -810,14 +779,10 @@ describe('TextField', () => {
   });
 
   /*
-   * Keystroke-to-commit against React Native's own `TextInput`, the two arms
-   * interleaved block by block so both see the same machine in the same seconds
-   * (T19's lesson). A keystroke is the same IME-level call into either field
-   * (`insertText` on iOS, `InputConnection.commitText` on Android); the clock starts
-   * in JS before that call and stops in the layout effect that commits the new text,
-   * so both arms pay the same JS -> UI hop and the difference is the field. What this
-   * test gates is that every key commits on both arms; the p50/p95 pair it measures is
-   * printed for the log, not judged — a duration gets its verdict in `bench/`.
+   * The two arms are interleaved block by block so both see the same machine load.
+   * The clock starts in JS before the key and stops in the layout effect that commits
+   * the text. The timings are printed, not judged: the test only requires that every
+   * key commits on both arms.
    */
   it('commits a keystroke about as fast as RN TextInput', async () => {
     commits.length = 0;
@@ -889,10 +854,6 @@ describe('TextField', () => {
         p95: percentile(samples.rn, 0.95),
       },
     };
-    // The bar that used to sit here was `nitro` p95 under 1.5x the `rn` p95 — a
-    // duration, which no gate run judges (X37 removed the timing gate, whose
-    // `HARNESS_TIMING=1` was set by nobody). The two arms are still printed side by
-    // side so a regression is visible in the log of any run.
     console.log(
       `keystroke->commit: nitro p50 ${summary.nitro.p50.toFixed(1)} / p95 ` +
         `${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ` +

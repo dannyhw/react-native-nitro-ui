@@ -14,7 +14,7 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // Test-only probe for example/__tests__/MountChurn.android.harness.tsx (task B1).
+          // Test-only probe module for the harness tests.
           add(NitroUiProbePackage())
         },
     )
@@ -23,12 +23,9 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
-    // After `loadReactNative`, for two reasons that are easy to get wrong and were each
-    // learned from a crash: it is what initialises SoLoader (the flag accessor's class
-    // cannot load before that), and it is what installs RN's own flag provider - and the
-    // C++ side takes one provider per process, so installing ours first and RN's second
-    // would throw, not merge. See NitroUiFeatureFlags for the full reason, including why
-    // the install has to *force*.
+    // Must follow `loadReactNative`: that initialises SoLoader, which the flag accessor
+    // needs, and installs RN's own flag provider. The C++ side takes one provider per
+    // process, so installing ours first would make RN's install throw.
     NitroUiFeatureFlags.install()
   }
 }

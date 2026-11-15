@@ -1,30 +1,3 @@
-/**
- * On-device tests for the SegmentedControl (task G4).
- *
- * SegmentedControl is the second control whose *size comes from its props*, and
- * the first whose size comes from a *list*: the labels are the width, so the
- * option list is the whole size configuration. That makes this suite the R3 test
- * DECISIONS D16 gives it - does an `options` change move the box Yoga was told -
- * plus the controlled-value story the Switch suite started: a tap paints at once
- * and a change React refuses has to snap back.
- *
- * Three readings, as in the Button suite:
- *  - `harnessUi.queryByTestId` - the box Fabric gave the view;
- *  - `hybridRef.measureContent()` - the size the hosted control measured;
- *  - `nitroUiCore.sizingStats()` / `drainSizingTrace()` - what the engine did.
- *
- * Two things make these tests able to fail (AGENTS.md, "Every new test or gate
- * must be shown to fail"):
- *  - every cold configuration is **poisoned** first (`seedSizingSize` with a size
- *    no segmented control has, then an environment bump), so a correction that
- *    never arrives leaves a visible wrong box *and* costs a correction the test
- *    requires;
- *  - the warm assertions require **zero** corrections, which on a second pass
- *    leaves the measure pass as the only road to the new size.
- *
- * Deliberately absent: a `beforeAll` that mounts a control to "warm the process",
- * which hides the process-local first-instance behaviour D17 is about.
- */
 import { useState } from 'react';
 import {
   Platform,
@@ -62,10 +35,6 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * What `hybridRef` hands back - declared, not imported (DECISIONS D14 keeps
- * Hybrid View types off the public surface). Read-only on purpose.
- */
 type SegmentedHandle = {
   readonly options: string[];
   /** The index as React sent it, normalised against `options`; null if uncontrolled. */
@@ -74,29 +43,15 @@ type SegmentedHandle = {
   readonly disabled: boolean;
   readonly tintColor: number | null;
   readonly accessibilityLabel: string | null;
-  /**
-   * Declared optional: a callback prop is not part of what the wrapper
-   * advertises (D14), and the runtime object has it. Reading it is how the iOS
-   * half of the event contract is asserted where a synthesised tap cannot reach
-   * a hosted SwiftUI control - see the Button suite for the measurement.
-   */
   readonly onValueChange?: unknown;
   measureContent(): { width: number; height: number };
-  /**
-   * Ask the platform what this control actually drew, and read the answer back
-   * (`nuiTestPixelProbe` is fire-and-forget on the UI thread, so the report arrives
-   * on a later read). Declared, not imported: D14 keeps Hybrid View types off the
-   * public surface.
-   */
+  /** Fire-and-forget on the UI thread; the answer arrives in a later report. */
   nuiTestPixelProbe(color: number): void;
   nuiTestPixelReport(): string;
   /**
-   * What the *hosted row* is painting as its selection (`displayed=<index>`, or
-   * `displayed=none` before it has drawn once). Declared optional for the same
-   * reason as `onValueChange`: D14 keeps it off the public surface. It is the only
-   * reading in this file that can see an uncontrolled selection, because the
-   * handle's `selectedIndex` answers `state.js` - null on a control React does not
-   * control. The Conformance recycle probe depends on it for the same reason.
+   * What the hosted row is painting as its selection: `displayed=<index>`, or
+   * `displayed=none` before the first draw. The only reading that can see an
+   * uncontrolled selection, because `selectedIndex` is null on one.
    */
   nuiTestDisplayedIndex?(): string;
 };
@@ -109,13 +64,7 @@ const captureHybrid =
     handles.set(testId, view);
   };
 
-/**
- * Every `onChange` the app has reported, in order: `testID:index`.
- *
- * A selection is the one thing a geometry query cannot see, and re-rendering to
- * show one would spend a render on the measurement. Native holds the callback, so
- * this array is what the event actually reached.
- */
+/** Every `onChange` the app has reported, in order: `testID:index`. */
 const eventLog: string[] = [];
 const recordChange =
   (testId: string) =>
@@ -162,12 +111,7 @@ function sizeOf(testId: string): Size | null {
   return harnessUi.queryByTestId(testId);
 }
 
-/**
- * The same box with its position, for a test that taps at an edge of it.
- *
- * `sizeOf` answers with a `Size` because that is all a sizing assertion reads; the
- * coordinates are screen dp, the unit `userEvent.pressAt` takes.
- */
+/** The box with its position in screen dp, the unit `userEvent.pressAt` takes. */
 function boxOf(testId: string): ViewInfo | null {
   return harnessUi.queryByTestId(testId);
 }
@@ -199,12 +143,8 @@ async function pollUntil<T>(
 }
 
 /**
- * Ask the hosted row what it is painting as its selection, and wait for `want`
- * (`displayed=<index>`, or `displayed=none` before the first draw).
- *
- * The read-out is written from the draw path, so an update that has been applied
- * but not yet drawn is not visible until the next frame; polling is what makes the
- * assertion about what was drawn rather than what was stored.
+ * Wait until the hosted row reports painting `want` as its selection. The read-out
+ * is written from the draw path, so an applied update shows up a frame later.
  */
 async function waitForDisplayed(
   testId: string,
@@ -252,13 +192,9 @@ async function waitForBox(testId: string, size: Size, what: string) {
 }
 
 /**
- * Poll until the control reports a size that is *not* `previous`.
- *
- * `measureContent()` answers with the size the hosted control last measured, and
- * on Android that is still the old one for the frame in which the new option list
- * landed: Compose recomposes and re-measures on the UI thread. Waiting for "a
- * size" would return the pre-change number, so the wait is for a *different* one
- * (see `waitForRemeasure` in the Button suite, which found this first).
+ * Poll until the control reports a size that is not `previous`. On Android
+ * `measureContent()` still answers the old size for the frame in which new props
+ * landed, because Compose re-measures on the UI thread.
  */
 async function waitForRemeasure(
   testId: string,
@@ -303,13 +239,9 @@ async function waitForEvents(count: number) {
 }
 
 /**
- * The key `SegmentedControl.tsx` builds: `optionCount|label|label|...`, each label
- * escaped so a `|` or a `\` inside one cannot forge a separator.
- *
- * Written out here rather than imported - a harness that poisoned the cache
- * through the library's own helper could not catch the helper being wrong, and a
- * missing input in that key is precisely the R3 bug class (every later option list
- * inherits the first one's size).
+ * The sizing key `SegmentedControl.tsx` builds: `optionCount|label|label|...`, with
+ * `|` and `\` escaped in each label. Written out here rather than imported, so a
+ * wrong key in the library cannot agree with itself.
  */
 function sizingKey(options: readonly string[]): string {
   return `${String(options.length)}|${options
@@ -318,14 +250,9 @@ function sizingKey(options: readonly string[]): string {
 }
 
 /**
- * A size that is *not* any segmented control's size, planted as the engine's
- * answer for a configuration before it is first mounted.
- *
- * The declared fallback is deliberately close to the truth (D17), which on its own
- * would make every "the box was right" assertion pass even if no correction ever
- * arrived. A poisoned entry is provisional, so it lays the first frame out and
- * then *must* be replaced: the test requires both the right final box and at least
- * one correction.
+ * A size no segmented control has, planted as the engine's answer for a
+ * configuration before its first mount. The declared fallback is close to the real
+ * size, so without this a correction that never arrived would go unnoticed.
  */
 const WRONG_SIZE = { width: 13.25, height: 66.5 };
 
@@ -349,12 +276,8 @@ async function settle(ms = 250): Promise<void> {
 
 /**
  * Ask `testId`'s control what colour it drew, and wait for that probe's own answer.
- *
- * `nuiTestPixelProbe` is fire-and-forget: reading pixels needs the UI thread and a
- * Nitro method may not block for it, so the result arrives on a later read of
- * `nuiTestPixelReport`. Each report is numbered (`n=3 …`) precisely so this can wait
- * for *this* probe rather than for the previous one to have gone stale - the same
- * reason Slider's `accessibilityStepReport` helper polls on change.
+ * The probe runs on the UI thread without blocking, and each report is numbered, so
+ * this waits for the report to change.
  */
 async function pixelProbe(
   testId: string,
@@ -381,22 +304,12 @@ async function pixelProbe(
       ),
     8000
   );
-  // A report that sampled nothing means the control drew nothing at all - a view that
-  // is not on screen, or a host whose layer is empty. Waiting on that would make every
-  // later assertion pass for the wrong reason, so it fails here, where it reads.
+  // A probe that sampled nothing would make every "absent" assertion pass.
   if (/no pixels|no image|no context|no colour|size=0x/.test(report)) {
     throw new Error(
       `the pixel probe for "${testId}" (${what}) sampled nothing: ${report}`
     );
   }
-  // The report's own shape, checked on every probe rather than trusted. Both
-  // platforms composite over a backdrop and average the whole control into `mean`, and
-  // an average is exactly where an arithmetic slip hides: iOS's first version weighted
-  // each channel by the pixel's alpha - always 255 once composited - and divided by the
-  // pixel count, so every channel came out 255x too large and the sum spilled out of
-  // the six digits it prints into (`mean=#8FAFB6EB`). A malformed `mean` is not only
-  // unreadable, it is a field a later round was invited to assert on, so a platform that
-  // starts overrunning it has to fail here rather than read as a colour nobody expected.
   if (!/ mean=#[0-9A-F]{6}( |$)/.test(report)) {
     throw new Error(
       `the pixel probe for "${testId}" (${what}) reported a mean that is not six ` +
@@ -407,11 +320,8 @@ async function pixelProbe(
 }
 
 /**
- * Require the probe report to say the colour was, or was not, on the screen.
- *
- * Thrown rather than `expect(...).toMatch`, because the whole diagnosis is in the
- * report line - the size, how many pixels hit, the mean colour and the nearest one
- * found - and Jest shortens long strings in a matcher failure.
+ * Require the probe report to say the colour was, or was not, on the screen. Thrown
+ * rather than matched, because a matcher failure shortens the report line.
  */
 function expectPixels(
   report: string,
@@ -433,12 +343,7 @@ function expectPixels(
 
 /**
  * Tap the middle of segment `index` of `testId` and require exactly one change event
- * for that index.
- *
- * `pressBothEnds` taps both ends and compares the whole log, which is what its own
- * test wants and what this one cannot use: the tint test taps one segment at a time and
- * needs to know which tap moved it. The centre is a fair target here because the row is
- * as wide as its labels - no over-wide fitting is involved, so no segment is off box.
+ * for that index. Assumes equal-width segments in a row that fits its box.
  */
 async function tapSegment(
   testId: string,
@@ -458,14 +363,9 @@ async function tapSegment(
 
 /**
  * Tap both ends of a control's box and require `expected` to be the log after.
- *
- * The tap is the only honest oracle for where a hosted row's segments actually
- * are: the harness dispatches real MotionEvents from the window root, so Compose
- * hit-tests this the way a finger is hit-tested, while its segments are virtual
- * nodes that no geometry query can see. Both ends matter - content drawn wider
- * than its box is centred, so each end of the box shows a *different* neighbour's
- * segment - and the expected log is spelled out by the caller so a test that taps
- * twice reads as one sequence.
+ * Compose's segments are virtual nodes no geometry query can see, so a tap is how
+ * a test learns which segment is where. Content drawn wider than its box is
+ * centred, so each end of the box would show a different neighbour's segment.
  */
 async function pressBothEnds(
   testId: string,
@@ -475,8 +375,7 @@ async function pressBothEnds(
   expect(box).not.toBeNull();
   await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
   await userEvent.pressAt(box!.x + 2, box!.y + box!.height / 2);
-  // Joined, so a red run says which segment got the tap: the harness prints an
-  // array diff abbreviated (`…(2)`), which hides exactly the fact under test.
+  // Joined, because the harness abbreviates an array diff.
   expect((await waitForEvents(expected.length)).join(',')).toEqual(
     [...expected].join(',')
   );
@@ -493,18 +392,9 @@ afterEach(() => {
 
 describe('SegmentedControl · G4', () => {
   it('lays each option list out at the size the control measured', async () => {
-    // The base R3 claim for this component: the labels are the width, so three
-    // option lists in one row must get three boxes. A missing `options` input in
-    // the sizing key, or a host that never reports, both look like a row of
-    // identical boxes from here.
     const SHORT = ['Go'];
     const MIDDLE = ['One', 'Two', 'Three'];
-    // Four labels, wide enough to be a third distinct width and narrow enough to
-    // fit either device's window. The first version of this list measured 417.14
-    // dp on Android against a 411.43 dp screen, and Yoga clamped the box to the
-    // window - a true fact about a caller's width winning, but not the claim this
-    // test makes. (`['January', …]` is still what `waitForMeasured` reports; only
-    // the laid-out box is clamped.)
+    // Narrow enough to fit either device's window: Yoga clamps a wider box.
     const LONG = ['North', 'South', 'East', 'West'];
     poisonConfigurations([
       sizingKey(SHORT),
@@ -548,46 +438,21 @@ describe('SegmentedControl · G4', () => {
         `middle=${describeSize(middleSize)} long=${describeSize(longSize)} ` +
         `cold=${JSON.stringify(cold)}`
     );
-    // Three configurations, all poisoned, so three corrections - and three cache
-    // entries. One entry shared by two of them is the missing-input bug, and it
-    // would also make two of these widths equal.
+    // Three poisoned configurations: three corrections and three cache entries.
     expect(cold.corrections).toBeGreaterThanOrEqual(3);
     expect(cold.cachedSizes).toBeGreaterThanOrEqual(3);
     expect(middleSize.width).toBeGreaterThan(shortSize.width + 1);
     expect(longSize.width).toBeGreaterThan(middleSize.width + 1);
-    // The height is the platform's control height and does not move with the
-    // labels - if it did, the fallback (one number per component) would be wrong
-    // for every option list but one.
+    // The height does not move with the labels.
     expect(
       sameSize(shortSize, { width: shortSize.width, height: longSize.height })
     ).toBe(true);
     unmount();
   });
 
-  /**
-   * The row is the sum of its own segments, not n x the widest one.
-   *
-   * E1 fix round 2's regression guard, and the arithmetic the connected group got
-   * wrong for two rounds: with `Modifier.weight` on each item, an item's equal share
-   * is also its ceiling, and the row's own demand at `width(IntrinsicSize.Max)` is
-   * n x the widest item - so a row of unequal labels was laid out at the *mean* of
-   * itself, widest label ellipsized by its own row, with the difference left as
-   * unpainted space at the end of a box that was still n x the widest label. The
-   * five labels below asked for 324.6 dp of segments and were laid out in a box of
-   * 363.4 dp, which is a control that looks off-centre when it is centred and whose
-   * dead tail ignores taps.
-   *
-   * The oracle is the same control measured one label at a time: a one-option row is
-   * that label's segment, so the five of them plus the four 2 dp gaps the group puts
-   * between items *is* the width the row has to have. Nothing here hard-codes a
-   * number, so the assertion holds across a font, a density or a padding change -
-   * and it is 5 x the widest minus the sum that goes red, not a constant.
-   *
-   * Android only for the sum: iOS draws a segmented `Picker`, whose segments share
-   * its own width and whose one-option row carries its own chrome, so the sum is not
-   * what iOS's row is either - measured here so the pairing is on the record, and
-   * asserted where the claim is.
-   */
+  // The expected width is the same control measured one label at a time, plus the
+  // gaps between segments. Asserted on Android only: an iOS segmented `Picker`
+  // shares its width equally between segments.
   it('is as wide as its own segments added up', async () => {
     const FIVE = ['Hour', 'Day', 'Week', 'Month', 'Year'];
     /** `ButtonGroupDefaults.ConnectedSpaceBetween`, the gap between two segments. */
@@ -622,10 +487,6 @@ describe('SegmentedControl · G4', () => {
     const wanted =
       singles.reduce((total, width) => total + width, 0) +
       GAP_DP * (FIVE.length - 1);
-    // The box has to arrive at the row's own width, and `waitForBox` is the poll
-    // that lets it: laid out at the declared fallback first (D17), corrected the turn
-    // the measure lands. A box wider than what the row draws is the dead tail, and it
-    // is dead to a finger as much as to an eye.
     const box = await waitForBox('five', row, 'the five-label row');
     console.log(
       `sum of segments (${Platform.OS}): singles=[${singles
@@ -636,8 +497,6 @@ describe('SegmentedControl · G4', () => {
     );
 
     if (Platform.OS === 'android') {
-      // The row of *this* test: measured against its own segments, not a constant, so
-      // a font or density change moves both sides of the comparison together.
       expect(
         Math.abs(row.width - wanted) < 1 ||
           `the row of ${FIVE.join(', ')} measures ${describeSize(
@@ -700,10 +559,8 @@ describe('SegmentedControl · G4', () => {
     );
     await waitForBox('opts', shortSize, 'the one-option list again');
 
-    // Warm *now*: both configurations are in the cache, so from here a turn that
-    // moves the size must cost no state update (D17). A node that fails to dirty
-    // its measurement after an `options` change has only corrections to reach the
-    // new size with, and the zero below refuses them.
+    // Both configurations are cached now, so a size change from here must cost no
+    // correction: the measure pass alone has to reach the new size.
     await settle(150);
     const warmBefore = stats();
     await rerender(
@@ -730,25 +587,15 @@ describe('SegmentedControl · G4', () => {
     );
     expect(warm.corrections).toBe(0);
     expect(warm.cachedSizes).toBe(0);
-    // ...while the control did re-measure, twice. Zero corrections with zero
-    // measurements would mean nothing happened, not that nothing was needed.
+    // Zero corrections with zero measurements would mean nothing happened at all.
     expect(warm.measurements).toBeGreaterThanOrEqual(2);
     unmount();
   });
 
   it('re-reports a key change that keeps the size (R3)', async () => {
-    // Review F1's shape, for this component: the option list changes, so the key
-    // changes and the engine has no answer for it - but the new list measures what
-    // the old one did. Each host skips a report within 0.5 of the size it reported
-    // last, so the one report that could move the box off the poisoned guess is
-    // the one the dedupe swallows, unless the key change itself resets the memory
-    // (`noteSizingKeyChanged`).
-    //
-    // The same two labels, in the other order. Each platform's width is a sum
-    // over segments (measured: `['Left', 'Right']` and `['Right', 'Left']` are
-    // 164.95 dp on Android and 102.0 pt on iOS either way), so the two lists
-    // measure alike while their keys differ - the one input a caller may really
-    // change without moving the control at all.
+    // The same two labels in the other order: the key changes and the measured size
+    // does not. A host skips a report within 0.5 of the last one it sent, so the
+    // key change itself has to reset that memory.
     const FIRST = ['Left', 'Right'];
     const SECOND = ['Right', 'Left'];
     poisonConfigurations([sizingKey(FIRST), sizingKey(SECOND)]);
@@ -776,8 +623,8 @@ describe('SegmentedControl · G4', () => {
         hybridRef={captureHybrid('same')}
       />
     );
-    // No `waitForRemeasure`: the control may still measure `size`, so the box and
-    // the engine's counters are the only readings that can show the fix.
+    // No `waitForRemeasure`: the control still measures `size`, so only the box and
+    // the engine's counters can change.
     await settle(500);
     const box = sizeOf('same');
     const after = delta(changed, stats());
@@ -785,21 +632,16 @@ describe('SegmentedControl · G4', () => {
       `same-size key change (${Platform.OS}): box=${describeSize(box)} ` +
         `measured=${describeSize(measured('same'))} delta=${JSON.stringify(after)}`
     );
-    // The visible bug first: the box would still be the guess.
     expect(sameSize(box, WRONG_SIZE)).toBe(false);
-    // ...and the box agrees with what the control measures now, whatever that is.
     expect(sameSize(box, measured('same'))).toBe(true);
     expect(after.corrections).toBeGreaterThanOrEqual(1);
     unmount();
   });
 
   it('keeps its size when the selection moves', async () => {
-    // Material 3 puts a check mark on the *selected* segment by default, which
-    // would make the row wider when a segment is chosen - and a size that moves
-    // with the selection would have to put the selection in `nuiSizingKey`, which
-    // is a cache fragmenter and a re-measure per tap. This component asks for
-    // label-only segments; this test is what would notice if that ever changed,
-    // on the platform where it would change (Android).
+    // Material 3 puts a check mark on the selected segment by default, which would
+    // make the row's width depend on the selection. This component asks for
+    // label-only segments.
     const { rerender, unmount } = await render(
       <SegmentedControl
         options={['Alpha', 'Beta', 'Gamma']}
@@ -829,22 +671,14 @@ describe('SegmentedControl · G4', () => {
     const moved = delta(before, stats());
     console.log(`selection turns: ${JSON.stringify(moved)}`);
     expect(sameSize(sizeOf('sel'), size)).toBe(true);
-    // Nothing had to be fixed: no correction, and no new cache entry. The
-    // *measure* count is deliberately not gated - this instance was corrected on
-    // its first frame (its configuration is cold), and D20 makes a corrected
-    // instance re-dirty its measurement on every later props turn, so three
-    // selections cost three measures here by design. The box is the claim.
+    // The measure count is not asserted: an instance that was corrected once
+    // re-measures on every later props change by design.
     expect(moved.corrections).toBe(0);
     expect(moved.cachedSizes).toBe(0);
     unmount();
   });
 
   it('clamps a selection the caller sends out of range', async () => {
-    // The documented rule (`docs/components/segmented-control.md`): an index is
-    // clamped into `options`, never dropped and never left pointing past the end.
-    // JS clamps too, so what the native side is asked for is already in range -
-    // reading it back is what proves the native side clamps as well, which is the
-    // half that matters when the two do not agree.
     const { rerender, unmount } = await render(
       <SegmentedControl
         options={['One', 'Two', 'Three']}
@@ -871,9 +705,6 @@ describe('SegmentedControl · G4', () => {
     );
     await settle(200);
     expect(handles.get('high')?.selectedIndex).toBe(0);
-    // Clamping is a repaint: the control did not change size, so no correction is
-    // owed and nothing new was cached. (Measures are not gated - see the note in
-    // the selection test above about D20.)
     const clamped = delta(before, stats());
     expect(sameSize(sizeOf('high'), wide)).toBe(true);
     expect(clamped.corrections).toBe(0);
@@ -882,27 +713,9 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('clamps an index written straight to native', async () => {
-    // What this covers, exactly: the `selectedIndex` **getter's** clamp. Both
-    // platforms normalise on read - Swift's `SegmentedControlModel.clamp(_:to:)` in
-    // the getter, Kotlin's `model.clampToDouble` in the setter that answers the read -
-    // and the handle is the only way to read the number back, so this is the test that
-    // proves a read cannot answer with an index that has no segment.
-    //
-    // What it cannot cover: the idempotent clamp at the end of `afterUpdate()`
-    // (`shown` on both platforms), which is what decides the *painted* segment. Nothing
-    // here can see it - the handle only ever reads the getter (which clamps anyway),
-    // the shrink test cannot either because the JS wrapper sends an already-clamped
-    // index, and with both `afterUpdate()` clamps deleted this suite stayed green on
-    // both platforms (proof 9 in the report). The one path that is purely native - an
-    // uncontrolled selection under a shrinking `options` - has no test (follow-up).
-    //
-    // The write through the handle is still the point: the wrapper clamps
-    // `selectedIndex`/`defaultSelectedIndex` before React sends them, so an app
-    // cannot ask native for index 9 of three segments, and this is the only door
-    // left. D14 keeps writes off the public surface for apps; this is the repo's own
-    // harness, and the write touches one thing: the handshake's raw `js` field,
-    // which is plain state on both platforms and never renders, so nothing is
-    // painted off the UI thread.
+    // The wrapper clamps the index before React sends it, so writing through the
+    // handle is the only way to hand native an out-of-range index. This covers the
+    // clamp on reading `selectedIndex` back, not which segment is painted.
     const { unmount } = await render(
       <SegmentedControl
         options={['One', 'Two', 'Three']}
@@ -913,17 +726,13 @@ describe('SegmentedControl · G4', () => {
     );
     await waitForTestId('raw');
     await settle(150);
-    // Cast away the `readonly` on purpose: the declared handle is read-only
-    // because that is what apps get, not because the property is unsettable.
     const raw = handles.get('raw') as unknown as {
       selectedIndex: number | null;
     };
-    // Uncontrolled, so native has no index of React's at all yet.
+    // Uncontrolled, so native has no index of React's yet.
     expect(raw.selectedIndex).toBe(null);
 
     raw.selectedIndex = 9;
-    // Read back through the same door: three options, so the answer is the last
-    // one that exists - never 9, which would be a selection that draws nothing.
     expect(handles.get('raw')?.selectedIndex).toBe(2);
 
     raw.selectedIndex = -3;
@@ -935,11 +744,8 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('clamps the selection and re-measures when the options shrink', async () => {
-    // The rule that has no JS-only answer: `options` and the selection arrive in
-    // one batch in no particular order, so the clamp belongs in `afterUpdate()`
-    // (core.md section 3). Shrink four options to two with the last one selected
-    // and the selection has to end up on the last remaining segment, at the new
-    // width.
+    // `options` and the selection arrive in one batch in no particular order, so
+    // native has to clamp after both have landed.
     const WIDE = ['One', 'Two', 'Three', 'Four'];
     const SMALL = ['One', 'Two'];
     poisonConfigurations([sizingKey(WIDE), sizingKey(SMALL)]);
@@ -969,22 +775,14 @@ describe('SegmentedControl · G4', () => {
     await waitForBox('shrink', smallSize, 'two options');
     expect(smallSize.width).toBeLessThan(wideSize.width - 1);
     await settle(150);
-    // The caller's index 3 does not exist any more; the last remaining one does.
     expect(handles.get('shrink')?.selectedIndex).toBe(1);
     expect(handles.get('shrink')?.options).toEqual(['One', 'Two']);
     unmount();
   });
 
   it('moves an uncontrolled selection into the list when the options shrink', async () => {
-    // The same rule as the test above, but reached with no prop that can show it.
-    // A control driven by `defaultSelectedIndex` answers `selectedIndex` as null -
-    // `state.js` is empty because React never controlled it - so the only reading
-    // that can see where the row sits is `nuiTestDisplayedIndex`, which is the
-    // hosted row's own drawing (Conformance's recycle probe relies on it the same
-    // way). A clamp that only ran where JS is in charge - or a `displayed` that was
-    // fixed up but never re-painted - leaves the third segment on screen here, and
-    // the read-out keeps saying `displayed=2` rather than the `displayed=1` the
-    // clamped model holds. Both steps have to work for this to go green.
+    // An uncontrolled control answers `selectedIndex` as null, so the only reading
+    // that shows where the row sits is `nuiTestDisplayedIndex`.
     const LARGE = ['One', 'Two', 'Three', 'Four'];
     const SMALL = ['One', 'Two'];
     const { rerender, unmount } = await render(
@@ -1001,8 +799,6 @@ describe('SegmentedControl · G4', () => {
     await waitForMeasured('uncontrolled-shrink', 'four options');
     expect(handles.get('uncontrolled-shrink')?.selectedIndex).toBeNull();
 
-    // A finger, not a prop: index 2 exists nowhere in what React sent, so the only
-    // way the row can be showing it is the control's own state.
     await tapSegment('uncontrolled-shrink', 2, LARGE.length);
     await waitForDisplayed(
       'uncontrolled-shrink',
@@ -1019,9 +815,8 @@ describe('SegmentedControl · G4', () => {
         hybridRef={captureHybrid('uncontrolled-shrink')}
       />
     );
-    // The clamp, as the row draws it: index 2 is gone, so the last remaining
-    // segment is 1. `defaultSelectedIndex` is still 0 and was never re-applied, so
-    // 1 is the clamp's answer and not the one-shot's.
+    // 1 is the clamp's answer: `defaultSelectedIndex` is still 0 and is not
+    // applied a second time.
     await waitForDisplayed(
       'uncontrolled-shrink',
       'displayed=1',
@@ -1031,10 +826,6 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('reads back what React sent', async () => {
-    // The props are the contract, so each one is read back off the native side
-    // (DECISIONS D14: reads are what `hybridRef` is for). The colour is the
-    // platform's own `processColor` output - D10's bit pattern, which is why the
-    // expected number is computed here rather than written down.
     const tint = processColor('#7C4DFF') as number;
     const { rerender, unmount } = await render(
       <SegmentedControl
@@ -1055,8 +846,6 @@ describe('SegmentedControl · G4', () => {
     expect(handle?.disabled).toBe(true);
     expect(handle?.tintColor).toBe(tint);
     expect(handle?.accessibilityLabel).toBe('View mode');
-    // Controlled, and no event has happened yet: `0` is "JS has echoed nothing",
-    // the handshake's floor - not an absent prop (the wrapper always sends it).
     expect(handle?.mostRecentEventCount).toBe(0);
 
     await rerender(
@@ -1075,15 +864,6 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('keeps a caller width in charge', async () => {
-    // A measured size is not an override: a `width` from the caller fixes the box,
-    // and this asserts the box - 140, not the ~330 the labels want.
-    //
-    // Both platforms then *draw* the box: iOS hands it to SwiftUI, whose segmented
-    // `Picker` compresses the segments and truncates the labels, and Android
-    // re-measures the row with it before placing it (`NitroUiMeasuredRoot`), which
-    // is what the test below is about. What stays unobservable through the handle is
-    // the *truncation itself* - Compose's segments are virtual nodes, so the honest
-    // claim here is still the box, and the row inside it is the next test's job.
     const { unmount } = await render(
       <SegmentedControl
         options={['January', 'February', 'March', 'April']}
@@ -1100,20 +880,9 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('fits an over-wide row into the box the caller gave it', async () => {
-    // The other half of a caller's width. The labels want ~330 dp and the box is
-    // 140, and what the user gets has to be a 140 dp row: four segments inside the
-    // box, each one reachable. Before the host asked for a *placement* measure with
-    // the box's constraints, Android drew the row at its intrinsic width centred in
-    // the box and clipped both ends - the outer segments were cut off, and the part
-    // of them that was visible was a neighbour's.
-    //
-    // The tap is the oracle because it cannot lie about which segment is where: the
-    // two outer segments are the only things at the two edges of the box, and the
-    // harness dispatches real MotionEvents from the window root, so Compose
-    // hit-tests this the way a finger is hit-tested. The reported size is asserted
-    // in the same breath - placement must not become the report, or 140 goes into
-    // the cache under this option list and every later row with these labels is
-    // laid out at 140 (the exact pre-T11 bug `docs/architecture/sizing.md` §3).
+    // The labels want about 330 dp and the box is 140: the row has to be drawn at
+    // 140, with each outer segment at its own edge of the box. The reported size
+    // must stay the row's own width, or 140 would be cached for this option list.
     const { unmount } = await render(
       <SegmentedControl
         options={['January', 'February', 'March', 'April']}
@@ -1131,12 +900,8 @@ describe('SegmentedControl · G4', () => {
     const intrinsic = await waitForMeasured('overwide', 'four long options');
     expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
 
-    // Uncontrolled, so native owns the result: the right edge is the last segment
-    // and the left edge is the first, if the row was laid out at 140 dp.
-    // The box reaching 140 says nothing about which of the row's drawings is on
-    // screen, and the first placement costs a clipped frame (C1, `core.md` §7), so the
-    // passes get a turn before a finger does — on a loaded emulator a tap dispatched
-    // during that frame would hit the neighbour and be indistinguishable from the bug.
+    // The box reaching 140 does not mean the row has been fitted into it yet: the
+    // first placement costs one clipped frame, and a tap during it hits a neighbour.
     await settle();
     await userEvent.pressAt(box!.x + box!.width - 2, box!.y + box!.height / 2);
     expect(await waitForEvents(1)).toEqual(['overwide:3']);
@@ -1147,33 +912,12 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('fits a row whose box comes from a narrow parent, not from a width', async () => {
-    // The G4 F2 shape of the bug: *no* `width` on the control. The option list is one
-    // this process has never seen, so the row's own report is what sizes it, and the
-    // report (~600 dp of month names) is wider than the 300 dp parent - the engine
-    // clamps it, so the box is the parent's and the row overruns it by a factor of
-    // two. That is the brief's "narrow parent" fixture, and it is the one the caller
-    // `width` test above cannot stand in for: here the box is whatever the parent has
-    // left over, which is also what a rotation does to a flex row.
+    // No `width` on the control: the row reports about 600 dp and the 300 dp parent
+    // clamps its box. The parent then narrows twice, because the fit made for one
+    // box width has to be made again for the next.
     //
-    // The parent then narrows twice, and that second half is the point. At mount the
-    // box moves once by itself (fallback, then the clamped report) but *when* that
-    // move lands is not deterministic - a correction applied before the view is first
-    // laid out leaves no trace at all - so the test moves the box itself and requires
-    // the row to still fit it. An arming is a fact about one content at one box, so
-    // each move retires it, and the measure at the new box has to discover the overrun
-    // and ask for its own placement measure: a host that reads an expired arming as
-    // "already placed at the box" answers 260 with the row drawn at its own width,
-    // centred, cut off at both ends, with each end of the box showing a neighbour.
-    //
-    // Two moves, not one, is what makes this fail without the fix rather than
-    // usually: at the first narrowing the row either ends up clipped (red there) or
-    // it is genuinely placed at 260, which means an arming exists for 260 - and the
-    // next narrowing retires exactly that. One move alone can land on a host that has
-    // never armed yet, where the old one-shot arming still works.
-    //
-    // `alignItems: flex-start` is load-bearing: a stretched child is pinned to the
-    // parent's width by Yoga from its first frame, and then the box is never the
-    // row's reported width clamped to anything, which is the case under test.
+    // `alignItems: flex-start` matters: a stretched child is pinned to the parent's
+    // width from its first frame, and its box is then never a clamped report.
     const COLD_SIX = ['January', 'February', 'March', 'April', 'May', 'June'];
     const row = (width: number) => (
       <View style={{ width, alignItems: 'flex-start' }}>
@@ -1190,12 +934,9 @@ describe('SegmentedControl · G4', () => {
     const box = boxOf('clamped');
     expect(box).not.toBeNull();
     const intrinsic = await waitForMeasured('clamped', 'six month labels');
-    // The clamp really happened, and the report stayed the row's own width: 300 is
-    // the parent, ~600 is the row. Reporting 300 instead is the pre-T11 bug, which
-    // is why this asserts both numbers as well as the taps.
+    // The box is the parent's width while the report stays the row's own.
     expect(Math.abs(box!.width - 300) < 0.6).toBe(true);
     expect(intrinsic.width).toBeGreaterThan(box!.width + 20);
-    // As above: the box is here, the placement pass that fits the row into it may not be.
     await settle();
     await pressBothEnds('clamped', ['clamped:5', 'clamped:0']);
 
@@ -1232,14 +973,8 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('re-fits when the caller narrows the box under an over-wide row', async () => {
-    // Fitted at 140, then the caller asks for 120 - a flex parent narrowing on
-    // rotation is the same path. Both boxes are too narrow, so the row overruns
-    // before and after; what has to change is that the arming is *made again*
-    // against the new width. Fabric does measure this host for a new box, so the
-    // danger is not that the pass never runs - it is that a host which has armed
-    // once reasons that the pass it just ran must have been the bounded one, and
-    // never asks again. From there the 120 box shows the middle of a row drawn at
-    // its own width, and a tap at either end belongs to the neighbour again.
+    // Fitted at 140, then the caller asks for 120. The row overruns both boxes, so
+    // the fit has to be made again against the new width.
     const FOUR = ['January', 'February', 'March', 'April'];
     const { rerender, unmount } = await render(
       <SegmentedControl
@@ -1255,8 +990,6 @@ describe('SegmentedControl · G4', () => {
     const wide = boxOf('narrowing');
     expect(wide).not.toBeNull();
     await waitForMeasured('narrowing', 'four long options at 140');
-    // Same reason as in the two tests above: a box that is here is not a placement pass
-    // that has run, and the taps are the oracle.
     await settle();
     await pressBothEnds('narrowing', ['narrowing:3', 'narrowing:0']);
 
@@ -1285,15 +1018,9 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('keeps an over-wide row fitted through a prop change', async () => {
-    // Arm at 140, then change one prop that repaints without resizing: the tint. It
-    // is not in the sizing key, so the box does not move, no sizing correction
-    // follows, and nothing else will measure this host again - Fabric measures a
-    // view when its spec changes, and this one did not. Content placed at its box's
-    // width answers the box's width whatever it is, so the pass after the props land
-    // has to ask the unbounded question again, and the pass that learns the row
-    // still overruns has to be the one that asks for the placement measure.
-    // Otherwise one `tintColor` sends the row back to the clipped drawing for the
-    // rest of the mount, and the ends mis-tap again.
+    // The tint repaints without resizing: it is not in the sizing key, so the box
+    // does not move and Fabric does not measure this host again. The row has to
+    // stay fitted anyway.
     const FOUR = ['January', 'February', 'March', 'April'];
     const tint = processColor('#7C4DFF') as number;
     const { rerender, unmount } = await render(
@@ -1322,9 +1049,8 @@ describe('SegmentedControl · G4', () => {
         hybridRef={captureHybrid('tinted')}
       />
     );
-    // The tint is the only observable half of "this prop was applied"; the passes it
-    // causes are not observable from JS at all, so the settle covers the UI thread's
-    // work rather than racing it.
+    // The handle shows the prop arrived; the layout passes it causes are not
+    // observable from JS, so a settle follows.
     await pollUntil(
       () => (handles.get('tinted')?.tintColor === tint ? true : null),
       () =>
@@ -1345,32 +1071,10 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('shows tintColor on the selected segment, on the screen and not next door', async () => {
-    // `tintColor` had a documented history of lying, because every reading this control
-    // offered was a prop echo: `hybridRef.tintColor` reports what React sent on both
-    // platforms, so it could not tell a tint that arrived from a tint the platform
-    // dropped - which is how iOS ended up with docs claiming the colour painted the
-    // selected segment while the screenshots showed the default one (G4 F1, and
-    // `docs/tasks/Q4-followups-triage.md` row 27). So this asks the question that has an
-    // answer: is the colour on the screen?
-    //
-    // Two controls are the test rather than one, because "the tint arrived" and "the
-    // tint stayed inside its own control" are one requirement: a fix that reached the
-    // neighbouring row would be a global restyle (that is why `UISegmentedControl
-    // .appearance()` is banned in the iOS file), and asserting only the first half would
-    // let it through.
-    //
-    // The expectation differs by platform, and that difference is the documented state of
-    // the prop (`docs/components/segmented-control.md`, Limits) - what is new in F3 is
-    // that it is now *asserted* instead of merely claimed: Android paints it, and iOS
-    // does not, and neither is allowed to drift away from what the docs say without this
-    // test failing. The iOS half is the regression guard the last two rounds did not
-    // have; see `HybridNitroUiSegmentedControl.swift`'s `OptionalSegmentedTint` for the
-    // measurements behind why it stays that way.
-    //
-    // Magenta, because neither platform draws it by itself: iOS uses the scheme's accent
-    // and Android the scheme's `secondaryContainer` (both measured on the two devices
-    // this suite runs on, and both shown in the report line a failure carries). A colour
-    // the theme already owns would pass for nothing.
+    // `hybridRef.tintColor` only echoes the prop, so the screen is probed for the
+    // colour. A second, untinted control checks the tint stays inside its own
+    // control. Android paints `tintColor`; on iOS it has no effect, and both are
+    // asserted. Magenta, because neither platform's theme draws it by itself.
     const TINT = processColor('#FF00A0') as number;
     const TINT_CSS = '#FF00A0';
     const RETINT = processColor('#00B8D4') as number;
@@ -1400,9 +1104,7 @@ describe('SegmentedControl · G4', () => {
     await waitForMeasured('painted', 'two short options');
     await settle(400);
 
-    // Before anything is sent: neither control carries the colour, so a hit later cannot
-    // be something that was already on screen. This also catches a probe that reports a
-    // hit whatever it sees, which would make every assertion below meaningless.
+    // Before the tint is sent neither control shows the colour, so a later hit is new.
     expectPixels(
       await pixelProbe('painted', TINT, 'the control while untinted'),
       'absent',
@@ -1424,10 +1126,7 @@ describe('SegmentedControl · G4', () => {
         ),
       5000
     );
-    // The handle agreeing is a prop echo and proves nothing about pixels, so the settle
-    // covers the frame the new colour needs. Then the whole sequence below is run on the
-    // drawn result: applied, kept across a selection change, moved to a second colour,
-    // and taken away again.
+    // The handle agreeing is a prop echo; the settle covers the frame the colour needs.
     await settle(400);
     const painted = await pixelProbe('painted', TINT, 'the tinted control');
     console.log(`tint pixels (${Platform.OS}): ${painted}`);
@@ -1470,10 +1169,8 @@ describe('SegmentedControl · G4', () => {
         '"plain" beside a tinted control - a tint must not reach its neighbour'
       );
 
-      // A second colour, because a tint that stuck at whatever it first painted would
-      // pass everything above: the prop has to keep working, not have worked once. And
-      // removing it has to give the row back to the scheme, which is the half that a
-      // cached colour set or an appearance-style global would get wrong.
+      // A second colour, then none: a tint that stuck at whatever it first painted
+      // would pass everything above.
       await rerender(tree('#00B8D4'));
       await settle(400);
       expectPixels(
@@ -1498,9 +1195,7 @@ describe('SegmentedControl · G4', () => {
         '"painted" after tintColor went back to null'
       );
     } else {
-      // iOS: the documented no-op, asserted. Three readings, because the interesting part
-      // is not that nothing happens once - it is that nothing happens *every* time, so
-      // the prop cannot be half-applied, and no other row's colour can leak in.
+      // iOS: `tintColor` has no effect, at every one of the three readings.
       expectPixels(
         painted,
         'absent',
@@ -1513,12 +1208,8 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('reports one event per selection, and nothing when disabled', async () => {
-    // A selection is the one requirement a geometry query cannot see, so this
-    // needs a reading that cannot lie: a plain RN `Pressable` in the same row is
-    // the *barometer*. If the harness tap does not reach that, an empty log below
-    // measures the test, not the control - the Button suite has the same guard and
-    // found the reason there (a synthesised `UITouch` with no HID event behind it
-    // is refused by SwiftUI's own gesture environment).
+    // A plain RN `Pressable` in the same row shows that harness taps arrive at all;
+    // without it an empty event log would prove nothing.
     const rnPresses: string[] = [];
     const { unmount } = await render(
       <View style={rowStyle}>
@@ -1561,22 +1252,19 @@ describe('SegmentedControl · G4', () => {
       5000
     );
 
-    // The disabled one first: an empty log at that moment would prove nothing on
-    // its own, because an event can still be in flight. The enabled control's
-    // event is the barrier that says the pipeline delivered.
+    // The disabled control first: an event from it could still be in flight here,
+    // and the enabled control's event arriving later, alone, rules that out.
     await userEvent.press(disabled);
     await userEvent.press(disabled);
     expect(eventLog).toEqual([]);
     expect(handles.get('tap-disabled')?.disabled).toBe(true);
 
     // Three equal-width segments, so the middle of the control is the middle
-    // segment on both platforms - and uncontrolled, so native owns the result.
+    // segment on both platforms.
     await userEvent.press(enabled);
     const seen = await waitForEvents(1);
     expect(seen).toEqual(['tap:1']);
-    // The segment that is already selected reports nothing again, which is the
-    // SwiftUI `Picker` binding's own rule (a write only happens when the value
-    // moves) applied to Material 3's plain clickable segment.
+    // A tap on the segment that is already selected reports nothing.
     await userEvent.press(enabled);
     await settle(250);
     expect(eventLog).toEqual(['tap:1']);
@@ -1588,16 +1276,10 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('snaps back a selection React does not accept', async () => {
-    // The controlled half of core.md section 4, with the tap-twice oracle the
-    // Switch suite uses. `Rejected` never moves `selectedIndex`, so every event is
-    // a change React refused: native must paint the tap, echo the count, and then
-    // put the *old* segment back. If the revert never happened, the second tap
-    // would land on a segment that is already selected and report nothing - so two
-    // events for two taps is what proves the selection really came back.
-    //
-    // `Advanced` is the mirror, and the reason the first control's second tap
-    // above is not simply a double report: once React accepts the selection, a
-    // further tap on the same segment must report nothing.
+    // `Rejected` never moves `selectedIndex`, so native has to put the old segment
+    // back after each tap. A tap on an already selected segment reports nothing, so
+    // two events for two taps show the selection came back. `Advanced` accepts the
+    // selection, and its second tap must report nothing.
     function Rejected() {
       const [index] = useState(0);
       return (
@@ -1639,8 +1321,6 @@ describe('SegmentedControl · G4', () => {
     await userEvent.press(rejected);
     const first = await waitForEvents(1);
     expect(first).toEqual(['rejected:1']);
-    // JS saw the event (that is what the echo is), and the value it sent back is
-    // still the one it wanted.
     await pollUntil(
       () =>
         (handles.get('rejected')?.mostRecentEventCount ?? 0) >= 1 ? true : null,
@@ -1674,11 +1354,7 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('sizes 200 option lists, each at its own size', async () => {
-    // The list case: 200 configurations at once is what a cache-key or
-    // per-instance-ledger bug looks like from the outside - a row that got a
-    // neighbour's box. Each row's option list differs by its number, so no two
-    // share a key, and each row is one *different number of segments* as well
-    // (1 + index % 3), which a key without the option count would collapse.
+    // No two rows share an option list, and the number of segments varies too.
     const lists: string[][] = Array.from({ length: 200 }, (_row, index) =>
       Array.from(
         { length: 1 + (index % 3) },
@@ -1700,12 +1376,8 @@ describe('SegmentedControl · G4', () => {
       </View>,
       { timeout: 30000 }
     );
-    // Every configuration here is cold - the poison dropped the cache, and the 180
-    // lists that were never seeded guess the component's declared number, which the
-    // poison made the wrong one too - so all 200 arrive wrong on their first frame
-    // and are corrected on the way. That is D17's rule, not a failure: the batch's
-    // stale count is deliberately not gated (sizing.md section 3). So this waits for
-    // the corrections to arrive, then judges whether any row kept a neighbour's box.
+    // Every configuration is cold, so all 200 are laid out wrong on their first
+    // frame and corrected afterwards. Wait for the corrections, then check each box.
     const findWrong = (): string[] => {
       const wrong: string[] = [];
       for (let index = 0; index < lists.length; index += 1) {
@@ -1745,21 +1417,12 @@ describe('SegmentedControl · G4', () => {
         `immediate=${String(d.immediate)} cached=${String(d.cachedSizes)}`
     );
     expect(wrong).toEqual([]);
-    // 200 distinct configurations, all cold: every one owes a correction, and 200
-    // cache entries. Fewer entries than lists means two lists share one size - the
-    // missing-input bug, at scale.
+    // Fewer cache entries than lists would mean two lists share one size.
     expect(d.corrections).toBeGreaterThanOrEqual(200);
     expect(d.cachedSizes).toBeGreaterThanOrEqual(200);
   });
 
   it('survives remounts with the size and seed of each mount', async () => {
-    // `RecyclableView` plus a fresh mount per cycle: the box must follow the option
-    // list of *this* mount, never the previous one's - a stale model, or a sizing
-    // id the host kept, both look like this from outside.
-    //
-    // The seed is the half no geometry query can see, and an uncontrolled control
-    // hides it from the handle too (`selectedIndex` reads `null` because React never
-    // sent one), so it gets its own oracle at the end of this test.
     const cases: { options: string[]; defaultSelectedIndex: number }[] = [
       { options: ['First'], defaultSelectedIndex: 0 },
       { options: ['Second', 'with a longer label'], defaultSelectedIndex: 1 },
@@ -1785,27 +1448,15 @@ describe('SegmentedControl · G4', () => {
       await waitForBox(testId, size, `mount ${String(index)}`);
       expect(sameSize(sizeOf(testId), WRONG_SIZE)).toBe(false);
       expect(handles.get(testId)?.options).toEqual(testCase.options);
-      // What the handle can say about the seed of an uncontrolled mount: React sent
-      // no index, so there is nothing to read back. The seed itself is proven below.
       expect(handles.get(testId)?.selectedIndex).toBeNull();
       unmount();
       await settle(100);
     }
 
-    // Does *this* mount apply its own `defaultSelectedIndex`, or is the model still
-    // the previous mount's? A model whose `didApplyDefault` survived the recycle
-    // never applies the seed again, and it shows up as the wrong segment painted -
-    // invisible to the handle and to the box. The oracle is the tap-twice rule
-    // (`Selection` in the docs page): a tap on the segment that is already selected
-    // reports nothing, on both platforms.
-    //
-    // Two controls, mounted, unmounted and mounted again:
-    //  - `remount-proof` seeds 0, so pressing its middle segment *must* report
-    //    index 1. That is the witness that a harness tap reaches a segmented control
-    //    in this row at all - without it, an empty log below would prove nothing.
-    //  - `remount-kept` seeds 1, so pressing its middle segment must report
-    //    *nothing*: the middle is already this mount's selection. A recycled model
-    //    that skipped the seed is displaying segment 0, and that press reports one.
+    // Whether a remount applies its own `defaultSelectedIndex` is checked by taps,
+    // because a tap on the selected segment reports nothing. `remount-proof` seeds
+    // 0, so a press on its middle segment must report index 1, which shows taps
+    // arrive. `remount-kept` seeds 1, so the same press on it must report nothing.
     const seedPair = () => (
       <View style={rowStyle}>
         <SegmentedControl
@@ -1845,21 +1496,10 @@ describe('SegmentedControl · G4', () => {
   });
 
   it('corrects a planted size that matches the current box (iOS measure signal)', async () => {
-    // The R3 tests above all move the box: a new option list is a configuration the
-    // engine has no exact answer for, so it is laid out at the fallback and the
-    // *bounds change* is itself a measure point on iOS
-    // (`NitroSwiftUIHost`: bounds change, trait change, first commit, or a component
-    // that said so). That hides the fourth signal entirely - and on iOS nothing else
-    // can produce a native re-measure after a props change: D20's re-dirty only
-    // re-reads the host's cache, and `noteSizingKeyChanged()` only unlocks the
-    // report, it never asks for one.
-    //
-    // So plant an answer for the second option list that is exactly the box the
-    // control is already in. The switch then costs no bounds change at all, and the
-    // only thing left that can notice the labels got longer is the setter's
-    // `host.noteContentSizeMayHaveChanged()` - which is what this test fails without
-    // (iOS). Android needs no such call and must still correct: Compose recomposes,
-    // and D20's re-dirty runs the host's own measure.
+    // On iOS a bounds change is itself a reason to re-measure. Planting the current
+    // box as the answer for the next option list removes that bounds change, so
+    // only the component telling its host that the content may have changed size
+    // can notice the longer labels.
     const SHORT = ['Run'];
     const LONG = ['Run', 'the', 'whole', 'build'];
     const { rerender, unmount } = await render(
@@ -1874,10 +1514,6 @@ describe('SegmentedControl · G4', () => {
     const shortSize = await waitForMeasured('pin', 'the one-option list');
     await waitForBox('pin', shortSize, 'the one-option list');
 
-    // The answer the engine will give for the *next* configuration: today's box.
-    // Provisional by construction (`seedSize`), so it lays the frame out and is
-    // still owed a correction. `invalidateSizingEnvironment` keeps it as that
-    // configuration's guess and drops the cache, like `poisonConfigurations`.
     nitroUiCore.seedSizingSize(
       COMPONENT,
       sizingKey(LONG),
@@ -1903,10 +1539,7 @@ describe('SegmentedControl · G4', () => {
       `planted-equal-to-box (${Platform.OS}): box=${describeSize(box)} ` +
         `measured=${describeSize(now)} delta=${JSON.stringify(after)}`
     );
-    // The control measures the longer row whatever the engine was told, so the
-    // planted size is provably the wrong answer for this configuration.
     expect(now !== null && now.width > shortSize.width + 1).toBe(true);
-    // ...and the box followed it, rather than staying where the guess put it.
     expect(sameSize(box, now)).toBe(true);
     expect(after.corrections).toBeGreaterThanOrEqual(1);
     unmount();

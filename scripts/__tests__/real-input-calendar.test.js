@@ -1,25 +1,3 @@
-/**
- * Material 3's calendar grid, measured out of a `uiautomator dump`.
- *
- * The gate this proves is the one the README screenshot showed by hand: seven weekday
- * columns inside the calendar's own box, each at least Material's 40 dp day cell, none
- * narrower than its neighbours. Every failure mode here is silent in the app — a
- * `fillWidth` control reports its box's width whatever the grid fits, and the cells are
- * Compose nodes the in-app queries cannot reach — so the rule's only evidence is the
- * dump, and the rule itself has to be provable without booting a device.
- *
- * Both dumps below are real, taken from `emulator-5574` (density 2.625) with one inline
- * `DatePicker` in a 320 dp box:
- *
- * - **before the fix**, header columns `126, 126, 126, 126, 126, 126, 20`. Material's
- *   48 dp interactive minimum wants 7 × 48 + 2 × 12 = 360 dp, the box is 320, and
- *   `Modifier.size` enforces the incoming maximum, so Saturday was left 20 px = 7.6 dp.
- * - **after it**, `105, 105, 105, 105, 105, 105, 105` — exactly 40 dp each.
- *
- * The mutants are the point. Each one is a way the fix could be *nearly* right and the
- * grid still broken, and each names the line that refuses it.
- */
-
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -35,10 +13,10 @@ import {
   measureCalendarGrid,
 } from '../real-input/android-calendar.mjs';
 
-/** The lease device's density, from `adb shell wm density`. */
+/** The density the fixture widths were recorded at (420 dpi). */
 const DENSITY = 2.625;
 
-/** The calendar's own box, as the dump reports the labelled node: 0,72 → 840,1416. */
+/** The calendar's own box: 320 dp wide at this density. */
 const BOX = { x1: 0, y1: 72, x2: 840, y2: 1416 };
 
 const WEEKDAYS = [
@@ -52,11 +30,8 @@ const WEEKDAYS = [
 ];
 
 /**
- * One header cell, shaped like the dump's: a non-clickable node naming a weekday.
- *
- * Built through `parseHierarchy` rather than by hand, so `bounds` is the real parsed
- * object — a fixture that got `width` wrong would test the rule against a shape the
- * code never sees.
+ * One header cell, shaped like the dump's: a non-clickable node naming a weekday. Built
+ * through the real parser so its `bounds` have the shape the code sees.
  */
 function headerCell(description, x1, width) {
   return parseHierarchy(
@@ -67,8 +42,7 @@ function headerCell(description, x1, width) {
 }
 
 /**
- * A whole header row: seven cells starting at `first`, each `width` wide with `gap`
- * between them. Widths are given explicitly so a squeezed row is expressible.
+ * A header row: one cell per width, `gap` px apart.
  *
  * @param {number[]} widths
  * @param {number} [gap]
@@ -104,19 +78,8 @@ function listRow(labels) {
 }
 
 /**
- * A whole row of day cells: same height, seven of them, at the 105 px a 320 dp box
- * gives them.
- *
- * Two deliberate departures from the real dump, together the reason this fixture exists.
- * In `g8-320-postfix.xml` a day cell is an unnamed, non-clickable `Button` of the same
- * 105 px as its header column, so the label filter alone already keeps the rule off it.
- * Here the cells are *named* — the case that needs guarding is a Material build that
- * publishes a date per cell — and *clickable*, which is all that is left between the rule
- * and a false read once the names are there. They also come *before* the header in the
- * tree, as they do in a real dump of a calendar that has been opened before: composition
- * order is not the order these nodes are reported in, so a rule that stopped filtering on
- * `clickable` would take this row and report a clean grid for a calendar whose header is
- * off screen.
+ * A row of day cells. A real dump leaves its day cells unnamed; these are named and
+ * clickable, so only the rule's `clickable` filter keeps it off them.
  *
  * @param {number[]} widths
  */
@@ -130,9 +93,8 @@ function dayRow(widths) {
 }
 
 /**
- * Both rows of the two real 320 dp dumps, in px (G8 report; FOLLOWUPS before X17). The day
- * cells are the unnamed `Button`s under the header, read by geometry alone: nothing in the
- * tree says which one is which day, which is the reason the rule reads the header.
+ * Header and day-cell widths, in px, of two real dumps of a calendar in a 320 dp box: one
+ * with Saturday squeezed, one laid out evenly.
  */
 const DUMP_320 = {
   'g8-320-prefix': {
@@ -145,7 +107,6 @@ const DUMP_320 = {
   },
 };
 
-/** What the real dumps measured, as a fixture pair. */
 const BROKEN_320 = headerRow(DUMP_320['g8-320-prefix'].header);
 const FIXED_320 = headerRow(DUMP_320['g8-320-postfix'].header);
 
@@ -177,10 +138,8 @@ function screen(cells) {
 
 describe('real-input Android calendar grid', () => {
   it("quotes the real dumps' widths in the module's own table", () => {
-    // The module's header explains why the rule reads the weekday header, with a table of
-    // measured widths. Its first version quoted day cells of 110, 110, 111, 110, 110, 110,
-    // 126 px that are in neither dump, and argued from that invented spread (X17 item 6).
-    // A comment cannot be run, so this pins its numbers to the fixtures that are.
+    // The module's header comment carries a table of these widths; this pins the table to
+    // the fixtures.
     const source = readFileSync(
       join(__dirname, '..', 'real-input', 'android-calendar.mjs'),
       'utf8'
@@ -212,11 +171,8 @@ describe('real-input Android calendar grid', () => {
   });
 
   it("refuses 40 dp columns in a box wide enough for Material's 48 dp", () => {
-    // The regression this exists to catch: the first version of the fix provided 40 dp
-    // at *every* width, so a full-width phone got 8 dp smaller day cells, prev/next
-    // buttons and year toggles than Material would have drawn. The narrow dump above,
-    // judged as the wide case it now is, has to be the failure - 40 dp is 105 px at this
-    // density and 48 dp is 126, so the row is 21 px short of what the box asked for.
+    // The narrow dump judged as the wide case: 40 dp is 105 px at this density and 48 dp
+    // is 126.
     const grid = measureCalendarGrid(screen(FIXED_320), BOX, DENSITY);
     expect(
       calendarGridProblems(grid, { minColumnDp: INTERACTIVE_DEFAULT_DP })
@@ -227,11 +183,8 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('accepts 48 dp columns in a wide box, and only those', () => {
-    // A calendar laid out at Material's default in a box that fits it. At this density
-    // 48 dp is 126 px, so a 393 dp box (1 031 px) has room for 7 × 126 plus the grid's
-    // own 24 dp of edge padding. `BOX` is a 320 dp calendar's box and the rule filters to
-    // the named calendar's box, so the wide row needs its own: seven 126 px columns do not
-    // fit inside 840 px, and the columns that fall outside it are not this calendar's.
+    // The rule only reads columns inside the calendar's box, and seven 126 px (48 dp)
+    // columns do not fit in `BOX`, so the wide row gets a 393 dp box of its own.
     const wideBox = { x1: 0, y1: 72, x2: 1031, y2: 1416 };
     const grid = measureCalendarGrid(
       screen(headerRow([126, 126, 126, 126, 126, 126, 126])),
@@ -243,31 +196,22 @@ describe('real-input Android calendar grid', () => {
     expect(
       calendarGridProblems(grid, { minColumnDp: INTERACTIVE_DEFAULT_DP })
     ).toEqual([]);
-    // And the same row read as the narrow case is not a pass: it clears a 40 dp floor, so
-    // the two readings are genuinely different rules rather than one loose one.
     expect(calendarGridProblems(grid)).toEqual([]);
   });
 
   it('picks the touch target from the measured box, at the boundary', () => {
-    // The threshold is Material's own arithmetic - seven 48 dp columns plus the 12 dp the
-    // grid keeps at each edge - and it is an exclusive test on the narrow side: at
-    // exactly 360 dp the 48 dp grid fits, so the wide answer is the right one there.
+    // The threshold is seven 48 dp columns plus the 12 dp the grid keeps at each edge. At
+    // exactly that width the 48 dp grid fits, so the wide answer is the right one there.
     expect(expectedColumnDp(320)).toBe(DAY_CELL_MIN_DP);
     expect(expectedColumnDp(CALENDAR_WIDE_MIN_DP - 0.1)).toBe(DAY_CELL_MIN_DP);
     expect(expectedColumnDp(CALENDAR_WIDE_MIN_DP)).toBe(INTERACTIVE_DEFAULT_DP);
     expect(expectedColumnDp(393)).toBe(INTERACTIVE_DEFAULT_DP);
-    // 360 is the fixture, not the answer: seven 48 dp columns plus the 12 dp the
-    // calendar's grid keeps at each edge. If the library's constant and this arithmetic
-    // ever drift apart, the check is measuring the wrong box.
     expect(CALENDAR_WIDE_MIN_DP).toBe(7 * INTERACTIVE_DEFAULT_DP + 2 * 12);
   });
 
   it('forgives the half pixel a non-integer density costs a 40 dp column', () => {
     // 213 dpi (density 1.331): a column asked for 40 dp is `round(40 x 1.331) = 53` px,
-    // and 53 px divides back to 39.8 dp. A floor compared in dp with no allowance calls
-    // that calendar broken on every device whose density is not 1, 2 or 3 - and the
-    // fixture's own numbers (105 px = exactly 40.0 dp) would never show it, because this
-    // host is at 420 dpi.
+    // and 53 px divides back to 39.8 dp.
     const DENSITY_213 = 213 / 160;
     const grid = measureCalendarGrid(
       screen(headerRow([53, 53, 53, 53, 53, 53, 53])),
@@ -276,8 +220,7 @@ describe('real-input Android calendar grid', () => {
     );
     expect(grid.minWidthDp.toFixed(1)).toBe('39.8');
     expect(calendarGridProblems(grid)).toEqual([]);
-    // Half a pixel is the whole allowance: one px short of the floor is the shortfall
-    // this rule exists to report, not a rounding artefact.
+    // Half a pixel is the whole allowance: one px short of the floor is a shortfall.
     const shortByOne = measureCalendarGrid(
       screen(headerRow([52, 52, 52, 52, 52, 52, 52])),
       BOX,
@@ -298,8 +241,7 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('refuses a grid that lost its last column rather than only shrinking it', () => {
-    // The real 240 dp dump: `105, 105, 105, 105, 105, 41`, with the seventh header absent
-    // from the tree entirely. Squeeze and missing column in one row, asserted as measured.
+    // A real dump of a 240 dp box: the seventh header is absent from the tree entirely.
     const grid = measureCalendarGrid(
       screen(headerRow([105, 105, 105, 105, 105, 41])),
       BOX,
@@ -313,10 +255,7 @@ describe('real-input Android calendar grid', () => {
         'have produced',
       'columns differ by 64 px wide, so they are not sharing the width out evenly',
     ]);
-    // And once with the width claims silenced: six equal 40 dp columns is a week with a
-    // day missing and nothing else wrong, which only the column count can see. This is
-    // the case a rule that weighed widths alone would have been handed six fine columns
-    // to congratulate.
+    // Six equal 40 dp columns: a missing day that only the column count can see.
     expect(
       calendarGridProblems(
         measureCalendarGrid(
@@ -329,9 +268,8 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('catches a squeeze that never reaches the 40 dp floor', () => {
-    // The arithmetic floor alone is not enough: a grid can hand its leftover to one
-    // column and stay above 40 dp everywhere. Every column here clears the 105 px that
-    // 40 dp is at this density, and an 8 px spread is not rounding.
+    // Every column here clears the 105 px that 40 dp is at this density, and an 8 px
+    // spread is not rounding.
     const grid = measureCalendarGrid(
       screen(headerRow([118, 118, 118, 118, 118, 118, 110])),
       BOX,
@@ -344,12 +282,8 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('tolerates the pixel rounding a real seven-column grid reports', () => {
-    // Synthetic, and the arithmetic says why it is the right shape: `SpaceEvenly` divides
-    // a box's leftover among the gaps and Compose rounds each share to whole pixels, so a
-    // seven-column row can report 110 px six times and 111 once for the same set of dp
-    // requests. One px apart is therefore the same column asked twice, and a rule that
-    // demanded equality would call a healthy calendar broken. (The dumps this task
-    // measured all happened to land equal: 105 px each at 320 dp, 126 each at 411 dp.)
+    // `SpaceEvenly` divides a box's leftover among the gaps and Compose rounds each share
+    // to whole pixels, so equal dp requests can report widths one px apart.
     const grid = measureCalendarGrid(
       screen(headerRow([110, 110, 111, 110, 110, 110, 110])),
       BOX,
@@ -360,9 +294,7 @@ describe('real-input Android calendar grid', () => {
 
   it('ignores day cells, the month toggle and a scroll-clipped header', () => {
     // Day cells are clickable; the toggle names a year and is clickable; a header
-    // scrolled out of the composition's clip is named with `[0,0][0,0]`. None of them
-    // is a column, and a rule that let them in would report an eighth column of
-    // somebody else's width and call the calendar fine.
+    // scrolled out of the composition's clip is named with `[0,0][0,0]`.
     const grid = measureCalendarGrid(
       [
         ...screen(FIXED_320),
@@ -386,16 +318,9 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('calls a clipped header missing rather than measuring a week of day cells', () => {
-    // The failure mode the `clickable` filter exists for. A calendar scrolled so its
-    // header is clipped keeps its day cells in the tree, and a week of them looks exactly
-    // like a header row structurally: seven boxes, one row, equal heights. The widths are
-    // the real dump's — 105 px each at a 320 dp box, which is what a correctly laid-out
-    // calendar reports for both rows — so a rule that let those nodes in would answer
-    // "40 dp floor cleared, columns equal": a clean bill of health for a calendar whose
-    // header is not on screen, which is the pass this check must never give. With the
-    // filter the row is not found at all and the answer is null: "not on screen", which
-    // the caller aborts on. The cells are named here even though the real dump leaves them
-    // unnamed, so the label filter cannot be what makes this test pass.
+    // A calendar scrolled so its header is clipped keeps its day cells in the tree, and a
+    // week of them looks like a header row: seven boxes, one row, equal heights. The cells
+    // are named here so the label filter cannot be what makes this pass.
     const grid = measureCalendarGrid(
       [
         ...calendarChrome(),
@@ -409,15 +334,11 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('says so when this calendar is not on screen at all', () => {
-    // Not a pass: a check that read "no header row" as "no problems" would go green on
-    // a calendar that never rendered.
     expect(measureCalendarGrid(screen([]), BOX, DENSITY)).toBeNull();
   });
 
   it('only measures the calendar it was pointed at', () => {
-    // The DatePicker screen has several inline calendars. Read across the whole tree
-    // the rule would mix their rows and could not say which calendar it judged, so a
-    // second calendar's header, outside this box, must not join the count.
+    // A second calendar's header, outside this box.
     const other = headerRow([200, 200, 200, 200, 200, 200, 200]).map(
       (node) => ({
         ...node,

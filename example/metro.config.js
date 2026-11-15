@@ -20,36 +20,18 @@ const config = withMetroConfig(getDefaultConfig(__dirname), {
   conditions: ['react-native-nitro-ui-source'],
 });
 
-// One extra route, for the one premise a test in the app cannot read for itself: the
-// runner publishes what this run opted out of, and the app reads it back over the dev
-// server - the only host port an emulator is sure to reach. Metro serves no project
-// files by itself, so the route is declared here; it answers exactly one path and
-// hands everything else on. See `scripts/harness-run-state.js`.
+// The harness runner publishes what a run opted out of and the app reads it back over
+// the dev server, the only host port an emulator is sure to reach.
 config.server = {
   ...config.server,
   enhanceMiddleware: withRunStateRoute({ exampleDir: __dirname }),
 };
 
-// Storybook (S1): the last wrapper, so it sees the finished config - the
-// monorepo resolver above and the run-state route are both preserved (it
-// composes `resolver.resolveRequest` and spreads the rest of the config).
-//
-// This is the bundler-agnostic wrapper, i.e. the documented entry-point
-// swapping setup. It reads `STORYBOOK_ENABLED` itself (`enabled` defaults to
-// `false` here), and when enabled it resolves the app entry - `index.js`, found
-// through `package.json#main` relative to the Metro process's working directory,
-// so run it from `example/` - to `.rnstorybook/index.tsx` instead, and
-// regenerates `storybook.requires.ts`.
-//
-// With the variable unset it returns this config untouched, before any of that:
-// no resolver, no generated file, no channel server. That strict no-op is what
-// keeps the app, the harness (`rn-harness.config.mjs`) and the real-input runner
-// bundling exactly what they bundled before Storybook existed - no Storybook
-// module in the graph at all. Verified by diffing the disabled bundle against
-// the pre-Storybook one (`docs/tasks/S1-storybook.report.md`).
-//
-// `configPath` is absolute so the config is found whatever the working directory
-// is, unlike the entry-point detection above.
+// Storybook wraps last so it sees the finished config. With `STORYBOOK_ENABLED`
+// unset it returns the config untouched, so no Storybook module enters the
+// bundle. When set, it swaps the app entry for `.rnstorybook/index.tsx`; the
+// entry is found relative to Metro's working directory, so run it from
+// `example/`.
 module.exports = withStorybook(config, {
   configPath: path.resolve(__dirname, './.rnstorybook'),
 });

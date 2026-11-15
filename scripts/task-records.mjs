@@ -8,20 +8,14 @@
  *   node scripts/task-records.mjs --days 7    keep a merged task's records 7 days
  *   node scripts/task-records.mjs --json      the same listing as data
  *
- * A task is merged when HEAD contains every `task/<ID>-...` branch, local or
- * remote-tracking, and its records are archived at once unless `--days` says to wait.
- * A task is kept while any worktree has an uncommitted change to its records or is on
- * a branch of it that HEAD does not contain, while such a branch is live (its tip is
- * younger than 14 days), and while it has a brief and no report. The branch HEAD is on
- * is never merged into itself, so a task is never archived from its own checkout.
+ * A task is merged when HEAD contains every `task/<ID>-...` branch. It is kept while a
+ * worktree has an uncommitted change to its records or is on an unmerged branch of
+ * it, while such a branch is live, and while it has a brief and no report.
  *
- * `--archive` runs only where HEAD contains `main` (the local branch, or `origin/main`
- * without one). It copies a task's tracked records to
- * `~/.nitro-ui/task-archive/<ID>/<path below docs/tasks>`, compares every copy with
- * its source, and only then runs `git rm`. The removal is staged, never committed: it
- * belongs in the merge commit. A task whose copy fails, or whose archive already holds
- * different bytes under the same name, is left exactly as it was, the others still go,
- * and the command exits 1.
+ * `--archive` runs only where HEAD contains `main`. It copies a task's tracked records
+ * to `~/.nitro-ui/task-archive/<ID>/`, compares every copy with its source, and only
+ * then stages the removal with `git rm` (never commits). A task whose copy fails is
+ * left as it was, the others still go, and the command exits 1.
  */
 
 import { spawnSync } from 'node:child_process';

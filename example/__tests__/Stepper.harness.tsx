@@ -1,45 +1,3 @@
-/**
- * On-device tests for the Stepper (task G25).
- *
- * A Stepper is Slider's value rules wearing IconButton's body, so this suite asks
- * each sibling's questions and then the two the control has on its own.
- *
- * - **Slider's**: does the event-count handshake hold - a controlled value both
- *   ways, a step JS refused snapping back, a value written from JS applying, and a
- *   `0.1` step arriving as `0.3` rather than `0.3000…4`? Those are
- *   `NitroUiSliderValue.quantize` answers, and the Stepper imports them rather than
- *   copying them, which is the point the digit assertions here protect.
- * - **IconButton's**: is the box the size the control measured, and on Android is
- *   the artwork actually painted? The glyph question has an extra twist here: a
- *   Stepper has no `tintColor` to probe for, because its content colour is the
- *   scheme's own `onSurfaceVariant` - a *dynamic* colour no JS constant knows. So
- *   the probe is self-referential: ask for black, ask for white, find which of the
- *   two extremes the control paints the most of (its container) and which the least
- *   (its ink), then insist the ink exists, is a minority of the box, and is **not**
- *   the sampler's own mid-grey backdrop. A stepper whose glyph slots came back
- *   empty has nothing in it darker (light scheme) or lighter (dark scheme) than that
- *   backdrop, and goes red on that line.
- * - **its own first**: the bounds. Each half is disabled at its own end of the range
- *   - iOS by SwiftUI's own doing, Android by the same `canStep` answer its buttons
- *   are given - and a half that is disabled produces **no event at all**, which is
- *   what makes "a tap at a bound does nothing" one rule rather than two platform
- *   habits. The control reports the two halves' enabled state from where it draws
- *   them, so this file asserts the button, not a re-computed guess.
- * - **its own second**: a reader meets **one** adjustable control, not two buttons.
- *   iOS vends an `.adjustable` element with the value in it; Android merges the row
- *   into one node with `ProgressBarRangeInfo` and clears the buttons' own semantics.
- *   Both are read through the *reader's* action - `accessibilityIncrement` on the
- *   element UIKit was handed, `SetProgress` on the merged semantics node - because a
- *   control whose own step works while its published action does nothing is the bug
- *   only that path can see.
- *
- * The readings: `harnessUi.queryByTestId` (the box Fabric gave the view),
- * `hybridRef.measureContent()` (the size the hosted control measured),
- * `nitroUiCore.sizingStats()` (what the sizing engine did), the control's own
- * `nuiTestStateReport()` (the value it is drawing, which half is live, and what its
- * accessibility node says), `nuiTestAccessibilityStepReport()` (what a reader's
- * action did) and `nuiTestPixelProbe`/`nuiTestPixelReport` (what it painted).
- */
 import { useCallback, useState } from 'react';
 import {
   Platform,
@@ -60,7 +18,6 @@ import { Stepper, nitroUiCore } from 'react-native-nitro-ui';
 
 import { waitForHandle } from './handles';
 
-/** The Stepper's Fabric name - what the sizing engine files sizes under. */
 const COMPONENT = 'NitroUiStepper';
 
 type Size = { width: number; height: number };
@@ -72,13 +29,6 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * What `hybridRef` hands back - declared, not imported (DECISIONS D14).
- *
- * The same shape `src/components/Stepper/Stepper.tsx` documents on its own
- * `hybridRef` prop, and the test-only seams are gone from that documentation the day
- * the harness can read pixels itself.
- */
 type StepperHandle = {
   readonly value: number | null;
   readonly mostRecentEventCount: number;
@@ -98,15 +48,9 @@ type StepperHandle = {
 };
 
 /**
- * The size this control declares for itself, in points / dp.
- *
- * Read off the two component sources - `HybridNitroUiStepper.kt`'s
- * `FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP` and `HybridNitroUiStepper.swift`'s
- * `declaresFallback` - and mirrored by `DECLARED_FALLBACKS.NitroUiStepper` in
- * `scripts/conformance-core.mjs`, which `check` insists agrees. It is *measured*
- * here, not asserted as a premise: an `intrinsic` control whose first frame is laid
- * out at a number it then contradicts costs every cold mount a correction (D17), so
- * "the box we guessed is the box we draw" is the claim worth a device.
+ * The fallback size the native Stepper declares, in points / dp. Must match the
+ * native sources and `DECLARED_FALLBACKS.NitroUiStepper` in
+ * `scripts/conformance-core.mjs`.
  */
 const DECLARED: Size =
   Platform.OS === 'android'
@@ -125,12 +69,11 @@ const captureHybrid =
 /** Every event the app was told, in order, as `testID:value`. */
 const events: string[] = [];
 
-/** The parents' `value` setters, by testID - how a test writes a value from JS. */
 const setters = new Map<string, (next: number) => void>();
 
 type OwnerProps = {
   testId: string;
-  /** Omit for an uncontrolled Stepper, which is the only way to see `defaultValue`. */
+  /** Omit for an uncontrolled Stepper. */
   value?: number;
   defaultValue?: number;
   minimumValue?: number;
@@ -138,21 +81,10 @@ type OwnerProps = {
   step?: number;
   disabled?: boolean;
   accessibilityLabel?: string;
-  /**
-   * Keep the app's own value no matter what the control asks for - the refused
-   * change, which is the half of the handshake that needs an app willing to say no.
-   */
+  /** Keep the app's own value whatever the control asks for. */
   refuse?: boolean;
 };
 
-/**
- * One Stepper with an app behind it.
- *
- * Controlled when `value` is passed, uncontrolled when it is not: `Stepper.tsx`
- * decides the mode by whether the prop is `undefined`, so this is the only way a
- * harness fixture can be genuinely uncontrolled (and therefore the only way to see
- * that a step costs no React render).
- */
 function StepperOwner({
   testId,
   value,
@@ -166,10 +98,6 @@ function StepperOwner({
 }: OwnerProps) {
   const controlled = value !== undefined;
   const [own, setOwn] = useState(value ?? defaultValue ?? 0);
-  // Always `own`, never the prop: a controlled fixture that rendered its own prop could
-  // never adopt the step it was just told about, so every "the app adopted it" claim
-  // below would describe a fixture that refuses everything. `own` starts at the prop,
-  // and the refusal case is the one that does not write it.
   const shown = own;
   if (controlled) {
     setters.set(testId, setOwn);
@@ -177,14 +105,7 @@ function StepperOwner({
   const onValueChange = useCallback(
     (next: number) => {
       events.push(`${testId}:${String(next)}`);
-      // Controlled: adopt the value unless this fixture exists to refuse it. The
-      // write has to land in the same commit as the hook's echo of the event count,
-      // which is why a refusal is a *missing* write rather than another prop.
-      //
-      // Uncontrolled: write **nothing**. Native owns the displayed value, so an app
-      // that keeps no state is the fixture that proves it - if the control snapped
-      // back to the value JS never stored, the "keeps its own value" test below is
-      // the one that says so.
+      // Uncontrolled writes nothing: native owns the displayed value.
       if (controlled && !refuse) setOwn(next);
     },
     [controlled, refuse, testId]
@@ -263,7 +184,6 @@ async function handleOf(testId: string): Promise<StepperHandle> {
   return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
 }
 
-/** Poll until the control reports a size. */
 async function waitForMeasured(testId: string, what: string): Promise<Size> {
   return pollUntil(
     () => {
@@ -274,12 +194,10 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
   );
 }
 
-/** The stepper's own report, as sent - the evidence a failure message carries. */
 function rawOf(testId: string): string {
   return handles.get(testId)?.nuiTestStateReport() ?? '';
 }
 
-/** The stepper's own report, as `key -> value`. */
 function reportOf(testId: string): Record<string, string> {
   const fields: Record<string, string> = {};
   const text = handles.get(testId)?.nuiTestStateReport() ?? '';
@@ -290,13 +208,8 @@ function reportOf(testId: string): Record<string, string> {
   return fields;
 }
 
-/**
- * Poll until the control is drawing `displayed`.
- *
- * `displayed` is written where the control is drawn (the SwiftUI body / the
- * composable), so it is a reading of the hosted control. `hybridRef`'s `value`
- * answers what *React* sent and cannot see any of this.
- */
+// `displayed` is written where the control is drawn; `hybridRef`'s `value` only
+// answers what React sent.
 async function waitForDrawn(testId: string, displayed: string): Promise<void> {
   await pollUntil(
     () => (reportOf(testId).displayed === displayed ? true : null),
@@ -308,17 +221,10 @@ async function waitForDrawn(testId: string, displayed: string): Promise<void> {
   );
 }
 
-/** How long `waitForEvents` waits for a surplus event after the count is reached. */
 const EVENT_QUIET_MS = 400;
 
-/**
- * Wait until the app has been told exactly `wanted`, then hand back everything.
- *
- * The quiet period is Chip's G12 lesson and it matters more here than anywhere: a
- * Stepper's failure mode is *two* events for one tap, which a count-only wait
- * passes - the surplus arrives after the count is reached. Every caller here
- * compares the whole list, and several assert it is empty.
- */
+// Waits a quiet period after the count is reached, so a surplus event (two for
+// one tap) is in the list the caller compares.
 async function waitForEvents(from: number, wanted: readonly string[]) {
   await pollUntil(
     () => {
@@ -335,26 +241,21 @@ async function waitForEvents(from: number, wanted: readonly string[]) {
   return events.slice(from);
 }
 
-/** Ask for nothing to arrive for a beat, then say what did. */
 async function eventsAfterQuiet(from: number): Promise<string[]> {
   await sleep(EVENT_QUIET_MS);
   return events.slice(from);
 }
 
-/** One step through the tap's own path, on the platform that owns the view. */
+/** One step through the same path a tap takes. */
 async function stepStepper(testId: string, direction: number): Promise<void> {
   const handle = await handleOf(testId);
   handle.nuiTestStep(direction);
 }
 
 /**
- * Perform the *reader's* action and wait for its report.
- *
- * Snapshot-before-post, Slider's rule: the seam posts to the UI thread and returns,
- * so the only question a caller that posted it can ask is "has the report changed?",
- * and reading the old report after posting loses a race the runner wins when it is
- * loaded. Every report is numbered (`#$n`), so no answer can be byte-identical to
- * the one before it.
+ * Performs the screen reader's action and waits for its report. The old report is
+ * read before the action is posted to the UI thread; reading it afterwards races.
+ * Reports are numbered, so a new one always differs.
  */
 async function accessibilityStepReport(
   testId: string,
@@ -377,7 +278,6 @@ async function accessibilityStepReport(
   );
 }
 
-/** Wait for the stepper's next accessibility probe, and return its `a11y` field. */
 async function probeAccessibility(testId: string): Promise<string> {
   const handle = await handleOf(testId);
   const before = Number(reportOf(testId).probes ?? '0');
@@ -391,24 +291,20 @@ async function probeAccessibility(testId: string): Promise<string> {
   );
 }
 
-/** `merged` - how many nodes a reader is offered. iOS answers `unavailable`. */
+/** How many nodes a screen reader is offered. iOS answers `unavailable`. */
 const mergedCount = (testId: string): string =>
   reportOf(testId).merged ?? 'none';
 
 /**
- * The key `Stepper.tsx` builds.
- *
- * Written out rather than imported, so a wrong helper cannot poison and pass its own
- * test (Chip's rule) - and the emptiness *is* the claim: nothing a caller sends
- * changes a Stepper's box, so one cached size serves the whole app. `Sizing` below
- * is what makes an accidental change to that cost a red test rather than a silently
- * widening cache.
+ * Must match the sizing key `Stepper.tsx` builds. It is empty because no prop
+ * changes a Stepper's box.
  */
 function sizingKey(): string {
   return '';
 }
 
-/** A size that is no stepper's, planted as the engine's answer before a mount. */
+// A size no Stepper has, seeded before a mount so that a missing size correction
+// leaves a visibly wrong box.
 const WRONG_SIZE = { width: 13.5, height: 61.5 };
 
 function poison(keys: readonly string[]): void {
@@ -425,17 +321,13 @@ function poison(keys: readonly string[]): void {
 
 /* ------------------------------ the pixel probe ------------------------------ */
 
-/**
- * Six digits everywhere on purpose: `processColor` reads an eight-digit literal as
- * `#RRGGBBAA`, so `#FF000000` is *red* to it, and the sampler compares the channels it
- * was handed. A constant written with a leading `FF` asks about the wrong colour.
- */
-/** The sampler's own backdrop, from `NitroUiPixelProbe.kt` / iOS's twin. */
+// Six digits on purpose: `processColor` reads an eight-digit literal as
+// `#RRGGBBAA`, so `#FF000000` is red to it.
+/** The mid-grey the native pixel sampler draws behind the control. */
 const BACKDROP = '#808080';
 const BLACK = '#000000';
 const WHITE = '#FFFFFF';
 
-/** One probe's answer, parsed. */
 type PixelReport = {
   raw: string;
   width: number;
@@ -543,8 +435,6 @@ describe('Stepper', () => {
         `${id}: the box Fabric gave is ${describeSize(box)} but the control measured ` +
           `${describeSize(control)} - an intrinsic control's box is its own measure`
       ).toBe(true);
-      // The claim D17 makes worth a device: the number this control declares is the
-      // box it draws, so a cold mount is not laid out at a size it then contradicts.
       expect(
         sameSize(control, DECLARED),
         `${id}: measured ${describeSize(control)}, which is not the size the control ` +
@@ -563,11 +453,6 @@ describe('Stepper', () => {
   });
 
   it('measures one box for every range, step and disabled state', async () => {
-    // A Stepper's sizing variant is empty, and this is the assertion that keeps it
-    // honest: the box is two fixed halves, so a range of 2 or of 2,000, a step of 1 or
-    // of 0.5, and a disabled control all measure the same number. If a prop that moves
-    // the box is ever added, `Stepper.tsx` has to start naming it in its variant - and
-    // this test goes red first, because the boxes stop agreeing.
     poison([sizingKey()]);
     const view = await render(
       <View style={{ flexDirection: 'row', gap: 12, padding: 12 }}>
@@ -648,8 +533,6 @@ describe('Stepper', () => {
     ).toEqual(['step:1']);
     await waitForDrawn('step', '1');
 
-    // Both halves report their state from where they are drawn, so a step is
-    // asserted against the buttons as well as against the value.
     expect(
       `${reportOf('step').up}/${reportOf('step').down}`,
       'mid-range, both halves are live'
@@ -697,11 +580,8 @@ describe('Stepper', () => {
       'at the maximum it is the other half round'
     ).toBe('0/1');
 
-    // The non-event needs a barrier (core.md §9): an empty list only means "nothing
-    // arrived" once something else has proved the callback pipeline flushed. A live
-    // stepper, stepped in the same turn as the two bound ones, is that proof - and
-    // the equality below then says both halves at once: the barrier's event arrived,
-    // and nothing else did.
+    // The live stepper is stepped last: its event proves the callback pipeline
+    // flushed, so the absence of the other two events means they never fired.
     await waitForTestId('bounds-barrier');
     const before = events.length;
     await stepStepper('at-min', -1);
@@ -719,10 +599,6 @@ describe('Stepper', () => {
     expect(reportOf('at-min').displayed, 'the floor stayed at 0').toBe('0');
     expect(reportOf('at-max').displayed, 'the ceiling stayed at 2').toBe('2');
 
-    // And the live half at each end still works, so the silence above is a bound and
-    // not a control that stopped listening. From the *settled* list onward: the
-    // barrier's own event sits in front of these two, so a window opened at
-    // `before` would report three events where two happened.
     const afterBarrier = events.length;
     await stepStepper('at-min', 1);
     expect(await waitForEvents(afterBarrier, ['at-min:1'])).toEqual([
@@ -752,8 +628,6 @@ describe('Stepper', () => {
     const before = events.length;
     for (let index = 0; index < 3; index += 1) {
       await stepStepper('tenths', 1);
-      // Awaited one step at a time: the point is the *digits* of each step, and a
-      // burst would let one drifted value hide behind the next correction.
       await waitForEvents(before + index, [
         `tenths:${['0.1', '0.2', '0.3'][index]}`,
       ]);
@@ -800,21 +674,14 @@ describe('Stepper', () => {
     const before = events.length;
     await stepStepper('refused', 1);
     expect(await waitForEvents(before, ['refused:3'])).toEqual(['refused:3']);
-    // The app never adopted 3. Its echo still advanced `mostRecentEventCount`, which
-    // is what lets native accept the still-current `value={2}` and put the control
-    // back - the refused half of the handshake (§4), and the half a control without
-    // an echo would get wrong forever.
     await waitForDrawn('refused', '2');
     expect(
       reportOf('refused').displayed,
       'a refused step snapped back to the app’s value'
     ).toBe('2');
 
-    // The other direction, same handshake: a value the app writes is displayed.
     setters.get('written')?.(7);
     await waitForDrawn('written', '7');
-    // And from there the user can step again, so the write was accepted rather than
-    // parked as stale.
     const next = events.length;
     await stepStepper('written', 1);
     expect(await waitForEvents(next, ['written:8'])).toEqual(['written:8']);
@@ -844,8 +711,7 @@ describe('Stepper', () => {
     await waitForTestId('off-barrier');
     await waitForDrawn('off', '5');
 
-    // The same barrier discipline as the bounds test: step the live one alongside the
-    // disabled one, so silence means "nothing arrived", not "nothing arrived yet".
+    // The live stepper's event proves the pipeline flushed.
     const before = events.length;
     await stepStepper('off', 1);
     await stepStepper('off', -1);
@@ -867,14 +733,8 @@ describe('Stepper', () => {
       'a disabled stepper has no live half at all'
     ).toBe('0/0');
 
-    // iOS: the *drawing*, not the flag. `model.disabled` is what React sent and the
-    // accessibility traits below are set straight from it, so everything above stays green
-    // while the screen paints a live-looking control - which is what the disabled row of
-    // `stepper-ios.png` used to look like, a half stop away from Android's. SwiftUI's
-    // `.disabled(_)` is on the chain and does reach this host (a `Toggle` under it dims), but
-    // SwiftUI's `Stepper` does not change its own drawing for it, and no capture of its box
-    // reaches what it draws (`nuiTestPixelProbe` carries that measurement). So the assertion
-    // is the opacity the drawing code was handed, read at the same point `up`/`down` are.
+    // SwiftUI's `Stepper` does not dim itself under `.disabled`, so the iOS control
+    // applies its own opacity, and the report carries the value it drew with.
     if (Platform.OS === 'ios') {
       expect(
         reportOf('off').opacity,
@@ -889,7 +749,6 @@ describe('Stepper', () => {
       ).toBe('1.00');
     }
 
-    // A reader is told the same thing the screen shows.
     const a11y = await probeAccessibility('off');
     expect(
       a11y,
@@ -898,8 +757,6 @@ describe('Stepper', () => {
     ).toContain('disabled=true');
 
     view.unmount();
-    // Re-mounted enabled under the same testID: the flag arriving as `false` is the
-    // other half of "follows the flag back".
     const second = await render(
       <View style={{ flexDirection: 'row', gap: 12, padding: 12 }}>
         <StepperOwner
@@ -946,17 +803,13 @@ describe('Stepper', () => {
     await waitForTestId('seeded');
     await waitForTestId('floored');
     await waitForDrawn('seeded', '3');
-    // An uncontrolled Stepper with no `defaultValue` starts at the bottom of its own
-    // range: `<Stepper minimumValue={20} />` showing 0 would display a value the
-    // control cannot legally hold.
+    // With no `defaultValue`, an uncontrolled Stepper starts at its minimum.
     await waitForDrawn('floored', '20');
 
     const before = events.length;
     await stepStepper('seeded', 1);
     expect(await waitForEvents(before, ['seeded:4'])).toEqual(['seeded:4']);
     await waitForDrawn('seeded', '4');
-    // Native owns the value, so the app being silent about it changes nothing: a
-    // second step continues from 4 rather than snapping back to the 3 it never saw.
     const again = events.length;
     await stepStepper('seeded', 1);
     expect(await waitForEvents(again, ['seeded:5'])).toEqual(['seeded:5']);
@@ -998,16 +851,10 @@ describe('Stepper', () => {
     }
     await waitForDrawn('over', '5');
     await waitForDrawn('under', '0');
-    // A value that is inside the range but not on the grid goes to the grid
-    // (`quantize`), not to the nearest bound. The fixture is deliberately *not* a tie:
-    // the shared quantizer breaks ties away from zero, so a half-step value would pin
-    // that tie-break here as well, and this test is about the grid.
+    // 7 on a grid of 3 is not a tie, so this does not depend on how ties round.
     await waitForDrawn('offgrid', '6');
 
     const before = events.length;
-    // From the clamped value the control can still step, and the first step is a
-    // legal one - a control that stored 9 and clamped only for display would step to
-    // 10, off the end of the range.
     await stepStepper('over', -1);
     expect(await waitForEvents(before, ['over:4'])).toEqual(['over:4']);
     await stepStepper('under', 1);
@@ -1039,28 +886,18 @@ describe('Stepper', () => {
     );
 
     expect(detail, 'the control is named').toContain('Quantity');
-    // The *value* is the control's own half of the announcement, spelled without a
-    // float's noise (`4`, not `4.0`), and both platforms have to spell it alike or
-    // the two readings of this line would disagree. It is read from the field the
-    // reader is handed (`accessibilityValue` on iOS, the merged node's published
-    // progress on Android): a bare `4` here would be satisfied by this fixture's own
-    // `step={2}`, `range=…@4/steps=4` and `traits=4096`, which say nothing about it.
+    // `value=4`, not a bare `4`: other fields of the report also contain a 4.
     expect(detail, 'the control carries its value').toContain('value=4');
 
     if (Platform.OS === 'ios') {
-      // `.adjustable` is the trait VoiceOver needs to offer a swipe-adjustable element
-      // at all. The control answers it as a bool computed by UIKit, because the raw mask
-      // beside it is UIKit's own numbering: an element UIKit agrees is adjustable
-      // reports `traits=4096` on the OS this ran on, which is not the bit the pre-26
-      // headers list, so a test that hard-coded one would be a premise everywhere else.
+      // The raw trait mask differs between iOS versions, so the test reads the
+      // `adjustable` flag UIKit computed and not a bit.
       const traits = /traits=(\d+)/.exec(detail)?.[1] ?? '';
       expect(traits.length, `no traits in "${detail}"`).toBeGreaterThan(0);
       expect(detail, `the element is not adjustable: "${detail}"`).toContain(
         'adjustable=true'
       );
     } else {
-      // Android's claim has two halves: the one node with range info, and the two
-      // buttons being *out* of the tree beside it.
       expect(
         mergedCount('a11y'),
         `a reader is not offered exactly one merged node (report: "${detail}")`
@@ -1124,14 +961,9 @@ describe('Stepper', () => {
     expect(down, 'and back down again').toContain('6->4');
     expect(await waitForEvents(back, ['reader:4'])).toEqual(['reader:4']);
 
-    // At the ceiling the *reader's* action has nothing to do. The two platforms word
-    // this differently - iOS performs the call on a `.notEnabled` element that
-    // refuses, Android's delegate clamps its own target - so what both have to agree
-    // on is the outcome: no event, and no value.
     const bound = events.length;
     const atBound = await accessibilityStepReport('reader-at-max', 1);
-    // The live stepper is the barrier for this non-event: its own reader step lands
-    // in the same window, so its event is what makes the empty list mean anything.
+    // The live stepper's event proves the pipeline flushed.
     const barrier = await accessibilityStepReport('reader', 1);
     console.log(`stepper reader at the ceiling: ${atBound}`);
     expect(atBound, 'the probe reported what it found').toContain('10');
@@ -1164,8 +996,6 @@ describe('Stepper', () => {
     await waitForDrawn('pixels', '5');
 
     if (Platform.OS === 'ios') {
-      // iOS has no Android artwork to sample and says so, in the same line shape
-      // IconButton's answers with, so one test reads both platforms.
       const refusal = await pixelProbe('pixels', BLACK, 'the iOS refusal');
       expect(refusal.raw, `iOS answered "${refusal.raw}"`).toContain(
         'no pixels'
@@ -1185,11 +1015,9 @@ describe('Stepper', () => {
       0
     );
 
-    // Black and white are not colours this control paints - they are the two ends of
-    // the scale used to *find* the two it does: each probe answers the nearest thing on
-    // screen to its own end. One of those is the container, the other the ink. Whether
-    // the scheme paints dark ink on a mid container or light ink on a dark one is then
-    // decided by the pixels rather than by a JS constant, so both spellings pass.
+    // The glyph colour comes from the dynamic colour scheme and is unknown here, so
+    // the probes ask for black and for white and take the closest colour to each:
+    // one is the container, the other the ink.
     const darkColour = dark.closest;
     const lightColour = light.closest;
     expect(darkColour.length, `no closest colour in "${dark.raw}"`).toBe(7);
@@ -1205,8 +1033,7 @@ describe('Stepper', () => {
       lightColour,
       'the lightest colour present'
     );
-    // The marks are thin strokes over a solid fill, so the extreme covering *fewer*
-    // pixels is the ink and the other one is the surface it sits on.
+    // The colour covering fewer pixels is the ink.
     const ink = darkPaint.hits <= lightPaint.hits ? darkPaint : lightPaint;
     const surface = darkPaint.hits <= lightPaint.hits ? lightPaint : darkPaint;
     console.log(
@@ -1226,10 +1053,8 @@ describe('Stepper', () => {
           colourDistance(ink.closest, surface.closest)
         )} apart on the sampler's own scale) - nothing is being drawn on top of it`
     ).toBeGreaterThan(60);
-    // The line a stepper with empty glyph slots cannot cross. With nothing painted,
-    // the two extremes are the container and the sampler's own mid-grey backdrop
-    // showing through the box - about 37 apart and near-equal in area - so this and the
-    // distance above collapse together rather than one of them quietly surviving.
+    // With no glyph painted, the two extremes would be the container and the
+    // sampler's backdrop: close in colour and near-equal in area.
     expect(
       surface.hits > ink.hits * 2,
       `the surface (${surface.closest}, ${String(
@@ -1245,7 +1070,6 @@ describe('Stepper', () => {
         'the glyph slots drew nothing, so the only dark/light thing here is the ' +
         `canvas: ${dark.raw}`
     ).toBeGreaterThan(30);
-    // And ink that covers the box is a filled block, not a glyph.
     expect(
       ink.hits < area * 0.5,
       `${ink.closest} covers ${String(ink.hits)} of ${String(
@@ -1256,11 +1080,6 @@ describe('Stepper', () => {
   });
 
   it('resets the value, the range and the name when its view is recycled', async () => {
-    // `Recycling.harness.tsx` proves the pool is real; Conformance's residue probe
-    // proves the reset clears the value. What this file pins is the pair the Stepper
-    // adds: a recycled control must also forget its previous owner's **range**, or a
-    // 0…2 stepper becomes a 0…100 stepper wearing the new owner's name - a wrong
-    // bound no prop re-sends until the app happens to send one.
     const first = await render(
       <StepperOwner
         accessibilityLabel="First owner"
@@ -1278,7 +1097,7 @@ describe('Stepper', () => {
     expect(await waitForEvents(before, ['recycled:2'])).toEqual(['recycled:2']);
     await waitForDrawn('recycled', '2');
     first.unmount();
-    // Long enough for the drop to run and the instance to reach the pool.
+    // Time for the dropped view to reach the recycle pool.
     await sleep(500);
 
     const second = await render(
@@ -1302,8 +1121,6 @@ describe('Stepper', () => {
       'the recycled control lost the previous owner’s range'
     ).toBe(100);
 
-    // And the one-shot that applies a default was re-armed: 40 is neither the residue
-    // (2) nor what a reset alone leaves (0), so only a re-applied default can draw it.
     const after = events.length;
     await stepStepper('recycled', -1);
     expect(await waitForEvents(after, ['recycled:39'])).toEqual([
@@ -1346,7 +1163,6 @@ describe('Stepper', () => {
     for (const index of many) {
       await waitForTestId(`many-${String(index)}`);
     }
-    // One cached size for all forty, and every control answers for itself.
     const sizes = new Map<string, Size>();
     for (const index of many) {
       const id = `many-${String(index)}`;

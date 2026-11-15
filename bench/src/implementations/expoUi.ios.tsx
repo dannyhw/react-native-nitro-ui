@@ -83,9 +83,8 @@ const LABELS_HIDDEN = [labelsHidden()];
 
 /**
  * `.labelStyle(.iconOnly)`: the label keeps its text for the screen reader and
- * SwiftUI draws only the symbol. Module-level for the same identity reason as
- * `LABELS_HIDDEN`, and it is what makes an icon-only button out of `Button` —
- * `@expo/ui` has no `IconButton` on iOS, so this is its equivalent surface.
+ * SwiftUI draws only the symbol. `@expo/ui` has no `IconButton` on iOS, so this
+ * is its equivalent.
  */
 const ICON_ONLY = [labelStyle('iconOnly')];
 
@@ -96,65 +95,39 @@ const ICON_ONLY = [labelStyle('iconOnly')];
  */
 const BORDERED_PROMINENT = [buttonStyle('borderedProminent')];
 
-/**
- * `.bordered` — the look nitro-ui's `ButtonGroup` gives its `standard` items, and the
- * default its `Button` arm does *not* use. Module-level for the identity reason.
- */
+/** `.bordered`, the look nitro-ui's `ButtonGroup` gives its `standard` items. */
 const BORDERED = [buttonStyle('bordered')];
 
 /**
- * Module-level for the same reason as `LABELS_HIDDEN`.
- *
- * `.linear` is spelled explicitly rather than left to `automatic`: outside a
- * `Form`/`List` a SwiftUI `ProgressView` with a value is linear anyway, and the
- * arm must not depend on the container it happens to sit in to be the control
- * under test - nitro-ui's arm asks its toolkit the same explicit question.
+ * `.linear` is spelled explicitly rather than left to `automatic`, so the arm
+ * does not depend on the container it sits in to be the control under test.
  */
 const LINEAR_STYLE = [progressViewStyle('linear')];
 
 /**
- * `.segmented`, which is the same native control nitro-ui hosts, reached through
- * Expo's bridge instead of through Nitro - the point of the comparison.
- * `labelsHidden()` for the reason `BenchToggle` has: a labelled `Picker` lays out
- * and renders a label `Text` that neither the floor nor the control under test
- * has, and inflating this arm's mount, CPU and memory in the one comparison this
- * project publishes is what T02 review B3 is about.
+ * `.segmented` is the same native control nitro-ui hosts. `labelsHidden()`
+ * because a labelled `Picker` lays out a label `Text` that no other arm draws.
  */
 const SEGMENTED_MODIFIERS = [pickerStyle('segmented'), labelsHidden()];
 
 /**
- * The `tag` a segmented option needs, one array per position, built once.
- *
- * A fresh `[tag(n)]` per render would hand the host a `modifiers` prop whose
- * identity changed on every flip (T02 review NIT). The count is fixed at three
- * because every arm's option list has three labels; `tagModifiers` says so out
- * loud rather than passing `undefined` to a control if that ever changes.
+ * The `tag` a segmented option needs, one array per position, built once so the
+ * `modifiers` prop keeps its identity across renders. Three, because every
+ * arm's option list has three labels.
  */
 const TAG_MODIFIERS = [[tag(0)], [tag(1)], [tag(2)]];
 
 /**
- * `.menu`, the pull-up list - the platform control nitro-ui's `variant: 'menu'`
- * hosts, reached through Expo's bridge. `labelsHidden()` for the reason
- * `BenchSegmented` has: a labelled SwiftUI `Picker` lays out a label `Text` that
- * neither the floor nor the control under test draws, and inflating this arm is
- * what T02 review B3 is about.
+ * `.menu`, the platform control nitro-ui's `variant: 'menu'` hosts.
+ * `labelsHidden()` for the same reason as `SEGMENTED_MODIFIERS`.
  */
 const MENU_MODIFIERS = [pickerStyle('menu'), labelsHidden()];
 
 /**
- * The trigger shape nitro-ui's iOS Menu asks SwiftUI for, asked the same way: the
- * label *is* the trigger (`.menuStyle(.button)`), the disclosure chevron is hidden
- * (`.menuIndicator(.hidden)`), and the button's own style is pinned rather than
- * left automatic.
- *
- * Not a cosmetic choice. Without these, `@expo/ui`'s `Menu` renders SwiftUI's
- * default menu look — a label with a chevron and no button chrome — and the arm
- * would measure a different box from the control under test, which is the exact
- * unfairness T02 review B3 is about. `ios/components/Menu/HybridNitroUiMenu.swift`
- * applies `.menuStyle(.button)` plus `.buttonStyle(.borderedProminent)` for its
- * default `filled` variant, so this array is that same pair through Expo's bridge:
- * the comparison is then one SwiftUI `Menu` over Nitro versus one over Expo, not two
- * different controls.
+ * The trigger shape nitro-ui's iOS Menu asks SwiftUI for. Without these,
+ * `@expo/ui`'s `Menu` renders SwiftUI's default menu look, a label with a
+ * chevron and no button chrome, and the arm would measure a different box from
+ * the control under test.
  */
 const MENU_TRIGGER_MODIFIERS = [
   menuStyle('button'),
@@ -162,9 +135,6 @@ const MENU_TRIGGER_MODIFIERS = [
   buttonStyle('borderedProminent'),
 ];
 
-/**
- * @param {number} segment
- */
 function tagModifiers(segment: number) {
   const modifiers = TAG_MODIFIERS[segment];
   if (modifiers == null) {
@@ -177,13 +147,9 @@ function tagModifiers(segment: number) {
 }
 
 /**
- * No `label`, plus `labelsHidden()`.
- *
- * A labelled SwiftUI `Toggle` lays out and renders a `Text` per control, which
- * neither RN's `Switch` nor nitro-ui's does (T10's SwiftUI toggle applies
- * `.labelsHidden()`). Labelling the Expo arm would inflate its mount, UI CPU and
- * memory numbers in exactly the comparison this project publishes
- * (T02 review B3). `testID` keeps per-control identity without drawing anything.
+ * No `label`, plus `labelsHidden()`: a labelled SwiftUI `Toggle` lays out and
+ * renders a `Text` per control, which neither RN's `Switch` nor nitro-ui's
+ * does. `testID` keeps per-control identity without drawing anything.
  */
 function BenchToggle({ index, value }: { index: number; value: boolean }) {
   return (
@@ -196,15 +162,6 @@ function BenchToggle({ index, value }: { index: number; value: boolean }) {
   );
 }
 
-/**
- * A SwiftUI `Slider` with no label of any kind.
- *
- * The same reason `BenchToggle` hides its labels: `minimumValueLabel` /
- * `maximumValueLabel` draw real `Text` views that RN's floor and nitro-ui's
- * control do not have, and labelling this arm would inflate its mount, UI CPU
- * and memory numbers in exactly the comparison this project publishes
- * (T02 review B3).
- */
 /**
  * A SwiftUI `Button` whose label is a plain string.
  */
@@ -220,14 +177,10 @@ function BenchButton({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * A `Button` whose label is a symbol and nothing else — the iOS peer for the
- * control under test.
- *
- * `label` stays set even though it is not drawn: it is the control's accessible
- * name, which is the same string every other arm passes, and dropping it would
- * leave this arm's button unnamed while the others are named. The default
- * `.borderless` button style is kept (no `buttonStyle(...)`), which is nitro-ui's
- * `standard` variant, so neither arm pays for a container the other avoids.
+ * A `Button` whose label is a symbol and nothing else. `label` stays set even
+ * though it is not drawn: it is the control's accessible name, which every
+ * other arm passes too. The default `.borderless` button style is kept, which
+ * is nitro-ui's `standard` variant.
  */
 function BenchIconButton({ index, value }: { index: number; value: boolean }) {
   return (
@@ -242,12 +195,9 @@ function BenchIconButton({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * `@expo/ui`'s SwiftUI `Stepper` — the same control `nitro-ui`'s iOS half is, reached
- * through somebody else's runtime, which is exactly what makes it the comparison.
- *
- * `labelsHidden()` because the control under test shows no label: SwiftUI's `Stepper`
- * requires one, and letting this arm draw a word would price a wider control than the
- * one in the row above it. `min`/`max` match every other arm's range.
+ * `@expo/ui`'s SwiftUI `Stepper`. `labelsHidden()` because SwiftUI's `Stepper`
+ * requires a label and the control under test shows none. `min`/`max` match
+ * every other arm's range.
  */
 function BenchStepper({ index, value }: { index: number; value: boolean }) {
   return (
@@ -268,17 +218,9 @@ function BenchStepper({ index, value }: { index: number; value: boolean }) {
  * The row nitro-ui's `ButtonGroup` draws at its defaults, rebuilt from `@expo/ui`'s
  * primitives: an `HStack` of three bordered `Button`s at the same 8 pt gap.
  *
- * Not `ControlGroup`, which `@expo/ui` does ship. `ControlGroup` is SwiftUI's
- * *connected* track — the peer of nitro-ui's `appearance: 'connected'`, which the plan
- * does not mount — and it collapses a `Button`'s chrome and drops trailing labels, so
- * this arm would price a different control from the one under test
- * (T02 review B3; `ios/components/ButtonGroup/HybridNitroUiButtonGroup.swift` draws the
- * `standard` row as exactly this HStack). Same reasoning as `MENU_TRIGGER_MODIFIERS`:
- * both sides ask the toolkit for the same box.
- *
- * `buttonStyle('bordered')` is nitro-ui's `standard` variant, pinned rather than left
- * automatic, and the item count is the row `buttonGroupItems` builds — module-level, so
- * the flip changes the titles and not only the props.
+ * Not `ControlGroup`: that is SwiftUI's connected track, which collapses a
+ * `Button`'s chrome and drops trailing labels, so it would be a different control
+ * from the one under test.
  */
 function BenchButtonGroup({ index, value }: { index: number; value: boolean }) {
   return (
@@ -296,13 +238,9 @@ function BenchButtonGroup({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * `@expo/ui`'s row for this job: its universal `ListItem`, which on iOS is a SwiftUI
- * `Button` with a headline and a trailing slot (Q10 Appendix A) — the row a `@expo/ui`
- * app writes for a settings line, and the same two pieces of text the other arms draw.
- *
- * `ListItem` rather than `LabeledContent` because the row under test *presses*, and a
- * labeled content row has no press of its own: bolting one on would be layout code the
- * arm under test does not write.
+ * `@expo/ui`'s universal `ListItem`, which on iOS is a SwiftUI `Button` with a
+ * headline and a trailing slot. Not `LabeledContent`, because the row under test
+ * presses and a labeled content row has no press of its own.
  */
 function BenchListItem({ index, value }: { index: number; value: boolean }) {
   return (
@@ -348,12 +286,8 @@ function BenchTextField({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * A SwiftUI `ProgressView` with no label.
- *
- * `children` is a label that renders as `Text` next to the bar - the same reason
- * `BenchToggle` hides its label and `BenchSlider` has none: labelling this arm
- * would inflate its mount, UI CPU and memory numbers in the comparison this
- * project publishes (T02 review B3).
+ * A SwiftUI `ProgressView` with no label: `children` would render as a `Text`
+ * next to the bar, which no other arm draws.
  */
 function BenchProgress({ index, value }: { index: number; value: boolean }) {
   return (
@@ -427,15 +361,9 @@ function BenchMenuPicker({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * A SwiftUI `Menu` whose trigger label is the one every other arm draws and whose
- * rows are the ones they mount - so the flip paints the same new title, and the
- * box has to follow it, as it does for every other arm.
- *
- * `MENU_TRIGGER_MODIFIERS` is what makes this the same control as the one under
- * test rather than SwiftUI's default menu look. The rows are `Button`s because that
- * is what a menu row is in SwiftUI, and the arm keeps them plain: the popup is
- * never opened during a cell, so what this costs is the mounted trigger plus the
- * row content SwiftUI builds for the menu.
+ * A SwiftUI `Menu` whose trigger label and rows are the ones every other arm
+ * mounts. The popup is never opened during a cell, so what this costs is the
+ * mounted trigger plus the row content SwiftUI builds for the menu.
  */
 function BenchMenu({ index, value }: { index: number; value: boolean }) {
   return (
@@ -452,18 +380,12 @@ function BenchMenu({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * One row of the batch's Form, in SwiftUI's own row vocabulary.
+ * One row of the batch's Form, in SwiftUI's own row vocabulary: `LabeledContent`
+ * is a title with a trailing value, a labelled `Toggle` is a title with a
+ * control, and a `Button` is the row that answers to a press.
  *
- * Each kind is what a SwiftUI app writes for it, because asking this arm the same
- * question nitro-ui's arm asks the platform is the whole comparison:
- * `LabeledContent` is a title with a trailing value, a labelled `Toggle` is a title
- * with a control, and a `Button` is the row that answers to a press - the only way
- * to make a SwiftUI Form row pressable here, so its look is SwiftUI's plain row and
- * not this arm's decoration.
- *
- * The `Toggle` keeps its label, unlike `BenchToggle`: out alone, a label would draw
- * a `Text` the other arms' controls do not have (T02 review B3); *in a row*, the
- * label is the row's title, which every arm draws and this arm gets for free.
+ * The `Toggle` keeps its label, unlike `BenchToggle`: in a row the label is the
+ * row's title, which every arm draws.
  */
 function BenchFormRow({ index, value }: { index: number; value: boolean }) {
   const kind = formRowKind(index);
@@ -492,9 +414,8 @@ function BenchFormRow({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
- * `@expo/ui` worst case for the library: one SwiftUI hosting view per control.
- * Expo UI always needs a `Host`, so both Expo arms are required for a fair
- * comparison (docs/research/setup-decisions.md SS6).
+ * `@expo/ui` worst case: one SwiftUI hosting view per control. Expo UI always
+ * needs a `Host`, so a fair comparison measures both this and the shared host.
  */
 export function ExpoUiHostPerControlList({
   n,
@@ -503,10 +424,8 @@ export function ExpoUiHostPerControlList({
 }: BenchListProps) {
   const style = rowStyle(component);
   if (component === 'form') {
-    // One hosting view per *row*: a Form per row, which is what an app pays when it
-    // hosts each settings row instead of one grouped list. Each host needs a box
-    // (`FORM_ROW_HOST_STYLE`) because a host has no intrinsic size, so this arm also
-    // prices the fixed row box the grouped-list arms get from the list for free.
+    // One hosting view, and one Form, per row. Each host needs a box
+    // (`FORM_ROW_HOST_STYLE`) because a host has no intrinsic size.
     return (
       <>
         {range(n).map((index) => (
@@ -519,9 +438,8 @@ export function ExpoUiHostPerControlList({
       </>
     );
   }
-  // `matchContents` is what lets a host take the button's fitting size, which is
-  // how a consumer ships a sized-to-content control here; it is also part of what
-  // this arm costs per control and is measured as such.
+  // `matchContents` lets a host take its content's fitting size, which is how a
+  // consumer ships a sized-to-content control.
   return (
     <>
       {range(n).map((index) =>
@@ -593,7 +511,7 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   }
   if (component === 'form') {
     // The peer for nitro-ui's one grouped Form: one hosting view, one SwiftUI
-    // `Form`, one `Section`, `n` rows - the tree an app writes.
+    // `Form`, one `Section`, `n` rows.
     return (
       <Host style={stackStyle(n, component)}>
         <Form>
@@ -613,8 +531,7 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
     component === 'picker' ||
     component === 'menu'
   ) {
-    // `matchContents` for the batch's host too, for the same reason as the
-    // per-control arm; the switch/slider hosts stay exactly as published.
+    // `matchContents` for the batch's host too, as in the per-control arm.
     return (
       <Host matchContents style={stackStyle(n, component)}>
         <VStack spacing={0}>

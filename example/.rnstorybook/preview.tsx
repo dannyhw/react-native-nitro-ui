@@ -1,7 +1,5 @@
-// Global Storybook preview: the controls/actions parameters the on-device
-// addons read, plus the background swatches the Backgrounds panel offers
-// (light / dark / surface). The default swatch follows the device appearance so
-// the controls are seen against a matching surface when a story first opens.
+// Global Storybook preview. The default background follows the device
+// appearance.
 import { withBackgrounds } from '@storybook/addon-ondevice-backgrounds';
 import { Appearance } from 'react-native';
 

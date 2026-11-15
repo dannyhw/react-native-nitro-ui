@@ -1,9 +1,3 @@
-/**
- * Chip stories (G12). Props and events: `docs/components/chip.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Chip } from 'react-native-nitro-ui';
@@ -68,12 +62,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * `selected` stays authoritative: taps move the local echo of it and report to
- * the Actions panel, and moving the `selected` row moves the chip.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onSelectedChange, selected, ...props }) {
     const [current, setCurrent] = useState<boolean>(selected ?? false);
@@ -103,11 +91,6 @@ export const Playground: Story = {
 
 const DIETS = ['Vegan', 'Vegetarian', 'Gluten-free', 'Nut-free'] as const;
 
-/**
- * Both kinds and both states in one panel - the README screenshot. Filter chips
- * on top (one selected), assist chips below (two with SF Symbols on iOS), and a
- * disabled pair.
- */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -140,7 +123,6 @@ export const States: Story = {
   ),
 };
 
-/** The controlled contract: the text is the prop, the chip follows it. */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const ink = useShowcaseInk();
@@ -185,9 +167,8 @@ export const Controlled: Story = {
 };
 
 /**
- * Sizing: a chip is its label's size. On Android a selected filter chip is
- * wider by its check mark; on iOS selection only changes the fill. A caller's
- * width truncates the label.
+ * On Android a selected filter chip is wider by its check mark; on iOS selection
+ * only changes the fill.
  */
 export const Sizing: Story = {
   render: () => (

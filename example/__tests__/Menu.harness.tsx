@@ -1,49 +1,3 @@
-/**
- * On-device tests for the Menu (task G7a).
- *
- * A Menu is a Button's box and a window's worth of content, so this suite has two
- * halves that read completely differently.
- *
- * **The box** is the Button's story, told again: the sizing configuration is
- * `variant|size|action|systemImage|title` (`Menu.tsx`'s `sizingVariantFor`), the items
- * are deliberately *not* in it, `action` is in it because a `primaryAction` gives
- * Android a second container (E3 - see the split suite), and every cold configuration
- * is poisoned first
- * (`seedSizingSize` with a size no menu has, then an environment bump) so a
- * correction that never arrives leaves a visible wrong box *and* costs a correction
- * the test requires. The `group` half is this control's own claim, and it is the
- * one a Button cannot make: a menu whose list grows must not be re-laid out, so
- * "the same key for two different menus" is asserted here, not assumed.
- *
- * **The window** is the Picker's story, told with a different seam. The harness
- * dispatches input into the app's own window, so a press reaches the trigger - and
- * on Android that really opens the list - while no press reaches a row inside it
- * (`HostPopups.harness.tsx`'s header explains why: a Compose `Popup` is a window of
- * its own). Rows are therefore pressed through `nuiTestSelectRow`, which runs the
- * model's own pick path, and everything about the list is read from inside the
- * composition through `nuiTestMenuReport`: `expanded`, a process-wide `live` menu
- * count, the anchor's rect, the menu's rect, and the pickable rows it composed.
- *
- * **iOS passes through the window half.** Two independent reasons, both measured
- * elsewhere: a SwiftUI `Menu` hands its list to the system's presentation, so the
- * composition never owns a window to measure (`HybridNitroUiPicker` answers `-1` for
- * the same reason and this control does too), and `userEvent`'s synthesised touch is
- * refused by SwiftUI's button gesture environment (`docs/tasks/G2-button.report.md`
- * measured that for every Button style). One exception, measured by E3's split suite:
- * a `Menu` built with `primaryAction:` does take the synthesised tap, so the action
- * half of that prop *is* observable on iOS - opening is not.
- *
- * So on iOS the open/close counters, the rects, `live` and the inline-vs-nested
- * difference are asserted only as far as the `-1`s and the row count go, and the taps
- * that need a real HID-level event are
- * G7b's real-input case (`docs/components/menu.md` says the same about
- * `onOpen`/`onClose`).
- *
- * Two rules that hold on both platforms and are therefore *not* platform-split: a
- * pick reports `onSelect` exactly once and a disabled row reports nothing (each with
- * the barrier twin that proves the press landed at all), and a `disabled` control
- * answers nothing.
- */
 import { useState } from 'react';
 import {
   PixelRatio,
@@ -77,7 +31,6 @@ import {
 /** The Fabric name - what the sizing engine files sizes under. */
 const COMPONENT = 'NitroUiMenu';
 
-/** The sibling this control claims to size like, filed under its own name. */
 const BUTTON_COMPONENT = 'NitroUiButton';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
@@ -89,11 +42,7 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * What `hybridRef` hands back - declared, not imported (DECISIONS D14). Read-only,
- * and there is no `expanded`: open state is native-owned (D29), and the witness
- * below is the seam that reads it.
- */
+/** What `hybridRef` hands back; the library exports no Hybrid View types. */
 type MenuHandle = {
   readonly title: string;
   readonly variant: string;
@@ -113,7 +62,6 @@ type MenuHandle = {
   nuiTestMenuPixelReport(): string;
 };
 
-/** Handles by testID, so a test can ask each control what it holds. */
 const handles = new Map<string, MenuHandle>();
 const captureHybrid =
   (testId: string) =>
@@ -121,10 +69,6 @@ const captureHybrid =
     handles.set(testId, view);
   };
 
-/**
- * The Button's handle, declared the same way (D14) and only as wide as the one
- * claim below needs: a Button and a Menu with the same props are the same box.
- */
 type ButtonHandle = {
   measureContent(): { width: number; height: number };
 };
@@ -136,11 +80,8 @@ const captureButton =
   };
 
 /**
- * All three callbacks in the one order they arrived, which `selectLog` and
- * `stateLog` cannot say between them: two arrays have no shared position, so the
- * pick-then-close order DECISIONS D32 chose would leave both of them exactly as they
- * are however the two callbacks were ordered. `docs/components/menu.md` states the
- * order, so this is the line that holds it.
+ * Every callback in arrival order; the per-kind logs below cannot show the order
+ * between a pick and a close.
  */
 const orderLog: string[] = [];
 
@@ -165,11 +106,8 @@ const recordClose = (testId: string) => (): void => {
 };
 
 /**
- * Every `primaryAction` the app has reported, in order (E3).
- *
- * Its own array rather than a tag inside `stateLog`, because the whole claim is about
- * the two *not* mixing: a press on the action half must leave `stateLog` empty, and
- * counting both in one list would make "no open" indistinguishable from "one open".
+ * Every `primaryAction` the app has reported, in order. Kept apart from `stateLog`
+ * so "a press on the action half opened nothing" can be asserted.
  */
 const primaryLog: string[] = [];
 const recordPrimary = (testId: string) => (): void => {
@@ -179,7 +117,7 @@ const recordPrimary = (testId: string) => (): void => {
 
 // MARK: - The witness
 
-/** The five numbers a menu is asked about, parsed out of its report line. */
+/** A menu's report line, parsed. */
 type MenuReport = {
   /** `-1` means "this platform cannot tell", which is not the same as `false`. */
   expanded: boolean | null;
@@ -187,17 +125,11 @@ type MenuReport = {
   anchor: number[];
   menu: number[];
   rows: number;
-  /**
-   * The menu the platform itself built, in `Menu.nitro.ts`'s notation, as the
-   * last `nuiTestMenuProbe` read it; `null` for `-1` (no probe yet, or Android,
-   * which has no second renderer to ask).
-   */
+  /** The menu the platform itself built; `null` for `-1` (nothing has read it yet). */
   drawn: string | null;
   /**
-   * Whether this mount's composition drew the split trigger (E3). `null` means `-1`:
-   * iOS has no second hit target to look for, `true`/`false` is Android looking and
-   * answering. Not the same question as the `primaryAction` prop, which is what React
-   * sent - see `MenuModel.splitDrawn`.
+   * Whether this mount drew the split trigger. `null` means `-1`: iOS has no second
+   * hit target to look for.
    */
   split: boolean | null;
   /** The two halves' screen rects, in the same space as `anchor`; `-1` unread. */
@@ -205,9 +137,8 @@ type MenuReport = {
   trailing: number[];
   /**
    * What each row that drew an `androidIcon` tinted it with: `<id>#<RRGGBB>`, comma
-   * separated, or `-` when no row drew one (G21). The colour is Material's, from the
-   * device's dynamic palette - which is exactly why a test cannot write it down and has
-   * to be told it by the row that used it.
+   * separated, or `-` when no row drew one. The colour comes from the device's
+   * dynamic palette, so a test has to read it here.
    */
   iconTints: string;
 };
@@ -228,17 +159,13 @@ function parseMenuReport(line: string): MenuReport {
   const liveField = field('live');
   const splitField = field('split');
   return {
-    // `-1` is this control's own "unanswerable" (Q1 §2: "never a `0` that reads as
-    // 'checked'"), so it must not coerce into `false`/`0` here and hide the
-    // difference between "closed" and "cannot tell".
+    // `-1` means "cannot tell" and must not coerce into `false` or `0`.
     expanded: expandedField === '-1' ? null : expandedField === '1',
     live: liveField === '-1' ? null : Number(liveField),
     anchor: rect('anchor'),
     menu: rect('menu'),
     rows: Number(field('rows')),
     drawn: field('drawn') === '-1' ? null : field('drawn'),
-    // The same `-1` is not a `false` argument here either: "Android composed one
-    // button" and "iOS has no such measurement" have to stay two different answers.
     split: splitField === '-1' ? null : splitField === '1',
     leading: rect('leading'),
     trailing: rect('trailing'),
@@ -247,11 +174,8 @@ function parseMenuReport(line: string): MenuReport {
 }
 
 /**
- * A parsed rect as four plain numbers, refusing a short one.
- *
- * `noUncheckedIndexedAccess` makes every `rect[0]` an `| undefined`, and `?? 0` at
- * each use would let a missing field read as "at the origin" - which is how a broken
- * anchor measurement sneaks through a geometry gate.
+ * A parsed rect as four numbers. Throws on a short one, so a missing field cannot
+ * read as "at the origin".
  */
 function edges(rect: number[], what: string): [number, number, number, number] {
   if (rect.length !== 4 || rect.some((value) => Number.isNaN(value))) {
@@ -262,14 +186,15 @@ function edges(rect: number[], what: string): [number, number, number, number] {
   return [rect[0] ?? 0, rect[1] ?? 0, rect[2] ?? 0, rect[3] ?? 0];
 }
 
-/** `-1` for every geometry field, which is what iOS answers and what iOS asserts. */
+/**
+ * iOS answers `-1` for open state and geometry: SwiftUI hands the menu to the
+ * system's presentation, so the control has no window to read.
+ */
 function expectUnanswerable(current: MenuReport): void {
   expect(current.expanded).toBeNull();
   expect(current.live).toBeNull();
   expect(current.anchor).toEqual([-1, -1, -1, -1]);
   expect(current.menu).toEqual([-1, -1, -1, -1]);
-  // E3's three, for the same reason as the four above: iOS's `primaryAction` is a
-  // gesture on one button, so `split=0` would claim a layout iOS chose.
   expect(current.split).toBeNull();
   expect(current.leading).toEqual([-1, -1, -1, -1]);
   expect(current.trailing).toEqual([-1, -1, -1, -1]);
@@ -325,17 +250,8 @@ function measuredButton(testId: string): Size | null {
 }
 
 /**
- * Poll until the hybrid handle for `testId` exists, so its props can be read.
- *
- * `hybridRef` fires when the native view is created, which is after the commit that
- * `render` waits for - so reading a handle once can land in that gap and answer
- * `undefined` for a control that is fine. That is how X14's merge saw
- * `expected undefined to be null` once at `read-back-fallback`, and it is the same
- * reason the sizing gates poll for a measured size instead of reading it once.
- *
- * The wait is for *a handle*, never for a particular value, so a prop that really is
- * wrong is exactly as red as it was and fails on the same expectation line - the only
- * thing that changes is that a slow registration stops being a test failure.
+ * Polls for the hybrid handle: `hybridRef` fires when the native view is created,
+ * which is after the commit `render` waits for.
  */
 async function waitForHandle(
   testId: string,
@@ -347,7 +263,6 @@ async function waitForHandle(
   );
 }
 
-/** Poll until the *Button* control reports a size. */
 async function waitForMeasuredButton(testId: string, what: string) {
   return await pollUntil(
     () => {
@@ -401,11 +316,8 @@ async function waitForTestId(
 }
 
 /**
- * Poll until the box of `testId` is `size`.
- *
- * Waiting for "a box" would accept the planted `WRONG_SIZE` and the declared
- * fallback, so every sizing gate waits for *this* size or fails naming both the box
- * it is stuck on and what the control measured.
+ * Polls until the box of `testId` is `size`. Waiting for any box would accept the
+ * planted `WRONG_SIZE` or the declared fallback.
  */
 async function waitForBox(testId: string, size: Size, what: string) {
   return await pollUntil(
@@ -432,19 +344,10 @@ async function waitForMeasured(testId: string, what: string) {
 }
 
 /**
- * Poll until a mount that answers as `wantTitle` reports a real size, and refuse
- * everything else.
- *
- * Q3 §1's rule for a remount is that the previous mount must not get to answer. The
- * obvious signal - "not the handle object I had before the teardown" - is wrong here:
- * measured on iOS at `06-02-21Z`, the remount of `recycle` answered through the *same*
- * JS handle object, because Fabric recycles the view and Nitro hands back the wrapper
- * it made for that tag. Object identity says nothing about which mount is talking; the
- * props do, so the wait asks the handle what title it was given and refuses any answer
- * still carrying the old one - the refusal is asserted where it happens, in the
- * remount test below, which calls this while only the torn-down mount can answer.
- * Zero is refused for Q3's other reason: a control answers `0x0` mid re-measure, and a
- * zero read as a verdict is the historical `0.00x0.00` signature.
+ * Polls until the mount titled `wantTitle` reports a non-zero size. Fabric recycles
+ * the view and Nitro hands back the same JS handle object for it, so object identity
+ * cannot tell a new mount from the old one; the title can. A control also answers
+ * `0x0` mid re-measure.
  */
 async function waitForFreshMeasure(
   testId: string,
@@ -475,15 +378,9 @@ async function waitForFreshMeasure(
 }
 
 /**
- * Poll until the control reports a size that is *not* `previous`.
- *
- * `measureContent()` keeps answering with the last measured size while Compose
- * recomposes and re-measures, so waiting for "a size" would return the pre-change
- * number and call the change measured.
- *
- * Zero is refused for the reason Q3 §1 gives for this same shape: a control answers
- * `0x0` mid re-measure, and "not the previous size" is then satisfied by a change that
- * never arrived - the historical `0.00x0.00` signature, read as a verdict.
+ * Polls until the control reports a non-zero size that is not `previous`:
+ * `measureContent()` keeps answering the last size while Compose re-measures, and
+ * answers `0x0` in between.
  */
 async function waitForRemeasure(
   testId: string,
@@ -510,10 +407,8 @@ async function waitForRemeasure(
 }
 
 /**
- * Poll the witness until `read` is happy, and hand back what it saw.
- *
- * A menu opens on the UI thread while JS is back in the test, so a fixed sleep would
- * measure the machine. The predicate, not the sleep, is what makes a red legible.
+ * Polls the report until `read` accepts it. A menu opens on the UI thread while JS
+ * is back in the test, so the wait is on state, not on time.
  */
 async function waitForMenu(
   testId: string,
@@ -567,17 +462,8 @@ async function settle(ms = 250): Promise<void> {
 // MARK: - Sizing fixtures
 
 /**
- * The key `Menu.tsx` builds: `variant|size|action|systemImage|title`, each piece
- * escaped.
- *
- * Written out here rather than imported - a harness that poisoned the cache through
- * the library's own helper could not catch the helper being wrong, and a missing
- * input in that key is the R3 bug class. The absence of `group` is asserted, too
- * (see the "trigger, not the list" test), and the presence of `action` is asserted by
- * the split sizing gate: a split trigger that shared the plain trigger's entry would be
- * laid out at the wrong width, and measured that way - the *split* control is the one
- * left at the other's box, because a shared entry keeps the last correction written to
- * it. `docs/tasks/E3/mutations.json` carries both directions.
+ * The sizing key `Menu.tsx` builds, each piece escaped. Written out rather than
+ * imported, so a wrong key in the library cannot go unnoticed here.
  */
 function sizingKey(
   variant: string,
@@ -601,13 +487,7 @@ function sizingKey(
 /** A size that is *not* any menu's size, planted as the engine's first answer. */
 const WRONG_SIZE = { width: 14.5, height: 73.5 };
 
-/**
- * Plant a wrong answer for several configurations, then drop the cache once.
- *
- * The component is a parameter because the parity gate poisons the *Button's*
- * entry too: two controls have to earn two sizes before their boxes may be
- * compared.
- */
+/** Plants a wrong size for each configuration, then drops the cache once. */
 function poisonConfigurations(
   keys: readonly string[],
   component: string = COMPONENT
@@ -624,10 +504,9 @@ function poisonConfigurations(
 }
 
 /**
- * What each platform *declares* before the first measure
- * (`NitroUiDeclaredFallbacks`), kept here so the "laid out at the fallback" claim is
- * checkable. These are deliberately not the measured size of any fixture below: a
- * fallback equal to the answer hides a failed correction (X4's rule 1).
+ * What each platform declares before the first measure (`NitroUiDeclaredFallbacks`).
+ * Deliberately not the measured size of any fixture below: a fallback equal to the
+ * answer would hide a failed correction.
  */
 const DECLARED_FALLBACK =
   Platform.OS === 'ios'
@@ -663,7 +542,7 @@ const GROUP: MenuGroup = {
 /**
  * `GROUP`'s pickable rows: the actions that are not submenu parents, plus every
  * child. A submenu's own row draws a header on Android and a nested menu on iOS, and
- * is not pickable on either (D29), so it is not counted.
+ * is not pickable on either, so it is not counted.
  */
 const PICKABLE = 6;
 
@@ -696,10 +575,8 @@ const BIG_GROUP: MenuGroup = {
 const BIG_PICKABLE = 11;
 
 /**
- * An untitled group between two titled ones (G9), holding both row roles: a
- * destructive row and a disabled one. The titled neighbours are the barrier - a
- * reading that lost every group would fail on them too, so a missing untitled
- * group cannot pass as "the probe read nothing".
+ * An untitled group between two titled ones, holding a destructive row and a
+ * disabled one.
  */
 const UNTITLED_GROUP: MenuGroup = {
   actions: [{ id: 'open', title: 'Open' }],
@@ -738,8 +615,8 @@ const UNTITLED_ROWS = ['Delete!', 'Archive~'];
 
 /**
  * The rows of the inline group titled `title` in a `drawn` tree, or `null` when the
- * tree has no such group. Inline groups do not nest (D29), so a group's rows run
- * from its `(` to the next `)`.
+ * tree has no such group. Inline groups do not nest, so a group's rows run from its
+ * `(` to the next `)`.
  */
 function drawnGroup(drawn: string, title: string): string[] | null {
   const open = `(${title}:`;
@@ -775,13 +652,9 @@ async function pressWitnessed(testId: string): Promise<void> {
 }
 
 /**
- * Press the middle of a rect the *witness* reports, in device pixels (E3).
- *
- * `pressTrigger` presses the middle of the *React Native* frame, which for a split
- * trigger is the seam between the two halves - a press there belongs to neither and
- * would make "the leading half fired the action" a coin flip. Everything the split
- * suite presses goes through the halves' own rects for that reason, and `edges`
- * refuses a short one so an unread `-1` half cannot press the origin.
+ * Presses the middle of a rect the witness reports, in device pixels. The middle of
+ * a split trigger's React Native frame is the seam between its two halves, so each
+ * half is pressed through its own rect.
  */
 async function pressRect(rect: number[], what: string): Promise<void> {
   const [left, top, right, bottom] = edges(rect, what);
@@ -794,7 +667,10 @@ async function pressRect(rect: number[], what: string): Promise<void> {
   );
 }
 
-/** Pick a row through the seam a real row uses. */
+/**
+ * Picks a row through the model's own pick path: a harness press cannot reach a row,
+ * which is drawn in the popup's own window.
+ */
 async function pickRow(testId: string, id: string): Promise<void> {
   const handle = handles.get(testId);
   if (handle == null) {
@@ -822,23 +698,13 @@ afterEach(() => {
 // MARK: - The box
 
 describe('Menu · G7a', () => {
-  /** The five Button variants a trigger can be, plus four of its five sizes. */
   const VARIANTS = ['filled', 'tonal', 'outlined', 'text', 'elevated'] as const;
-  /**
-   * Four of the five rungs - `medium` is every other configuration's size. The two
-   * G19 fix round 2 added to Menu are in here because "the trigger has the whole
-   * ladder" is a claim about each rung's configuration, not about one: a rung whose
-   * key the engine has never seen is laid out at the declared fallback until it
-   * earns its own entry, and that is a per-rung failure. The rung *boxes* - the
-   * heights that are the actual promise - are measured by the ladder suite at the
-   * end of this file.
-   */
+  /** `medium` is left out: it is the size of every other configuration here. */
   const TRIGGER_SIZES = ['small', 'large', 'xlarge', 'xxlarge'] as const;
 
   it('lays each configuration out at the size the control measured', async () => {
-    // The control is its own oracle: nothing below is a constant, and every
-    // configuration is poisoned first, so the box has to be *earned* by a
-    // correction rather than inherited from the declared fallback.
+    // Every configuration is poisoned first, so each box has to come from a
+    // correction rather than from the declared fallback.
     poisonConfigurations([
       ...VARIANTS.map((variant) => sizingKey(variant, 'medium', 'Variant')),
       ...TRIGGER_SIZES.map((size) => sizingKey('filled', size, 'Sized')),
@@ -877,9 +743,8 @@ describe('Menu · G7a', () => {
       await waitForTestId(testId);
       const content = await waitForMeasured(testId, testId);
       const box = await waitForBox(testId, content, testId);
-      // Both wrong answers, named separately, because they fail differently: the
-      // planted size surviving means no correction ever arrived, and the fallback
-      // surviving means the correction never beat the first frame (X4 rule 1).
+      // The planted size surviving means no correction ever arrived; the fallback
+      // surviving means the correction never replaced the first frame.
       expect(sameSize(box, WRONG_SIZE)).toBe(false);
       expect(sameSize(box, DECLARED_FALLBACK)).toBe(false);
       lines.push(`${testId}=${describeSize(box)}`);
@@ -891,23 +756,14 @@ describe('Menu · G7a', () => {
         `${lines.join(' ')} corrections=${String(cold.corrections)} ` +
         `measurements=${String(cold.measurements)}`
     );
-    // Seven poisoned configurations, seven corrections. This is the strict half:
-    // unlike a *new* configuration, which Android can settle inside the layout
-    // pass that first measures it (Picker's shrink gate records that), a poisoned
-    // entry is provisional and is laid out, so it has to be replaced.
+    // A poisoned entry is provisional and is laid out, so each one has to be
+    // replaced by a correction.
     expect(cold.corrections).toBeGreaterThanOrEqual(
       VARIANTS.length + TRIGGER_SIZES.length
     );
   });
 
   it('takes exactly the box its Button twin takes', async () => {
-    // Every other sizing gate in this file only requires a box to be *earned*,
-    // so a trigger laid out at its label's text box - no fill, no padding -
-    // passes all of them. That is precisely the bug this test exists for: the
-    // iOS trigger shipped that way (53.33x20.33 against Button's 77.33x34.33,
-    // measured in `docs/components/menu.md`) and every gate above stayed green.
-    // Parity against a real Button needs no constant, which is what makes it
-    // cheap to keep.
     const key = sizingKey('filled', 'medium', 'Twin');
     poisonConfigurations([key]);
     poisonConfigurations([key], BUTTON_COMPONENT);
@@ -954,16 +810,12 @@ describe('Menu · G7a', () => {
     expect(sameSize(menuBox, WRONG_SIZE)).toBe(false);
     expect(sameSize(buttonBox, WRONG_SIZE)).toBe(false);
     expect(cold.corrections).toBeGreaterThanOrEqual(2);
-    // And the one is the other's - the claim Q1 section 2 makes about the label.
     expect(sameSize(menuBox, buttonBox)).toBe(true);
   });
 
   it('keeps the trigger when only the list changes', async () => {
-    // The `group` half of the sizing key claim, and the one a Button cannot make.
-    // Nine items plus a section, against four items plus a submenu, must give the
-    // same box *and* cost no new cache entry: a `group` that leaked into the key
-    // would give the same box and still fragment the cache, which is the failure
-    // the key exists to prevent.
+    // A `group` that leaked into the sizing key would give the same box and still
+    // cost a new cache entry, so both are checked.
     const key = sizingKey('filled', 'medium', 'List');
     poisonConfigurations([key]);
     const { rerender, unmount } = await render(
@@ -1001,14 +853,11 @@ describe('Menu · G7a', () => {
     );
     expect(sameSize(box, smallSize)).toBe(true);
     expect(sameSize(box, WRONG_SIZE)).toBe(false);
-    // Zero new configurations: the key did not change, so the engine was never
-    // asked about this menu again...
     expect(after.cachedSizes).toBe(0);
-    // ...and nothing had to chase a box that never moved.
     expect(after.corrections).toBe(0);
 
-    // And the big list is really the one the control holds - the assert above
-    // would also be true if the second render had been dropped on the floor.
+    // The big list did arrive: the asserts above would also hold if the second
+    // render had been dropped.
     expect(handles.get('list-small')?.title).toBe('List');
     expect(report('list-small').rows).toBe(
       Platform.OS === 'android' ? 0 : BIG_PICKABLE
@@ -1055,8 +904,6 @@ describe('Menu · G7a', () => {
     await waitForBox('title', longSize, 'the long title');
     expect(longSize.width).toBeGreaterThan(shortSize.width + 1);
     expect(handles.get('title')?.title).toBe(LONG);
-    // The list is not in the key, and the trigger is: the second title cost a
-    // configuration of its own.
     expect(delta(before, stats()).cachedSizes).toBeGreaterThanOrEqual(2);
     console.log(
       `title R3: short=${describeSize(shortSize)} long=${describeSize(longSize)}`
@@ -1067,15 +914,9 @@ describe('Menu · G7a', () => {
   // MARK: - Picking
 
   it('reports one onSelect per pick and nothing for a row that cannot be picked', async () => {
-    // Nothing in this control is more important than "one answer per pick", and it
-    // is the one requirement both platforms answer identically: the row press goes
-    // through the model, not through a window.
-    //
-    // The refusals come first, because an empty log by itself proves nothing - an
-    // event can still be in flight. The enabled twin control's answer is the barrier
-    // that says the pipeline delivered, and the RN `Pressable` at the top of the
-    // column says the same thing about the harness itself (`Button.harness.tsx`
-    // records why a hosted SwiftUI control cannot be its own witness on iOS).
+    // The refusals come first, and an empty log alone proves nothing: an event can
+    // still be in flight. The enabled twin's answer shows events are delivered, and
+    // the RN `Pressable` shows the harness press itself lands.
     const rnPresses: string[] = [];
     await render(
       <View style={columnStyle}>
@@ -1120,20 +961,17 @@ describe('Menu · G7a', () => {
       5000
     );
 
-    // Three refusals, three different reasons: a row the group says is disabled, a
-    // submenu *parent* (a header on Android, a nested menu on iOS - pickable on
-    // neither, D29), and an id the group has never heard of.
+    // Three refusals: a row the group says is disabled, a submenu parent (pickable
+    // on neither platform) and an id the group does not hold.
     await pickRow('pick', 'paste');
     await pickRow('pick', 'share');
     await pickRow('pick', 'no-such-row');
     expect(selectLog).toEqual([]);
 
-    // The barrier: the twin answers, so an empty log above was a refusal.
     await pickRow('twin', 'copy');
     await waitForLog(selectLog, 1, "the twin's pick");
     expect(selectLog).toEqual(['twin:copy']);
 
-    // And the control under test answers once, then again - never twice.
     await pickRow('pick', 'copy');
     await waitForLog(selectLog, 2, 'the first pick');
     expect(selectLog).toEqual(['twin:copy', 'pick:copy']);
@@ -1141,7 +979,6 @@ describe('Menu · G7a', () => {
     await waitForLog(selectLog, 3, 'the destructive pick');
     console.log(`picks: ${JSON.stringify(selectLog)}`);
     expect(selectLog).toEqual(['twin:copy', 'pick:copy', 'pick:delete']);
-    // Still nothing for the rows that cannot be picked, after everything above.
     expect(
       selectLog.filter((line) => /paste|share|no-such/.test(line))
     ).toEqual([]);
@@ -1165,18 +1002,15 @@ describe('Menu · G7a', () => {
     await waitForTestId('events');
 
     if (Platform.OS !== 'android') {
-      // iOS answers `-1` for all of it, and that answer is the assertion: a `0` or
-      // a `false` here would claim the control had a closed menu when the truth is
-      // that the platform keeps the presentation (Q1 §2). A press is delivered and
-      // nothing is reported, which is what `docs/components/menu.md` says about
-      // `onOpen`/`onClose` on iOS; the tap that would open it for real is G7b's.
+      // iOS answers `-1` for all of it: the system keeps the presentation, so the
+      // control cannot tell whether its menu is open. A press is delivered and
+      // nothing is reported.
       const box = await waitForTestId('events');
       await userEvent.pressAt(box.x + box.width / 2, box.y + box.height / 2);
       await settle(400);
       expectUnanswerable(report('events'));
       expect(stateLog).toEqual([]);
       expect(await handles.get('events')?.title).toBe('Events');
-      // The half iOS does answer: a pick reaches JS through the model.
       await pickRow('events', 'copy');
       await waitForLog(selectLog, 1, 'the iOS pick');
       expect(selectLog).toEqual(['events:copy']);
@@ -1200,7 +1034,7 @@ describe('Menu · G7a', () => {
     expect(open.rows).toBe(PICKABLE);
     await waitForLog(stateLog, 1, 'the open');
     // Once, not twice: the anchor's own `onClick` and Material's expansion callback
-    // both report the same request, and the funnel is what keeps that to one event.
+    // both report the same request.
     expect(stateLog).toEqual(['events:open']);
 
     await pickRow('events', 'copy');
@@ -1209,29 +1043,17 @@ describe('Menu · G7a', () => {
       (r) => r.expanded === false && r.live === (liveBefore ?? 0)
     );
     expect(selectLog).toEqual(['events:copy']);
-    // The pairing: a pick closes the menu, and a close that is not reported is a
-    // listener that never sees the menu go away. (`Q1` §5 worded this as "never for a
-    // pick"; D32 settles it the way the report read it - an *unpaired* open is what to
-    // refuse, so a pick does fire the pair.)
     expect(stateLog).toEqual(['events:open', 'events:close']);
-    // And the order between the two callbacks, which neither log above can express.
-    // DECISIONS D32: a pick reports the choice first and closes after it, and
-    // `MenuModel.applyPick` is written that way. `docs/components/menu.md` promises
-    // exactly this sequence, so a listener that acts on the pick is never handed a
-    // menu that is still up. The same order is pinned off-device by
-    // `android/src/test/.../MenuModelTest.kt`, which is the half that can be shown red
-    // without an emulator.
+    // A pick reports the choice first and the close after it.
     expect(orderLog).toEqual([
       'open:events',
       'select:events:copy',
       'close:events',
     ]);
-    // The rect goes with the window, so a later gate cannot press where a closed
-    // menu used to be.
+    // The rect goes with the window.
     expect(afterPick.menu).toEqual([-1, -1, -1, -1]);
     expect(afterPick.rows).toBe(0);
 
-    // And again: open state is not sticky, and the second open is one event.
     await pressTrigger('events');
     await waitForMenu(
       'events',
@@ -1242,8 +1064,8 @@ describe('Menu · G7a', () => {
     console.log(`open/close: ${JSON.stringify(stateLog)}`);
     // Leave nothing up for the next test.
     await pickRow('events', 'copy');
-    // A delta, not `=== 0`: `live` is process-wide, so a menu an earlier gate left
-    // open would make this line blame the wrong control (Q3 §2).
+    // A delta, not `=== 0`: `live` is process-wide, so a menu an earlier test left
+    // open would count here.
     await waitForMenu(
       'events',
       (r) => r.expanded === false && r.live === (liveBefore ?? 0)
@@ -1265,9 +1087,8 @@ describe('Menu · G7a', () => {
     );
     await waitForTestId('disable');
     if (Platform.OS !== 'android') {
-      // iOS has no open state to close from here, and the reason is the same as
-      // above. What *is* checkable is that the flag React sent is the flag SwiftUI
-      // is told, which is the half of D29 that lives in this repo.
+      // iOS has no open state to read; what is checkable is that the flag React
+      // sent reaches the control.
       rerender(
         <Menu
           title="Disable"
@@ -1308,15 +1129,12 @@ describe('Menu · G7a', () => {
       />
     );
     // Both halves, not just `expanded`: `expanded` is model state and drops with the
-    // props batch, while the window goes when Compose disposes the popup - reading
-    // the count in between measures a window already on its way out (H2b's wording,
-    // for the same reason).
+    // props batch, while the window goes later, when Compose disposes the popup.
     const closed = await waitForMenu(
       'disable',
       (r) => r.expanded === false && r.live === liveBefore
     );
     expect(closed.menu).toEqual([-1, -1, -1, -1]);
-    // D29 is a rule about the app's view of it too: whoever opened it hears it close.
     expect(stateLog).toEqual(['disable:open', 'disable:close']);
     expect(handles.get('disable')?.disabled).toBe(true);
 
@@ -1372,10 +1190,9 @@ describe('Menu · G7a', () => {
         'submenu',
         (r) => r.expanded === true && r.live === liveBefore + 1
       );
-      // Six is the *inline* answer, and it is a discriminator rather than a
-      // restatement: a nested Android list would compose four rows here (Copy, Cut,
-      // Paste, Share), because the submenu's children only exist once its own window
-      // opens. D29 asks for the six.
+      // Six is the inline answer: a nested list would compose four rows here (Copy,
+      // Cut, Paste, Share), because a submenu's children exist only once its own
+      // window opens.
       expect(open.rows).toBe(PICKABLE);
       expect(open.rows).toBeGreaterThan(4);
       // The parent draws a header and answers nothing; its children answer.
@@ -1390,8 +1207,7 @@ describe('Menu · G7a', () => {
       );
     } else {
       // iOS nests, so the system's window holds the children and this control can
-      // only report what its own model holds - which is the same six, counted
-      // differently, and the harness cannot tell the two renderings apart from here.
+      // only report the rows its own model holds.
       expect(closed.rows).toBe(PICKABLE);
       await pickRow('submenu', 'share');
       expect(selectLog).toEqual([]);
@@ -1406,13 +1222,8 @@ describe('Menu · G7a', () => {
   });
 
   /**
-   * A trigger whose title is shorter than any of its rows, which is the case the
-   * list has to survive: the README's `menu-android.png` showed this shape and the
-   * popup lost the tail of every label in it.
-   *
-   * "Move into a folder" is deliberately long enough that its row needs more width than
-   * Material's 112 dp list floor, which is what makes the assertion below about the
-   * popup's width rather than about a constant.
+   * A trigger whose title is shorter than its rows. "Move into a folder" needs more
+   * width than Material's 112 dp list floor.
    */
   const WIDE_GROUP: MenuGroup = {
     actions: [
@@ -1432,8 +1243,6 @@ describe('Menu · G7a', () => {
   /**
    * Material's own minimum width for a dropdown list, and its own maximum for a row's
    * content (`DropdownMenuItemDefaultMinWidth` / `…MaxWidth` in `Menu.kt`, both private).
-   * The two bounds a popup has to sit between, named here rather than as literals so the
-   * assertions say which is which.
    */
   const MATERIAL_LIST_MIN_DP = 112;
   const MATERIAL_LIST_MAX_DP = 280;
@@ -1448,12 +1257,8 @@ describe('Menu · G7a', () => {
   };
 
   /**
-   * Opens `testId` and measures its popup against its own trigger.
-   *
-   * `live` is read here rather than passed in because it counts every menu in the
-   * process, so a caller that already has one open would otherwise be one out. Both
-   * rects come from one witness read of one menu, and two menus read the same way in one
-   * render answer in the same units, so anything taken here compares directly.
+   * Opens `testId` and measures its popup against its own trigger. `live` is read
+   * here rather than passed in because it counts every menu in the process.
    */
   async function openAndMeasurePopup(testId: string): Promise<PopupMeasure> {
     const liveBefore = report(testId).live ?? 0;
@@ -1495,13 +1300,9 @@ describe('Menu · G7a', () => {
           hybridRef={captureHybrid('wide-list')}
           onSelect={recordSelect('wide-list')}
         />
-        {/* The same render's other half, and the reason it has to be in this render:
-            Material's 112 dp floor is a *constant*, so "wider than 112 dp" is only a
-            claim about the items if a short list really does sit on that constant here.
-            This menu measures that, in the same units on the same device, which is what
-            turns "the wide popup is wider than the short one" into a check that a popup
-            pinned to any single width - 112 dp, or `Modifier.width(112.dp)` - cannot
-            pass. */}
+        {/* A short list in the same render measures where Material's 112 dp floor
+            sits on this device, so the wide popup is compared with that and not
+            with a constant. */}
         <Menu
           title="Up"
           group={NARROW_GROUP}
@@ -1518,12 +1319,8 @@ describe('Menu · G7a', () => {
     const closedFloor = report('floor-list');
 
     if (Platform.OS !== 'android') {
-      // iOS presents through the system's menu, which reports no window for the
-      // composition to measure (D23), so nothing about the list's width can be read
-      // from here on iOS's harness. (Android can: the rest of this test measures its
-      // popup through the witness's `menu=` rect.) What this branch keeps deterministic
-      // is the part that is answerable: the model's own rows, and the -1s for the window
-      // that is not there.
+      // iOS presents through the system's menu, which gives the control no window
+      // to measure; only the model's own rows are answerable.
       expectUnanswerable(closed);
       expectUnanswerable(closedFloor);
       expect(closed.rows).toBe(WIDE_GROUP.actions?.length ?? 0);
@@ -1542,51 +1339,31 @@ describe('Menu · G7a', () => {
       'the trigger'
     );
     const wide = await openAndMeasurePopup('wide-list');
-    // The bug, in one line: `ExposedDropdownMenu` passes `matchAnchorWidth = true`
-    // by default, and its own `exposedDropdownSize` sets `minWidth = maxWidth =
-    // anchorWidth`, so the window came back exactly as wide as the button and every
-    // longer row lost its tail. Nothing here could see that: the rows are Compose
-    // nodes, not views, so `queryByTestId` cannot reach them, and the trigger's own
-    // rect is the box that is *not* clipped. The witness's `menu=` rect is the
-    // popup's window, which is where the clipping happened.
+    // `ExposedDropdownMenu` matches the anchor's width by default, which clips every
+    // row longer than the trigger. The rows are Compose nodes that `queryByTestId`
+    // cannot reach, so the popup window's own rect is what is read.
     expect(wide.anchorWidthPx).toBeGreaterThan(0);
     expect(wide.popupWidthPx).toBeGreaterThan(wide.anchorWidthPx);
 
-    // The premise, measured rather than assumed: a list of two short rows sits on
-    // Material's floor in this render, on this device, in these units. Closed by
-    // picking a row first, because a popup is a window of its own and the second
-    // one's width should be the only thing on screen while it is being read.
+    // The first popup is closed by picking a row, so only one is on screen while
+    // the next is measured. A list of two short rows sits on Material's floor.
     await closePopupByPicking('wide-list', 'folder');
     const floor = await openAndMeasurePopup('floor-list');
     const floorPx = MATERIAL_LIST_MIN_DP * PixelRatio.get();
     expect(floor.popupWidthPx).toBeGreaterThanOrEqual(floorPx - 1);
 
-    // And now the width is the items', not a constant's: strictly wider than a list
-    // that needed nothing but the floor. Either the trigger's width (the shipped bug) or
-    // a hard 112 dp goes red on this line, which is what the line above alone cannot do.
+    // The width is the items', not a constant's: strictly wider than a list that
+    // needed nothing but the floor.
     expect(wide.popupWidthPx).toBeGreaterThan(floor.popupWidthPx);
 
-    // …and the reason that is not "grow forever": the popup stays inside the 280 dp
-    // ceiling Material caps a row's content at. `<=`, not `<`, because a popup whose
-    // widest row wants exactly the cap is allowed to be exactly the cap, and at a large
-    // font scale that is a reachable configuration rather than a rounding argument.
+    // `<=`, not `<`: a popup whose widest row wants exactly Material's 280 dp cap
+    // may be exactly the cap, which a large font scale can reach.
     expect(wide.popupWidthPx / PixelRatio.get()).toBeLessThanOrEqual(
       MATERIAL_LIST_MAX_DP
     );
 
-    // Where the extra width went: printed, not asserted, and that is deliberate. The
-    // window's horizontal position is `ExposedDropdownMenuPositionProvider`'s decision,
-    // and this call exposes no lever that moves a window sideways - `Modifier.offset(x =
-    // 12.dp)` on the list, the widest one it takes, moves the rows *inside* the window and
-    // leaves the window where it was (measured: the witness still read the same rect, and
-    // every assertion above stayed green). An assertion here could not be shown to fail,
-    // which is the bar every new check has to clear, so placement is guarded where it is
-    // genuinely at risk instead: the hosted test below asserts
-    // `Math.abs(mLeft - aLeft) < 40` beside a `gap < 48` whose red proof is G7b round 1's
-    // `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` - the one mutant in this file's
-    // history that really moved a window (16 px below the anchor's bottom to 168 px). What
-    // these lines add is the width claim; the number below keeps the geometry the fix
-    // produced on the record every run.
+    // Horizontal placement is printed, not asserted: it is decided by Material's
+    // `ExposedDropdownMenuPositionProvider`.
     await closePopupByPicking('floor-list', 'a');
     console.log(
       `wide list: trigger ${String(wide.anchorWidthPx)} px, popup ` +
@@ -1600,8 +1377,7 @@ describe('Menu · G7a', () => {
 
   /**
    * A section whose title is far longer than the 280 dp a Material row stops at, over
-   * rows that need almost nothing. The header is the only child of a popup that is not
-   * a `DropdownMenuItem`, so it is the only one Material's own cap does not reach.
+   * rows that need almost nothing.
    */
   const LONG_HEADER_GROUP: MenuGroup = {
     sections: [
@@ -1634,13 +1410,8 @@ describe('Menu · G7a', () => {
     }
 
     const { popupWidthPx } = await openAndMeasurePopup('long-header');
-    // Once the popup stopped matching the trigger, its width is whatever its widest
-    // child asks for. Material caps a *row* at 280 dp (`DropdownMenuItemDefaultMaxWidth`
-    // in the row's own `sizeIn`) but a header is not a row, so an uncapped header was
-    // free to stretch the list past the width a Material menu is meant to stop at - and
-    // the widest thing the menu could then show was still capped, which is a menu whose
-    // rows are ellipsised inside a window bigger than they need. `MenuHeader` carries the
-    // same cap, and this is the line that says so.
+    // The popup is as wide as its widest child asks. Material caps a row at 280 dp,
+    // but a header is not a row, so the header has to carry the same cap itself.
     expect(popupWidthPx / PixelRatio.get()).toBeLessThanOrEqual(
       MATERIAL_LIST_MAX_DP
     );
@@ -1679,13 +1450,8 @@ describe('Menu · G7a', () => {
     const [menuLeft, , menuRight] = edges(open.menu, 'menu');
     const [anchorLeft, , anchorRight] = edges(open.anchor, 'anchor');
     const scale = PixelRatio.get();
-    // The other half of the fix: switching the anchor's width off must not let the
-    // list shrink to the trigger. Both rows here are shorter than Material's
-    // minimum, so a correct popup is exactly its floor, and a mutant that forced
-    // *some* width (rather than letting content decide) would land on the trigger's
-    // box and go red under this line. The wide test above measures this same floor in
-    // its own render, because comparing a wide popup against a floor needs both in one
-    // place; this test keeps it as a standalone claim as well.
+    // Both rows are shorter than Material's minimum, so the popup sits on the floor
+    // rather than shrinking to the trigger.
     expect((menuRight - menuLeft) / scale).toBeGreaterThanOrEqual(
       MATERIAL_LIST_MIN_DP
     );
@@ -1711,13 +1477,11 @@ describe('Menu · G7a', () => {
     await waitForTestId('untitled');
     const handle = await waitForHandle('untitled', 'the untitled-group menu');
     const before = report('untitled');
-    // Nothing has asked yet, so nothing may be claimed: a `drawn` before the probe
-    // would be an answer this test did not cause.
+    // No probe has run yet, so nothing is reported as drawn.
     expect(before.drawn).toBeNull();
 
     if (Platform.OS === 'ios') {
-      // The model has all six - it did before G9 too. `rows` is what we asked
-      // SwiftUI to draw, which is why it could not see the bug.
+      // `rows` counts what the model asked SwiftUI to draw, not what it drew.
       expect(before.rows).toBe(UNTITLED_PICKABLE);
       handle.nuiTestMenuProbe();
       const probed = await waitForMenu('untitled', (r) => r.drawn != null);
@@ -1726,8 +1490,6 @@ describe('Menu · G7a', () => {
       // The titled groups first: the barrier that the probe read a real menu.
       expect(drawnGroup(drawn, 'Share')).toEqual(['AirDrop', 'Mail']);
       expect(drawnGroup(drawn, 'More')).toEqual(['Get Info']);
-      // The claim: the untitled group is its own group, with both of its rows and
-      // their roles. Before G9 this read `[]` - the group was there, empty.
       expect(drawnGroup(drawn, '')).toEqual(UNTITLED_ROWS);
       // And the whole menu, in order, so a row moved between groups is red too.
       expect(drawn).toBe(
@@ -1741,16 +1503,15 @@ describe('Menu · G7a', () => {
       await settle(150);
       expect(report('untitled').drawn).toBeNull();
       await pressTrigger('untitled');
-      // `rows` here is counted from the rows the popup composed, so six is the
-      // untitled group drawn - the parity iOS is held to above.
+      // `rows` here counts the rows the popup composed.
       const open = await waitForMenu(
         'untitled',
         (r) =>
           r.expanded === true && r.live === liveBefore + 1 && r.drawn != null
       );
       expect(open.rows).toBe(UNTITLED_PICKABLE);
-      // And the popup's own semantics tree (E2): every Material group, the untitled
-      // one with both of its rows. Destructive is a colour there, so no `!`.
+      // The popup's own semantics tree: every Material group, the untitled one
+      // with both of its rows. Destructive is a colour there, so no `!`.
       console.log(`untitled group: android drawn=${open.drawn ?? ''}`);
       expect(drawnGroup(open.drawn ?? '', 'Share')).toEqual([
         'AirDrop',
@@ -1761,13 +1522,11 @@ describe('Menu · G7a', () => {
       );
     }
 
-    // The destructive row of the untitled group is a row like any other: picked, it
-    // reports; its disabled neighbour reports nothing.
     await pickRow('untitled', 'archive');
     expect(selectLog).toEqual([]);
     if (Platform.OS === 'android') {
-      // A press on a disabled row still takes the popup down (D32); reopen for the
-      // pick that reports.
+      // A press on a disabled row still takes the popup down; reopen for the pick
+      // that reports.
       await waitForMenu('untitled', (r) => r.expanded === false);
       await pressTrigger('untitled');
       await waitForMenu('untitled', (r) => r.expanded === true);
@@ -1792,10 +1551,8 @@ describe('Menu · G7a', () => {
       { timeout: 20000 }
     );
     await waitForTestId('shrink');
-    // Closed, `rows` differs by platform by construction: Android counts the rows the
-    // open popup composed (none while it is shut), iOS counts what its model can
-    // build. The relay below is what this gate is about, so the closed reading is
-    // only asserted where it says something.
+    // Closed, `rows` differs by platform: Android counts the rows the open popup
+    // composed (none while it is shut), iOS counts what its model can build.
     if (Platform.OS !== 'android') {
       expect(report('shrink').rows).toBe(PICKABLE);
     }
@@ -1811,9 +1568,8 @@ describe('Menu · G7a', () => {
     );
 
     if (Platform.OS !== 'android') {
-      // No window to watch on iOS, but the model still has to follow React: an open
-      // menu's contents are the system's, and a *closed* one is the only place the
-      // relay can be read from here.
+      // No window to watch on iOS: an open menu's contents are the system's, so a
+      // closed one is the only place the relay can be read from.
       rerender(shrinkTo);
       await settle(300);
       expect(report('shrink').rows).toBe(2);
@@ -1851,10 +1607,8 @@ describe('Menu · G7a', () => {
   // MARK: - Teardown
 
   it('leaves nothing behind when a Menu with an open menu is dropped', async () => {
-    // `live` counts menus in the whole process, and the dropped control is the one
-    // thing that cannot be trusted to report about itself - so the count is read on
-    // a *surviving* control, as a delta from the value it had before anything opened
-    // (`Q3` §2). Absolute numbers would make this test depend on the tests around it.
+    // `live` counts menus in the whole process and the dropped control cannot report
+    // on itself, so the count is read on a surviving control, as a delta.
     const tree = (openPresent: boolean) => (
       <View style={columnStyle}>
         {openPresent ? (
@@ -1880,9 +1634,7 @@ describe('Menu · G7a', () => {
     await waitForTestId('drop-witness');
 
     if (Platform.OS !== 'android') {
-      // iOS reports `-1` for `live`: the control that could answer is gone, and the
-      // one that remains says it cannot tell. Nothing here can be measured, and the
-      // harness says so instead of reading a zero as a clean-up.
+      // iOS reports `-1` for `live`, so nothing here can be measured.
       expectUnanswerable(report('drop-witness'));
       console.log('iOS: no live-menu count exists to drop back to zero');
       unmount();
@@ -1896,7 +1648,6 @@ describe('Menu · G7a', () => {
       (r) => r.expanded === true && r.live === liveBefore + 1
     );
     expect(open.rows).toBe(PICKABLE);
-    // The survivor sees the same window the dropped control opened.
     expect(report('drop-witness').live).toBe(liveBefore + 1);
 
     rerender(tree(false));
@@ -1926,9 +1677,9 @@ describe('Menu · G7a', () => {
   });
 
   it('carries no old state across a remount', async () => {
-    // Recycling is the harness's, not the test's to force, so the claim is the one
-    // that holds either way: a fresh mount of the same id shows what React sent and
-    // nothing the last instance left behind - including an open menu.
+    // A test cannot force Fabric to recycle the view, so the claim holds either way:
+    // a fresh mount of the same id shows what React sent and nothing the last
+    // instance left behind, including an open menu.
     const { unmount } = await render(
       <Menu
         title="Recycled"
@@ -1952,10 +1703,8 @@ describe('Menu · G7a', () => {
     }
     unmount();
     await settle(400);
-    // Q3 §1's other half, proven at the moment it is worth proving: right now the
-    // only handle that exists is the one the teardown left behind. A wait that
-    // accepted "any handle answers" would be satisfied here and report the remount as
-    // measured. The short wait below has to fail, and fail naming what it refused.
+    // The only handle that exists now is the one the teardown left behind, so the
+    // short wait below has to fail, naming what it refused.
     const previousTitle = handles.get('recycle')?.title ?? null;
     const previousSize = measured('recycle');
     let refusal = 'answered';
@@ -1973,13 +1722,9 @@ describe('Menu · G7a', () => {
       `refuse previous mount: title=${JSON.stringify(previousTitle)} ` +
         `measured=${describeSize(previousSize)} -> ${refusal}`
     );
-    // The leftover is the previous mount's handle, carrying the title this mount was
-    // given, not the next one's.
     expect(previousTitle).not.toBe('Renamed');
-    // And the wait refuses it. Measured on both platforms, the torn-down handle
-    // answers `0.00x0.00` (drop and recycle clear the cached size on both), so the
-    // zero rule and the title rule both refuse it here. The probe after the remount
-    // holds the title rule on its own, against a handle with a real size to offer.
+    // The torn-down handle answers `0x0` on both platforms (drop and recycle clear
+    // the cached size), so the zero check and the title check both refuse it here.
     expect(refusal).toContain('never answered as "Renamed"');
     selectLog.length = 0;
     stateLog.length = 0;
@@ -1999,10 +1744,8 @@ describe('Menu · G7a', () => {
     );
     await waitForTestId('recycle');
     await waitForFreshMeasure('recycle', 'Renamed', 'the remounted menu');
-    // The title rule on its own: this handle has a real size to offer, so a wait that
-    // accepted any handle would answer here. Ask for a title no mount was given and
-    // the only thing that can refuse is the guard - drop the guard and this is the
-    // line that goes red, which is what makes the wait a check rather than a comment.
+    // This handle has a real size to offer, so asking for a title no mount was given
+    // can only be refused by the title check.
     let wrongTitleRefusal = 'answered';
     try {
       await waitForFreshMeasure(
@@ -2034,13 +1777,12 @@ describe('Menu · G7a', () => {
   });
 });
 
-// MARK: - Expressive rows (E2)
+// MARK: - Expressive rows
 
 /**
- * Every new row shape at once (E2): a checked row with a subtitle, an unchecked
- * checkable row, a plain row with a subtitle, a titled group holding a checked row and
- * a disabled row with a subtitle, and an untitled group with a destructive row - the
- * last one is the barrier that the probe read a real menu.
+ * Every row shape at once: a checked row with a subtitle, an unchecked checkable
+ * row, a plain row with a subtitle, a titled group holding a checked row and a
+ * disabled row with a subtitle, and an untitled group with a destructive row.
  */
 const E2_GROUP: MenuGroup = {
   actions: [
@@ -2094,11 +1836,10 @@ const E2_PLAIN: MenuGroup = {
 
 /**
  * What each platform's own menu holds for {@link E2_GROUP} and {@link E2_PLAIN}, in
- * `drawn` notation (`Menu.nitro.ts`). iOS reads UIKit's `UIMenu`: a subtitle is
- * `UIAction.subtitle` and a check is `.on`, and an unchecked toggle is `.off` like a
- * plain row, so `List` has no mark. Android reads the popup's semantics tree: every
- * Material group is `( )` - the top-level actions too - an unchecked checkable row is
- * `=`, and destructive is a colour the tree does not carry.
+ * `drawn` notation. iOS reads UIKit's `UIMenu`, where an unchecked toggle is `.off`
+ * like a plain row, so `List` has no mark. Android reads the popup's semantics tree:
+ * every Material group is `( )` - the top-level actions too - an unchecked checkable
+ * row is `=`, and destructive is a colour the tree does not carry.
  */
 const E2_DRAWN =
   Platform.OS === 'ios'
@@ -2169,13 +1910,12 @@ describe('Menu · Expressive rows (E2)', () => {
     });
     await waitForTestId('e2-rows');
     await waitForHandle('e2-rows', 'the E2 menu');
-    // Nothing has asked yet, so nothing may be claimed.
+    // No probe has run yet, so nothing is reported as drawn.
     expect(report('e2-rows').drawn).toBeNull();
     const drawn = await readDrawn('e2-rows');
     console.log(`e2 rows: ${Platform.OS} drawn=${drawn}`);
     // The whole menu, in order: every subtitle and check where the platform puts it,
-    // and on Android three Material groups - each section a surface of its own, where
-    // before E2 a bare divider split one surface and the tree held no group at all.
+    // and on Android three Material groups, each section a surface of its own.
     expect(drawn).toBe(E2_DRAWN);
     if (Platform.OS === 'android') {
       expect(drawn.split('),(')).toHaveLength(3);
@@ -2188,7 +1928,7 @@ describe('Menu · Expressive rows (E2)', () => {
     expect(selectLog).toEqual(['e2-rows:grid']);
     if (Platform.OS === 'android') {
       await waitForMenu('e2-rows', (r) => r.expanded === false);
-      // D32 is unchanged on the new popup: one open, one close, pick before close.
+      // One open, one close, pick before close.
       expect(orderLog).toEqual([
         'open:e2-rows',
         'select:e2-rows:grid',
@@ -2208,8 +1948,7 @@ describe('Menu · Expressive rows (E2)', () => {
     expect(full).toBe(E2_DRAWN);
     await closeQuietly('e2-reset');
 
-    // In place: the same mount, new props. Both fields are part of what makes one
-    // menu a different menu, so the wrapper's cached row array has to change with them.
+    // In place: the same mount, new props.
     e2Control.setGroup?.(E2_PLAIN);
     await settle(200);
     const plain = await readDrawn('e2-reset', full);
@@ -2242,7 +1981,7 @@ describe('Menu · Expressive rows (E2)', () => {
   });
 });
 
-// MARK: - Split trigger (E3)
+// MARK: - Split trigger
 
 /** Mount-time setters for {@link SplitMenu}, so a test can change one prop in place. */
 const splitControl: {
@@ -2251,13 +1990,9 @@ const splitControl: {
 } = {};
 
 /**
- * The split configuration: a Menu whose `primaryAction` a test can take away and hand
- * back without remounting (E3).
- *
- * The action is passed as `undefined` rather than as a no-op when it is "off", because
- * `undefined` is what makes `Menu.tsx` send `hasPrimaryAction: false` - the flag that
- * chooses the trigger's layout. `useStableCallback` keeps one wrapper per mount, so
- * flipping it is a prop change and not a callback-identity change.
+ * A Menu whose `primaryAction` a test can take away and hand back without
+ * remounting. "Off" is `undefined`, not a no-op: only `undefined` makes the trigger a
+ * single button.
  */
 function SplitMenu({ testId }: { testId: string }) {
   const [action, setAction] = useState(true);
@@ -2280,37 +2015,20 @@ function SplitMenu({ testId }: { testId: string }) {
 }
 
 describe('Menu · Split trigger (E3)', () => {
-  /**
-   * Two hit targets, two jobs.
-   *
-   * The claim under every line here is *two*, not "wider": a trigger that grew a
-   * second container but routed both to the popup, or drew a second container that is
-   * not a hit target at all, would satisfy a width assertion. The two halves are read
-   * from the composition's own layout (`split`/`leading`/`trailing`) and pressed there,
-   * not through the React Native frame - whose middle is the seam between them.
-   */
   it('is two halves, and each one does only its own job', async () => {
     await render(<SplitMenu testId="split" />, { timeout: 20000 });
     await waitForTestId('split');
     await waitForHandle('split', 'the split menu');
 
     if (Platform.OS !== 'android') {
-      // iOS is unchanged by E3's *layout*, and the -1s are the answer that says so
-      // ("no second hit target exists here to measure"), not a `0` that would claim a
-      // layout iOS chose. What the prop changes there is the gesture: a SwiftUI `Menu`
-      // built with `primaryAction:` acts on a tap and opens on a long press (D29).
-      //
-      // Measured on this run, the harness's synthesised touch does reach that tap -
-      // unlike a Button's own gesture environment, which refuses it (G2), so this is
-      // the one place the action half of the prop is observable off the real-input
-      // gate. The open half stays unobservable either way (system presentation), which
-      // is what the -1s above and the iOS cases further up are for.
+      // iOS has no second hit target, so the layout fields answer `-1`. A SwiftUI
+      // `Menu` built with `primaryAction:` acts on a tap and opens on a long press,
+      // and the harness's synthesised touch does reach that tap.
       const before = report('split');
       expectUnanswerable(before);
       expect(before.split).toBeNull();
       await pressTrigger('split');
       await settle(400);
-      // One press, one action, and still no second container in the report.
       expect(primaryLog).toEqual(['split:action']);
       expect(stateLog).toEqual([]);
       expect(report('split').split).toBeNull();
@@ -2335,8 +2053,6 @@ describe('Menu · Split trigger (E3)', () => {
     expect(lBottom).toBeGreaterThan(lTop);
     expect(lTop).toBe(tTop);
     expect(lBottom).toBe(tBottom);
-    // Side by side and not overlapping - the seam is where a "single trigger with a
-    // chevron drawn on top" would fail, because it has no second rect to report.
     expect(lLeft).toBeLessThan(tLeft);
     expect(lRight).toBeLessThanOrEqual(tLeft + 1);
     const frame = boxOf('split');
@@ -2367,9 +2083,7 @@ describe('Menu · Split trigger (E3)', () => {
     expect(stillShut.live).toBe(liveBefore);
     expect(stillShut.split).toBe(true);
 
-    // --- The trailing half: the list, exactly once. One press is one `onOpen`, which
-    // is the same funnel the plain trigger relies on - Material's checked button
-    // reports a *request*, and `MenuModel.setOpen` is what keeps it to one event.
+    // --- The trailing half: the list, exactly once. One press is one `onOpen`.
     await pressRect(drawn.trailing, 'the list half');
     const opened = await waitForMenu(
       'split',
@@ -2379,13 +2093,8 @@ describe('Menu · Split trigger (E3)', () => {
     expect(primaryLog).toEqual(['split:action']);
     expect(orderLog).toEqual(['action:split', 'open:split']);
 
-    // --- And the list hangs off *that* half, not off the whole control: the window's left
-    // edge has to be the trailing half's, not the control's (`lLeft`, well to its left).
-    // E3 measured which of the two placements decides that - composing the list in the
-    // leading half's slot moved this window to 21 px against these 202, while moving the
-    // call out of the half's own wrapper `Box` and staying in this half's slot moved it
-    // nowhere (`docs/tasks/E3/mutations.json`). The slot anchors the list; the `Box` is
-    // `propagateMinConstraints` plumbing.
+    // --- And the list hangs off *that* half, not off the whole control: the window's
+    // left edge is the trailing half's, not the control's (`lLeft`, well to its left).
     const [mLeft, mTop] = edges(opened.menu, 'menu');
     expect(mLeft).toBeGreaterThanOrEqual(tLeft - 2);
     expect(mLeft).toBeLessThanOrEqual(tLeft + 2);
@@ -2415,20 +2124,11 @@ describe('Menu · Split trigger (E3)', () => {
     expect(closedAgain.leading).toEqual(drawn.leading);
   });
 
-  /**
-   * The second half follows the prop, in place.
-   *
-   * E3's layout claim in the direction the old code could not make: taking
-   * `primaryAction` away has to *stop* drawing the split button, not leave a second
-   * hit target that fires nothing. `split` is what the composition drew, so this is the
-   * assertion that says the layout followed, rather than the prop being remembered.
-   */
   it('takes the second half away with the action, and gives it back', async () => {
     await render(<SplitMenu testId="split-inplace" />, { timeout: 20000 });
     await waitForHandle('split-inplace', 'the split menu');
     if (Platform.OS !== 'android') {
-      // The prop round-trips and iOS has no layout to change - the same statement the
-      // case above makes, with the flag now moving.
+      // iOS has no layout to change.
       expectUnanswerable(report('split-inplace'));
       splitControl.setAction?.(false);
       await settle(300);
@@ -2443,8 +2143,7 @@ describe('Menu · Split trigger (E3)', () => {
     splitControl.setAction?.(false);
     await settle(400);
     const off = await waitForMenu('split-inplace', (r) => r.split === false);
-    // Both halves go unread, not stale: a half that kept its box would still hand the
-    // next gate coordinates for a container that is gone.
+    // Both halves go unread, not stale.
     expect(off.leading).toEqual([-1, -1, -1, -1]);
     expect(off.trailing).toEqual([-1, -1, -1, -1]);
     // One trigger again, so a press opens like any other Menu's.
@@ -2470,16 +2169,8 @@ describe('Menu · Split trigger (E3)', () => {
     console.log('split in place: on -> off (one trigger) -> on again');
   });
 
-  /**
-   * Across a remount, which is the recycle case.
-   *
-   * Fabric may hand the new mount the previous owner's native view, and the previous
-   * owner here had a second hit target. `MenuModel.reset` and the split composition's
-   * own `onDispose` are the two things that stop that layout answering for a control
-   * that never asked for it, and this is the only place either is observed from the
-   * device side (`MenuModelTest.aRecycleClearsTheSplitTriggerAndItsHalves` is the
-   * off-device twin).
-   */
+  // Fabric may hand the new mount the previous owner's native view, and the previous
+  // owner here had a second hit target.
   it('starts a new mount with one trigger, whatever the last one drew', async () => {
     const { unmount } = await render(<SplitMenu testId="split-recycle" />, {
       timeout: 20000,
@@ -2492,8 +2183,8 @@ describe('Menu · Split trigger (E3)', () => {
     await settle(400);
     handles.delete('split-recycle');
 
-    // Same testID, same title, no `primaryAction` - the shape a recycled view arrives
-    // in, where the only difference from the previous owner is the missing half.
+    // Same testID, same title, no `primaryAction`: the only difference from the
+    // previous owner is the missing half.
     const { unmount: unmountAgain } = await render(
       <Menu
         title="Publish"
@@ -2508,8 +2199,6 @@ describe('Menu · Split trigger (E3)', () => {
     await waitForHandle('split-recycle', 'the remounted plain menu');
     const fresh = report('split-recycle');
     if (Platform.OS === 'android') {
-      // Android answers the layout question directly: the recycled view drew one
-      // trigger, so `split` is a `false` and both halves are unread rather than stale.
       expect(fresh.split).toBe(false);
       expect(fresh.leading).toEqual([-1, -1, -1, -1]);
       expect(fresh.trailing).toEqual([-1, -1, -1, -1]);
@@ -2526,8 +2215,7 @@ describe('Menu · Split trigger (E3)', () => {
         (r) => r.expanded === false && r.live === liveBefore
       );
     } else {
-      // iOS never had a split layout to leak, so the three fields answer -1 before the
-      // remount and after it - the same answer, which is the claim E3 can make there.
+      // iOS never had a split layout to leak.
       expectUnanswerable(fresh);
     }
     console.log(
@@ -2536,21 +2224,11 @@ describe('Menu · Split trigger (E3)', () => {
     unmountAgain();
   });
 
-  /**
-   * `disabled` reaches both halves, and ends an open list (D29).
-   *
-   * The close is D29's rule restated for a split trigger; the two refusals are the
-   * half that a plain Menu has no equivalent of, because there is only one press to
-   * refuse there. Material keeps a disabled button inert before the model sees the
-   * press, so the off-device twin of this (`aDisabledControlRefusesThePrimaryAction`)
-   * asks the model directly - this is the real-input-shaped version.
-   */
   it('disables both halves and closes an open split menu', async () => {
     await render(<SplitMenu testId="split-disabled" />, { timeout: 20000 });
     await waitForHandle('split-disabled', 'the split menu');
     if (Platform.OS !== 'android') {
-      // iOS: the flag round-trips and the presentation is SwiftUI's, exactly as the
-      // non-split disabled case above asserts.
+      // iOS: the flag round-trips and the presentation is SwiftUI's.
       splitControl.setDisabled?.(true);
       await settle(300);
       expect(handles.get('split-disabled')?.disabled).toBe(true);
@@ -2585,22 +2263,9 @@ describe('Menu · Split trigger (E3)', () => {
     console.log('split disabled: open closed by the flag, both halves inert');
   });
 
-  /**
-   * The split configuration's size, earned rather than inherited (D17's rule, E3's
-   * configuration).
-   *
-   * Two wrong answers are poisoned and refused: the planted `WRONG_SIZE`, and the
-   * control's *declared fallback* - which is what a split trigger left at the first
-   * frame would sit at. The two boxes are also compared with each other, because the
-   * sizing key carries an `action` field precisely so these two configurations cannot
-   * share a cache entry. A source that dropped the field puts both Menus in one entry,
-   * and this is the case that sees it - on the *split* control, left at the plain
-   * trigger's width. A shared entry holds one answer, the last correction written to it,
-   * and the split control is the holder that no longer matches its own measurement. Both
-   * directions of the mutation are in `docs/tasks/E3/mutations.json`; the field itself,
-   * which no device run can read, is guarded by
-   * `src/__tests__/menuSizingKey.test.tsx`.
-   */
+  // The sizing key carries an `action` field so the split and plain triggers cannot
+  // share a cache entry; sharing one would leave the split control at the plain
+  // trigger's width.
   it("earns its own box, which is not the plain trigger's", async () => {
     const splitKey = sizingKey('filled', 'medium', 'Publish', '', 'action');
     const plainKey = sizingKey('filled', 'medium', 'Publish');
@@ -2631,9 +2296,8 @@ describe('Menu · Split trigger (E3)', () => {
     const splitBox = sizeOf('split-size')!;
     const plainBox = sizeOf('plain-size')!;
     if (Platform.OS === 'android') {
-      // Material's own answer: the second container makes the control wider. iOS's
-      // `primaryAction` is a gesture, so its box is the same box and this line would be
-      // a lie there - which is the same asymmetry the whole suite is written around.
+      // The second container makes the control wider. On iOS `primaryAction` is a
+      // gesture, so its box is the same box.
       expect(splitBox.width).toBeGreaterThan(plainBox.width + 1);
     }
     await settle(300);
@@ -2661,12 +2325,9 @@ type HostLog = {
 const newHostLog = (): HostLog => ({});
 
 /**
- * A Menu hosted by a `<Host>`, under a spacer the test can lengthen.
- *
- * Shape copied from `HostPopups.harness.tsx`'s `PopupHost`, for the reason it gives:
- * inside a `<Host>` the child's own React Native frame is `0 × 0` (D24), so the
- * witness's rect is the only address there is, and a spacer is how a test moves the
- * thing underneath a popup's window without a scroll gesture.
+ * A Menu hosted by a `<Host>`, under a spacer the test can lengthen. Inside a
+ * `<Host>` the child's own React Native frame is `0 × 0`, so the witness's rect is
+ * the only address there is, and the spacer moves the Host without a scroll gesture.
  */
 function HostedMenu({ log }: { log: HostLog }) {
   const [spacer, setSpacer] = useState(0);
@@ -2709,15 +2370,9 @@ describe('Menu · inside a Host', () => {
     await waitForHandle('hosted-menu', 'the hosted menu');
 
     if (Platform.OS !== 'android') {
-      // `<Host>` is the documented passthrough on iOS (D23): the child keeps its own
-      // React Native view, so the honest claim is that hosting changes nothing the
-      // box is made of - not an Android geometry that does not exist here.
-      // The measurement is taken first and the frame is then waited for, in that
-      // order: the first frame is the declared fallback, so reading the frame once
-      // compares a pre-correction box with a post-correction measurement and passes
-      // only when the correction happened to land first. It did exactly that until
-      // this trigger grew its Button chrome, and then the window closed. `waitForBox`
-      // asks for the size the control earned, like every other sizing gate here.
+      // `<Host>` is a passthrough on iOS: the child keeps its own React Native view.
+      // The first frame is the declared fallback, so the measurement is taken first
+      // and the frame is then waited for.
       const content = await waitForMeasured(
         'hosted-menu',
         'the hosted trigger'
@@ -2736,9 +2391,8 @@ describe('Menu · inside a Host', () => {
       return;
     }
 
-    // The sanity gate under the rest of this test, in `HostPopups`'s words: if the
-    // anchor rect came from the React Native frame it would be `0 × 0` here, and the
-    // press below would land on the spacer instead of on the button.
+    // An anchor rect taken from the React Native frame would be `0 × 0` here, and
+    // the press below would land on the spacer instead of on the button.
     const own = sizeOf('hosted-menu');
     expect(own == null ? 0 : own.width * own.height).toBe(0);
 
@@ -2753,41 +2407,18 @@ describe('Menu · inside a Host', () => {
     expect(aRight).toBeGreaterThan(aLeft);
     expect(aBottom).toBeGreaterThan(aTop);
     expect(mBottom).toBeGreaterThan(mTop);
-    // Under the button rather than under the `<Host>`'s rectangle - which is the
-    // whole point of this control having its own anchor, and what a plain
-    // `DropdownMenu` composed inside a host would get wrong.
+    // Under the button rather than under the `<Host>`'s rectangle.
     expect(mTop + 24).toBeGreaterThanOrEqual(aBottom);
     expect(Math.abs(mLeft - aLeft)).toBeLessThan(40);
     expect(first.rows).toBe(PICKABLE);
     const gap = mTop - aBottom;
-    // The upper bound, which the line above does not give: `mTop + 24 >= aBottom` only
-    // refuses a popup that comes up *above* the button, so a list opened 200 px below
-    // it would pass. The number is the same 48 the reopened half below uses, so both
-    // halves ask one question.
-    //
-    // How this was shown able to fail (G7b fix round 1, M2). Baseline on this emulator:
-    // the popup's window top sat 16 px below the anchor's bottom. Replacing this
-    // `ExposedDropdownMenu` with a plain `DropdownMenu(offset = DpOffset(0.dp, 64.dp))`
-    // - a 64 dp offset handed to Material's own position provider, so the *window*
-    // moves rather than its content - made the same reading 168 px, and this line
-    // went red with `expected 168 to be less than 48` (`harness:android:Menu`, 30 Oct
-    // 01:48:49Z). So the bound does catch a popup that moves: the witness reads the
-    // window, and the window can move.
-    //
-    // What it did *not* catch, in round 1: dropping `menuAnchor` from the trigger three
-    // ways (the anchor inside the box, a `clickable` + `DropdownMenu`, that pair inside
-    // a `fillMaxSize` Box) and a 300 dp `Modifier.offset` on the list's *content*. All
-    // four passed this gate whole, which on this Material version (1.4.0) is the
-    // measurement: none of them moved the popup's window off the anchor. So this bound
-    // guards behaviour `menuAnchor` provides, and the code comment in
-    // `HybridNitroUiMenu.kt` explaining why the anchor stays is a reading of Material's
-    // contract rather than something these four mutants reproduced.
+    // The upper bound: `mTop + 24 >= aBottom` only refuses a popup that comes up
+    // above the button, so a list opened far below it would pass.
     expect(gap).toBeLessThan(48);
 
     // Move the `<Host>`. Compose is never told: a popup positions itself against the
     // anchor's box inside its own composition, so a window left standing would point
-    // at where the button used to be. `docs/components/host.md` records that answer
-    // for the Picker; this is the same rule, measured on the Menu.
+    // at where the button used to be.
     log.setSpacer?.(120);
     const moved = await waitForMenu(
       'hosted-menu',
@@ -2795,9 +2426,8 @@ describe('Menu · inside a Host', () => {
     );
     expect(moved.menu).toEqual([-1, -1, -1, -1]);
 
-    // The witness followed the Host rather than freezing: the press below is aimed at
-    // the rect it reports *now*, so a stale rect lands on the spacer and no menu
-    // opens. That is what makes the second half evidence and not a restatement.
+    // The press below is aimed at the rect the witness reports now, so a stale rect
+    // lands on the spacer and no menu opens.
     await pressWitnessed('hosted-menu');
     const reopened = await waitForMenu(
       'hosted-menu',
@@ -2808,11 +2438,8 @@ describe('Menu · inside a Host', () => {
     expect(
       Math.abs(nextBottom - aBottom - 120 * PixelRatio.get())
     ).toBeLessThan(6);
-    // The list came up at the *new* anchor rather than where the old one is: within a
-    // row of the new anchor's bottom, and a good part of the 120 dp away from where it
-    // sat before. Material is allowed a small correction of its own at the second
-    // place - the numbers are logged below rather than pinned to a constant, because
-    // what this gate refuses is a popup that stayed behind, not a five-point inset.
+    // The list came up at the new anchor: within a row of its bottom, and a good
+    // part of the 120 dp away from where it sat before.
     expect(Math.abs(nextMenuTop - nextBottom)).toBeLessThan(48);
     expect(Math.abs(nextMenuTop - (aBottom + gap))).toBeGreaterThan(
       (120 * PixelRatio.get()) / 2
@@ -2824,8 +2451,8 @@ describe('Menu · inside a Host', () => {
         `px at anchor bottom ${String(aBottom)} -> ${String(nextBottom)}`
     );
 
-    // Leave nothing up: `live` counts menus in the whole process, so a window this
-    // gate forgets is the next gate's leak.
+    // Leave nothing up: `live` counts menus in the whole process, so a window left
+    // open here would count in the next test.
     handles.get('hosted-menu')?.nuiTestSelectRow('copy');
     await waitForMenu(
       'hosted-menu',
@@ -2858,8 +2485,8 @@ describe('Menu · inside a Host', () => {
     await render(tree(true, 0), { timeout: 30000 });
     await waitForHandle('hosted-survivor', 'the surviving hosted menu');
     if (Platform.OS !== 'android') {
-      // On iOS the two Menus are ordinary React Native views (D23), so the claim
-      // that survives is only that both are there and neither reports a window.
+      // On iOS the two Menus are ordinary React Native views, so all that can be
+      // checked is that both are there and neither reports a window.
       await waitForTestId('hosted-removal');
       await waitForTestId('hosted-survivor');
       expectUnanswerable(report('hosted-survivor'));
@@ -2867,18 +2494,15 @@ describe('Menu · inside a Host', () => {
     }
     await waitForTestId('hosted-removal');
     const liveBefore = report('hosted-survivor').live ?? 0;
-    // Pressed where the Host drew it, as the other hosted cases are: a hosted child's
-    // React Native frame is `0 × 0` at the Host's origin (`docs/components/host.md`,
-    // "Finding a hosted control"), so its centre is the trigger's corner pixel - which
-    // `menuAnchor`'s whole-box pointer input caught before E2, and a Button's own touch
-    // target does not.
+    // Pressed where the Host drew it: a hosted child's React Native frame is `0 × 0`
+    // at the Host's origin, so its centre is the trigger's corner pixel, which a
+    // Button's touch target does not catch.
     await pressWitnessed('hosted-removal');
     await waitForMenu(
       'hosted-removal',
       (r) => r.expanded === true && r.live === liveBefore + 1
     );
-    // Take the child out and leave the `<Host>` itself alone - the third teardown an
-    // app performs, after the whole-host drop and the disable.
+    // Take the child out and leave the `<Host>` itself alone.
     render(tree(false, 0));
     const gone = await waitForMenu(
       'hosted-survivor',
@@ -2900,14 +2524,9 @@ describe('Menu · inside a Host', () => {
   });
 
   /**
-   * Two hosted controls stacked in one `<Host>`, the one above able to grow.
-   *
-   * This is the second of the two ways an anchored window can be left pointing at
-   * nothing, and the `<Host>`-moves test above cannot see it: growing the row above
-   * moves the Menu's button *inside* the composition while the composition itself,
-   * and the `<Host>`'s React Native frame, stay exactly where they were. Only a
-   * reading of the anchor's own box can notice (`noteAnchorBox`), which is why the
-   * fixture is a pair rather than another spacer.
+   * Two hosted controls stacked in one `<Host>`, the one above able to grow. Growing
+   * it moves the Menu's button inside the composition while the composition and the
+   * `<Host>`'s React Native frame stay where they were.
    */
   function HostedPair({ log: hostLog }: { log: HostLog }) {
     const [buttonSize, setButtonSize] = useState<ButtonSize>('small');
@@ -2931,8 +2550,8 @@ describe('Menu · inside a Host', () => {
     await render(<HostedPair log={log} />, { timeout: 30000 });
     await waitForHandle('pair-menu', 'the paired hosted menu');
     if (Platform.OS !== 'android') {
-      // Nothing to measure: iOS hosts by passing the child through (D23), so the
-      // button and the menu are ordinary React Native views there.
+      // Nothing to measure: iOS hosts by passing the child through, so the button
+      // and the menu are ordinary React Native views there.
       await waitForTestId('pair-menu');
       expectUnanswerable(report('pair-menu'));
       return;
@@ -2954,8 +2573,7 @@ describe('Menu · inside a Host', () => {
       (r) => r.expanded === false && (r.live ?? 0) === liveBefore
     );
     expect(closed.menu).toEqual([-1, -1, -1, -1]);
-    // And the button really did move - without this the gate above could be reading a
-    // window that closed for a reason nobody intended.
+    // And the button really did move, so the window closed for that reason.
     const [, nextAnchorTop] = edges(report('pair-menu').anchor, 'anchor');
     expect(nextAnchorTop).toBeGreaterThan(anchorTop);
     console.log(
@@ -2997,11 +2615,6 @@ describe('Menu · inside a Host', () => {
     await waitForTestId('read-back');
     await waitForTestId('read-back-plain');
     await waitForMeasured('read-back', 'the named menu');
-    // Every handle this test reads is waited for, not read once: `hybridRef` lands
-    // after the commit `render` resolves, so a single read is a race with view
-    // creation. `read-back-fallback` is the one X14's merge tripped on, and
-    // `read-back-plain` is the same shape one line earlier - it just happens to be
-    // behind a `waitForMeasured` that only waits for `read-back`.
     const named = await waitForHandle('read-back', 'the named menu');
     const plain = await waitForHandle('read-back-plain', 'the disabled menu');
     expect(named?.title).toBe('Named');
@@ -3010,8 +2623,8 @@ describe('Menu · inside a Host', () => {
     expect(named?.disabled).toBe(false);
     expect(named?.systemImage).toBe('tray.full');
     expect(named?.accessibilityLabel).toBe('Open the actions');
-    // The colour is the platform's own `processColor` output - D10's bit pattern,
-    // which is why the expected number is computed rather than written down.
+    // The colour is the platform's own `processColor` output, so the expected
+    // number is computed rather than written down.
     expect(named?.tintColor).toBe(processColor('#c837ab'));
     expect(plain?.accessibilityLabel).toBeNull();
     expect(plain?.disabled).toBe(true);
@@ -3021,19 +2634,13 @@ describe('Menu · inside a Host', () => {
           named?.accessibilityLabel
         )}`
     );
-    // The half the getters cannot say: that the name reaches the element a screen
-    // reader lands on. Everything above is a round trip through React's props, so this
-    // reads the tree the harness can walk - the house pattern of `Progress.harness.tsx`
-    // and `Slider.harness.tsx`. And it is a different read, not the same one: measured
-    // at `06-20-03Z`, clearing `accessibilityLabel` off the view RN builds for this
-    // control - prop, model and SwiftUI element untouched - leaves all six getters above
-    // answering and makes this query return null.
+    // Everything above is a round trip through React's props; this reads the view
+    // tree the harness can walk.
     const namedElement =
       harnessUi.queryByAccessibilityLabel('Open the actions');
-    // `read-back-fallback` sets no `accessibilityLabel`, so this is the title fallback -
-    // logged rather than asserted, because the walk cannot see it: measured at
-    // `06-02-21Z` it answers null on iOS, and on Android the query answers null for every
-    // Compose control (`Slider.harness.tsx`), so it would say nothing there either way.
+    // `read-back-fallback` sets no `accessibilityLabel`, so this is the title fallback.
+    // Logged rather than asserted: the query answers null for it on iOS, and null for
+    // every Compose control on Android.
     const fallbackElement = harnessUi.queryByAccessibilityLabel('Fallback');
     console.log(
       `a11y tree: named=${describeSize(namedElement)} ` +
@@ -3050,64 +2657,20 @@ describe('Menu · inside a Host', () => {
       expect(namedElement).not.toBeNull();
       expect(Math.abs(namedElement!.width - namedBox.width)).toBeLessThan(2);
     }
-    // What this cannot say. On Android the one-node promise (`clearAndSetSemantics`
-    // carrying name, value, role, state and the action, so TalkBack gets one focus stop
-    // rather than a nameless one beside it) is a claim about the `SemanticsNode` tree,
-    // and the only reading of that tree this environment has is `uiautomator dump` -
-    // which is `realInput`, and G7b's. On iOS the element the walk lands on is the one RN
-    // makes for the view: `HybridNitroUiMenuComponent` is an `RCTViewComponentView`, RN
-    // applies `accessibilityLabel` to it from its own base props, and the Swift host is
-    // only its `contentView` - so deleting `.modifier(OptionalMenuAccessibility(...))`
-    // from the SwiftUI trigger, measured at `06-02-21Z`, leaves this query answering for
-    // `'Open the actions'`. What the assertion holds is that the prop reaches the
-    // component view RN makes at the trigger's box - not the name VoiceOver reads. The
-    // query walks UIKit views only, and that view is not an accessibility element (no
-    // `accessible`), so the name a reader gets comes from the SwiftUI modifier, which
-    // this test cannot reach (a reading; FOLLOWUPS has it for G7b). What VoiceOver says
-    // for the rows is SwiftUI's own naming, and
-    // nothing here can open the menu to hear it. `docs/components/menu.md` keeps the list
-    // of what is and is not stood behind.
+    // The query walks UIKit views only: this holds that the prop reaches the
+    // component view React Native makes at the trigger's box, not the name VoiceOver
+    // reads from the SwiftUI element.
   });
 });
 
-// MARK: - The glyph and the top of the ladder (G19 fix round 2)
+// MARK: - The glyph and the top of the ladder
 
 /**
- * `androidIcon` on the trigger, and the two rungs the trigger was missing.
- *
- * Both come from one review finding: `ButtonSize` and `ButtonProps.androidIcon` grew
- * in this task and Menu — whose trigger *is* a Button, in the docs and in the
- * composition — was left behind. `size="xlarge"` type-checked and drew `medium`;
- * a glyph was not offerable at all.
- *
- * What a device adds over `src/__tests__/menuSizingKey.test.tsx` (which reads the key
- * and the prop directly) is the box. A key can carry a field and a prop can arrive and
- * still be drawn wrong: the icon can miss its slot, an unresolved name can reserve one
- * anyway, and a rung can be sent to native and laid out at the declared fallback. So
- * every case here measures, poisons first so nothing is inherited, and compares
- * against a real `Button` rather than against a constant — the same rule the parity
- * gate above runs on.
- *
- * **The drawn glyph is proven by width, not by pixels.** Menu has no pixel probe
- * (Button's `nuiTestPixelProbe` is its own spec, and D43's tint rule is proven there),
- * and a Menu's node tree does not show the glyph either: it carries no
- * `contentDescription`, because the trigger's own node names the control. What is
- * measurable is that the slot Material's `Button` reserves was taken — which only
- * happens when the composition was handed artwork — and that the box it produced is
- * the *same box* a Button with the same asset produced, drawn by the same
- * [NitroUiM3Button]. That comparison is what a Menu-specific pixel probe would add
- * nothing to.
+ * The trigger's glyph is checked by width, not by pixels: the slot Material's
+ * `Button` reserves is taken only when the composition was handed artwork, and the
+ * box is compared with a `Button` given the same asset.
  */
 describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
-  /**
-   * The Material Symbols file the example app imports, required the way an app does.
-   *
-   * `share_24px.xml`, not `star_24px.xml`: Button's D43 suite loads the star in its
-   * own gates and this suite wants the file read fresh here. It does not change a
-   * single assertion below — every box in this file is a *settled* box — but a cold
-   * read is the state a developer's first frame is in, and `Pending` taking the slot
-   * is half of what the second case proves.
-   */
   const SHARE_ASSET = require('../src/assets/icons/share_24px.xml');
 
   /** A name the example app does not ship, so the resource table answers 0. */
@@ -3116,13 +2679,8 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
   const RUNGS = ['small', 'medium', 'large', 'xlarge', 'xxlarge'] as const;
 
   /**
-   * Measure, in the order given, and refuse a control that never reported a box.
-   *
-   * `buttonIds` names the ids that are `Button`s, because the two controls answer
-   * `measureContent` through **different handle maps** — `handles` holds what
-   * `captureHybrid` handed back, `buttonHandles` what `captureButton` did. Asking the
-   * Menu map about a Button is not a wrong number, it is no number at all: the poll
-   * sits there until it times out, which is how this first met a device.
+   * Measures in the order given. `buttonIds` names the ids that are `Button`s: their
+   * handles live in `buttonHandles`, not in `handles`.
    */
   async function measureAll(
     testIds: readonly string[],
@@ -3146,11 +2704,8 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
       .join(' ');
 
   it('takes the glyph the Button takes, into the box the Button takes', async () => {
-    // The claim `docs/components/menu.md` makes about a control it could not make
-    // until now: an icon makes a trigger wider, and by exactly the amount it makes a
-    // Button wider, because they are the same composition. Four configurations, both
-    // components, poisoned in both caches — and no constant anywhere, so the ladder
-    // and Material's `hasStartIcon` padding can move and this stays true.
+    // An icon makes a trigger wider by exactly the amount it makes a Button wider,
+    // because they are the same composition.
     const menuKeys = ['', 'icon'].map((icon) =>
       sizingKey('filled', 'medium', 'Share', '', 'plain', icon)
     );
@@ -3192,25 +2747,19 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
     const plain = boxes.get('menu-plain')!;
     const icon = boxes.get('menu-icon')!;
     const twin = boxes.get('button-icon')!;
-    // The wire the wrapper built, read back off the trigger: an asset has to arrive as
-    // the dev-server URL (or, in a release build, the drawable Metro filed it under),
-    // not as the number `require` evaluated to.
+    // An asset has to arrive as the dev-server URL (or, in a release build, the
+    // drawable Metro filed it under), not as the number `require` evaluated to.
     if (Platform.OS === 'android') {
       expect(handles.get('menu-icon')?.androidIcon ?? '').toMatch(
         /^url:.*share_24px\.xml/
       );
-      // Material's slot, taken: the ladder's glyph plus its spacing, and not one
-      // pixel of it decided by the file.
+      // Material's icon slot is taken: wider, and no taller.
       expect(icon.width).toBeGreaterThan(plain.width + 1);
       expect(Math.abs(icon.height - plain.height)).toBeLessThan(0.6);
-      // The Box the Button's icon produced, to the tenth of a dp: same slot, same
-      // painter, same padding call. A Menu that resolved the icon and never passed it
-      // to its trigger, or passed it to a slot of its own making, fails here rather
-      // than in a screenshot nobody compares.
+      // The same box the Button's icon produced.
       expect(sameSize(icon, twin)).toBe(true);
     } else {
-      // iOS draws `systemImage` and ignores `androidIcon` — the same contract Button
-      // keeps, now measured on the second control that offers the prop.
+      // iOS draws `systemImage` and ignores `androidIcon`.
       expect(sameSize(icon, plain)).toBe(true);
       expect(handles.get('menu-icon')?.androidIcon ?? '').toContain(
         'share_24px'
@@ -3222,9 +2771,7 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
   });
 
   it('draws no slot for a glyph that cannot be resolved', async () => {
-    // Round 1's contract, on the new control: an unresolvable name is *no icon*, not a
-    // smaller icon. Reserved-but-empty artwork is the failure a release build hides
-    // and a user sees as a gap beside a label.
+    // An unresolvable name is no icon at all, not an empty reserved slot.
     const keys = ['', 'icon'].map((icon) =>
       sizingKey('filled', 'medium', 'Share', '', 'plain', icon)
     );
@@ -3255,9 +2802,9 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
   });
 
   it('puts the glyph on the leading half of a split trigger', async () => {
-    // `primaryAction` gives Android a second container, and the label — with its
-    // glyph — goes in the leading one while the chevron holds the trailing one. iOS
-    // has one button for both jobs, so this is an Android measurement, like E3's.
+    // `primaryAction` gives Android a second container: the label, with its glyph,
+    // goes in the leading one and the chevron holds the trailing one. iOS has one
+    // button for both jobs.
     const keys = ['', 'icon'].map((icon) =>
       sizingKey('filled', 'medium', 'Publish', '', 'action', icon)
     );
@@ -3299,11 +2846,6 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
   });
 
   it('lays the five rungs out in order, and reaches the top two', async () => {
-    // The half of item 4 a JS test cannot see: `xlarge` reaching native is one thing,
-    // being *laid out* at 96 dp another. Before this round the wrapper rewrote the
-    // rung to `medium`, so this measured a 48 dp box for a name whose box is 96 — and
-    // nothing else in the suite noticed, because every other gate asks a box to be
-    // earned rather than to be a particular height.
     poisonConfigurations(
       RUNGS.map((size) => sizingKey('filled', size, 'Rung'))
     );
@@ -3337,10 +2879,8 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
     expect(cold.corrections).toBeGreaterThanOrEqual(RUNGS.length);
 
     if (Platform.OS === 'android') {
-      // Material's own container heights: 48 / 48 / 56 / 96 / 136, the first two
-      // sharing a box because the 48 dp touch target floors both. The top two numbers
-      // only exist if the rung reached Compose: `medium` is 48 dp, which is what this
-      // control drew for `xlarge` until this round.
+      // Material's own container heights: 48 / 48 / 56 / 96 / 136 dp, the first two
+      // sharing a box because the 48 dp touch target floors both.
       expect(heightOf('medium')).toBeLessThan(heightOf('large'));
       expect(heightOf('large')).toBeLessThan(heightOf('xlarge'));
       expect(heightOf('xlarge')).toBeLessThan(heightOf('xxlarge'));
@@ -3348,9 +2888,7 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
       expect(heightOf('xxlarge')).toBeGreaterThanOrEqual(135.5);
     } else {
       // iOS has fewer `.controlSize` values than the ladder has rungs, so the top of
-      // the ladder collapses there — documented in `docs/components/menu.md` as the
-      // same collapse `docs/components/button.md` measures for Button. Asserted, so a
-      // future SDK that stops collapsing it is a change someone notices.
+      // the ladder collapses there.
       expect(heightOf('xlarge')).toBeGreaterThanOrEqual(heightOf('medium'));
       expect(Math.abs(heightOf('xlarge') - heightOf('xxlarge'))).toBeLessThan(
         0.6
@@ -3360,29 +2898,14 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
 });
 
 /**
- * `androidIcon` on the rows (G21): a glyph in each row's Material slot.
- *
- * The popup is a window of its own, so nothing readable on this control - no box, no
- * semantics node, no prop echo - can say whether a row's glyph reached the screen. Two
- * things make it readable here:
- *
- *  - `iconTints=` in the menu's own report, which each row writes **as it draws**, from
- *    the `LocalContentColor` its glyph is tinted with. A harness cannot name this
- *    device's dynamic Material palette, so it asks the row and then samples for that;
- *  - `nuiTestMenuPixelProbe`, which samples the popup window the witness already keeps.
- *
- * The numbers are compared as **differences** between two menus that differ only by the
- * icon, because a colour count includes the row titles - which are drawn in the same
- * colour. Subtract the menu with no icons and what is left is the artwork, and the
- * artwork here is a filled square, so what is left is also the slot's area. That is the
- * size claim: 20 dp (`MenuDefaults.LeadingIconSize`) on this device's density, squared.
- *
- * One popup is open at a time, everywhere below. A Material popup takes focus and
- * dismisses on a touch outside itself, so pressing a second trigger while a first menu
- * is open would dismiss the first and its sample would be the frame of a dying window.
+ * A row's glyph is read two ways: `iconTints` in the report, which each row writes as
+ * it draws, and `nuiTestMenuPixelProbe`, which samples the popup window. Pixel counts
+ * are compared as differences between two menus that differ only by the icon, because
+ * the row titles are drawn in the same colour. One popup is open at a time: a
+ * Material popup dismisses on a touch outside itself.
  */
 describe('Menu · the row glyphs (G21)', () => {
-  /** The same filled square, through each road D43 gives an app. */
+  /** The same filled square, as a Metro asset and as a drawable name. */
   const SLAB_ASSET = require('../src/assets/icons/slab_24px.xml');
   const SLAB_NAME = 'nitroui_test_slab';
   const NOT_SHIPPED = 'nitroui_test_never_built';
@@ -3391,12 +2914,9 @@ describe('Menu · the row glyphs (G21)', () => {
   const ROW_ICON_DP = 20;
 
   /**
-   * One row with a glyph, one row without, and a disabled row to close through.
-   *
-   * The glyph is on the row that can also be `checked`, because that is the pair worth
-   * measuring: Material swaps the check *into the same slot*, so the menu is one width
-   * either way. The titles are the ones every comparison menu here uses too, so
-   * subtracting one probe from the other cancels the text and leaves the artwork.
+   * One row with a glyph, one row without, and a disabled row to close through. Every
+   * comparison menu uses the same titles, so subtracting one probe from another
+   * cancels the text and leaves the artwork.
    */
   const glyphGroup = (
     icon: string | number | undefined,
@@ -3429,11 +2949,8 @@ describe('Menu · the row glyphs (G21)', () => {
   }
 
   /**
-   * A rect's `WxH`, which is the half of it two menus can share.
-   *
-   * Two triggers in one column are not in one place, so their popups are not either;
-   * the claim a size makes - no reserved gap, no moved label - is about the frame, and
-   * comparing whole rects would compare where each menu happens to sit.
+   * A rect's `WxH`. Two triggers in one column sit in different places, so only the
+   * sizes of their popups compare.
    */
   function frameOf(rect: number[]): string {
     const [left, top, right, bottom] = edges(rect, 'menu');
@@ -3443,11 +2960,8 @@ describe('Menu · the row glyphs (G21)', () => {
   }
 
   /**
-   * Run one probe on `probe`/`read` and wait for that probe's own answer.
-   *
-   * Sampling needs the UI thread and a Nitro method may not block for it, so a probe is
-   * a pair: ask, then poll. The `n=` a line carries is the sentinel that says the answer
-   * is the one this call asked for and not the previous control's.
+   * Runs one probe and waits for its answer. Sampling needs the UI thread and a Nitro
+   * method may not block for it, so a probe is a pair: ask, then poll.
    */
   function probeOnce(
     probe: () => void,
@@ -3474,14 +2988,9 @@ describe('Menu · the row glyphs (G21)', () => {
   }
 
   /**
-   * A split trigger whose two hit targets have been **measured**, not merely composed.
-   *
-   * `split === true` is the composition saying it drew both halves; the rects are the
-   * witness's own measurement and land a frame later. Read in between, a control answers
-   * a zero-wide leading half, and a zero-wide half compared against a measured one is a
-   * "difference" of the whole control — which is what this first reported as an 87 px
-   * move of the chevron's half. Degenerate rects are `-1,-1,-1,-1`, whose width is 0, so
-   * both halves being wide is what says the frame has landed.
+   * A split trigger whose two halves have been measured, not merely composed:
+   * `split === true` says the composition drew both, and their rects land a frame
+   * later.
    */
   async function splitHalves(testId: string): Promise<MenuReport> {
     return await waitForMenu(
@@ -3505,15 +3014,8 @@ describe('Menu · the row glyphs (G21)', () => {
   }
 
   /**
-   * The same "the rows are composed" wait, for the one platform that cannot see it.
-   *
-   * `expanded` is Android's: its popup is a window this process owns and its Compose
-   * state says whether it is showing. iOS hands a SwiftUI `Menu` to the system's
-   * presentation and answers `expanded=-1` for it (`HybridNitroUiMenu.swift`), so a wait
-   * for `true` there waits for a fact that platform never reports - a 12 s timeout read as
-   * a broken menu. The probe is the read iOS does answer: it presents the `UIMenu`, copies
-   * the tree UIKit built and dismisses it in one main-thread turn, so a tree here is
-   * evidence a press produced - which is more than the flag would have been.
+   * The iOS counterpart of {@link openRows}. iOS answers `expanded=-1`, so the wait is
+   * for the tree the probe copies from the `UIMenu` it presents and dismisses.
    */
   async function probeIosRows(testId: string): Promise<MenuReport> {
     const handle = await waitForHandle(testId, `the iOS menu "${testId}"`);
@@ -3544,10 +3046,8 @@ describe('Menu · the row glyphs (G21)', () => {
         `"${testId}" never recorded a tint for ${what} row "${rowId}".`
       );
     }
-    // The artwork for a Metro asset arrives on its own schedule, and the row records its
-    // tint as soon as it *composes* the slot - before the bytes, if the bytes are late.
-    // Sampling then would count a slot reserved for a glyph, not a glyph, so the count is
-    // read until it stops moving.
+    // A Metro asset's artwork can arrive after the row composes its slot and records
+    // the tint, so give it time before the caller samples.
     await settle(400);
     return parseInt(tint.slice(1), 16);
   }
@@ -3637,9 +3137,7 @@ describe('Menu · the row glyphs (G21)', () => {
     if (Platform.OS !== 'android') {
       // iOS's menu is UIKit's, in a window this process cannot rasterise: the probe says
       // `no pixels` rather than answering 0, and `iconTints` stays `-` because iOS drew
-      // no Android glyph. Both are the honest version of a green - and the tree is what
-      // makes it green rather than empty: `androidIcon` beside a row must not cost that
-      // row its place in the menu UIKit built.
+      // no Android glyph. The row itself must still be in the menu UIKit built.
       const opened = await probeIosRows('rows-asset');
       expect(opened.iconTints).toBe('-');
       expect(opened.rows).toBe(3);
@@ -3675,24 +3173,20 @@ describe('Menu · the row glyphs (G21)', () => {
       )} name=${String(nameInk)} none=${String(noneInk)}`
     );
 
-    // The slot, measured: `MenuDefaults.LeadingIconSize` is 20 dp, and a square that
-    // fills its canvas paints the slot squared. 12% is the anti-aliased edge of a
-    // 55-pixel square, and nothing else: Material's 24 dp default would be 44% more ink
-    // and "resolved but never drawn" is 100% less.
+    // A square that fills its canvas paints the 20 dp slot squared; the 12% allows
+    // for its anti-aliased edge.
     const slot = ROW_ICON_DP * PixelRatio.get();
     expect(ink).toBeGreaterThan(slot * slot * 0.88);
     expect(ink).toBeLessThan(slot * slot * 1.12);
 
-    // D43's two roads to one file, measured as pixels: the drawable the app shipped and
-    // the file Metro served leave the same mark.
+    // The drawable the app shipped and the file Metro served leave the same mark.
     const nameDifference = nameInk - noneInk;
     expect(Math.abs(nameDifference - ink)).toBeLessThan(
       Math.max(6, ink * 0.06)
     );
 
     // Closed, there is no window to sample, and the probe says `no popup` rather than
-    // counting the last frame it saw - a stale answer would otherwise pass as a live one
-    // for everything that reads this handle next.
+    // counting the last frame it saw.
     const closed = await probeOnce(
       () => assetHandle.nuiTestMenuPixelProbe(color),
       () => assetHandle.nuiTestMenuPixelReport(),
@@ -3725,10 +3219,8 @@ describe('Menu · the row glyphs (G21)', () => {
     }
 
     if (Platform.OS !== 'android') {
-      // The name iOS cannot resolve is a name iOS never asked for: `androidIcon` is
-      // Android's prop. So the honest iOS claim is the one Android measures with popup
-      // frames - the menu built from a name nobody can look up is the same menu, row for
-      // row, as the group with no icons at all.
+      // `androidIcon` is Android's prop, so on iOS the menu built from an unresolvable
+      // name is the same menu, row for row, as the group with no icons at all.
       const missing = await probeIosRows('rows-missing');
       expect(missing.iconTints).toBe('-');
       const plain = await probeIosRows('rows-none2');
@@ -3738,7 +3230,7 @@ describe('Menu · the row glyphs (G21)', () => {
     }
 
     // Before anything is open, the probe refuses: "nothing to sample" is a different
-    // answer from "sampled, and found none", and the harness needs to tell them apart.
+    // answer from "sampled, and found none".
     const handle = await waitForHandle('rows-missing', 'the closed control');
     const refused = await probeOnce(
       () => handle.nuiTestMenuPixelProbe(0x123456),
@@ -3750,8 +3242,7 @@ describe('Menu · the row glyphs (G21)', () => {
     const missing = await openRows('rows-missing');
     expect(missing.iconTints).toBe('-');
     // Resolved-to-nothing is the menu with no icons at all: no reserved gap, no moved
-    // label, one popup frame. `Absent` reaches `leadingIcon` as `null`, which is what
-    // makes that true - a non-null-but-empty lambda would still take 20 dp.
+    // label, one popup frame.
     const missingFrame = frameOf(missing.menu);
     await shut('rows-missing');
     const plain = await openRows('rows-none2');
@@ -3785,9 +3276,8 @@ describe('Menu · the row glyphs (G21)', () => {
       await waitForMeasured(testId, testId);
     }
     if (Platform.OS !== 'android') {
-      // iOS has no Material slot to keep, so the width claim below is Android's. What iOS
-      // can say is that the check reaches UIKit on the row that carries the glyph - the
-      // `+` the tree notation carries - which is the same fact the pixels make on Android.
+      // iOS has no Material slot to keep. What it can show is that the check reaches
+      // UIKit on the row that carries the glyph: the `+` in the tree notation.
       const checked = await probeIosRows('rows-checked');
       expect(checked.drawn).toContain('Arrange by size+');
       const unchecked = await probeIosRows('rows-unchecked');
@@ -3801,10 +3291,8 @@ describe('Menu · the row glyphs (G21)', () => {
     const uncheckedFrame = frameOf(unchecked.menu);
     await shut('rows-unchecked');
 
-    // The same row checked: it drew Material's check *in that slot* instead, so it
-    // recorded no tint for the app's glyph - and the popup is exactly as wide, which is
-    // the difference between "the check takes the slot" and "the slot comes and goes
-    // with the state". Same props, same group: one `MenuGroup`, one `checked`.
+    // The same row checked: it drew Material's check in that slot instead, so it
+    // recorded no tint for the app's glyph, and the popup is exactly as wide.
     const checked = await openRows('rows-checked');
     expect(tintsOf(checked).has('slab')).toBe(false);
     const checkedFrame = frameOf(checked.menu);
@@ -3816,11 +3304,8 @@ describe('Menu · the row glyphs (G21)', () => {
   });
 
   it('puts the trigger glyph in the leading half, and only there', async () => {
-    // A CSS string, not the bare number: `tintColor` is a `ColorValue`, and the number
-    // form is an *ARGB* int — `0xff00a0` is alpha 0, so the app would ask for a
-    // transparent tint and a probe that then found nothing would read as a dropped
-    // glyph. `processColor` is the same conversion the wrapper runs, and the probe
-    // compares RGB, which is why the sampled colour is written through it too.
+    // A CSS string, not the bare number: the number form of a `ColorValue` is an ARGB
+    // int, so `0xff00a0` has alpha 0 and would ask for a transparent tint.
     const tintCss = '#ff00a0';
     const tint = processColor(tintCss) as number;
     await render(
@@ -3852,9 +3337,8 @@ describe('Menu · the row glyphs (G21)', () => {
 
     if (Platform.OS !== 'android') {
       // iOS has no split trigger to look at: a `primaryAction` there is a gesture on one
-      // button, so `split`/`leading`/`trailing` answer `-1` ("no second hit target to
-      // measure"), and the trigger's pixel probe answers `no pixels` because it has no
-      // Android glyph to sample. Refusing, where Android measures, is the whole claim.
+      // button, so `split` answers `-1`, and the trigger's pixel probe answers
+      // `no pixels` because it has no Android glyph to sample.
       expect(report('split-ink').split).toBeNull();
       const iosHandle = await waitForHandle(
         'split-ink',
@@ -3875,7 +3359,6 @@ describe('Menu · the row glyphs (G21)', () => {
       `split halves: glyph=${lRight - lLeft}/${tRight - tLeft} ` +
         `plain=${plainLRight - plainLLeft}/${plainTRight - plainTLeft}`
     );
-    // Two places, not one rect twice — the seam of a real split button.
     expect(lRight).toBeLessThanOrEqual(tLeft + 1);
     expect(plainLRight).toBeLessThanOrEqual(plainTLeft + 1);
     // The label, glyph and all, lives in the leading half: that half grows by the slot,
@@ -3885,10 +3368,9 @@ describe('Menu · the row glyphs (G21)', () => {
       0.6
     );
 
-    // And the glyph is *painted* there. The tint is the app's own, so the colour is
-    // known; the label carries it too, so what is asserted is the difference the square
-    // makes - an icon that resolved, laid out a slot wide, and never drew is exactly
-    // what a prop echo cannot be told apart from, and what this can.
+    // And the glyph is painted there. The tint is the app's own, so the colour is
+    // known; the label carries it too, so what is asserted is the difference the
+    // square makes.
     const glyphHandle = await waitForHandle('split-ink', 'the split trigger');
     const plainHandle = await waitForHandle(
       'split-noink',

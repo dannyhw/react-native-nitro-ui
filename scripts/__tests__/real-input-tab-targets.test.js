@@ -1,15 +1,3 @@
-/**
- * The example tab bar's touch-target rule (X19), its iOS log parser, and the tab list it
- * reads from `example/src/App.tsx`.
- *
- * The rule's fixtures do not coincide with the right answer: the "old bar" fixture is the
- * size the 15-tab shared row actually measured on the lease's Pixel 9 (G16's `tab-picker`,
- * 61 x 74 px at 2.625x = 23.2 x 28.2 dp), and the edge cases sit either side of the
- * one-pixel slack rather than on the minimum itself.
- *
- * @file
- */
-
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from '@jest/globals';
@@ -62,11 +50,6 @@ describe('exampleTabs', () => {
   });
 
   it('picks up tabs the registry adds, so the next components need no edit here', () => {
-    // SearchField and Tooltip were the next two components (X19 brief). Their tabs are
-    // written into App.tsx by the same region `bun run regen` rewrites; the rule has to
-    // see them from that output alone. A component that has landed since (Tooltip, G18)
-    // is read from its own manifest rather than invented a second time, which the
-    // registry would refuse as a duplicate.
     const dirs = readdirSync(join(repoRoot, 'src/components'), {
       withFileTypes: true,
     })
@@ -277,19 +260,13 @@ describe('parseIosTabTargets', () => {
     expect(swift).toContain('format: "%.1f,%.1f,%.1f,%.1f"');
     expect(swift).toContain('" | reached=\\(reached)"');
 
-    // The literal string is not the contract. `reached=\(reached)` prints whatever `reached` *is*,
-    // and when `revealTab` started answering with the gesture-settlement outcome instead of a yes
-    // or no, the pass printed 23 well-formed-looking lines that this parser read as nothing — a
-    // device run that blamed the tab bar for a format change. What the parser needs is the word
-    // `true` or `false`, so the annotation is the contract: the compiler holds it, and this asks
-    // for it by name so nobody re-infers their way back into the same red run.
+    // The parser needs the word `true` or `false`, so the print site's `Bool`
+    // annotation is what keeps the line readable.
     expect(swift).toMatch(/let reached: Bool = /);
   });
 
   it('says a line could not be read, rather than calling every tab unreachable', () => {
-    // The fixture is the real thing: this is what the pass printed on the run that found the drift
-    // (task/X34-gate-hygiene, real-input+ios), reported here with the type name and the long frame
-    // left in. Read as "never measured", 23 tabs were blamed for one print site.
+    // What the pass prints when `reached` is not a Bool.
     const drifted =
       'real-input tab-target id=tab-switch | frame=4.0,68.0,67.7,44.0 | ' +
       'reached=Outcome<TabReveal>(last: RealInputTests.TabReveal(frame: (4.0, 68.0, 67.7, 44.0), ' +
@@ -311,7 +288,6 @@ describe('parseIosTabTargets', () => {
     expect(verdicts[0].ok).toBe(false);
     expect(verdicts[0].line).toContain('could not be read');
     expect(verdicts[0].line).toContain('tab-targets.mjs');
-    // and the tab is still reported, because the rule still has nothing to say about it
     expect(verdicts[1].line).toContain('was never measured');
   });
 
@@ -323,8 +299,6 @@ describe('parseIosTabTargets', () => {
       'Assertion failed: reached=false in some other file',
     ].join('\n');
     expect(unreadTabTargetLines(log)).toEqual({ count: 0, examples: [] });
-    // A pass that printed nothing is not a drift: there is no line to fail to read, and every tab
-    // is genuinely unmeasured. `checkTabTargets` says so without blaming a format.
     const verdicts = checkTabTargets({
       platform: 'ios',
       tabs: [{ id: 'switch', label: 'Switch' }],
@@ -332,8 +306,7 @@ describe('parseIosTabTargets', () => {
       pixel: 1 / 3,
       strays: unreadTabTargetLines(log),
     });
-    // One verdict per tab, and no verdict about the format: `host` is in the log and not in the
-    // caller's tab list, which is a different rule and still answered on its own line.
+    // `host` is in the log and not in the caller's tab list, so it gets its own line.
     expect(verdicts.map((v) => v.id)).toEqual(['switch', 'host']);
     expect(verdicts[0].line).toContain('is 71.3 × 44 pt');
     expect(verdicts.some((v) => v.line.includes('could not be read'))).toBe(

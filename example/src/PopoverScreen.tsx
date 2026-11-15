@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { BottomSheet, Popover, Tooltip } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -31,7 +30,6 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({
   label,
   testID,
@@ -54,11 +52,6 @@ function Opener({
   );
 }
 
-/**
- * The element a popover points at: a box the app lays out, sized in dp. It opens its
- * popover on press, because the anchor is the app's own view and the popover is
- * controlled - `Popover` adds nothing to it and takes no touch from it.
- */
 function Anchor({
   label,
   testID,
@@ -90,16 +83,6 @@ function Anchor({
   );
 }
 
-/**
- * Every Popover configuration G22 shows on one screen: content that fits its own width,
- * content that needs the whole `maxWidth`, a tall popover near the bottom of the window
- * (which flips above its anchor), a `TextInput` (which brings up the keyboard), a popover
- * inside an RN `Modal`, and a Tooltip and a BottomSheet open at the same time.
- *
- * The log line (`popover-log`) is what real input reads: every event the app received, in
- * order, so "the press before the close" is a string comparison. The presses inside the
- * popover are counted (`popover-inner-presses`): a real tap must land exactly once.
- */
 export default function PopoverScreen() {
   const ink = useInk();
   const topInset = useTopInset();
@@ -131,7 +114,6 @@ export default function PopoverScreen() {
     setSheetOpen(false);
   };
 
-  /** The content of the popover real input taps inside: press once, and it closes. */
   const pressContent = (testId: string) => (
     <View style={[styles.content, styles.narrow]}>
       <Text style={[styles.contentTitle, { color: ink.ink }]}>Actions</Text>

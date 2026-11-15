@@ -24,11 +24,9 @@ Pod::Spec.new do |s|
   s.dependency 'React-jsi'
   s.dependency 'React-callinvoker'
 
-  # The generated `BenchProbeAutolinking.mm` does `#include "HybridBenchProbe.hpp"`,
-  # and the pod's own `ios/` directory is not on the include path by default once
-  # the pod is built as a static library. Set this BEFORE loading the nitrogen
-  # autolinking script - it merges into `pod_target_xcconfig` and would otherwise
-  # not know about our headers.
+  # The generated `BenchProbeAutolinking.mm` includes "HybridBenchProbe.hpp", and a
+  # static-library pod does not have its own `ios/` directory on the include path.
+  # Set before loading the nitrogen autolinking script, which merges into it.
   s.pod_target_xcconfig = {
     'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/ios" "${PODS_TARGET_SRCROOT}/cpp"',
   }

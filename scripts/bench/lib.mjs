@@ -1,10 +1,6 @@
 /**
- * Pure helpers for the benchmark runner and reporter.
- *
- * Nothing in here touches a device or spawns a process, so the math that decides
- * whether a PR is "slow" can be read on its own. The protocol implemented here
- * is `docs/research/setup-decisions.md` SS6 "Benchmarks and performance
- * guardrails".
+ * Pure helpers for the benchmark runner and reporter: nothing in here touches a
+ * device or spawns a process.
  */
 
 /**
@@ -24,49 +20,44 @@ export const RATIO_FAIL_THRESHOLD = 1.2;
 /** ... and the bootstrap CI of that ratio excludes this (so tiny moves do not fail). */
 export const RATIO_CI_EXCLUDES = 1.05;
 /**
- * Above this, a control metric's head/base movement is *mentioned* in the report
- * as machine context. It never suppresses a verdict (T02 review B1).
+ * Above this, a control metric's head/base movement is mentioned in the report
+ * as machine context. It never suppresses a verdict.
  */
 export const CONTROL_NOTE_THRESHOLD = 0.1;
 /**
  * Within-run noise limit, as the MAD of the launch-paired ratio divided by its
- * median (docs/DECISIONS.md D9). Judged per (scenario, N, metric): a cell that
- * bounced around inside one run cannot be attributed to a code change, and a
- * cell that was stable stays conclusive even when another cell was noisy.
+ * median. Judged per (scenario, N, metric): a cell that bounced around inside
+ * one run cannot be attributed to a code change, and a cell that was stable
+ * stays conclusive even when another cell was noisy.
  */
 export const NOISE_REL_SPREAD = 0.1;
 /**
- * Above this share of a cell's samples, a metric is **not reportable** (round
- * 4): it prints `n/a`, and it is dropped from `comparableMetrics()`, so it
- * enters no ratio table and cannot be gated. A median over "the 35 of 80
- * iterations whose signal happened to arrive" is not a slow cell - it is a
- * survivor-biased sample of a broken signal, and printing it is worse than
- * printing nothing (round 3's Android mount `presented` read 166 ms / 178 ms
- * that way, at 44 % and 84 % missing).
+ * With more than this share of a cell's samples missing, a metric is not
+ * reportable: it prints `n/a` and is dropped from `comparableMetrics()`, so it
+ * enters no ratio table and cannot be gated. A median over the iterations whose
+ * signal happened to arrive is survivor-biased.
  */
 export const MAX_MISSING_SAMPLE_RATIO = 0.1;
 /**
- * A machine is "unquiet" above 0.5 x core count (D9). The answer is reported with
+ * A machine is "unquiet" above 0.5 x core count. The answer is reported with
  * every run - `machine.quiet` and the report's load line - because a busy host
  * still produces readable same-run ratios, just noisier ones.
  */
 export const UNQUIET_LOAD_RATIO = 0.5;
 /**
- * How often a running bench takes a load sample in addition to the one at every
- * launch boundary (R4). The guard used to read a single `os.loadavg()` taken
- * when the run *ended*, so three quiet hours were judged by their last minute.
+ * How often a running bench takes a load sample, in addition to the one at every
+ * launch boundary.
  */
 export const LOAD_SAMPLE_INTERVAL_MS = 30_000;
 /**
- * How much of a run may sit over the ceiling before the run counts as busy (R4).
- * A bench run is dozens of minutes of short bursts, so the odd spike - a daemon,
- * a Spotlight pass - is not the machine being busy *for the run*.
+ * How much of a run may sit over the ceiling before the run counts as busy: the
+ * odd spike (a daemon, a Spotlight pass) is not the machine being busy for the run.
  */
 export const LOAD_OVER_CEILING_FRACTION = 0.1;
 /**
  * Only the implementation under development is gated. `expo-ui-*` are reference
  * arms: an `@expo/ui` bump must not fail a nitro-ui PR, and `rn-core` is the
- * control. They are measured and reported, never gated (T02 review S9).
+ * control. They are measured and reported, never gated.
  */
 export const GATED_IMPLEMENTATIONS = ['nitro-ui'];
 
@@ -83,29 +74,17 @@ export const IMPLEMENTATIONS = [
   'expo-ui-host-per-control',
   'expo-ui-shared-host',
   'nitro-ui',
-  // nitro-ui's controls inside one shared `<Host>` (H1, widened to more controls by
-  // H2a). A reference arm like the two `expo-ui-*` ones - measured and reported, never
-  // gated (`GATED_IMPLEMENTATIONS`).
+  // nitro-ui's controls inside one shared `<Host>`. A reference arm like the two
+  // `expo-ui-*` ones: measured and reported, never gated.
   'nitro-ui-host',
 ];
 
 /**
- * The arms a baseline **compares against** rather than gates: the two `@expo/ui`
- * references. Everything measured except the library under development (`nitro-ui` and
- * its `nitro-ui-host` variant) and the `rn-core` control.
- *
- * This is the A4 amendment to D9. An incomplete metric on a comparison arm makes that
- * one cell's ratio survivor-biased - which is a reason not to print or gate it, and
- * never a reason to withhold the whole table, because these arms carry no verdict
- * (`GATED_IMPLEMENTATIONS`) and are not our code. A3 is why the rule is drawn this
- * way: `mount.date-picker` at N=200 presented on 55/160 and 87/160 measured
- * iterations on the two `@expo/ui` arms and nothing else was wrong, and one such
- * cell used to throw away a four-hour run. Now that cell is left out and recorded;
- * a gap in `nitro-ui`, `nitro-ui-host` or `rn-core` is still reported, because
- * those arms carry verdicts.
- *
- * `nitro-ui-host` stays with the gated arm deliberately: it is our own runtime, so
- * a lost signal there is a fact about nitro-ui, not about a third-party reference.
+ * The arms a baseline compares against rather than gates: the two `@expo/ui`
+ * references. An incomplete metric on one of them leaves that one cell out of the
+ * table and records it, and never withholds the whole table. `nitro-ui-host` is
+ * not one of them: it is our own runtime, so a lost signal there is a fact about
+ * nitro-ui, not about a third-party reference.
  */
 export const COMPARISON_IMPLEMENTATIONS = IMPLEMENTATIONS.filter(
   (name) =>
@@ -113,23 +92,15 @@ export const COMPARISON_IMPLEMENTATIONS = IMPLEMENTATIONS.filter(
 );
 
 /**
- * The default waiting rule, **per platform** (A4).
+ * The default waiting rule, per platform. `bench/src/plan.ts` `BENCH_DEFAULT_TIMEOUTS`
+ * must hold the same numbers: `scripts/` cannot import the app's TypeScript, and a
+ * jest test fails if the two disagree.
  *
- * `bench/src/plan.ts` `BENCH_DEFAULT_TIMEOUTS` owns these numbers - it is what parses
- * them off the launch plan - and they are restated here because `scripts/` cannot import
- * the app's TypeScript. `scripts/__tests__/bench-missing-samples.test.js` imports both
- * sides and fails if they disagree, on either platform.
- *
- * A run that waited anything other than the platform's default is a **diagnostic**, like
- * a `--perf-marks` run - in either direction: a sample that arrives keeps its value, but
- * *which* samples arrive changes the median, so its ratios are not comparable with a run
- * measured under a different rule. `run.mjs` says so at startup rather than letting a
- * raised wait quietly redefine what `presented` means.
- *
- * `presentationCeilingMs` and `maxRequestedTimeoutMs` are here for the same reason: the
- * native backstop decides what a requested wait can mean, and Android's is 2 s because
- * the longer wait is scoped to iOS (review M1). A cap that let a run ask past the
- * backstop would record a timeout the run never asked for.
+ * A run that waited anything other than its platform's default is a diagnostic: which
+ * samples arrive changes the median, so its ratios are not comparable with a run
+ * measured under a different rule. `maxRequestedTimeoutMs` stays below
+ * `presentationCeilingMs`, the native backstop, because a backstop that answers first
+ * records a timeout the run never asked for.
  */
 export const DEFAULT_TIMEOUTS_MS = {
   ios: {
@@ -161,13 +132,9 @@ export function defaultTimeoutsFor(platform) {
 
 /**
  * The per-launch wall-clock budgets, by platform and scenario action, that `run.mjs`
- * starts from. Restated here so `launchBudgetMs` can be tested without importing the
- * runner (which cannot be imported under jest: `import.meta`).
- *
- * Each must exceed what a launch of *that platform* can spend waiting under its default
- * rule - see the comment on `TIMEOUTS` in `run.mjs` and the test that keeps the two
- * honest. Android's row is the pre-A4 table: its waits never changed, so the allowance
- * for a launch did not either (review M1).
+ * starts from. Each must exceed what a launch of that platform can spend waiting under
+ * its default rule. They live here because the runner cannot be imported under jest
+ * (`import.meta`).
  */
 export const DEFAULT_SCENARIO_BUDGETS = {
   ios: {
@@ -186,23 +153,10 @@ export const DEFAULT_SCENARIO_BUDGETS = {
 
 /**
  * The wall-clock budget for one launch: the scenario's allowance, widened by any extra
- * waiting this launch was asked to do.
- *
- * The base already covers waiting at that platform's defaults (see
- * `DEFAULT_SCENARIO_BUDGETS`). What it cannot know is a run that asks for longer: an
- * iteration of `mount` waits up to `mount` + `presented` for its own two signals and
- * again `mount` in the teardown that follows, so asking for a 40 s presenting wait on iOS
- * adds 32 s per iteration - 800 s across a launch. Left alone, that launch would be
- * killed as *stalled* for a reason the runner itself introduced, and a killed launch
- * becomes a `problem` instead of 20 iterations each recording a
- * `probe-timeout` reason.
- *
- * `platform` is required: the two platforms wait different amounts (review M1), so a
- * budget that assumed one of them would be too small for iOS or would quietly allow
- * Android launches four times the waiting its own table was sized for.
- *
- * `overrideSeconds` is the `BENCH_LAUNCH_TIMEOUT_S` escape hatch and wins outright: that
- * override exists precisely to set the budget by hand.
+ * waiting this launch was asked to do, so a launch that asked for longer waits is not
+ * killed as stalled. `platform` is required because the two platforms wait different
+ * amounts. With `overrideSeconds` (`BENCH_LAUNCH_TIMEOUT_S`) the budget is set by hand
+ * and nothing is added.
  */
 export function launchBudgetMs(
   entry,
@@ -247,13 +201,9 @@ export function launchBudgetMs(
  * `--timeout-presented`, and the `mountTimeout=`/`presentedTimeout=` launch flags).
  *
  * Both platforms arm a native backstop for a process that never draws at all, and a
- * backstop that wins the race *is* the timeout: it would answer `-1` and the recorded
- * reason would blame a wait the run never asked for. So the requested wait stays strictly
- * below that platform's ceiling - 90 s on iOS (`kBenchPresentationCeilingSeconds`), 2 s on
- * Android (`PRESENTATION_CEILING_MS`, unchanged from before A4 because the longer wait is
- * scoped to iOS: review M1). That asymmetry is the point: on Android the answer to "how
- * long can I wait for a presenting frame?" is 2 s, and a flag that appeared to raise it
- * would be a lie. `bench/src/plan.ts` `BENCH_DEFAULT_TIMEOUTS` restates both for the app.
+ * backstop that wins the race would record a timeout the run never asked for. So the
+ * requested wait stays strictly below that platform's ceiling: 90 s on iOS
+ * (`kBenchPresentationCeilingSeconds`), 2 s on Android (`PRESENTATION_CEILING_MS`).
  */
 export function maxRequestedTimeoutMsFor(platform) {
   return defaultTimeoutsFor(platform).maxRequestedTimeoutMs;
@@ -261,21 +211,12 @@ export function maxRequestedTimeoutMsFor(platform) {
 
 /**
  * `--timeout-mount <ms>` / `--timeout-presented <ms>`: how long each launch waits for a
- * native signal before recording it as missing, with the reason.
+ * native signal before recording it as missing, with the reason. The value rides the
+ * launch string rather than an env var because a release build has no env. The cap is
+ * the platform's (see `maxRequestedTimeoutMsFor`).
  *
- * The point is the diagnostic question A4 asks - "did this arm's frame never come, or
- * did it come later than we were willing to wait?" - which is unanswerable at the
- * default 2 s when the arm in question takes 40 s. The value rides the launch string
- * rather than an env var because a release build has no env, exactly like `marks`.
- *
- * The cap is the *platform's*, because the native backstop that decides whether the wait
- * you asked for is the wait you get is per platform (see `maxRequestedTimeoutMsFor`). On
- * Android, asking for a 40 s presenting wait is refused here rather than measured as a
- * 2 s timeout.
- *
- * Returns the problem rather than exiting, so a test can prove the validation without
- * spawning a run. A run that raises a timeout is not baseline material (see
- * `DEFAULT_TIMEOUTS_MS`) and `run.mjs` says so at startup.
+ * Returns the problem rather than exiting, so a test can check the validation without
+ * spawning a run.
  */
 export function parseTimeoutFlags(argv, readFlag, platform) {
   const out = { mountTimeoutMs: null, presentedTimeoutMs: null, problem: null };
@@ -304,61 +245,31 @@ export function parseTimeoutFlags(argv, readFlag, platform) {
 
 /**
  * Arms that cannot mount a component on one platform, keyed
- * `platform:implementation:component`, so those cells are simply not scheduled
- * there (G5).
+ * `platform:implementation:component`, so those cells are not scheduled there.
  *
- * `@expo/ui`'s two Android arms have no date-picker cell because `@expo/ui`
- * exposes no mountable date *field* — only the inline Material 3 `DateTimePicker`
- * and whole dialogs. Measured on `nitroui_t02` (2026-10-25), neither shape is
- * priceable:
- *
- * - the fit-its-content host every self-sizing arm gets (`Host matchContents`)
- *   measures the inline calendar's horizontally scrollable month pager with
- *   infinite width, and the app dies: `IllegalStateException: Horizontally
- *   scrollable component was measured with an infinity maximum width
- *   constraints`;
- * - with the width bounded it does mount, at 2.45 s of mount work per iteration
- *   of 50 inline calendars (~96 s per launch, shared-host arm), which is the
- *   runner's whole per-launch budget — and it prices a full-screen calendar
- *   against the compact field every other arm renders.
- *
- * An arm that cannot mount the control is not a slow arm, so the Android
- * date-picker rows are `nitro-ui` over `rn-core` with the gap stated, rather
- * than four launches per cell that end in `no end sentinel within 180s`.
- * `bench/src/implementations/expoUi.android.tsx` fails such a launch loudly.
+ * `@expo/ui` on Android exposes no mountable date field, only the inline Material 3
+ * `DateTimePicker` and whole dialogs. In a fit-its-content host the inline calendar's
+ * month pager is measured with infinite width and the app crashes; with the width
+ * bounded it prices a full-screen calendar against the compact field every other arm
+ * renders.
  */
 export const ARMS_WITHOUT_COMPONENT = [
   'android:expo-ui-host-per-control:date-picker',
   'android:expo-ui-shared-host:date-picker',
-  // G25: `@expo/ui`'s Compose surface has no stepper because Material has none, so
-  // there is no Android arm to measure — the iOS Stepper is the comparison. Saying so
-  // here keeps the cell out of the plan instead of launching an arm that throws.
+  // `@expo/ui`'s Compose surface has no stepper, because Material has none.
   'android:expo-ui-host-per-control:stepper',
   'android:expo-ui-shared-host:stepper',
 ];
 
 /**
- * Arms that are scoped to a set of components, or to one platform *and* a set of
- * components, keyed by implementation name.
+ * Arms that are scoped to a set of components, or to one platform and a set of
+ * components, keyed by implementation name. `nitro-ui-host` composes only what a
+ * `<Host>` can draw, and on iOS `<Host>` is a passthrough, so a cell there would price
+ * "nitro-ui plus one extra `View`" under a name that promises a shared composition.
  *
- * `ARMS_WITHOUT_COMPONENT` is per platform because it describes something the
- * *platform's* runtime cannot mount. This is the other case: an arm that renders some
- * controls (and, for the Host, exists on one platform). `nitro-ui-host` (H1, widened to
- * Slider, Progress and Button by H2a) composes what a `<Host>` can draw - Switch,
- * Slider, linear Progress, Button - and `NitroUiHostList` throws for the rest, so any
- * other cell is a launch that would render nothing and still report a plausible mount
- * time for zero controls. SegmentedControl, Picker and DatePicker stay out because a
- * `<Host>` refuses them, which is H2b's scope. And on iOS `<Host>` is the documented
- * passthrough - permanently, since T17 measured an iOS Host and D23's outcome was not
- * to ship one - so a cell there would price "nitro-ui plus one extra `View`" under a
- * name that promises a shared composition.
- *
- * The component scope is a property of the arm, so it applies whether or not the caller
- * named a platform; the platform scope only applies when one is named.
- * `bench/src/implementations/index.ts` repeats the same list as `components` and
- * `NitroUiHostList` refuses what is not on it: an arm that renders nothing must say so
- * in the table rather than be measured. `scripts/__tests__/bench-gate.test.js` keeps
- * those lists from drifting apart.
+ * The component scope applies whether or not the caller named a platform; the platform
+ * scope only applies when one is named. `bench/src/implementations/index.ts` must list
+ * the same components.
  */
 export const ARM_SCOPES = {
   'nitro-ui-host': {
@@ -388,9 +299,8 @@ export function armScopeCovers(implementation, component) {
 export const LATENCY_METRICS = ['jsCommitNs', 'mountedNs', 'presentedNs'];
 
 /**
- * Per-op CPU metrics. Named "per op" because the op is a mount+teardown cycle in
- * the `mount` scenario and a prop update in the `update` scenario (T02 review
- * S5 asked for the mount and the unmount to stop sharing one bracket).
+ * Per-op CPU metrics. The op is a mount+teardown cycle in the `mount` scenario and
+ * a prop update in the `update` scenario.
  */
 export const CPU_METRICS = ['jsNsPerOp', 'mainNsPerOp', 'unmountMainNsPerOp'];
 
@@ -406,12 +316,10 @@ export const GATE_METRICS = [
 
 /**
  * Plans are lists of `scenario:N` cells. The implementation dimension is crossed
- * with these by `buildSchedule`; `nitro-ui` self-skips until a component
- * registers itself (bench/src/implementations/nitroUi.tsx).
+ * with these by `buildSchedule`.
  *
- * A cell's scenario carries its component: the bare name is the first component
- * (Switch, kept so pre-G1 results files and baselines still line up) and
- * `<action>.<component>` is every component after it. `componentOf` is the one
+ * A cell's scenario carries its component: the bare name is Switch and
+ * `<action>.<component>` is every other component. `componentOf` is the one
  * place that reads the encoding; `--component` filters on it.
  */
 export const PLANS = {
@@ -443,10 +351,8 @@ export const PLANS = {
     { scenario: 'mount.text-field', n: 50 },
     { scenario: 'update.text-field', n: 50 },
     { scenario: 'memory.text-field', n: 200 },
-    // Two `mount` cells rather than one: a Form's `n` is rows inside one container,
-    // and the question this component is priced on (S6's sixth, G24) is asked at both
-    // 20 and 50, so the quick plan has to answer it or local feedback is half a
-    // sentence. `plan.ts`'s schedule length reads this through the per-component sum.
+    // Two `mount` cells: a Form's `n` is rows inside one container, and it is measured
+    // at both 20 and 50.
     { scenario: 'mount.form', n: 20 },
     { scenario: 'mount.form', n: 50 },
     { scenario: 'update.form', n: 50 },
@@ -517,12 +423,10 @@ export const PLANS = {
     { scenario: 'memory.text-field', n: 200 },
     { scenario: 'leak.text-field', n: 200 },
     // Form is a container, so its `n` is a row count inside one grouped list rather
-    // than a count of mounted controls, and the two sizes S6's question 6 asks about
-    // are 20 and 50 (G24). There is no `n: 1` and no `n: 200` for `mount`/`update`:
-    // a one-row Form is not a grouped list, and a 200-row settings screen is the
-    // virtualised-list conversation in `docs/components/form.md` rather than a shape
-    // anyone ships. `memory`/`leak` keep the platform-wide `n: 200` because those
-    // cells measure bytes per row, which wants a long batch to divide by.
+    // than a count of mounted controls. There is no `n: 1` and no `n: 200` for
+    // `mount`/`update`: a one-row Form is not a grouped list, and a 200-row one wants
+    // a virtualised list. `memory`/`leak` keep `n: 200` because those cells measure
+    // bytes per row, which wants a long batch to divide by.
     { scenario: 'mount.form', n: 20 },
     { scenario: 'mount.form', n: 50 },
     { scenario: 'update.form', n: 20 },
@@ -532,13 +436,7 @@ export const PLANS = {
   ],
 };
 
-/**
- * The component a scenario cell belongs to.
- *
- * The one reader of the `action.component` encoding, so the runner, the
- * reporter and the gate all treat a component as a dimension rather than
- * string-matching scenario names in three places.
- */
+/** The component a scenario cell belongs to: `mount.slider` -> `slider`. */
 export function componentOf(scenario) {
   const dot = String(scenario).indexOf('.');
   return dot === -1 ? 'switch' : String(scenario).slice(dot + 1);
@@ -567,7 +465,7 @@ export function planString(scenario, implementation, n, flags = null) {
 /**
  * The launch string for one schedule entry, including the `:marks` flag when the
  * entry asked for the runtime's own perf marks. A results *cell* key never carries
- * it (`cellKey`): a marks run is a diagnosis of the same cell, not a fifth arm.
+ * it (`cellKey`): a marks run is a diagnosis of the same cell, not another arm.
  */
 export function launchPlanString(entry) {
   const flags = [];
@@ -595,10 +493,9 @@ export function parseCellKey(key) {
 
 /**
  * The launch schedule: `launches` passes over every cell, forward on even passes
- * and reversed on odd ones. That is the ABBA idea (nitro's own `performance.yml`
- * scheme) generalised to four implementations - whatever machine drift survives
- * a fresh process per cell then hits every implementation about evenly instead
- * of always the last one.
+ * and reversed on odd ones (ABBA), so whatever machine drift survives a fresh
+ * process per cell hits every implementation about evenly instead of always the
+ * last one.
  */
 export function buildSchedule({
   plan = 'quick',
@@ -619,11 +516,7 @@ export function buildSchedule({
       `Unknown plan "${String(plan)}" (expected ${Object.keys(PLANS).join(' or ')})`
     );
   }
-  // The component dimension is crossed here too, and *before* the
-  // implementation one: a plan now holds several components' cells, and running
-  // a component's cells is the unit of work a task or a review asks for
-  // (`--component slider`). `null` keeps the historical behaviour of measuring
-  // every component the plan knows about.
+  // A `null` filter keeps every cell the plan has.
   const wantedCells = cells
     .filter(
       (cell) => component == null || componentOf(cell.scenario) === component
@@ -657,8 +550,7 @@ export function buildSchedule({
     );
   }
   if (perfMarks) {
-    // Only the library records marks, so a marks run measures nothing else - it
-    // would just burn launches whose marks are structurally empty.
+    // Only the library records marks, so a marks run measures nothing else.
     const marked = wanted.filter((name) =>
       MARK_CAPABLE_IMPLEMENTATIONS.includes(name)
     );
@@ -669,10 +561,9 @@ export function buildSchedule({
     }
     wanted = marked;
   }
-  // A scoped arm (see `ARM_SCOPES`) is not scheduled outside its scope. The
-  // platform half is dropped here, before the cell loop, because the caller asked
-  // for arms by name: an arm that is not scheduled at all must not read as a
-  // measured arm with a missing cell.
+  // A scoped arm (see `ARM_SCOPES`) is not scheduled on another platform. It is
+  // dropped here, before the cell loop, so it does not read as a measured arm with
+  // a missing cell.
   wanted = wanted.filter((name) => {
     const scope = ARM_SCOPES[name];
     return (
@@ -702,9 +593,7 @@ export function buildSchedule({
     for (const cell of wantedCells) {
       for (const implementation of order) {
         if (!armScopeCovers(implementation, componentOf(cell.scenario))) {
-          // The arm renders a different control than this cell asks for. Skipping
-          // the cell is also what keeps a scoped arm out of another component's
-          // ratio table, where its absence is honest and an empty tree is not.
+          // The arm does not render this cell's component.
           continue;
         }
         if (
@@ -713,15 +602,12 @@ export function buildSchedule({
             `${platform}:${implementation}:${componentOf(cell.scenario)}`
           )
         ) {
-          // One platform's arm cannot mount this component at all; the other
-          // platforms keep their cell, and a run with no `platform` (a hand
-          // schedule, a test) still asks for every arm it was given.
+          // This platform's arm cannot mount the component. A run with no `platform`
+          // (a hand schedule, a test) still asks for every arm it was given.
           continue;
         }
-        // Only a timeout the caller *asked for* goes on the launch string, so a
-        // normal run's strings stay exactly what they were and the app's own
-        // defaults apply. Anything non-default makes the run a diagnostic
-        // (`BASELINE_*_TIMEOUT_MS`), which `run.mjs` says at startup.
+        // Only a timeout the caller asked for goes on the launch string; otherwise
+        // the app's own defaults apply.
         schedule.push({
           scenario: cell.scenario,
           implementation,
@@ -810,7 +696,7 @@ function percentile(values, quantile) {
  * ratios** (`arm launch median / rn-core launch median` for the same launch
  * index), so machine drift cancels the way it does in the point estimate.
  *
- * Two sampling modes, both honest about what they resample:
+ * Two sampling modes:
  *
  * - **hierarchical** - when a side has its per-launch iterations, resample
  *   launches first and then iterations inside each sampled launch (iterations in
@@ -922,9 +808,8 @@ function emptyCell(record) {
     measured: 0,
     /**
      * `false` when the arm told the runner its latency pair cannot exist
-     * (`bench/src/plan.ts` `NO_MOUNT_SIGNAL`). Turned on by the launch's `meta`
-     * record; changes no number, only whether a cell full of nulls is called a
-     * lost signal or an absent one.
+     * (`bench/src/plan.ts` `NO_MOUNT_SIGNAL`). Changes no number, only whether a
+     * cell full of nulls is called a lost signal or an absent one.
      */
     mountSignal: true,
     latency: {
@@ -945,26 +830,18 @@ function emptyCell(record) {
     },
     /**
      * Why each missing signal is missing, accumulated while folding the run:
-     * `metric -> reason -> { count, maxWaitedMs, askedMs, details }`.
-     *
-     * The counts in `sanity` answer "how many"; they cannot answer "why", which is the
-     * question a lost sample leaves behind (A3's iOS run: 105 missing `presented`
-     * samples on one arm, and no way to tell a 2 s probe timeout from a probe that
-     * never answered at all). Every `iter` record now carries a reason per null, and
-     * `summariseCell` turns these into the compact `cell.missing` the report prints.
+     * `metric -> reason -> { count, maxWaitedMs, askedMs, details }`. The counts in
+     * `sanity` say how many; these say why.
      */
     missing: {},
     /**
-     * The waiting rule this cell was measured under, as recorded by the launches'
-     * own `meta` records (A4). Null until a launch says otherwise, which is what a
-     * results file from before the flag existed looks like.
+     * The waiting rule this cell was measured under, from its launches' `meta`
+     * records. Null when no launch recorded one.
      */
     timeouts: { mountTimeoutMs: null, presentedTimeoutMs: null },
     /**
      * Denominators for the completeness rule, counted from the records that
-     * arrived: what each metric should have produced. Without them a metric
-     * that produced 35 of 80 samples is indistinguishable from one that
-     * produced 80 of 80, which is how round 3 shipped survivor-biased numbers.
+     * arrived: what each metric should have produced.
      */
     universe: {
       /** Measured (non-warmup) `iter` records: the latency denominator. */
@@ -981,14 +858,7 @@ function emptyCell(record) {
   };
 }
 
-/**
- * Fold one iteration's `missing` entry into the cell's reason tally.
- *
- * Kept as a function of the accumulating cell (rather than a post-pass over records) so
- * the tally is built in the same pass as the latency values it explains, and so a record
- * with no `missing` array - every results file written before A4, and every healthy
- * iteration - contributes nothing.
- */
+/** Fold one iteration's `missing` entry into the cell's reason tally. */
 function recordMissingReason(cell, entry) {
   if (entry == null || typeof entry !== 'object') {
     return;
@@ -1027,11 +897,8 @@ function recordMissingReason(cell, entry) {
 }
 
 /**
- * The per-cell `missing` summary the report prints and the refusal points at: one entry
- * per signal, one per reason, with the counts and the waits.
- *
- * Returns null for a cell nothing went missing in, so the cells in a healthy results file
- * stay the size they were before A4.
+ * The per-cell `missing` summary the report prints: one entry per signal, one per
+ * reason, with the counts and the waits. Null for a cell nothing went missing in.
  */
 function summariseMissing(byMetric) {
   if (Object.keys(byMetric).length === 0) {
@@ -1058,14 +925,10 @@ function summariseMissing(byMetric) {
 }
 
 /**
- * One human-readable line per signal with missing samples, for the report and for the
- * a missing sample. The reasons are the point of the whole exercise, so they lead:
+ * One human-readable line per signal with missing samples, for the report:
  *
  *     presentedNs: 12 probe-timeout (asked 2000 ms, waited up to 2000.4 ms)
  *     mountedNs: 20 not-awaited
- *
- * A results file written before A4 has counts and no reasons, and says so rather than
- * printing an empty summary.
  */
 export function describeMissing(cell) {
   const lines = [];
@@ -1105,11 +968,8 @@ export function describeMissing(cell) {
  *
  *     20 iterations, 3 presented probe-timeout (2000 ms)
  *
- * Lives in `lib.mjs` rather than inlined in `run.mjs` so it can be unit tested: the
- * runner cannot be imported under jest at all (`import.meta`), and a progress line that
- * silently stopped counting reasons is exactly the kind of regression nobody notices on a
- * four-hour run. Measured iterations only, so the counts line up with the iteration count
- * in front of them; warmups still reach the cell's own `missing` block.
+ * Measured iterations only, so the counts line up with the iteration count in front of
+ * them.
  */
 export function summarizeMissingReasons(records) {
   const reasons = {};
@@ -1158,20 +1018,18 @@ function distinctLaunches(cell) {
 /**
  * One cell's numbers.
  *
- * `median`/`mad` are the median and MAD **of the per-launch medians** - the
- * "median of medians" the protocol promises - so a launch is the unit of
- * variation, which matches how the launches are interleaved and how the gate
- * bootstraps. `p95`/`min`/`max` stay pooled over iterations because a tail
- * latency only shows up in the pooled distribution.
+ * `median`/`mad` are the median and MAD of the per-launch medians, so a launch
+ * is the unit of variation, which matches how the launches are interleaved and
+ * how the gate bootstraps. `p95`/`min`/`max` stay pooled over iterations because
+ * a tail latency only shows up in the pooled distribution.
  */
 function summariseCell(key, cell) {
   const metrics = {};
   /**
-   * How complete each metric is (round 4). `expected` is what the cell's own
-   * records said it should produce - measured iterations for a latency metric,
-   * launches for a per-launch one - and `reportable` is false once more than
-   * `MAX_MISSING_SAMPLE_RATIO` of it is missing. A partial median is a
-   * survivor-biased number, so it must not be printed, ratioed, or gated.
+   * How complete each metric is. `expected` is what the cell's own records said
+   * it should produce - measured iterations for a latency metric, launches for a
+   * per-launch one - and `reportable` is false once more than
+   * `MAX_MISSING_SAMPLE_RATIO` of it is missing.
    */
   const completeness = {};
   const judge = (samples, expected) => ({
@@ -1290,10 +1148,7 @@ function summariseCell(key, cell) {
    * The runtime's own native perf marks, when this cell came from a
    * `--perf-marks` run. Reported, never gated: recording a mark is a mutex write
    * and draining one is JS work, so these iterations are instrumented and cannot
-   * be compared with the clean numbers above. They exist to explain them - the
-   * `propsAppliedPerInstance` count says how many native prop commits one React
-   * commit really caused, and `drawLatencyNs` is the library's own props-to-pixels
-   * span inside what the probe measures as `UI CPU/op`.
+   * be compared with the clean numbers above.
    */
   const markRecords = [...cell.marks.values()].flat();
   completeness.bytesPerInstance = judge(
@@ -1336,19 +1191,11 @@ function summariseCell(key, cell) {
     launches: distinctLaunches(cell),
     metrics,
     cpu,
-    /**
-     * Why signals did not arrive, per metric and reason (A4). Null in a clean cell.
-     * The counts next to it (`sanity.missingPresented`) say how many; these say why,
-     * which is what a missing-sample report has to answer.
-     */
+    /** Why signals did not arrive, per metric and reason. Null in a clean cell. */
     missing: summariseMissing(cell.missing),
     /** The waiting rule this cell ran under, from its launches' `meta` records. */
     timeouts: cell.timeouts,
-    /**
-     * `{ samples, expected, reportable }` per metric: the denominator rule
-     * behind every `n/a` in the tables, and the reason a cell with a 44 %-missing
-     * column cannot carry a verdict (round 4).
-     */
+    /** `{ samples, expected, reportable }` per metric: the rule behind every `n/a`. */
     completeness,
     memory: {
       bytesPerInstance: median(perLaunchBytes),
@@ -1362,23 +1209,21 @@ function summariseCell(key, cell) {
       heapCollected:
         heapCollected.length === 0 ? null : heapCollected.every(Boolean),
       /**
-       * Where the per-instance bytes actually live (review S8): `Debug
-       * .getNativeHeapAllocatedSize()` and Java-heap-used deltas on Android,
-       * `null` on iOS, where `phys_footprint` already attributes the native heap
-       * to the process. Reported, deliberately **not gated** - `bytesPerInstance`
-       * is the memory verdict, these two explain it (the Expo arms have measured
-       * below `rn-core` on PSS, which is only believable with a breakdown).
+       * Where the per-instance bytes live: `Debug.getNativeHeapAllocatedSize()`
+       * and Java-heap-used deltas on Android, `null` on iOS, where
+       * `phys_footprint` already attributes the native heap to the process.
+       * Reported, not gated: `bytesPerInstance` is the memory verdict.
        */
       nativeBytesPerInstance: median(perLaunchNative),
       javaBytesPerInstance: median(perLaunchJava),
       heapBreakdownLaunches: perLaunchNative.length,
     },
-    /**
-     * Cross-checks on the native signals (T02 review S2): `presented` is a frame
-     * stamp, so `presented < mounted` or `mounted < jsCommit` means a signal
-     * arrived out of order and the reader must not trust the latency pair.
-     */
     marks,
+    /**
+     * Cross-checks on the native signals: `presented < mounted` or
+     * `mounted < jsCommit` means a signal arrived out of order and the latency
+     * pair cannot be trusted.
+     */
     sanity: cell.sanity,
     mountSignal: cell.mountSignal,
   };
@@ -1388,8 +1233,7 @@ function summariseCell(key, cell) {
  * Fold every NDJSON record of a run into the results matrix.
  *
  * `launch` is the index the runner stamped when it merged the launches;
- * `warmup` iterations are dropped here - they exist to make the measured ones
- * honest, not to be reported.
+ * `warmup` iterations are dropped here.
  */
 export function aggregateRecords(records, { keepRaw = false } = {}) {
   /** @type {Map<string, any>} */
@@ -1411,11 +1255,7 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       if (record.mountSignal === false) {
         cell.mountSignal = false;
       }
-      /**
-       * The waiting rule this cell was measured under (A4). Max, not first: a mixed
-       * launch set is worth seeing rather than averaging away, and a rule that is
-       * not the platform's default makes the run a diagnostic (see `run.mjs`).
-       */
+      /** The longest wait any launch of this cell was asked for. */
       for (const [field, value] of [
         ['mountTimeoutMs', record.mountTimeoutMs],
         ['presentedTimeoutMs', record.presentedTimeoutMs],
@@ -1445,10 +1285,8 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
       if (record.presentedNs == null) {
         cell.sanity.missingPresented += 1;
       }
-      // Why, not just how many (A4). Sits in the same branch as the `sanity` counters
-      // it explains, so warmups are excluded here for exactly the reason they are
-      // excluded there: the denominators, the samples and the reasons have to be
-      // counted over the same set of iterations or the two cannot be reconciled.
+      // In the same branch as the `sanity` counters, so the reasons and the counts
+      // cover the same iterations (warmups excluded).
       for (const missing of record.missing ?? []) {
         recordMissingReason(cell, missing);
       }
@@ -1495,8 +1333,8 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
         phases.heapCollected = record.heapCollected;
       }
       // Heap breakdown, kept per phase so the same empty/full delta that gives
-      // `bytesPerInstance` can be attributed to a heap (review S8). iOS reports
-      // -1 for both, which stays `null` here rather than becoming a number.
+      // `bytesPerInstance` can be attributed to a heap. iOS reports -1 for both,
+      // which stays `null` here rather than becoming a number.
       for (const [heapKey, bytes] of [
         ['nativeHeap', record.nativeHeapBytes],
         ['javaHeap', record.javaHeapBytes],
@@ -1529,23 +1367,9 @@ export function aggregateRecords(records, { keepRaw = false } = {}) {
 /* ------------------------- ratios to the control arm ------------------------ */
 
 /**
- * Metrics a cell contributes to a comparison. Smaller is better for all of them,
- * and each must be a positive number to mean anything.
- *
- * The leak slope only counts when the footprint actually climbed monotonically:
- * §6 of setup-decisions asks to "fail on a monotonic increase", and a slope from
- * a wobbling series is not an increase (T02 review S8 - it used to be printed
- * and never gated).
- */
-/**
  * Whether one metric of one cell has enough samples to be printed at all
- * (round 4, `MAX_MISSING_SAMPLE_RATIO`).
- *
- * New runs carry `cell.completeness` with the exact denominator. Results files
- * written before round 4 do not, so their denominators are rebuilt from the
- * sanity counters: a pre-fix file that recorded `missingPresented: 45` of 80
- * iterations gets the same `n/a` when it is re-reported today, which is the
- * only way round 3's Android mount table stops quoting a 166 ms survivor.
+ * (`MAX_MISSING_SAMPLE_RATIO`). A results file without `cell.completeness` has
+ * its denominators rebuilt from the sanity counters.
  */
 export function metricIsReportable(cell, metric) {
   const declared = cell?.completeness?.[metric];
@@ -1586,7 +1410,9 @@ export function metricIsReportable(cell, metric) {
 /**
  * The metrics this cell may be *quoted* on: positive, and complete enough to
  * mean anything. `ratioTable`, the absolute table, `--compare` and the gate all
- * go through here, so an incomplete metric is absent everywhere at once.
+ * go through here, so an incomplete metric is absent everywhere at once. The
+ * leak slope only counts when the footprint climbed monotonically: a slope from
+ * a wobbling series is not an increase.
  */
 export function comparableMetrics(cell) {
   const metrics = {};
@@ -1691,9 +1517,9 @@ export function launchValues(cell, metric) {
  * Launch-paired ratio of one cell against the `rn-core` cell of the same
  * scenario and N: launch `L`'s arm median over launch `L`'s control median.
  *
- * Pairing by launch index is the whole point - the launches are interleaved
- * ABBA across implementations, so whatever the machine did during launch 2
- * affected both arms. Dividing two pooled medians instead would keep that drift.
+ * The launches are interleaved ABBA across implementations, so whatever the
+ * machine did during launch 2 affected both arms. Dividing two pooled medians
+ * instead would keep that drift.
  */
 export function pairedLaunchRatios(cell, control, metric) {
   const arm = launchValues(cell, metric);
@@ -1717,7 +1543,7 @@ export function pairedLaunchRatios(cell, control, metric) {
  *
  * Absolute numbers drift with the OS build, the simulator image and whatever
  * else the machine is doing; a launch-paired ratio to the control arm does not.
- * That is why every comparison is made on ratios (docs/DECISIONS.md D9).
+ * That is why every comparison is made on ratios.
  */
 export function ratioTable(source) {
   const cells = cellsFrom(source);
@@ -1744,11 +1570,8 @@ export function ratioTable(source) {
     }
     const controlMetrics = comparableMetrics(control);
     for (const metric of Object.keys(comparableMetrics(cell))) {
-      // A ratio is only as whole as its denominator: in round 3 the Android
-      // `expo-ui-shared-host` mount cell had 80 of 80 presenting frames while
-      // `rn-core` had 13, and 1.15x was the survivor over the survivor. If the
-      // control's metric is incomplete, the arm's ratio for it is meaningless
-      // too - n/a, and ungated.
+      // A ratio is only as whole as its denominator: if the control's metric is
+      // incomplete, the arm's ratio for it is n/a too, and ungated.
       if (!(metric in controlMetrics)) {
         continue;
       }
@@ -1779,9 +1602,9 @@ export function ratioTable(source) {
 
 /**
  * Within-run noise of a ratio table, per cell and metric: the MAD of the
- * launch-paired ratios over their median (D9). `rn-core` itself is 1.0 by
- * construction, so the spread of *every other arm's* paired ratio is the honest
- * answer to "how much did this machine move while measuring this cell?".
+ * launch-paired ratios over their median. `rn-core` itself is 1.0 by
+ * construction, so the spread of every other arm's paired ratio says how much
+ * the machine moved while measuring this cell.
  */
 export function noiseTable(table) {
   const out = {};
@@ -1809,11 +1632,7 @@ export function noiseTable(table) {
 
 /**
  * How much the `rn-core` control moved between two runs, per cell and metric.
- *
- * Informational only. It used to suppress the whole run when any single control
- * metric drifted, which - measured on absolute numbers between two sessions -
- * happened almost every time and made the gate structurally unable to fail
- * (T02 review B1). Noise is judged within the run instead (see `noiseTable`).
+ * Informational only: noise is judged within the run (see `noiseTable`).
  */
 export function controlMovement(base, head) {
   const baseCells = cellsFrom(base);
@@ -1846,15 +1665,15 @@ export function controlMovement(base, head) {
 /* ---------------------------------- gate ---------------------------------- */
 
 /**
- * The one gate (`T02 review S11`): `run.mjs` and `report.mjs` both call this, so
- * the standalone reporter cannot drift away from the runner again.
+ * The one gate: `run.mjs` and `report.mjs` both call this, so the standalone
+ * reporter cannot drift away from the runner.
  *
  * Both sides arrive as **launch-paired ratios to `rn-core`**, so:
  *
  * - both modes compare head's ratios with base's ratios, i.e.
  *   `head(x/rn-core) / base(x/rn-core)`;
  * - noise is per (scenario, N, metric) inside each run, never a whole-run veto;
- * - only `nitro-ui` is gated: `expo-ui-*` stay reference arms (S9).
+ * - only `nitro-ui` is gated: `expo-ui-*` stay reference arms.
  */
 export function gate({
   head,
@@ -2051,9 +1870,7 @@ export function uncomparedCells({ expected, head, base, rows }) {
   return uncompared;
 }
 
-/**
- * The load average a run is quiet at (D9): 0.5 x core count.
- */
+/** The load average a run is quiet at: 0.5 x core count. */
 export function loadCeiling(cpuCount) {
   return isNumber(cpuCount) ? cpuCount * UNQUIET_LOAD_RATIO : null;
 }
@@ -2077,10 +1894,8 @@ function isLoadSummary(value) {
 
 /**
  * Summarise a run's load samples compactly enough to live in a committed
- * baseline: the run is described by five numbers instead of ~1 500 of them.
- *
- * Returns null when there is nothing to summarise or the ceiling is unknown,
- * which is what keeps a results file from before R4 on the old rule.
+ * baseline. Returns null when there is nothing to summarise or the ceiling is
+ * unknown.
  */
 export function summarizeLoadSamples(samples, { cpuCount } = {}) {
   const ceiling = loadCeiling(cpuCount);
@@ -2127,18 +1942,13 @@ export function createLoadSampler(readLoad) {
 }
 
 /**
- * Why this run's load counts as busy, or null when it does not (D9 + R4).
+ * Why this run's load counts as busy, or null when it does not.
  *
- * R4: the rule judges **the run, not its last minute**. A run that recorded
- * samples is busy when the median is over the ceiling, or when more than
- * `LOAD_OVER_CEILING_FRACTION` of the samples are. A1b's iOS run is the case the
- * single sample got wrong: `full` plan, 1120 launches, no problems, load5 4.06
- * against a 7.0 ceiling - and its one recorded `loadavg1`, 7.60, came from the
- * final minute of a 154-minute run.
- *
- * Results files from before the sampler keep the single-sample rule: a lone load
- * average is all they have. Nothing exits on this answer - it rides along with the
- * numbers, and a busy run is read as a noisier run.
+ * The rule judges the whole run, not its last minute: a run that recorded samples
+ * is busy when the median is over the ceiling, or when more than
+ * `LOAD_OVER_CEILING_FRACTION` of the samples are. A results file with no samples
+ * is judged on its single load average. Nothing exits on this answer: a busy run
+ * is read as a noisier run.
  */
 export function loadOverCeiling(machine) {
   const source = machine ?? {};
@@ -2167,7 +1977,7 @@ export function loadOverCeiling(machine) {
 
 /**
  * The waiting rule a run measured under: the largest timeout any of its cells was
- * asked to wait for, and 0 when a results file predates the field.
+ * asked to wait for, and 0 when a results file has no such field.
  *
  * Compared against `DEFAULT_TIMEOUTS_MS` by the runner: a run that waited differently
  * is a diagnostic (it changes which samples arrive, not what they say).
@@ -2248,8 +2058,8 @@ export function markdownTable(header, rows) {
 
 /**
  * Results files are named `<sha>[-dirty]-<platform>-<run stamp>.json` so two
- * runs of the same commit never overwrite each other (T02 review S12), and a
- * dirty-tree run can never masquerade as the clean run of that commit.
+ * runs of the same commit never overwrite each other, and a dirty-tree run can
+ * never masquerade as the clean run of that commit.
  */
 export function resultsFileName(
   sha,

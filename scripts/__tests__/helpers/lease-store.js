@@ -1,17 +1,6 @@
 /**
- * A lease store a spawned CLI can be pointed at: `NITRO_UI_HOME` + the two files
- * inside it (`leases.json`, `devices.json`) that `lease.mjs list` reads and that a
- * device gate now has to agree with (X28).
- *
- * Not a jest module: no fixtures, no assertions — the same shape as
- * `scrubbed-env.js` and `free-lsof-stub.js`. The point is that several suites
- * (`gate.test.js`, `gate-logs.test.js`, `lease-metro-port.test.js`) drive `gate.mjs`
- * with a lease in its environment, and each of them used to invent its own pair
- * shape. One helper means the pair a test claims and the env it exports cannot
- * quietly stop matching, which is the exact drift the gate now refuses.
- *
- * The identifiers here are placeholders by design (D25): no UDID, AVD name or port
- * from a real machine, and nothing a test asserts is a substring of a real one.
+ * A lease store a spawned CLI can be pointed at: `NITRO_UI_HOME` and the two files
+ * inside it, `leases.json` and `devices.json`. Every identifier is a placeholder.
  *
  * @file
  */
@@ -19,7 +8,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** The pair the helper writes when a test does not name one. */
 export const DEFAULT_PAIR = {
   id: 'pair-a',
   ios: {
@@ -37,7 +25,6 @@ export const DEFAULT_PAIR = {
   metroPort: 8295,
 };
 
-/** A second pair, for the case "a device that exists but is not mine". */
 export const OTHER_PAIR = {
   id: 'pair-b',
   ios: {
@@ -55,16 +42,13 @@ export const OTHER_PAIR = {
   metroPort: 8296,
 };
 
-/**
- * The serial a pair's emulator console port implies — the same derivation
- * `renderEnvFile` uses, repeated here so a fixture cannot pass by coincidence.
- */
+/** The serial a pair's emulator console port implies. */
 export function serialFor(pair = DEFAULT_PAIR) {
   return `emulator-${String(pair.android.emulatorPort)}`;
 }
 
 /**
- * The lease record `decideAcquire` would have written for a pair.
+ * The lease record an acquire would have written for a pair.
  *
  * @param {object} [options]
  * @param {string} [options.id]
@@ -142,11 +126,8 @@ export function writeLeaseStore(
 }
 
 /**
- * The environment sourcing that lease's env file would have exported (X28).
- *
- * Everything `renderEnvFile` prints for the pair — device ids, ports, Metro port and
- * the three `NITRO_UI_LEASE_*` names — so a fixture that passes the gate is a
- * fixture that could have come from `lease.mjs acquire`.
+ * The environment that sourcing the lease's env file would export: device ids,
+ * ports, the Metro port and the three `NITRO_UI_LEASE_*` names.
  *
  * @param {object} [options]
  * @param {string} [options.home]

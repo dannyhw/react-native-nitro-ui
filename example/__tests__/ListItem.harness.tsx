@@ -1,43 +1,3 @@
-/**
- * On-device tests for the ListItem (task G30).
- *
- * A ListItem is the row *content* of a list row, drawn by the platform's own row view —
- * UIKit's `UIListContentView` on iOS, Material 3's `ListItem` on Android (DECISIONS D46) —
- * and it has exactly one property that no other component in this library has: its height
- * is a function of **which slots are filled**, never of what was typed into them, because
- * every slot is capped to one line. That is what a `fillWidth` control must be able to
- * promise (`docs/architecture/sizing.md` §5), and it is what these tests hold:
- *
- * - **The ladder is the configuration, not the text.** Four configurations (title, plus
- *   subtitle, plus leading icon, plus both) are each poisoned with a size no row has, and
- *   each has to correct away from it; then every slot that costs no height — a different
- *   value, an accessory, a longer title — has to leave the box *where it was* and ask the
- *   engine for nothing. The second half is the expensive one: a key that folded text
- *   length in would resize on every keystroke of a search field and cost a correction per
- *   row of a list.
- * - **The leading glyph is a drawing contract.** `androidIcon` is G19's probe's reason for
- *   existing: every other reading of it is an echo of the prop. The row hands the harness
- *   the colour it tinted the glyph with, recorded where it tinted it, and the probe counts
- *   pixels of that colour. A filled 24 dp slab is the fixture, because its ink is
- *   *computable* — "the icon drew" and "the icon filled the slot" are then different
- *   assertions — and a missing drawable is the fixture that must not pass.
- * - **Inside a `Form.Row` the leaf is not the cell.** The row owns the insets, the shape
- *   and the press highlight (D46 item 2), so the item inside one reports `0,0` where the
- *   standalone one reports `16,16`, and paints nothing of its own where the standalone one
- *   paints its press. Both answers are read from the layout that drew and from the painter
- *   that was chosen, not off the `insideRow` prop.
- * - **A disabled row is inert.** A press is refused at the seam a tap uses, and no event
- *   reaches the app — the half that a prop echo can never answer, because `disabled` is
- *   also just a prop.
- *
- * The readings: `harnessUi.queryByTestId` (the box Fabric gave the view),
- * `hybridRef.measureContent()` (what the hosted row measured),
- * `nuiTestLayoutReport()` (where the row put its content, and who paints its press),
- * `nuiTestStateReport()` (what it drew, how many presses it took, what its accessibility
- * node says, and the colour it painted the glyph with), `nuiTestPixelProbe`/
- * `nuiTestPixelReport` (what it painted), `nuiTestLifetimeReport` (what the host object has
- * been through) and `nitroUiCore.sizingStats()` (what the engine did).
- */
 import { useState } from 'react';
 import { PixelRatio, Platform, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -59,7 +19,7 @@ import {
 /** The ListItem's Fabric name — what the sizing engine files sizes under. */
 const COMPONENT = 'NitroUiListItem';
 
-/** The glyph `HybridNitroUiListItem` is asked to draw on Android: a filled 24 dp square. */
+/** A test drawable in the example APK: a filled 24 dp square, so its ink is computable. */
 const SLAB = 'nitroui_test_slab';
 /** A drawable that is not in the APK, for the fixture that must *not* draw. */
 const NOT_SHIPPED = 'nitroui_test_never_built';
@@ -75,7 +35,6 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/** What `hybridRef` hands back — declared, not imported (DECISIONS D14). */
 type ListItemHandle = {
   measureContent(): Size;
   nuiTestPress(): void;
@@ -94,11 +53,6 @@ const captureItem =
     handles.set(testId, view);
   };
 
-/**
- * What a `Form.Row`'s `hybridRef` hands back: the two test-only methods this file needs to
- * ask the *cell* what it was told to be. Declared, not imported (DECISIONS D14), as
- * `Form.harness.tsx` spells them.
- */
 type FormRowHandle = {
   nuiTestRowReport(): string;
   nuiTestA11yClick(): void;
@@ -127,7 +81,7 @@ function rowReportOf(key: string): Record<string, string> {
  *
  * Each colour is a `#rrggbbaa`, or a word: `none` for a slot that draws nothing, `unset` for
  * iOS's image slot when the row set no tint, and `pending` for a slot whose configure never
- * ran — which is how a missing slot shows up instead of passing as a colour.
+ * ran.
  */
 function coloursOf(testId: string): Record<string, string> {
   const report = reportOf(testId).colours ?? '';
@@ -163,13 +117,9 @@ const recordPress = (testId: string) => (): void => {
 };
 
 /**
- * The four size configurations, spelled out here rather than read from
- * `ListItem.tsx`'s helper — `Button.harness.tsx`'s rule: a file that poisons the keys a
- * component derives through the helper it is testing cannot notice the helper moving,
- * which is the one failure the poison exists to catch.
- *
- * `s` is the subtitle (the only slot that costs height) and `i` the leading glyph; `value`
- * and `accessory` are measured not to cost anything on either platform and so are absent.
+ * The four size configurations, spelled out rather than imported from the component, so a
+ * change in how the component derives its keys fails here. `s` is the subtitle (the only
+ * slot that costs height) and `i` the leading glyph.
  */
 const KEY_TITLE = '';
 const KEY_SUBTITLE = 's';
@@ -177,11 +127,8 @@ const KEY_ICON = 'i';
 const KEY_BOTH = 's|i';
 
 /**
- * A size that is no list row's, planted as the engine's answer before a mount.
- *
- * 111.5 is taller than the tallest row this file measures (Material's two-line minimum is
- * 72 dp, UIKit's `.subtitleCell()` 68.33 pt) and shorter than the width, so a box left
- * standing at it cannot be mistaken for a row that measured itself.
+ * A size no list row has (taller than the tallest row here), planted as the engine's answer
+ * before a mount, so a box left standing at it cannot pass for a row that measured itself.
  */
 const WRONG_SIZE = { width: 33.5, height: 111.5 };
 
@@ -260,11 +207,8 @@ function handleOf(testId: string): ListItemHandle {
 }
 
 /**
- * The size configuration the row filed itself under.
- *
- * `nuiSizingKey` is an intrinsic prop (`core/NitroUiIntrinsicProps.ts`), which nitrogen
- * keeps off the generated hybrid type — so it is read through a cast, as
- * `Picker.harness.tsx` does, rather than widened into the handle above.
+ * The size configuration the row filed itself under. `nuiSizingKey` is not on the generated
+ * hybrid type, hence the cast.
  */
 function sizingKeyOf(testId: string): string | undefined {
   return (
@@ -322,7 +266,6 @@ async function waitForLayout(testId: string, what: string): Promise<Layout> {
   );
 }
 
-/** Poll until the row has drawn the line it is being asked to draw. */
 async function waitForDisplayed(testId: string, displayed: string) {
   return pollUntil(
     () => (reportOf(testId).displayed === displayed ? true : null),
@@ -348,7 +291,6 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
   );
 }
 
-/** Poll until the *laid-out* box is `size`, i.e. until a size has really arrived. */
 async function waitForBox(testId: string, size: Size, what: string) {
   return pollUntil(
     () => (sameSize(sizeOf(testId), size) ? sizeOf(testId) : null),
@@ -361,7 +303,6 @@ async function waitForBox(testId: string, size: Size, what: string) {
   );
 }
 
-/** Poll until the box's *height* is `height`, whatever width it settled at. */
 async function waitForBoxHeight(testId: string, height: number) {
   return pollUntil(
     () => {
@@ -379,9 +320,8 @@ async function waitForBoxHeight(testId: string, height: number) {
 }
 
 /**
- * Mount each id, then wait until each one's laid-out box equals what its own row measured.
- * Every assertion in this file sits behind this: a box still standing at the planted size
- * would make "it corrected" and "it never corrected" read the same.
+ * Mount each id, then wait until each one's laid-out box equals what its own row measured,
+ * so no assertion reads a box still standing at the planted size.
  */
 async function settleEach(
   testIds: readonly string[]
@@ -409,7 +349,7 @@ function poison(keys: readonly string[]): void {
   nitroUiCore.invalidateSizingEnvironment();
 }
 
-/** Press an item the way this platform's harness can, through the tap's own path. */
+/** Press an item through the path a tap takes. */
 function pressItem(testId: string): void {
   handleOf(testId).nuiTestPress();
 }
@@ -430,8 +370,7 @@ async function waitForEvents(from: number, wanted: readonly string[]) {
           JSON.stringify(events.slice(from))
       )
   );
-  // Then a quiet period: returning the moment the count is reached let a surplus event
-  // through, and a row that fires twice per tap is exactly what this suite must see.
+  // Then a quiet period, so a surplus event (a row that fires twice per tap) is seen.
   await sleep(EVENT_QUIET_MS);
   return events.slice(from);
 }
@@ -530,13 +469,7 @@ function drainKinds(instanceId: number): string[] {
   return kinds;
 }
 
-/**
- * The props a test rewrites, by testID.
- *
- * A row's height claim is about *changing* slots, and `ListItem.tsx` sends every prop on
- * every commit, so the only way to change one is for the parent to re-render with a
- * different value. These are the parents' setters.
- */
+/** The props a test rewrites on a mounted row. */
 type Slots = {
   title?: string | null;
   subtitle?: string | null;
@@ -587,18 +520,6 @@ describe('ListItem · G30', () => {
   });
 
   it('sizes each configuration from a poisoned fallback, and only it', async () => {
-    // Four rows, four size configurations, each planted with a size no row has before it
-    // mounts. A configuration that never arrives leaves a visible 111.5 tall row *and*
-    // costs this file the correction it requires below, so the two failure modes — the
-    // engine never asked, and the engine asked and was ignored — cannot both hide.
-    //
-    // The relations between the four are the actual claim, and they are asserted rather
-    // than logged: the subtitle is the only slot that costs height, so it must move the
-    // box, and the glyph — which is in the key because on Android a leading composable
-    // *could* raise the row's minimum — must not. Measured against UIKit's `.cell()`
-    // (52.00 pt) and `.subtitleCell()` (68.33 pt) and Material's one- and two-line minima
-    // (56 dp, 72 dp), a subtitle that changed nothing, or a glyph that changed something,
-    // is red here rather than in a screenshot review.
     const ids = ['size-title', 'size-subtitle', 'size-icon', 'size-both'];
     const keys = new Map<string, string>([
       ['size-title', KEY_TITLE],
@@ -661,8 +582,7 @@ describe('ListItem · G30', () => {
       const box = boxes.get(id) ?? null;
       // 1. The box is not the planted size: the correction arrived.
       expect(sameSize(box, WRONG_SIZE)).toBe(false);
-      // 2. The row filed itself under the key this file poisoned, which is what makes the
-      //    correction above attributable to the poison rather than to a key nobody read.
+      // 2. The row filed itself under the key this file poisoned.
       expect(sizingKeyOf(id)).toBe(keys.get(id));
       // 3. `fillWidth`: the width is the column's, and the height is the row's own.
       const measuredSize = measured(id);
@@ -680,33 +600,22 @@ describe('ListItem · G30', () => {
     expect(heightOf('size-subtitle')).toBeGreaterThan(
       heightOf('size-title') + 8
     );
-    // 5. The glyph is in the key but costs no height: one line either way, on both
-    //    platforms. `size-both` against `size-subtitle` says the same of the value and the
-    //    accessory, which are not in the key at all.
+    // 5. The glyph is in the key but costs no height. `size-both` against `size-subtitle`
+    //    says the same of the value and the accessory, which are not in the key at all.
     expect(
       Math.abs(heightOf('size-icon') - heightOf('size-title'))
     ).toBeLessThan(0.6);
     expect(
       Math.abs(heightOf('size-both') - heightOf('size-subtitle'))
     ).toBeLessThan(0.6);
-    // 6. And the poison is not the answer for any of them, spelled for the report.
+    // 6. And the poison is not the answer.
     expect(heightOf('size-title')).not.toBeCloseTo(WRONG_SIZE.height, 5);
   });
 
   it('keeps one box while the slots that cost nothing change', async () => {
-    // The sizing promise in the other direction: a key that folded the *text* in would
-    // pass the test above and still cost a cache entry per row of a settings screen,
-    // because every row has its own title. Here the title, the value and the accessory all
-    // change, and the box has to stay exactly where it was — and, the sharper half,
-    // `cachedSizes` has to stay where it was: **no new configuration may open**. That is
-    // the claim, not "zero corrections", which this run measured at 1 for a value change on
-    // iOS: a prop commit re-measures the hosted row and the engine re-applies a size it
-    // already had, and a re-apply of the right number costs a list nothing. A key that
-    // folded the text in cannot hide from `cachedSizes`, which counts configurations.
-    //
-    // Then the subtitle arrives and leaves, and both directions pay: the box has to follow
-    // the configuration, and the key has to be what makes it do so. The `s` key is poisoned
-    // first so "the two-line box came back" cannot be a box that was simply never corrected.
+    // The claim is `cachedSizes`, not zero corrections: a prop commit may re-measure the
+    // row and re-apply a size the engine already had. The `s` key is poisoned so the
+    // two-line box below cannot be one that was simply never corrected.
     const id = 'slot-row';
     poison([KEY_SUBTITLE]);
     await render(
@@ -746,9 +655,8 @@ describe('ListItem · G30', () => {
       1
     );
 
-    // 3. A title four times as long, at the same width: one line, tail-truncated, and the
-    //    same height. This is the fixture that does not coincide with the answer — the
-    //    row has to *truncate* rather than grow, and a row that grew is 20 pt taller.
+    // 3. A title four times as long, at the same width: it truncates on one line instead
+    //    of growing.
     before = stats();
     const longTitle =
       'Ringtone for the default text tone on this device and its repeats';
@@ -770,8 +678,7 @@ describe('ListItem · G30', () => {
     expect(sameSize(sizeOf(id), WRONG_SIZE)).toBe(false);
     await waitForBoxHeight(id, twoLine.height);
     expect(corrections(before, stats())).toBeGreaterThanOrEqual(1);
-    // The second line is a *configuration*, which is why it is the one change that opens a
-    // cache entry — and the entry it opened is the poisoned `s` key, not a fresh one per text.
+    // The second line is a configuration, so it is the one change that opens a cache entry.
     expect(stats().cachedSizes - before.cachedSizes).toBe(1);
     expect(twoLine.height).toBeGreaterThan(oneLine + 8);
 
@@ -789,22 +696,9 @@ describe('ListItem · G30', () => {
   });
 
   it('draws the leading glyph in the row content colour, filling its slot', async () => {
-    // Three rows with the same title and the same height: a slab, nothing, and a drawable
-    // that is not in the APK. The row records the colour it tinted the glyph with where it
-    // tinted it (`LocalContentColor`, which is Material's own dynamic-palette answer and
-    // cannot be written down by a test), and the probe counts pixels of that colour over
-    // the row's own bounds.
-    //
-    // The slab is the fixture that makes the count *mean* something. A glyph's ink area is
-    // unknowable from the outside, so "an icon appeared" is the most a star could prove; a
-    // filled 24 dp square paints `(24 dp x density)^2` pixels, so the delta over the row
-    // with no icon can be asserted against the slot's area — which is the difference
-    // between an icon that drew and an icon that drew *in the slot Material gives a leading
-    // glyph* (`ListTokens.ItemLeadingIconSize`).
-    //
-    // The missing drawable is the fixture that must not pass: its slot is held at 24 dp by
-    // a `Spacer`, so the box is right while the ink is absent, and only a pixel count can
-    // tell the two apart.
+    // Three rows of the same height: a filled 24 dp slab, whose ink area is computable, no
+    // glyph, and a drawable missing from the APK, whose empty slot is still held at 24 dp.
+    // The tint is Material's dynamic colour, so it is read from the row, not written here.
     const ids = ['ink-slab', 'ink-none', 'ink-missing'];
     await render(
       <View style={columnStyle}>
@@ -832,11 +726,7 @@ describe('ListItem · G30', () => {
     await settleEach(ids);
 
     if (Platform.OS === 'ios') {
-      // iOS has no sampler: the probe refuses rather than reporting zero hits, which is the
-      // answer that would let a dropped symbol look like a passing test. What iOS does
-      // prove here is the *slot* — the glyph is in the box the row measured (the `i`
-      // configuration above), and the SF Symbol's pixels are the screenshot's and the
-      // example app's to show.
+      // iOS has no pixel sampler: the probe refuses rather than reporting zero hits.
       const refusal = await pixelProbe('ink-slab', 0x000000, 'the iOS refusal');
       expect(refusal).toContain('no pixels');
       expect(reportOf('ink-slab').iconTint).toBe('-');
@@ -844,8 +734,7 @@ describe('ListItem · G30', () => {
       return;
     }
 
-    // Android records the tint, and records *nothing* for a row that has no glyph — the
-    // difference between "no icon" and "an icon whose colour was never read".
+    // Android records the tint, and records nothing for a row that has no glyph.
     const tint = await glyphTintOf('ink-slab');
     expect(reportOf('ink-none').iconTint).toBe('-');
 
@@ -855,10 +744,8 @@ describe('ListItem · G30', () => {
       await pixelProbe('ink-missing', tint, 'the miss')
     );
 
-    // The ink a 24 dp slab paints at this density, and the floor it has to clear. Half of
-    // the slot's area is generous — antialiasing costs a rim of pixels at the edge, and
-    // the probe's own tolerance is ±30 per channel sum — and it is still three times what
-    // a slot that drew nothing could produce.
+    // The ink a 24 dp slab paints at this density. The floor is half the slot's area:
+    // antialiasing costs a rim of pixels, and the probe tolerates ±30 per channel sum.
     const density = PixelRatio.get();
     const slot = Math.pow(24 * density, 2);
     const glyphInk = filled - empty;
@@ -876,10 +763,8 @@ describe('ListItem · G30', () => {
   });
 
   it('takes no press and sends nothing while disabled', async () => {
-    // A tap on a disabled row must do *nothing*: not fire and be grey, not fire once for
-    // the row and once for the cell. `nuiTestPress` runs the path a tap takes — Material's
-    // `onClick`, UIKit's recogniser — and refuses on the same condition, so the counter
-    // below is the row's own answer rather than a prop's.
+    // `nuiTestPress` runs the path a tap takes (Material's `onClick`, UIKit's recogniser)
+    // and refuses on the same condition, so the press counter is the row's own answer.
     const ids = ['press-enabled', 'press-disabled'];
     await render(
       <View style={columnStyle}>
@@ -916,8 +801,7 @@ describe('ListItem · G30', () => {
     ]);
     expect(reportOf('press-enabled').presses ?? 'none').toBe('1');
 
-    // The disabled row is still *drawn*, and still says it is disabled to a reader: inert,
-    // not absent.
+    // The disabled row is still drawn, and still says it is disabled to a screen reader.
     expect(reportOf('press-disabled').displayed).toContain('Do not disturb');
     const a11y = await probeAccessibility('press-disabled');
     expect(a11y).toContain('disabled=true');
@@ -928,11 +812,8 @@ describe('ListItem · G30', () => {
   });
 
   it('publishes one node, whose role is a button only with onPress', async () => {
-    // One element per item (core.md §3), carrying title, subtitle and value; the button
-    // role only when there is a press to make. Android reads the merged Compose semantics
-    // node a reader is handed — and says how many nodes name the item, so a row that
-    // leaked its labels as separate elements is a failure rather than an ambiguity — and
-    // iOS reads the one element this leaf publishes for itself.
+    // Android reads the merged Compose semantics node and answers `ambiguous` when more
+    // than one node names the item; iOS reads the one element the row publishes.
     const ids = ['a11y-button', 'a11y-label'];
     await render(
       <View style={columnStyle}>
@@ -964,17 +845,13 @@ describe('ListItem · G30', () => {
     expect(label).not.toContain('no node');
     expect(label).not.toContain('ambiguous');
 
-    // The role, and only with `onPress`. iOS spells the element's trait `button`; Android
-    // spells `Role.Button`'s own name, and the row without a press has no role at all.
+    // iOS spells the element's trait `button`; Android spells `Role.Button`'s own name, and
+    // the row without a press has no role at all.
     expect(button.toLowerCase()).toContain('role=button');
     expect(label.toLowerCase()).not.toContain('role=button');
 
     // All three slots, in the order a person reads the row: headline, supporting line,
-    // value. Both platforms build that label themselves — UIKit from the row's three slots
-    // in `applyAccessibility`, Android through a `contentDescription` it sets precisely
-    // because Material merges the row's text in slot order instead — so the order is part of
-    // what the component promises, not an accident of the toolkit. `label=` is the last
-    // field of the probe line on both platforms.
+    // value. `label=` is the last field of the probe line on both platforms.
     const readOrder = (probed: string): string => {
       const at = probed.lastIndexOf(',label=');
       return at < 0 ? probed : probed.slice(at + ',label='.length);
@@ -1008,14 +885,8 @@ describe('ListItem · G30', () => {
   });
 
   it('starts a recycled row from nothing', async () => {
-    // The residue a row can leave for its next owner is its press counter and the line it
-    // drew, and neither is cleared by a prop rewrite: `ListItem.tsx` sends every prop on
-    // every commit, so the only thing that says whether the reset ran is a press the second
-    // owner takes and reads back.
-    //
-    // `nuiPerfId` is the witness that the churn actually pooled something: without a
-    // `recycled` mark the loop below would be measuring a run that allocated a fresh view
-    // every round and proved nothing (`Recycling.harness.tsx`'s rule, for the same reason).
+    // A prop rewrite does not clear the press counter, so the second owner's count shows
+    // whether the reset ran. The `recycled` perf mark shows a view really was pooled.
     const PERF_ID = 3030;
     const owner = (title: string, value: string) => (
       <View style={columnStyle}>
@@ -1052,8 +923,8 @@ describe('ListItem · G30', () => {
           timeout: 20000,
         });
         await settleEach(['recycled-item']);
-        // Read *before* pressing: a stale `displayed=` is the residue, and pressing first
-        // would overwrite it with the answer the props would have produced anyway.
+        // Read before pressing: a stale `displayed=` is the residue, and a press would
+        // overwrite it.
         const drawn = reportOf('recycled-item').displayed;
         const from2 = events.length;
         pressItem('recycled-item');
@@ -1078,24 +949,9 @@ describe('ListItem · G30', () => {
   });
 
   it('draws no insets, container or highlight of its own inside a Form.Row', async () => {
-    // The row is the cell, and the cell has already paid for its insets, its shape and its
-    // press (D46 item 2). An item that also drew them would land its text 32 pt in from the
-    // edge with a second highlight under the cell's — the doubled-padding row this leaf
-    // exists to make impossible.
-    //
-    // Both answers are read from the drawn thing. `insets=` is where the content actually
-    // landed inside the view's bounds: the title label's frame in the row's coordinates on
-    // iOS, `onGloballyPositioned` on Android — not `configuration.directionalLayoutMargins`
-    // read back, which would repeat the number the row wrote into it and could not notice an
-    // `insideRow` that was ignored. `shape=` is the row's own highlight *painting*: iOS
-    // answers from the call that set its background colour, Android from a Press interaction
-    // collected off the stream the ripple itself consumes. At rest both rows therefore
-    // answer `0`, and only the standalone one answers `1` after a press.
-    //
-    // The row here has no `onPress` of its own, because that is the shape the README teaches
-    // (`list-item-in-form`) and the shape the component screen ships: the handler is written
-    // on the item, and the row has to take it. A `Form.Row` that stayed unpressable around a
-    // pressable item pressed in silence — the callback arrived and nothing on screen said so.
+    // `insets=` is where the content landed inside the view's bounds, and `shape=` is 1
+    // once the row has painted a press highlight of its own. The `Form.Row` has no
+    // `onPress`: the handler is written on the item, and the row has to take it.
     const ids = ['bare-item', 'form-item'];
     await render(
       <View style={columnStyle}>
@@ -1138,8 +994,7 @@ describe('ListItem · G30', () => {
     expect(inRow.shape).toBe(0);
 
     // The cell has taken the item's handler: `pressable` is what the row tells its own native
-    // view to be, and it is 0 unless the report the item handed up reached it. iOS publishes
-    // the report from main, so this polls rather than reads once.
+    // view to be. iOS publishes the report from main, so this polls rather than reads once.
     const pressable = await pollUntil(
       () => {
         const report = rowReportOf('form-row');
@@ -1170,12 +1025,9 @@ describe('ListItem · G30', () => {
     console.log(`  · in row after both presses: ${afterPress.raw}`);
     expect(afterPress.shape).toBe(0);
 
-    // And the item inside the row still gets its own press — through the cell that now owns
-    // the touch. On Android that is `ACTION_CLICK` on the row, the action TalkBack doubles:
-    // the handler the item wrote is the one the cell was given, so the cell's press is the
-    // item's callback. (iOS's activation is a synthesised centre tap no method can send from
-    // here - `Form.harness.tsx` says so, and `real-input:ios`'s in-Form case is the half that
-    // presses this row with a finger.)
+    // The item inside the row still gets its own press, through the cell that owns the
+    // touch: on Android, `ACTION_CLICK` on the row. iOS's activation is a synthesised centre
+    // tap that no method can send from here.
     expect(reportOf('form-item').displayed).toBe('Ringtone|-|Normal|none');
     if (Platform.OS === 'android') {
       const from = events.length;
@@ -1187,16 +1039,9 @@ describe('ListItem · G30', () => {
   });
 
   it('greys every slot when it is disabled, not only the value', async () => {
-    // `disabled` has always refused the press; what it did to the *paint* is the half that
-    // went wrong first. iOS greyed the value label alone and left the headline, the
-    // supporting line and the leading glyph at full strength, so a "disabled" row read as a
-    // row whose answer happened to be faint.
-    //
-    // `colours=` is read where each slot is configured — the configuration's own text
-    // colours and image tint on iOS, the `LocalContentColor` each slot inherits on Android —
-    // so it is what will be painted, not what `disabled` was sent. The alpha byte is the
-    // comparison: a platform's enabled grey is not another's, and this asserts that one row
-    // got greyer than the identical row next to it, slot by slot.
+    // `colours=` is read where each slot is configured, so it is what will be painted. The
+    // alpha byte is compared between two identical rows, because each platform has its
+    // own greys.
     const ids = ['colour-live', 'colour-off'];
     const slots = {
       accessory: 'disclosure' as const,
@@ -1236,9 +1081,8 @@ describe('ListItem · G30', () => {
       );
     }
 
-    // The three slots every platform owns: same colour family, less alpha. `pending` fails
-    // here as much as a full-strength one would — a slot that never recorded says nothing
-    // about what it painted.
+    // The three slots every platform owns: same colour family, less alpha. A `pending`
+    // slot fails here too.
     for (const slot of ['text', 'secondary', 'value']) {
       const before = alphaOf(live[slot]);
       const after = alphaOf(off[slot]);
@@ -1255,11 +1099,9 @@ describe('ListItem · G30', () => {
       expect(after).toBeLessThan(before);
     }
 
-    // The glyph's tint is the slot with the two platforms' widest difference: iOS leaves the
-    // symbol's tint to UIKit when the row is enabled and so answers `unset`, while Android
-    // resolves Material's leading-content colour either way. What both have to show is that
-    // disabling a row *changes* its glyph — a disabled row whose icon stayed full-strength is
-    // the same bug in one slot.
+    // iOS leaves the symbol's tint to UIKit when the row is enabled and so answers `unset`;
+    // Android resolves Material's leading-content colour either way. On both, disabling
+    // the row has to change its glyph.
     if (alphaOf(live.image) == null) {
       expect(alphaOf(off.image)).not.toBeNull();
     } else {
@@ -1268,10 +1110,9 @@ describe('ListItem · G30', () => {
       expect(after).toBeLessThan(before);
     }
 
-    // The chevron is the exception, and it is a look fact rather than a bug: UIKit's own
-    // disclosure indicator is `.tertiaryLabel` — already the row's disabled grey — so iOS
-    // cannot grey it further and this asserts it stays put. Android takes the trailing icon's
-    // colour from Material, which does dim it. Neither may make the chevron *brighter*.
+    // UIKit's disclosure indicator is `.tertiaryLabel`, already the row's disabled grey, so
+    // iOS cannot grey it further. Android takes the trailing icon's colour from Material,
+    // which does dim it.
     const liveChevron = alphaOf(live.chevron);
     const offChevron = alphaOf(off.chevron);
     if (liveChevron != null && offChevron != null) {

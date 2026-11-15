@@ -1,20 +1,10 @@
 /**
- * Which task records under `docs/tasks` stay in git, decided from facts handed in.
- *
- * A task's brief, report and reviews are read while the task is in flight. Once it is
- * merged they are copied to a local archive and removed, so `docs/tasks` holds only
- * what somebody is still working from.
- *
- * Unknown is keep: a worktree list that cannot be read, a symbolic link, a brief with
- * no report. Anything that does not start with a task ID (`STATUS.md`, `FOLLOWUPS.md`,
- * the report template) is not a task record and is never listed.
- *
- * No process or filesystem access here: `scripts/task-records.mjs` gathers the facts.
+ * Which task records under `docs/tasks` stay in git, decided from facts handed in:
+ * no process or filesystem access here. Unknown is keep.
  */
 
 import { taskOfBranch } from './worktrees-core.mjs';
 
-/** Where task records live, relative to the repository root. */
 export const RECORDS_DIR = 'docs/tasks';
 
 /** Days a merged task's records stay in git. Zero: they leave with the merge. */

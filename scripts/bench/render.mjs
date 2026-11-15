@@ -1,13 +1,6 @@
 /**
- * Markdown + verdict rendering for benchmark results. Pure: no filesystem, no
- * `import.meta`, so `gate()` and the tables around it are unit-testable in jest
- * (scripts/__tests__/bench-gate.test.js), which transpiles .mjs to CommonJS.
- *
- * This is the single implementation of the gate presentation: `run.mjs` and
- * `scripts/bench/report.mjs` both call `comparisonSections()` with the same
- * arguments they print, so the standalone reporter cannot drift from the runner
- * (review S11). What the numbers mean is documented in report.mjs's header and
- * docs/architecture/benchmarks.md.
+ * Markdown and verdict rendering for benchmark results. Pure (no filesystem, no
+ * `import.meta`), so jest, which transpiles .mjs to CommonJS, can test it.
  */
 
 import {
@@ -61,10 +54,9 @@ function formatNumber(value, digits = 0) {
 }
 
 /**
- * Cells group by what the launch does, then by which control it mounted, then
- * by size. A scenario cell carries its component (`mount.slider`), so sorting on
- * the whole string would put `mount.slider` next to `mount` only by luck and
- * every later component wherever the alphabet puts it.
+ * Cells sort by what the launch does, then by which control it mounted, then by
+ * size. A scenario carries its component (`mount.slider`), so sorting on the
+ * whole string would not group them.
  */
 function cellSort(a, b) {
   const scenarioOrder = ['mount', 'update', 'memory', 'leak'];
@@ -83,10 +75,9 @@ function cellSort(a, b) {
 }
 
 /**
- * The main table: one row per (scenario, N, implementation), columns are the
- * metrics. With `vsControl` every value is the launch-paired ratio to `rn-core`
- * - including `rn-core` itself, which is exactly 1.00x and is the reader's proof
- * the normalisation is honest. That is also the only form a baseline stores.
+ * The main table: one row per (scenario, N, implementation), one column per
+ * metric. With `vsControl` every value is the launch-paired ratio to `rn-core`,
+ * including `rn-core` itself at exactly 1.00x.
  */
 export function summaryTable(run, { vsControl = false } = {}) {
   const cells = cellsFrom(run);
@@ -159,7 +150,7 @@ export function detailSections(run) {
       const stats = cell.metrics?.[metric] ?? {};
       const ratio = table[cell.key]?.metrics?.[metric];
       // Too few samples arrived to quote a number: `n/a` beats a median over
-      // the iterations whose signal happened to show up (round 4).
+      // the iterations whose signal happened to show up.
       if (stats.reportable === false) {
         return [
           metric,
@@ -231,10 +222,9 @@ export function detailSections(run) {
       }
     }
     if (isNumber(cell.memory?.leakSlopeBytesPerCycle)) {
-      // The word is the claim: a monotonic climb only *refuses a run* on the arm
-      // the gate reads (`GATED_IMPLEMENTATIONS`), and a reference arm's leak is
-      // information about someone else's code. Saying "gated" there sent a
-      // reviewer looking for a verdict that could never exist (A5 review).
+      // A monotonic climb only refuses a run on the arm the gate reads
+      // (`GATED_IMPLEMENTATIONS`); on a reference arm it is reported, and
+      // labelled so.
       const leakGated = GATED_IMPLEMENTATIONS.includes(cell.implementation);
       rows.push([
         'leak slope',
@@ -323,11 +313,9 @@ export function detailSections(run) {
       );
     }
     /**
-     * Why the signals that are missing went missing (A4), printed for any cell that
-     * lost samples at all - not only for one that lost enough to be `n/a`. A gap small
-     * enough to stay reportable is still a probe behaving oddly, and "73 timeouts at
-     * 2000 ms" versus "73 probe-error" is the difference between a slow arm and a
-     * broken rig.
+     * Why the missing signals went missing, printed for any cell that lost
+     * samples at all: "73 timeouts at 2000 ms" and "73 probe-error" are a slow
+     * arm and a broken rig.
      */
     const missingLines = describeMissing(cell);
     if (missingLines.length > 0) {
@@ -372,13 +360,9 @@ export function detailSections(run) {
 }
 
 /**
- * What the run's load samples say (R4).
- *
- * The headline `load average` is the end-of-run instant - the number that refused
- * A1b's iOS baseline in its last minute - so this is the part that describes the
- * 154 minutes around it. Empty for a results file from before the sampler
- * existed, which is honest: such a file has nothing to say about the middle of its
- * own run.
+ * What the run's load samples say. The headline load average is the end-of-run
+ * instant; this describes the run around it. Empty for a results file with no
+ * samples.
  */
 function loadSamplesNote(samples) {
   const keys = ['count', 'median', 'p90', 'max', 'overFraction', 'ceiling'];
@@ -436,11 +420,9 @@ export function runHeader(run) {
 }
 
 /**
- * One comparison -> markdown + exit code, shared by `run.mjs` and the standalone
- * reporter. There is one shape: `head` is the run under review and `base` is another
- * run of the same plan - the release side of a `--compare-release` session, or any
- * results file `--compare` names. The gate never sees a committed number, so the
- * control movement between the two runs is always worth printing.
+ * One comparison -> markdown + exit code, shared by `run.mjs` and the
+ * standalone reporter. `head` is the run under review and `base` is another run
+ * of the same plan.
  */
 export function comparisonSections({
   run,

@@ -1,30 +1,6 @@
 /**
- * `--dry-run`: what a bench run *would* do, without booting, building or measuring.
- *
- * It exists because a bench run is hours of device time and its failures are cheap to
- * predict and expensive to discover late: an unassigned simulator, a device key derived
- * from a simulator's *name* instead of its hardware class, a `--component` that names
- * nothing in the plan. Each is answerable in a second by a command that prints what it
- * resolved. For `--compare-release` it also prints the whole two-sided plan
- * (`scripts/bench/compare.mjs`) - the other thing a long run should not discover about
- * itself halfway through.
- *
- * Two halves, deliberately:
- *
- *   - `dryRunReport` is pure: the device answer, the load average and the flag list all
- *     come in as arguments, so the rules are unit tests rather than a machine
- *     (`scripts/__tests__/bench-dry-run.test.js`).
- *   - `dryRun` is the gatherer: one read-only `simctl list`, one read of the AVD's
- *     own files, `os.loadavg`. It calls nothing that boots, builds or installs -
- *     `resolveIosDevice` boots a stopped simulator and `resolveAndroidDevice`
- *     requires a running emulator, which is exactly what a pre-flight has to survive.
- *
- * The refusals are the runner's own functions called on the runner's own inputs, so a
- * dry run cannot disagree with the run it describes.
- *
- * `--compare-release` brings the two-sided plan along (`prepareComparison`): reading a
- * ref's plan needs its files and nothing else, so the dry run extracts the ref and asks
- * it what it measures - no install, no build, no device.
+ * `--dry-run`: what a bench run would do, with no boot, build or measurement.
+ * `dryRunReport` is pure; `dryRun` gathers read-only tool output and calls it.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -41,12 +17,8 @@ import { comparisonPlanLines } from './compare.mjs';
 import { buildSchedule, loadOverCeiling, loadCeiling } from './lib.mjs';
 
 /**
- * The iOS device key from a simulator listing alone.
- *
- * The same three fields `resolveIosDevice` uses - the runtime bucket's identifier,
- * the entry's `deviceTypeIdentifier`, and `name` only as the fallback - with no
- * `simctl boot` behind it. A stopped simulator is a normal answer here, not a
- * problem: that is the case where booting would be the mistake.
+ * The iOS device key from a simulator listing alone. Nothing is booted: a
+ * stopped simulator is a normal answer here.
  *
  * @param {{
  *   udid: string | null,
@@ -94,14 +66,9 @@ export function iosDryRunDevice({ udid, listing }) {
 }
 
 /**
- * The hardware profile and API level of an AVD that is *not* running, from its files.
- *
- * A dry run cannot ask a device (`adb shell getprop`) because the honest case is a
- * stopped AVD, and starting one is what this command must not do. The AVD directory
- * already holds both answers: `hw.device.name` is the same key `resolveAndroidDevice`
- * reads for a live one, and the system-image path carries the API level, with the
- * sidecar `.ini`'s `target=android-<n>` behind it. Nulls rather than guesses - a
- * fallback that happened to equal the real value would make a failed read invisible.
+ * The hardware profile and API level of an AVD that is not running, read from
+ * its files. Nulls rather than guesses: a fallback equal to the real value
+ * would hide a failed read.
  *
  * @param {{
  *   avd: string | null,
@@ -175,8 +142,7 @@ export function androidDryRunDevice({
     );
   }
   // Both halves or neither: an API level with no profile would produce
-  // `android33-emu-`, a key shaped like a real one that matches no committed
-  // baseline - the worst kind of wrong answer, because it reads as resolved.
+  // `android33-emu-`, a key shaped like a real one.
   if (hardware.apiLevel == null || hardware.profile == null) {
     problems.push(
       `the device key cannot be built from this AVD's files (API level ${hardware.apiLevel ?? 'unknown'}, profile ${hardware.profile ?? 'unknown'})`
@@ -199,10 +165,8 @@ export function androidDryRunDevice({
 
 /**
  * Everything a plain `--dry-run` prints and decides, from injected inputs.
- *
- * Nothing here is refused for being merely busy: the load is a line of the answer, not
- * a veto (X36). What still makes it exit 2 is a run that *cannot* start as asked - no
- * device to measure on, a filter that matches no cell.
+ * Load is reported, never a refusal; exit 2 means the run cannot start as
+ * asked (no device, or a filter that matches no cell).
  *
  * @param {{
  *   platform: 'ios' | 'android',
@@ -234,9 +198,9 @@ export function dryRunReport(input) {
     comparison = null,
   } = input;
 
-  // The run's own schedule builder, so the launch count and the `--component` /
-  // `--only` / `--scenario` refusals are the real ones rather than a re-derivation that
-  // could drift. It throws for exactly the cases worth naming, so the message is kept.
+  // The run's own schedule builder, so the launch count and the filter refusals
+  // are the real ones. It throws for the cases worth naming, so the message is
+  // kept.
   let schedule = [];
   let scheduleProblem = null;
   const filters = {
@@ -322,12 +286,7 @@ export function simctlListing(env = process.env) {
   }
 }
 
-/**
- * The emulators adb sees, or an empty list.
- *
- * A convenience line ("is my AVD up?"), so a machine with no Android SDK still gets
- * a dry run rather than a stack trace.
- */
+/** The emulators adb sees, or an empty list when there is no Android SDK. */
 export function attachedEmulatorSerials(env = process.env) {
   const home = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;
   const adb = home != null ? path.join(home, 'platform-tools', 'adb') : 'adb';
@@ -373,9 +332,7 @@ export function dryRun({
   let device;
   if (platform === 'ios') {
     const udid = env.IOS_SIM_UDID ?? null;
-    // Only asks Xcode when there is a UDID to look for: nothing is assigned, the
-    // answer is already known, and a pre-flight should not pay for a tool call it
-    // cannot use the result of.
+    // Asks Xcode only when there is a UDID to look for.
     device = iosDryRunDevice({
       udid,
       listing: udid == null || udid === '' ? null : simctlListing(env),
@@ -399,8 +356,8 @@ export function dryRun({
     });
   }
 
-  // Only after the device question is answered: the comparison plan prints the device
-  // both sides will share, and preparing it must not be the thing that fails first.
+  // After the device question is answered: the comparison plan prints the
+  // device both sides will share.
   const comparison = prepareComparison == null ? null : prepareComparison();
 
   const report = dryRunReport({

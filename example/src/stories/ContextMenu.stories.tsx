@@ -1,15 +1,5 @@
-/**
- * ContextMenu stories (G16). Props and events: `docs/components/context-menu.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- *
- * `group` gets no Controls row, for Menu's reason: it is a tree, and the on-device
- * Controls panel cannot type one. Every story hands it a module-level list.
- *
- * Touch and hold a message to open its menu. A tap is the message's own (`Pressable`),
- * and a hold that opens the menu never presses it.
- */
+// `group` has no Controls row: it is a tree, and the on-device Controls panel
+// cannot type one.
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ContextMenu, type MenuGroup } from 'react-native-nitro-ui';
@@ -62,8 +52,6 @@ const INNER: MenuGroup = {
 const meta = {
   component: ContextMenu,
   args: {
-    // Required by the component type, so it is in `args`; `control: false` keeps it
-    // off the Controls panel.
     group: MESSAGE,
     title: undefined,
     disabled: false,
@@ -110,7 +98,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Every public prop on the Controls panel, around one message. */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const { onSelect, ...rest } = props;
@@ -153,8 +140,6 @@ export const Playground: Story = {
 };
 
 /**
- * A short conversation, the shape the README photographs: hold the second message.
- *
  * iOS lifts the bubble itself as the preview (its corners are the style's
  * `borderRadius`); Android opens a Material menu at the finger.
  */
@@ -190,7 +175,6 @@ export const Conversation: Story = {
   },
 };
 
-/** Nested ContextMenus: a hold opens the innermost one under the finger. */
 export const Nested: Story = {
   render: function NestedStory() {
     const [picked, setPicked] = useState('nothing yet');
@@ -218,7 +202,6 @@ export const Nested: Story = {
   },
 };
 
-/** Disabled, next to an enabled one: no menu, and the hold stays the child's. */
 export const Disabled: Story = {
   render: function DisabledStory() {
     const [taps, setTaps] = useState(0);

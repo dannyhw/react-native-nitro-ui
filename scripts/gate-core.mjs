@@ -1,27 +1,6 @@
 /**
- * The pure half of the gate ledger (`scripts/gate.mjs` is the half that spawns
- * processes and reads git).
- *
- * A result is keyed to the code tree the gate ran on - `app.stamp`'s digest
- * (scripts/app-stamp-core.mjs), which excludes `docs/`, Markdown and build output -
- * because a gate needs re-running when the *code* moved, not when a *commit*
- * happened. A docs commit leaves that digest alone, so
- * a green gate stays green, and the report's gate table is generated from the
- * same lines instead of typed by hand.
- *
- * The re-run rules this encodes are the ones the process review asked for:
- *
- *   - review (an implementation or fix round): `check` plus the harness suites of
- *     the platforms the code diff touches, each accepted on *its own platform's*
- *     tree (see `platformTreesFromEntries`), so an Android-only fix does not
- *     re-owe an iOS run;
- *   - merge: the full set once on the final code tree - `check`, full harness on
- *     both, real-input on both - always matched on the whole tree;
- *   - benches are never required here at all (they belong to the bench host, D15
- *     and the second-machine plan).
- *
- * No `import.meta` here, so `scripts/__tests__/gate.test.js` can import it (same
- * reason `scripts/app-stamp-core.mjs` and `scripts/lease-core.mjs` exist).
+ * The pure half of the gate ledger: the rules `scripts/gate.mjs` applies, with no
+ * process spawning, no git and no `import.meta`, so jest can import it.
  */
 
 import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
@@ -30,64 +9,13 @@ import { ACQUIRE_HINT, emulatorSerial, leaseIsLive } from './lease-core.mjs';
 /** Where a machine's ledgers live. Gitignored: a ledger is local evidence. */
 export const LEDGER_DIR = '.gates';
 
-/**
- * The name of the gate **log store** inside a clone's git common directory.
- *
- * Chosen over moving the ledger too: `.gates/<branch>.jsonl` is read by path in
- * export code, it is small, and it is re-created by the next run in a
- * fresh checkout anyway - whereas the logs are the evidence nothing re-creates.
- * So the brief's "keep `.gates/<branch>.jsonl` where it is" is what this does, and
- * only the logs move (X12 item 1 says to keep it unless moving is simpler).
- */
+/** The name of the gate log store inside a clone's git common directory. */
 export const LOG_STORE_BASENAME = 'nitro-ui-gates';
 
 /**
  * The shape of the JSON lines this version writes (see `ledgerLineFromRun`).
- *
- * v2 adds three fields, all of them from the X2 round-1 review:
- *
- *   - `trees`: `{ios, android}` - the code-tree digest restricted to the files
- *     that belong to that platform. This is what makes the fix-round rule real:
- *     a round that edits only `android/` leaves `trees.ios` alone, so a
- *     `harness:ios` pass from earlier in the branch still counts at review - and,
- *     since X30 item 1, at merge too, which is the half that stopped every branch
- *     owing four device runs again whenever a tooling-only commit landed on
- *     `main`. See `digestKeyFor` for the rule and its soundness argument.
- *   - `treeAfter`: the code tree when the run *finished*. A line whose tree moved
- *     under it is not evidence about either tree, so it never reads green (N1).
- *   - `summaries`: every test summary the gate printed, in order. `check` runs
- *     jest, then perf, then more, and "the last summary wins" made its row report
- *     the 7-test perf step instead of the 391-test unit run (M3).
- *
- * v3 adds `stepTimings` for `check` (X10): what each of the steps did, with
- * its own duration. `check` is the one gate long enough that "3 m 04 s" is not an
- * actionable number - the thing a reader wants is which step got slower. It is a
- * record, not a rule: no decision in this file reads `stepTimings`, so a v2 line and
- * a v3 line mean the same thing to `need` and `table`.
- *
- * v5 (X12) changes no rule and adds two things:
- *
- *   - `logPath` is now relative to the clone's **gate log store** (the git common
- *     directory) rather than to the worktree, because a run's evidence must outlive
- *     `git worktree remove`.
- *   - `load.end`: the last sample, the load a run finished under. `median`/`max` are
- *     what judge a run; `start`/`end` are context.
- *
- * v6 (X11) adds `suiteTimings` and changes no rule: the per-suite timings a harness
- * run recorded, in the shape `scripts/harness-suite-timing.mjs` writes them. It is
- * what turns "the Android harness costs 455 s" into "these five files cost 200 s of
- * it, and 255 s of the run was outside any file", which is the difference between
- * fixing a suite and fixing the runner. Absent on every non-harness gate and on any
- * run where the plugin was not asked for, which reads as "no per-suite timings" -
- * what it means for a v5 line or a run without the plugin. The sidecar file it is
- * read from lives in the gate log store like every other log (v5), never in the
- * worktree, so a run's timings outlive `git worktree remove` for the same reason its
- * transcript does.
- *
- * v1 lines are still read: with no `trees` they compare on the full digest, and
- * with no `treeAfter` they are taken at their word. Older lines may also carry
- * `fullTree`, `worktreeClean` and `failureLogPath`; they are no longer written and
- * nothing reads them.
+ * Older lines are still read: with no `trees` they compare on the full digest, and
+ * with no `treeAfter` they are taken at their word.
  */
 export const LEDGER_VERSION = 6;
 
@@ -104,26 +32,14 @@ export const MERGE_GATES = [
 ];
 
 /**
- * Paths that *run* the checks rather than change what ships.
+ * Paths that run the checks rather than change what ships.
  *
- * An explicit allow-list, not `scripts/` wholesale (X2 review, "Rules, docs and
- * tests"). A device run imports a lot of `scripts/`: `example/rn-harness.config.mjs`
- * pulls in `app-stamp*.mjs`, `node-version.mjs` and
- * `harness-run-state.js`, `example/metro.config.js` requires that run-state route,
- * and `scripts/real-input/**`, `harness.mjs`, `build-app.mjs`, `pod-install*.mjs`
- * and `patch-nitrogen.mjs` shape the binary or the run. Everything not listed
- * below therefore stays unmapped, which means both platforms - the expensive
- * answer, which is the right one for a tool a device run depends on.
+ * An explicit allow-list, not `scripts/` wholesale: a device run imports much of
+ * `scripts/` (the harness config, the runners, the build scripts), so a script not
+ * listed here stays unmapped and counts as both platforms.
  *
- * The one exception to that sentence is the lease pair below (X26): a device run does
- * read two *guards* out of `lease-core.mjs` through the harness config. They are named
- * there and proven by unit test here, which is why that file is allowed on a list whose
- * whole point is "nothing here reaches the binary".
- *
- * A tooling path belongs to *no* platform, so it is also out of both per-platform
- * digests (`platformsOwningFile`). That is what stops a fix round that edits
- * `scripts/gate.mjs` from re-owing two device runs, and it is the same decision
- * as `check` being keyed to the full tree: tooling is proven by `check`.
+ * A tooling path belongs to no platform, so it is in neither per-platform digest:
+ * editing one re-owes `check`, which is keyed to the full tree, and no device run.
  */
 export const TOOLING_PREFIXES = [
   'scripts/__tests__/',
@@ -135,15 +51,11 @@ export const TOOLING_PREFIXES = [
   '.changeset/',
 ];
 
-/** @see TOOLING_PREFIXES - the single-file members, named rather than globbed. */
+/** The tooling paths that are single files, named rather than globbed. */
 export const TOOLING_FILES = [
   'scripts/gate.mjs',
   'scripts/gate-core.mjs',
-  // X34. The supervisor `gate.mjs` runs each gate's command under. The same argument as its
-  // parent's, one level down: nothing ships, nothing compiles, and a broken version is a gate
-  // that cannot start (`gate: could not start`, an exit in the shell) rather than a different
-  // binary. Its own tests are `scripts/__tests__/gate-runner.test.js`, and `gate.mjs` imports it,
-  // which is also tooling. Proven by search below, the same way `task-ready` is.
+  // The supervisor `gate.mjs` runs each gate's command under.
   'scripts/gate-runner.mjs',
   'scripts/nitrogen-check.mjs',
   'scripts/readme-examples-check.mjs',
@@ -152,84 +64,41 @@ export const TOOLING_FILES = [
   'scripts/check-autolinking.mjs',
   'scripts/doctor.mjs',
   'scripts/doctor-core.mjs',
-  // Runs the checks, and only writes the file the release path writes; a device run
-  // consumes `example/ios/Podfile.lock` itself, which is mapped as iOS.
+  // Writes only the file the release path writes; a device run consumes
+  // `example/ios/Podfile.lock` itself, which is mapped as iOS.
   'scripts/sync-example-lock.mjs',
   'scripts/example-lock-core.mjs',
-  // X10. The runner and its step graph schedule `bun run <step>` and write only the
-  // timing file under `.gates/` (gitignored); they touch no source the app builds.
   'scripts/check.mjs',
   'scripts/check-steps.mjs',
-  // Writes `src/components/**`/`example/src/App.tsx` regions when asked to (`--write`),
-  // and `registry:check` - the half `check` runs - writes nothing at all. A broken
-  // version of either is a wrong *gate*, caught by its own unit test in
-  // `scripts/__tests__/registry.test.js`, never a different binary.
+  // Writes source regions only when asked to (`--write`); the half `check` runs
+  // writes nothing.
   'scripts/gen-registry.mjs',
   'scripts/registry-core.mjs',
-  // The build-slot lock in `~/.nitro-ui/builds.json`: it decides *when* a build may
-  // start, never what goes into it. `build-app.mjs` (which is mapped, and stays so)
-  // fails loudly if this misbehaves, and `scripts/__tests__/build-slot.test.js`
-  // proves it in `check`.
+  // The build-slot lock decides when a build may start, never what goes into it.
   'scripts/build-slot-core.mjs',
-  // X26. The device/port allocator behind `~/.nitro-ui/leases.json`. Like the build slot
-  // beside it, it decides *when* a run may start and never what is in it: no package ships
-  // either file, and no built code contains them. `example/rn-harness.config.mjs` does
-  // import two env *guards* from here (`checkEmulatorEnv`, `emulatorSerial`) - pure checks
-  // on the variables a lease exported, nothing compiled - and `scripts/__tests__/lease.test.js`
-  // ("the console port a lease owns") exercises both, which is the honest version of the
-  // claim this list rests on. One more importer reads the same kind of thing, and round 1
-  // of X30 left it out of this sentence while widening the search that proves it (see
-  // `gate-check.test.js`, which now greps all of `scripts/` and subtracts the tooling
-  // paths rather than three hand-picked directories):
-  // `scripts/real-input/android.mjs:78` takes `isReservedSerial` and `requireLeaseDevice`.
-  // It is an Android *runner* file, so unlike the harness config it
-  // is mapped to a platform half, and the question is worth answering rather than waving:
-  // these functions read `ANDROID_SERIAL`, `ANDROID_ADB_SERVER_PORT` and the reserved
-  // serial, and refuse a run that names a device its lease does not own. They decide who
-  // may be *addressed*, never what is compiled or what the app does — a wrong one turns
-  // into `gate: refused before the run`, an exit in the shell, not a different binary. The
-  // rules themselves are proven by `lease.test.js`, `lease-queue.test.js`,
-  // `lease-pool-cli.test.js` and `gate-lease-required.test.js`, and `check` is the cheapest
-  // place in the repo to learn that one of them is wrong.
+  // The device and port allocator. The harness config and the Android real-input
+  // runner import env guards from it; those decide which device a run may address,
+  // never what is compiled, so a wrong one refuses a run instead of changing a binary.
   'scripts/lease.mjs',
   'scripts/lease-core.mjs',
   // The template `doctor.mjs --setup` copies to `~/.nitro-ui/devices.json`. A device
   // run reads that copy, never this file, and neither is in the app.
   'scripts/devices.example.json',
-  // X30. The hand-in checklist as a command: it reads the ledger, the registry and
-  // the report, and runs nothing. `scripts/__tests__/task-ready.test.js` proves the
-  // rules, `check` is the cheapest place to learn one is wrong, and the claim that
-  // no device run reads these two files is a `git grep` wide - asserted in
-  // `gate-check.test.js` rather than assumed, because a wrong entry here makes a
-  // real change look like it needs no testing. Before this pair was listed, a
-  // commit touching only the checker counted as unmapped code - both platforms -
-  // and asked for two harness runs over a script no binary contains.
+  // The hand-in checklist: reads the ledger, the registry and the report, runs nothing.
   'scripts/task-ready.mjs',
   'scripts/task-ready-core.mjs',
-  // The worktree lister and the watchdog. Both read the machine (git worktrees, the
-  // lease file, free disk, `gh`, `npm view`) and neither is imported by anything a
-  // device run starts; `worktrees.mjs --prune` removes checkouts, never a file inside
-  // the one a gate is running in. `gate-check.test.js` holds that claim as a search.
+  // The worktree lister and the watchdog: nothing a device run starts imports either.
   'scripts/worktrees.mjs',
   'scripts/worktrees-core.mjs',
   'scripts/watchdog.mjs',
   'scripts/watchdog-core.mjs',
-  // The task-record retention tool: it reads git and `docs/tasks`, copies old records
-  // to the local archive and stages their removal. No device run imports it, which
-  // `gate-check.test.js` holds as a search.
+  // The task-record retention tool. No device run imports it.
   'scripts/task-records.mjs',
   'scripts/task-records-core.mjs',
-  // The README's code samples, kept in sync by `readme:check`. It sits under
-  // `example/src/`, so the directory rule would call it both platforms, but no app
-  // code imports it - tsc, ESLint, Prettier and `readme:check` are what prove it - so
-  // a README-only change used to ask for two harness runs over a file no device
-  // mounts (D3).
+  // The README's code samples. It sits under `example/src/`, which the directory
+  // rule would call both platforms, but no app code imports it.
   'example/src/readme-examples.tsx',
-  // The config that wires `eslint-rules/` (already tooling as a directory) to the
-  // files it checks. It was unmapped, which is the expensive answer: a commit that
-  // only turned a lint rule on for `scripts/` read as "touches ios + android" and
-  // asked for two harness runs over a file no build reads. Nothing compiles it -
-  // `lint` is the step that proves it, and `check` runs `lint`.
+  // Wires `eslint-rules/` to the files it checks; no build reads it.
   'eslint.config.mjs',
   '.gitignore',
   '.prettierignore',
@@ -276,16 +145,9 @@ export function requiredGatesFor({ stage, touchedPlatforms = [] }) {
  *
  * `kind` is `'tooling'` for check-only paths, `'non-code'` for anything outside
  * the code tree, `'mapped'` for a path the rules below place, and `'unmapped'`
- * for code outside them. `unmapped` matters twice over: it counts as both
- * platforms, and `need` names it, because "we did not know what this touched"
- * has to be visible rather than quietly cheap.
- *
- * Counting unmapped code as both is a deliberate deviation from "derive from
- * paths": `example/`, `patches/` and `package.json` are not in the brief's list,
- * and a ledger that quietly required nothing when a change touched the harness
- * patch or the app's `Main.tsx` would be a machine-shaped false claim - the exact
- * failure class this task exists to remove. Unknown is therefore expensive rather
- * than cheap.
+ * for code outside them. `unmapped` counts as both platforms, and `need` names
+ * it: not knowing what a change touched has to be visible and expensive, never
+ * quietly cheap.
  *
  * @param {string} file repo-relative path with forward slashes
  * @returns {{kind: 'ios'|'android'|'both'|'unmapped'|'tooling'|'non-code',
@@ -299,8 +161,6 @@ export function platformMappingFor(file) {
   if (
     clean === 'NitroUi.podspec' ||
     clean.startsWith('ios/') ||
-    // The Podfile, Podfile.lock and the Xcode project are iOS-only, exactly as
-    // `example/android/` is Android-only (X2 review N3).
     clean.startsWith('example/ios/')
   ) {
     return { kind: 'ios', platforms: ['ios'] };
@@ -308,8 +168,8 @@ export function platformMappingFor(file) {
   if (clean.startsWith('android/') || clean.startsWith('example/android/')) {
     return { kind: 'android', platforms: ['android'] };
   }
-  // The generated halves are checked before the bare `nitrogen/` prefix so each
-  // belongs to its own platform (N3); `shared` and anything unseen stays both.
+  // The generated halves are checked before the bare `nitrogen/` prefix, so each
+  // belongs to its own platform; `shared` and anything else stays both.
   if (clean.startsWith('nitrogen/generated/ios/'))
     return { kind: 'ios', platforms: ['ios'] };
   if (clean.startsWith('nitrogen/generated/android/'))
@@ -337,11 +197,9 @@ export function platformsOwningFile(file) {
 }
 
 /**
- * Which platforms a code diff touches, derived from paths (the brief's rule),
- * plus the tooling and the unmapped paths it touched.
- *
- * Docs and bench paths are not code (`isCodeFile`), which is what keeps a report
- * commit from asking for a device run.
+ * Which platforms a code diff touches, derived from paths, plus the tooling and
+ * the unmapped paths it touched. Docs and bench paths are not code (`isCodeFile`),
+ * so a docs commit asks for no device run.
  *
  * @param {string[]} paths repo-relative paths
  * @returns {{platforms: ('ios'|'android')[], unmapped: string[], tooling: string[]}}
@@ -371,12 +229,9 @@ export function platformsTouchedByPaths(paths) {
 /**
  * The per-platform digests for a set of `path -> content hash` entries.
  *
- * Each is `codeTreeDigest` over the same hash function and the same file set as
- * the full tree, restricted to the files that belong to that platform
- * (`platformsOwningFile`), so a pass keyed to `trees.ios` means "the iOS half of
- * this tree is exactly the code that ran". Shared code (`src/`, `cpp/`) is in
- * both, so a change there moves both and re-owes both - which is correct, that
- * code is in both binaries.
+ * Each is the full tree's digest restricted to the files that belong to that
+ * platform (`platformsOwningFile`). Shared code (`src/`, `cpp/`) is in both
+ * binaries, so a change there moves both digests.
  *
  * @param {Record<string, string>} entries path -> content hash
  * @returns {Record<'ios'|'android', string>}
@@ -397,11 +252,9 @@ export function platformTreesFromEntries(entries) {
 /**
  * The git invocations that say what a branch changed (used by `need`).
  *
- * `--no-renames` is load-bearing (M4): git follows renames by default and prints
- * only the destination, so `git mv ios/components/Button/Hybrid.swift bench/attic/`
- * reads as "a file appeared in bench/", and the ledger asks for no iOS gate for a
- * commit that deleted an iOS source. The same trick works by moving the file into
- * `docs/`. It is cheap to be wrong here and expensive to notice.
+ * `--no-renames` is load-bearing: git follows renames by default and prints only
+ * the destination, so moving an iOS source into `docs/` would read as a docs change
+ * and ask for no iOS gate.
  *
  * @param {string} mergeBase
  * @returns {string[][]} argument arrays for `git`
@@ -417,16 +270,11 @@ export function changedPathsGitArgs(mergeBase) {
 /**
  * One run of one gate, as it is written to the ledger.
  *
- * `tree` is the code tree the command ran against (`currentCodeTree()`), which is
- * the key every decision below reads. `head` is recorded beside it and never
- * gates anything, for the reason given in `codeTreeDigest`: a docs commit must
- * not invalidate a device run.
- *
- * `stepTimings` (v3) and `suiteTimings` (v6) are the two timing attachments, and
- * they are not the same measurement: one step of `check` runs many jest suites, and
- * one harness gate runs one runner over many suites. Both are records, not rules —
- * nothing in this file reads either, so a line without them decides exactly as it
- * used to. Neither is defaulted here: the caller passes what it read from the run.
+ * `tree` is the code tree the command ran against, the key every decision reads.
+ * It excludes docs, so a docs commit does not invalidate a device run; `head` is
+ * recorded beside it and never gates anything. `stepTimings` (the steps of
+ * `check`) and `suiteTimings` (the suites of a harness run) are records only: no
+ * decision in this file reads them.
  *
  * @returns {object} a JSON-ready line
  */
@@ -481,11 +329,8 @@ export function ledgerLineFromRun({
 
 /**
  * The per-step records on a ledger line, or `[]` for a gate that has none.
- *
- * Tolerant by shape rather than by version: a line written before X10 has no
- * `stepTimings`, and a hand-edited or half-written one must not make `table`
- * throw. Anything that is not an object with a `name` is dropped rather than
- * rendered as an empty row, because a blank duration reads like a zero-length step.
+ * Anything that is not an object with a `name` is dropped, so a hand-edited or
+ * half-written line cannot make `table` throw.
  *
  * @param {object | undefined} entry a ledger line
  * @returns {Array<{name: string, status: string, durationMs: number, exitCode: number | null, signal: string | null, reason: string | null}>}
@@ -508,12 +353,6 @@ const STEP_STATUS_LABELS = {
 /**
  * The per-step table `gate.mjs table --full` prints under the gate rows.
  *
- * It is a second table rather than extra cells on the first because it belongs to
- * one gate: `check` is the only run long enough to need it, and its row's duration
- * is the sum of this column's interesting parts. `--full` is the switch because
- * the report's gate table is the one a reviewer reads, and a step row under it
- * would bury the five device rows.
- *
  * @param {object} options
  * @param {object[]} options.entries ledger lines
  * @param {string[]} [options.gates] which gates to render, in order
@@ -533,12 +372,8 @@ export function renderStepTimings({ entries, gates = null }) {
     if (steps.length === 0) continue;
     const jobs = entry?.stepTimings?.jobs;
     const rows = steps.map((step) => {
-      // A passing step's detail is nothing. For the rest, the runner's `reason`
-      // already spells out the exit code and signal (`exit 2`, `exit null (signal
-      // SIGTERM)`, `not started - prepare failed`), so it is shown as-is and the
-      // numbers are not repeated beside it; they are the fallback when no reason
-      // arrived. Pipes are escaped because a reason is a sentence and a table cell
-      // is not a paragraph.
+      // The runner's `reason` already spells out the exit code and signal, so the
+      // numbers are only the fallback. Pipes are escaped for the table cell.
       const detail =
         step.reason != null
           ? String(step.reason)
@@ -564,9 +399,8 @@ export function renderStepTimings({ entries, gates = null }) {
 
 /**
  * Ledger text -> entries. Blank lines are skipped and an unparseable line is
- * kept as a `{ corrupt: true }` marker: a half-written line from an interrupted
- * run must show up in `status` rather than vanish, because the honest reading of
- * a ledger nobody can parse is "missing".
+ * kept as a `{ corrupt: true }` marker, so a half-written line from an interrupted
+ * run shows up in `status` rather than vanishing.
  *
  * @param {string} text
  * @returns {object[]} in append order
@@ -597,9 +431,8 @@ export function parseLedger(text) {
 /**
  * The lines for each gate name, in append order.
  *
- * Append order decides, not the timestamp: two runs in the same second on a
- * machine whose clock moved are exactly when a timestamp tie would pick the wrong
- * winner.
+ * Append order decides, not the timestamp: a tie, or a clock that moved, would
+ * let a timestamp pick the wrong winner.
  *
  * @param {object[]} entries
  * @returns {Record<string, object[]>}
@@ -633,32 +466,13 @@ export function platformOfGate(gate) {
 /**
  * Which tree a line is evidence for.
  *
- * A **device** gate is evidence about one binary, so it is keyed to that
- * platform's own half of the tree at *both* stages (X30 item 1). It used to be
- * the review rule and only the review rule: `need --for merge` asked every device
- * gate for a line whose *whole* code tree matched, so a tooling-only commit
- * landing on `main` - a test fixture, a `gate*.mjs` fix, a `.changeset` - moved
- * the whole tree under every branch gated before it and re-owed all four device
- * runs. G29+X27 paid a real ~2.5 h for exactly that over a fixture change. The
- * run being asked for would read the same binary either way: the tooling that
- * decided *when* to run it is not in it.
+ * A device gate is evidence about one binary, so it is keyed to that platform's
+ * half of the tree (`platformTreesFromEntries`) at both stages: a change inside
+ * `ios/` voids only the iOS runs, shared or unmapped code voids both, and a
+ * tooling-only commit voids neither. Any other gate, `check` above all, reads
+ * every platform's files, so it is keyed to the whole tree.
  *
- * What is not per-platform keeps the whole tree at both stages: `check` reads
- * every platform's files plus the docs, so the merge asks for one `check` on the
- * whole final tree, and a tooling change re-owns it. That is the half of the rule
- * that keeps this sound rather than merely cheap.
- *
- * The other half is how the halves are built (`platformTreesFromEntries`): each is
- * the same digest as the full tree over the same file set, restricted to the files
- * that belong to that platform. So a change inside `ios/` moves only `trees.ios`
- * and voids only the iOS runs; a change in `src/` or `cpp/` moves both and voids
- * both; and a code path the mapping does not recognise is *both* halves by
- * definition (`platformMappingFor`'s `unmapped`), which keeps "we did not know
- * what this touched" expensive instead of free. There is no third kind.
- *
- * `stage` is no longer part of the decision, and callers that still pass it are
- * not wrong: the merge bar is now the review bar plus `real-input` and a whole-tree
- * `check`, not a stricter tree.
+ * `stage` is not part of the decision; callers may still pass it.
  *
  * @param {{gate: string, stage?: string}} options
  * @returns {'ios'|'android'|'full'}
@@ -670,21 +484,12 @@ export function digestKeyFor({ gate }) {
 /**
  * Green / red / stale / missing for one line of one gate on one code tree.
  *
- * `stale` is the state the process review was about: a gate whose evidence is not
- * about this code. It is not red - nothing failed - but it is not evidence
- * either, and `need` reports it as missing with the tree it came from so nobody
- * reads it as a re-run they did not do. Two ways in:
+ * `stale` means the line is not evidence about this code, whether it passed or
+ * failed; `need` reports it as missing. Two ways in:
  *
- *   - the digest the stage asks for does not match (the classic: passed on an
- *     older tree); or
- *   - the tree moved while the run went on (`treeAfter` != `tree`, N1). Metro
- *     serves the edited JS and jest reads files lazily, so a run that started on
- *     one tree and ended on another proved neither, and a green row for it is a
- *     claim about code it did not entirely see.
- *
- * A line from another tree reads `stale` whether it passed or failed (N2): a red
- * from an older tree printing `**FAIL**` tells a reader the current code fails,
- * which it does not know.
+ *   - the digest the gate is keyed to does not match; or
+ *   - the tree moved while the run went on (`treeAfter` != `tree`). Metro serves
+ *     the edited JS and jest reads files lazily, so such a run proved neither tree.
  *
  * @param {object} options
  * @param {string} options.gate
@@ -717,8 +522,8 @@ export function gateStateFor({
   const want = key === 'full' ? tree : (trees?.[key] ?? null);
   const got =
     key === 'full' ? (entry.tree ?? null) : (entry.trees?.[key] ?? null);
-  // A v1 line (or a line from a tree with no per-platform half) has no `trees`,
-  // so it falls back to the full digest rather than reading as stale forever.
+  // A line with no `trees` falls back to the full digest rather than reading as
+  // stale forever.
   const useKey = want != null && got != null ? key : 'full';
   const useWant = useKey === 'full' ? tree : want;
   const useGot = useKey === 'full' ? (entry.tree ?? null) : got;
@@ -744,12 +549,11 @@ export function gateStateFor({
 /**
  * The row for one gate, given every line it has.
  *
- * The latest line *whose digest matches the tree being asked about* wins
- * (N2). A pass on T1 then a fail on T2 then a revert to T1 is green again, which
- * is right: the current code is the code that passed. With no matching line the
- * latest one is returned as `stale` so `status` can still name the tree it came
- * from, and a line whose tree moved mid-run is never decisive - an earlier clean
- * line on this tree is better evidence than an interrupted run.
+ * The latest line whose digest matches the tree being asked about wins: a pass on
+ * one tree, a fail on a second, then a revert to the first is green again, because
+ * the current code is the code that passed. With no matching line the latest one
+ * is returned as `stale`, so `status` can still name the tree it came from. A line
+ * whose tree moved mid-run is never decisive.
  *
  * @param {object} options
  * @param {string} options.gate
@@ -907,11 +711,7 @@ export function formatDuration(ms) {
   return `${String(minutes)} m ${String(seconds).padStart(2, '0')} s`;
 }
 
-/**
- * The counts column. `162 tests / 11 suites` reads the way the reports already
- * say it; a failing run shows the failures first, because that is the number
- * that matters in a red row.
- */
+/** The counts column: `162 tests / 11 suites`. A failing run leads with the failures. */
 export function formatCounts(counts) {
   if (counts == null || typeof counts !== 'object') return '—';
   const tests = counts.tests ?? null;
@@ -940,14 +740,9 @@ export function formatCounts(counts) {
 }
 
 /**
- * The counts a row reports (M3).
- *
- * A gate that prints one summary shows it. A gate that prints several shows its
- * *first* - jest runs before perf in `bun run check`, and 391 unit tests across
- * 23 suites is the number a reviewer uses to notice a deleted or skipped suite,
- * where "7 tests / 7 suites" from the perf step hid it. When anything failed, the
- * row shows the total across steps with the failures first, because "check FAIL"
- * beside a passing-looking count is worse than an approximate total.
+ * The counts a row reports. A gate that prints several summaries shows its first
+ * (for `check`, the unit-test run); when anything failed, it shows the total
+ * across steps instead, so a red row never sits beside a passing-looking count.
  *
  * @param {object | undefined} entry a ledger line
  * @returns {object | null}
@@ -1027,11 +822,8 @@ const STATE_LABELS = {
 };
 
 /**
- * The tree cell: which digest the row was matched on.
- *
- * A green row matched on the full tree prints the bare digest; one matched on its
- * platform's half says so, because the full digest beside it is *not* the current
- * tree and a reader has to be able to tell those apart at a glance.
+ * The tree cell: which digest the row was matched on. A row matched on its
+ * platform's half says so, because the full digest beside it is not the current tree.
  */
 function formatTreeCell(row) {
   const entry = row.entry;
@@ -1044,11 +836,9 @@ function formatTreeCell(row) {
 }
 
 /**
- * The Markdown gate table for a report.
- *
- * It is generated so the report cannot claim a gate the ledger has no line for,
- * and a row whose tree is not the current one says `stale` instead of `PASS` -
- * the review item "report claims to correct" was mostly this, written by hand.
+ * The Markdown gate table for a report. Generated, so a report cannot claim a
+ * gate the ledger has no line for, and a row whose tree is not the current one
+ * says `stale` instead of `PASS`.
  *
  * @param {object} options
  * @param {object[]} options.entries
@@ -1086,22 +876,12 @@ export function renderGateTable({
 }
 
 /**
- * Summarise the load samples a gate took, in the shape the brief asks for.
+ * Summarise the load samples a gate took. A gate is never refused for load, so
+ * this only records how loaded the machine was while it ran.
  *
- * Deliberately not `summarizeLoadSamples()` from the bench lib: that one exists
- * to decide whether a run may mint a baseline and needs a ceiling and a p90. A
- * gate row only has to say how loaded the machine was while it ran, which is
- * three numbers - and D21 means a *gate* is not load-refused the way a baseline
- * is, so importing that judgement here would be wrong.
- *
- * All three are rounded: `os.loadavg()` returns a float, and an unrounded `start`
- * was writing `"start":13.54443359375` into the committed ledger (N5).
- *
- * v5 adds `end` (X12). It is not a fourth judgement - `median` and `max` are what
- * make a row trustworthy - but "this run started under a load of 3 and finished
- * under 40" is two of the three numbers a reader of a red harness run asks for. It
- * is the last sample rather than a fresh read so
- * it is the same measurement the median was computed from.
+ * Every value is rounded, because `os.loadavg()` returns a float. `end` is the
+ * last sample rather than a fresh read, so it is the same measurement the median
+ * was computed from.
  *
  * @param {{start: number | null, samples: number[]}} options
  * @returns {{start: number | null, median: number | null, max: number | null, count: number, end: number | null}}
@@ -1138,9 +918,7 @@ export function summarizeLoad({ start = null, samples = [] }) {
 
 /**
  * The jest-style summaries a gate printed, from its log, in document order.
- *
- * `bun run check` prints several (jest, then the perf step), and which one a
- * report should quote is a decision, not an accident - see `countsForDisplay`.
+ * `bun run check` prints several.
  *
  * @param {string} text
  * @returns {{suites: object | null, tests: object | null}[]}
@@ -1186,16 +964,12 @@ export function parseTestCounts(text) {
 }
 
 /**
- * `task/X2-gate-ledger` -> `task/X2-gate-ledger.jsonl`.
+ * `task/my-branch` -> `task/my-branch.jsonl`.
  *
  * Nested rather than flattened with a separator: any character chosen to replace
- * `/` collides, because several ref characters map onto one safe one (`task/a`
- * and `task+a` are both legal refs, and so are `task?a` and `task*b`). A
- * directory per branch namespace is the shape that cannot collide, and git refs
- * are already path-safe - `git check-ref-format` forbids `..`, a leading or
- * trailing `/`, `//`, whitespace and every other shell-significant character, so
- * nothing has to be escaped. The guard below is for a caller that passes a branch
- * string that did not come from git.
+ * `/` can collide, because it is itself legal in a ref (`task/a` and `task+a`).
+ * Git refs are already path-safe, so nothing is escaped; the guard below is for a
+ * branch string that did not come from git.
  */
 export function ledgerFileName(branch) {
   const cleaned = String(branch ?? '').trim();
@@ -1218,22 +992,13 @@ export function ledgerRelativePath(branch) {
   return `${LEDGER_DIR}/${ledgerFileName(branch)}`;
 }
 
-/* --------------------------- gate log store (X12) --------------------------- */
+/* ------------------------------ gate log store ------------------------------ */
 
 /**
- * The directory of one clone's gate logs, beside the git directory the worktrees
- * of this clone share.
- *
- * `git rev-parse --git-common-dir` is the answer to "where does evidence go so
- * that removing a worktree cannot delete it": a linked worktree's own `.git`
- * directory is deleted *with* the checkout, and the common directory is not. That
- * is precisely the X12 bug — Q3 could not read the logs of the failing X3 runs
- * because the X3 worktree was already gone.
- *
- * The store lives under the common directory rather than in `~/.nitro-ui`, so it
- * is scoped to the clone (two checkouts of two forks do not mix logs) and a
- * developer who deletes the clone deletes their own logs with it, which is what
- * they expect.
+ * The directory of one clone's gate logs, inside the git directory the worktrees
+ * of this clone share. `git worktree remove` deletes a linked worktree's own git
+ * directory with the checkout and never the common one, so the logs outlive the
+ * worktree that wrote them.
  *
  * @param {string} commonDir the output of `git rev-parse --git-common-dir`
  * @returns {string}
@@ -1243,13 +1008,9 @@ export function gateLogStoreDir(commonDir) {
 }
 
 /**
- * Where one run's log goes, relative to whatever root the caller prints it from.
- *
- * `<branch>/<gate>-<started-at>.log`: keyed by branch because that is the question
- * a reader asks ("the logs of that X3 run"), and it cannot collide with another
- * branch's run of the same name at the same instant. `ledgerFileName` is reused so
- * the same guard against a branch string that is not a git ref applies here too —
- * a `../` in a branch name would otherwise write outside the store.
+ * Where one run's log goes, relative to the store: `<branch>/<gate>-<started-at>.log`.
+ * `ledgerFileName` supplies the guard against a branch string that is not a git
+ * ref: a `../` in it would otherwise write outside the store.
  *
  * @param {string} branch
  * @param {string} logName e.g. `harness+android-2026-10-28T12-00-00.000Z.log`
@@ -1260,11 +1021,7 @@ export function logRelativePath(branch, logName) {
 }
 
 /**
- * The name of one run's log file.
- *
- * Same shape as before X12 (`<gate>-<iso-time>.log`, `:` folded to `-`) so a log
- * path from an old ledger line looks like a log path, and so a reader who has used
- * this tool for a week recognises the file at a glance.
+ * The name of one run's log file: `<gate>-<iso-time>.log`, with `:` folded to `-`.
  *
  * @param {string} gate
  * @param {number} startedAt
@@ -1309,20 +1066,12 @@ export function ledgerLogCandidates(entry, options) {
 }
 
 /**
- * How many days a gate log is kept, and how much of it.
+ * How long a gate log is kept, and how much of them:
  *
- * The rule, stated because the brief asks for one and because a retention rule
- * nobody can read is a rule that gets bypassed:
- *
- *   - **35 days by mtime** — five working weeks of branches, which is longer than
- *     any task in this repo has lived, and short enough that a machine does not
- *     accumulate a year of harness transcripts;
- *   - **64 MiB total**, oldest-first, and only *after* the age rule — so a machine
- *     that ran 200 gates a day for a week loses the week's tail, not a month's worth
- *     of everything;
- *   - a log whose `startedAt` is inside `protectNewerThan` is never deleted: a run
- *     in progress is writing it, and a `wait` that loses its log mid-run is a worse
- *     bug than an over-full directory.
+ *   - 35 days by mtime;
+ *   - then 64 MiB in total, oldest first;
+ *   - a log touched inside `protectNewerThan` is never deleted, because a run in
+ *     progress may still be writing it.
  *
  * Failure logs get no exemption.
  */
@@ -1330,11 +1079,8 @@ export const LOG_RETENTION_DAYS = 35;
 export const LOG_RETENTION_MAX_BYTES = 64 * 1024 * 1024;
 
 /**
- * Which stored logs a retention sweep deletes.
- *
- * Age and size, in that order, with a floor for "just started writing": a file
- * whose mtime is inside `protectNewerThan` is not a candidate at all, because the
- * run that made it may still be appending to it.
+ * Which stored logs a retention sweep deletes: by age, then by size, and never a
+ * file whose mtime is inside `protectNewerThan`.
  *
  * @param {Array<{file: string, bytes: number, mtimeMs: number, startedAt?: number | null}>} logs
  *   every stored log, with the store's own bookkeeping merged in where available
@@ -1366,8 +1112,8 @@ export function planLogRetention(
       .sort((a, b) => Number(a.mtimeMs) - Number(b.mtimeMs))
       .map((log) => [log.file, { file: log.file, reason: 'age' }])
   );
-  // Size is measured over what survives the age rule: deleting stale files first is
-  // what makes the cap a backstop rather than a second way to lose a young log.
+  // Size is measured over what survives the age rule, so the cap is a backstop and
+  // not a second way to lose a young log.
   const survivors = (logs ?? []).filter((log) => !victims.has(log.file));
   let total = survivors.reduce((sum, log) => sum + Number(log?.bytes ?? 0), 0);
   if (total > maxBytes) {
@@ -1397,10 +1143,8 @@ export const DEVICE_CONTEXT_START =
 export const DEVICE_CONTEXT_END = 'gate: ---- end device context ----';
 
 /**
- * Splits a log into its run output and the device-context block appended to it.
- *
- * "The last 150 lines" of a log whose last 500 are logcat show no failure at all,
- * so a reader of the block, or of the run's own tail, wants them apart.
+ * Splits a log into its run output and the device-context block appended to it,
+ * so the tail of the run is not buried under the block.
  *
  * @param {string} text
  * @returns {{body: string, context: string | null}}
@@ -1430,16 +1174,9 @@ const EMULATOR_SERIAL_SHAPE = /\bemulator-\d{2,5}\b/gi;
 /**
  * Replaces every device identifier in `text` except the ones this run owns.
  *
- * Why (review N6): the device block answers some host-wide questions - which
- * simulators are booted on this Mac, what an adb error said - and their answers name
- * every device on the machine, not just the pair this task leased. Another task's
- * simulator and the maintainer's own device therefore used to be copied into a
- * committed excerpt, one identifier per line. The brief asked for the probe, so the
- * probe stays; what it must not carry home is a name it has no business publishing.
- *
- * A device's *name and state* survive ("iPhone 16 (Booted)" is the half that tells
- * you a second simulator stole focus); only the identifier - the part you type back
- * into a tool - is replaced.
+ * The device block lists every device on the machine, not just the leased pair,
+ * and a committed excerpt must not publish another task's. A device's name and
+ * state survive ("iPhone 16 (Booted)"); only the identifier is replaced.
  *
  * @param {string} text
  * @param {{udid?: string | null, serial?: string | null, device?: string | null}} own
@@ -1460,11 +1197,8 @@ export function redactForeignDeviceIds(text, own = {}) {
 }
 
 /**
- * Did this stored log belong to a run that failed?
- *
- * One place for the answer, because two callers need it and must not disagree: the
- * record that closed the run (`result`, `exitCode`), and, for a run whose record is
- * older than that field or missing altogether, the ledger line, if the caller has one.
+ * Did this stored log belong to a run that failed? Answered from the record that
+ * closed the run, and failing that from the ledger line, if the caller has one.
  *
  * @param {object | null | undefined} record the store's record for the log
  * @param {object | null | undefined} entry the ledger line for the same run
@@ -1486,11 +1220,7 @@ export function storedLogFailed(record, entry = null) {
 }
 
 /**
- * Which device a gate ran on, read from the lease environment (X1).
- *
- * The ledger records the *lease id* and the serial, not a device name, so the
- * committed evidence stays free of this machine's identifiers (D25) and still
- * answers "which device proved this".
+ * Which device a gate ran on and under which lease, read from the lease environment.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {'ios'|'android'|null} platform
@@ -1517,18 +1247,10 @@ export function deviceFromEnv(env, platform = null) {
 }
 
 /**
- * Which gates drive a device, and so which ones owe a lease (X28).
- *
- * Read off `resolveGate`'s own answer rather than off a list of names: `platform` is what claims a device and
- * pre-flights Metro, `bench` is the one gate that measures one on purpose, and a
- * `smoke:expo`/`smoke:rn-cli` run boots a device of its own (`ensure_emulator` in
- * `scripts/smoke/common.sh`) without ever setting `platform`, because the script
- * decides per `PLATFORM` at run time. `check` and `smoke:pack` build things and touch
- * nothing: they run from any shell, lease or not.
- *
- * A filtered run is a device gate exactly when its base gate is (`harness:android:
- * ColdSizing` included), which is the case the brief calls out: the filter changes
- * what the run proves, not what it boots.
+ * Which gates drive a device, and so which ones owe a lease: a gate with a
+ * `platform`, a bench, and a `smoke:expo`/`smoke:rn-cli` run, which boots a device
+ * of its own without ever setting `platform`. `check` and `smoke:pack` touch no
+ * device. A filtered run is a device gate exactly when its base gate is.
  *
  * @param {{gate?: string, platform?: string | null, bench?: boolean}} resolved
  * @returns {boolean}
@@ -1548,12 +1270,9 @@ function smokeTouchesDevice(gate) {
 /**
  * Which platform a device gate is about to drive, or null when it has not said yet.
  *
- * Read the way the runner reads it, so the gate never refuses a run the runner would
- * have accepted on other devices: a harness/real-input gate carries its platform in
- * the name, a bench only has `--platform` (`benchPlatform`, because a bench has no
- * `platform` to claim a device with), and a smoke run falls back to the `PLATFORM`
- * variable `scripts/smoke/common.sh` reads — including its default of `both`, which
- * is why "said nothing" means *both halves here*, not *nothing*.
+ * Read the way the runner reads it: a harness or real-input gate carries its
+ * platform in the name, a bench only has `--platform`, and a smoke run reads the
+ * `PLATFORM` variable, which `scripts/smoke/common.sh` defaults to `both`.
  *
  * @param {{gate?: string, platform?: string | null, bench?: boolean, benchPlatform?: string | null}} resolved
  * @param {NodeJS.ProcessEnv} [env]
@@ -1577,26 +1296,15 @@ function leaseCoversPlatform(leasePlatform, needed) {
 }
 
 /**
- * Why this device gate must not start on the lease in `env`, or `null` (X28).
+ * Why this device gate must not start on the lease in `env`, or `null`.
  *
- * On 2026-11-11 G30 ran two `real-input:android` gates from a shell with no lease
- * env. AGENTS.md already said a device gate runs under a lease; the ledger proved it
- * after the fact (`lease: null` on the line), and only the runner's own luck decided
- * which emulator got driven. This is the rule that refuses it *before* the build,
- * the Metro pre-flight, the claim and the first `adb`/`simctl` call: `NITRO_UI_LEASE_ID`
- * has to name a lease that is still live in the store, for a task and platform that
- * match this run, and holding the very devices the environment names.
+ * `NITRO_UI_LEASE_ID` has to name a lease that is still live in the store, for a
+ * task and platform that match this run, holding the very devices the environment
+ * names. The caller asks before the build, the Metro pre-flight and the first
+ * `adb`/`simctl` call, so a refused run has touched no device.
  *
- * Pure, and handed the state rather than reading `~/.nitro-ui`: `scripts/gate.mjs`
- * loads `leases.json` and `devices.json` (the same pair `lease.mjs list` prints, so
- * an override never exists — the bench host passes this check by holding an exclusive
- * lease, which is exactly the state it is in), and the test drives the decision with
- * a temporary home.
- *
- * The lease *record* is the authority, not the environment: `NITRO_UI_LEASE_TASK` and
- * the device variables are what a shell exported, and a shell can be edited. That is
- * also why a lease nobody holds any more is a refusal even when every identifier
- * around it looks right — a released lease's devices are somebody else's now.
+ * The lease record is the authority, not the environment: a shell's variables can
+ * be edited, and a released lease's devices are somebody else's now.
  *
  * @param {object} options
  * @param {NodeJS.ProcessEnv} [options.env] the run's environment
@@ -1617,9 +1325,7 @@ export function deviceGateLeaseRefusal({
 } = {}) {
   if (!isDeviceGate(resolved)) return null;
   const gate = String(resolved?.gate ?? 'device gate');
-  // Every refusal ends the same way, because every one of them is fixed by the
-  // same two commands — and a message that only says "no" is a message that gets
-  // worked around by exporting a variable by hand.
+  // Every refusal ends with the commands that fix it.
   const acquire = `Lease a device and source it:\n${ACQUIRE_HINT}`;
   const leaseId = String(env?.NITRO_UI_LEASE_ID ?? '').trim();
 
@@ -1676,9 +1382,8 @@ export function deviceGateLeaseRefusal({
 
   const needed = deviceGatePlatform(resolved, env);
   if (needed === null) {
-    // A bench with no `--platform`: live lease, live devices, and the runner
-    // refuses the run itself for the name it was not given. Nothing here can say
-    // which half to check, and inventing one is how a claim lands on the wrong device.
+    // A bench with no `--platform`: the runner refuses that run itself, and nothing
+    // here can say which half of the pair to check.
     return null;
   }
   if (!leaseCoversPlatform(lease.platform, needed)) {
@@ -1688,10 +1393,8 @@ export function deviceGateLeaseRefusal({
     ].join('\n');
   }
 
-  // Only now, with a live lease whose task and platform fit, does the pool get
-  // asked about: an unusable `devices.json` and a stale lease are both refusals, but
-  // the lease is the one the caller can fix in one command, and reading them the
-  // other way round sends somebody off to edit a pool file they did not break.
+  // The pool is asked about only once the lease fits: a stale lease is the refusal
+  // the caller can fix in one command, so it is reported first.
   if (poolProblem != null) {
     return [
       `${gate} cannot check lease ${leaseId}: ${poolProblem}. A device gate is ` +
@@ -1776,9 +1479,8 @@ function checkLeasedIosDevice({ env, gate, lease, held, acquire }) {
  * The serial is derived from the pair's console port the same way
  * `renderEnvFile` derives the one the lease exports, so a hand-set
  * `ANDROID_SERIAL` that points at a warm but unleased emulator cannot pass. The adb
- * server is checked against the pair too: AGENTS.md requires every adb command to
- * address the lease's own server, and the default server on 5037 is the
- * maintainer's.
+ * server is checked against the pair too: the default server on 5037 also sees
+ * every other device on the machine.
  */
 function checkLeasedAndroidDevice({ env, gate, lease, held, acquire }) {
   const serial = String(env?.ANDROID_SERIAL ?? '').trim();
@@ -1838,15 +1540,10 @@ function checkLeasedAndroidDevice({ env, gate, lease, held, acquire }) {
  *
  * `harness:android` plus `ColdSizing` is `harness:android:ColdSizing`, and
  * `real-input:android` plus `--control switch` is
- * `real-input:android:--control:switch`. `encodeURIComponent` per argument,
- * joined with `:`: a name a reader recognises (`ColdSizing`, `--control`) stays
- * readable, and a character that could fake a separator (`:`, a space) cannot,
- * so `x:y` as one argument cannot impersonate two arguments. It is also
- * idempotent - `gate.mjs harness:android:ColdSizing` records the same name - so
- * a recorded name can be pasted straight back as a command.
- *
- * This is M1. Before it, `gate.mjs harness:android -- ColdSizing` recorded
- * `gate: "harness:android"`, and one suite satisfied the platform gate.
+ * `real-input:android:--control:switch`. Each argument is URI-encoded, so `x:y`
+ * as one argument cannot impersonate two. The encoding is idempotent
+ * (`gate.mjs harness:android:ColdSizing` records the same name), so a recorded
+ * name can be pasted straight back as a command.
  *
  * @param {string} base e.g. `harness:android`
  * @param {string[]} [extraArgs]
@@ -1864,14 +1561,10 @@ export const USAGE_PROBE_FLAGS = ['--help', '-h'];
 /**
  * Is this command line a help probe rather than a gate run?
  *
- * `gate.mjs bench --help` used to resolve as the bench gate with a `--help` filter, launch
- * `scripts/bench/run.mjs --help` - which prints its usage and exits 2 - and append
- * `bench:--help FAIL` to the branch ledger (X16 item 3, seen in G7b's and A6b's tables). A FAIL
- * row is evidence: `table` puts it first and `status` calls the branch red, for a command
- * that measured nothing. So a probe never reaches
- * `runGate`, on either side of `--`, and in the colon-packed form too (`bench:--help`), and the
- * answer is this script's own usage - which is where "how do I spell the bench gate" is answered.
- * A runner's own flags come from running that runner directly.
+ * A probe must never run as a gate: `bench --help` would launch the runner, which
+ * prints its usage and exits 2, and record a FAIL row for a command that measured
+ * nothing. Recognised on either side of `--` and in the colon-packed form
+ * (`bench:--help`).
  *
  * @param {string} name the gate name as typed
  * @param {string[]} extraArgs every remaining argument, before or after `--`
@@ -1887,32 +1580,11 @@ export function isUsageProbe(name, extraArgs = []) {
 }
 
 /**
- * Gate name -> the command to run, where, and the name to record it under.
- *
- * These are the same commands `package.json` runs, spelled out because
- * `bun run <script>` mangles arguments that follow it and a gate name has to
- * survive an append of extra args (a single harness suite). The harness entry is
- * `scripts/harness.mjs` from `example/`, exactly as `bun --cwd example
- * harness:ios` expands to, so the Node guard and the printed command still apply.
- *
- * The returned `gate` is what the ledger records, not `argv[0]`: a run with a
- * filter is a different gate from the full one (M1), and `need` will not accept
- * it in place of one.
- *
- * @param {string} name e.g. `check`, `harness:android`, `harness:android:ColdSizing`
- * @param {string[]} [extraArgs] what came after `--`
- * @returns {{gate: string, argv: string[], cwd: 'repo'|'example',
- *   platform: 'ios'|'android'|null, bench: boolean}}
- */
-/**
  * The platform a bench run says it will drive, read out of its own arguments.
  *
- * Spelled the way `run.mjs` reads it - `flag(argv, '--platform')`, i.e. the token
- * after `--platform` - because this is only worth recording when the runner would
- * agree: a `--platform=ios` or a colon-packed `bench:--platform:ios` is a run that
- * refuses to start, and the ledger should say "no platform", the same as a `check`.
- * Anything but `ios`/`android` (absent, a typo, another flag) is null for the same
- * reason.
+ * Read the way `scripts/bench/run.mjs` reads it, as the token after `--platform`:
+ * a `--platform=ios` or a colon-packed `bench:--platform:ios` is a run the runner
+ * refuses to start, so it is null here too, like anything but `ios`/`android`.
  *
  * @param {string[]} args the bench's own arguments
  * @returns {'ios' | 'android' | null}
@@ -1924,6 +1596,19 @@ export function benchPlatformFromArgs(args = []) {
   return value === 'ios' || value === 'android' ? value : null;
 }
 
+/**
+ * Gate name -> the command to run, where, and the name to record it under.
+ *
+ * These are the commands `package.json` runs, spelled out because
+ * `bun run <script>` mangles arguments that follow it. The returned `gate` is what
+ * the ledger records: a run with a filter is a different gate from the full one,
+ * and `need` will not accept it in place of one.
+ *
+ * @param {string} name e.g. `check`, `harness:android`, `harness:android:ColdSizing`
+ * @param {string[]} [extraArgs] what came after `--`
+ * @returns {{gate: string, argv: string[], cwd: 'repo'|'example',
+ *   platform: 'ios'|'android'|null, bench: boolean}}
+ */
 export function resolveGate(name, extraArgs = []) {
   const args = [...extraArgs];
   if (name === 'check') {
@@ -1953,10 +1638,7 @@ export function resolveGate(name, extraArgs = []) {
     const suiteArgs = [...suites, ...args];
     return {
       gate: canonicalGateName(`harness:${platform}`, suiteArgs),
-      // `../scripts/` because the cwd is `example/`, exactly as `bun --cwd
-      // example harness:android` expands its own script line. A root-relative
-      // path here fails to resolve before the suite starts (found by the first
-      // real run of this file, not by a unit test).
+      // `../scripts/` because the cwd is `example/`.
       argv: [
         'node',
         '../scripts/harness.mjs',
@@ -2006,16 +1688,12 @@ export function resolveGate(name, extraArgs = []) {
       gate: canonicalGateName('bench', extraArgsForRun),
       argv: ['node', 'scripts/bench/run.mjs', ...extraArgsForRun],
       cwd: 'repo',
-      // Deliberately null: what `platform` keys is the device claim, the Metro
-      // pre-flight and the harness suite timings, none of which a bench run today.
+      // Deliberately null: `platform` keys the device claim, the Metro pre-flight
+      // and the harness suite timings, and a bench uses none of them.
       platform: null,
       bench: true,
-      // The bench's own `--platform`, for the ledger (X15 item 4). A5's iOS bench was
-      // recorded as `platform: android` with an Android serial: a bench lease covers
-      // both halves of a pair, so reading the environment answers "which devices does
-      // this task own", not "which device did this run drive". The runner refuses to
-      // start without `--platform`, so a bench that never named one has nothing to
-      // record - the environment must not fill it in.
+      // The bench's own `--platform`, for the ledger. A bench lease covers both
+      // halves of a pair, so the environment cannot say which device the run drove.
       benchPlatform: benchPlatformFromArgs(extraArgsForRun),
     };
   }
@@ -2025,10 +1703,7 @@ export function resolveGate(name, extraArgs = []) {
   );
 }
 
-/**
- * The line `need` prints for a row that is not satisfied - the part that makes
- * this usable instead of just a list of names.
- */
+/** The line `need` prints for one row, with the reason when it is not satisfied. */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
     return row.matched != null && row.matched !== 'full'
@@ -2055,39 +1730,24 @@ export function explainNeedRow(row, codeTree) {
 /** Re-exported so `gate.mjs` can build the per-platform trees from one listing. */
 export { codeTreeDigest, contentHash, isCodeFile };
 
-/* --------------------------- background gates (X9) ------------------------- */
+/* ----------------------------- background gates ---------------------------- */
 
 /**
- * The exit code `gate.mjs wait` prints when the gate is *still running* at the
- * timeout.
- *
- * Distinct from 1, which is what the gate's own failure produces: the point of
- * `wait` is that a script or an agent can act on the difference between "the gate
- * said no" and "the gate has not finished yet, keep waiting" without reading a log
- * to find out which. 13 rather than a small number because 1..2 are already taken
- * here by "failed" and "bad arguments".
+ * The exit code of `gate.mjs wait` when the gate is still running at the timeout.
+ * Distinct from the gate's own failure (1) and from bad arguments (2), so a script
+ * can tell "the gate said no" from "keep waiting" without reading a log.
  */
 export const STILL_RUNNING_EXIT = 13;
 
-/**
- * The default `wait` budget: 45 minutes. That is a `check` on a cold machine with
- * room for one harness run, and short enough that a wrong guess costs a coffee
- * rather than an hour - `--timeout-minutes` exists for the long ones.
- */
+/** The default `wait` budget; `--timeout-minutes` overrides it. */
 export const DEFAULT_WAIT_MINUTES = 45;
 
-/**
- * How often `wait` prints a progress line: once a minute, which is what makes an
- * agent's transcript readable instead of a wall of identical lines.
- */
+/** How often `wait` prints a progress line. */
 export const WAIT_PROGRESS_INTERVAL_MS = 60_000;
 
 /**
- * Where a backgrounded gate's bookkeeping lives, beside the log it is writing.
- *
- * `<gate>-<started-at>.gate.json` next to `<gate>-<started-at>.log`: the pair
- * belongs together, and `wait` finds both from the ledger rather than by scanning
- * a directory of loose state files that can outlive their meaning.
+ * Where a backgrounded gate's bookkeeping lives:
+ * `<gate>-<started-at>.gate.json`, beside `<gate>-<started-at>.log`.
  *
  * @param {string} logPath the log path already recorded in the ledger line
  */
@@ -2096,20 +1756,13 @@ export function backgroundRecordPath(logPath) {
 }
 
 /**
- * Which background records belong to *this* checkout, newest first.
+ * Which background records belong to this checkout, in the order given.
  *
- * The store is one directory shared by every worktree of the clone, so "the newest
- * record for `check`" is a question with the wrong subject once two tasks run gates
- * at the same time - which is the normal case here, not an edge one (review M1: a
- * passing run in worktree C reported worktree B's exit 7 and exited 7). Both halves
- * are compared, and for a reason: the branch alone would still let two worktrees on
- * one branch (a `git worktree add --force`, a detached pair) adopt each other's
- * runs, and the directory alone would not tell a re-run of this branch from another
- * task's run of a different one.
- *
- * A record with neither field is from before this scoping existed and matches: the
- * alternative is that `wait` loses a run that is happening right now, which is a
- * worse failure than the one being fixed.
+ * The store is shared by every worktree of the clone, so a record counts only
+ * when both its branch and its worktree match: the branch alone would let two
+ * worktrees on one branch adopt each other's runs, and the directory alone would
+ * not tell this branch's run from an earlier branch's in the same checkout. A
+ * record with neither field matches.
  *
  * @param {object[]} records every record in the store
  * @param {{branch: string | null, worktree: string | null}} own this checkout
@@ -2134,12 +1787,8 @@ export function ownBackgroundRecords(records, { branch, worktree }) {
 }
 
 /**
- * The last non-empty line of a log, which is what `wait` prints as progress.
- *
- * Trailing blank lines are skipped because a finished gate always ends with some,
- * and "the log's last line" as a progress signal means *what is it doing now* - a
- * blank says nothing. Capped so one assertion diff cannot push a progress line
- * across a terminal.
+ * The last non-empty line of a log, which is what `wait` prints as progress,
+ * capped at 200 characters.
  *
  * @param {string} text
  * @returns {string | null}
@@ -2156,13 +1805,8 @@ export function lastLogLine(text) {
 }
 
 /**
- * Whether a pid is a process that could still be *this* gate.
- *
- * A backgrounded gate killed by anything other than its own exit leaves its record
- * behind with no process to read, and `wait` must say "gone" rather than block for
- * its whole timeout on something that stopped existing. EPERM counts as alive: a
- * pid owned by another user is running, and declaring someone's gate dead because
- * we cannot signal it would report a run that has not finished as finished.
+ * Whether a pid is a process that could still be this gate. EPERM counts as
+ * alive: a pid owned by another user is running, even though it cannot be signalled.
  *
  * @param {number} pid
  * @param {(pid: number, signal?: number) => boolean} [kill]
@@ -2179,10 +1823,6 @@ export function pidMayBeRunning(pid, kill = process.kill) {
 
 /**
  * What `gate.mjs wait` should do next, given one read of the background record.
- *
- * All four outcomes in one pure function, because the interesting bugs are exactly
- * here: reporting a still-running gate as passed, or treating a record whose
- * process is gone as "still running" and burning the whole timeout on a corpse.
  *
  * `record.done` is written by the detached runner only after the ledger line is on
  * disk, so a record that exists without it means the gate is mid-run - not missing,
@@ -2247,13 +1887,9 @@ export function decideWait({
   }
 
   if (!pidAlive) {
-    // Killed hard enough never to have written `done` - or, the case that actually
-    // happens, a race where the run finished so fast the launcher's "here is my
-    // pid" write landed *after* the run's "I am done" write and resurrected the
-    // record as running. Either way the **ledger** is the source of truth: if the
-    // line is there, the gate finished and its recorded exit code is the answer.
-    // Inventing a failure or a pass from the record alone would be wrong in one
-    // direction or the other.
+    // Killed before it wrote `done`, or a run so fast that the launcher's pid write
+    // landed after the run's `done` write and overwrote it. Either way the ledger
+    // is the source of truth: a line there means the gate finished with that code.
     if (ledgerEntry != null) {
       const code = Number(
         ledgerEntry.exitCode ?? (ledgerEntry.result === 'pass' ? 0 : 1)
@@ -2272,8 +1908,6 @@ export function decideWait({
       exitCode: STILL_RUNNING_EXIT,
       message:
         `${record.gate ?? 'gate'}: pid ${String(record.pid)} is gone without recording a result or a ledger line` +
-        // Where it stopped, which is the thing a reader acts on: the log may say
-        // "Compiling Switch.swift" or nothing at all.
         (progress == null ? '' : ` (last log line: ${progress})`) +
         ' - read the log, then re-run the gate',
     };
@@ -2295,28 +1929,16 @@ export function decideWait({
 }
 
 /**
- * Which of the pids serving a Metro port belong to the run that is ending (X15 review).
+ * Which of the pids serving a Metro port belong to the run that is ending.
  *
- * Why this exists: the merge sequence is `real-input:ios` -> `real-input:android` ->
- * `harness:ios` -> `harness:android` on one lease, and `real-input`'s `ensureMetro` reuses a
- * server that is already up *by design* (`scripts/real-input/support.mjs`). So a run that
- * starts the Metro itself must stop it itself: leaving it up means the next gate in the
- * sequence pre-flights its own leftover and refuses. Attributing a listener by its
- * environment (`ps eww`, hunting for the lease id) was the other option and is not good
- * enough - `ps` truncates its env block at a width nobody controls, so a lease id past the cut
- * reads as somebody else's Metro, and the safe branch there is the leak. Process *groups* are
- * not approximated: the gate spawns its child `detached`, so the child leads a group of its
- * own, and a listener whose pgid is that group can only have been started by this run.
+ * A run that starts Metro must stop it, or the next gate on the lease finds the
+ * port busy and refuses. Ownership is decided by process group: the gate spawns
+ * its child detached, so the child leads a group of its own, and only a listener
+ * in that group was started by this run. A listener in any other group, or one the
+ * kernel cannot answer for, is left alone.
  *
- * A listener in any other group is another task's Metro, and stopping that is the X4 incident
- * this feature exists to prevent. So the rule is equality with the leader's pid - never
- * "whatever is on the port" - and a pid the kernel cannot answer for is left alone.
- *
- * The leader itself is never a target, and not because it is unimportant: the sweep runs after
- * it has exited, so a pid answering to `leaderPid` at that point has been *recycled* to some
- * unrelated process, and its group would match by accident. That is the one way this sweep
- * could kill a stranger without violating its own rule, so the leader's number is excluded
- * rather than trusted (X15 review 6c).
+ * The leader itself is never a target: the sweep runs after it has exited, so a
+ * process with its pid by then is an unrelated one that reused the number.
  *
  * @param {object} options
  * @param {Array<{pid: number, command: string}>} [options.listeners] what `lsof` found
@@ -2343,27 +1965,14 @@ export function ownMetroPids({ listeners, leaderPid, groupOf }) {
 }
 
 /**
- * Does a process holding the leased port belong to a gate that died mid-run? (X34 item 2)
+ * Does a process holding the leased port belong to a gate that died mid-run?
  *
- * The failure this answers: a `gate.mjs` is killed hard enough to run no handlers, its run's
- * bundle server keeps serving the lease's Metro port, and the *next* gate on that lease reads
- * "Metro port is served by node …" — a fact about a port, when the fact it needs is *which run*
- * left it and whether that run ever reported itself. That difference is the difference between
- * "wait for the other run" and "your predecessor died; here is its log".
- *
- * `records` are the runner sidecars (`<log>.runner.json`), written by each run's supervisor at the
- * moment the run starts and naming the process group that run leads. Attribution is therefore a
- * group question — the same kernel fact `ownMetroPids` uses — and not a guess from a command line
- * or a `ps eww` environment, which is truncated at a width nobody controls.
- *
- * A match needs all three, because each one alone is a different (innocent) story:
- *   - the listener's group is a run's group — otherwise the server is somebody else's, which is
- *     the pre-flight's ordinary refusal and none of this function's business;
- *   - that run's gate is gone — a live gate means the run is *happening*, and the right answer is
- *     to wait for it;
- *   - that run left no ledger line — a run that recorded its result is a run that finished and
- *     simply left a server up (which `stopOwnMetro` was meant to take down, but it is a *finished*
- *     run, not a death, and saying "died" about it would be a false claim in the evidence.
+ * `records` are the runner sidecars (`<log>.runner.json`), written when a run
+ * starts and naming the process group that run leads. A match needs all three:
+ *   - the listener's group is a recorded run's group (otherwise the server is
+ *     somebody else's);
+ *   - that run's gate process is gone (a live one means the run is still going);
+ *   - that run left no ledger line (a run with one finished, and did not die).
  *
  * @param {object} options
  * @param {Array<{group?: number, pid?: number, gatePid?: number, logPath?: string, gate?: string, startedAt?: number}>} records
@@ -2413,11 +2022,8 @@ export function deadGateBehindPort({
 }
 
 /**
- * Which backgrounded gates are still running, for `status`.
- *
- * A gate started with `--background` returns before it finishes, so without this
- * `status` would say "missing" for a run that is happening right now - the most
- * misleading thing it could say while someone decides whether to start it again.
+ * Which backgrounded gates are still running, so `status` does not call a run
+ * that is in progress "missing".
  *
  * @param {Array<{pid?: number, done?: boolean, gate?: string, logPath?: string, startedAt?: number}>} records
  * @param {(pid: number) => boolean} [isAlive]

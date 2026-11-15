@@ -1,9 +1,3 @@
-/**
- * TextField stories (G13). Props and events: `docs/components/text-field.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and
- * benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextField, type TextFieldHandle } from 'react-native-nitro-ui';
@@ -88,7 +82,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A field in a grey well: the field is undecorated, so the well is the container. */
 function Well({ children }: { children: React.ReactNode }) {
   const ink = useShowcaseInk();
   return (
@@ -96,11 +89,6 @@ function Well({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Every public prop on the Controls panel. Typing moves a local copy of `value`
- * (so the field feels alive) and reports to the Actions panel; moving the `value`
- * row writes the field.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onChangeText, value, ...props }) {
     const [current, setCurrent] = useState(value ?? '');
@@ -130,7 +118,6 @@ export const Playground: Story = {
   },
 };
 
-/** The field's looks, side by side: the README's screenshot. */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -168,7 +155,6 @@ export const States: Story = {
   ),
 };
 
-/** The controlled contract, a refused edit, a cap, and `ref.focus()`. */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const ink = useShowcaseInk();
@@ -215,7 +201,6 @@ export const Controlled: Story = {
   },
 };
 
-/** Width is the parent's; height is one line, or the text at that width. */
 export const Sizing: Story = {
   render: () => (
     <Showcase>

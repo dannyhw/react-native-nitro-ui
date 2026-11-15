@@ -1,11 +1,10 @@
 # nitro-ui example app
 
 The example app of `react-native-nitro-ui`: a bare React Native app (React
-Native CLI, new architecture) with one tab per component — Switch, Slider,
-Button, Progress, SegmentedControl, DatePicker, Picker, Menu and Host — in
-`src/App.tsx` and the `src/*Screen.tsx` files. It is also the app the
-on-device tests run in (`__tests__/*.harness.tsx`, through
-`react-native-harness`) and a Storybook showcase (below).
+Native CLI, new architecture) with one tab per component, in `src/App.tsx` and
+the `src/*Screen.tsx` files. It is also the app the on-device tests run in
+(`__tests__/*.harness.tsx`, through `react-native-harness`) and a Storybook
+showcase (below).
 
 It shares the repo root's bun install. Run its scripts from this directory with
 `bun run …`, or from the repo root with `bun run example <script>`. See
@@ -37,7 +36,7 @@ instead — see [`rn-harness.config.mjs`](rn-harness.config.mjs).
 
 # Storybook
 
-The example app doubles as a tester / showcase app built on [React Native
+The example app is also a showcase built on [React Native
 Storybook](https://storybook.js.org/docs/react-native/intro): one story file per
 component under [`src/stories/`](src/stories), configured by
 [`.rnstorybook/`](.rnstorybook).
@@ -69,8 +68,7 @@ scripts set is read by `withStorybook` in `metro.config.js`, and the inline
   relative to the Metro process, so start it from this directory.
 - **Without the variable `withStorybook` is a strict no-op** - no resolver hook,
   no generated file, no Storybook module in the bundle at all. The app, the
-  Harness tests and the real-input runner therefore bundle exactly what they
-  bundled before Storybook existed.
+  Harness tests and the real-input runner bundle no Storybook code.
 - **Stories** are CSF3 (`Meta` / `StoryObj`) and typecheck against the real
   component props. Each control has a `Playground` story whose Controls panel
   carries every public prop, plus showcase stories for its variants, sizes,
@@ -80,7 +78,7 @@ scripts set is read by `withStorybook` in `metro.config.js`, and the inline
   SegmentedControl, Picker and DatePicker whose menu and dialog open from it.
   Events log to the Actions panel.
 - **`storybook.requires.ts` is generated** (by the `withStorybook` Metro wrapper,
-  or `bun run storybook:generate`) and is gitignored, so it is not reviewed.
+  or `bun run storybook:generate`) and is gitignored.
 - **Adding a story file needs a Metro restart**: the generated file globs
   `src/stories` with `require.context`, and a running server keeps its existing
   module map.

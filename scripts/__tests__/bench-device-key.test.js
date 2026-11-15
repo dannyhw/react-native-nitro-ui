@@ -1,19 +1,3 @@
-/**
- * A simulator's device key comes from its hardware type, not its name.
- *
- * The device key is how a run says *what it measured on*, on the results file, in the
- * report header and on the `device:` line of a release comparison - the two sides of a
- * comparison are only the same measurement if the key is the same. A key that describes
- * what a simulator was *named* rather than what it *is* breaks that quietly: the lease
- * pool's pair-a is an iPhone 17 simulator named `nitro-ui A`, and by name that keys as
- * `ios27-sim-nitrouia` - a key no canonical device has, and one D9 never contemplated. The fixture below keeps the two
- * sources deliberately apart (`nitro-ui A` vs `…iPhone-17`): a derivation that
- * reads the wrong one produces a visibly wrong key, not an accidental match.
- *
- * The pure derivation lives in `devices.mjs` (no `import.meta`, no process calls
- * at module scope), so this needs no simulator and no lease.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -22,7 +6,10 @@ import {
   iosDeviceKey,
 } from '../bench/devices.mjs';
 
-/** An iPhone 17 simulator under a lease-pool name, as `simctl list` reports it. */
+/**
+ * An iPhone 17 simulator under an unrelated name, as `simctl list` reports it. Name and
+ * type differ, so a key derived from the wrong one is visibly wrong.
+ */
 const PAIR_A = {
   name: 'nitro-ui A',
   deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17',
@@ -30,12 +17,8 @@ const PAIR_A = {
 
 describe('the iOS device key', () => {
   it('classes a leased simulator by its hardware type, not its lease name', () => {
-    // The name says nothing a device key can use; the type identifier says
-    // exactly the D9 class.
     expect(iosDeviceClassName(PAIR_A)).toBe('iphone17');
     expect(iosDeviceKey('27.0', PAIR_A)).toBe('ios27-sim-iphone17');
-    // The wrong source is visible, not silent: the name's class is a different
-    // string entirely, so reading it cannot coincidentally match.
     expect(deviceClassName(PAIR_A.name)).toBe('nitrouia');
     expect(iosDeviceKey('27.0', PAIR_A)).not.toBe(
       `ios27-sim-${deviceClassName(PAIR_A.name)}`
@@ -43,7 +26,6 @@ describe('the iOS device key', () => {
   });
 
   it('classes the other lease names by the same rule', () => {
-    // pair-b: an iPhone Air named `nitro-ui B`.
     expect(
       iosDeviceKey('27.0', {
         name: 'nitro-ui B',

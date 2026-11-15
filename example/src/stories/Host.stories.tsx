@@ -1,15 +1,3 @@
-/**
- * Host stories (H1, H2a, H2b). What it is and what it refuses:
- * `docs/components/host.md`.
- *
- * The story is the comparison, because that is the only thing a Host changes: the
- * same controls, drawn by one composition or by N of them. `style.height` on the
- * Host is not decoration — a hosted control reports no size, so the box is the
- * height the app gives it (D24).
- *
- * `Popups` is the H2b story: all seven controls in one Host, including the three
- * that open a window of their own.
- */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -27,10 +15,9 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 
 import { Column, Note, Showcase } from './showcase';
 
-/** Switches per side. Enough to be a batch, few enough to fit the device. */
 const ROWS = 8;
 
-/** The pitch a hosted `Switch` draws at — the engine's box for that configuration. */
+/** The height a hosted `Switch` row draws at on Android, in dp. */
 const ROW = 48;
 
 const meta = {
@@ -45,13 +32,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Hosted and unhosted, side by side, same count.
- *
- * The two columns look identical on purpose — that is the trade: nothing about the
- * control changes, only who composes it. On iOS both sides are ordinary React
- * Native views, because a Host is a passthrough there.
- */
+/** On iOS both columns are ordinary views: a Host is a passthrough there. */
 export const HostedVsNot: Story = {
   render: function HostedVsNotStory() {
     const [events, setEvents] = useState(0);
@@ -93,13 +74,6 @@ export const HostedVsNot: Story = {
   },
 };
 
-/**
- * The same batch, rebuilt: what a screen does when a settings page closes and opens.
- *
- * `Rebuild` unmounts the tree and mounts it again, which is the loop the leak gate
- * measures (`example/__tests__/MountChurn.android.harness.tsx`) — on a screen where it is a
- * button rather than a number.
- */
 export const Churn: Story = {
   render: function ChurnStory() {
     const [generation, setGeneration] = useState(0);
@@ -132,14 +106,6 @@ export const Churn: Story = {
   },
 };
 
-/**
- * Four kinds of control, one composition (H2a).
- *
- * A `Switch`, a `Slider`, both `Progress` variants and a `Button` in one `Column`,
- * which is where the per-control sizing rule shows itself: the Slider stretches to
- * the Host's width, the Button and the circular indicator keep their own width at the
- * leading edge, and none of them was asked how big it is.
- */
 export const Mixed: Story = {
   render: function MixedStory() {
     const [on, setOn] = useState(false);
@@ -182,15 +148,6 @@ export const Mixed: Story = {
   },
 };
 
-/**
- * All seven controls, one composition (H2b).
- *
- * The three popup/dialog controls join the four from H1 and H2a: the `SegmentedControl`
- * draws in the column like any other row, while the `Picker`'s menu and the
- * `DatePicker`'s dialog are windows that belong to *this* composition. Open either one
- * and it sits under the row the Host drew; close it with the outside tap, the back
- * gesture or the row itself, and the Host keeps drawing the rest.
- */
 export const Popups: Story = {
   render: function PopupsStory() {
     const [segmented, setSegmented] = useState(1);
@@ -257,11 +214,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   host: { width: '100%', height: ROWS * ROW },
-  // Four kinds of control draw their own heights, and RN is not told any of them, so
-  // this is room rather than a measurement (D24). A Host that is too short clips.
+  // Hosted controls report no size, so these heights are room, not a measurement.
+  // A Host that is too short clips its last rows.
   mixedHost: { width: '100%', height: 280 },
-  // Seven rows, none of which told RN how tall it draws (D24): room, not a
-  // measurement. A Host that is too short clips its last rows.
   popupHost: { width: '100%', height: 420 },
   link: { color: '#3b82f6', paddingVertical: 6 },
 });

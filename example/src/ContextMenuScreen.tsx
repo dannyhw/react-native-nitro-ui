@@ -1,12 +1,6 @@
 /**
- * The ContextMenu tab (G16): a message row that opens a menu on a long press, and the
- * fixtures real input reads (`testRealInputContextMenu` in `RealInputTests.swift`,
- * `CHECKS['context-menu']` in `scripts/real-input/android.mjs`).
- *
- * The echoes are React's own counters, in a fixed header *outside* the ScrollView: a
- * scrolled echo leaves the accessibility tree, and an echo that grows would move every
- * ContextMenu below it - which closes an open Android menu (the layout-move rule), so
- * each line has a fixed height.
+ * The counters sit in a fixed-height header outside the ScrollView: a scrolled echo leaves
+ * the accessibility tree, and a layout move would close an open menu on Android.
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -40,9 +34,8 @@ const MESSAGE_GROUP: MenuGroup = {
     },
   ],
 };
-// Row titles no text on the screen repeats: iOS reads an open menu's rows from the same
-// accessibility tree as the page behind it, so a row called "Outer" would match the
-// `<Text>Outer</Text>` below whether or not any menu is up.
+// Row titles that no text on the screen repeats: iOS reads an open menu's rows from the
+// same accessibility tree as the page behind it.
 const OUTER_GROUP: MenuGroup = {
   actions: [{ id: 'outer', title: 'Outer action' }],
 };

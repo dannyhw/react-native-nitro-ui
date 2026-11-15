@@ -27,13 +27,9 @@ import type { BenchImplementation, BenchPlan, BenchRecord } from './types';
 type Phase = 'idle' | 'running' | 'done' | 'skipped';
 
 /**
- * Benchmark driver screen.
- *
- * One process runs exactly one (scenario, implementation, N) plan, unattended:
- * the runner launches us with `-benchPlan` / a `benchPlan` Intent extra, we
- * settle, loop, write NDJSON into the app container, echo it through
- * `NITRO_BENCH` logs as a fallback, and sit there until the runner kills us for
- * the next launch. Release build, so there is no Metro and no dev menu.
+ * Benchmark driver screen. One process runs exactly one (scenario,
+ * implementation, N) plan from its launch arguments, unattended: it writes
+ * NDJSON into the app container and echoes it through `NITRO_BENCH` logs.
  */
 export function BenchApp() {
   const plan = useMemo(
@@ -81,9 +77,8 @@ function BenchRunner({
   const [count, setCount] = useState(0);
   const [value, setValue] = useState(false);
   /**
-   * Bumped by every `commit`, so a plan step that happens to re-apply the same
-   * `n`/`value` still produces a real React commit instead of bailing out and
-   * leaving the caller waiting forever.
+   * Bumped by every `commit`, so a plan step that re-applies the same
+   * `n`/`value` still produces a React commit instead of bailing out.
    */
   const [, setNonce] = useState(0);
 
@@ -154,10 +149,8 @@ function BenchRunner({
         return;
       }
 
-      // An arm that implements some components and not others (as T16's
-      // `nitro-ui-host` arm once was, Switch only) must be *said* to be absent on the rest, not
-      // launch and render an empty tree: zero controls still mounts fast, and a fast
-      // mount of nothing is exactly the kind of number a table should not contain.
+      // An implementation that lacks this component is recorded as skipped: an
+      // empty tree would still mount, and fast.
       if (
         implementation.components !== null &&
         !implementation.components.includes(plan.component)
@@ -200,9 +193,6 @@ function BenchRunner({
         drainPerfMarks: wantsMarks ? implementation.drainPerfMarks : null,
       };
 
-      // The component is not part of this switch: every scenario is the same
-      // sequence of commits, and which control a commit mounts is the arm's
-      // business (`BenchListProps.component`).
       switch (plan.action) {
         case 'mount':
           await runMountScenario(engine, plan, 0);
@@ -262,11 +252,7 @@ function BenchRunner({
         {`NITRO_BENCH ${plan.scenario} ${plan.implementation} n=${String(plan.n)} ${phase}`}
       </Text>
       {/* No `React.Profiler` wrapper: it only reports when React is built with
-          `__PROFILE__`, so in the release build the bench uses it would always
-          read 0 ms and the report would print a number nobody asked for. The
-          React-side cost is measured directly instead - `jsCommitNs` brackets
-          the commit, and `ReactFabric-profiling` can be aliased in
-          bench/metro.config.js by whoever wants that metric for real. */}
+          `__PROFILE__`, so in a release build it would always read 0 ms. */}
       <List
         n={count}
         value={value}
@@ -282,6 +268,5 @@ function BenchRunner({
 const styles = StyleSheet.create({
   idle: { flex: 1, padding: 16 },
   screen: { flex: 1, padding: 4 },
-  // Keeps React from unmounting the status text while the list grows large.
   spacer: { height: 1 },
 });

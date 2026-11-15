@@ -1,44 +1,9 @@
 /**
- * The release comparison: measure a git ref and the working tree in one session.
+ * The release comparison: measures a git ref and the working tree in one session,
+ * alternating installs of the two bench apps on one device.
  *
  *   bun bench --platform ios --compare-release            # newest release tag
  *   bun bench --platform ios --compare-release v0.9.0     # an explicit ref
- *
- * The question is "is this slower than the last release?", and the only answer that
- * means anything on a simulator or emulator is a *paired* one: two library versions,
- * one device, one session, alternating. Absolute milliseconds move with whatever else
- * the host is doing (D15), and a committed baseline from another day measures a
- * different machine (X36 removed the committed baselines for that reason).
- *
- * ## How the older ref is measured
- *
- * The ref is extracted into a second checkout outside the repository
- * (`~/.nitro-ui/bench-base/<repo>/<tag>/`), `bun install` runs there, and its **own**
- * `scripts/bench/build.mjs` builds its **own** bench app. That is the whole trick: the base side is the app the last release shipped
- * with, parsed and measured by the code that release contained, so a plan format, a
- * waiting rule or an arm that changed since then cannot make the base side lie about
- * a version it never ran.
- *
- * Both apps are installed on the device under the same identifier, so only one is
- * installed at a time. The session therefore runs in *launch rounds*: for launch N of
- * every cell, the runner installs one side, drives its launches, then installs the
- * other side for the next round. The order per round is the same ABBA the arms use
- * (`sideOrderForRound`), so neither side is always measured first in a round and the
- * host drift inside a session is shared. The cost is one install per side switch (6
- * installs for a 4-launch plan - not yet timed on a device) and one extra app build.
- *
- * ## What is compared
- *
- * Cell keys (`mount.switch:nitro-ui:50`). A cell only the head knows about is reported
- * as `not measured in base` - a new component has no release number to be slower than -
- * and a cell only the base knows about is measured and not gated. The gate itself is
- * `gate()` in `lib.mjs`: the same launch-paired ratio to `rn-core` on each side, the
- * ratio of those ratios, over 1.20 with a CI excluding 1.05 on a cell that was quiet
- * inside its own run (D9).
- *
- * The pure half (`newestReleaseTag`, `planComparison`, `sideOrderForRound`) is what the
- * unit tests read; the gatherer below (`prepareBaseCheckout`, `readBaseSchedule`) is
- * the part that touches git, bun and a build.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -48,14 +13,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /**
- * Where a base-ref checkout lives: `~/.nitro-ui/bench-base/<repo>/<ref>` by default,
- * `NITRO_UI_BENCH_BASE_DIR` to move it.
- *
- * Deliberately *outside* the checkout. A second copy of the repository inside it would
- * be walked by eslint, `tsc`, jest and every `git ls-files`-driven check in `check`, and
- * a stale copy of the library would be found by tools looking for the current one. The
- * directory is a cache, not an artifact: deleting it costs one extraction, one install
- * and one build.
+ * Overrides where base-ref checkouts live (`~/.nitro-ui/bench-base/<repo>/<ref>` by
+ * default). They stay outside the repository, where lint, typecheck and jest would
+ * otherwise walk a second copy of it.
  */
 export const BASE_REF_DIR_ENV = 'NITRO_UI_BENCH_BASE_DIR';
 
@@ -72,10 +32,7 @@ export function baseRefRoot({ repoRoot, env = process.env }) {
   );
 }
 
-/**
- * One directory per ref, reused across runs: the second release comparison of a week
- * costs a build at most, not an extraction and an install as well.
- */
+/** One directory per ref, reused across runs. */
 export function baseRefDir({ repoRoot, ref, env = process.env }) {
   return path.join(
     baseRefRoot({ repoRoot, env }),
@@ -87,16 +44,10 @@ export function baseRefDir({ repoRoot, ref, env = process.env }) {
 export const RELEASE_TAG_PATTERN = /^v\d+\.\d+\.\d+$/;
 
 /**
- * The newest release tag that is worth comparing against.
- *
- * `tags` arrives in git's `--sort=-creatordate` order, which is *when the tag was
- * made*, and that is the answer wanted: a patch released later on an older line
- * (`v0.9.1` after `v0.10.0`) is the thing the next release must not regress against.
- * A lexical or numeric sort of the names would pick a different tag, so the order is
- * the input's and this function only filters.
- *
- * A tag that points at the commit we are standing on is skipped: measuring a tree
- * against itself produces a 1.00 everywhere and a green light that measured nothing.
+ * The newest release tag worth comparing against. `tags` must arrive newest-created
+ * first (git's `--sort=-creatordate`), and that order is kept rather than re-sorted by
+ * version: a patch released later on an older line is the one to compare against.
+ * A tag at `headSha` is skipped, because a tree compared with itself measures nothing.
  *
  * @param {{ tags: string[], shaOfTag?: Record<string, string | null>, headSha?: string | null }} input
  * @returns {{ ref: string | null, sha: string | null, skipped: string[], problem: string | null }}
@@ -124,11 +75,8 @@ export function newestReleaseTag({ tags, shaOfTag = {}, headSha = null }) {
 }
 
 /**
- * Which side runs first in a launch round: ABBA over four rounds, like the arms inside
- * a launch (docs/architecture/benchmarks.md "Protocol"). Over four rounds each side is
- * first twice and last twice, which is the whole reason the order is not "base then
- * head" - a host that warms up or cools down across a session would otherwise show up
- * as a difference between the two library versions.
+ * Which side runs first in a launch round: ABBA over four rounds, so each side is
+ * first twice and host drift across the session is shared by both.
  *
  * @param {number} launch 0-based launch index
  * @returns {['base' | 'head', 'base' | 'head']}
@@ -285,8 +233,7 @@ export function planComparison({
 }
 
 /**
- * The plan as text - what `--dry-run --compare-release` prints, and what the live run
- * prints before it starts, so a two-hour session can be read before it is paid for.
+ * The plan as text, printed by `--dry-run --compare-release` and before a live run.
  *
  * @param {{ plan: object, deviceKey: string | null }} input
  * @returns {string[]}
@@ -347,12 +294,8 @@ export function comparisonOutcome({
 /* --------------------------------- effects -------------------------------- */
 
 /**
- * Extract `ref` into its own directory and install its dependencies.
- *
- * `git archive` rather than `git worktree add`: a worktree registers itself in the
- * clone's metadata, where another task's `worktrees.mjs --prune` could reach it, and
- * nothing about a bench base needs to be a branch. The extraction is read-only with
- * respect to the repository.
+ * Extract `ref` into its own directory. `git archive` rather than `git worktree add`:
+ * a worktree registers itself in the clone's metadata, where a prune could reach it.
  *
  * @param {{ repoRoot: string, baseDir: string, ref: string, quiet?: boolean }} input
  * @returns {{ baseDir: string, reused: boolean }}
@@ -384,9 +327,8 @@ export function extractBaseRef({ repoRoot, baseDir, ref }) {
 }
 
 /**
- * Install the extracted ref's own dependencies. Only a build needs this - reading the
- * ref's plan does not, because `scripts/bench/lib.mjs` is dependency-free, which is what
- * lets `--dry-run` print a two-sided plan without installing anything.
+ * Install the extracted ref's own dependencies. Only a build needs this: reading the
+ * ref's plan does not, because `scripts/bench/lib.mjs` is dependency-free.
  */
 export function installBaseDependencies({ baseDir, quiet = false }) {
   if (fs.existsSync(path.join(baseDir, 'node_modules'))) {
@@ -400,11 +342,8 @@ export function installBaseDependencies({ baseDir, quiet = false }) {
 }
 
 /**
- * Ask a checkout's own module for an answer, as JSON on stdout.
- *
- * Used for both halves of the base side - its `build.mjs` builds the app, and its
- * `lib.mjs` says what its plan measures - because the base side must be described by
- * the code that release contained, not by today's tables.
+ * Ask a checkout's own module for an answer, as JSON on stdout. The base side must be
+ * described by the code that release contained.
  */
 function askCheckout({ baseDir, module, exportName, args = [] }) {
   const modulePath = pathToFileURL(path.join(baseDir, module)).href;
@@ -428,11 +367,8 @@ function askCheckout({ baseDir, module, exportName, args = [] }) {
 }
 
 /**
- * The base checkout's own schedule for the same request.
- *
- * Anything the base plan does not know about (a component added since, an option that
- * did not exist) comes back as a warning or a smaller schedule: the comparison then
- * covers the cells both sides can measure, which is the honest subset.
+ * The base checkout's own schedule for the same request. What the base plan does not
+ * know about comes back as a warning or a smaller schedule.
  *
  * @returns {{ schedule: object[] | null, problem: string | null }}
  */
@@ -483,12 +419,6 @@ export function readBaseSchedule({
   }
 }
 
-/**
- * Build the base side's bench app with the base checkout's own build script, then ask
- * that script where the artifact and its app identifier are.
- *
- * @returns {{ artifact: object, problem: null } | { artifact: null, problem: string }}
- */
 /**
  * Where an already-built base artifact is, without building it (`--skip-build`).
  */

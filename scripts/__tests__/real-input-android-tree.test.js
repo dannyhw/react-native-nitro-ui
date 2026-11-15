@@ -1,21 +1,3 @@
-/**
- * A hosted Switch's own state, read out of a `uiautomator dump`.
- *
- * `nativeChecked` is M3's Android half: it is what lets `pressUntil` tell "the
- * OS dropped the touch" from "the control changed and the change event never
- * reached JS". Both of its failure modes are silent. Return `null` where a value
- * exists and every retry gets blamed on delivery, which is the behaviour this
- * whole change exists to stop. Pick the wrong node and it reads somebody else's
- * state, which is worse than reading nothing because it is *confidently* wrong -
- * it can call a delivered touch a dropped one.
- *
- * The fixtures are the real shapes, measured in a dump of the running app: the
- * labelled node is `checkable="false"` at `[901,759][1038,843]` and the node that
- * holds the value is its parent, `checkable="true"` at `[901,738][1038,864]`. The
- * library's `accessibilityLabel` lands on the child, so reading the labelled node
- * itself answers "off" forever.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
@@ -26,11 +8,8 @@ import {
 } from '../real-input/android-tree.mjs';
 
 /**
- * A node shaped like the ones in a real dump.
- *
- * `bounds` is what `parseHierarchy` produces, so the fixture is built through the
- * real parser rather than by hand: a hand-rolled object that gets `width` wrong
- * would test the helper against a shape the code never sees.
+ * A node shaped like the ones in a real dump, built through the real parser so
+ * its `bounds` have the shape the code sees.
  */
 function node({ desc = '', checkable = 'false', checked = 'false', bounds }) {
   return {
@@ -46,7 +25,10 @@ function node({ desc = '', checkable = 'false', checked = 'false', bounds }) {
   };
 }
 
-/** The real pair, as measured: labelled child inside a checkable parent. */
+/**
+ * As in a real dump: the accessibility label lands on a child that is not
+ * checkable, and its checkable parent holds the value.
+ */
 const SWITCH_ON = [
   node({ bounds: '[0,0][1080,2424]' }),
   node({ checkable: 'true', checked: 'true', bounds: '[901,738][1038,864]' }),
@@ -65,11 +47,7 @@ describe('real-input Android native state', () => {
   });
 
   it('refuses a checkable box elsewhere on the screen', () => {
-    // The screen the real-input suite runs on has eight checkable Switches. A
-    // helper that took "the first checkable node in document order" - which is
-    // what reading the flat dump backwards does - would answer with whichever one
-    // happens to be first, and the M3 guard would then be comparing one control's
-    // state against another control's echo.
+    // The first checkable node in document order belongs to another control.
     const tree = [
       node({ checkable: 'true', checked: 'true', bounds: '[80,400][206,526]' }),
       node({
@@ -115,8 +93,7 @@ describe('real-input Android native state', () => {
 
   it('ignores a labelled node with no box', () => {
     // A node scrolled out of the viewport keeps its `content-desc` and loses its
-    // height. Matching it would read the state of a control no tap could reach,
-    // while `requireControlOnScreen` is separately refusing to press it.
+    // height.
     const tree = [
       node({
         checkable: 'true',
@@ -131,9 +108,8 @@ describe('real-input Android native state', () => {
 });
 
 /**
- * `nativeEnabled`, against the shape measured on G12's Chip screen: the disabled
- * chip's `enabled="false"` is on its clickable 48 dp touch target, and the node
- * with the label inside it says `enabled="true"`.
+ * A chip in a real dump: a disabled chip's `enabled="false"` is on its clickable
+ * 48 dp touch target, and the labelled node inside it says `enabled="true"`.
  */
 function chipNode({
   desc = '',
@@ -173,7 +149,6 @@ describe('real-input Android enabled state', () => {
   });
 
   it('does not read the labelled node itself, which says enabled either way', () => {
-    // The measured trap: the labelled node is `enabled="true"` on a disabled chip.
     const labelled = DISABLED_CHIP[2];
     expect(labelled.enabled).toBe('true');
     expect(nativeEnabled(DISABLED_CHIP, 'Real-input disabled chip')).not.toBe(
@@ -193,17 +168,9 @@ describe('real-input Android enabled state', () => {
 });
 
 /**
- * `tightestFlaggedNode`, against the shape measured on G20's ButtonGroup screen:
- * Material merges the *row*, then draws each item as its own box (the one that
- * carries `clickable`, and for a toggle `checkable`/`checked`), the title as a
- * separate `TextView` inside it, and Compose's `Role.Checkbox` decoration as a third
- * node between the two. `real-input`'s item search starts from the title, because
- * that is the only thing in the dump that says which item it means.
- *
- * The three nodes are deliberately the same shape apart from the flags: a rule that
- * took the first node in document order, the loosest container, or the named node
- * itself would each pick one of the decoys, and the `ButtonGroup` check would then
- * report a checked toggle as unchecked and a disabled item as enabled.
+ * A ButtonGroup item in a real dump: the item's own box carries `clickable` (and
+ * for a toggle `checkable`/`checked`), its title is a separate `TextView` inside
+ * it, and Compose's `Role.Checkbox` decoration is a third node between the two.
  */
 function groupNode({
   text = '',
@@ -221,13 +188,10 @@ function groupNode({
   )[0];
 }
 
-/** The `Bold` toggle item of "Real-input formatting toggles", as measured. */
+/** A `Bold` toggle item, inside a decoy row. */
 const TOGGLE_ITEM = [
   groupNode({ bounds: '[0,0][1080,2424]' }),
-  // A row that *is* clickable, and answers for the whole group: the loosest box that
-  // contains the title, and the wrong answer to both questions below. The real row is
-  // not clickable, but a rule that picked the loosest container cannot tell the two
-  // screens apart, and the fixture must be able to.
+  // A decoy: a clickable row, the loosest box that contains the title.
   groupNode({
     clickable: 'true',
     checkable: 'true',
@@ -267,8 +231,8 @@ describe('real-input Android container lookup', () => {
   });
 
   it('carries the disabled answer out of the item, where it lives', () => {
-    // The measured trap, one rung smaller than the Chip's: the title of a disabled
-    // item says `enabled="true"` and the item's own box says `enabled="false"`.
+    // The title of a disabled item says `enabled="true"`; the item's own box
+    // says `enabled="false"`.
     const disabled = TOGGLE_ITEM.map((n, i) =>
       i === 2 ? { ...n, checked: 'false', enabled: 'false' } : n
     );
@@ -279,8 +243,7 @@ describe('real-input Android container lookup', () => {
   });
 
   it('says null rather than naming somebody else', () => {
-    // A title with no clickable box around it is not an item a reader can act on,
-    // and `itemOf` aborts on that reading — so the helper must not answer.
+    // A title with no clickable box around it is not an item a reader can act on.
     expect(
       tightestFlaggedNode(
         [TOGGLE_ITEM[0], TOGGLE_ITEM[4]],

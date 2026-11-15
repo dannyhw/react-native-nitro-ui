@@ -1,23 +1,6 @@
-/**
- * The stranded-Modal hazard (DECISIONS D35 item 5), in an app instance of its own.
- *
- * React Native closes a `Modal` by dismissing *its own* controller. A sheet presented in
- * that controller's chain is what UIKit dismisses instead, and the `Modal`'s host stays
- * over the app for good (G11's finding, reproduced by S2). D35's rule avoids it: a
- * BottomSheet presents in a window of its own whenever an RN `Modal` is on top.
- *
- * This file closes the Modal *while the sheet is up* - the exact move that strands it.
- * If the rule ever regresses, RN's host is left over the app and every later file in
- * the same process lays out under it (S2: 15 files at `0 x 0`), so this file must never
- * run in the shared harness process. `example/jest.harness.config.mjs` keeps
- * `__tests__/isolated/` out of the shared run; run it alone with
- *
- *   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- BottomSheetModalHazard
- *
- * Android has no chain to strand - Material's sheet is a `Dialog` window, and so is the
- * Modal - so there the same moves pin the other half: the Modal closing under the sheet
- * leaves the sheet up, focused and unreported.
- */
+// Runs in an app instance of its own, never in the shared harness process: if a
+// Modal's host is ever stranded over the app, every later file lays out under it.
+//   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- BottomSheetModalHazard
 import { useState } from 'react';
 import { Modal, Platform, Text, View } from 'react-native';
 import {
@@ -74,11 +57,8 @@ async function waitForReport(
   }
 }
 
-/**
- * Waits until the event log holds at least `count` events, or `timeoutMs` passes, then
- * leaves 200 ms for anything extra to land. A close's `onDismiss` reaches JS a hop after
- * the report that already says `live=0`, so the log read straight after it can be empty.
- */
+// A close's `onDismiss` reaches JS a hop after the report that already says `live=0`,
+// so wait for the events themselves, then leave 200 ms for anything extra to land.
 async function waitForEventCount(
   count: number,
   timeoutMs = 3000
@@ -98,11 +78,6 @@ const up = (report: Report) =>
     ? report.onScreen === '1'
     : report.sheetValue !== 'none' && report.sheetValue !== 'Hidden');
 
-/**
- * A screen with a BottomSheet and an RN `Modal`. `inside` puts the sheet in the Modal's
- * content; otherwise the sheet's view is on the screen *under* the Modal, which is the
- * case where only D35's rule - not the view's own place - keeps it out of the chain.
- */
 function Screen({ inside }: { inside: boolean }) {
   const [modal, setModal] = useState(true);
   const [sheet, setSheet] = useState(false);
@@ -155,8 +130,8 @@ describe('BottomSheet · the stranded-Modal hazard (own app instance)', () => {
     await sleep(600);
     setters.get('sheet')?.(true);
     const shown = await waitForReport('sheet', up, 'up over the Modal');
-    // The move that strands a sheet in the Modal's chain. Asserted first, so a
-    // regression reads as the strand itself, not as a field that predicts it.
+    // React Native closes a Modal by dismissing its own controller; UIKit dismisses
+    // a sheet presented in that controller's chain instead and strands the Modal.
     setters.get('modal')?.(false);
     await sleep(1200);
     const after = await waitForReport(
@@ -164,12 +139,11 @@ describe('BottomSheet · the stranded-Modal hazard (own app instance)', () => {
       (r) => (IOS ? r.modalHosts === '0' && r.topPresented === '-' : true),
       'no Modal host left in the app window'
     );
-    // The sheet was not in the Modal's chain, so closing the Modal did not take it.
     expect(up(after)).toBe(true);
     expect(after.unasked).toBe('0');
     expect(eventLog).toEqual([]);
     if (IOS) {
-      // Why: D35 - an RN Modal on top means a window of its own, above the alerts.
+      // With an RN Modal on top, the sheet presents in a window of its own.
       expect(shown.ownWindow).toBe('1');
       expect(shown.appTop).toContain('ModalHostViewController');
       expect(Number(shown.windowLevel)).toBeGreaterThan(1000);
@@ -187,12 +161,11 @@ describe('BottomSheet · the stranded-Modal hazard (own app instance)', () => {
     setters.get('sheet')?.(true);
     const shown = await waitForReport('sheet', up, 'up from inside the Modal');
     if (IOS) expect(shown.ownWindow).toBe('1');
-    // Closing the Modal unmounts the sheet with it: a drop while presented.
     setters.get('modal')?.(false);
     await sleep(1500);
     cleanup();
     handles.clear();
-    // Nothing of either is left: read through a fresh mount.
+    // The first mount is gone, so its state is read through a fresh one.
     await render(<Screen inside={false} />);
     setters.get('modal')?.(false);
     await waitForReport(

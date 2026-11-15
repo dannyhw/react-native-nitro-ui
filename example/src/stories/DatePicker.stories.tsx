@@ -1,15 +1,3 @@
-/**
- * DatePicker stories (S1's layout, for G5). Props and the per-platform variant
- * matrix: `docs/components/date-picker.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- *
- * The date rows use the controls addon's `date` control, which hands back a
- * `YYYY-MM-DD` string rather than a `Date`, so every date the panel supplies goes
- * through `toDate()` below. `undefined` means "this prop is not set", which for
- * `value` is the difference between a controlled and an uncontrolled picker.
- */
 import { useCallback, useState } from 'react';
 import {
   Pressable,
@@ -26,10 +14,9 @@ import type { ArgTypes, Meta, StoryObj } from '@storybook/react-native';
 
 import { Column, Frame, Note, Row, Showcase, useShowcaseInk } from './showcase';
 
-/** What the `date` control hands back, plus what `args` may hold. */
 type DateArg = Date | string | null | undefined;
 
-/** A `date` control's string, a `Date`, or nothing - as a `Date | undefined`. */
+/** The controls addon's `date` control hands back a `YYYY-MM-DD` string. */
 function toDate(value: DateArg): Date | undefined {
   if (value == null) {
     return undefined;
@@ -38,7 +25,6 @@ function toDate(value: DateArg): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-/** `2026-10-25 14:05`, written by hand: a readout must not change with the region. */
 function showDate(date: Date | undefined): string {
   if (date == null) {
     return '(not set)';
@@ -51,10 +37,8 @@ function showDate(date: Date | undefined): string {
 }
 
 /**
- * The `select` control needs its options in `argTypes`, and core's `ControlType`
- * union is narrower than the on-device addon's - so the two entries that use
- * options are widened through the real `argTypes` shape rather than written
- * loosely (the same dance `SegmentedControl.stories.tsx` does for `array`).
+ * Core's `ControlType` union is narrower than the on-device addon's, so the two
+ * entries that use options are typed through the real `argTypes` shape.
  */
 type OptionsControl = NonNullable<
   ArgTypes<{ mode: DatePickerMode }>['mode']['control']
@@ -135,7 +119,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Every prop, on one picker, with the instant it currently holds. */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const [selected, setSelected] = useState(
@@ -176,7 +159,6 @@ export const Playground: Story = {
   },
 };
 
-/** The three modes, as fields and as inline pickers. */
 export const Modes: Story = {
   render: ({ tintColor }) => (
     <Showcase>
@@ -199,7 +181,6 @@ export const Modes: Story = {
   ),
 };
 
-/** The three variants, in a 320-wide parent so the policies are visible. */
 export const Variants: Story = {
   render: ({ tintColor }) => (
     <Showcase>
@@ -223,7 +204,6 @@ export const Variants: Story = {
   ),
 };
 
-/** Uncontrolled / controlled / disabled / tinted, at the same time. */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -259,11 +239,6 @@ export const States: Story = {
   ),
 };
 
-/**
- * A controlled value the story moves from outside the picker, which is the part
- * of the contract a `date` control cannot show: a write React did not come from a
- * tap, and a write the parent refuses.
- */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const ink = useShowcaseInk();
@@ -321,7 +296,6 @@ export const Controlled: Story = {
   },
 };
 
-/** Bounds: a range that clamps, and a range too narrow to leave. */
 export const Bounds: Story = {
   render: ({ tintColor }) => (
     <Showcase>
@@ -359,7 +333,6 @@ export const Bounds: Story = {
   ),
 };
 
-/** Sizing (README "Sizing"): a field measures itself, a calendar takes the width. */
 export const Sizing: Story = {
   render: () => (
     <Showcase>
@@ -383,11 +356,7 @@ export const Sizing: Story = {
   ),
 };
 
-/**
- * The picker as the current appearance draws it, plus why one story cannot show
- * two appearances (the same note `Button.stories.tsx` carries: RN 0.88 has no
- * per-subtree appearance override, so a black card is not dark mode).
- */
+/** RN has no per-subtree appearance override, so a black card is not dark mode. */
 function AppearancePanel() {
   const scheme = useColorScheme();
   return (

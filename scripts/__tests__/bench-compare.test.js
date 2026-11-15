@@ -1,24 +1,3 @@
-/**
- * The release comparison: one session, two library versions, one device.
- *
- * X36 removed the committed baselines. What replaced them is a *paired* measurement:
- * `bun bench --compare-release [ref]` builds the ref's own bench app and the working
- * tree's, installs one at a time under the same app identifier, and alternates them
- * launch round by launch round. Two things can make that answer meaningless, and the
- * blocks below guard exactly those two:
- *
- *   - the *plan*: a side that is never measured first would absorb any drift in the
- *     host, and a ref that resolves to the commit under review measures nothing;
- *   - the *rule*: the same D9 gate the old `--check` had (ratio over 1.20, bootstrap CI
- *     excluding 1.05, cell quiet inside its own run), reached here through the same
- *     `comparisonSections()` that `run.mjs` calls, so this file cannot pass while the
- *     command it describes is broken.
- *
- * No device is involved: the runs are synthetic, and the numbers are chosen so that a
- * wrong rule reads differently — the boundary is 1.20 and the fixtures sit at 1.10 and
- * 1.25, never on 1.20 itself.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -40,13 +19,9 @@ const LAUNCHES = 4;
 const ITERATIONS = 20;
 
 /**
- * One cell, as the app would record it.
- *
- * `mounted`/`presented`/`jsCommit` are per-iteration nanoseconds for launch 0;
- * `launchFactors` scale a whole launch (that is the axis the within-run noise guard
- * reads), and `wide` spreads the iterations inside every launch instead — which leaves
- * each launch median where it was and makes the bootstrap interval honest about how
- * little a stable median proves.
+ * One cell, as the app would record it. `launchFactors` scale a whole launch;
+ * `wide` spreads the iterations inside every launch instead, which leaves each
+ * launch median where it was and widens the bootstrap interval.
  */
 function cellRecords({
   implementation,
@@ -100,10 +75,9 @@ function cellRecords({
 }
 
 /**
- * A synthetic side: the control and the gated arm of one cell.
- *
- * `nitroUi` is a multiple of the control, so a comparison of two of these runs has an
- * exact expected ratio — the fixture cannot agree with the answer by accident.
+ * A synthetic side: the control and the gated arm of one cell. `nitroUi` is a
+ * multiple of the control, so a comparison of two sides has an exact expected
+ * ratio.
  */
 function side({ nitroUi = 1.1, launchFactors = [1, 1, 1, 1], wide = false }) {
   const control = { mounted: 100_000, presented: 130_000, jsCommit: 40_000 };
@@ -153,14 +127,10 @@ describe('the release comparison rule', () => {
     const section = compare({ head: side({}), base: side({}) });
     expect(section.exitCode).toBe(0);
     expect(section.result.conclusiveFailures).toEqual([]);
-    // The same fixture on both sides is the only green that proves nothing on its own,
-    // so the row has to show that the cell was actually compared.
     expect(section.markdown).toContain('mount:nitro-ui:50');
   });
 
   it('passes a cell that is a little slower than the release', () => {
-    // 1.10x: under the 1.20 bound, and the distance from the bound is the point — a
-    // threshold tightened to "any movement" is the mistake this fixture catches.
     const section = compare({
       head: side({ nitroUi: 1.21 }),
       base: side({ nitroUi: 1.1 }),
@@ -182,7 +152,6 @@ describe('the release comparison rule', () => {
     // head(1.4/1.0) / base(1.1/1.0)
     expect(failure.ratio).toBeCloseTo(1.4 / 1.1, 2);
     expect(failure.ci.low).toBeGreaterThan(RATIO_CI_EXCLUDES);
-    // The answer a human gets is the cell, not a count.
     expect(section.markdown).toContain('mount:nitro-ui:50');
     expect(section.result.conclusiveFailures.map((f) => f.key)).toContain(
       'mount:nitro-ui:50'
@@ -190,9 +159,9 @@ describe('the release comparison rule', () => {
   });
 
   it('will not call a slow cell slower when its own interval includes 1.05', () => {
-    // Same 1.27x point estimate, but the iterations inside every launch straddle the
-    // median: the launch-to-launch spread is quiet, the interval is not. Without the CI
-    // half of the rule a single wide measurement would fail a release.
+    // The same 1.27x point estimate, but the iterations inside every launch
+    // straddle the median: the launch-to-launch spread is quiet and the
+    // interval is wide.
     const section = compare({
       head: side({ nitroUi: 1.4, wide: true }),
       base: side({ nitroUi: 1.1 }),
@@ -208,10 +177,9 @@ describe('the release comparison rule', () => {
   });
 
   it('will not call a cell slower when the cell was bouncing inside its own run', () => {
-    // 1.36x on the median, and the four launches disagree by more than the noise bound
-    // - a busy minute on one side of the session. Deliberately *not* a wide interval:
-    // every launch is over 1.25x, so the interval excludes 1.05 and the quiet-cell rule
-    // is the only thing standing between this measurement and a failed release.
+    // 1.36x on the median, with four launches that disagree by more than the
+    // noise bound. Not a wide interval: every launch is over 1.25x, so only the
+    // quiet-cell rule applies.
     const section = compare({
       head: side({ nitroUi: 1.2, launchFactors: [1.05, 1.45, 1.15, 1.35] }),
       base: side({ nitroUi: 1.1 }),
@@ -226,8 +194,6 @@ describe('the release comparison rule', () => {
   });
 
   it('reports a cell the release never measured instead of passing it quietly', () => {
-    // A component added since the tag: nothing to be slower than, and "ok" would be a
-    // claim that it was checked.
     const head = side({});
     head.cells['mount:nitro-ui:500'] = head.cells['mount:nitro-ui:50'];
     const section = compare({ head, base: side({}) });
@@ -237,16 +203,12 @@ describe('the release comparison rule', () => {
   });
 });
 
-/**
- * A release whose app crashes, or loses its launches, leaves nothing to be slower
- * than - and "nothing was slower" must not be what the session then reports.
- */
 describe('a comparison whose release side has nothing to compare', () => {
   const PLANNED = ['mount:rn-core:50', 'mount:nitro-ui:50'];
 
   it('fails, and names every planned cell, when the release side measured nothing', () => {
-    // 1.5x: far past the bound, so the only reason no cell reads FAIL is that there is
-    // no release number to divide by.
+    // 1.5x, far past the bound: no cell reads FAIL only because there is no
+    // release number to divide by.
     const section = comparisonSections({
       run: side({ nitroUi: 1.5 }),
       base: { ...side({}), cells: {} },
@@ -256,7 +218,6 @@ describe('a comparison whose release side has nothing to compare', () => {
     expect(section.exitCode).not.toBe(0);
     expect(section.uncompared.map((cell) => cell.key)).toEqual(PLANNED);
     expect(section.uncompared[1].reasons).toEqual(['base has no record']);
-    // Not the "slower" ending: nothing was measured to be slower than.
     expect(section.result.conclusiveFailures).toEqual([]);
     expect(section.markdown).not.toContain('FAIL');
     expect(section.markdown).toContain('**Not compared** - 2 cell(s)');
@@ -431,8 +392,8 @@ function plan(options) {
 
 describe('the release comparison plan', () => {
   it('measures each side first the same number of times', () => {
-    // ABBA over four rounds, like the arms inside a launch. "base then head" every
-    // round would put the whole warm-up-or-cool-down of the session on one library.
+    // ABBA over four rounds: "base then head" every round would put the
+    // session's whole warm-up or cool-down on one side.
     const order = Array.from({ length: 4 }, (_, launch) =>
       sideOrderForRound(launch).join('/')
     );
@@ -489,8 +450,6 @@ describe('the release comparison plan', () => {
     expect(compared.cells.baseOnly).toEqual([
       'mount:expo-ui-host-per-control:50',
     ]);
-    // Both asymmetries are said out loud: a head-only cell is a new component, and a
-    // base-only cell is measured and then not gated.
     expect(compared.warnings.join('\n')).toContain('only in this tree');
     expect(compared.warnings.join('\n')).toContain('v0.9.0');
   });
@@ -512,8 +471,6 @@ describe('the release comparison plan', () => {
     expect(same.problem).toContain('measures nothing');
     expect(same.rounds).toEqual([]);
 
-    // And the converse: two commits whose labels happen to read the same are two
-    // commits, and the run is plannable.
     const older = plan({
       launches: 2,
       baseSha: commit.slice(0, 7),
@@ -589,15 +546,12 @@ describe('the newest release tag', () => {
   });
 
   it('picks a hotfix that shipped after a bigger version was cut', () => {
-    // v0.9.2 was released after v0.10.1: the question is "slower than what?", and what
-    // is running in the world is the thing that shipped last, not the biggest number.
+    // v0.9.2 was released after v0.10.1.
     const answer = newestReleaseTag({ tags: hotfixTags, headSha: 'cccc333' });
     expect(answer.ref).toBe('v0.9.2');
   });
 
   it('skips a tag that is the commit under review', () => {
-    // The shape of "release branch cut, tag pushed, still tagging": measuring HEAD
-    // against HEAD produces 1.00 everywhere and a gate that cannot fail.
     const answer = newestReleaseTag({
       tags: trainTags,
       shaOfTag: { 'v0.10.0': 'cccc333', 'v0.9.11': 'dddd444' },
@@ -618,8 +572,6 @@ describe('the newest release tag', () => {
   });
 
   it('takes a tag whose commit it cannot resolve', () => {
-    // `git rev-parse` failing for one tag is a reason to say less about it, not a
-    // reason to refuse the comparison.
     const answer = newestReleaseTag({
       tags: trainTags,
       shaOfTag: { 'v0.9.1': null },

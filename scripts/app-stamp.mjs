@@ -1,14 +1,6 @@
 /**
- * `app.stamp`: prove a device gate is testing the code in front of it.
- *
- * `scripts/app-stamp-core.mjs` holds the decisions; this is the half that talks
- * to git, the filesystem and a built binary. Two kinds of caller:
- *
- *   - `scripts/build-app.mjs` writes a stamp after a verified build;
- *   - the harness config and the real-input entry scripts call
- *     `assertFreshApp()` and refuse when the stamp no longer matches.
- *
- * See `scripts/app-stamp-core.mjs` for why this gate exists.
+ * `app.stamp`: proves a device gate is testing the code in front of it. This is
+ * the half that talks to git, the filesystem and a built binary.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -32,11 +24,8 @@ import {
 } from './app-stamp-core.mjs';
 
 /**
- * The checkout this call belongs to, found by walking up for a marker rather
- * than from `import.meta.url`: `example/rn-harness.config.mjs`, the real-input
- * scripts and `build-app.mjs` all call in with a different working directory, and
- * a module-level constant computed from one of them would be wrong for the rest.
- * It also keeps this module importable from jest, which rejects `import.meta`.
+ * The checkout this call belongs to, found by walking up for a marker: callers
+ * run from different working directories, and jest rejects `import.meta`.
  */
 export function repoRootOf(startDir = process.cwd()) {
   return findRepoRoot({
@@ -46,7 +35,6 @@ export function repoRootOf(startDir = process.cwd()) {
   });
 }
 
-/** The iOS product of `scripts/build-app.mjs --platform ios`. */
 export function iosAppPath(repoRoot = repoRootOf()) {
   return path.join(
     repoRoot,
@@ -60,7 +48,6 @@ export function iosAppPath(repoRoot = repoRootOf()) {
   );
 }
 
-/** The Android product of `scripts/build-app.mjs --platform android`. */
 export function androidApkPath(repoRoot = repoRootOf()) {
   return path.join(
     repoRoot,
@@ -75,7 +62,6 @@ export function androidApkPath(repoRoot = repoRootOf()) {
   );
 }
 
-/** Both live under a gitignored `build/` directory, per platform. */
 export function stampPath({ repoRoot = repoRootOf(), platform }) {
   return platform === 'ios'
     ? path.join(repoRoot, 'example', 'ios', 'build', STAMP_BASENAME)
@@ -90,12 +76,12 @@ export function artifactPath({ repoRoot = repoRootOf(), platform }) {
 /**
  * The code tree as it stands on disk: tracked files plus untracked ones git is
  * not ignoring. Content-hashed rather than taken from `git write-tree` because
- * the working tree is usually dirty here, and the app was built from *that*.
+ * the app is built from the working tree, which is usually dirty.
  *
  * @param {object} [options]
  * @param {string} [options.repoRoot]
  * @param {{tree: string, head: string, files: number}} [options.cached] reuse
- *   within one process; the harness config and a build both ask more than once
+ *   within one process
  * @returns {{tree: string, head: string, files: number}}
  */
 export function currentCodeTree({
@@ -103,9 +89,8 @@ export function currentCodeTree({
   cached = null,
 } = {}) {
   if (cached != null) return cached;
-  // HEAD is read for the stamp's own record ("which commit built this"), not for
-  // the digest: see codeTreeDigest. A docs-only commit must not invalidate a
-  // build, and it did until review M4.
+  // HEAD is recorded in the stamp but kept out of the digest, so a docs-only
+  // commit does not invalidate a build.
   const head = git(repoRoot, ['rev-parse', 'HEAD'], '<none>');
   const listing = git(repoRoot, [
     '-c',
@@ -125,8 +110,8 @@ export function currentCodeTree({
     try {
       stats = fs.lstatSync(absolute);
     } catch {
-      // Deleted in the working tree, so it is not in the app: absent from the
-      // digest, which is what makes a `git rm` show up as staleness.
+      // Deleted in the working tree: leaving it out of the digest is what makes
+      // a removed file show up as staleness.
       continue;
     }
     if (stats.isSymbolicLink()) {
@@ -138,15 +123,13 @@ export function currentCodeTree({
     }
     files += 1;
   }
-  // No head here: the digest is the files the compiler read (review M4).
   return { tree: codeTreeDigest(entries), head, files };
 }
 
 /**
  * @param {string} repoRoot
  * @param {string[]} args
- * @param {string} [fallback] returned instead of throwing when git fails, so a
- *   machine without a `HEAD` (a shallow clone) still gets a tree, not a crash
+ * @param {string} [fallback] returned instead of throwing when git fails
  * @returns {string} trimmed stdout
  */
 function git(repoRoot, args, fallback) {
@@ -164,8 +147,7 @@ function git(repoRoot, args, fallback) {
 
 /**
  * The components the app is supposed to register, read from nitrogen's generated
- * sources for that platform - see `parseIosComponentNames` for why generated
- * beats a hand-kept list.
+ * sources for that platform.
  *
  * @param {object} [options]
  * @param {string} [options.repoRoot]
@@ -215,10 +197,9 @@ export function registeredComponents({
 /**
  * How many times each component's hybrid class appears in the built artifact.
  *
- * On iOS the app's own code is in `NitroUiExample.debug.dylib` (Xcode's debug
- * dylib injection), not in the 40 KB stub executable, so both the executable and
- * the bundle's `.dylib`s are scanned. Frameworks are not: they are RN's, and if
- * a component ever moves there the refusal names the files it looked at.
+ * On iOS a debug build keeps the app's own code in `NitroUiExample.debug.dylib`,
+ * not in the stub executable, so every executable in the bundle root is scanned.
+ * Frameworks are not.
  *
  * @param {object} options
  * @param {'ios'|'android'} options.platform
@@ -239,10 +220,7 @@ export function inspectArtifact({
     if (!fs.existsSync(artifact)) {
       throw new Error(`${artifact} does not exist - build it first`);
     }
-    // Every executable in the bundle root: the `CFBundleExecutable` stub, the
-    // `*.debug.dylib` the code actually lives in, and `__preview.dylib`. Read
-    // off the mode bits rather than Info.plist, which Xcode writes as a binary
-    // plist (parsing it would need `plutil`, i.e. a macOS-only dependency).
+    // Executables are found by mode bits: Info.plist is a binary plist here.
     for (const entry of fs.readdirSync(artifact)) {
       const candidate = path.join(artifact, entry);
       let stats;
@@ -284,13 +262,8 @@ export function inspectArtifact({
 }
 
 /**
- * A digest of the bytes the gate actually looked at.
- *
- * The stamp has to bind to a file, and the honest way to say "the same file" is
- * the content it was checked against - not its inode, its mtime, or the path
- * string, each of which survives a copy, a `touch` or another worktree. Size
- * goes in as well so a file whose scanned region happens to be unchanged but
- * which grew elsewhere is still a different artifact.
+ * A digest of the scanned bytes plus the artifact's size, so a file that
+ * changed only outside the scanned region is still a different artifact.
  *
  * @param {object} options
  * @param {string} options.artifact
@@ -320,20 +293,17 @@ export function readStamp(file) {
 }
 
 /**
- * Record what a finished build contained. Called by `build-app.mjs` after it has
- * verified the binary, so a stamp is a claim about a build that passed.
+ * Records what a finished, verified build contained.
  *
  * @param {object} options
  * @param {string} [options.repoRoot]
  * @param {'ios'|'android'} options.platform
  * @param {string} options.artifact
  * @param {{tree: string, head: string, files: number}} [options.treeBefore] the
- *   code tree as it was when the build started. A stamp is a claim that this
- *   binary came from these sources, so it can only be made when the sources did
- *   not move while the compiler was reading them.
+ *   code tree as it was when the build started; a different tree now throws
  * @param {string} [options.abis] the Android ABIs the artifact was built for,
  *   as they were passed to gradle (`arm64-v8a`, or a comma-separated list).
- *   Omitted for iOS and for a stamp that does not know.
+ *   Omitted for iOS.
  * @param {((message: string) => void)} [options.log]
  * @returns {object} the stamp
  */
@@ -345,14 +315,8 @@ export function recordBuild({
   abis = null,
   log = (message) => process.stderr.write(`${message}\n`),
 }) {
-  // M3: the tree the build started from has to be the tree the stamp describes.
-  // A build that ran while files changed proves nothing about either - the most
-  // likely shape is a generator (nitrogen, pod install, a second task in the same
-  // checkout) writing during the compile, and the most likely outcome is a green
-  // stamp over a binary that does not match the sources anyone can see. Checked
-  // first, before anything is read out of the artifact: the claim this function
-  // is about to make is already broken, and proving that needs no binary. So
-  // nothing is written, and the fix is the same build again.
+  // A build that ran while files changed (a generator writing mid-compile) does
+  // not prove which sources the binary came from, so no stamp is written.
   const tree = currentCodeTree({ repoRoot });
   if (treeBefore != null && treeBefore.tree !== tree.tree) {
     throw new Error(
@@ -379,9 +343,8 @@ export function recordBuild({
     );
   }
   const stamp = {
-    // Version 2: artifactPath and fingerprint bind the stamp to the file it
-    // was read from (review M2). A v1 stamp cannot be checked against them, and
-    // decideFreshness says so rather than guessing.
+    // Version 2 adds artifactPath and fingerprint, which bind the stamp to the
+    // file it was read from.
     version: 2,
     platform,
     artifact,
@@ -394,13 +357,8 @@ export function recordBuild({
     counts,
     scanned,
   };
-  // Which ABIs went into an Android artifact (review M1). The stamp path and the
-  // APK path are both fixed per worktree, so nothing else in here says whether
-  // the file on disk is arm64-v8a, x86_64, or all four - and `build-app.mjs`
-  // needs that to decide whether this artifact is the build that was asked for.
-  // Left out rather than set to null for iOS, where there is no such thing, and
-  // no version bump: a stamp without the field is simply one written before it
-  // existed, which the skip reads as "unknown" and builds.
+  // The APK path is the same for every ABI set, so the stamp records which one
+  // was built. A stamp without the field reads as "unknown".
   if (abis != null && abis !== '') stamp.abis = abis;
   const file = stampPath({ repoRoot, platform });
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -418,10 +376,9 @@ export function recordBuild({
 }
 
 /**
- * The absolute, symlink-free path of an artifact, or the input when even that
- * fails. Two checkouts hold the same relative path; `realpath` is what tells
- * them apart (`/tmp` on macOS is itself a symlink, so a resolved path is what
- * two processes on the same file agree on).
+ * The absolute, symlink-free path of an artifact, or the resolved input when
+ * that fails. `/tmp` on macOS is itself a symlink, so only a resolved path is
+ * one that two processes on the same file agree on.
  *
  * @param {string} artifact
  * @returns {string}
@@ -434,17 +391,11 @@ export function realpath(artifact) {
   }
 }
 
-/** Raised by `assertFreshApp`, so a caller can print it red and stop early. */
 export class StaleAppError extends Error {}
 
 /**
- * Decide, without refusing anything: does the artifact at this path really come
- * from this code tree?
- *
- * `assertFreshApp` is the same question with a throw attached, and
- * `scripts/build-app.mjs` needs the answer the other way round - it skips the
- * build when the answer is yes, so a "no" here is a normal sentence in a log,
- * not an error. Both callers go through this one so they can never disagree.
+ * Reports, without throwing, whether the artifact at this path was built from
+ * this code tree.
  *
  * @param {object} options
  * @param {string} [options.repoRoot]
@@ -493,7 +444,7 @@ export function checkFreshApp({
 }
 
 /**
- * The gate. Throws `StaleAppError` with the reason and the fix.
+ * Throws `StaleAppError` with the reason and the fix when the app is stale.
  *
  * @param {object} options
  * @param {string} [options.repoRoot]
@@ -512,10 +463,6 @@ export function assertFreshApp({
 }) {
   const decision = checkFreshApp({ repoRoot, platform, artifact, warn });
   if (decision.ok) return decision.stamp;
-  // The difference matters for the message: a missing artifact is "go build
-  // one", anything else is "what you have does not match this tree". Flag, not
-  // string match - rewording a problem sentence must not silently change which
-  // of the two the gate says.
   if (decision.missing === true) {
     throw new StaleAppError(
       `${command}: ${decision.problems[0]}.\n` +
@@ -530,8 +477,7 @@ export function assertFreshApp({
 }
 
 /**
- * Red for a refusal, green for a pass - only when the stream is a terminal, so
- * a CI log and a report transcript stay free of escape codes.
+ * Colours the text only when the stream is a terminal.
  *
  * @param {string} text
  * @param {'red'|'green'} color

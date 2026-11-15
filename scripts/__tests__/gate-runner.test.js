@@ -1,40 +1,3 @@
-/**
- * The supervisor a gate runs its command under, and the two claims that make it work (X34 item 2).
- *
- * The incident (X32, seen again by X33): a `gate.mjs <gate> --background` was killed by pid
- * mid-run, nothing else noticed, and the run's bundle server went on serving the lease's Metro
- * port with no ledger line. The next task on that lease read a busy port and had no way to learn
- * that its predecessor had died. `gate.mjs` cannot catch that to itself — a killed process runs no
- * handlers — so the job belongs to a process that stays alive and can ask whether its gate still
- * exists. Two things have to be true for that to be worth anything:
- *
- *   1. **the command lives in the supervisor's group.** `gate.mjs` spawns the supervisor
- *      `detached`, so the group's id is the pid of the child it started — the same number
- *      `ownMetroPids` already attributes a leftover server by, and the same number the signal
- *      handlers aim `process.kill(-child.pid, …)` at. A command started in a group of its own
- *      would leave a server reporting a group no gate can name: the leak, back again, quietly.
- *      Proven below by a command that asks the kernel which group it is in, and by the exit code
- *      of a real run whose group had to be swept.
- *   2. **the death check notices a gate that died, and only that.** A bare pid is not a fact that
- *      stays true over a 50-minute run — the kernel reuses pids, and a supervisor watching a reused
- *      pid would run on past its own gate's death and leave the Metro up: the failure arriving as
- *      its opposite. A *group* is not the answer either, which is what the first version of this
- *      file got wrong: a gate started by `nohup zsh -c '…'` or by anything that is not a job leader
- *      sits in a group that outlives it, so `kill(-pgid, 0)` answers "alive" about a dead gate for
- *      the whole life of the shell. So the check is the pair — the pid must exist *and* still be in
- *      the group it reported (`gateProcessIsAlive`) — with a stdin pipe over the top, whose EOF the
- *      kernel guarantees when the gate dies however it dies.
- *      Proven below by a killed gate that is not its group's leader (which the group question
- *      answers "alive" to), by a recycled pid that `gateProcessIsAlive` refuses to believe, and by
- *      `pgidIsAlive`'s refusal to ask about group 0 (`kill(-0, 0)` is a broadcast to this process's
- *      own group, and answers yes to a question nobody asked).
- *
- * And the sweep is aimed at one group: the one this supervisor was started in. Nothing here
- * signals a process it did not start, a name, or a pattern.
- *
- * @file Real processes, all of them started and recorded here: no device, no lease, no Metro port.
- */
-
 import { spawn, spawnSync } from 'node:child_process';
 import {
   appendFileSync,
@@ -77,14 +40,9 @@ import { childEnv } from './helpers/scrubbed-env.js';
 const GATE_RUNNER = join(__dirname, '..', 'gate-runner.mjs');
 
 /**
- * The processes this file started, so cleanup signals nothing it did not create.
- *
- * A `ChildProcess` wherever it has one and a bare pid only for a process it never spawned (a
- * grandchild reported by its own output): the handle refuses to signal a child it has already
- * reaped, while a number is a fact that expires — the moment that pid exits, the kernel can hand
- * the same number to someone else, and a suite-wide `afterAll` runs whatever it likes by then. The
- * pid-reuse case is not hypothetical here: this file's whole subject is a pid that outlived its
- * meaning.
+ * The processes this file started, so cleanup signals nothing it did not create: a `ChildProcess`
+ * where there is one, and `{ pid, group }` for a process it only learned of from output, because
+ * the kernel can hand a bare pid to another process once the first one exits.
  */
 const started = [];
 const tempDirs = [];
@@ -97,17 +55,13 @@ afterAll(() => {
         continue;
       }
       if (target.pid != null) {
-        // A pid learned from somebody else's output — the command a supervisor ran, or the bundle
-        // server one level below it. Killable only while it is still in the group this file's own
-        // spawn leads: a recycled pid is in another group, which is the same test the supervisor
-        // applies to its gate before it believes a number.
+        // Killable only while it is still in the group this file's own spawn leads: a recycled
+        // pid is in another group.
         if (groupId(target.pid) === target.group) {
           process.kill(target.pid, 'SIGKILL');
         }
         continue;
       }
-      // Asked of the handle, twice over: `exitCode == null` is Node's own "I have not reaped this
-      // one yet", and `kill()` on a finished child is a no-op rather than a signal to a stranger.
       if (target.exitCode == null && target.signalCode == null) {
         target.kill('SIGKILL');
       }
@@ -126,7 +80,6 @@ afterAll(() => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Poll a condition with a deadline — a ceiling on the wait, never an ingredient of the answer. */
 async function until(predicate, waitedFor, timeoutMs = 25_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -145,7 +98,6 @@ const workDir = () => {
   return dir;
 };
 
-/** The group of a live process, asked with the same `ps` call the production code uses. */
 function groupId(pid) {
   const result = spawnSync('ps', ['-o', 'pgid=', '-p', String(pid)], {
     encoding: 'utf8',
@@ -168,8 +120,6 @@ const pendingCommand = (group = 4242) => {
   };
 };
 
-/* --------------------- the rule, with the kernel injected --------------------- */
-
 describe('superviseGateRunner (what the supervisor decides)', () => {
   it('leaves with the command’s own exit code while its gate is alive', async () => {
     const command = pendingCommand();
@@ -181,7 +131,6 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       start: async () => command,
       isAlive: () => true,
       members: async () => [4300, 4301],
-      // This supervisor leads the group its command runs in, which is what makes sweeping legal.
       ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
@@ -207,9 +156,8 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       start: async () => command,
       // There for the first look, gone for the second: one tick of the watchdog.
       isAlive: () => (looks += 1) <= 1,
-      // The command and its server, and no trace of the gate: the group is safe to signal.
       members: async () => [4300, 4301],
-      // It leads that group, which is what makes sweeping it legal at all.
+      // The supervisor's pid equals the group id: it may sweep only a group it leads.
       ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
@@ -219,8 +167,6 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       log: (message) => lines.push(message),
     });
     expect(swept).toEqual([4242]);
-    // Not `1`: a run stopped for loss of its gate did not fail its tests, and the reader of the
-    // ledger has to be able to tell the two apart.
     expect(result.code).toBe(GATE_DEATH_EXIT);
     expect(result.reason).toContain('gate died');
     expect(lines.join('')).toContain('died without a ledger line');
@@ -245,17 +191,12 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       log: (message) => lines.push(message),
     });
     expect(result.left).toEqual([9001]);
-    // The fact a later pre-flight has to answer for, said out loud rather than swallowed.
     expect(lines.join('')).toContain('still alive in group 4242');
     expect(lines.join('')).toContain('9001');
     command.finish(1);
   });
 
   it('refuses to sweep a group that contains the gate itself', async () => {
-    // The supervisor is started `detached`, so its group holds the run and nobody else. A caller
-    // that started it inside the gate's own group would turn "signal this run's group" into
-    // "SIGKILL the gate, or the test runner that is running the suite" — a supervisor that kills
-    // the thing it watches, on a timer. The kernel is asked who is in the group first.
     const command = pendingCommand(4242);
     const swept = [];
     const lines = [];
@@ -266,8 +207,8 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       gatePgid: 100,
       start: async () => command,
       isAlive: () => (looks += 1) <= 1,
+      // The gate's own pid (100) is a member of the group.
       members: async () => [100, 4300],
-      // It leads this group; the gate's pid inside it is what makes it unsweepable.
       ownPid: 4242,
       stop: async (group) => {
         swept.push(group);
@@ -284,12 +225,8 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
   });
 
   it('refuses to sweep a group it does not lead at all', async () => {
-    // The other way this can be wrong, and the one no membership check can see: a supervisor started
-    // without `detached` — imported by a suite, run by hand, or launched by a caller that forgot the
-    // flag — sits in a group holding processes nobody handed it: a test runner's, a shell's. Its own
-    // pid is not that group's number, and that single inequality is what says "not mine to signal".
-    // It comes before the `ps` question below it, and the gate that created the group — which has a
-    // number it made — sweeps it instead.
+    // A supervisor started without `detached` sits in a group that holds other processes (a
+    // shell's, a test runner's). Its own pid is then not the group's id.
     const command = pendingCommand(4242);
     const swept = [];
     const lines = [];
@@ -302,7 +239,6 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
       isAlive: () => (looks += 1) <= 1,
       // A group holding nothing but the run: the membership check could not object to this one.
       members: async () => [4300, 4301],
-      // This process leads a *different* group, so 4242 is somebody else's tree.
       ownPid: 4300,
       stop: async (group) => {
         swept.push(group);
@@ -317,18 +253,13 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
     expect(lines.join('')).toContain(
       'refusing to signal a group it does not lead'
     );
-    // No `stopped` note for a sweep that never happened: the gate still has its own job to do.
     expect(result.left).toBeUndefined();
     command.finish(1);
   });
 
   it('asks about the gate as a pid *and* the group it reported', async () => {
-    // The pid-reuse defence, as a question about behaviour: what does the watchdog get asked about?
-    // A gate's pid can be handed to another process while a long run is going, so a probe that got
-    // only the number cannot tell the gate from a stranger — and a supervisor that believed the
-    // stranger would keep a run alive after its gate died, the leak this file exists to prevent
-    // arriving as a run that never ends. The group is what tells them apart, and it travels with the
-    // pid or the probe is a guess (`gateProcessIsAlive`).
+    // The kernel can reuse a gate's pid during a long run, and only the group tells the gate
+    // from the process that got its number.
     const command = pendingCommand();
     const asked = [];
     const run = superviseGateRunner({
@@ -375,24 +306,9 @@ describe('superviseGateRunner (what the supervisor decides)', () => {
   });
 });
 
-/**
- * The signal a supervisor rides out, and the two ways the end of that hold used to be wrong.
- *
- *   1. **the sweep must get the grace it asked for.** The supervisor leads the group it is about to
- *      signal, so the SIGTERM it sends arrives at *its own* handler. If that handler is still
- *      listening, the term it sent itself reads as a second signal from a hand that is not typing:
- *      the escalation runs with `termGraceMs: 0` and the group is killed within a second of the
- *      decision to give it ten — a harness and a bundle server cut off in the middle of a cleanup
- *      that was working, which is the one thing this hold exists to prevent.
- *   2. **a supervisor that does not lead the group holds nothing.** The same rule as the sweep's:
- *      the named group is not its tree to end, and a handler left installed is a handler that
- *      outlives the fixture.
- *
- * The signal is an invented name, and deliberately: `process.emit` is the only way to deliver the
- * term a sweep sends to its own group without handing a real signal to the jest worker running this
- * file. The handler body — which is what is under test — cannot tell the two apart.
- */
 describe('holdOnSignal (the signal a supervisor rides out)', () => {
+  // An invented signal name, delivered with `process.emit`: a real signal would reach the jest
+  // worker running this file.
   const SIGNAL = 'SIGSWEEPDONE';
 
   it('lets its own sweep have the grace it asked for', async () => {
@@ -406,13 +322,12 @@ describe('holdOnSignal (the signal a supervisor rides out)', () => {
       signals: [SIGNAL],
       stop: (target, options) => {
         stops.push({ target, options: options ?? {} });
-        // The real sweep signals the group, and this process is a member of it: the term comes
-        // straight back, synchronously, as `kill(2)` does. Only the sweep that was *granted* sends
-        // it — a second call below is the escalation itself, which kills by pid and signals no
-        // group at all.
+        // The real sweep signals the group, and the supervisor is a member of it, so its own
+        // term comes straight back to its handler. A second call would be the escalation,
+        // which kills by pid and signals no group.
         if (stops.length === 1) process.emit(SIGNAL);
-        // Never settles, like a sweep still running — which also keeps this fixture away from the
-        // `process.exit` at the end of the real path.
+        // Never settles, which keeps this fixture away from the `process.exit` at the end of
+        // the real path.
         return new Promise(() => {});
       },
     });
@@ -423,13 +338,11 @@ describe('holdOnSignal (the signal a supervisor rides out)', () => {
         'the hold to expire and the sweep to begin',
         5_000
       );
-      // The grace it asked for is the default one: no zero-grace options on this call.
+      // The default grace: no zero-grace options on this call.
       expect(stops[0]).toEqual({ target: group, options: {} });
-      // The heart of it: the term the supervisor sent itself was not taken for a second signal from
-      // a user, so nothing escalated and nothing was killed early.
+      // The term the supervisor sent itself was not taken for a second signal.
       expect(stops.length).toBe(1);
       expect(lines.join('')).not.toContain('second');
-      // Still reported to the caller, which owns the exit code: the run *was* signalled.
       expect(hold.get()).toBe(SIGNAL);
     } finally {
       hold.dispose();
@@ -441,8 +354,6 @@ describe('holdOnSignal (the signal a supervisor rides out)', () => {
     const lines = [];
     expect(process.listenerCount(SIGNAL)).toBe(0);
     const hold = holdOnSignal(4242, () => true, {
-      // A group this process is a member of but does not lead — the shape of a supervisor started
-      // without `detached`, inside the gate's group or a suite's.
       ownPid: 4300,
       log: (message) => lines.push(message),
       signals: [SIGNAL],
@@ -454,8 +365,6 @@ describe('holdOnSignal (the signal a supervisor rides out)', () => {
     });
     try {
       expect(lines.join('')).toContain('not its to end');
-      // Nothing installed, either: holding is the thing that ends a group, and a handler left
-      // behind would end it from the next test in the file.
       expect(process.listenerCount(SIGNAL)).toBe(0);
       expect(hold.get()).toBeNull();
       expect(() => hold.pause()).not.toThrow();
@@ -467,13 +376,12 @@ describe('holdOnSignal (the signal a supervisor rides out)', () => {
 
 describe('pidIsAlive / pgidIsAlive (the questions the watchdog may ask)', () => {
   it('refuses 0, where `kill(0)` and `kill(-0)` are questions about nobody', () => {
-    // `kill(2)` reads 0 as "every process in my group" and -0 likewise: both succeed, so a naive
-    // watchdog would answer "the gate is alive" forever *and* signal its own group every second.
+    // `kill(2)` reads 0 as "every process in my group", and that call succeeds.
     expect(pidIsAlive(0)).toBe(false);
     expect(pgidIsAlive(0)).toBe(false);
     expect(pgidIsAlive(-7)).toBe(false);
-    // A string that is not a whole number is not a pid. (A numeric string is one: ids come back
-    // from the environment as text — and '42' is a live kernel thread on a Linux runner.)
+    // A numeric string is a pid (ids come back from the environment as text), so the
+    // strings here are ones that are not whole numbers.
     expect(pidIsAlive('4.2')).toBe(false);
     expect(pidIsAlive('not-a-pid')).toBe(false);
     expect(pgidIsAlive(Number.NaN)).toBe(false);
@@ -485,16 +393,14 @@ describe('pidIsAlive / pgidIsAlive (the questions the watchdog may ask)', () => 
     const group = groupId(process.pid);
     expect(group).not.toBeNull();
     expect(pgidIsAlive(group)).toBe(true);
-    // The answer the watchdog needs when its gate has been killed and its group drained: `ESRCH`.
     expect(pgidIsAlive(0x7ffe)).toBe(false);
   });
 });
 
 describe('stopGroup (what the sweep may touch)', () => {
   it('signals nothing when it was not given a group number', async () => {
-    // 0 in particular: `kill(-0, …)` is a broadcast to this process's own group. And `'4242'`, one
-    // line below, *is* a group number — these ids arrive as strings from `ps` and from the
-    // environment, and a sweep that refused one would silently leave a Metro up.
+    // 0 in particular: `kill(-0, …)` signals this process's own group. A numeric string is a
+    // group number, because ids arrive as text from `ps` and from the environment.
     const refused = [];
     for (const group of [0, -1, Number.NaN, undefined, null, 'not-a-group']) {
       await stopGroup(group, {
@@ -534,10 +440,8 @@ describe('stopGroup (what the sweep may touch)', () => {
   });
 
   it('terms the group, then kills the survivors by pid - never the group again', async () => {
-    // The order of targets is the safety of the sweep. The term goes to the group because that is
-    // the whole tree in one call; the kill goes to the named survivors because the group still
-    // contains the supervisor, and a supervisor SIGKILLed by its own cleanup reports nothing,
-    // writes no sidecar, and leaves the gate reading a bare signal exit.
+    // The kill goes to the survivors by pid because the group still contains the supervisor,
+    // which must survive its own cleanup to report it.
     const signals = [];
     let members = [71, 72];
     const left = await stopGroup(4242, {
@@ -580,18 +484,9 @@ describe('stopGroup (what the sweep may touch)', () => {
   });
 
   it("sends the real term to the GROUP, so a run's command goes down without the escalation", async () => {
-    // The tests above inject `signal`, so none of them can see the one character this sweep turns
-    // on: `process.kill(-group, …)` signals every process in the group, and `process.kill(group, …)`
-    // signals only the process whose NUMBER equals the group id - the run's own leader. That second
-    // spelling is X32's incident: the leader died, the command it had started kept the Metro port
-    // and the emulator, and no ledger line arrived. Only the kernel answers which tree a term
-    // reached, so this is the real call on a real group this test created and records.
-    //
-    // What is asserted is that the SIGTERM ALONE empties the group: the by-pid escalation is wired
-    // to a spy that refuses to kill anything. Reaching it - or a survivor in the returned list -
-    // means the term did not cover the tree, which is the claim under test. The grace periods are
-    // the real ones: an orphan's reap is a real cost, and a sweep that needs the escalation to
-    // clean up after a term is a sweep the next task pays for.
+    // `process.kill(-group, …)` signals every process in the group; `process.kill(group, …)`
+    // signals only its leader. Only the kernel shows which one a term was, so this is the real
+    // call on a real group, with the by-pid escalation wired to a spy that kills nothing.
     const leader = spawn('sh', ['-c', 'sleep 300 & echo $!; wait'], {
       detached: true,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -608,12 +503,9 @@ describe('stopGroup (what the sweep may touch)', () => {
       15_000
     );
     const grandchild = Number(/^\d+/m.exec(out)[0]);
-    // The leader leads its own group and the grandchild is in it — asserted below, and the reason
-    // this pid is worth recording with that group rather than on its own.
     started.push({ pid: grandchild, group: leader.pid });
 
-    // `detached` means the leader leads its own group, so the group number is its pid - and the
-    // grandchild is in that group, which is the whole point.
+    // `detached` makes the leader lead its own group, so the group id is its pid.
     expect(groupId(leader.pid)).toBe(leader.pid);
     expect(pidIsAlive(grandchild)).toBe(true);
 
@@ -665,8 +557,6 @@ describe('writeRunnerRecord (the sidecar a later run attributes a port by)', () 
     });
     expect(first.startedAt).toEqual(expect.any(Number));
 
-    // The sweep's note is a merge: the fields that make attribution possible are the first write's,
-    // and an update that rewrote them from memory could contradict the run it describes.
     appendFileSync(logPath, 'note\n');
     expect(
       markRunnerRecordStopped(file, { reason: 'gate died', left: [] })
@@ -678,16 +568,7 @@ describe('writeRunnerRecord (the sidecar a later run attributes a port by)', () 
   });
 });
 
-/**
- * The decision `gate.mjs` makes after its supervisor is gone: may it sweep that group?
- *
- * The sidecars are the real format, written by `writeRunnerRecord` /
- * `markRunnerRecordStopped` into this file's own temp dirs, because the thing worth catching here is
- * the two halves disagreeing about what `stopped` means. The live-pid answer is injected: this case
- * is about a decision, and a fixture cannot make the kernel reuse a pid on demand.
- */
 describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', () => {
-  /** A sidecar for a run that led group 4242, optionally with the sweep's note on it. */
   const sidecar = ({ stopped = false } = {}) => {
     const dir = workDir();
     const logPath = join(dir, 'run.log');
@@ -705,8 +586,6 @@ describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', (
   };
 
   it('owes the sweep while the sidecar has no `stopped` record', () => {
-    // The X32 shape: a supervisor taken so hard that its own cleanup never ran, leaving the gate as
-    // the last process that can name the run's group.
     const owed = maySweepRunnerGroup({
       runnerPid: 4242,
       recordFile: sidecar(),
@@ -717,8 +596,6 @@ describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', (
   });
 
   it('stands down once the supervisor has reported its sweep', () => {
-    // Sweeping again would be a second signal at a tree that has already been told to go, and the
-    // note is the supervisor's own account of what survived it.
     const decided = maySweepRunnerGroup({
       runnerPid: 4242,
       recordFile: sidecar({ stopped: true }),
@@ -729,9 +606,7 @@ describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', (
   });
 
   it('stands down when the pid has been reused', () => {
-    // The one that reaches a stranger's process tree. The gate watched its supervisor exit, so a
-    // *live* process with that number is a different process — and `ps -g` / `kill(-pid, …)` about
-    // it describes whatever group that one leads.
+    // The gate watched its supervisor exit, so a live process with that pid is another process.
     const decided = maySweepRunnerGroup({
       runnerPid: 4242,
       recordFile: sidecar(),
@@ -742,8 +617,6 @@ describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', (
   });
 
   it('asks the live-pid question first, when both facts are true at once', () => {
-    // A swept group *and* a recycled number: the answer is still no, and for the reason that keeps a
-    // stranger alive rather than the one about bookkeeping.
     const decided = maySweepRunnerGroup({
       runnerPid: 4242,
       recordFile: sidecar({ stopped: true }),
@@ -754,8 +627,6 @@ describe('maySweepRunnerGroup (may the gate sweep its supervisor’s group?)', (
   });
 
   it('owes the sweep with no sidecar to read, and refuses without a pid', () => {
-    // A run whose sidecar could not be written is the worse case, not the clean one: nothing says
-    // the group came down. With no pid there is no group to name at all.
     const missing = maySweepRunnerGroup({
       runnerPid: 4242,
       pidAlive: () => false,
@@ -790,7 +661,6 @@ describe('deadGateBehindPort (whose leftover server is this?)', () => {
   });
 
   it('says nothing while that gate is still running', () => {
-    // The ordinary busy port: somebody's run is happening, and the honest answer is "wait for it".
     expect(
       deadGateBehindPort({
         records: [{ group: 4242, gatePid: 77, logPath: 'branch/check-1.log' }],
@@ -802,8 +672,6 @@ describe('deadGateBehindPort (whose leftover server is this?)', () => {
   });
 
   it('says nothing about a run that recorded a result and merely left a server up', () => {
-    // Calling a finished run a death would be a false claim in the evidence, and it is a different
-    // problem (`stopOwnMetro` was meant to take that server down).
     expect(
       deadGateBehindPort({
         records: [{ group: 4242, gatePid: 77, logPath: 'branch/check-1.log' }],
@@ -816,8 +684,6 @@ describe('deadGateBehindPort (whose leftover server is this?)', () => {
   });
 
   it('says nothing about a server in a group no recorded run led', () => {
-    // Somebody else's Metro: the pre-flight's plain refusal is the right answer, and naming a
-    // stranger's run as dead would be both wrong and an accusation.
     expect(
       deadGateBehindPort({
         records: [{ group: 9999, gatePid: 77, logPath: 'branch/check-1.log' }],
@@ -829,9 +695,7 @@ describe('deadGateBehindPort (whose leftover server is this?)', () => {
   });
 
   it('asks about the group, not the listener pid, and refuses when it cannot', () => {
-    // A `ps` that will not answer (a pid that vanished between `lsof` and here) must produce the
-    // silent answer: the sweep and the hint both act on a group, and a guessed one is a signal
-    // aimed at somebody else's run.
+    // `ps` gives no group for a pid that vanished between `lsof` and here.
     expect(
       deadGateBehindPort({
         records: [{ group: 900, gatePid: 77, logPath: 'x' }],
@@ -842,7 +706,6 @@ describe('deadGateBehindPort (whose leftover server is this?)', () => {
     ).toBeNull();
     expect(
       deadGateBehindPort({
-        // A sidecar with no usable group is not evidence about anything.
         records: [{ gatePid: 77, logPath: 'x' }],
         listeners: listener,
         pidAlive: () => false,
@@ -851,8 +714,6 @@ describe('deadGateBehindPort (whose leftover server is this?)', () => {
     ).toBeNull();
   });
 });
-
-/* ------------------- the death check, with the kernel injected ------------------- */
 
 describe('gateProcessIsAlive (is that pid still that gate?)', () => {
   it('says no for a pid the kernel does not know', () => {
@@ -865,10 +726,6 @@ describe('gateProcessIsAlive (is that pid still that gate?)', () => {
   });
 
   it('says no for a pid that has been REUSED - the number lives, in another group', () => {
-    // The case a bare `kill(pid, 0)` cannot see: `real-input:ios` runs ~50 min, long enough for the
-    // kernel to hand this gate's pid to somebody else. The stranger answers a liveness probe with
-    // "alive", and a supervisor that believed it would outlive its gate with a Metro in tow — the
-    // X32 leak, arriving as the check that was supposed to stop it.
     expect(
       gateProcessIsAlive(41_001, 41_001, {
         pidAlive: () => true,
@@ -887,8 +744,6 @@ describe('gateProcessIsAlive (is that pid still that gate?)', () => {
   });
 
   it('says yes when `ps` cannot answer, because guessing dead stops a healthy run', () => {
-    // The bias is the point: a false "dead" ends a 40-minute device run and frees a leased device
-    // mid-harness. A transient `ps` failure costs one more poll.
     expect(
       gateProcessIsAlive(41_001, 41_001, {
         pidAlive: () => true,
@@ -898,7 +753,6 @@ describe('gateProcessIsAlive (is that pid still that gate?)', () => {
   });
 
   it('falls back to the pid alone when the gate never reported a group', () => {
-    // A caller that could not ask the kernel for its group must not be answered "dead" for that.
     expect(gateProcessIsAlive(41_001, null, { pidAlive: () => true })).toBe(
       true
     );
@@ -910,9 +764,7 @@ describe('gateProcessIsAlive (is that pid still that gate?)', () => {
 
 describe('the supervisor\u2019s gate-death signal', () => {
   it('sweeps on the pipe alone, while its gate is still alive', async () => {
-    // The gate is *this* jest worker: unambiguously alive, so nothing in the pid check can be what
-    // ends this run. Only the pipe can. That is the asymmetry worth pinning — EOF is the kernel's
-    // own report that the process which opened this pipe is gone, whatever it died of.
+    // The gate is this jest worker, which is alive, so only the pipe can end this run.
     let resolveGone = null;
     const gateGone = new Promise((resolve) => {
       resolveGone = resolve;
@@ -926,8 +778,6 @@ describe('the supervisor\u2019s gate-death signal', () => {
       gatePgid: null,
       gateGone,
       start: async () => command,
-      // A live pid that must not be asked about: the poll is refused so this case can only pass on
-      // the pipe.
       isAlive: () => {
         throw new Error('the pid poll should not decide this case');
       },
@@ -947,15 +797,12 @@ describe('the supervisor\u2019s gate-death signal', () => {
     command.finish(0);
     expect(swept).toEqual([4242]);
     expect(result.code).toBe(GATE_DEATH_EXIT);
-    // The sentence says which signal fired, because "the gate died" and "the gate closed my stdin"
-    // are two different claims and only one of them was checked here.
     expect(lines.join('')).toContain('stdin');
   });
 
   it('leaves a healthy command alone when there is no pipe to watch', async () => {
-    // The false-positive direction of the same seam: `stdio: 'ignore'` is `/dev/null`, which reports
-    // EOF the instant it is read. A supervisor that treated that as a death would sweep every run it
-    // was ever started for, and take a leased device with it.
+    // `stdio: 'ignore'` is `/dev/null`, which reports EOF the instant it is read. That EOF is
+    // not a death.
     const command = pendingCommand();
     const swept = [];
     const run = superviseGateRunner({
@@ -980,14 +827,9 @@ describe('the supervisor\u2019s gate-death signal', () => {
   });
 });
 
-/* ------------------- the pipe, with real file descriptors ------------------- */
-
 describe('tolerateBrokenStdio (the write that kills the reporter)', () => {
   it('leaves a dead pipe answered, not fatal', async () => {
-    // The shape of the incident at the level of one stream: an `error` event with no listener is an
-    // uncaught exception, and a supervisor that dies of the news it is reporting leaves the harness
-    // and its Metro up. The real version of that is proved below, with a killed gate holding the
-    // read ends; this is the same rule at the speed of a unit test.
+    // A stream `error` event with no listener is an uncaught exception.
     const { PassThrough } = await import('node:stream');
     const dead = new PassThrough();
     let seen = null;
@@ -998,13 +840,12 @@ describe('tolerateBrokenStdio (the write that kills the reporter)', () => {
     dead.emit('error', Object.assign(new Error('EPIPE'), { code: 'EPIPE' }));
     await sleep(10);
     expect(seen?.code).toBe('EPIPE');
-    // And the stream stays usable: tolerating the error is not closing the report.
     expect(() => dead.write('still reporting\n')).not.toThrow();
   });
 });
 
 describe('gateStdinDeath (the pipe, with a real file descriptor)', () => {
-  /** A child that answers once about its own stdin, and then keeps answering until told to stop. */
+  // A child that prints NO_PIPE, DEAD or ALIVE about its own stdin.
   const WATCHER = `
     const { pathToFileURL } = require('node:url');
     (async () => {
@@ -1043,8 +884,7 @@ describe('gateStdinDeath (the pipe, with a real file descriptor)', () => {
   }
 
   it('reports nothing about a stdin that is not a pipe', async () => {
-    // `stdio: 'ignore'` is `/dev/null`, and reading it reaches EOF at once. A supervisor that read
-    // that as its gate's death would sweep every run it was started for.
+    // `stdio: 'ignore'` is `/dev/null`, and reading it reaches EOF at once.
     const { child, output } = startWatcher('ignore');
     await until(
       () => output.text.includes('NO_PIPE'),
@@ -1068,8 +908,6 @@ describe('gateStdinDeath (the pipe, with a real file descriptor)', () => {
   }, 30_000);
 
   it('stays quiet while the pipe is held open', async () => {
-    // The false-positive direction, on real fds: an open pipe with no data is a gate that is
-    // thinking, not a gate that has died.
     const { child, output } = startWatcher('pipe');
     child.stdin.write('');
     await until(
@@ -1079,18 +917,12 @@ describe('gateStdinDeath (the pipe, with a real file descriptor)', () => {
     );
     expect(output.text).toContain('ALIVE');
     expect(output.text).not.toContain('DEAD');
-    // The watcher's own window, not a wait this case needs: it prints at 4 s.
   }, 30_000);
 });
 
-/* ---------------------- the incident, with real processes ---------------------- */
-
 /**
- * A command that reports where it lives and starts a helper.
- *
- * The command is the harness; its child is the bundle server. The helper matters because the leak
- * was never about the process `gate.mjs` started directly — it was about the server one level down,
- * which is why the unit of cleanup is a group and not a pid.
+ * A command that writes its pid and group to `command.json` and starts a helper. It stands for
+ * the harness, and the helper for the bundle server one level below it.
  */
 const COMMAND_SCRIPT = `
   const { spawn, spawnSync } = require('node:child_process');
@@ -1123,7 +955,6 @@ const COMMAND_SCRIPT = `
   setInterval(() => {}, 500);
 `;
 
-/** Starts the supervisor with a real command, as `gate.mjs` does. */
 function startSupervisor({
   gatePid,
   gatePgid,
@@ -1133,14 +964,11 @@ function startSupervisor({
   command = [process.execPath, '-e', COMMAND_SCRIPT, dir],
 }) {
   const child = spawn(process.execPath, [GATE_RUNNER, ...command], {
-    // `detached`, because that is how `gate.mjs` starts it and because a supervisor started
-    // inside this suite's own group would sweep *that* group when its gate died — killing the
-    // test runner, which is the hazard `superviseGateRunner` now refuses. The fixture has to
-    // model the shape, not just the happy path.
+    // `detached`, as `gate.mjs` starts it: the supervisor must lead a group of its own, not
+    // sit in this suite's.
     detached: true,
-    // `'pipe'` models what `gate.mjs` really hands a supervisor (X34 item 2): a stdin the
-    // supervisor watches and nobody writes, whose EOF *is* the gate's death. `'ignore'` models the
-    // shape without it, which is how the identity poll gets tested on its own.
+    // `'pipe'` is what `gate.mjs` hands a supervisor: a stdin nobody writes, whose EOF is the
+    // gate's death. `'ignore'` leaves only the (pid, group) poll.
     stdio: [stdin, 'pipe', 'pipe'],
     env: childEnv({
       ...(gatePid == null ? {} : { [GATE_PID_ENV]: String(gatePid) }),
@@ -1163,10 +991,7 @@ function startSupervisor({
   };
 }
 
-/**
- * A process leading a session of its own — the way `startBackgroundGate` starts a gate, which is
- * what makes "is that gate's group gone" a question with a yes-or-no answer.
- */
+/** A stand-in gate that leads a group of its own, as a `--background` gate does. */
 function startGate() {
   const gate = spawn(
     process.execPath,
@@ -1187,8 +1012,6 @@ describe('a real supervisor, and a real gate that gets killed', () => {
     writeFileSync(logFile, '');
     const gate = startGate();
     const gatePgid = groupId(gate.pid);
-    // The fixture would not be describing the incident if the gate did not lead a group of its
-    // own: that is what `--background`'s `detached` means, and what makes the group an answer.
     expect(gatePgid).toBe(gate.pid);
 
     const supervisor = startSupervisor({
@@ -1209,10 +1032,7 @@ describe('a real supervisor, and a real gate that gets killed', () => {
     expect(command.gatePgid).toBe(String(gatePgid));
     expect(command.gate).toBe('harness:ios');
 
-    // THE structural claim, asked of the kernel rather than asserted: the command — and so the
-    // server it spawns — is in the supervisor's group, which is the id `gate.mjs` learns from its
-    // own spawn and the id `ownMetroPids` attributes a leftover by. Start this command `detached`
-    // and this line is the one that goes red.
+    // The command, and so the server it spawns, is in the supervisor's group.
     expect(command.pgid).toBe(supervisor.pid);
 
     const sidecarFile = `${logFile}${RUNNER_RECORD_SUFFIX}`;
@@ -1226,7 +1046,7 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       logPath: logFile,
     });
 
-    // The incident: killed hard enough to run no handlers.
+    // SIGKILL, so the gate runs no handlers.
     gate.kill('SIGKILL');
     await until(
       () => !pidIsAlive(gate.pid),
@@ -1236,16 +1056,13 @@ describe('a real supervisor, and a real gate that gets killed', () => {
 
     const exit = await supervisor.exited;
     expect(exit.code).toBe(GATE_DEATH_EXIT);
-    // The command trapped the term, so getting here means the escalation fired — and the helper one
-    // level down went with it, which no pid-targeted kill of the command could have done.
+    // The command traps SIGTERM, so it and its helper go only when the escalation fires.
     await until(
       () => !pidIsAlive(command.pid) && !pidIsAlive(command.helper),
       'the run and its server to leave with the gate'
     );
     expect(pgidIsAlive(supervisor.pid)).toBe(false);
 
-    // The evidence: the sentence in the run's log (whose pipe died with the gate), and the
-    // sweep's account in the sidecar.
     expect(readFileSync(logFile, 'utf8')).toContain(
       'died without a ledger line'
     );
@@ -1257,19 +1074,9 @@ describe('a real supervisor, and a real gate that gets killed', () => {
   }, 90_000);
 
   /**
-   * A gate that does **not** lead its own group, and the supervisor it started.
-   *
-   * `gate.mjs --background` detaches its run into a group of its own, and a gate started that way is
-   * its group's leader — which is why a watchdog that asks about the group passes every fixture that
-   * models only that shape. It is not the only shape: a gate started by `nohup zsh -c 'node
-   * scripts/gate.mjs …' &`, by a launcher script, or by anything that runs a gate as a plain child
-   * sits in a group that belongs to somebody else and outlives it. This fixture is that shape,
-   * because the difference between the two is the whole difference between a run that ends and a
-   * Metro that serves a dead task's port for a day.
-   *
-   * The gate itself starts the supervisor, so the stdin pipe between them is the real one. Built by
-   * concatenation rather than a template: it interpolates another script, and nesting the two is how
-   * a fixture starts out escaping its own placeholders.
+   * A gate that does not lead its own group (one started as a plain child, e.g. by
+   * `nohup zsh -c '…' &`), and the supervisor it starts: its group outlives it, so asking whether
+   * the group is alive says nothing about the gate.
    */
   function gateScript(dirVar) {
     return [
@@ -1308,8 +1115,8 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       process.execPath,
       ['-e', gateScript('process.argv[1]'), dir, stdin],
       {
-        // Not detached: this gate inherits the group of the process that started it (this suite),
-        // which is a group that is very much alive and will still be alive when the gate is killed.
+        // Not detached: this gate inherits this suite's group, which stays alive after the gate
+        // is killed.
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: childEnv(pollMs == null ? {} : { [POLL_MS_ENV]: String(pollMs) }),
@@ -1323,7 +1130,6 @@ describe('a real supervisor, and a real gate that gets killed', () => {
     return {
       pid: gate.pid,
       stderr: () => stderr,
-      // Recorded by pid, and killed one pid at a time: this is a process this file started.
       kill: (signal) => process.kill(gate.pid, signal),
     };
   }
@@ -1337,9 +1143,8 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       const dir = workDir();
       const logFile = join(dir, 'run.log');
       writeFileSync(logFile, '');
-      // One signal at a time: the pipe case takes the poll out of the race (a minute away), and the
-      // poll case is given no pipe to watch. Otherwise the two would race each other on every run
-      // and neither would be proven.
+      // One notice at a time: the pipe case puts the poll a minute away, and the poll case has
+      // no pipe to watch. Otherwise the two would race.
       const gate = startGateInsideAnotherGroup({ dir, stdin, pollMs });
 
       await until(
@@ -1359,9 +1164,7 @@ describe('a real supervisor, and a real gate that gets killed', () => {
         { pid: command.helper, group: gateInfo.supervisor }
       );
 
-      // THE shape, asserted rather than assumed: this gate is not the leader of the group it is in.
-      // Every fixture that detaches its gate cannot say this, and every watchdog that asks about
-      // the group answers "alive" here — for as long as the group's owner lives.
+      // This gate is not the leader of the group it is in.
       expect(gateInfo.pgid).not.toBe(gate.pid);
       expect(gateInfo.pgid).toBe(groupId(process.pid));
       expect(gateInfo.supervisor).toBeGreaterThan(0);
@@ -1372,8 +1175,7 @@ describe('a real supervisor, and a real gate that gets killed', () => {
         'the killed gate to be gone',
         10_000
       );
-      // The question the old check asked, answered out loud: the gate's group is still there, because
-      // the group was never the gate's to begin with.
+      // The gate's group outlives it.
       expect(pgidIsAlive(gateInfo.pgid)).toBe(true);
 
       try {
@@ -1383,8 +1185,6 @@ describe('a real supervisor, and a real gate that gets killed', () => {
           40_000
         );
       } catch (error) {
-        // The supervisor's own note is the difference between "the watchdog never looked" and "it
-        // looked and refused", and neither is guessable from a pid that is still there.
         throw new Error(
           `${String(error?.message ?? error)}\n` +
             `  run.log: ${JSON.stringify(readFileSync(logFile, 'utf8'))}\n` +
@@ -1393,8 +1193,8 @@ describe('a real supervisor, and a real gate that gets killed', () => {
             `gate ${String(gate.pid)} alive: ${pidIsAlive(gate.pid)}, pollMs: ${String(pollMs)}`
         );
       }
-      // The pids go before the supervisor's last line does: it asks the kernel who is left in the
-      // group and only then writes the outcome. Wait for that line (either outcome), not for time.
+      // The pids go before the supervisor writes its last line: it asks the kernel who is left
+      // in the group first. Wait for that line (either outcome), not for time.
       await until(
         () =>
           /the run is gone with it|still alive in group/.test(
@@ -1406,9 +1206,8 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       const log = readFileSync(logFile, 'utf8');
       expect(log).toContain('died without a ledger line');
       expect(log).toContain(stdin === 'pipe' ? 'stdin' : 'pid');
-      // The sweep *finished*, in the file that outlives the gate. The gate's own stderr cannot be
-      // read here by construction: the process forwarding it is the one that got killed — which is
-      // why the supervisor writes to the log as well, and why it must not die of that write.
+      // Read from the log file: the gate that forwarded the supervisor's stderr is the process
+      // that was killed.
       expect(log).toContain('the run is gone with it');
     },
     90_000
@@ -1436,7 +1235,6 @@ describe('a real supervisor, and a real gate that gets killed', () => {
     expect(pidIsAlive(command.helper)).toBe(true);
     expect(supervisor.stderr()).not.toContain('died without a ledger line');
 
-    // End the command the way a finished run does; the supervisor reports its code, not a sweep.
     command.pid != null && process.kill(command.pid, 'SIGKILL');
     const exit = await supervisor.exited;
     expect(exit.code).not.toBe(GATE_DEATH_EXIT);
@@ -1444,18 +1242,6 @@ describe('a real supervisor, and a real gate that gets killed', () => {
     gate.kill('SIGKILL');
   }, 60_000);
 
-  /**
-   * A run that **finishes**, with its gate still alive on the other end of the pipe.
-   *
-   * Every real gate ends this way: the harness exits with a code while `gate.mjs` sits there holding
-   * the write end of the supervisor's stdin open, because that is how the supervisor is meant to
-   * learn about a death. A supervisor that treats that pipe as a reason to keep its event loop alive
-   * keeps the whole run with it, and `gate.mjs` is waiting for this process to leave before it can
-   * write the ledger line. The run is then neither dead nor finished: no line, the Metro port still
-   * served, the lease still held — the leak this file exists to close, arriving as a hang instead of
-   * a corpse. The shape only exists with `stdin: 'pipe'`: a supervisor started with `'ignore'` has no
-   * such handle and leaves on its own, which is why the fixture above never noticed.
-   */
   it('leaves when the run finishes, even while its gate holds the stdin pipe', async () => {
     const dir = workDir();
     const gate = startGate();
@@ -1464,7 +1250,8 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       gatePgid: groupId(gate.pid),
       logFile: null,
       dir,
-      // The handle at issue: the writer on the other end is alive, so this end never reaches EOF.
+      // The writer on the other end stays alive, so this pipe never reaches EOF and could
+      // keep the supervisor's event loop alive.
       stdin: 'pipe',
       command: [
         process.execPath,
@@ -1474,23 +1261,18 @@ describe('a real supervisor, and a real gate that gets killed', () => {
       ],
     });
 
-    // Bounded on purpose: the failure this guards is a process that never leaves, so waiting forever
-    // would be the bug rather than the proof of it.
     await until(
       () => !pidIsAlive(supervisor.pid),
       'the supervisor to leave when its command finishes, with its gate still holding the pipe',
       20_000
     );
     expect(await supervisor.exited).toEqual({ code: 3, signal: null });
-    // The gate never died, so nothing was swept and the run's code is the command's own.
     expect(supervisor.stderr()).not.toContain('died without a ledger line');
     expect(pidIsAlive(gate.pid)).toBe(true);
     gate.kill('SIGKILL');
   }, 60_000);
 
   it('sweeps on the pid fallback too, when no group was handed over', async () => {
-    // A caller that could not ask the kernel for its gate's group still gets a supervisor that
-    // notices the death: the group is the better question, not the only one.
     const dir = workDir();
     const logFile = join(dir, 'run.log');
     writeFileSync(logFile, '');

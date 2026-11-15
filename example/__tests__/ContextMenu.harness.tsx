@@ -1,28 +1,3 @@
-/**
- * On-device tests for the ContextMenu (task G16; design Q6 Appendix F1, spike S3).
- *
- * A ContextMenu is a `View` around React Native children that opens a menu on a long
- * press, so the suite has three halves:
- *
- * - **The box.** It must lay out exactly like a `View` with the same style - Yoga's box,
- *   and the children where Yoga put them. The oracle is a twin `View`, never a constant,
- *   and the child positions are read from the native views themselves (`kids=` in the
- *   report, and HarnessUI's own frames), because Yoga's numbers are the same whatever
- *   the native mount does (D36 item 5: the iOS content-children patch would draw a padded
- *   ContextMenu's children twice inset).
- * - **The gesture.** A held press goes through `userEvent.longPressAt` - the
- *   `@react-native-harness/ui` patch D36 item 2 asked for (`docs/upstream.md` H11) - with
- *   real timing on both platforms, so there is no synchronous stand-in for the long-press
- *   timeout. A tap is `userEvent.press`. What a person would see is React's own counters.
- * - **The menu.** A row in a popup is out of the injector's reach (it is not the app's
- *   window), so picks go through `nuiTestSelectRow`, the path a row press takes; the rest
- *   is read from `nuiTestContextMenuReport` (`ContextMenu.nitro.ts` says what each field
- *   means and which platform answers it).
- *
- * Platform splits are stated where they happen: the anchor, the layout-move rule, the
- * gesture slot's arm count and the a11y action are Android's; the `UIMenu` tree, the
- * interaction and the accessible-wrapper getter are iOS's.
- */
 import type { ReactElement } from 'react';
 import {
   PixelRatio,
@@ -56,7 +31,6 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/** What `hybridRef` hands back - declared, not imported (DECISIONS D14). */
 type Handle = {
   readonly disabled: boolean;
   readonly title: string | null;
@@ -65,7 +39,6 @@ type Handle = {
   nuiTestMenuProbe(): void;
   nuiTestContextMenuReport(): string;
   nuiTestA11yLongClick(): void;
-  /** Sample the open popup's window (G21); `no popup` when this wrapper has none. */
   nuiTestMenuPixelProbe(color: number): void;
   nuiTestMenuPixelReport(): string;
 };
@@ -84,7 +57,6 @@ const record = (testId: string) => ({
   onClose: () => events.push(`${testId}:close`),
   onSelect: (id: string) => events.push(`${testId}:select:${id}`),
 });
-/** The inner `Pressable`'s own callbacks, counted by kind. */
 const presses: Record<string, number> = {};
 const bump = (key: string) => (): void => {
   presses[key] = (presses[key] ?? 0) + 1;
@@ -116,7 +88,6 @@ async function handleFor(testId: string): Promise<Handle> {
   return handles.get(testId)!;
 }
 
-/** The report as `key -> value`. */
 function parse(line: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const pair of line.split(';')) {
@@ -127,10 +98,9 @@ function parse(line: string): Record<string, string> {
 }
 
 /**
- * The report once it satisfies `ok`: the native side publishes it on the UI thread and
- * each read asks for a fresh one, so a read can trail the event it is about. A view
- * builds no report before the first read asks (`pending`), and `ok` is never shown that
- * one: `undefined !== '-1'` would pass it.
+ * The native side publishes the report on the UI thread and each read asks for
+ * a fresh one, so a read can trail the event it is about. A view builds no
+ * report before the first read asks, and `ok` is never shown that one.
  */
 async function reportWhen(
   testId: string,
@@ -154,8 +124,7 @@ async function reportWhen(
 }
 
 /**
- * The report after it has had time to settle: two reads 150 ms apart, and the second
- * one built (a first read can be the one that asked for it).
+ * Two reads 150 ms apart: a first read can be the one that asks for the report.
  */
 async function settledReport(testId: string): Promise<Record<string, string>> {
   const handle = await handleFor(testId);
@@ -170,13 +139,11 @@ function box(testId: string): ViewInfo {
   return info;
 }
 
-/** A point inside a view, as fractions of its box (screen points / dp). */
 function pointIn(testId: string, fx: number, fy: number) {
   const b = box(testId);
   return { x: b.x + b.width * fx, y: b.y + b.height * fy };
 }
 
-/** Hold at a point for `ms` (real timing), then wait for the app to hear `open`. */
 async function holdAt(
   testId: string,
   fx: number,
@@ -219,7 +186,10 @@ const GROUP: MenuGroup = {
 /** What the menu built from {@link GROUP} is, in Menu's `drawn` notation. */
 const GROUP_DRAWN =
   'Reply,Copy,Pin~,{More:Archive,Mail},(Tools:Flag),(:Delete!)';
-/** The same menu as the Android popup's semantics tree has it (E2): every group `( )`. */
+/**
+ * The same menu as the Android popup's semantics tree has it: every group in `(
+ * )`.
+ */
 const GROUP_DRAWN_ANDROID =
   '(:Reply,Copy,Pin~),(More:Archive,Mail),(Tools:Flag),(:Delete)';
 /** Its pickable rows: 7 actions, the submenu's own row not among them. */
@@ -230,7 +200,6 @@ const GROWN: MenuGroup = {
   sections: GROUP.sections,
 };
 
-/** A ContextMenu around one `Pressable`, recorded under `testId`. */
 function Message({
   testId,
   group = GROUP,
@@ -331,19 +300,14 @@ describe('ContextMenu · the box', () => {
         `${String(twinChild.x - twinBox.x)},${String(twinChild.y - twinBox.y)} ` +
         `native kids=${report.kids} contentIndex=${report.contentIndex}`
     );
-    // The box is the twin's.
     expect(Math.abs(menuBox.width - twinBox.width)).toBeLessThan(0.6);
     expect(Math.abs(menuBox.height - twinBox.height)).toBeLessThan(0.6);
-    // And the child sits where the twin's does - read from the native frames, which is
-    // what a double inset would move.
     expect(
       Math.abs(child.x - menuBox.x - (twinChild.x - twinBox.x))
     ).toBeLessThan(0.6);
     expect(
       Math.abs(child.y - menuBox.y - (twinChild.y - twinBox.y))
     ).toBeLessThan(0.6);
-    // The native side agrees: one React Native child, at the twin's offset, and the
-    // menu's own view (iOS content view, Android compose host) is the last subview.
     const [kid] = (report.kids ?? '').split('|');
     const frame = (kid ?? '').split('@')[1]?.split(',').map(Number) ?? [];
     expect(kid?.startsWith('mount-child@')).toBe(true);
@@ -381,7 +345,6 @@ describe('ContextMenu · the box', () => {
     let bad = '-';
     let ok = 0;
     for (let round = 1; round <= 50; round += 1) {
-      // Deterministic: drop one, insert one, rotate.
       const next = ids.filter((id) => id % 7 !== round % 7);
       next.push(100 + round);
       const shift = round % next.length;
@@ -438,19 +401,16 @@ describe('ContextMenu · the gesture', () => {
         `${String(count('hold:pressOut'))} press=${String(count('hold:press'))} ` +
         `events=${eventsOf('hold').join(',')}`
     );
-    // The cancel: the `Pressable` saw the touch begin and end, and never pressed.
     expect(count('hold:press')).toBe(0);
     expect(count('hold:pressIn')).toBe(1);
     expect(count('hold:pressOut')).toBe(1);
     const open = await reportWhen('hold', (r) => r.open === '1', 'open');
     expect(open.opens).toBe('1');
-    // A pick reports the choice, then the close (D32), exactly once each.
     (await handleFor('hold')).nuiTestSelectRow('copy');
     await until('the close', () => eventsOf('hold').includes('close'));
     await sleep(300);
     expect(eventsOf('hold')).toEqual(['open', 'select:copy', 'close']);
     await reportWhen('hold', (r) => r.open === '0', 'closed');
-    // No stuck responder: a fresh tap presses exactly once, and opens nothing.
     await userEvent.press(await screenRef('hold-target'));
     await until('the fresh press', () => count('hold:press') === 1);
     await sleep(900);
@@ -500,8 +460,6 @@ describe('ContextMenu · the gesture', () => {
     );
     await handleFor('off');
     await handleFor('on');
-    // A tap on each: an enabled ContextMenu arms a long press for it (Android), a
-    // disabled one does not - the barrier twin that says the tap reached both.
     await userEvent.press(await screenRef('off-target'));
     await userEvent.press(await screenRef('on-target'));
     await until('both presses', () => {
@@ -512,7 +470,6 @@ describe('ContextMenu · the gesture', () => {
       const on = await settledReport('on');
       expect(off.arms).toBe('0');
       expect(on.arms).toBe('1');
-      // And a view that cannot open copies no event for it; the armed twin does.
       expect(off.copies).toBe('0');
       expect(Number(on.copies)).toBeGreaterThan(0);
     } else {
@@ -520,7 +477,6 @@ describe('ContextMenu · the gesture', () => {
       (await handleFor('off')).nuiTestMenuProbe();
       await reportWhen('off', (r) => r.drawn === 'nil', 'a refused probe');
     }
-    // And a hold: the child presses on release (it has no `onLongPress`), no menu.
     await holdAt('off-target', 0.5, 0.5);
     await until('the disabled hold to press', () => count('off:press') === 2);
     await sleep(500);
@@ -571,7 +527,6 @@ describe('ContextMenu · not the touch target', () => {
     await handleFor('pe-none');
     await handleFor('pe-box-none');
     const none = pointIn('pe-none', 0.5, 0.5);
-    // A tap: the press under it is the barrier that says the touch landed here.
     await userEvent.pressAt(none.x, none.y);
     await until('the press under it', () => count('under:press') === 1);
     // Longer than the long-press timeout on both platforms (Android 400 ms, iOS ~740).
@@ -581,7 +536,6 @@ describe('ContextMenu · not the touch target', () => {
     await userEvent.longPressAt(none.x, none.y, 1000);
     await until('the held press under it', () => count('under:press') === 2);
     await sleep(600);
-    // `box-none` on its empty area: the same, with nothing under it to press.
     const empty = pointIn('pe-box-none', 0.85, 0.8);
     await userEvent.pressAt(empty.x, empty.y);
     await sleep(1200);
@@ -603,7 +557,6 @@ describe('ContextMenu · not the touch target', () => {
       expect(noneReport.armed).toBe('0');
       expect(boxNoneReport.armed).toBe('0');
     }
-    // The barrier for box-none: a hold on its child is its own, and opens the menu.
     await holdAt('pe-box-none-child', 0.5, 0.5);
     await until('the box-none child hold to open', () =>
       eventsOf('pe-box-none').includes('open')
@@ -628,8 +581,8 @@ describe('ContextMenu · the menu', () => {
       expect(report.drawn).toBe(GROUP_DRAWN);
       expect(report.rows).toBe(GROUP_ROWS);
     } else {
-      // Android: the popup's own composition, and its semantics tree (E2) - Menu's
-      // Material groups, the submenu inline as a group of its own.
+      // Android: the popup's semantics tree has Menu's Material groups, with
+      // the submenu inline as a group of its own.
       handle.nuiTestA11yLongClick();
       await reportWhen('tree', (r) => r.open === '1', 'open');
       const composed = await reportWhen(
@@ -685,7 +638,6 @@ describe('ContextMenu · the menu', () => {
         '(:Pin@Keep on top+,Mute=),(Tools:Flag@For later)'
       );
     }
-    // A checked row's pick is a pick.
     if (IOS) await openedBy('e2-ctx-target');
     handle.nuiTestSelectRow('pin');
     await until('the pick', () => eventsOf('e2-ctx').includes('select:pin'));
@@ -697,7 +649,6 @@ describe('ContextMenu · the menu', () => {
     await openedBy('refuse-target');
     handle.nuiTestSelectRow('pin');
     await until('the close', () => eventsOf('refuse').includes('close'));
-    // The barrier: a real row picks, so the refusal above was not a pick still in flight.
     await openedBy('refuse-target');
     handle.nuiTestSelectRow('reply');
     await until('the second close', () => {
@@ -760,7 +711,6 @@ describe('ContextMenu · the menu', () => {
     }
     const { rerender } = await render(<Titled n={0} />);
     await handleFor('quiet');
-    // Ten prop updates, each an `afterUpdate`, and no read yet: what an app does.
     for (let n = 1; n <= 10; n += 1) {
       await rerender(<Titled n={n} />);
     }
@@ -774,7 +724,6 @@ describe('ContextMenu · the menu', () => {
       `    · seq=${String(report.seq)} title=${String(report.title)}`
     );
     expect(report.title).toBe('Title 10');
-    // The builds the reads themselves asked for, and nothing from the updates before.
     expect(Number(report.seq)).toBeLessThanOrEqual(2);
   });
 
@@ -793,7 +742,6 @@ describe('ContextMenu · the menu', () => {
     await openedBy('live-target');
     await rerender(<Live disabled={false} group={GROWN} />);
     if (!IOS) {
-      // The popup recomposed with the new rows, and stayed up.
       const grown = await reportWhen(
         'live',
         (r) => r.rows === '8',
@@ -855,10 +803,10 @@ describe('ContextMenu · the menu', () => {
       Math.abs(a - b) / density <= 1;
     const seen: string[] = [];
     let atTopStart = 0;
-    // Off-centre points, so an anchor at the view's centre or corner cannot pass. A popup
-    // that does not fit to the right of the finger is aligned to end there instead
-    // (Material's position provider), so either corner may sit on the press point - but
-    // the first point leaves room, and must land top-start.
+    // Off-centre points, so an anchor at the view's centre or corner cannot
+    // pass. Material's position provider aligns a popup that does not fit right
+    // of the finger to its end instead, so only the first point, which leaves
+    // room, must land top-start.
     for (const [fx, fy] of [
       [0.15, 0.3],
       [0.8, 0.6],
@@ -914,9 +862,8 @@ describe('ContextMenu · accessibility', () => {
       `    · on ax=${on.ax} action=${on.a11yAction} · off ax=${off.ax} · ` +
         `disabled action=${disabled.a11yAction}`
     );
-    // iOS (D37 item 2): RN's `isAccessibilityElement` answers from the content view, so
-    // this goes red the day React Native moves that answer again. Android: `accessible`
-    // makes the wrapper the focusable node.
+    // iOS: RN's `isAccessibilityElement` answers from the content view.
+    // Android: `accessible` makes the wrapper the focusable node.
     expect(on.ax).toBe('1');
     expect(off.ax).toBe('0');
     if (!IOS) {
@@ -1005,7 +952,6 @@ describe('ContextMenu · drop and recycle', () => {
       }
     };
     const before = Number((await settledReport('watch-pick')).watchStray);
-    // 1. A pick - what a row press calls - with the view still mounted, then frames.
     await openedBy('watch-pick-target');
     (await handleFor('watch-pick')).nuiTestSelectRow('reply');
     await until('the pick close', () =>
@@ -1013,7 +959,6 @@ describe('ContextMenu · drop and recycle', () => {
     );
     await frames('picked');
     const afterPick = Number((await settledReport('watch-pick')).watchStray);
-    // 2. That view dropped, and another dropped while its menu is open, then frames.
     await rerender(<Scene step="open" tick={++tick} />);
     await openedBy('watch-drop-target');
     await rerender(<Scene step="gone" tick={++tick} />);
@@ -1098,7 +1043,6 @@ describe('ContextMenu · drop and recycle', () => {
     }
     const { rerender } = await render(<Owner id="first" />);
     const first = await handleFor('first');
-    // State a reset has to clear: a pick, an open/close pair and a probe's answer.
     await openedBy('first-target');
     first.nuiTestSelectRow('reply');
     await until('the close', () => eventsOf('first').includes('close'));
@@ -1117,7 +1061,6 @@ describe('ContextMenu · drop and recycle', () => {
     expect(report.rows).toBe('1');
     expect(report.drawn).toBe('-1');
     if (IOS) expect(report.interaction).toBe('1');
-    // And it still opens, for its own owner.
     await openedBy('second-target');
     (await handleFor('second')).nuiTestSelectRow('only');
     await until('the pick', () => eventsOf('second').includes('select:only'));
@@ -1126,10 +1069,10 @@ describe('ContextMenu · drop and recycle', () => {
 
 describe('ContextMenu · a recycled wrapper', () => {
   it('keeps no previous owner’s accessibility label', async () => {
-    // React Native's own recycle reset clears the label's tag and leaves the view's
-    // `contentDescription`, and only ever writes a non-empty one back - so a wrapper
-    // recycled into an owner with no label would still be announced by the old one.
-    // Measured by real input's a11y sweep: "Message from Grace" on `ctx-outer`.
+    // React Native's recycle reset clears the label's tag but leaves the view's
+    // `contentDescription`, and only ever writes a non-empty one back, so a
+    // wrapper recycled into an owner with no label would still be announced by
+    // the old one.
     function Owner({
       step,
     }: {
@@ -1160,12 +1103,10 @@ describe('ContextMenu · a recycled wrapper', () => {
   });
 });
 
-/** HarnessUI's element reference for a testID (what `userEvent.press` wants). */
 function screenRef(testId: string) {
   return screen.findByTestId(testId);
 }
 
-/** The process-wide popup count, read through a throwaway ContextMenu (Android). */
 async function liveNow(): Promise<string> {
   const probe = await render(<Message testId="live-now" />);
   const report = await settledReport('live-now');
@@ -1176,31 +1117,12 @@ async function liveNow(): Promise<string> {
 }
 
 /**
- * `androidIcon` on the rows (G21): a glyph in each row's Material slot.
- *
- * The rows live in a popup of their own window, so nothing readable on the wrapper says
- * whether a row's glyph reached the screen. Menu faces the same wall and answers it the
- * same way, and ContextMenu carries the same two reads for the same reason:
- *
- *  - `iconTints=` in its report, written by each row **as it draws**, from the
- *    `LocalContentColor` its glyph is tinted with — a colour a test cannot name, because
- *    Material takes it from this device's dynamic palette;
- *  - `nuiTestMenuPixelProbe`, which samples the popup window the witness already keeps.
- *
- * Counts are compared as **differences** between two menus that differ only by the icon:
- * a colour count includes the row titles, which Material draws in that same colour, and
- * the artwork here is a filled square, so the difference is the slot's area. The size
- * claim is 20 dp (`MenuDefaults.LeadingIconSize`) at this device's density, squared.
- *
- * One popup is open at a time: a Material popup takes focus and dismisses on a touch
- * outside itself, so a sample is taken and the menu closed before the next one opens.
- *
- * The `MenuRowIcons.reset()` half of this is proven on the JVM, where a recycled slot is
- * observable directly (`MenuRowIconsTest`); the recycle case below is the same claim on
- * the device, where whether Fabric hands the view back at all is not the harness's call.
+ * The rows live in a popup of their own window, so a row's glyph is read from
+ * `iconTints=` in the report and from `nuiTestMenuPixelProbe`. Pixel counts are
+ * compared between two menus that differ only by the icon, because Material
+ * draws the row titles in the same colour.
  */
 describe('ContextMenu · the row glyphs (G21)', () => {
-  /** The same filled square, through each road D43 gives an app. */
   const SLAB_ASSET = require('../src/assets/icons/slab_24px.xml');
   const SLAB_NAME = 'nitroui_test_slab';
   const NOT_SHIPPED = 'nitroui_test_never_built';
@@ -1208,10 +1130,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
   /** `MenuDefaults.LeadingIconSize` in material3 1.5.0-beta02. Not 24 dp. */
   const ROW_ICON_DP = 20;
 
-  /**
-   * One row that may carry a glyph, one that never does, and the titles every
-   * comparison menu here shares — so one probe minus another leaves the artwork.
-   */
   const glyphGroup = (icon: string | number | undefined): MenuGroup => ({
     actions: [
       { id: 'slab', title: 'Arrange by size', androidIcon: icon },
@@ -1234,7 +1152,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     return out;
   }
 
-  /** A field every report carries, refusing the line that lost it. */
   function fieldOf(report: Record<string, string>, name: string): string {
     const value = report[name];
     if (value == null) {
@@ -1246,11 +1163,8 @@ describe('ContextMenu · the row glyphs (G21)', () => {
   }
 
   /**
-   * A `l,t,r,b` rect as `WxH` — the half of it two popups can share.
-   *
-   * Two wrappers sit in two places, so their popups do too; what a claim about a glyph
-   * is about is the frame, and comparing whole rects would compare where each happened
-   * to open.
+   * A `l,t,r,b` rect as `WxH`: two popups open in different places, so only
+   * their sizes compare.
    */
   function frameOf(rect: string): string {
     const parts = rect.split(',').map(Number);
@@ -1269,16 +1183,10 @@ describe('ContextMenu · the row glyphs (G21)', () => {
   }
 
   /**
-   * Open `testId` the way the platform can be asked to, and wait for its menu.
-   *
-   * Both platforms are opened by real input, and then each is read by the one witness it
-   * answers. Android shows a popup of its own window, so the witness's `menu=` rect is the
-   * proof its rows are on screen. iOS hands the menu to UIKit's system presentation and
-   * answers `menu=-1` for it forever (`HybridNitroUiContextMenu.swift`), so waiting for
-   * that rect there waits for a fact the platform never reports - a 15 s timeout, not a
-   * verdict. What iOS does answer is `drawn`: the probe builds the same `UIMenu`
-   * `configuration(at:)` hands UIKit and copies the tree, which is the stronger claim of
-   * the two - the rows UIKit was handed, rather than a window number.
+   * Android shows a popup of its own window, so the `menu=` rect proves its
+   * rows are on screen. iOS hands the menu to UIKit's system presentation and
+   * answers `menu=-1` for it, so there the wait is on `drawn`, the tree UIKit
+   * was handed.
    */
   async function openMenu(testId: string): Promise<Record<string, string>> {
     const handle = await handleFor(testId);
@@ -1301,7 +1209,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     );
   }
 
-  /** Pick the row with no glyph: the popup closes, and no test below counts a pick. */
   async function shut(testId: string): Promise<void> {
     const handle = await handleFor(testId);
     handle.nuiTestSelectRow('plain');
@@ -1309,11 +1216,9 @@ describe('ContextMenu · the row glyphs (G21)', () => {
   }
 
   /**
-   * One popup probe, answered.
-   *
-   * Sampling needs the UI thread and a Nitro call may not block for it, so a probe is a
-   * pair: ask, then poll. The `n=` a line carries is what tells this probe's answer from
-   * the previous control's.
+   * Sampling needs the UI thread and a Nitro call may not block for it, so a
+   * probe is a pair: ask, then poll. The `n=` in a line tells this probe's
+   * answer from the previous one.
    */
   async function probePopup(
     handle: Handle,
@@ -1337,7 +1242,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     }
   }
 
-  /** Sample the open popup until two reads agree, and return that count. */
   async function stableHits(
     handle: Handle,
     color: number,
@@ -1372,7 +1276,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     }
   }
 
-  /** Open `testId`, sample its popup, close it, and hand back the count. */
   async function inkOf(
     testId: string,
     color: number,
@@ -1395,11 +1298,9 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     );
 
     if (IOS) {
-      // iOS's menu is UIKit's `UIMenu`: `androidIcon` has nothing to draw into there, so
-      // `iconTints` stays `-` and the pixel probe says `no pixels` rather than answering
-      // 0. What is asserted is that these rows still reach UIKit - `drawn`, whose exact
-      // tree the suite above pins - and that opening them through a real hold works with
-      // an unresolvable name beside a Metro asset. Both refusals are the honest green.
+      // iOS's menu is UIKit's `UIMenu`: `androidIcon` has nothing to draw into,
+      // so `iconTints` stays `-` and the pixel probe says `no pixels`. What is
+      // asserted is that the rows still reach UIKit.
       const opened = await openMenu('glyph-asset');
       expect(opened.iconTints).toBe('-');
       expect(opened.drawn).toBe('Arrange by size,Sort by name');
@@ -1410,7 +1311,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
       return;
     }
 
-    // The row names the colour it drew with, and only the row with an icon names one.
     const asset = await handleFor('glyph-asset');
     await openMenu('glyph-asset');
     const drawn = await reportWhen(
@@ -1437,15 +1337,12 @@ describe('ContextMenu · the row glyphs (G21)', () => {
       )} name=${String(nameInk)} none=${String(noneInk)}`
     );
 
-    // The slot, measured: 20 dp, and a square that fills its canvas paints it squared.
-    // 12% is the anti-aliased edge of a 55-pixel square and nothing else — Material's
-    // 24 dp default would be 44% more ink, and "resolved but never drawn" is 100% less.
+    // A square that fills the 20 dp slot paints it squared; the 12% margin is
+    // its anti-aliased edge.
     const slot = ROW_ICON_DP * PixelRatio.get();
     expect(ink).toBeGreaterThan(slot * slot * 0.88);
     expect(ink).toBeLessThan(slot * slot * 1.12);
 
-    // D43's two roads to one file, measured as pixels: the drawable the app shipped and
-    // the file Metro served leave the same mark.
     const nameDifference = nameInk - noneInk;
     expect(Math.abs(nameDifference - ink)).toBeLessThan(
       Math.max(6, ink * 0.06)
@@ -1466,10 +1363,9 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     );
 
     if (IOS) {
-      // The name iOS cannot resolve is a name iOS never asked for: `androidIcon` is
-      // Android's prop, so UIKit gets the same two rows here as it does from the group
-      // with no icons at all, and `iconTints` is `-` for both. Android compares the two
-      // popups' frames; iOS has no popup rect, so the tree is the comparison it has.
+      // `androidIcon` is Android's prop, so UIKit gets the same two rows as
+      // from the group with no icons. iOS has no popup rect, so the tree is the
+      // comparison.
       const missing = await openMenu('miss');
       expect(missing.iconTints).toBe('-');
       await shut('miss');
@@ -1480,8 +1376,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
       return;
     }
 
-    // Before anything is open the probe refuses: "nothing to sample" is a different
-    // answer from "sampled and found none", and a test has to be able to tell them apart.
     const handle = await handleFor('miss');
     const refused = await probePopup(handle, 0x123456, 'the closed popup');
     expect(refused).toContain('no popup');
@@ -1490,9 +1384,9 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     expect(missing.iconTints).toBe('-');
     const missingFrame = frameOf(fieldOf(missing, 'menu'));
     await shut('miss');
-    // A name the resource table does not know resolves to `Absent`, which reaches
-    // `leadingIcon` as `null` — so the popup that could not find its glyph is the popup
-    // with no glyphs at all, to the last dp: no reserved 20 dp gap, no moved title.
+    // A name the resource table does not know reaches `leadingIcon` as `null`,
+    // so the popup is the same size as one with no glyphs: no reserved 20 dp
+    // gap.
     const plain = await openMenu('miss-none');
     expect(plain.iconTints).toBe('-');
     const plainFrame = frameOf(fieldOf(plain, 'menu'));
@@ -1527,12 +1421,8 @@ describe('ContextMenu · the row glyphs (G21)', () => {
       'the first owner’s glyph',
       15000
     );
-    // The colour the *first* owner painted its glyph with, which is the only colour worth
-    // asking the second owner about. The claim is "a slot kept from the first owner would
-    // draw its square beside these titles" - so the sample has to be for the ink that
-    // square would have. This used to probe `0x123456`, a colour no chip, row or label on
-    // this screen is ever drawn in, and an always-empty sample passes whether or not the
-    // square is there: `expect(ink).toBe(0)` could not have gone red.
+    // Probe for the colour the first owner painted its glyph with: a slot kept
+    // from that owner would draw its square in that colour.
     const firstTint = tintsOf(first).get('slab');
     if (firstTint == null) {
       throw new Error(
@@ -1546,10 +1436,6 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     await rerender(<Owner id="second" />);
     const second = await handleFor('recycle-second');
 
-    // Whether Fabric hands the same wrapper back is its own business; what is asserted
-    // is what the second owner may claim. It has no `androidIcon`, so before it opens it
-    // carries no tint — and once open, its popup draws none either: a slot kept from the
-    // first owner would put a square beside these titles.
     expect(tintsOf(await settledReport('recycle-second')).size).toBe(0);
     const opened = await openMenu('recycle-second');
     const frame = frameOf(fieldOf(opened, 'menu'));
@@ -1558,15 +1444,9 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     console.log(
       `    · second owner: menu=${frame} ink=${String(ink)} sampled=${firstTint}`
     );
-    // The pixels first: they are the claim, and the report line below is only its
-    // echo. And the claim is *no slot of that colour*, not *none of it* — Material
-    // draws these very titles in the same `LocalContentColor` the glyph was tinted
-    // from, so the popup of a menu with no icon at all counts 145 px of `#40434B`
-    // here. A 20 dp square is 2954 px on this device: a quarter of one is a margin
-    // no text reaches and a kept slot blows through, which is what h5' — the
-    // mutation that hands the next owner the last owner's loaded slots — does, at
-    // 2954. (`expect(ink).toBe(0)` was the first thing written here and the device
-    // said no: the same colour belongs to the row titles too.)
+    // Not zero: Material draws the row titles in the same `LocalContentColor`
+    // as the glyph. A quarter of a 20 dp square is a margin no text reaches and
+    // a kept slot exceeds.
     const slot = ROW_ICON_DP * PixelRatio.get();
     expect(ink).toBeLessThan(slot * slot * 0.25);
     expect(opened.iconTints).toBe('-');
