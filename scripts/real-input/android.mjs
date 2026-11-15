@@ -540,7 +540,7 @@ async function main() {
         adbShell,
         tabs,
         appId: BUNDLE_ID,
-        only: controls.map((control) => control.id),
+        only: wanted.map((control) => control.id),
         stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
       }
     );
