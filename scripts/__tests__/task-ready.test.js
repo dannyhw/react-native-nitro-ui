@@ -1,4 +1,3 @@
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -663,7 +662,6 @@ describe('which report file a task refers to', () => {
     expect(slugReportNames(null, ['G29-a.report.md'])).toEqual([]);
   });
 });
-
 
 describe('the task a branch name belongs to (X30 item 4)', () => {
   it('reads the id off a fix round, a merge round, and any prefix', () => {
