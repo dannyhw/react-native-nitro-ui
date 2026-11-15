@@ -176,7 +176,7 @@ function avdNameFor(serial) {
 /**
  * Resolve the device to measure on.
  *
- * `ANDROID_AVD` is what a CI bench names, because its emulator comes from the job and
+ * `ANDROID_AVD` is what an unleased bench names, because
  * console ports are handed out in order of availability. A *leased* run is a different
  * animal (X28): its pair has a fixed console port, so the serial the lease exported is
  * both known and binding, and `requireLeaseDevice` refuses a bench whose env names a
