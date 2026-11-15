@@ -1,0 +1,65 @@
+# The real-input suite (Android)
+
+Real touches, delivered by [e2e](https://github.com/e2e-inc/e2e) through
+`@e2e-dev/mobile` (agent-device), asserted only against what the app draws and
+what the screen reader is told. Run it with:
+
+```sh
+node scripts/gate.mjs real-input:android         # every control
+node scripts/gate.mjs real-input:android --control slider
+```
+
+`scripts/real-input/android.mjs` owns the device, the stamped APK, Metro and the
+private agent-device daemon; this directory owns the checks. Nothing here shells
+out to `adb`, and nothing here asks a model what to do next: `agent.act` and
+`agent.assert` are not used, because a gate that depends on a model is not a
+gate. `retries` is 0 — a flaky check is fixed or reported, never retried green.
+
+## What a test asserts
+
+One thing per control: **a touch the operating system delivered reached the
+hosted Compose control**. That is the class of bug no in-app test can see — the
+harness drives controls through the library's own hooks and has never proved the
+InputDispatcher → window → React Native → Compose path — and it is the reason
+the suite exists (`docs/tasks/T15-real-input.md`).
+
+Beyond that, only the four kinds the 2026-11-15 audit ties to a real defect, and
+which no harness test in `example/__tests__` covers:
+
+1. **Hit-testing and gesture arbitration** — `form.e2e.ts` (a flick across a row
+   must not press it), `slider.e2e.ts` (a drag is one gesture, not ten taps),
+   `context-menu.e2e.ts` (a scroll opens nothing).
+2. **The screen-reader tree** — `reader.ts`, used by the controls whose names and
+   states the audit found on the wrong node (G15, G16, G23, G24, G31). An in-app
+   query cannot see a hosted control's name at all: Compose publishes it on a
+   `SemanticsNode`, not a `View`.
+3. **Keyboard avoidance** — `keyboard.ts`, for the text controls (G24: a focused
+   field left behind the keyboard; G22: a popup placed under it).
+4. **Drawn press feedback** — `press-feedback.ts` (G30: a Form row that drew no
+   ripple ink while held).
+
+Everything else the old driver asserted — refused changes snap back, disabled
+controls take nothing, one event per tap over N taps, event order, `maxLength`,
+the controlled echo — is asserted by the harness suites, at a tenth of the cost
+and with an event handshake instead of a screenshot. `docs/tasks/X35-real-input-e2e.report.md`
+lists each dropped assertion against the harness test that covers it.
+
+## Layout
+
+One `<control-id>.e2e.ts` per row of `scripts/real-input/controls.mjs` — the
+runner refuses a control with no file and a file with no control, so a control
+cannot leave the suite unnoticed. Shared parts:
+
+| File | What it is |
+| --- | --- |
+| `support.ts` | tab navigation, the tappable band, echo readers |
+| `reader.ts` | the screen-reader rule and its known-debt rows |
+| `keyboard.ts` | keyboard geometry, measured from the resized content view |
+| `press-feedback.ts` | pixels of a held press, through the driver's own capture |
+
+## Reading a failure
+
+`e2e` writes a trace per attempt under `.real-input/android/results/<test>/`, and
+the run's JSON report to `.real-input/android/report.json`; both are artifacts,
+not the ledger — `gate.mjs` is the record. The trace names the step, the box it
+asked for, and the screen as the driver read it at the moment it failed.

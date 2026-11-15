@@ -1,0 +1,52 @@
+import { test } from '@e2e-dev/mobile';
+import { expect } from 'e2e';
+
+import { openScreen, reveal } from './support';
+import { fieldAboveKeyboard, focusAndExpectKeyboard } from './keyboard';
+
+const TYPING = 'Typing search field';
+const FOCUS = 'Focus search field';
+
+test('real keystrokes reach the field, and the clear button reports the empty query', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'searchfield');
+  const field = screen.getByLabel(TYPING);
+  const echo = screen.getByTestId('search-typing-echo');
+  await reveal(screen, field);
+
+  // The clear button is Material's own `IconButton`, named by the framework
+  // (`Clear query`) and present only while the query is non-empty. It exists in no
+  // React tree, so the harness cannot press it: this is the half of
+  // `SearchField.harness` "reports the clear button as one empty edit…" that only
+  // a device can check. G17's defect — the button was unnamed for TalkBack — is
+  // exactly why the tap is placed by that name.
+  await expect(echo).toHaveText('query:  (0)');
+  await field.tap();
+  await field.pressSequentially('abc');
+  await expect(echo).toHaveText('query: abc (3)');
+
+  await screen.getByLabel('Clear query').tap();
+  await expect(echo).toHaveText('query:  (0)');
+});
+
+test('a real tap on a search field brings up the keyboard and keeps the field above it', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'searchfield');
+  const field = screen.getByLabel(FOCUS);
+  const echo = screen.getByTestId('search-focus-echo');
+  await reveal(screen, field);
+
+  // The keyboard-type-reaches-the-IME claim is the harness's ("gives the field the
+  // keyboard the app asked for, Search key included"); what is left for the device
+  // is that focusing really raises an IME and does not lose the field behind it.
+  await expect(echo).toHaveText('focus: 0 blur: 0 submitted: -');
+  await focusAndExpectKeyboard(screen, field);
+  await fieldAboveKeyboard(screen, field);
+  await expect(echo).toContainText('focus: 1');
+});
