@@ -29,7 +29,69 @@ export const REQUIREMENTS = {
   androidApiLevel: 35,
   avdProfile: 'pixel_9',
   minFreeDiskGb: 40,
+  // Below this a device gate does not start. A task worktree with both apps built is
+  // 10-18 GB, and a run that meets ENOSPC half-way dies as an unreadable device
+  // failure; on 2026-11-13 that stopped every task on a machine for 34 hours.
+  deviceRunMinFreeDiskGb: 10,
 };
+
+/**
+ * Why a device gate must not start on this disk, or `null` when it may.
+ *
+ * `freeGb` is `null` when the volume could not be read, and that is not a refusal:
+ * a check that cannot see is not evidence the disk is full. An ephemeral CI runner
+ * is exempt because the cause this guards - worktrees nobody removed - cannot
+ * accumulate on a machine that is thrown away after the job.
+ *
+ * @param {{freeGb: number | null, floorGb?: number, ci?: boolean}} facts
+ * @returns {string | null}
+ */
+export function diskRefusal({
+  freeGb,
+  floorGb = REQUIREMENTS.deviceRunMinFreeDiskGb,
+  ci = false,
+}) {
+  if (ci || freeGb == null || !Number.isFinite(freeGb)) return null;
+  if (freeGb >= floorGb) return null;
+  return (
+    `${freeGb} GB free on this volume and a device run needs ${floorGb} GB. ` +
+    'Merged and pushed task worktrees are the usual cause: ' +
+    '`node scripts/worktrees.mjs` lists them and `--prune` removes the safe ones.'
+  );
+}
+
+/**
+ * Is this an ephemeral CI runner? Only the two spellings CI systems set count:
+ * `CI=false`, `CI=0` and an empty `CI` are a person's shell, and exempting those
+ * would be a way round the floor that nobody meant to offer.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {boolean}
+ */
+export function isCiRunner(env) {
+  return env.CI === 'true' || env.CI === '1';
+}
+
+/**
+ * Free space as the gate reads it.
+ *
+ * Outside a test this is the measured value and nothing else: no variable can raise
+ * it. Inside one (`JEST_WORKER_ID`, which jest sets and a spawned CLI inherits) the
+ * measurement is not used at all, because a suite that drives `gate.mjs` through a
+ * leased device gate must not turn red on a developer's nearly-full disk. There a
+ * case asks about the disk by naming a value in `NITRO_UI_GATE_FREE_DISK_GB`, and a
+ * case that names none is not asked (`null`, see `diskRefusal`).
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {number | null} measuredGb
+ * @returns {number | null}
+ */
+export function freeDiskGbFrom(env, measuredGb) {
+  if (env.JEST_WORKER_ID == null) return measuredGb;
+  const forced = String(env.NITRO_UI_GATE_FREE_DISK_GB ?? '').trim();
+  if (forced !== '' && Number.isFinite(Number(forced))) return Number(forced);
+  return null;
+}
 
 /**
  * The two device pairs a fresh machine gets: the same models and ports the

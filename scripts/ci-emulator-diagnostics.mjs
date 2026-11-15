@@ -13,8 +13,8 @@
  *
  *  1. **Nothing may block indefinitely.** Every command is spawned with its own deadline
  *     and killed when it passes it. `timeout(1)` would have been the shell answer and is
- *     not one: these tests run the step for real, on macOS, where `timeout` is not
- *     installed — a guard nobody can execute is not a guard.
+ *     not one: it is not installed on macOS, so the step could not be run on a
+ *     development machine — a guard nobody can execute is not a guard.
  *  2. **Cheap evidence goes first.** Reading `date`, the AVD's `config.ini` and qemu's own
  *     log cannot block, so they run before anything that talks to an emulator or to
  *     `sudo`. On a machine where the emulator is wedged, that ordering is the difference
@@ -48,11 +48,9 @@ import path from 'node:path';
 import process from 'node:process';
 
 /**
- * Per-command and overall budgets. Both overridable so a test can prove the bound in
- * seconds instead of waiting half a minute per hanging command — and, per this repo's own
- * rule about fakes that change timing, the shortened form is paired with a second case at
- * the *real* numbers (a tool that is merely slow), so a script that only honoured a small
- * deadline could not pass. Every timeout below is expressed as a multiple of
+ * Per-command and overall budgets. Both overridable so the bound can be shown in
+ * seconds instead of waiting half a minute per hanging command. Every timeout below is
+ * expressed as a multiple of
  * {@link COMMAND_TIMEOUT_MS} rather than as a fresh literal, so one knob moves them all
  * and no command can end up longer than the thing meant to bound it.
  */
