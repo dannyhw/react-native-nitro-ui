@@ -1,8 +1,8 @@
 /**
  * `--dry-run`: what a bench run *would* do, without booting, building or measuring.
  *
- * Minting this machine's baselines (RECOVERY's first step) failed twice on things
- * only reading the code revealed: there was no per-machine baseline to write to, and
+ * Minting this machine's baselines (the first step on a new machine) failed twice on
+ * things only reading the code revealed: there was no per-machine baseline to write to, and
  * the iOS device key came from the simulator's *name*. Both are answerable in a
  * second by a command that prints what it resolved, so a three-hour plan is not the
  * first thing to tell you.

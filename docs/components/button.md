@@ -97,11 +97,11 @@ does.
 
 | iOS light                                     | iOS dark                                      |
 | ----------------------------------------------- | ----------------------------------------------- |
-| ![iOS light](../tasks/G2-button/ios-light.png)   | ![iOS dark](../tasks/G2-button/ios-dark.png)   |
+| ![iOS light](../images/button/ios-light.png)   | ![iOS dark](../images/button/ios-dark.png)   |
 
 | Android light                                     | Android dark                                     |
 | --------------------------------------------------- | ---------------------------------------------------- |
-| ![Android light](../tasks/G2-button/android-light.png) | ![Android dark](../tasks/G2-button/android-dark.png) |
+| ![Android light](../images/button/android-light.png) | ![Android dark](../images/button/android-dark.png) |
 
 Each screenshot is the example screen (`example/src/ButtonScreen.tsx`) as it
 opens, down to the tinted pair and the SF Symbol row: the five variants, the

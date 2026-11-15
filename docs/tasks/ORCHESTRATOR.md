@@ -14,7 +14,8 @@ used.
 | Standing agreements                                      | `docs/agents/working-agreements.md`                         |
 | Every rule, its enforcer and the incident behind it      | `docs/agents/rules.md`                                      |
 | Reusing a `check` at merge (was "The loop" step 5), logs | `docs/agents/gates.md`                                      |
-| Live state                                               | `STATUS.md` (task table), `RECOVERY.md` (what is in flight) |
+| Live state                                               | `STATUS.md` (in flight, recently merged, blocked)           |
+| Which task records are still in git                      | `node scripts/task-records.mjs`                             |
 
 Older briefs and reports cite this file by step number ("The loop" step 1b, 3, 5). Step 1b is the
 context pack, now in the `brief` skill; step 3 is the hand-in check, now in `orchestrate`; step 5

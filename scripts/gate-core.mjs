@@ -245,6 +245,11 @@ export const TOOLING_FILES = [
   'scripts/worktrees-core.mjs',
   'scripts/watchdog.mjs',
   'scripts/watchdog-core.mjs',
+  // The task-record retention tool: it reads git and `docs/tasks`, copies old records
+  // to the local archive and stages their removal. No device run imports it, which
+  // `gate-check.test.js` holds as a search.
+  'scripts/task-records.mjs',
+  'scripts/task-records-core.mjs',
   // The README's code samples, kept in sync by `readme:check`. It sits under
   // `example/src/`, so the directory rule would call it both platforms, but no app
   // code imports it - tsc, ESLint, Prettier and `readme:check` are what prove it - so
