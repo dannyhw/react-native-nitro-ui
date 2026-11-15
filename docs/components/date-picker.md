@@ -33,7 +33,7 @@ const [date, setDate] = useState(new Date());
 | `nuiPerfId`        | `number \| null \| undefined`       | `null`    | **Internal.** Instance id for perf marks. |
 
 `DatePicker` is a `View`, so any other `ViewProps` work as usual. `hybridRef` and
-`nuiPerfId` are not app API (DECISIONS D14).
+`nuiPerfId` are not app API (DESIGN.md D14).
 
 No view prop is optional (D7 / nitro#1184): the wrapper always sends every prop and uses
 `null` for "not set". **An absent bound is `null`, not a magic number** — both platforms

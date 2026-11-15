@@ -6,7 +6,7 @@ wearing a style that draws Apple's own checklist glyph — `checkmark.circle.fil
 is `@available(iOS, unavailable)` in the SDK, so there is no system checkbox to
 borrow, only the `Toggle` underneath one. Drawing Apple's symbol on Apple's control is
 what lets a `Checkbox` stop looking exactly like a `Switch` without this library
-imitating a control of its own (DECISIONS D47). `iosStyle` chooses the picture there —
+imitating a control of its own (DESIGN.md D47). `iosStyle` chooses the picture there —
 `'circle'` (the default), `'square'`, or `'switch'`, the look this component shipped
 with — and is ignored on Android, where Material 3 has a checkbox and there is nothing
 to choose.
@@ -51,7 +51,7 @@ const [terms, setTerms] = useState(false);
 | `nuiPerfId`          | `number \| null \| undefined`          | `null`    | **Internal.** Instance id for perf marks.                            |
 
 `Checkbox` is a `View`, so other `ViewProps` (`onLayout`, …) work as usual.
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14).
+`hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14).
 
 ## Platform mapping
 
@@ -72,7 +72,7 @@ const [terms, setTerms] = useState(false);
 put a third case in the one prop every caller reads, and would make an app's `checked`
 a type its `Switch` is not. So `indeterminate` is a *display*: it picks the third
 picture — `TriStateCheckbox` on Android, `minus.circle.fill` / `minus.square.fill` on
-iOS (DECISIONS D47 item 3) — and `onCheckedChange` never carries a third value.
+iOS (DESIGN.md D47 item 3) — and `onCheckedChange` never carries a third value.
 
 One exception is worth stating because both platforms had to agree on it: `'switch'`
 has two positions, so that one style reads the prop as off and draws nothing, exactly
@@ -192,7 +192,7 @@ iOS — which is the difference the field in the key is there to draw.
 The fallback — the size of the very first frame before anything is measured — is
 26 × 26 pt on iOS and 48 × 48 dp on Android (`NitroUiSizing.setFallback` in
 `ios/components/Checkbox/HybridNitroUiCheckbox.swift` and
-`android/.../HybridNitroUiCheckbox.kt`). Until DECISIONS D47 the iOS number was the
+`android/.../HybridNitroUiCheckbox.kt`). Until DESIGN.md D47 the iOS number was the
 Switch's 61 × 28 pt — with the Switch's OS-version split, because a Checkbox on iOS *was*
 a `Toggle(.switch)` — and it is this component's own default box now: a bare checkbox in
 the default style, which is what an app draws first. The glyph's measure is an SF Symbol's
@@ -206,7 +206,7 @@ the engine keys fallbacks by component alone and a labelled Checkbox is wider by
 default box is the one measurement that equals its own declared fallback, which is exactly
 why `Checkbox.harness.tsx` poisons the cache with `11.5 × 57.5` before mounting everything
 else: the agreement has to be earned by a correction, not handed over by the fallback. The
-first instance of a new configuration can show it for one frame (DECISIONS D17).
+first instance of a new configuration can show it for one frame (DESIGN.md D17).
 
 A user `style` wins. A `width` narrower than the control truncates the label with a
 trailing ellipsis on both platforms rather than painting outside the box.
@@ -324,7 +324,7 @@ The control is the platform's, so the accessibility element is too:
   value again — which is the oracle `real-input` uses for a refusing parent.
 - **Stale writes are dropped.** A `checked` written while a toggle is in flight is
   ignored rather than undoing what the user just did (the event-count handshake,
-  `docs/architecture/core-architecture.md` §4).
+  `docs/DESIGN.md` 3.5).
 - **A press asks for the opposite of what is showing**, from whichever hand the
   platform's control reaches: Material's own `onCheckedChange` on Android's bare box, the
   merged row's `clickable` beside a label, and the `Toggle` binding on iOS. Every one of

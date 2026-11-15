@@ -1,6 +1,6 @@
 # AlertDialog and ConfirmationDialog
 
-Two exports over one native view, `NitroUiDialog` (DECISIONS D33). A dialog has no box:
+Two exports over one native view, `NitroUiDialog` (DESIGN.md D33). A dialog has no box:
 the view React Native lays out is a `0 × 0` anchor, and the window is the platform's.
 
 | Export               | iOS                                                    | Android                                                       |

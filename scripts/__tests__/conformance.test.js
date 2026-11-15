@@ -542,7 +542,7 @@ describe('the declared-fallback rule', () => {
     const copied = clone(DECLARED_FALLBACKS);
     copied.NitroUiSlider.ios = { ...copied.NitroUiSwitch.ios };
     const problems = checkFallbackTable(manifests, sizing, copied);
-    // Two names now that the Checkbox draws its own glyph on iOS (DECISIONS D47) and
+    // Two names now that the Checkbox draws its own glyph on iOS (DESIGN.md D47) and
     // declares its own box: before that, three shared the Switch's 61x28 and the
     // excused pair still left a third name to refuse.
     expect(problems.join('\n')).toContain(
@@ -552,7 +552,7 @@ describe('the declared-fallback rule', () => {
   });
 
   it('excuses exactly the one shared row, and nobody else at that size', () => {
-    // Since DECISIONS D47 the table has one shared row: on iOS a Checkbox draws its own
+    // Since DESIGN.md D47 the table has one shared row: on iOS a Checkbox draws its own
     // glyph and declares its own box, so the only honest sharing left is Android's, where
     // a bare Checkbox and a default IconButton are each Material 3's
     // `MinInteractiveComponentSize`. `SHARED_FALLBACK_ROWS` is what lets it; this test is
@@ -574,7 +574,7 @@ describe('the declared-fallback rule', () => {
     expect(androidJoined).toContain('NitroUiMenu');
     expect(androidJoined).toContain('one of these rows was copied');
 
-    // And iOS has no row to excuse any more: since DECISIONS D47 a Checkbox declares its
+    // And iOS has no row to excuse any more: since DESIGN.md D47 a Checkbox declares its
     // glyph box, so the Switch's 61x28 is one row again.
     const asItStands = checkFallbackTable(repoManifests(), repoSizingTable());
     expect(asItStands.join('\n')).not.toContain('61x28');

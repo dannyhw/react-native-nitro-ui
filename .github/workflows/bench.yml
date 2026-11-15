@@ -19,7 +19,7 @@ name: Bench
 # D9 names: `ios27-sim-iphone17` and `android35-emu-pixel9`. A machine on someone's
 # desk is a different device key, so it compares (`--compare`) rather than checks.
 
-# Manual only, like the other device jobs (docs/DECISIONS.md D22, D25): the
+# Manual only, like the other device jobs (docs/DESIGN.md D22, D25): the
 # scheduled and label/comment triggers are off, so nothing runs here until a
 # maintainer starts it. The `trigger` job below still understands those events,
 # so re-enabling them is a change to this block alone. A dispatch run has base ==

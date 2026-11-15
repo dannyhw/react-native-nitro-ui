@@ -88,7 +88,7 @@ lighter (292.2 and 213.1 KiB are heavy), but because `@expo/ui`'s `Picker` and
 (0.89×), on `maintainer-mac-2` it is 1.19× and `Progress` (0.96×) and `Menu`
 (0.98×) hold the line instead. And the iOS memory miss survives a whole machine
 change (1.34–1.46× on `Slider`, `Progress`, `Button` and `Menu`, parity on
-`Switch`), which is the strongest evidence yet that DECISIONS D23's "no known
+`Switch`), which is the strongest evidence yet that DESIGN.md D23's "no known
 fix" is about the shape, not the tuning.
 
 Reading it honestly — these read the `maintainer-mac-1` run above, cell by cell:
@@ -132,7 +132,7 @@ Reading it honestly — these read the `maintainer-mac-1` run above, cell by cel
   one hosting controller and its SwiftUI graph per control, where `@expo/ui`
   shares one across all of them. **There is no known fix for it.** A shared iOS
   host was built and measured: it narrowed the memory gap (Slider still missed)
-  but made mount and unmount UI CPU worse, so it did not ship (DECISIONS D23); and the
+  but made mount and unmount UI CPU worse, so it did not ship (DESIGN.md D23); and the
   lighter public hosting-view type that might have cut the per-instance bytes
   does not exist in the iOS 27 SDK.
 - **iOS `mounted`** (time spent inside the mount transaction, not in the table)
@@ -175,7 +175,7 @@ it loses on is the JS thread — roughly 1.2× the shared host, where the unhost
 control is below it — because a hosted control is still a React Native node
 _and_ a child of somebody else's composition. That is why `Host` is something an
 app opts into for a dense list rather than what every container does. On iOS
-`Host` is a passthrough `View` (DECISIONS D23). `maintainer-mac-2`'s quiet full
+`Host` is a passthrough `View` (DESIGN.md D23). `maintainer-mac-2`'s quiet full
 plan reads that hosted column on its own emulator as 0.91× memory (46.0 KiB
 against the shared host's 50.6), 0.84× UI CPU, 0.97× `mounted`, 1.01×
 `presented`, 1.17× JS CPU and 0.57× `n/v` unmount: the shape reproduces on a

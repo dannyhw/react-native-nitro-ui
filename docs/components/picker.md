@@ -43,7 +43,7 @@ reused rather than forked; what is new here is a control that *presents* UI.
 | `nuiPerfId`            | `number \| null \| undefined`            | `null`   | **Internal.** Instance id for perf marks; `null` disables marks.  |
 
 `Picker` is a `View`, so any other `ViewProps` (`onLayout`, …) work as usual.
-`hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): the handle is read-only
+`hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14): the handle is read-only
 plus `measureContent()`, and it runs once, when the view mounts. There is no
 `isExpanded` on purpose — a SwiftUI `Picker` keeps its menu's open state to itself,
 so such a prop would be answerable on Android and not on iOS.
@@ -149,7 +149,7 @@ of rows, each row `selectable(selected, enabled, Role.RadioButton)` around a
 `RadioButton(onClick = null)` and the label, 48 dp tall, the whole row the press
 target. iOS **renders the menu**, because SwiftUI's radio-group style —
 `RadioGroupPickerStyle` — is `@available(iOS, unavailable)`: there is nothing to
-host, and DECISIONS D38 rules that a missing control falls back to the platform's
+host, and DESIGN.md D38 rules that a missing control falls back to the platform's
 real one rather than to an imitation drawn by us. (`wheel` is the case where both
 platforms do have the control, so nothing falls back — see The wheel variant.)
 
@@ -191,7 +191,7 @@ control iOS does have for "choose one of these, all shown" — or a `Menu` for m
 On iOS this is SwiftUI's `.wheel` style, as it always was. On Android it is Material
 3 1.5's `ScrollField`: one drum of the options, the row under the centre line lit,
 rolled with a finger. Both platforms therefore have the real control and nothing
-falls back (DECISIONS D38); what differs is what a *choice* physically is.
+falls back (DESIGN.md D38); what differs is what a *choice* physically is.
 
 A menu row is pressed and a radio row is pressed; a wheel's choice is **a scroll that
 comes to rest**. While the drum moves, the row under the centre line changes once per

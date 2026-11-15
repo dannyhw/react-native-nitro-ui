@@ -39,7 +39,7 @@ store. Options are plain strings — no icons, no per-option colours.
 | `nuiPerfId`            | `number \| null \| undefined`   | `null`   | **Internal.** Instance id for perf marks; `null` disables marks.  |
 
 `SegmentedControl` is a `View`, so any other `ViewProps` (`onLayout`, …) work as
-usual. `hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): the handle is
+usual. `hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14): the handle is
 read-only plus `measureContent()`, and it runs once, when the view mounts.
 
 ## Platform mapping
@@ -108,7 +108,7 @@ do.
 SegmentedControl is `intrinsic`, and it is the library's second control whose size
 comes from its props and the first whose size comes from a **list**: the labels
 *are* the width, so the option list is the whole size configuration. This is the
-R3 verification DECISIONS D16 asks for, in
+R3 verification DESIGN.md D16 asks for, in
 `example/__tests__/SegmentedControl.harness.tsx`.
 
 The sizing key is `optionCount|label|label|…`

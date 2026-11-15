@@ -92,7 +92,7 @@ Both platforms put the popover below the anchor, start-aligned, and above it whe
 is no room below. Android's position provider keeps the popover inside the *visible frame*
 of the app's own window — the region below the status bar that stops at the keyboard once
 the keyboard is up — and places the open popover again when that frame moves, so a
-`TextInput` inside a popover is never under the keyboard (DECISIONS D44 item 1). The frame
+`TextInput` inside a popover is never under the keyboard (DESIGN.md D44 item 1). The frame
 is read from the app's window rather than from the size Compose hands the provider, which
 is that frame's height with its origin thrown away: placing against the size alone leaves
 a popover pinned to the top of the screen (measured and fixed in G22).

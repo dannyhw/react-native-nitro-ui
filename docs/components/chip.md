@@ -76,7 +76,7 @@ density, ±12%; the fixture is a filled square so that difference *is* the slot'
 A prop that belongs to the other kind is ignored: an assist chip never selects,
 and a filter chip never calls `onPress`. `Chip` is a `View`, so other
 `ViewProps` (`onLayout`, …) work as usual. `hybridRef` and `nuiPerfId` are not
-app API (DECISIONS D14).
+app API (DESIGN.md D14).
 
 ## Platform mapping
 
@@ -130,7 +130,7 @@ The fallback, the size of the very first frame before anything is measured, is
 80 × 28 pt on iOS and 96 × 48 dp on Android (`NitroUiSizing.setFallback` in
 `ios/components/Chip/HybridNitroUiChip.swift` and
 `android/.../HybridNitroUiChip.kt`). The first instance of a new configuration
-can show it for one frame (DECISIONS D17).
+can show it for one frame (DESIGN.md D17).
 
 A user `style` wins. A `width` smaller than the label truncates it with a
 trailing ellipsis instead of painting outside the box. That was seen on iOS in
