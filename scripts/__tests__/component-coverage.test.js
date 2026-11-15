@@ -31,8 +31,6 @@ import {
   failingKeys,
   recycleNotes,
 } from '../conformance-core.mjs';
-import { SCREEN_TAB, screenTab } from '../real-input/screens.mjs';
-import { exampleTabs } from '../real-input/tab-targets.mjs';
 
 /** Where the conformance suite keeps its per-control fixtures, and its tables. */
 const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
@@ -195,26 +193,6 @@ describe('every bench component is implemented by every arm', () => {
   });
 });
 
-/**
- * The tabs `example/src/App.tsx` renders, in bar order.
- *
- * X19 made the app's own `TABS` array the one source of a tab's id and label, and the
- * Android runner looks a tab up in it by id; this is that same read, so the guard below
- * asks the question the runner actually asks — is there a tab with this id — rather than
- * comparing a label this file also writes out.
- */
-function appTabs() {
-  return exampleTabs(readRepo('example/src/App.tsx'));
-}
-
-/** Every string the example app draws, so an echo testID can be proved to exist. */
-function exampleSourceText() {
-  return readdirSync(join(repoRoot, 'example/src'))
-    .filter((name) => name.endsWith('.tsx'))
-    .map((name) => readRepo(`example/src/${name}`) ?? '')
-    .join('\n');
-}
-
 describe('every real-input control has a check on both platforms', () => {
   const controls = () => {
     const text = readRepo('scripts/real-input/controls.mjs') ?? '';
@@ -271,11 +249,17 @@ describe('every real-input control has a check on both platforms', () => {
   // failing on whichever one sorts first.
   for (const control of controls()) {
     it(`${control.id} has a check on both platforms`, () => {
+      // Android is a suite of files, one per control: e2e collects each file on its
+      // own, so a control whose file was deleted does not fail — it runs nothing.
+      // The same silent gap the old driver's `CHECKS` comparison guarded.
+      const file = `example/e2e/real-input/${control.id}.e2e.ts`;
+      // Named in the value rather than in a message argument, which jest ignores.
       expect(
-        new RegExp(`^ {2}'${control.id}': async \\(t\\)`, 'm').test(
-          readRepo('scripts/real-input/android.mjs') ?? ''
-        )
-      ).toBe(true);
+        existsSync(join(repoRoot, file))
+          ? 'present'
+          : `${file} is missing, so no real touch is delivered to ` +
+            `"${control.id}" and nothing would notice`
+      ).toBe('present');
       // The Swift check is named for the row id, camel-cased: `segmented-control` ->
       // `testRealInputSegmentedControl`, `hosted-slider` -> `testRealInputHostedSlider`.
       const pascal = `${control.id[0].toUpperCase()}${control.id
@@ -289,63 +273,23 @@ describe('every real-input control has a check on both platforms', () => {
       ).toBe(true);
     });
 
-    it(`${control.id}'s screen can be reached on Android`, () => {
-      // A check is only run if the runner can get to the screen behind it, and the two
-      // platforms get there differently. iOS taps the tab by its `testID`, which React
-      // Native writes as `accessibilityIdentifier`, so a new screen needs no new iOS
-      // table row. Android's accessibility tree carries no testID (React Native stores it
-      // as a view tag), so the runner finds the tab by *id* in the `TABS` array the app
-      // renders (X19) and then polls an echo testID to learn the screen came up — that
-      // echo is the one half `SCREEN_TAB` still owns.
-      //
-      // G17's SearchField is what happens when the two halves are not both there: the
-      // screen and its tab both existed, the tables the runner used did not know the
-      // screen, and the run died 15 device-minutes in on `no "undefined" tab` — after
-      // every other control had passed. A device gate is the wrong place to discover a
-      // missing table row.
-      const { id } = appTabs().find((tab) => tab.id === control.screen) ?? {};
-      // Named in the value rather than in a message argument, which jest ignores.
-      expect(String(id)).not.toBe('undefined');
-      const tab = screenTab(control.screen);
-      // The echo has to be drawn by something, or the runner waits out its timeout
-      // for a screen that is already up. Matched against every example source rather
-      // than the one screen file, because a screen can borrow its echo from a widget it
-      // renders (`dialog-log`, `sheet-log` do).
-      const drawn = new RegExp(`["'\`]${tab.anchor}["'\`]`).test(
-        exampleSourceText()
-      );
+    it(`${control.id}'s Android check opens the screen its row names`, () => {
+      // The suite reaches a screen by tapping the tab whose testID is `tab-<screen>`,
+      // so the pair that has to agree is the row's `screen` and the `openScreen` call
+      // in the control's own file. G17's SearchField is what this guards: the screen
+      // and its tab both existed, the navigation table the runner used did not know
+      // the screen, and the run died 15 device-minutes in — after every other control
+      // had passed. A device gate is the wrong place to discover that.
+      const text = readRepo(`example/e2e/real-input/${control.id}.e2e.ts`) ?? '';
       expect(
-        drawn ? 'drawn' : `nothing in example/src draws "${tab.anchor}"`
-      ).toBe('drawn');
+        text.includes(`openScreen(screen, '${control.screen}')`)
+          ? 'opens it'
+          : `example/e2e/real-input/${control.id}.e2e.ts never opens the ` +
+            `screen "${control.screen}" that scripts/real-input/controls.mjs ` +
+            'names for it'
+      ).toBe('opens it');
     });
   }
-});
-
-describe('the Android navigation table agrees with the tab bar', () => {
-  it('no row names a tab the example app stopped rendering', () => {
-    // The other direction: a renamed or dropped tab leaves a row nothing navigates to,
-    // and the runner would keep looking for an id the bar no longer draws.
-    const ids = new Set(appTabs().map((tab) => tab.id));
-    expect(
-      Object.keys(SCREEN_TAB).filter((screen) => !ids.has(screen))
-    ).toEqual([]);
-  });
-
-  it('an unknown screen is named in the failure, not tapped as "undefined"', () => {
-    // The bug this guards is invisible without it: `undefined` is a perfectly good value
-    // to look up in the accessibility tree, so the runner just fails to find a tab. The
-    // message has to say which table lost the row, because the fix is not in the file
-    // that throws.
-    let message = '<did not throw>';
-    try {
-      screenTab('searchfield-typo');
-    } catch (error) {
-      message = String(error.message);
-    }
-    expect(message).toContain('searchfield-typo');
-    expect(message).toContain('SCREEN_TAB');
-    expect(message).toContain('scripts/real-input/screens.mjs');
-  });
 });
 
 describe('every component is covered by the conformance suite', () => {
