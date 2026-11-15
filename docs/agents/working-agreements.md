@@ -27,7 +27,8 @@ quoting anyone.
 - **Needs the owner:** approving a staged npm publish (D28); a product or API choice that no
   experiment can settle; anything that trades what users see for fewer dependencies or less setup
   (D43); starting a tooling or process task. That last one replaces the earlier agreement to
-  schedule tooling alongside product work (2026-10-27): it grew to 28 % of agent time. (2026-11-14)
+  schedule tooling alongside product work (2026-10-27): in its first week process tooling took
+  45 % of agent time. (2026-11-14)
 - **Does not:** ordering, release contents, merge order, removing what is no longer needed, stray
   PR comments, and any reversible choice the orchestrator already has a recommendation for.
 - A staged publish is never waited on. Say once that it is staged, carry on, and check the
@@ -66,7 +67,17 @@ quoting anyone.
 - CI is checked after every push to `main`. (2026-10-31)
 - No periodic self-check runs inside the orchestrator's own conversation. The hourly watchdog is
   separate: it runs outside and is silent unless something changed. (2026-10-28, 2026-11-14)
-- Benchmarks run when the machine is idle; load is the only constraint. (2026-10-27)
+- Benchmarks run before a release, on an idle machine. A task runs one only when its brief names
+  it. (2026-10-27, 2026-11-15)
+- Process tooling stays under 10 % of agent hours in any week, and the weekly digest states the
+  share. The gate and lease code takes bug fixes only; nothing is added to the lease pool while a
+  replacement for it is being evaluated. (2026-11-15)
+- Tooling and tests have to earn their place. A check that has never caught a real defect, a tool
+  nothing calls, and a probe written for one investigation are removed when the task that needed
+  them ends. (2026-11-15)
+- No commit on `main` only updates task records. Status, follow-ups and decisions change inside the
+  merge commit of the work they describe, and a brief is the first commit of its task branch. A
+  task branch carries one records commit per round at most. (2026-11-15)
 - A replacement for an existing tool is proven in a side install before the flow changes to it.
   (2026-11-04)
 

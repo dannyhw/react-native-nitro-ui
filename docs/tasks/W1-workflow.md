@@ -15,7 +15,8 @@ to build its recommendations. What the review measured:
 - 3,359 gate runs over 409 hours, half of them red; 185 of 385 red full device runs were on code
   that later passed unchanged.
 - 61 % of delegated agent time came after a task's first round.
-- 29 tooling tasks took 28 % of agent time, and `scripts/` grew faster than the library.
+- Process tooling took 45 % of agent time in its first week, and `scripts/` grew faster than the
+  library.
 - 95 of 442 hours with nothing running, including stalls of 39 h and 34 h that nothing in the
   system noticed. The 34 h one was a disk filled by 47 worktrees nobody removed.
 

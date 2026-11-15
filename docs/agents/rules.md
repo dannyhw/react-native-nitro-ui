@@ -64,7 +64,11 @@ These depend on an agent reading and obeying. They are the candidates for the ne
 | A task has a wall-clock budget                                        | brief          | New rule; single rounds ran 8 to 21 h             |
 | One rerun; a flake seen twice is quarantined                          | flake          | New rule; reruns were unlimited                   |
 | 30 minutes and two device runs to reproduce a flake                   | flake          | 2026-11-14: about 15 h of device time on four flaky tests |
-| No tooling task without a measured cost and the owner's yes           | orchestrate    | New rule, replacing "schedule tooling alongside product work" (2026-10-27); 29 tooling tasks took 28 % of agent time |
+| No tooling task without a measured cost and the owner's yes           | orchestrate    | New rule, replacing "schedule tooling alongside product work" (2026-10-27); process tooling took 45 % of agent time in its first week |
+| Process tooling under 10 % of agent hours a week; gate and lease code takes bug fixes only | orchestrate    | 2026-10-26 week: 69,000 lines of process scripts, 9,600 of library |
+| Benchmarks run before a release, not per task                         | orchestrate    | 16 recorded runs, 7 red, none a regression caught by the baseline check |
+| No commit on `main` only updates task records                         | orchestrate    | 433 of 478 direct commits on `main` touched only `docs/tasks`, about three per merge |
+| A tool or test nothing calls, or that never caught a defect, is removed | working agreements | 2026-11-15 audit                                  |
 | Nothing reaches `main` ungated                                        | orchestrate    | 2026-11-12: a one-line CI fix cost a 2.5 h re-run |
 | Look at every screenshot before merge                                 | orchestrate    | 2026-11-06: a search icon that drew a key shipped |
 | Status lines come from a live query                                   | owner-digest   | See the npm row above                             |

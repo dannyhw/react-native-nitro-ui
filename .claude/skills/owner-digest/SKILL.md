@@ -25,6 +25,9 @@ Running: <plain name, how long so far against its budget>
 
 Under 120 words unless they ask for more.
 
+Once a week add a fifth line: `Tooling: <n>% of agent hours this week (ceiling 10%)`,
+from the hours of the tasks that ran. Over the ceiling, say what you stopped.
+
 ## Rules
 
 - **Look before you write.** Every line comes from this turn. Run
