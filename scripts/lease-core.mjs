@@ -1187,8 +1187,8 @@ export function pruneExpired(state, now) {
  *
  * Two limits, per the brief: at most `maxDeviceLeases` device leases at a time,
  * and an `--exclusive` lease only once every other lease has ended (the bench and
- * baseline runs that need a quiet machine - D21's wall-clock gates are refused at
- * load 10+ for a reason).
+ * baseline runs that need a quiet machine — a baseline refuses to mint while the
+ * machine is loaded, `scripts/bench/lib.mjs:loadBlocker`).
  *
  * @param {object} options
  * @param {object[]} options.active the active leases

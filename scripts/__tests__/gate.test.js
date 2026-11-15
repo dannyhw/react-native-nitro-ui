@@ -1104,7 +1104,7 @@ describe('platformMappingFor / tooling class', () => {
       'scripts/app-stamp.mjs',
       'scripts/app-stamp-core.mjs',
       'scripts/node-version.mjs',
-      'scripts/harness-timing-gate.js',
+      'scripts/harness-run-state.js',
       'scripts/harness.mjs',
       'scripts/real-input/android.mjs',
       'scripts/build-app.mjs',

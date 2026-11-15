@@ -4,7 +4,7 @@ const { withMetroConfig } = require('react-native-monorepo-config');
 
 const { withStorybook } = require('@storybook/react-native/withStorybook');
 
-const { withTimingGateRoute } = require('../scripts/harness-timing-gate.js');
+const { withRunStateRoute } = require('../scripts/harness-run-state.js');
 
 const root = path.resolve(__dirname, '..');
 
@@ -20,19 +20,18 @@ const config = withMetroConfig(getDefaultConfig(__dirname), {
   conditions: ['react-native-nitro-ui-source'],
 });
 
-// One extra route, for the harness's wall-clock gates (D21): a test running in
-// the app cannot see this machine's load average, so the runner publishes it and
-// reads it back over the dev server - the only host port an emulator is sure to
-// reach. Metro serves no project files by itself, so the route is declared here;
-// it answers exactly one path and hands everything else on. See
-// `scripts/harness-timing-gate.js`.
+// One extra route, for the one premise a test in the app cannot read for itself: the
+// runner publishes what this run opted out of, and the app reads it back over the dev
+// server - the only host port an emulator is sure to reach. Metro serves no project
+// files by itself, so the route is declared here; it answers exactly one path and
+// hands everything else on. See `scripts/harness-run-state.js`.
 config.server = {
   ...config.server,
-  enhanceMiddleware: withTimingGateRoute({ exampleDir: __dirname }),
+  enhanceMiddleware: withRunStateRoute({ exampleDir: __dirname }),
 };
 
 // Storybook (S1): the last wrapper, so it sees the finished config - the
-// monorepo resolver above and the timing-gate route are both preserved (it
+// monorepo resolver above and the run-state route are both preserved (it
 // composes `resolver.resolveRequest` and spreads the rest of the config).
 //
 // This is the bundler-agnostic wrapper, i.e. the documented entry-point

@@ -31,8 +31,6 @@ import {
   type NitroUiSizingStats,
   type NitroUiSizingTraceEvent,
 } from 'react-native-nitro-ui';
-import { expectTimingBudget } from './timingGate';
-
 /** The Switch's Fabric name - the key the sizing engine files its sizes under. */
 const COMPONENT = 'NitroUiSwitch';
 
@@ -687,26 +685,13 @@ describe('Sizing · intrinsic (T11)', () => {
     // one correction, 199 async enqueues) is 0.09ms. One commit of a 200-host tree
     // cost 38.80ms as the first batch in a process and 14.08-18.88ms in the rounds
     // after it, and T11 measured 84-125ms for the same batch on a loaded one, so
-    // this is the load-bound number, not a target: the bar stays where T11 put it
-    // because it cannot be tightened without turning this test red on a busy
-    // machine. The structural guarantee - not N synchronous commits - is carried by
-    // the `immediate` gate above, not by milliseconds.
-    // Both bars are on a duration, so both are D21 gates: reported on every
-    // run, judged only under `HARNESS_TIMING=1` on a quiet machine. The
-    // structural guarantee this test is really about - one correction per
-    // instance, one flush for the batch - is gated above, on every run.
-    await expectTimingBudget({
-      label: 'cold batch of 200: one correction flush',
-      measuredMs: flushMs,
-      limitMs: mountedIn * 0.1,
-      note: 'the batch may not cost more than a tenth of its own mount',
-    });
-    await expectTimingBudget({
-      label: 'cold batch of 200: one correction flush',
-      measuredMs: flushMs,
-      limitMs: Platform.OS === 'android' ? 250 : 40,
-      note: 'bar placed by T11; T12 attributed the Android half to the pre-draw re-layout',
-    });
+    // this is the load-bound number, not a target. X37 removed the two duration bars
+    // that used to sit here (`flushMs` under a tenth of the batch's own mount, and
+    // T11's 40 ms / 250 ms bar): no gate run judges a wall-clock bar - `HARNESS_TIMING`
+    // is unset in every one - and this test's verdict is structural and on every run:
+    // one correction per instance, one flush for the batch, at most
+    // `immediateBudget` of them immediate. `flushMs` is still printed above, so a
+    // regression is visible in the log; a duration gets its verdict in `bench/`.
     unmount();
   });
 

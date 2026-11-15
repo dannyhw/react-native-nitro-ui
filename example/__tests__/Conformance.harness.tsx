@@ -96,7 +96,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import { deviceLocale, deviceLocaleNote } from './deviceContext';
 import { waitForHandle } from './handles';
-import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
+import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './runState';
 import {
   AlertDialog,
   BottomSheet,
@@ -1280,7 +1280,7 @@ function fallbackFindings(input: {
     // pins the launch locale, so the app reporting another one means the pin was lost, was
     // overridden without being said, or the formatter stopped following the locale it was
     // handed. The skip exists only behind the run's own opt-out (see `localeMismatchAllowed`
-    // in `timingGate.ts`), and names the two claims it suspends — the box comparison and the
+    // in `runState.ts`), and names the two claims it suspends — the box comparison and the
     // warm-corrections claim below, which `HybridNitroUiDatePicker.swift`'s `fallbackSize`
     // prices in words. Everything else still runs either way: the poison must still be
     // corrected, and a mount that settles at nothing still fails.

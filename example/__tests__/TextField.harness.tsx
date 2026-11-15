@@ -44,7 +44,6 @@ import {
   type TextFieldHandle,
 } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
-import { expectTimingBudget } from './timingGate';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -816,8 +815,9 @@ describe('TextField', () => {
    * (T19's lesson). A keystroke is the same IME-level call into either field
    * (`insertText` on iOS, `InputConnection.commitText` on Android); the clock starts
    * in JS before that call and stops in the layout effect that commits the new text,
-   * so both arms pay the same JS -> UI hop and the difference is the field. Every key
-   * must commit on both arms; the duration is D21's (`expectTimingBudget`).
+   * so both arms pay the same JS -> UI hop and the difference is the field. What this
+   * test gates is that every key commits on both arms; the p50/p95 pair it measures is
+   * printed for the log, not judged — a duration gets its verdict in `bench/`.
    */
   it('commits a keystroke about as fast as RN TextInput', async () => {
     commits.length = 0;
@@ -889,12 +889,15 @@ describe('TextField', () => {
         p95: percentile(samples.rn, 0.95),
       },
     };
-    await expectTimingBudget({
-      label: 'TextField keystroke->commit p95 (1.5x RN TextInput p95)',
-      measuredMs: summary.nitro.p95,
-      limitMs: summary.rn.p95 * 1.5,
-      note: `nitro p50 ${summary.nitro.p50.toFixed(1)} / p95 ${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ${summary.rn.p95.toFixed(1)}`,
-    });
+    // The bar that used to sit here was `nitro` p95 under 1.5x the `rn` p95 — a
+    // duration, which no gate run judges (X37 removed the timing gate, whose
+    // `HARNESS_TIMING=1` was set by nobody). The two arms are still printed side by
+    // side so a regression is visible in the log of any run.
+    console.log(
+      `keystroke->commit: nitro p50 ${summary.nitro.p50.toFixed(1)} / p95 ` +
+        `${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ` +
+        `${summary.rn.p95.toFixed(1)}`
+    );
   });
 
   it('comes back from the pool with none of its previous owner', async () => {
