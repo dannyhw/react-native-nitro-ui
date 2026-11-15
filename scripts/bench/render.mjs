@@ -422,7 +422,7 @@ export function runHeader(run) {
   if (machine.cpuCount != null) {
     const cpu = machine.cpuModel != null ? ` (${machine.cpuModel})` : '';
     lines.push(
-      `- machine: \`${machine.hostname}\`, ${String(machine.cpuCount)} cores${cpu}, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${loadSamplesNote(machine.loadSamples)}${machine.quiet === false ? ' **(busy)**' : ''}`
+      `- host: ${String(machine.cpuCount)} cores${cpu}, ${String((machine.totalMemoryGb ?? 0).toFixed(1))} GB, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${loadSamplesNote(machine.loadSamples)}${machine.quiet === false ? ' **(busy)**' : ''}`
     );
   }
   if (machine.osVersion != null) {

@@ -1,20 +1,18 @@
 /**
  * What a run records about the machine it ran on.
  *
- * Lives here rather than in `run.mjs` for the reason `format.mjs` documents: the
- * runner is a CLI that resolves repo paths through `import.meta`, which jest's
- * CommonJS transform cannot represent, and this record decides whether a run may
- * mint a baseline at all - so it has to be testable without a device.
+ * Lives here rather than in `run.mjs` for the reason the header of this directory
+ * documents: the runner is a CLI that resolves repo paths through `import.meta`,
+ * which jest's CommonJS transform cannot represent, and this record is what a
+ * reader of a results file uses to judge the numbers - so it has to be testable
+ * without a device.
  *
- * The label is the single thing here that is *not* a measurement
- * (`machineLabelFromEnv`), and it is the one that picks the directory the run's
- * baseline is written to. `run.mjs` therefore refuses an unusable label before the
- * run starts, in the same pre-flight as the load check: both are facts about the
- * machine, known at second one, that decide whether the next three hours are worth
- * spending. Recording the label differently from the way that pre-flight judged it
- * - a raw `process.env` read that skips the trim, say - would discover the
- * mismatch at the end of the plan rather than the start, which is what the test for
- * this module guards.
+ * Every field is a measurement, read at the moment the run ended except `loadSamples`,
+ * which is the sampler that ran *with* the run. Nothing here identifies the machine by
+ * name (D25: results are quoted in public reports): the CPU model, core count, RAM and
+ * OS release are what tell two runs' hardware apart, and `deviceKey` above this block
+ * says which device produced them. `quiet` is the load answer (`loadOverCeiling`),
+ * printed beside the numbers - a busy machine is a noisier machine, not a disqualification.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -22,9 +20,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { machineLabelFromEnv } from './baseline.mjs';
 import { installedVersion, resolvedDependencies } from './deps.mjs';
-import { isNumber, loadBlocker } from './lib.mjs';
+import { loadOverCeiling } from './lib.mjs';
 
 /** Bounded best-effort command execution: null rather than a throw or a hang. */
 export function tryExec(command, args) {
@@ -109,8 +106,8 @@ export function runDependencies({
 /**
  * Who ran this, on what, and how busy they were (T02 review S10, D9, R4).
  *
- * A baseline is only meaningful if it says so: the load average decides whether
- * the run may mint one at all, and the OS runtime is part of the device key
+ * A number is only meaningful if it says so: the load average says how much of the
+ * machine was doing something else, and the OS runtime is part of the device key
  * because a runtime change breaks comparability sooner than a device change.
  *
  * `load` is the sampler that ran with the run, so the file carries the load of
@@ -123,10 +120,6 @@ export function collectMachine(platform, device, load) {
   const loadavg = os.loadavg();
   const cpuCount = os.cpus().length;
   const machine = {
-    // A label, not os.hostname(): results and baselines are committed to a public repo
-    // (D25). It also picks the directory this machine's baselines live in, and it has to
-    // be the same value the pre-flight judged - hence the shared helper, not an env read.
-    hostname: machineLabelFromEnv(),
     osPlatform: os.platform(),
     osRelease: os.release(),
     osVersion: os.version(),
@@ -142,7 +135,7 @@ export function collectMachine(platform, device, load) {
     totalMemoryGb: Math.round((os.totalmem() / 1024 ** 3) * 10) / 10,
     xcode: tryExec('xcodebuild', ['-version'])?.split('\n')[0] ?? null,
   };
-  machine.quiet = isNumber(machine.loadavg1) && loadBlocker(machine) === null;
+  machine.quiet = loadOverCeiling(machine) === null;
   if (platform === 'ios') {
     machine.simRuntime = device.runtime ?? null;
   } else {
