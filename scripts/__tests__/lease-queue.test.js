@@ -535,7 +535,13 @@ describe('the CLI keeps a queue in the lease file', () => {
           '0',
         ]).status
       ).toBe(0);
-      expect(readState().leases.map((entry) => entry.task)).toEqual(['X24']);
+      // X24 holds its pair, granted first. The other pair is free and X25 is now the head of
+      // the queue, polling every 50 ms, so it may already hold that one: both states are the
+      // queue working. Asserting `['X24']` alone was a race against that poll, which the
+      // device scan `acquire` used to do on every poll happened to make slow enough to lose.
+      expect([['X24'], ['X24', 'X25']]).toContainEqual(
+        readState().leases.map((entry) => entry.task)
+      );
       // Served: out of the queue, so it is not blocking the next grant either.
       expect(
         (readState().waiters ?? []).some((entry) => entry.task === 'X24')

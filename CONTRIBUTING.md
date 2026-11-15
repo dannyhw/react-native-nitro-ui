@@ -1071,8 +1071,8 @@ how the suite measures rather than what an app gets:
 - **"Known debt" rows are pinned to the measurement that opened them.**
   `A11Y_EXEMPTIONS` (`scripts/real-input/a11y.mjs`) matches a failure's own numbers, so
   a row is reported _stale_ the moment the geometry changes for any reason - including
-  being fixed - and a fixed control has to delete its row. `docs/tasks/FOLLOWUPS.md`
-  owns what each one is for.
+  being fixed - and a fixed control has to delete its row. Each row's `followups`
+  field says what it is for.
 
 ### Wall-clock gates (`HARNESS_TIMING`)
 

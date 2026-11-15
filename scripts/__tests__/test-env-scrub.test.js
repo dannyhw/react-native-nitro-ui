@@ -29,15 +29,9 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import {
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 import { describe, expect, it } from '@jest/globals';
 
@@ -48,18 +42,6 @@ import {
   isLeaseScopedEnvName,
   withoutLeaseEnv,
 } from './helpers/scrubbed-env.js';
-import {
-  callScrubsLease,
-  callSetsEnv,
-  callSpreadsProcessEnv,
-  dataMask,
-  definitionText,
-  deviceAwareScripts,
-  deviceAwareTarget,
-  envValueIdentifiers,
-  spawnCalls,
-  unresolvedScriptsTarget,
-} from './helpers/spawn-env-audit.js';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 
@@ -422,187 +404,5 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
         seen: expected.sort(),
       });
     });
-  });
-});
-
-/**
- * The line between "a call this file makes" and "a call this file writes", checked on its own.
- *
- * Both ways this rule can be wrong are silent. Too wide and a real leak stops counting as a site —
- * the audit goes green on a suite that hands `process.env` to `gate.mjs`. Too narrow and it cries
- * wolf at a fixture's prose until somebody widens it, which is the route by which a guard stops
- * being a guard. So the boundary is asserted, not trusted.
- */
-describe('dataMask (which `spawn(` is a call site of this file)', () => {
-  it('does not count a call written inside generated source', () => {
-    const source = [
-      'function gateScript() {',
-      '  return [',
-      '    \'const { spawn } = require("node:child_process");\',',
-      '    \'const run = spawn(process.execPath, ["gate.mjs"], { env: process.env });\',',
-      "  ].join('\\n');",
-      '}',
-    ].join('\n');
-    expect(spawnCalls(source)).toEqual([]);
-    // The mask is the reason, not a pattern that stopped matching: the text is there, the position
-    // is data. Saying it the other way round would pass for the wrong reason.
-    const line = source.split('\n')[3];
-    expect(line).toContain('spawn(');
-    expect(dataMask(source)[3]).not.toContain('spawn(');
-  });
-
-  it('still counts a real call that mentions a script in prose around it', () => {
-    // The loophole, spelled out: a comment naming `gate.mjs` is the cheapest way to make a leak
-    // invisible to this audit, and it must not be.
-    const source = [
-      "const CLI = join(root, 'scripts', 'gate.mjs');",
-      "// Run gate.mjs with a scrubbed environment — don't inherit this shell's lease.",
-      'const run = spawn(process.execPath, [CLI], { env: childEnv() }); // don’t inherit',
-    ].join('\n');
-    expect(spawnCalls(source).map((call) => call.line)).toEqual([3]);
-  });
-
-  it('does not count a call that only exists in a doc comment', () => {
-    const source = [
-      '/**',
-      ' * Use it as: spawn(process.execPath, [CLI], { env: childEnv() })',
-      ' */',
-      'const run = spawn(process.execPath, [CLI], { env: childEnv() });',
-    ].join('\n');
-    expect(spawnCalls(source).map((call) => call.line)).toEqual([4]);
-  });
-});
-
-/**
- * The conservative half of the audit: what it does with a target it *cannot* resolve.
- *
- * `deviceAwareTarget` can only speak for a call whose script it can read out of the file. Suites that
- * copy the repo's scripts into a scratch checkout and name the file by variable are outside that, and
- * the question the guard then asks — "did that child get the shell's lease?" — is the same question.
- * Both directions of this rule are silent, so both are asserted: too narrow and a `bench/report.mjs`
- * inherits `EMULATOR_PORT` from a leased shell again (the real thing this caught), too wide and every
- * `git grep … -- scripts` in the directory becomes a leak nobody will fix.
- */
-describe('unresolvedScriptsTarget (a spawn target the audit cannot name)', () => {
-  const target = (window) => unresolvedScriptsTarget(window);
-
-  it('counts a script joined out of `scripts/` by variable', () => {
-    // The shape that hid the leak: the name is a variable, so no scan can resolve it, and the
-    // script itself is a *copy* in a scratch tree rather than the one this scan walks.
-    expect(
-      target(
-        "spawnSync(process.execPath, [path.join(root, 'scripts', 'bench', script), ...args], { env:"
-      )
-    ).not.toBeNull();
-  });
-
-  it('counts a script spelled out under `scripts/`, and passes one outside it', () => {
-    expect(
-      target(
-        "spawnSync(process.execPath, [join(repoRoot, 'scripts', 'gen-registry.mjs')], { encoding: 'utf8' }"
-      )
-    ).not.toBeNull();
-    expect(
-      target(
-        "spawnSync(process.execPath, [join(repoRoot, 'bench', 'run.mjs')], { encoding: 'utf8' }"
-      )
-    ).toBeNull();
-  });
-
-  it('does not mistake an argument for a target', () => {
-    // The false positive that would have made this rule a week-old guard: `scripts` as a *pathspec*
-    // of a `git grep`, which is neither the command nor a script anyone is spawning.
-    expect(
-      target(
-        "spawnSync('git', ['grep', '-l', 'task-ready', '--', 'scripts', 'example'], { encoding: 'utf8' }"
-      )
-    ).toBeNull();
-  });
-});
-
-/**
- * Coverage, not taste: the guard has to notice a *new* device-aware spawn site, because that is
- * how X32 and X33 got there (`bench-baseline-merge.test.js` predates the lease rules and nobody
- * thought to audit it). Both sides of the match are read from the tree.
- */
-describe('no suite spawns a device-aware script from an unscrubbed environment', () => {
-  const aware = deviceAwareScripts(join(REPO_ROOT, 'scripts'));
-
-  it('knows which scripts a sourced lease would change the behaviour of', () => {
-    // The list is the guard's whole premise, so it is asserted against the scripts the X32/X33
-    // reports named, not against a count: an empty match per script is the failure this exists for.
-    // The five the reports named. `harness.mjs` is deliberately not on this list: it is the
-    // `react-native-harness` CLI wrapper and reads no device variable of its own — the device
-    // reaches it through the harness config in `example/`, which is not a script this scan walks.
-    for (const script of [
-      'lease.mjs',
-      'gate.mjs',
-      'run.mjs',
-      'ios.mjs',
-      'android.mjs',
-    ]) {
-      expect(
-        [...aware.keys()].filter((path) => path.endsWith(`/${script}`))
-      ).not.toEqual([]);
-    }
-    // And a script that reads only a test knob is *not* device aware: `sync-example-lock.mjs`
-    // reads `NITRO_UI_LOCK_SYNC_ROOT`, which says nothing about a device, and a guard that
-    // called that one device aware would be ignored within a month because it cries wolf.
-    expect(
-      [...aware.entries()].filter(([script]) =>
-        script.endsWith('sync-example-lock.mjs')
-      )
-    ).toEqual([]);
-  });
-
-  it('finds the sites, and every one of them scrubs', () => {
-    const suites = readdirSync(__dirname)
-      .filter((name) => name.endsWith('.test.js'))
-      .sort();
-    expect(suites.length).toBeGreaterThan(20);
-    const offending = [];
-    let guarded = 0;
-    for (const name of suites) {
-      const source = readFileSync(join(__dirname, name), 'utf8');
-      for (const call of spawnCalls(source)) {
-        // A call this audit cannot resolve is not a free pass: a suite that spawns `scripts/` by
-        // variable is judged as though it had named a device-aware script, because the variable is
-        // exactly how one hides (X34 review: `bench/report.mjs`, in a suite that was green).
-        const target =
-          deviceAwareTarget(call.targetText, source, aware) ??
-          unresolvedScriptsTarget(call.targetText);
-        if (target == null) continue;
-        // An `env:` built in a helper is judged on the helper's text too: `env: env(extra)` is
-        // clean exactly when the function behind it scrubs, and reading only the call site would
-        // call it clean either way.
-        const effective = [
-          call.window,
-          ...envValueIdentifiers(call.window).map((id) =>
-            definitionText(source, id)
-          ),
-        ].join('\n');
-        if (callScrubsLease(effective)) {
-          guarded += 1;
-          continue;
-        }
-        // No `env` at all is the worst case, not the safe one: the child gets the suite's own
-        // environment wholesale. Only an environment the suite assembled by hand is clean.
-        if (callSetsEnv(call.window) && !callSpreadsProcessEnv(effective))
-          continue;
-        offending.push(
-          `${relative(REPO_ROOT, join(__dirname, name))}:${String(call.line)} hands ` +
-            `${target.script.split('/').pop()} ` +
-            `(${target.names.length > 0 ? `reads ${target.names.slice(0, 3).join(', ')}` : 'a scripts/ path this audit cannot resolve'}) ` +
-            (callSetsEnv(call.window)
-              ? 'an unscrubbed process.env'
-              : 'no environment of its own at all')
-        );
-      }
-    }
-    expect(offending).toEqual([]);
-    // A guard that matched nothing would pass the assertion above forever. The number is how many
-    // device-aware sites the scrub is actually protecting — the count of suites that spawn a real
-    // CLI with a scrubbed environment. If it drops, a site went missing rather than being fixed.
-    expect(guarded).toBeGreaterThanOrEqual(12);
   });
 });

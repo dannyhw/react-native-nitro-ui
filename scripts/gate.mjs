@@ -876,10 +876,8 @@ function adbFromSdk(env) {
 /**
  * The lease list, from the lease file.
  *
- * Read rather than `lease.mjs list`, which would shell out to `simctl`/`adb` again
- * and print warnings about devices nobody asked about; and read *without pruning*,
- * because the run that just failed may have been pruned for a ttl it exceeded and
- * that is exactly the fact worth recording.
+ * Read *without pruning*, because the run that just failed may have been pruned for
+ * a ttl it exceeded and that is exactly the fact worth recording.
  *
  * The file is named as `<lease file>`, not as an absolute path: a reader on the
  * machine that ran the gate knows where the lease file is.
