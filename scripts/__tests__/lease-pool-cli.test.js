@@ -1,3 +1,4 @@
+/* global Atomics, SharedArrayBuffer */
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import {
@@ -204,6 +205,16 @@ describe('the lease owns the device lifecycle', () => {
     }
   };
 
+  // The emulator stub is spawned detached, so its line can land after the CLI has exited.
+  const logOnceItHas = (needle, timeoutMs = 10_000) => {
+    const pause = new Int32Array(new SharedArrayBuffer(4));
+    const deadline = Date.now() + timeoutMs;
+    while (!log().includes(needle) && Date.now() < deadline) {
+      Atomics.wait(pause, 0, 0, 25);
+    }
+    return log();
+  };
+
   /** A leases.json with exactly these leases. */
   const withLeaseFile = (leases) => {
     writeFileSync(
@@ -369,7 +380,9 @@ describe('the lease owns the device lifecycle', () => {
       '0.02',
     ]);
     expect(acquired.status).toBe(0);
-    expect(log()).toContain('emulator @nitro-ui-a -port 5574');
+    expect(logOnceItHas('emulator @nitro-ui-a -port 5574')).toContain(
+      'emulator @nitro-ui-a -port 5574'
+    );
     expect(log()).not.toContain('simctl boot');
     expect(log()).not.toContain('simctl shutdown');
     expect(log()).not.toContain(UDID_A);
@@ -416,7 +429,9 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
     expect(acquired.stderr).toContain('did not come up');
-    expect(log()).toContain('emulator @nitro-ui-a -port 5574');
+    expect(logOnceItHas('emulator @nitro-ui-a -port 5574')).toContain(
+      'emulator @nitro-ui-a -port 5574'
+    );
     expect(log()).toContain('-gpu host');
     expect(log()).toContain(`simctl boot ${UDID_A}`);
     // Headless: the pool that opens Simulator.app boots a device no lease handed out.
@@ -794,7 +809,9 @@ describe('the lease owns the device lifecycle', () => {
     // A boot that ran before the reap would have been powered off by it.
     expect(booted).toBeGreaterThan(killed);
     // Headless and on the pair's own console port, as every other pool boot is.
-    expect(log()).toContain(`emulator @${AVD_A} -port 5574`);
+    expect(logOnceItHas(`emulator @${AVD_A} -port 5574`)).toContain(
+      `emulator @${AVD_A} -port 5574`
+    );
     // iOS half: `simctl boot`, never `open -a Simulator` (that boots a device no lease handed out).
     expect(log()).toContain(`simctl boot ${UDID_A}`);
     expect(log()).not.toContain('open -a');
@@ -817,7 +834,7 @@ describe('the lease owns the device lifecycle', () => {
     ]);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
-    expect(log()).toContain('emulator @');
+    expect(logOnceItHas('emulator @')).toContain('emulator @');
     expect(log()).not.toContain(`simctl boot ${UDID_A}`);
     // The simulator went down with the rest of the pool and stayed down.
     expect(log()).toContain(`simctl shutdown ${UDID_A}`);
@@ -899,7 +916,7 @@ describe('the lease owns the device lifecycle', () => {
       'both',
     ]);
     expect(acquired.status).toBe(0);
-    expect(log()).toContain('emulator @');
+    expect(logOnceItHas('emulator @')).toContain('emulator @');
     expect(log()).toContain(`simctl boot ${UDID_A}`);
   });
 
@@ -991,7 +1008,7 @@ describe('the lease owns the device lifecycle', () => {
     ]);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).not.toContain('spared');
-    expect(log()).toContain('emulator @');
+    expect(logOnceItHas('emulator @')).toContain('emulator @');
   });
 
   it("spares only the named platform's own device", () => {
