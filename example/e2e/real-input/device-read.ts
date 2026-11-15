@@ -120,7 +120,7 @@ export function screenCapture(): DecodedPng {
  */
 export function displayDensity(): number {
   const reported = /Physical density:\s*(\d+)|Override density:\s*(\d+)/g;
-  const dump = adbShell(['shell', 'wm', 'density']);
+  const dump = adbShell(['wm', 'density']);
   const dpi = [...dump.matchAll(reported)].map((match) =>
     Number(match[1] ?? match[2])
   );
