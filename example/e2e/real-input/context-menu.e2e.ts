@@ -14,19 +14,18 @@ test('a real long press opens the context menu at the finger and the view under 
   const echo = screen.getByTestId('ctx-echo');
   await reveal(screen, target);
 
-  // Two claims, and both are gesture arbitration: the long press belongs to the
-  // ContextMenu (open), and the Pressable underneath must be left alone (press=0).
-  // G16's recycled wrapper label and the red proof that a non-accessible wrapper
-  // offered TalkBack a long-click are the a11y half of this row, kept in the same
-  // shape the driver had: the echo is read, not inferred.
+  // Two claims, both gesture arbitration: the long press belongs to the
+  // ContextMenu (`open`), and the Pressable underneath is left alone (`press=0`).
+  // The echoes are read once the popup is gone, because while it is up the popup
+  // owns the window and the page's own text is not in the tree a reader gets —
+  // which is itself the proof that the menu took the gesture.
   await expect(order).toHaveText('order=');
   await target.longPress({ duration: 900 });
-  const opened = screen.getByText('Reply');
-  await opened.waitFor({ state: 'visible' });
-  await expect(order).toHaveText('order=open');
-  await expect(echo).toContainText('press=0;');
+  const reply = screen.getByText('Reply');
+  await reply.waitFor({ state: 'visible' });
 
-  await opened.tap();
+  await reply.tap();
+  await reply.waitFor({ state: 'detached' });
   await expect(order).toHaveText('order=open,select:reply,close');
   await expect(echo).toContainText('press=0;');
 });

@@ -6,6 +6,22 @@ import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input date picker';
 
+/** A day in the currently visible month, far enough from today to be distinct. */
+function targetDay(): { label: string; iso: string } {
+  const now = new Date();
+  const day = now.getDate() >= 20 ? now.getDate() - 5 : now.getDate() + 5;
+  const date = new Date(now.getFullYear(), now.getMonth(), day);
+  return {
+    label: date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }),
+    iso: `${String(date.getFullYear())}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+  };
+}
+
 test('a real tap opens the date dialog, a day cell reaches JS, OK closes it', async ({
   app,
   screen,
@@ -16,22 +32,20 @@ test('a real tap opens the date dialog, a day cell reaches JS, OK closes it', as
   const value = screen.getByTestId('real-input-date-value');
   await reveal(screen, field);
 
-  // The dialog is presented in its own window, and the library tags it with the
-  // field's testID plus `-dialog`, which is the only way to know that the day
-  // being tapped belongs to *this* dialog and not to a row of the page behind it.
+  const target = targetDay();
+
+  // The day cells are named with the whole date — "Friday, November 20, 2026" —
+  // which is the screen-reader fact this suite keeps, and the only way to say
+  // *which* day a person is pressing: the grid's own nodes carry no testID and the
+  // dialog window carries none either, so a tap by number could land on any
+  // month's 20th. Picking by the name the reader reads is the honest version.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('-');
 
   await field.tap();
-  const dialog = screen.getByTestId('real-input-date-dialog');
-  await dialog.waitFor({ state: 'visible' });
-  await dialog.getByText(/^15$/).tap();
-  await dialog.getByText(/^OK$/i).tap();
-
-  const picked = await value.textContent();
-  expect(
-    /^\d{4}-\d{2}-15$/.test(picked ?? ''),
-    `picking day 15 and pressing OK left the echo reading "${picked}"`,
-  ).toBe(true);
-  await expect(value).not.toHaveText('-');
+  const day = screen.getByRole('button', target.label);
+  await day.waitFor({ state: 'visible' });
+  await day.tap();
+  await screen.getByText(/^OK$/).tap();
+  await expect(value).toHaveText(target.iso);
 });
