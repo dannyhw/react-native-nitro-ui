@@ -175,7 +175,8 @@ class SweepDevice {
           'the a11y sweep cannot reach the screen its case names.'
       );
     }
-    const up = () => this.hierarchy().some((node) => node.resourceId === anchor);
+    const up = () =>
+      this.hierarchy().some((node) => node.resourceId === anchor);
     // Two cases on one control is the common run, and standing on the screen is then
     // the answer; the scroll below costs a dump per swipe.
     if (up()) return;
@@ -333,9 +334,10 @@ class SweepDevice {
       const stdout = this.adbShell(command);
       return { status: 0, stdout, text: stdout };
     } catch (error) {
-      const failure = /** @type {{ stdout?: unknown, status?: number, message?: string }} */ (
-        /** @type {unknown} */ (error)
-      );
+      const failure =
+        /** @type {{ stdout?: unknown, status?: number, message?: string }} */ (
+          /** @type {unknown} */ (error)
+        );
       const stdout = String(failure.stdout ?? '');
       return {
         status: Number(failure.status ?? 1),

@@ -153,9 +153,7 @@ function asTreeNode(node: DriverNode): TreeNode {
     text: hasText ? (node.value ?? '') : '',
     resourceId: node.identifier ?? '',
     className: node.type ?? '',
-    contentDesc: hasText
-      ? (node.contentDescription ?? '')
-      : (node.label ?? ''),
+    contentDesc: hasText ? (node.contentDescription ?? '') : (node.label ?? ''),
     enabled: node.enabled === false ? 'false' : 'true',
     clickable: '',
     longClickable: '',
@@ -163,8 +161,7 @@ function asTreeNode(node: DriverNode): TreeNode {
     // The driver prints `checked` only for a node that offers the state, so its
     // presence is the flag a dump spells `checkable="true"`.
     checkable: node.checked === undefined ? 'false' : 'true',
-    checked:
-      node.checked === undefined ? '' : node.checked ? 'true' : 'false',
+    checked: node.checked === undefined ? '' : node.checked ? 'true' : 'false',
     selected: node.selected === true ? 'true' : 'false',
     // No flag, but a class that cannot be anything else: the rule this serves is the
     // one that refuses a control's name sitting on the page's own scroller.

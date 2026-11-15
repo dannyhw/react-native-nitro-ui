@@ -471,12 +471,13 @@ async function main() {
   const adbShell = (/** @type {string} */ command) => {
     const result = adbRun(['shell', command]);
     if (result.status !== 0) {
-      const failure = /** @type {NodeJS.ErrnoException & {status?: number, stdout?: string}} */ (
-        new Error(
-          `real-input: adb shell ${command} exited ${String(result.status)}: ` +
-            `${String(result.stderr ?? '').trim() || String(result.stdout).trim()}`
-        )
-      );
+      const failure =
+        /** @type {NodeJS.ErrnoException & {status?: number, stdout?: string}} */ (
+          new Error(
+            `real-input: adb shell ${command} exited ${String(result.status)}: ` +
+              `${String(result.stderr ?? '').trim() || String(result.stdout).trim()}`
+          )
+        );
       failure.status = result.status;
       failure.stdout = result.stdout;
       throw failure;

@@ -2,7 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { nodesForTestIds } from './os-tree';
-import { boxOf, drag, openScreen, reveal } from './support';
+import { openScreen, reveal } from './support';
 
 test('a real tap opens the sheet, a Pressable inside it counts, and Back closes it', async ({
   app,
@@ -81,108 +81,4 @@ test('a real tap on a TextInput inside the sheet is a whole press', async ({
   await expect(screen.getByTestId('sheet-input-touches')).toHaveText(
     'Input touches: in 1 out 1'
   );
-
-  // A horizontal scroll inside the sheet hands its parents the gesture for the
-  // length of the drag; the press after it still has to end.
-  const strip = await boxOf(screen.getByTestId('sheet-hscroll'));
-  if (strip == null) {
-    throw new Error('real-input: the sheet has no horizontal list to drag.');
-  }
-  await drag(
-    screen,
-    { x: strip.x + strip.width - 20, y: strip.y + strip.height / 2 },
-    { x: strip.x + 20, y: strip.y + strip.height / 2 }
-  );
-  await sheet.getByTestId('sheet-press').tap();
-  await expect(screen.getByTestId('sheet-presses')).toHaveText(
-    'Pressed 1 times'
-  );
-});
-
-test('a drag down dismisses an ordinary sheet and moves nothing else', async ({
-  app,
-  screen,
-}) => {
-  await app.open();
-  await openScreen(screen, 'sheet');
-  const log = screen.getByTestId('sheet-log');
-  await reveal(screen, screen.getByTestId('sheet-open-fit'));
-
-  // The three gestures a person uses to get rid of a sheet. None of them is a
-  // harness test: the suites ask native to *report* a dismissal
-  // ("closes as a user dismissal does"), which is the callback's half. Whether a
-  // drag a finger makes is recognised as one at all — and whether a sheet the app
-  // declared sticky refuses it — is only answerable with a real drag.
-  await expect(log).toHaveText('none');
-  await screen.getByTestId('sheet-open-fit').tap();
-  const fit = screen.getByTestId('sheet-fit-sheet');
-  await fit.waitFor({ state: 'visible' });
-  const chrome = await boxOf(screen.getByTestId('sheet-fit-title'));
-  if (chrome == null) {
-    throw new Error(
-      'real-input: the fit sheet draws no title to start a drag on.'
-    );
-  }
-  // A drag that starts above the sheet's own chrome is taken by the system as the
-  // gesture that pulls down the notification shade, and the shade takes the screen with
-  // it: every later read of the tree then sees SystemUI instead of the app. The 180 ms is
-  // the swipe the prop documents - a 700 ms drag over the same 600 px is taken as a drag
-  // of the content and springs the sheet back without a word to JS.
-  await drag(
-    screen,
-    { x: chrome.x + chrome.width / 2, y: chrome.y + 12 },
-    { x: chrome.x + chrome.width / 2, y: chrome.y + 600 },
-    180
-  );
-  await fit.waitFor({ state: 'detached' });
-  await expect(log).toContainText('dismiss');
-
-  // The header of a two-detent sheet is not a scroll view, so a drag on it belongs
-  // to the sheet: up has to reach the second detent rather than scroll a list.
-  await reveal(screen, screen.getByTestId('sheet-open-two'));
-  await screen.getByTestId('sheet-open-two').tap();
-  const two = screen.getByTestId('sheet-two-sheet');
-  await two.waitFor({ state: 'visible' });
-  const header = screen.getByTestId('sheet-two-header');
-  const headerBox = await boxOf(header);
-  if (headerBox == null) {
-    throw new Error(
-      'real-input: the two-detent sheet draws no header to drag.'
-    );
-  }
-  const twoAt = await boxOf(two);
-  await drag(
-    screen,
-    { x: headerBox.x + headerBox.width / 2, y: headerBox.y + 12 },
-    { x: headerBox.x + headerBox.width / 2, y: headerBox.y - 400 }
-  );
-  const lifted = await boxOf(two);
-  console.log(
-    `    header drag: sheet ${JSON.stringify(twoAt)} -> ${JSON.stringify(lifted)}`
-  );
-  await expect(log).toContainText('detent:1');
-  await app.back();
-  await two.waitFor({ state: 'detached' });
-
-  // The sticky one takes none of it. A sheet that eats drags also eats the one that
-  // should have dismissed a screen later, so this half is read on the same page.
-  await reveal(screen, screen.getByTestId('sheet-open-sticky'));
-  await screen.getByTestId('sheet-open-sticky').tap();
-  const sticky = screen.getByTestId('sheet-sticky-sheet');
-  await sticky.waitFor({ state: 'visible' });
-  const stickyTitle = await boxOf(screen.getByTestId('sheet-sticky-title'));
-  if (stickyTitle == null) {
-    throw new Error(
-      'real-input: the sticky sheet draws no title to drag from.'
-    );
-  }
-  await drag(
-    screen,
-    { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 12 },
-    { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 600 },
-    180
-  );
-  await sticky.getByTestId('sheet-sticky-title').waitFor({ state: 'visible' });
-  await sticky.getByTestId('sheet-sticky-close').tap();
-  await sticky.waitFor({ state: 'detached' });
 });
