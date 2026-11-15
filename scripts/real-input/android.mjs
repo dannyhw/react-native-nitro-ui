@@ -44,6 +44,7 @@ import {
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { exampleTabs } from './tab-targets.mjs';
 import { runA11ySweepOnDevice } from './a11y-sweep-device.mjs';
+import { runTreeChecksOnDevice } from './android-tree-checks.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
 import { isReservedSerial, requireLeaseDevice } from '../lease-core.mjs';
@@ -531,7 +532,20 @@ async function main() {
         stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
       }
     );
-    const allPassed = controlsPassed && sweep.covered.length > 0;
+    // The tree checks next, on the same daemon-less device: each is a rule the driver's
+    // own node map cannot express, and a dump cannot be asked while it is attached.
+    const tree = await runTreeChecksOnDevice(
+      (id, title) => suite.beginAuxiliary(id, title),
+      {
+        adbShell,
+        tabs,
+        appId: BUNDLE_ID,
+        only: controls.map((control) => control.id),
+        stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
+      }
+    );
+    const allPassed =
+      controlsPassed && sweep.covered.length > 0 && tree.covered.length > 0;
     if (sweep.covered.length === 0) {
       console.log(
         'real-input: the a11y sweep reported no cases, which is not a pass.'

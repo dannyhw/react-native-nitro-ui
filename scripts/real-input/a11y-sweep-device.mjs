@@ -78,7 +78,14 @@ export async function runA11ySweepOnDevice(begin, device) {
   });
 }
 
-class SweepDevice {
+/**
+ * The device as the passes outside the driver see it: real injected input, and the tree
+ * as `uiautomator` answers with it.
+ *
+ * Exported for `android-tree-checks.mjs`, which needs the same reach and a few more
+ * gestures: a key press, a raw touch event, a tap at a point, the window count.
+ */
+export class SweepDevice {
   /**
    * @param {{ adbShell: (command: string) => string, tabs: ReadonlyArray<{ id: string, label: string }> }} device
    */
@@ -320,6 +327,86 @@ class SweepDevice {
         `${String(Math.round(x2))} ${String(Math.round(y2))} ` +
         `${String(durationMs)}`
     );
+  }
+
+  /**
+   * One raw touch event. A gesture that changes shape mid-way - a hold that becomes a drag
+   * - is several of these in one stream.
+   *
+   * @param {'DOWN' | 'MOVE' | 'UP'} action
+   * @param {number} x
+   * @param {number} y
+   */
+  motion(action, x, y) {
+    this.adbShell(
+      `input motionevent ${action} ${String(Math.round(x))} ` +
+        `${String(Math.round(y))}`
+    );
+  }
+
+  /**
+   * @param {number} keyCode 4 is `KEYCODE_BACK`
+   */
+  key(keyCode) {
+    this.adbShell(`input keyevent ${String(keyCode)}`);
+  }
+
+  /** @param {number} x @param {number} y */
+  tapAt(x, y) {
+    this.adbShell(
+      `input tap ${String(Math.round(x))} ${String(Math.round(y))}`
+    );
+  }
+
+  /**
+   * How many pixels one dp is, from the device rather than from a comment: every geometry
+   * rule these checks make is in pixels, and the ones that want to say "40 dp" can only do
+   * it by converting. `wm density` answers a dpi and one dp is 160 dpi; an override line
+   * wins when there is one, because that is what the device lays its controls out at.
+   */
+  density() {
+    const out = this.adbShell('wm density');
+    const dpi = Number(
+      (out.match(/Override density:\s*(\d+(?:\.\d+)?)/) ??
+        out.match(/Physical density:\s*(\d+(?:\.\d+)?)/))?.[1]
+    );
+    if (!Number.isFinite(dpi) || dpi <= 0) {
+      throw new Error(
+        `real-input: \`adb shell wm density\` said nothing useful: ${out.trim()}`
+      );
+    }
+    return dpi / 160;
+  }
+
+  /**
+   * The app's own popup windows right now: the oracle for "the window came down with the
+   * control that owned it". `dumpsys window` prints the window's class on its header line
+   * and the owning package a few lines later, so a window counts once both are seen.
+   */
+  popupWindowCount() {
+    const dump = this.adbShell('dumpsys window windows');
+    let count = 0;
+    let isPopup = false;
+    let namesApp = false;
+    const flush = () => {
+      if (isPopup && namesApp) {
+        count += 1;
+      }
+    };
+    for (const line of dump.split('\n')) {
+      const header = line.match(/^\s*Window #\d+ Window\{([^}]*)\}/);
+      if (header != null) {
+        flush();
+        isPopup = header[1].includes('Pop-Up');
+        namesApp = header[1].includes(this.appId);
+        continue;
+      }
+      if (isPopup && !namesApp && line.includes(this.appId)) {
+        namesApp = true;
+      }
+    }
+    flush();
+    return count;
   }
 
   /**
