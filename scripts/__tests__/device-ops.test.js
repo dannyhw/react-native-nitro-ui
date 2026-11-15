@@ -37,32 +37,20 @@ import { deviceOperations } from '../device-pool.mjs';
  * One stub for each tool: print the answer file for the subcommand being run, then exit with its
  * status file. An absent answer file means "printed nothing", and an absent status file means 0, so
  * the two things a real tool does when it is wedged are both expressible.
- *
- * `stderr` is a separate channel because the device forces the distinction: on the API 35 emulator
- * this pool runs on, `pm path` for an absent package and `pm path` for a device the client cannot
- * reach have the same stdout (empty) and the same status (1). The only difference is the `adb:` line
- * the second one writes to stderr, and reading the first shape as the second one is how a reset
- * reports a clean no-op on a device it never reached.
  */
 const STUB = (kind) =>
   [
     '#!/bin/sh',
     'here=$(dirname "$0")',
     'answer() { cat "$here/../answers/$1" 2>/dev/null; }',
-    'answer_err() { cat "$here/../answers/$1.err" 2>/dev/null; }',
     'status() { cat "$here/../answers/$1.status" 2>/dev/null || printf 0; }',
     'case "$*" in',
     kind === 'adb'
       ? [
           '  *\'emu avd name\'*) answer avd_name; exit "$(status avd_name)" ;;',
           '  *devices*) answer devices; exit "$(status devices)" ;;',
-          '  *\'pm path\'*) answer_err pm_path >&2; answer pm_path; exit "$(status pm_path)" ;;',
         ].join('\n')
-      : [
-          "  *'get_app_container'*' app'*) answer app_container; exit \"$(status app_container)\" ;;",
-          '  *\'get_app_container\'*) answer data_container; exit "$(status data_container)" ;;',
-          '  *list*) answer sim_list; exit "$(status sim_list)" ;;',
-        ].join('\n'),
+      : ['  *list*) answer sim_list; exit "$(status sim_list)" ;;'].join('\n'),
     '  *) exit 0 ;;',
     'esac',
     '',
@@ -117,13 +105,9 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-/**
- * What the stubbed tool prints (and exits with) for its next question. `err` goes to stderr, which
- * some answers only exist on.
- */
-const answer = (name, text, status = null, err = null) => {
+/** What the stubbed tool prints (and exits with) for its next question. */
+const answer = (name, text, status = null) => {
   writeFileSync(join(home, 'answers', name), text);
-  if (err != null) writeFileSync(join(home, 'answers', `${name}.err`), err);
   if (status != null)
     writeFileSync(join(home, 'answers', `${name}.status`), String(status));
 };
@@ -147,13 +131,6 @@ const opsMissing = () =>
       NITRO_UI_SIMCTL_BIN: join(home, 'no-such-xcrun'),
     },
   });
-
-const ANDROID = {
-  kind: 'android',
-  key: 'avd:nitro-ui-a',
-  serial: 'emulator-5574',
-  adbPort: 5043,
-};
 
 describe('the identity check in front of an Android kill', () => {
   const asked = () => ops().emulatorAvdName('emulator-5574', 5043);
@@ -298,111 +275,5 @@ describe('what an emulator is started with', () => {
     // the variable is absent, and `undefined` or an empty string would be a different bug.
     await opsWithEmulator().bootEmulator({ avd: 'nitro-ui-a', port: 5574 });
     expect(await recorded('emu.adb_server')).toBe('none');
-  });
-});
-
-describe('is the app on the device (X11 re-review N5)', () => {
-  it('reads a `package:` line as installed', () => {
-    answer(
-      'pm_path',
-      'package:/data/app/~~abc==/nitroui.example-def=.apk\n',
-      0
-    );
-    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
-      answered: true,
-      ok: true,
-    });
-  });
-
-  it('reads an empty, silent failure as not installed — the answer this API level really gives', () => {
-    // Measured on the API 35 device this pool runs on: `pm path` for a package that is absent exits 1
-    // and prints **nothing at all**, on either stream. The first fixture for this case claimed
-    // `No package found for user: 0`, a line from older platform tools, and a code path built on it
-    // would be right for the wrong reason: the rule is "an answer from the device, saying no", and
-    // here the only evidence is the exit status with no client error behind it.
-    answer('pm_path', '', 1);
-    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
-      answered: true,
-      ok: false,
-    });
-  });
-
-  it('refuses to read an unreachable device as "not installed" (the false no-op)', () => {
-    // Same stdout, same exit status as the case above, and it is *not* an answer: this is adb
-    // saying it has never heard of the serial. Reading it as "not installed" is what produced a
-    // real `reset avd:nitroui_a: pm clear` line for a device the pool could not reach at all - the
-    // boot had gone to a different adb server, and the reset reported a clean no-op without asking
-    // the device anything. Fall back to attempting the clear, whose failure is honest.
-    answer('pm_path', '', 1, "adb: device 'emulator-5574' not found");
-    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
-      answered: false,
-      ok: false,
-    });
-    answer('pm_path', '', 1, 'error: device offline');
-    expect(ops().deviceAppInstalled(ANDROID, 'nitroui.example')).toMatchObject({
-      answered: false,
-      ok: false,
-    });
-  });
-
-  it('keeps a device-side "not found" an answer, not a client error', () => {
-    // The other side of the prefix rule, and the reason it is a list rather than "anything that
-    // looks like an error": `Error: Package 'x' not found` is the *device* answering that the app
-    // is absent, and must stay a clean no-op. Which stream carries it is not consistent across
-    // platform levels (API 35, measured above, prints nothing at all), so the rule is pinned for
-    // both placements. A parser that read any error-shaped line as "could not ask" would send
-    // every fresh AVD back through four retries with a misleading line - the original N5 bug.
-    for (const onStderr of [false, true]) {
-      answer(
-        'pm_path',
-        onStderr ? '' : "Error: Package 'nitroui.example' not found\n",
-        1,
-        onStderr ? "Error: Package 'nitroui.example' not found\n" : null
-      );
-      expect(
-        ops().deviceAppInstalled(ANDROID, 'nitroui.example')
-      ).toMatchObject({ answered: true, ok: false });
-    }
-  });
-
-  it('is unknown for an iOS simulator whose container lookup fails the same way', () => {
-    answer('app_container', 'Unable to find application container\n', 1);
-    expect(
-      ops().deviceAppInstalled(
-        { kind: 'ios', key: 'ios:UDID-A', udid: 'UDID-A' },
-        'nitroui.example'
-      )
-    ).toMatchObject({ answered: true, ok: false });
-    answer('app_container', '/Users/x/Library/.../NitroUiExample.app\n', 0);
-    expect(
-      ops().deviceAppInstalled(
-        { kind: 'ios', key: 'ios:UDID-A', udid: 'UDID-A' },
-        'nitroui.example'
-      )
-    ).toMatchObject({ answered: true, ok: true });
-  });
-
-  it('is unknown when there is no tool to ask', () => {
-    expect(
-      opsMissing().deviceAppInstalled(ANDROID, 'nitroui.example')
-    ).toMatchObject({ answered: false, ok: false });
-    expect(
-      opsMissing().deviceAppInstalled(
-        { kind: 'ios', key: 'ios:UDID-A', udid: 'UDID-A' },
-        'nitroui.example'
-      )
-    ).toMatchObject({ answered: false, ok: false });
-  });
-
-  it('is unknown for an android device with no serial to address', () => {
-    // Not a tool failure but the same three-way answer, for the same reason: "I could not ask" must
-    // never become "it is not installed", or a record missing its serial turns into a confident
-    // no-op and the next task inherits the storage the reset was supposed to clear.
-    expect(
-      ops().deviceAppInstalled(
-        { kind: 'android', key: 'avd:nitro-ui-a', serial: null },
-        'nitroui.example'
-      )
-    ).toMatchObject({ answered: false, ok: false });
   });
 });

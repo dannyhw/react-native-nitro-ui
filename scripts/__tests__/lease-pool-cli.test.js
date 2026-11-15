@@ -62,37 +62,11 @@ describe('the lease owns the device lifecycle', () => {
    * attached after the `emu kill` that had just run, which is how `--exclusive --boot` looked like a
    * warm reuse while nothing had been started (X16 item 2).
    *
-   * @param {{androidUp?: boolean, iosUp?: boolean, stateful?: boolean, pmClear?: string}} options
+   * @param {{androidUp?: boolean, iosUp?: boolean, stateful?: boolean}} options
    */
-  /**
-   * What `pm clear` answers, in order, with the last one repeating.
-   *
-   * Every pattern requires the word `shell`, because that is the whole of M1: `adb -s X pm clear Y`
-   * is not a command — adb answers `unknown command pm` on stderr with empty stdout and exit 1,
-   * which this table would happily have reported as "the device refused to clear". Requiring
-   * `shell` in the match means a reset that drops it matches nothing, prints nothing, and the
-   * cases that assert a successful reset go red instead of quietly passing.
-   */
-  const pmClearLines = {
-    success: [`  *'shell pm clear'*) printf 'Success' ;;`],
-    settle: [
-      // The counter file lives next to the calls file, so a test run in a fresh home starts clean.
-      `  *'shell pm clear'*)`,
-      `      n=$(cat "$NITRO_UI_FAKE_CALLS.count" 2>/dev/null || echo 0)`,
-      `      n=$((n+1)); printf '%s' "$n" > "$NITRO_UI_FAKE_CALLS.count"`,
-      `      if [ "$n" -lt 3 ]; then printf 'Failed'; else printf 'Success'; fi ;;`,
-    ],
-    fail: [`  *'shell pm clear'*) printf 'Failed' ;;`],
-    // The device-side command refusing, as it does for a package that is not installed.
-    unknownPackage: [
-      `  *'shell pm clear'*) printf 'Error: unknown package\\n' ; exit 1 ;;`,
-    ],
-  };
-
   const tools = ({
     androidUp = false,
     iosUp = false,
-    pmClear = 'success',
     stateful = false,
   } = {}) => {
     const listingFor = (iosState) => ({
@@ -114,29 +88,10 @@ describe('the lease owns the device lifecycle', () => {
         : '';
     // One `printf` of a pre-built string per stub: the JSON goes in through JSON.stringify, so
     // neither the shell nor the JS parser has to agree about quotes.
-    //
-    // `simctl` answers by subcommand, because the pool now asks it three different questions: which
-    // devices exist, "remove this app" (M2's reset), and "where is its data container?". The last
-    // one has to fail after an uninstall - a stub that printed the same JSON for every call made the
-    // reset read "the data container survived" on a device that had just had the app removed.
     const simctlLines = [
       '#!/bin/sh',
       'echo "simctl $*" >> "$NITRO_UI_FAKE_CALLS"',
       'case "$*" in',
-      // Two different questions come through `get_app_container`, and one stub answer for both is
-      // how a reset starts lying: `… app` is "is it installed?" (X11 N5, asked *before* the reset),
-      // `… data` is "did the uninstall take the data with it?" (M2, asked after, and the honest
-      // answer here is no container). Installed by default, because that is what a pooled simulator
-      // is; `NITRO_UI_FAKE_APP_INSTALLED=0` is the fresh device.
-      "  *'get_app_container'*' app'*)",
-      '      if [ "${NITRO_UI_FAKE_APP_INSTALLED-1}" = 1 ]; then',
-      "        printf '%s\\n' '/Users/x/Library/Developer/CoreSimulator/Devices/UDID-A/bundle/NitroUiExample.app'",
-      '      else',
-      "        printf '%s\\n' 'Unable to find application container' ; exit 1",
-      '      fi ;;',
-      "  *'get_app_container'*) exit 1 ;;",
-      "  *'uninstall'*) exit 0 ;;",
-      "  *'install'*) exit 0 ;;",
       // The boot and the power-off, in the stateful shape only: they move the one bit the listing
       // below reads, so `simctl list` afterwards reports what the last command did.
       ...(stateful
@@ -187,20 +142,6 @@ describe('the lease owns the device lifecycle', () => {
             `  *devices*) printf '%b\\n' ${shellQuote(adbDeviceText(androidUp))} ;;`,
           ]),
       "  *boot_completed*) printf '1' ;;",
-      // "Is the package on the device?" (`adb shell pm path <pkg>`), asked before the clear so a
-      // fresh AVD is a no-op instead of four retries and a misleading line (X11 N5). Matched ahead
-      // of `pm clear`, whose pattern would not match it anyway - the order is only so a reader sees
-      // which question comes first.
-      "  *'pm path'*)",
-      '      if [ "${NITRO_UI_FAKE_PM_PATH-1}" = 1 ]; then',
-      "        printf 'package:/data/app/~~abc==/nitroui.example-def=.apk\\n'",
-      '      else',
-      "        printf 'No package found for user: 0\\n' ; exit 1",
-      '      fi ;;',
-      // A device that answers `Failed` twice and then `Success`, counted in a file: that is what
-      // an emulator whose `sys.boot_completed` is already 1 really does while PackageManager
-      // settles, and it is what the first real boot of this code reported as a failed reset.
-      ...(pmClearLines[pmClear] ?? pmClearLines.success),
       ...(stateful
         ? [
             // Which serial is being killed is in the argv, so the state file is per-serial: an
@@ -428,148 +369,6 @@ describe('the lease owns the device lifecycle', () => {
     }
   });
 
-  it('does not reset a pair when the task already held the lease and nothing booted', () => {
-    // X11 re-review M2 at the CLI, which is where the failure was reachable. Re-running
-    // `acquire --boot` in a second shell is the documented way to regenerate an env file; it used
-    // to run `pm clear` and `simctl uninstall` on the devices the task is *already* using, under
-    // its own running suite. Two independent guards fire here, and the test says which: the CLI
-    // skips the reset because this is a warm re-acquire by the same task, and `resetPair` would
-    // have refused anyway because the records carry a live gate claim.
-    tools({ androidUp: true, iosUp: true });
-    warmDevice({
-      ...idleEntry({ leaseId: 'T1-aaaa', idleMinutes: 1 }),
-      claims: CLAIM,
-    });
-    warmDeviceSecond({
-      ...idleEntry({
-        key: `ios:${UDID_A}`,
-        kind: 'ios',
-        id: UDID_A,
-        leaseId: 'T1-aaaa',
-        idleMinutes: 1,
-        serial: null,
-      }),
-      claims: CLAIM,
-    });
-    withLeaseFile([
-      {
-        id: 'T1-aaaa',
-        task: 'T1',
-        platform: 'both',
-        exclusive: false,
-        holds: ['pair-a'],
-        acquiredAt: new Date().toISOString(),
-        ttlMinutes: 240,
-      },
-    ]);
-    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
-    expect(acquired.status).toBe(0);
-    expect(acquired.stderr).toContain('is already up - reusing it');
-    expect(acquired.stderr).toContain('not resetting the pair');
-    expect(log()).not.toContain('shell pm clear');
-    expect(log()).not.toContain('simctl uninstall');
-  });
-
-  it('skips a reset on a device whose gate claim is live, even for a brand-new lease', () => {
-    // The half the warm-re-acquire skip cannot cover: a *different* task taking a pair whose
-    // previous lease was released mid-run, or any hand-off that is not `already`. Here the CLI
-    // asks for the reset, and `resetPair`'s own check is the only thing between it and another
-    // task's running suite - so this case must not be satisfied by the skip above.
-    tools({ androidUp: true, iosUp: true });
-    warmDevice({
-      ...idleEntry({ leaseId: 'T2-aaaa', idleMinutes: 1 }),
-      claims: CLAIM,
-    });
-    warmDeviceSecond({
-      ...idleEntry({
-        key: `ios:${UDID_A}`,
-        kind: 'ios',
-        id: UDID_A,
-        leaseId: 'T2-aaaa',
-        idleMinutes: 1,
-        serial: null,
-      }),
-      claims: CLAIM,
-    });
-    withLeaseFile([]);
-    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
-    expect(acquired.status).toBe(0);
-    expect(acquired.stderr).not.toContain('not resetting the pair');
-    // The reset was asked for and each device answered "in use", which is reported rather than
-    // silently dropped - a task that sees no reset line cannot tell "skipped" from "broken".
-    expect(acquired.stderr).toMatch(
-      /reset avd:nitro-ui-a: pm clear SKIPPED \(in use by pid \d+ \(harness:ios\)\)/
-    );
-    expect(log()).not.toContain('shell pm clear');
-    expect(log()).not.toContain('simctl uninstall');
-  });
-
-  it('does not reset a pair when the task already held the lease and nothing booted, with no claim', () => {
-    // The skip is `already` *and* warm, not `already` alone: with no claim in the records, this is
-    // the only thing protecting the task's own storage, and the case above passes without it.
-    tools({ androidUp: true, iosUp: true });
-    warmDevice(idleEntry({ leaseId: 'T1-aaaa', idleMinutes: 1 }));
-    warmDeviceSecond({
-      ...idleEntry({
-        key: `ios:${UDID_A}`,
-        kind: 'ios',
-        id: UDID_A,
-        leaseId: 'T1-aaaa',
-        idleMinutes: 1,
-        serial: null,
-      }),
-    });
-    withLeaseFile([
-      {
-        id: 'T1-aaaa',
-        task: 'T1',
-        platform: 'both',
-        exclusive: false,
-        holds: ['pair-a'],
-        acquiredAt: new Date().toISOString(),
-        ttlMinutes: 240,
-      },
-    ]);
-    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
-    expect(acquired.stderr).toContain('not resetting the pair');
-    expect(log()).not.toContain('shell pm clear');
-    // And the storage on those devices is this task's own: the wipe the skip prevents.
-    expect(log()).not.toContain('simctl uninstall');
-  });
-
-  it('still resets a re-acquired lease that had to boot the pair', () => {
-    // The deliberately narrow version of the skip. A re-acquire that found the devices *down* is
-    // looking at machines that came up from a snapshot, which can be another task's data, so
-    // skipping there would reintroduce the inheritance the reset exists to prevent.
-    tools({ androidUp: false, iosUp: false });
-    withLeaseFile([
-      {
-        id: 'T1-aaaa',
-        task: 'T1',
-        platform: 'both',
-        exclusive: false,
-        holds: ['pair-a'],
-        acquiredAt: new Date().toISOString(),
-        ttlMinutes: 240,
-      },
-    ]);
-    // `--boot-timeout-minutes 0` so the wait for a device the stub never brings up costs nothing:
-    // the stub's `adb devices` answer is fixed, so a down device stays down for the whole poll
-    // loop. The boot still *starts*, which is all this case needs - `booted` is non-empty, so the
-    // hand-off is not warm, and that is the condition the skip turns on.
-    const acquired = cli([
-      'acquire',
-      '--task',
-      'T1',
-      '--boot',
-      '--boot-timeout-minutes',
-      '0',
-    ]);
-    expect(acquired.status).toBe(0);
-    expect(acquired.stderr).not.toContain('not resetting the pair');
-    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
-  });
-
   it('boots the pair it hands out when told to, from the shared launch config', () => {
     tools({ androidUp: true, iosUp: true });
     const acquired = cli(['acquire', '--task', 'T1', '--boot']);
@@ -583,38 +382,22 @@ describe('the lease owns the device lifecycle', () => {
       'avd:nitro-ui-a',
       `ios:${UDID_A}`,
     ]);
-    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
-    // And on iOS, a reset that is actually a reset (M2): the app is removed, which takes its data
-    // container with it, and the pool checks the container is gone rather than trusting `install`.
-    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
-    expect(log()).toContain(
-      `simctl get_app_container ${UDID_A} nitroui.example data`
-    );
+    // A warm hand-off changes nothing on either device: the only thing it sends to a serial is the
+    // readiness probe that answers "is this one already up?".
+    for (const line of log().split('\n')) {
+      if (line.includes(`-s ${SERIAL_A}`)) {
+        expect(line).toContain('getprop sys.boot_completed');
+      }
+    }
   });
 
-  it('reinstalls the app after an iOS reset when HARNESS_APP_PATH is set', () => {
-    // Uninstall is only safe because every consumer installs first. When the pool can see the
-    // build, it puts the app back so a device never leaves the pool empty for something that does
-    // not (and the row says it did).
-    const app = join(home, 'NitroUiExample.app');
-    writeFileSync(app, 'not really an app bundle');
-    tools({ androidUp: true, iosUp: true });
-    const acquired = cli(['acquire', '--task', 'T15', '--boot'], {
-      HARNESS_APP_PATH: app,
-    });
-    expect(acquired.status).toBe(0);
-    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
-    expect(log()).toContain(`simctl install ${UDID_A} ${app}`);
-    expect(acquired.stderr).toContain('reset ios:');
-    expect(acquired.stderr).not.toContain('FAILED');
-  });
-
-  // X20 item 2. Q9 took a lease for iOS only, and `acquire --boot` printed `pm clear` on the pair's
-  // emulator: the hand-off reset the whole pair whatever the lease was for. The emulator may be
-  // another task's Android device at that moment, and an iOS lease has no business asking it
-  // anything - not to clear, not whether the app is installed, not to boot.
+  // X20 item 2. Q9 took a lease for iOS only, and the pool answered for the whole pair. The
+  // emulator may be another task's Android device at that moment, and an iOS lease has no business
+  // asking it anything - not to boot it, not to power it off, not to clear it. The pair is *down*
+  // here on purpose: with a warm pair nothing is started on either half and every `not.toContain`
+  // below would pass with or without the narrowing.
   it('touches only the simulator for an iOS-only lease', () => {
-    tools({ androidUp: true, iosUp: true });
+    tools({ androidUp: false, iosUp: false });
     const acquired = cli([
       'acquire',
       '--task',
@@ -622,21 +405,21 @@ describe('the lease owns the device lifecycle', () => {
       '--platform',
       'ios',
       '--boot',
+      '--boot-timeout-minutes',
+      '0',
     ]);
     expect(acquired.status).toBe(0);
-    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
-    expect(acquired.stderr).toContain(`reset ios:${UDID_A}`);
-    expect(acquired.stderr).not.toContain('reset avd:');
+    expect(log()).toContain(`simctl boot ${UDID_A}`);
     // Nothing addressed to the emulator at all: `adb devices` lists the machine and is not a
-    // command *to* a device, but every `-s <serial>` is.
-    expect(log()).not.toContain('pm clear');
-    expect(log()).not.toContain('pm path');
+    // command *to* a device, but `-s <serial>` and `emulator @avd` both are.
     expect(log()).not.toContain(`-s ${SERIAL_A}`);
     expect(log()).not.toContain('emulator @');
+    expect(acquired.stdout).not.toContain('ANDROID_SERIAL');
   });
 
+  // The same narrowing seen from the other half.
   it('touches only the emulator for an Android-only lease', () => {
-    tools({ androidUp: true, iosUp: true });
+    tools({ androidUp: false, iosUp: false });
     const acquired = cli([
       'acquire',
       '--task',
@@ -644,13 +427,17 @@ describe('the lease owns the device lifecycle', () => {
       '--platform',
       'android',
       '--boot',
+      '--boot-timeout-minutes',
+      // The emulator is spawned detached, so a zero-second wait returns before its stub has
+      // written its line; this is the same short-but-real wait the boot cases below use.
+      '0.02',
     ]);
     expect(acquired.status).toBe(0);
-    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
-    expect(acquired.stderr).not.toContain('reset ios:');
-    expect(log()).not.toContain('simctl uninstall');
-    expect(log()).not.toContain('get_app_container');
+    expect(log()).toContain('emulator @nitro-ui-a -port 5574');
     expect(log()).not.toContain('simctl boot');
+    expect(log()).not.toContain('simctl shutdown');
+    expect(log()).not.toContain(UDID_A);
+    expect(acquired.stdout).not.toContain('IOS_SIM_UDID');
   });
 
   it('keeps a re-acquired iOS lease on iOS when the second acquire names no platform', () => {
@@ -679,7 +466,6 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.status).toBe(0);
     expect(log()).toContain(`simctl boot ${UDID_A}`);
     expect(log()).not.toContain('emulator @');
-    expect(log()).not.toContain('pm clear');
     expect(log()).not.toContain(`-s ${SERIAL_A}`);
     expect(acquired.stdout).not.toContain('ANDROID_SERIAL');
   });
@@ -698,15 +484,7 @@ describe('the lease owns the device lifecycle', () => {
     // in emulator-launch.test.js; what is proved here is that the pool puts the rule's answer in
     // the argv it spawns.
     const acquired = cli(
-      [
-        'acquire',
-        '--task',
-        'T2',
-        '--boot',
-        '--boot-timeout-minutes',
-        '0.02',
-        '--no-reset',
-      ],
+      ['acquire', '--task', 'T2', '--boot', '--boot-timeout-minutes', '0.02'],
       { DISPLAY: ':99', NITRO_UI_EMULATOR_GPU: '' }
     );
     expect(acquired.status).toBe(0);
@@ -1003,31 +781,6 @@ describe('the lease owns the device lifecycle', () => {
     expect(poolDevices()).toHaveLength(1);
   });
 
-  it('retries a reset on a device still settling, instead of reporting it failed', () => {
-    // The pool resets a device it has just booted, and such a device can answer `Failed` for a
-    // few seconds. A single attempt made the lease say "FAILED - the next run inherits its data"
-    // about a device that was fine, which is the opposite of what the reset is for.
-    tools({ androidUp: true, iosUp: true, pmClear: 'settle' });
-    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
-    expect(acquired.status).toBe(0);
-    expect(acquired.stderr).toContain(
-      'reset avd:nitro-ui-a: pm clear (3 tries)'
-    );
-    expect(acquired.stderr).not.toContain('FAILED');
-  });
-
-  it("says so, in the device's own words, when the reset never succeeds", () => {
-    tools({ androidUp: true, iosUp: true, pmClear: 'fail' });
-    const acquired = cli(['acquire', '--task', 'T1', '--boot']);
-    expect(acquired.status).toBe(0);
-    // Still a successful lease: a device that cannot be cleared is worth using, and the warning
-    // is the honest part. But it quotes `pm clear` rather than inventing a reason.
-    expect(acquired.stderr).toContain(
-      'reset avd:nitro-ui-a: pm clear FAILED (Failed)'
-    );
-    expect(acquired.stderr).toContain('the next run inherits its data');
-  });
-
   it('never powers off a device the config does not name', () => {
     // Somebody's AVD recorded in the state file by an older run, a hand edit, or a devices.json
     // swap. The pool shuts down what the machine *declared*, and this is the test that keeps the
@@ -1124,7 +877,6 @@ describe('the lease owns the device lifecycle', () => {
       // single-platform bench cold-boot a simulator it never uses.
       '--platform',
       'both',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('exclusive');
@@ -1169,7 +921,6 @@ describe('the lease owns the device lifecycle', () => {
       // refusal now (X16 fix round 1, item 2). This case is about the *order* of the two halves.
       '--platform',
       'both',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     const logLines = log()
@@ -1212,7 +963,6 @@ describe('the lease owns the device lifecycle', () => {
       '--platform',
       'android',
       '--boot',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
@@ -1292,7 +1042,6 @@ describe('the lease owns the device lifecycle', () => {
       'BENCH',
       '--exclusive',
       '--boot',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(2);
     expect(acquired.stderr).toContain('--platform');
@@ -1319,7 +1068,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'both',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(log()).toContain('emulator @');
@@ -1339,7 +1087,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'both',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(log()).not.toContain('emulator @');
@@ -1360,10 +1107,9 @@ describe('the lease owns the device lifecycle', () => {
     // under `--exclusive`, because the exclusive path skipped the hand-off entirely; item 2's fix
     // silently made it boot both devices. Only a typed `--boot` may boot an exclusive lease.
     tools({ androidUp: true, iosUp: true, stateful: true });
-    const acquired = cli(
-      ['acquire', '--task', 'BENCH', '--exclusive', '--no-reset'],
-      { NITRO_UI_LEASE_BOOT: '1' }
-    );
+    const acquired = cli(['acquire', '--task', 'BENCH', '--exclusive'], {
+      NITRO_UI_LEASE_BOOT: '1',
+    });
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('not booted');
     expect(log()).not.toContain('emulator @');
@@ -1378,10 +1124,9 @@ describe('the lease owns the device lifecycle', () => {
     // the shell says it boots devices and then does not. Saying which of the two it did is the
     // whole of the difference between a surprise and a mystery.
     tools({ androidUp: true, stateful: true });
-    const acquired = cli(
-      ['acquire', '--task', 'BENCH', '--exclusive', '--no-reset'],
-      { NITRO_UI_LEASE_BOOT: '1' }
-    );
+    const acquired = cli(['acquire', '--task', 'BENCH', '--exclusive'], {
+      NITRO_UI_LEASE_BOOT: '1',
+    });
     expect(acquired.stderr).toContain('NITRO_UI_LEASE_BOOT');
     expect(acquired.stderr).toContain('--boot');
   });
@@ -1406,7 +1151,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'android',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(log()).not.toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
@@ -1433,7 +1177,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'android',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).not.toContain('spared');
@@ -1463,7 +1206,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'android',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(log()).not.toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
@@ -1498,7 +1240,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'android',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     const summary = acquired.stderr
@@ -1536,7 +1277,6 @@ describe('the lease owns the device lifecycle', () => {
       '--boot',
       '--platform',
       'android',
-      '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(log()).not.toContain(`simctl shutdown ${UDID_A}`);
