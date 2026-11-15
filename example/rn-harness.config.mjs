@@ -253,7 +253,8 @@ function avd() {
  * the pin exists to make the comparison meaningful, and a run that reported a skip
  * instead would read green while comparing less than it claims. Only
  * `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` turns it into the printed skip, and it is for
- * someone deliberately probing another locale — see `localePremiseMiss`.
+ * someone deliberately probing another locale — see `localePremiseMiss` in
+ * `example/__tests__/Conformance.harness.tsx`, which reads this run's published answer.
  *
  * Override per shell with `NITRO_UI_TEST_LOCALE`/`NITRO_UI_TEST_TZ`; an empty
  * value means "ask the device", which is what a developer's own machine already
