@@ -48,7 +48,12 @@ import {
  */
 const HOLD_MS = 1_800;
 
-/** How long after the finger lands the frame is asked for, in ms. */
+/**
+ * How long after the press is *issued* the frame is asked for, in ms. Measured from
+ * the call rather than from the finger, because the driver's own round trip to put
+ * the finger down is not visible from here; the press is `HOLD_MS` long from the
+ * same moment, so both ends of the window are counted the same way.
+ */
 const CAPTURE_AFTER_MS = 450;
 
 /** How far inside the control's box the sample starts, in device px. */
@@ -158,7 +163,7 @@ export async function pressPaintsFeedback(
     before - duringMean,
     `holding the control left its own box at mean luminance ` +
       `${duringMean.toFixed(4)} (frame asked for +${String(askedAt)}ms after the ` +
-      `finger landed and read ${String(took)}ms later, inside a ` +
+      `press was issued and read ${String(took)}ms later, inside a ` +
       `${String(HOLD_MS)}ms press), against ${before.toFixed(4)} at rest: a press ` +
       `that paints nothing is what G30 Android shipped with ("no press feedback ` +
       `drawn"). The sampled region is ${JSON.stringify(region)} of a ` +
