@@ -1,18 +1,6 @@
 /**
- * What a run records about the machine it ran on.
- *
- * Lives here rather than in `run.mjs` for the reason the header of this directory
- * documents: the runner is a CLI that resolves repo paths through `import.meta`,
- * which jest's CommonJS transform cannot represent, and this record is what a
- * reader of a results file uses to judge the numbers - so it has to be testable
- * without a device.
- *
- * Every field is a measurement, read at the moment the run ended except `loadSamples`,
- * which is the sampler that ran *with* the run. Nothing here identifies the machine by
- * name (D25: results are quoted in public reports): the CPU model, core count, RAM and
- * OS release are what tell two runs' hardware apart, and `deviceKey` above this block
- * says which device produced them. `quiet` is the load answer (`loadOverCeiling`),
- * printed beside the numbers - a busy machine is a noisier machine, not a disqualification.
+ * What a bench run records about the machine it ran on. Nothing here may identify
+ * the machine by name: results are quoted in public reports.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -36,13 +24,8 @@ export function tryExec(command, args) {
 }
 
 /**
- * The two installed packages a run measured, read from `node_modules`.
- *
- * Beside the lock because the measured thing is the install, and the two
- * disagreeing is worth a line: a stale install would otherwise put an unrecorded
- * app's numbers under this commit's versions.
- *
- * A package that is not installed is null rather than a guess.
+ * The two installed packages a run measured, read from `node_modules`. A package
+ * that is not installed is null.
  *
  * @param {{ nodeModulesDir: string, read?: (file: string) => string }} input
  * @returns {{ reactNative: string | null, expoUi: string | null }}
@@ -67,10 +50,8 @@ export function installedPackageVersions({
 }
 
 /**
- * The app versions a run's numbers belong to. Read from `bun.lock` because that is
- * the version list committed with the run's own commit; the installed packages are
- * recorded beside it because the measured thing is the install
- * (`installedDependenciesProblem()` compares the two).
+ * The app versions a run's numbers belong to: the ones `bun.lock` names, with the
+ * installed ones beside them because the install is what was measured.
  *
  * @param {{ lockPath: string, nodeModulesDir: string, read?: (file: string) => string }} input
  */
@@ -104,17 +85,9 @@ export function runDependencies({
 }
 
 /**
- * Who ran this, on what, and how busy they were (T02 review S10, D9, R4).
- *
- * A number is only meaningful if it says so: the load average says how much of the
- * machine was doing something else, and the OS runtime is part of the device key
- * because a runtime change breaks comparability sooner than a device change.
- *
- * `load` is the sampler that ran with the run, so the file carries the load of
- * the whole run (`loadSamples`) and not just the instant this function happens to
- * be called in. `loadavg1`/`loadavg5` stay what they always were - the end-of-run
- * instant, which is all a results file from before R4 had, and what
- * `bench/tools/arm-ratios.mjs` and the markdown report already read.
+ * The hardware, OS and load a run was measured under. `load` is the sampler that
+ * ran with the run (`loadSamples`); `loadavg1`/`loadavg5` are the instant this is
+ * called, at the end of the run.
  */
 export function collectMachine(platform, device, load) {
   const loadavg = os.loadavg();
@@ -125,9 +98,8 @@ export function collectMachine(platform, device, load) {
     osVersion: os.version(),
     arch: os.arch(),
     cpuCount,
-    // D15: device keys stay class-level, so the CPU model is what tells two
-    // machines claiming the same `android35-emu-pixel9` / `ios27-sim-iphone17`
-    // key apart when a baseline is being compared across desks or with CI.
+    // Device keys name a device class, so the CPU model is what tells two
+    // machines with the same key apart.
     cpuModel: os.cpus()[0]?.model ?? null,
     loadavg1: loadavg[0] ?? null,
     loadavg5: loadavg[1] ?? null,

@@ -1,18 +1,3 @@
-/**
- * Which task records `scripts/task-records.mjs --archive` may take out of git.
- *
- * The cost of being wrong is one-sided. Keeping a task's records a little longer costs
- * nothing; removing the brief of a task that is still in flight takes away what its
- * worker is reading. So every unit case starts from a task that *is* archivable and
- * changes exactly one fact, and each single fact must be enough to keep it. The
- * end-to-end cases run the real command in a throwaway repository, where the same
- * facts come from git rather than from a fixture.
- *
- * Fixtures do not sit on the answer: old is 40 days against a 14-day branch life, the
- * recent task is 3 days old, a late merge is 20 days of branch and 1 day of HEAD, and
- * each edge is tested on both sides.
- */
-
 import { afterAll, describe, expect, it } from '@jest/globals';
 import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
@@ -37,8 +22,8 @@ const ARCHIVABLE = {
   task: 'G24',
   files: ['G24-form.md', 'G24-form.report.md', 'G24/context.md'],
   symlinks: 0,
-  // Another task's edit is not this task's, and a worktree still on the branch HEAD
-  // already contains is a checkout nobody has removed yet.
+  // Neither of these keeps the task: another task's edit, and a worktree on a
+  // branch HEAD already contains.
   worktrees: [
     { branch: 'main', dirty: ['X31-flakes.md'] },
     { branch: 'task/G24-form', dirty: [] },
@@ -241,7 +226,6 @@ describe('copyThenRemove', () => {
     { file: 'G71/gates.jsonl', from: 'src/b', to: 'dst/b' },
   ];
 
-  /** A disk made of a Map, and a log of what was done to it, in order. */
   function fakeDisk(
     initial,
     copy = (bytes, from, to, disk) => disk.set(to, bytes)
@@ -346,11 +330,8 @@ describe('task-records.mjs, end to end', () => {
     for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  /**
-   * The environment every child here runs with: no lease, no inherited `GIT_*` (they
-   * win over `cwd`), no host git config, and a state home of its own so the archive
-   * lands in the fixture.
-   */
+  // Inherited `GIT_*` variables win over `cwd`, so they are dropped; the state
+  // home is the fixture's, so the archive lands there.
   function childEnv(home) {
     const env = withoutLeaseEnv(process.env);
     for (const name of Object.keys(env)) {
@@ -385,10 +366,8 @@ describe('task-records.mjs, end to end', () => {
     const home = path.join(root, 'home');
     fs.mkdirSync(repo);
     fs.mkdirSync(home);
-    /**
-     * Every git command is dated, because dates are what the rule reads: a commit's,
-     * a merge's, a branch tip's, and the reflog entry a fast-forward leaves.
-     */
+    // Every git command is dated: the rule reads commit, merge, branch-tip and
+    // reflog dates.
     const git = (args, daysAgo = OLD) => {
       const date = new Date(now - daysAgo * 86_400_000).toISOString();
       const result = spawnSync('git', args, {
@@ -629,7 +608,6 @@ describe('task-records.mjs, end to end', () => {
     expect(rows.W6).toMatchObject(
       kept('1 uncommitted path(s) in the worktree on a detached head')
     );
-    // Listing changes nothing.
     expect(repo.git(['status', '--porcelain'])).toBe(before);
     expect(fs.existsSync(repo.archive)).toBe(false);
   });
@@ -708,7 +686,6 @@ describe('task-records.mjs, end to end', () => {
       'B2-old.report.md',
     ]);
 
-    // Gone from the working tree and from the index ...
     expect(fs.existsSync(repo.record('G71'))).toBe(false);
     expect(fs.existsSync(repo.record('M1-late.md'))).toBe(false);
     expect(
@@ -716,13 +693,11 @@ describe('task-records.mjs, end to end', () => {
         .tracked()
         .filter((file) => MERGED.some((task) => file.includes(`/${task}`)))
     ).toEqual([]);
-    // ... as a staged removal, with no commit made.
     expect(repo.git(['rev-parse', 'HEAD'])).toBe(head);
     expect(repo.git(['diff', '--cached', '--name-status'])).toContain(
       'D\tdocs/tasks/G71-done.report.md'
     );
 
-    // Everything else is where it was.
     for (const name of [
       ...STANDING,
       'S9-spike.md',
@@ -739,7 +714,6 @@ describe('task-records.mjs, end to end', () => {
       expect.arrayContaining(STANDING.map((name) => `docs/tasks/${name}`))
     );
 
-    // A second run before the commit finds nothing left to do.
     const again = repo.run(['--archive']).rows;
     expect(again.G71).toBeUndefined();
     expect(Object.values(again).filter((row) => row.archived)).toEqual([]);
@@ -829,7 +803,6 @@ describe('task-records.mjs, end to end', () => {
     expect(repo.git(['status', '--porcelain'])).toBe('');
     expect(fs.existsSync(repo.archive)).toBe(false);
 
-    // With main merged in, the same command goes through.
     repo.git(['merge', '-q', '--ff-only', 'main']);
     const { rows, stderr } = repo.run(['--archive']);
     expect(stderr).toBe('');
@@ -877,7 +850,6 @@ describe('task-records.mjs, end to end', () => {
     );
     expect(rows.G71).toMatchObject({ verdict: 'keep', failed: true });
     expect(rows.G71.archived).toBeUndefined();
-    // The one before it and the one after it both went.
     expect(rows.B2.verdict).toBe('archived');
     expect(rows.X8.verdict).toBe('archived');
     expect(repo.tracked()).toEqual([
@@ -885,7 +857,6 @@ describe('task-records.mjs, end to end', () => {
       'docs/tasks/G71-done.report.md',
       'docs/tasks/G71/gates.jsonl',
     ]);
-    // The earlier file is untouched and nothing was half-copied beside it.
     expect(fs.readFileSync(earlier, 'utf8')).toBe('an earlier round\n');
     expect(fs.readdirSync(path.join(repo.archive, 'G71'))).toEqual(['G71']);
   });

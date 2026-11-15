@@ -1,25 +1,3 @@
-/**
- * A device gate refuses to start unless a live lease authorises the device it is
- * about to use (X28).
- *
- * The failure this guards is not a wrong number, it is a run on somebody else's
- * emulator: on 2026-11-11 two `real-input:android` gates were launched from shells
- * with no lease env, the runner answered "which device?" for itself, and
- * `emulator-5554` was driven over the machine's own adb server. Nothing refused,
- * because the only rule about it lived in AGENTS.md. So the cases below are the
- * shapes that incident came in — no lease, a released lease, a lease whose ttl is
- * out, a lease for another task or the other platform, and an environment whose
- * device is not the one the lease holds — plus the one case that must stay
- * possible: a real lease, which has to get through.
- *
- * Driven through the real CLI wherever the wiring is the risk (a check that never
- * runs refuses nothing) and through the pure function where the *decision* is the
- * risk (which of ten reasons this refusal is). Device commands are never run: the
- * checkout's `node`/`bun` is a shim, the lease store is a temporary `NITRO_UI_HOME`,
- * and a run that reached a device would show up as a ledger line this suite asserts
- * is absent.
- */
-
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -62,8 +40,8 @@ afterAll(() => {
 });
 
 function gitIn(dir, args) {
-  // A fixture identity: CI runners have no git user, and `commit` refuses without one.
-  // Signing off too: a host whose global config signs commits has no key for this identity.
+  // A fixture identity: CI runners have no git user, and `commit` refuses
+  // without one. Signing is off: a host that signs commits has no key for it.
   const result = spawnSync('git', ['-c', 'commit.gpgsign=false', ...args], {
     cwd: dir,
     encoding: 'utf8',
@@ -80,11 +58,6 @@ function gitIn(dir, args) {
   }
 }
 
-/**
- * A checkout small enough to be a fixture: the repo marker, an `example/`, a git
- * history, and a `node`/`bun` shim that prints test counts and stands in for every
- * gate's real command.
- */
 function makeCheckout() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x28-gate-'));
   fs.mkdirSync(path.join(dir, 'nitrogen/generated/ios'), { recursive: true });
@@ -103,7 +76,7 @@ function makeCheckout() {
   return dir;
 }
 
-/** The shim every gate command lands on. It also records that it ran at all. */
+/** Stands in for every gate's real command, and records that it ran at all. */
 function writeFakeRunner(dir) {
   const bin = path.join(dir, 'fake-bin');
   fs.mkdirSync(bin, { recursive: true });
@@ -114,9 +87,8 @@ function writeFakeRunner(dir) {
     'echo "Test Suites: 1 passed, 1 total"\n' +
     'echo "Tests: 3 passed, 3 total"\n' +
     'exit ${FAKE_EXIT:-0}\n';
-  // `bash` too, because a smoke gate is spawned as `bash scripts/smoke/<kind>.sh`:
-  // without it the fixture would run the real pack script in a checkout that has no
-  // package to pack.
+  // `bash` too: a smoke gate is spawned as `bash scripts/smoke/<kind>.sh`, and
+  // the real pack script has nothing to pack in this fixture.
   for (const name of ['node', 'bun', 'bash']) {
     fs.writeFileSync(path.join(bin, name), script);
     fs.chmodSync(path.join(bin, name), 0o755);
@@ -124,10 +96,7 @@ function writeFakeRunner(dir) {
   return bin;
 }
 
-/**
- * Run the real `gate.mjs` in the fixture, with the calling shell's lease scrubbed
- * (X16 item 1) and whatever the case asks for added back.
- */
+/** Runs the real `gate.mjs` in the fixture without the calling shell's lease. */
 function runCli(dir, args, extraEnv = {}) {
   const bin = writeFakeRunner(dir);
   const ranFile = path.join(dir, 'runner-ran.txt');
@@ -138,10 +107,8 @@ function runCli(dir, args, extraEnv = {}) {
     timeout: 120_000,
     env: {
       ...withoutLeaseEnv(process.env),
-      // A leased env carries METRO_PORT, so a device gate pre-flights it (X15). Nothing
-      // in this file is about ports, and another task's Metro on the fixture's port is
-      // not this suite's business: `FREE_LSOF` answers "free", `lease-metro-port.test.js`
-      // owns the busy-port case.
+      // A leased env carries METRO_PORT and a device gate checks that the port is
+      // free; the stub answers "free" whatever is listening on this machine.
       ...FREE_LSOF,
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       FAKE_RAN_FILE: ranFile,
@@ -168,7 +135,7 @@ function ledgerLines(dir) {
     .map((raw) => JSON.parse(raw));
 }
 
-/** A home holding `leases`/`pairs`, or the default live lease over the default pair. */
+/** With no options, the store holds one live lease over the default pair. */
 function homeWith(dir, options = {}) {
   const home = path.join(dir, 'state');
   writeLeaseStore(home, options);
@@ -199,8 +166,6 @@ describe('which gates are device gates (X28)', () => {
   });
 
   it('leaves the gates that touch no device alone', () => {
-    // `check` is the one every shell runs, and `smoke:pack` only builds a tarball:
-    // refusing those would stop the very thing that produces a device run.
     for (const name of ['check', 'smoke:pack']) {
       expect({ name, device: isDeviceGate(resolveGate(name)) }).toEqual({
         name,
@@ -216,8 +181,7 @@ describe('which gates are device gates (X28)', () => {
         resolveGate('bench', ['--platform', 'ios', '--plan', 'quick'])
       )
     ).toBe('ios');
-    // A bench with no `--platform` has not said, and `run.mjs` refuses it for that
-    // reason; inventing a platform here would claim a device the run never named.
+    // A bench with no `--platform` names no device; the bench runner refuses it.
     expect(deviceGatePlatform(resolveGate('bench'))).toBeNull();
     // A smoke run decides from PLATFORM at run time, defaulting to both halves.
     expect(deviceGatePlatform(resolveGate('smoke:expo'), {})).toBe('both');
@@ -263,7 +227,6 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
     const refusal = decide({ env: { NITRO_UI_LEASE_ID: '' } });
     expect(refusal).toContain('is a device gate and this shell has no lease');
     expect(refusal).toContain('NITRO_UI_LEASE_ID is not set');
-    // The point of the message: the next command is the fix, not a guess.
     expect(refusal).toContain('node scripts/lease.mjs acquire --task <ID>');
     expect(refusal).toContain('source /tmp/<ID>.env');
   });
@@ -283,8 +246,8 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
   });
 
   it('refuses a lease taken by another task', () => {
-    // The environment claims task G6; the store says the lease belongs to X28. A
-    // shell that sourced two lease files is the case this catches.
+    // The environment and the store disagree about the task, as they do in a
+    // shell that sourced two lease files.
     const refusal = decide({ env: { NITRO_UI_LEASE_TASK: 'G6' } });
     expect(refusal).toContain('environment from two leases');
     expect(refusal).toContain('but NITRO_UI_LEASE_TASK says G6');
@@ -296,8 +259,7 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
     });
     expect(refusal).toContain('drives android');
     expect(refusal).toContain('taken for ios devices');
-    // The same lease is fine for an iOS gate, so the refusal is about the pair of
-    // them, not about a lease nobody can use.
+    // The same lease is fine for an iOS gate.
     expect(
       decide({
         leases: [leaseRecord({ platform: 'ios', now })],
@@ -307,11 +269,11 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
   });
 
   it('refuses a device the lease does not hold — the stray emulator', () => {
-    // emulator-5554 is in nobody's lease here; it is the device from the incident.
+    // emulator-5554 is in no pair of the pool.
     const refusal = decide({ env: { ANDROID_SERIAL: 'emulator-5554' } });
     expect(refusal).toContain('would drive emulator-5554');
     expect(refusal).toContain('not the emulator of lease');
-    // And the *other* pair's emulator: attached, leased, but not to this task.
+    // The other pair's emulator is in the pool, but this lease does not hold it.
     expect(
       decide({
         env: {
@@ -325,8 +287,7 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
   });
 
   it('refuses the machine’s own adb server under a leased serial', () => {
-    // The half of the incident that let it reach a device at all: a serial with no
-    // private server is an `adb` command on the default port, which sees everyone.
+    // With no private server, `adb` uses the default port, which sees every device.
     const refusal = decide({ env: { ANDROID_ADB_SERVER_PORT: '' } });
     expect(refusal).toContain("address the machine's own adb server");
     expect(decide({ env: { ANDROID_ADB_SERVER_PORT: '5045' } })).toContain(
@@ -349,8 +310,7 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
   });
 
   it('refuses IOS_UDID steering an iOS run off the leased simulator', () => {
-    // scripts/real-input/ios.mjs prefers IOS_UDID, so a gate that only looked at
-    // IOS_SIM_UDID would approve one device and drive another.
+    // The iOS real-input runner prefers IOS_UDID over IOS_SIM_UDID.
     const refusal = decide({
       resolved: resolveGate('real-input:ios'),
       env: { IOS_UDID: other.ios.udid },
@@ -382,15 +342,13 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
         poolProblem: 'devices.json is not usable: pairs must list at least one',
       })
     ).toContain('refused rather than run unverifiable');
-    // A pool edited after the lease was taken says the same thing.
+    // A pool edited after the lease was taken.
     expect(decide({ pairs: [{ ...pair, id: 'pair-renamed' }] })).toContain(
       'no pair in this machine'
     );
   });
 
   it('says nothing about a gate that touches no device', () => {
-    // An empty store: `check` must still run, or the fix would have broken the
-    // one command every round starts with.
     const nothing = { leases: [], pairs: [] };
     expect(decide({ resolved: resolveGate('check'), ...nothing })).toBeNull();
     expect(
@@ -405,8 +363,7 @@ describe('deviceGateLeaseRefusal (the decision)', () => {
   });
 
   it('lets an exclusive lease run on any pair of the pool it holds', () => {
-    // The bench host's override is the exclusive lease itself: it holds every pair,
-    // so the other pair's emulator is its own to use — no flag involved.
+    // The environment names the other pair's emulator; the lease holds both pairs.
     expect(
       decide({
         leases: [
@@ -434,8 +391,6 @@ describeCli('gate.mjs refuses a device gate with no live lease', () => {
     expect(run.stderr).toContain('gate: refused before the run');
     expect(run.stderr).toContain('this shell has no lease');
     expect(run.stderr).toContain('node scripts/lease.mjs acquire --task <ID>');
-    // The three things a refusal must not do: start the command, claim a device,
-    // and leave a ledger line that reads like a result.
     expect(run.ran).toBe(false);
     expect(ledgerLines(dir)).toEqual([]);
     expect(fs.existsSync(path.join(home, 'pool.json'))).toBe(false);
@@ -463,8 +418,7 @@ describeCli('gate.mjs refuses a device gate with no live lease', () => {
   });
 
   it('refuses a released lease even with every device variable still exported', () => {
-    // The variables outlive the lease: `release` does not reach into a shell. This
-    // is the shape where "looks leased" and "is leased" differ, and the store wins.
+    // Releasing a lease cannot unset the variables a shell already exported.
     const dir = makeCheckout();
     const home = homeWith(dir, { leases: [] });
     const run = runCli(dir, ['harness:android'], {
@@ -543,8 +497,8 @@ describeCli('gate.mjs refuses a device gate with no live lease', () => {
   });
 
   it('refuses a backgrounded run in the shell that asked for it', () => {
-    // `--background` re-spawns itself detached; a refusal that only lived in the
-    // child would leave a record, a log and a `wait` for nobody to answer.
+    // `--background` re-spawns itself detached; a refusal in the child would
+    // leave a run record and a log behind, with nobody waiting for them.
     const dir = makeCheckout();
     const home = homeWith(dir);
     const run = runCli(dir, ['harness:android', '--background'], {
@@ -564,8 +518,6 @@ describeCli('gate.mjs refuses a device gate with no live lease', () => {
   });
 
   it('lets a live lease through, and records the device it ran on', () => {
-    // The other half of the rule: without this green the gate is just broken, and
-    // the ledger has to carry the lease the run proved.
     const dir = makeCheckout();
     const live = leaseRecord();
     const home = homeWith(dir, { leases: [live] });
@@ -629,13 +581,6 @@ describeCli('gate.mjs refuses a device gate with no live lease', () => {
 
 /* ------------------------- a device gate on a full disk ---------------------- */
 
-/**
- * The 2026-11-13 stall: 47 task worktrees nobody removed filled the disk, device runs
- * died with ENOSPC half-way, and nothing said "disk" until a person looked. A device
- * gate is now refused before it starts. The floor in these fixtures is the real one,
- * and the free-space values sit on both sides of it (9 and 11 against 10) so an
- * off-by-one or a flipped comparison cannot pass by accident.
- */
 describe('a device gate on a full disk', () => {
   const floor = REQUIREMENTS.deviceRunMinFreeDiskGb;
 
@@ -658,7 +603,6 @@ describe('a device gate on a full disk', () => {
 
   it('outside a test, reads the measured value and lets nothing raise it', () => {
     expect(freeDiskGbFrom({}, 123)).toBe(123);
-    // The bypass a reviewer found in the first version: 999 over a measured 3.
     expect(freeDiskGbFrom({ NITRO_UI_GATE_FREE_DISK_GB: '999' }, 3)).toBe(3);
     expect(freeDiskGbFrom({}, null)).toBeNull();
   });
@@ -668,8 +612,8 @@ describe('a device gate on a full disk', () => {
     expect(
       freeDiskGbFrom({ ...jest, NITRO_UI_GATE_FREE_DISK_GB: '4' }, 123)
     ).toBe(4);
-    // Not asked: a leased-gate case about something else must not depend on the
-    // host's disk, so the measurement is deliberately not used.
+    // Under jest the measurement is ignored, so a test about something else does
+    // not depend on the host's disk.
     expect(freeDiskGbFrom(jest, 3)).toBeNull();
     expect(
       freeDiskGbFrom({ ...jest, NITRO_UI_GATE_FREE_DISK_GB: ' ' }, 3)
@@ -699,8 +643,7 @@ describe('a device gate on a full disk', () => {
       ...leasedEnv({ pair: DEFAULT_PAIR, lease: live }),
       NITRO_UI_HOME: home,
       NITRO_UI_GATE_FREE_DISK_GB: String(floor - 1),
-      // A CI runner is exempt, and this suite runs on one: say plainly that this
-      // child is not on CI, or the case would pass there by never asking.
+      // A CI runner is exempt from the floor, and this suite also runs on one.
       CI: '',
     });
     expect(run.status).toBe(1);
@@ -742,8 +685,8 @@ describe('a device gate on a full disk', () => {
   });
 
   it('with no test seam at all, agrees with the disk it is really on', () => {
-    // Every case above names a value. This one removes jest's marker, so the child
-    // measures for itself, and the expectation is computed the same way here.
+    // Without jest's marker the child measures the disk for itself, so the
+    // expectation is computed from the same volume here.
     const dir = makeCheckout();
     const live = leaseRecord();
     const home = homeWith(dir, { leases: [live] });
@@ -752,7 +695,7 @@ describe('a device gate on a full disk', () => {
     const run = runCli(dir, ['harness:android'], {
       ...leasedEnv({ pair: DEFAULT_PAIR, lease: live }),
       NITRO_UI_HOME: home,
-      // A value that would refuse, to prove it is ignored outside a test.
+      // Would refuse if it were read; outside a test it is ignored.
       NITRO_UI_GATE_FREE_DISK_GB: '0',
       JEST_WORKER_ID: undefined,
       CI: '',
@@ -791,9 +734,7 @@ describe('requireLeaseDevice (what a runner may use)', () => {
   const leased = leasedEnv({ pair, lease: leaseRecord() });
 
   it('refuses an Android runner that names no serial — the incident’s shape', () => {
-    // The exact call scripts/real-input/android.mjs makes, on the environment a
-    // shell with no lease has: no serial, no AVD, no private adb server. Before
-    // X28 that environment was fine, because the runner went and found a device.
+    // The call the Android real-input runner makes, from a shell with no lease.
     const call = () =>
       requireLeaseDevice({
         env: {},
@@ -803,7 +744,7 @@ describe('requireLeaseDevice (what a runner may use)', () => {
       });
     expect(call).toThrow(/ANDROID_SERIAL is not set/);
     expect(call).toThrow(/lease\.mjs acquire/);
-    // `adb devices` would have answered with something; this answers with a refusal.
+    // The refusal comes before any `adb devices` call.
     expect(call).not.toThrow(/adb devices. failed/);
   });
 
@@ -837,8 +778,7 @@ describe('requireLeaseDevice (what a runner may use)', () => {
   });
 
   it('refuses a leased run with no AVD, so the harness cannot reach its default', () => {
-    // `avd()` in the harness config falls back to `nitroui`; under a lease that
-    // default is another pair's AVD, and the fallback is what this closes.
+    // The harness config's default AVD is not the leased pair's.
     const env = { ...leased };
     delete env.ANDROID_AVD;
     expect(() =>
@@ -851,17 +791,13 @@ describe('requireLeaseDevice (what a runner may use)', () => {
   });
 
   it('leaves a run with no lease and no requirement alone', () => {
-    // The developer/CI path: no lease named, `requireDevice` false. `gate.mjs` is
-    // what refuses this shape for a *gate*; a GitHub job that boots its own
-    // emulator is not a gate.
+    // A CI job that boots its own emulator runs the runner with no lease.
     expect(
       requireLeaseDevice({ env: {}, platform: 'android' }).serial
     ).toBeNull();
   });
 
   it('checks the emulator port rules before the serial question', () => {
-    // A reserved serial is refused whichever variable names it, and a run with both
-    // mistakes sees the reserved one first: it is the one that must never be used.
     expect(() =>
       requireLeaseDevice({
         env: { ANDROID_SERIAL: 'emulator-5560' },
@@ -920,8 +856,6 @@ describe('the bench runner measures on one device or none', () => {
   }
 
   it('refuses to switch to another emulator when its serial and AVD disagree', () => {
-    // Before X28 this printed "…; using emulator-5599." and measured on the other
-    // device. A bench number describes one device, so a disagreement is a refusal.
     const stub = adbStub({ attached: ['emulator-5599'], avdOf: 'nitro-ui-a' });
     const out = resolve({
       __root: stub.root,
@@ -944,13 +878,11 @@ describe('the bench runner measures on one device or none', () => {
     });
     expect(out).toContain('REFUSED');
     expect(out).toContain('ANDROID_SERIAL is not set');
-    // It asked adb nothing: the refusal happened before the device question.
+    // The refusal comes before any adb call.
     expect(fs.existsSync(stub.calls)).toBe(false);
   });
 
   it('still resolves a CI bench that only names an AVD', () => {
-    // The other direction: this file must not break a run that boots its own
-    // emulator and has no lease to source.
     const stub = adbStub({ attached: ['emulator-5599'], avdOf: 'nitroui-ci' });
     const out = resolve({ __root: stub.root, ANDROID_AVD: 'nitroui-ci' });
     expect(out).toContain('DEVICE');
@@ -965,8 +897,7 @@ describe('the Android runners have no device-list fallback', () => {
     'scripts/real-input/android.mjs': (body) => {
       expect(body).toContain('requireLeaseDevice');
       expect(body).toContain('requireDevice: true');
-      // The old shape: filter `adb devices` down to the emulators running an AVD
-      // and take the match. Nothing may pick a serial that way any more.
+      // Nothing may pick a serial by filtering the `adb devices` list.
       expect(body).not.toMatch(/serials\.filter\(/);
       expect(body).not.toMatch(/matching\.length/);
       expect(body).not.toMatch(/ANDROID_AVD \?\? 'nitroui'/);
@@ -993,13 +924,8 @@ describe('the Android runners have no device-list fallback', () => {
 });
 
 describe('the harness config asks its lease before it names a device', () => {
-  // `example/rn-harness.config.mjs` cannot be imported here: loading without a
-  // stamped app is a refusal, and that refusal is the point of the file. So this
-  // reads it as text and pins the two facts that were wrong on X28's first try —
-  // that the device selection reads the lease, and that the lease is *declared*
-  // above the module's own top-level call into that selection. A `const` below its
-  // first use is a "Cannot access 'leaseDevice' before initialization" in every
-  // leased Android harness run, which no unit test on this machine would ever see.
+  // The config cannot be imported here, because it refuses to load without a
+  // stamped app, so it is read as text.
   const text = fs.readFileSync(
     path.join(process.cwd(), 'example/rn-harness.config.mjs'),
     'utf8'
@@ -1009,8 +935,6 @@ describe('the harness config asks its lease before it names a device', () => {
     expect(text).toContain('const leaseDevice = requireLeaseDevice({');
     expect(text).toContain('const udid = leaseDevice.udid;');
     expect(text).toContain('return leaseDevice.avd ?? DEFAULT_AVD;');
-    // The AVD default stays reachable only with no lease named (`requireLeaseDevice`
-    // insists on `ANDROID_AVD` from a leased run), never by an env that forgot it.
     expect(text).not.toContain(
       'process.env.ANDROID_AVD ?? process.env.AVD ?? DEFAULT_AVD'
     );
@@ -1036,7 +960,6 @@ describe('the harness config asks its lease before it names a device', () => {
   });
 });
 
-/** `describeCli` with the cleanup this file owns, named for what it runs. */
 function describeCli(name, fn) {
   describe(name, fn);
 }

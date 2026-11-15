@@ -1,25 +1,3 @@
-/**
- * The iOS half of the accessibility rule.
- *
- * X4's review found that the in-app harness could not fail this rule on iOS at all:
- * React Native copies an `accessibilityLabel` prop onto its own component view
- * (`RCTViewComponentView.mm:471`), and the harness's query finds a view by that same label
- * (`ViewQueryHelper.mm:65`), so the box it measured and the "labelled box" it measured were
- * one and the same view. The rule moved to XCUITest, which walks the tree VoiceOver walks.
- *
- * These tests are why the move is worth the extra machinery: `iosA11yProblems` decides from
- * a tree handed to it, so every way the bug can appear is proved here in milliseconds, and
- * `scripts/real-input/ios.mjs` runs the same function against a simulator's log.
- *
- * The nodes are written as the real pass reported them on pair-a (`iPhone 17`, the tree
- * `RealInputTests.testRealInputA11y` prints): every control has the React Native wrapper
- * carrying its `testID` *and* the hosted element carrying the same name. A fixture that
- * left the wrapper out would be a fixture where the old bug is impossible.
- *
- * @file No device: see the header of `./real-input-a11y.test.js` for why the rule lives
- *       apart from the runner.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import { readFileSync } from 'node:fs';
@@ -38,16 +16,10 @@ import {
   staleExemptions,
 } from '../real-input/a11y.mjs';
 
-/** The measured box of `switch-controlled`, as XCUITest reported it. */
+// The box of `switch-controlled`, as XCUITest reported it.
 const SWITCH_BOX = { x: 325, y: 217.3333282470703, width: 61, height: 28 };
 
-/**
- * One element, defaulting to "a hosted element at the control's box, announcing the
- * control's name, as a switch, and ready to be acted on".
- *
- * Defaults matter here: each test states only the one thing it breaks, so a red fixture is
- * readable as one difference from the measured truth.
- */
+// One hosted element at the control's box, announcing its name as a switch.
 function node(overrides = {}) {
   return {
     type: 'switch',
@@ -62,12 +34,13 @@ function node(overrides = {}) {
   };
 }
 
-/** The React Native wrapper: same box, same name, and the `testID` that anchors the case. */
+// React Native copies `accessibilityLabel` onto its own wrapper view, so every
+// real tree has the wrapper carrying the `testID` and the name, plus the hosted
+// element carrying the same name.
 function wrapper(label = 'Controlled switch', frame = SWITCH_BOX) {
   return node({ id: 'switch-controlled', label, frame, anchor: true });
 }
 
-/** The tree the current iOS code produces for a Switch — the shape all seven pass. */
 function switchTree() {
   return [wrapper(), node()];
 }
@@ -87,9 +60,6 @@ describe('the iOS a11y rule', () => {
   });
 
   it('goes red when the name is on the wrapper and nowhere else', () => {
-    // The exact bug the rule exists for, and the shape the in-app suite reported as a pass
-    // for every control: React Native's component view carries the label, nothing beneath
-    // it does. `box == labelBox` was the "evidence".
     const tree = [wrapper()];
     const problems = iosA11yProblems(control('switch'), tree);
     expect(problems).toHaveLength(1);
@@ -103,7 +73,6 @@ describe('the iOS a11y rule', () => {
 
   describe('a control that is the React Native view (ContextMenu)', () => {
     const GRACE_BOX = { x: 16, y: 300, width: 361, height: 76 };
-    /** The accessible ContextMenu: one element, the wrapper itself, carrying the name. */
     const graceWrapper = (overrides = {}) =>
       node({
         type: 'other',
@@ -122,8 +91,6 @@ describe('the iOS a11y rule', () => {
     });
 
     it('goes red when the wrapper lost its name (not an accessibility element)', () => {
-      // The D37 item 2 failure: React Native asks the content view, the content view says
-      // no, and the wrapper is announced as nothing at all.
       const problems = iosA11yProblems(control('context-menu'), [
         graceWrapper({ label: '' }),
       ]);
@@ -148,12 +115,9 @@ describe('the iOS a11y rule', () => {
     });
 
     it('goes red on the measured tree of a wrapper that is not one element', () => {
-      // The content view's getter forced false, on iOS 27: the wrapper is still listed
-      // with its label (XCUITest lists any view with an identifier), so the name check
-      // alone passes - what gives it away is the children reached as stops of their own.
-      // Four stops, which is also what the *healthy* component reads once React Native has
-      // published both Texts - so the sentence has to name the thing that actually
-      // separates the two, the unnamed container box between the wrapper and its texts.
+      // XCUITest lists any view with an identifier, so the wrapper still shows its
+      // label here. What separates this tree from a healthy one is the unnamed
+      // container box between the wrapper and its texts.
       const tree = parseIosA11yLog(
         readFileSync(
           `${__dirname}/fixtures/a11y/ios-context-menu-not-an-element.log`,
@@ -170,11 +134,8 @@ describe('the iOS a11y rule', () => {
     });
 
     it('reports both shipped readings as its recorded debt, and only those', () => {
-      // The shipped code on iOS 27 reads either 2 stops (the sweep walked the tree before
-      // React Native published the second Text) or 4 (after it), both at the same boxes:
-      // measured a minute apart on the same machine, on trees that differ only in whether
-      // other components landed. Both are the same debt. The regression - the wrapper not
-      // an element - is a third tree, and it is not covered by the row.
+      // iOS 27 reads either 2 stops or 4, depending on whether React Native had
+      // published the second Text when the tree was walked.
       const read = (name) =>
         parseIosA11yLog(
           readFileSync(`${__dirname}/fixtures/a11y/${name}.log`, 'utf8')
@@ -196,11 +157,6 @@ describe('the iOS a11y rule', () => {
     });
 
     it("excuses the wrapper's own Texts at any count, and nothing else", () => {
-      // X22 fix round 1 withdrew the count anchor: 2 and 4 are one finding read at two
-      // moments, so pinning the number pinned a stopwatch. What the row does anchor is the
-      // *membership* of the list - only the two Texts the example puts inside the wrapper -
-      // and the cause the sentence names. Each of those two anchors is proved here, because
-      // either one alone would let a tree through that a person would call broken.
       const [row] = exemptionsFor('context-menu', 'ios');
       const stop = (label) => `static text "${label}" at (25, 459.67, 352, 17)`;
       const grace = stop('Grace Hopper');
@@ -218,7 +174,6 @@ describe('the iOS a11y rule', () => {
           sentence(4, [grace, body, grace, body].join('; '), published)
         )
       ).toBe(true);
-      // A third element under the wrapper is a different finding, at any count.
       expect(
         row.matches.test(
           sentence(
@@ -235,7 +190,6 @@ describe('the iOS a11y rule', () => {
           )
         )
       ).toBe(false);
-      // And the wrapper-not-an-element sentence, which quotes the unnamed box, is never it.
       expect(
         row.matches.test(
           sentence(
@@ -249,13 +203,6 @@ describe('the iOS a11y rule', () => {
     });
 
     it('records a Form row that is named only on its wrapper as debt', () => {
-      // Measured twice on pair-b (G24 rounds 2 and 3), and identical both times: the
-      // row's name reaches the React Native wrapper for the row's own `Text` and nowhere
-      // else, so the row is not the one element the component page says it is. Recorded,
-      // printed on every run, and narrow: with the row taken away the same measured tree
-      // is a failure, which is the proof the case can still go red - and a name that
-      // arrives on a *second* element, or on the wrapper as a button, matches nothing here
-      // and goes red as well.
       const read = parseIosA11yLog(
         readFileSync(`${__dirname}/fixtures/a11y/ios-form.log`, 'utf8')
       ).get('form');
@@ -281,8 +228,6 @@ describe('the iOS a11y rule', () => {
     });
 
     it('is the only case that may grade its wrapper', () => {
-      // Every other control keeps the exclusion: React Native puts the label on the
-      // wrapper whatever the control does, so for them it proves nothing.
       expect(
         A11Y_CONTROLS.filter((entry) => entry.wrapperIsControl === true).map(
           (entry) => entry.id
@@ -292,8 +237,6 @@ describe('the iOS a11y rule', () => {
   });
 
   it('goes red when the named element is not at the control’s box', () => {
-    // A name the person can act on belongs on the box the control is drawn at. Ten points
-    // away is a different place: measured, the honest pair agrees to under a tenth.
     const tree = [
       wrapper(),
       node({ frame: { ...SWITCH_BOX, y: SWITCH_BOX.y + 10 } }),
@@ -304,8 +247,6 @@ describe('the iOS a11y rule', () => {
   });
 
   it('still accepts the sub-tenth a second read of one layout produces', () => {
-    // The tolerance is the noise floor of two independent reads, and it has to be tested
-    // from both sides or it is just a number that makes the other test pass.
     const tree = [
       wrapper(),
       node({ frame: { ...SWITCH_BOX, height: SWITCH_BOX.height + 0.33 } }),
@@ -314,7 +255,6 @@ describe('the iOS a11y rule', () => {
   });
 
   it('goes red when the name reaches two elements', () => {
-    // G6's symptom on this platform: two stops, one value.
     const tree = [
       wrapper(),
       node(),
@@ -331,9 +271,7 @@ describe('the iOS a11y rule', () => {
   });
 
   it('leaves an indicator alone — Progress is not something you press', () => {
-    // Measured: the hosted linear bar's element is `hittable=false` because it is 4 pt
-    // tall. Requiring a press there would assert something the component deliberately is
-    // not, and the first person to see it would loosen the whole rule.
+    // The hosted linear bar's element is `hittable=false` because it is 4 pt tall.
     const progress = control('hosted-progress');
     const tree = [
       node({
@@ -356,8 +294,7 @@ describe('the iOS a11y rule', () => {
   });
 
   it('goes red when the announcement loses the kind of control it is', () => {
-    // The brief's trait. `other` is what XCUITest reports for a plain box: a person hears
-    // a name with no idea what can be done with it.
+    // `other` is what XCUITest reports for a plain box.
     const tree = [wrapper(), node({ type: 'other' })];
     const problems = iosA11yProblems(control('switch'), tree);
     expect(problems[0]).toContain(
@@ -366,14 +303,11 @@ describe('the iOS a11y rule', () => {
   });
 
   it('goes red when no element carries the testID it anchors on', () => {
-    // Not "the control is fine and unreadable" — if the anchor is gone, the run read
-    // nothing and must not report a verdict either way.
     const problems = iosA11yProblems(control('switch'), [node()]);
     expect(problems[0]).toContain('never found the control');
   });
 
   it('tells a name with no box apart from a name that is absent', () => {
-    // Two different bugs with the same symptom from one query, and different fixes.
     const tree = [
       wrapper(),
       node({ frame: { x: 0, y: 0, width: 0, height: 0 } }),
@@ -386,10 +320,7 @@ describe('the iOS a11y rule', () => {
 
 describe('the iOS debt rows', () => {
   it('prints the Slider’s real announcement as known failing, not as a pass', () => {
-    // Measured on pair-a: the element under `slider-controlled` is `other` with value
-    // "0.25" — the vended `.adjustable` element, which XCUITest reports by its type. The
-    // rule still asks, and the debt list is what makes the answer printed rather than
-    // swallowed.
+    // XCUITest reports the slider's adjustable element as `other` with value "0.25".
     const slider = control('slider');
     const tree = [
       node({
@@ -418,9 +349,6 @@ describe('the iOS debt rows', () => {
   });
 
   it('still fails the Slider for a bug its debt row does not describe', () => {
-    // An exemption is tied to a finding, not to a control. The row excuses the wrong word
-    // in the announcement; a name that has also moved off the control is a second problem,
-    // and it has to go red *beside* the known one rather than being swallowed by it.
     const slider = control('slider');
     const tree = [
       node({
@@ -444,9 +372,6 @@ describe('the iOS debt rows', () => {
   });
 
   it('reports the hosted Picker’s doubled name as a finding, and keeps it debt', () => {
-    // Measured: no element under `host-picker` is announced as "Hosted picker"; the one the
-    // label reaches announces "Hosted picker, Hosted picker". The rule reads that as the
-    // control having no name of its own — which is what a person would call a stutter.
     const picker = control('hosted-picker');
     const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
     const tree = [
@@ -473,12 +398,6 @@ describe('the iOS debt rows', () => {
   });
 
   it('goes red when the hosted Picker’s label stops arriving at all', () => {
-    // X4 re-review M3, the reason the row's `matches` is one sentence and not a word
-    // fragment. The old row matched `/no element other than the|announced as/`, which is
-    // also the sentence a *lost* label produces — so this tree, where `accessibilityLabel`
-    // never reaches the hosted control, was excused by a row written for a stutter, and the
-    // case could not go red any way the bug could appear. The stutter has a sentence of its
-    // own now; the lost label has to fall through to it as a new failure.
     const picker = control('hosted-picker');
     const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
     const tree = [
@@ -502,9 +421,6 @@ describe('the iOS debt rows', () => {
   });
 
   it('counts a doubled name by the name, not by the separator', () => {
-    // "Hosted picker Hosted picker" (no comma), a localised joiner, and a component that
-    // concatenated the strings itself are all the same finding to a person hearing it. A
-    // rule keyed on `", "` would excuse each of them.
     const picker = control('hosted-picker');
     const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
     for (const announcement of [
@@ -527,9 +443,6 @@ describe('the iOS debt rows', () => {
   });
 
   it('does not let one platform’s row excuse the other platform’s finding', () => {
-    // The reason `A11Y_EXEMPTIONS` rows carry a platform. The Slider has debt on both
-    // platforms, for different bugs; an iOS run that read a *correct* announcement must
-    // match nothing, and the Android row must not be reachable from this side at all.
     const good = [
       node({
         id: 'slider-controlled',
@@ -549,8 +462,6 @@ describe('the iOS debt rows', () => {
     expect(result.known).toEqual([]);
     expect(result.failures).toEqual([]);
     expect(exemptionsFor('slider', 'ios').length).toBe(1);
-    // And the stale-clearing pass on iOS cannot report the Android rows, which that run
-    // never read.
     expect(
       staleExemptions(
         A11Y_CONTROLS.map((entry) => entry.id),
@@ -561,11 +472,8 @@ describe('the iOS debt rows', () => {
   });
 
   it('reports the shipped IconButton inset as its recorded debt, and only that', () => {
-    // Measured on pair-a (iOS 27): the name is on the `button` element, enabled and hittable,
-    // and it is the style's own 38.67 pt box centred inside the 44 x 44 pt host React Native
-    // laid out — the 44 pt touch target is a layer *behind* the control, so the element never
-    // grew to the box. Debt, printed every run, and the fixture is the tree the sweep reported,
-    // not a sketch of it.
+    // On iOS 27 the named `button` element is the style's own 38.67 pt box, centred
+    // inside the 44 x 44 pt host.
     const measured = parseIosA11yLog(
       readFileSync(`${__dirname}/fixtures/a11y/ios-icon-button.log`, 'utf8')
     ).get('icon-button');
@@ -576,9 +484,6 @@ describe('the iOS debt rows', () => {
     expect(shipped.known[0]).toContain('known failing');
     expect(shipped.known[0]).toContain('is announced by the element at');
     expect(shipped.exempt).toBe(true);
-    // The regression the box rule exists for is not this row: a name that has *moved*, rather
-    // than been inset by the component on purpose, has to go red beside the known finding
-    // instead of being swallowed by it.
     const moved = checkIosControlA11y(
       control('icon-button'),
       measured.map((entry) =>
@@ -593,8 +498,6 @@ describe('the iOS debt rows', () => {
   });
 
   it('excuses the measured inset, not a box one point or ten wider', () => {
-    // G16's "not 12 or 22" test, for a number instead of a count. The row quotes the geometry
-    // it was measured with, so the only tree it can excuse is that one.
     const [row] = exemptionsFor('icon-button', 'ios');
     const sentence = (namedBox, drawnBox) =>
       'NitroUiIconButton: "Real-input icon button" is announced by the element at ' +
@@ -604,12 +507,10 @@ describe('the iOS debt rows', () => {
     expect(
       row.matches.test(sentence('18.67, 269.67, 38.67, 38.67', DRAWN))
     ).toBe(true);
-    // The vertical coordinate is the one number allowed to move: it is where the screen sits,
-    // and a row pinned to it would go stale for an unrelated layout change.
+    // The vertical coordinate may move: it depends on where the screen is scrolled.
     expect(
       row.matches.test(sentence('18.67, 412.67, 38.67, 38.67', DRAWN))
     ).toBe(true);
-    // The two boxes agreeing is the row's retirement, not something it excuses.
     expect(row.matches.test(sentence('16, 267, 44, 44', DRAWN))).toBe(false);
     expect(
       row.matches.test(sentence('18.17, 269.67, 38.67, 38.67', DRAWN))
@@ -626,7 +527,6 @@ describe('the iOS debt rows', () => {
 });
 
 describe('reading the pass out of an xcodebuild log', () => {
-  /** Two cases, in the shape `RealInputTests.testRealInputA11y` prints. */
   const LOG = [
     "Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputA11y]' started.",
     'real-input a11y case=switch kind=anchor id=switch-controlled x=325.0 y=217.333 w=61.0 h=28.0 nodes=2',
@@ -639,10 +539,6 @@ describe('reading the pass out of an xcodebuild log', () => {
   ].join('\n');
 
   it('keeps a two-word element type intact', () => {
-    // Measured the hard way: the first version printed `trait=segmented control` unquoted,
-    // the reader stopped at the space, and the rule reported "announced as a segmented and
-    // not as a segmented control" — a parser artifact dressed up as a component bug, in a
-    // run whose every other line was correct.
     const node = parseIosA11yLog(LOG).get('hosted-segmented')[0];
     expect(node.type).toBe('segmented control');
     expect(node.label).toBe('Hosted segmented');
@@ -656,8 +552,6 @@ describe('reading the pass out of an xcodebuild log', () => {
       'hosted-picker',
     ]);
     const [anchor, hosted] = trees.get('switch');
-    // The element that carries the `testID` is the wrapper however the pass orders its
-    // lines; that is the one definition of "the control's box", shared with the rule.
     expect(anchor.anchor).toBe(true);
     expect(hosted.anchor).toBe(false);
     expect(hosted.value).toBe('0');
@@ -665,15 +559,11 @@ describe('reading the pass out of an xcodebuild log', () => {
   });
 
   it('carries a label with a comma and spaces through intact', () => {
-    // The reason the Swift side quotes these fields: splitting on whitespace would read the
-    // hosted Picker's doubled name as "Hosted" and lose the rest of the line.
     const node = parseIosA11yLog(LOG).get('hosted-picker')[1];
     expect(node.label).toBe('Hosted picker, Hosted picker');
   });
 
   it('decides the whole run from the log alone', () => {
-    // The point of parsing rather than asserting in Swift: this is the same call
-    // `ios.mjs` makes against a simulator's log, so a fixture proves the device path.
     const trees = parseIosA11yLog(LOG);
     expect(
       checkIosControlA11y(control('switch'), trees.get('switch'))
@@ -689,9 +579,7 @@ describe('reading the pass out of an xcodebuild log', () => {
   });
 
   it('refuses a line whose box did not parse, rather than reading no elements', () => {
-    // A format change would otherwise look like "every case measured nothing" and the
-    // temptation would be to make missing lines a skip.
-    // The *node* line, not the anchor's preamble, which the reader skips by design.
+    // The node line is broken, not the anchor line, which the reader skips.
     const broken = LOG.replace(
       'label="Controlled switch" value="0" x=325.0 y=217.333 w=61.0 h=28.0',
       'label="Controlled switch" value="0" x=325.0 y=217.333 w=?? h=??'
@@ -700,25 +588,13 @@ describe('reading the pass out of an xcodebuild log', () => {
   });
 
   it('reads a log with no a11y lines as no cases at all', () => {
-    // `ios.mjs` turns this into a per-case "not measured" failure, which is how a pass that
-    // never reached a screen stays a failure rather than a green section.
     expect(parseIosA11yLog('nothing here').size).toBe(0);
   });
 });
 
-/**
- * The re-read the Swift pass does before it prints a case's boxes (X16 item 4).
- *
- * `a11y:switch` failed twice on maintainer-mac-1 with the React Native wrapper's box at exactly ⅓
- * of the switch's — every component divided by the screen scale — and passed on a re-run of the
- * same tree. That snapshot is the pass's to throw away, and the pass itself is
- * `A11yFrameStability`, proved on the host by `scripts/native-tests/a11y-frame-stability.test.swift`
- * in `bun run test:native`. What is proved *here* is the other half: that the log line it prints
- * about doing so reaches the report, because a fix that retried its way to a green would otherwise
- * be indistinguishable from a clean run.
- */
 describe('the accessibility re-read', () => {
-  /** One case, re-read three times before its box stopped being the ⅓-scale one. */
+  // XCUITest can return a stale first snapshot whose boxes are the real ones
+  // divided by the screen scale. Here the first read is at ⅓ scale.
   const STABILITY_LOG = [
     'real-input a11y case=switch kind=stability reads=3 settled=true moved=1 elapsedMs=240 ' +
       'firstAnchorX=108.33333 firstAnchorY=72.44444 firstAnchorW=20.33333 firstAnchorH=9.33333',
@@ -728,13 +604,8 @@ describe('the accessibility re-read', () => {
   ].join('\n');
 
   it('does not read a stability line as an element', () => {
-    // It carries `case=` like an element line, so a reader that keyed only on that would hand the
-    // rule a phantom node with no label and a box made of `NaN`s — which the rule would report as
-    // "no element is announced as the control", i.e. the guard would manufacture its own failure.
     const trees = parseIosA11yLog(STABILITY_LOG);
     expect(trees.get('switch')).toHaveLength(2);
-    // The phantom it would otherwise create: no trait, no label, and a box made of `NaN`s, which
-    // the rule would report as "no element is announced as the control".
     expect(
       trees.get('switch').every((element) => element.type !== 'unknown')
     ).toBe(true);
@@ -753,9 +624,6 @@ describe('the accessibility re-read', () => {
     expect(stability.settled).toBe(true);
     expect(stability.moved).toBe(1);
     expect(stability.elapsedMs).toBe(240);
-    // The box that was thrown away, in the report: "the pass read it three times" is only useful
-    // if a reader can see the two answers differ by the screen scale, which is how the ⅓-scale
-    // snapshot was recognised as a stale read rather than a moved control.
     expect(stability.firstAnchor).toEqual({
       x: 108.33333,
       y: 72.44444,
@@ -765,8 +633,6 @@ describe('the accessibility re-read', () => {
   });
 
   it('reports a case that printed no stability line as an ordinary two-read settle', () => {
-    // The common case must stay silent in the log — fourteen extra lines a run is noise — so the
-    // absence of a line is what "settled immediately" means, and `ios.mjs` notes nothing.
     expect(
       parseIosA11yStability(
         'real-input a11y case=switch kind=anchor id=switch-controlled x=325.0 y=217.333 w=61.0 h=28.0 nodes=2\n' +
@@ -776,9 +642,6 @@ describe('the accessibility re-read', () => {
   });
 
   it('keeps an unsettled case visibly unsettled', () => {
-    // A tree that never holds still (an animated indicator, a list mid-recycle) is measured on its
-    // last read and must not read as a settle: that branch is the difference between a discounted
-    // measurement and a pass.
     const log =
       'real-input a11y case=switch kind=stability reads=6 settled=false moved=2 elapsedMs=1440 ' +
       'firstAnchorX=325 firstAnchorY=217 firstAnchorW=61 firstAnchorH=28';
@@ -788,8 +651,6 @@ describe('the accessibility re-read', () => {
   });
 
   it('refuses a stability line whose counts did not parse', () => {
-    // Same rule as an unreadable box: a format change is a broken measurement, and reading
-    // `reads=NaN settled=false` as "it never settled" would blame the app for a parser.
     expect(() =>
       parseIosA11yStability(
         'real-input a11y case=switch kind=stability reads=?? settled=true moved=1'
@@ -798,7 +659,6 @@ describe('the accessibility re-read', () => {
   });
 
   it('says nothing in the report for a case that settled on the ordinary two reads', () => {
-    // Fourteen extra notes a run is noise, and the silence is what makes the note meaningful.
     expect(iosStabilityNote(undefined)).toBeNull();
     expect(iosStabilityNote(null)).toBeNull();
   });
@@ -809,21 +669,15 @@ describe('the accessibility re-read', () => {
       SWITCH_BOX
     );
     expect(note).toContain('read 3 times before two agreed');
-    // The box that was thrown away, and the ratio to the one kept: that ratio is how a reader
-    // tells a stale snapshot from a control that moved, so it has to survive into the report.
     expect(note).toContain('(108.33, 72.44, 20.33, 9.33)');
     expect(note).toContain('at ⅓ scale');
     expect(note).toContain('1 frame(s) moved');
     expect(note).toContain('240 ms');
-    // And what the guard does NOT do, in the same breath, because the note is the only place a
-    // reader learns which of the two kinds of wait this was.
     expect(note).toContain('never two reads');
   });
 
   it('will not call the first read a scaled one unless every component says so', () => {
-    // The ⅓ sentence is a diagnosis, and a diagnosis printed for a box that merely happens to be
-    // smaller would teach the next reader to distrust the note. Fixtures that coincide with the
-    // right answer prove nothing, so this one is one component off: x/y/w at a third, height not.
+    // One component off: x, y and width are at a third, the height is not.
     const almost = {
       reads: 3,
       settled: true,
@@ -833,17 +687,10 @@ describe('the accessibility re-read', () => {
     };
     const notScaled = iosStabilityNote(almost, SWITCH_BOX);
     expect(notScaled).not.toContain('the first read is this box at');
-    // And the note must not assert the *shape* of the incident either: naming the ⅓-scale bug in
-    // every re-read note would teach a reader to see that bug in notes that are not about it.
-    // (checked on the bare fraction, not a spelling: the note writes "at ⅓ scale", and an
-    // assertion that depended on a hyphen would pass on a note that did name it.)
     expect(notScaled).not.toContain('⅓');
-    // And a discarded box that equals the kept one says nothing either: `settle` would not have
-    // thrown it away, so if it ever appeared the note must not invent a scale for it.
     const same = { ...almost, firstAnchor: { ...SWITCH_BOX } };
     expect(iosStabilityNote(same, SWITCH_BOX)).not.toContain('scale');
-    // With no discarded box printed at all (a budget timeout before a second read), the note still
-    // renders: the read count is the finding, not the ratio.
+    // No discarded box at all: the note still renders.
     const none = { reads: 2, settled: false, moved: 0, elapsedMs: 1500 };
     expect(iosStabilityNote(none, SWITCH_BOX)).toContain(
       'read 2 times and never agreed'
@@ -859,16 +706,9 @@ describe('the accessibility re-read', () => {
     });
     expect(note).toContain('read 6 times and never agreed');
     expect(note).toContain('discount it');
-    // Never a pass, never a failure: `ios.mjs` notes it, and the rule still grades the boxes.
     expect(note).not.toMatch(/\bFAIL\b/);
   });
 
-  /**
-   * Item 4: a ⅓-scale first read is a real accessibility bug that came and went, and the case still
-   * *passes* the rule — so a note two screens up is where a finding like that goes to be reported
-   * as clean. These are the two directions that matter: the shape must warn, and an ordinary
-   * disagreement must not, because a WARN that fires on every re-read is a WARN nobody reads.
-   */
   it('warns when the first read has the shape of a stale render-scale snapshot', () => {
     const warning = iosStabilityWarning(
       parseIosA11yStability(STABILITY_LOG).get('switch'),
@@ -876,13 +716,10 @@ describe('the accessibility re-read', () => {
     );
     expect(warning).toContain('⅓');
     expect(warning).toContain('stale');
-    // Said as a warning precisely because it is not a failure: the boxes below are the settled ones.
     expect(warning).toMatch(/not a failure/);
   });
 
   it('warns nothing for a re-read that is not the screen-scale shape', () => {
-    // A control that moved, or a tree still being laid out: the note covers it, and calling every
-    // re-read a warning would train a reader to skim past the one that matters.
     expect(
       iosStabilityWarning(
         { reads: 3, settled: true, moved: 1, elapsedMs: 240 },
@@ -900,18 +737,14 @@ describe('the accessibility re-read', () => {
   });
 
   it('warns nothing for a uniform ratio that is not a screen scale', () => {
-    // The shape test alone is not the claim: every component dividing by one ratio is also what a
-    // control that is still animating in, or a layout pass at another size, looks like. Only the
-    // scales a screen actually has (⅓, ½, ¼, 2×, 3×) are the stale-snapshot bug, so 0.8× on all
-    // four components is a box that moved, and the note — not the summary — is where it belongs.
+    // Only the scales a screen has (⅓, ½, ¼, 2×, 3×) mean a stale snapshot. A
+    // uniform 0.8× is a box that moved.
     const uniform = {
       x: SWITCH_BOX.x * 0.8,
       y: SWITCH_BOX.y * 0.8,
       width: SWITCH_BOX.width * 0.8,
       height: SWITCH_BOX.height * 0.8,
     };
-    // The fixture really is uniform, so a pass below is the named-scale rule and not the shape
-    // rule refusing a ratio that only nearly lines up.
     expect(firstReadScale(uniform, SWITCH_BOX)).toBe('0.800×');
     const stability = {
       reads: 3,
@@ -921,18 +754,12 @@ describe('the accessibility re-read', () => {
       firstAnchor: uniform,
     };
     expect(iosStabilityWarning(stability, SWITCH_BOX)).toBeNull();
-    // And the note beside it, which still quotes the ratio, does not call it a render-scale
-    // snapshot: a note that named the bug the summary declined to warn about would be the
-    // contradiction `firstReadScale` exists to prevent.
     const note = iosStabilityNote(stability, SWITCH_BOX);
     expect(note).toContain('0.800×');
     expect(note).not.toContain('render scale');
   });
 
   it('has one definition of the scale shape, shared by the note and the warning', () => {
-    // The note and the WARN ask the same question in two places. If they answered it separately they
-    // would eventually disagree, and a summary that warns about a box the note beside it declines to
-    // call scaled is the kind of contradiction a reader cannot resolve from a log.
     expect(
       firstReadScale({ x: 100, y: 100, width: 30, height: 30 }, SWITCH_BOX)
     ).toBe(null);
@@ -960,7 +787,6 @@ describe('the accessibility re-read', () => {
     );
     expect(warns).toContain('⅓');
     expect(notes).toContain('⅓');
-    // And they say nothing when the other says nothing.
     const plain = { x: 300, y: 200, width: 61, height: 28 };
     expect(firstReadScale(plain, SWITCH_BOX)).toBeNull();
     expect(
@@ -977,15 +803,6 @@ describe('the accessibility re-read', () => {
     ).toBeNull();
   });
 
-  /**
-   * Item 4, end to end: the finding has to reach the check, not just exist as a helper.
-   *
-   * `reportIosStability` is what `ios.mjs` calls, and it is written against a plain `{note, warn}`
-   * pair so it can be handed a real `CheckLog` here. A text assertion on a call site is not enough —
-   * an earlier version of this file asserted `toContain('check.warn(stabilityWarning)')` and stayed
-   * green when the mutation wrapped that call in `if (false)`, because the text was still there. The
-   * call is checked by making it.
-   */
   it('reports the re-read onto the check: a note always, a WARN only for the scale shape', async () => {
     const { CheckLog } = await import('../real-input/report.mjs');
     const scaled = { x: 108.333, y: 72.444, width: 20.333, height: 9.333 };
@@ -1004,7 +821,6 @@ describe('the accessibility re-read', () => {
     );
     expect(warned.warns.length).toBe(1);
     expect(warned.warns[0]).toContain('⅓');
-    // The whole point of item 4: a warning, not a failure. The boxes below are settled ones.
     expect(warned.passed).toBe(true);
 
     const quiet = new CheckLog('Slider a11y');
@@ -1023,13 +839,7 @@ describe('the accessibility re-read', () => {
   });
 
   it('has the runner hand the anchor-flagged box, not index zero, to the reporter', () => {
-    // The behavioural test above covers what `reportIosStability` does; it cannot reach `ios.mjs`,
-    // which needs a simulator to import. What is still worth pinning at the call site is *which box*
-    // is handed over: the Swift pass prints frames[0], the wrapper, so the first read's box is the
-    // wrapper's and the settled box has to be the wrapper's too. Looking it up by the anchor flag
-    // rather than by index is what keeps a tree whose wrapper is not first from producing a ratio
-    // that is not the screen scale at all. `nodes[0]` stays as the fallback for a log that flags
-    // nothing, which is the same fallback the note above has always used.
+    // `ios.mjs` needs a simulator to import, so its call site is read as text.
     const runner = require('node:fs').readFileSync(
       `${__dirname}/../real-input/ios.mjs`,
       'utf8'
@@ -1043,9 +853,8 @@ describe('the accessibility re-read', () => {
   });
 
   it('has the Swift pass print what the reader parses', () => {
-    // The line is written in Swift and read in JavaScript, in two files that never see each other.
-    // Every key `parseIosA11yStability` reads has to be one the pass prints, or the note above
-    // silently disappears from the report on a rename.
+    // The line is written in Swift and parsed in JavaScript: every key the parser
+    // reads has to be one the pass prints.
     const swift = require('node:fs').readFileSync(
       `${__dirname}/../../example/ios/NitroUiExampleUITests/RealInputTests.swift`,
       'utf8'
@@ -1059,15 +868,10 @@ describe('the accessibility re-read', () => {
     ]) {
       expect(swift).toContain(`${key}=`);
     }
-    // And it settles through the shared helper rather than re-implementing the wait inline, so the
-    // host test above is testing the code that runs on the device.
+    // The pass must use the shared helpers, which the host-side Swift tests
+    // cover, and not an inline copy of the wait or of the print condition.
     expect(swift).toContain('A11yFrameStability.settle(');
     expect(swift).not.toMatch(/while !framesAgree/);
-    // The *print* decision is delegated to `shouldReport` too (X16 item 5). Inline, the condition is
-    // three clauses that read as obvious, and the one clause that is not obvious - `reads > 2`, for
-    // a tree that flaps A, B, A, A and ends where it started with `moved == 0` - would be a device
-    // run away from ever being tested. Asking the helper means the host test covers the rule the
-    // device run follows, and a second copy of the condition cannot survive review unnoticed.
     expect(swift).toContain('A11yFrameStability.shouldReport(settled)');
     expect(swift).not.toMatch(/if settled\.reads > 2/);
     expect(swift).not.toMatch(/if settled\.moved > 0/);
@@ -1080,7 +884,6 @@ describe('the Swift case list against the shared table', () => {
     'utf8'
   );
 
-  /** The `A11yCase(id: "…", testId: "…", label: "…")` entries in the Swift file. */
   const swiftCases = () => {
     const found = [];
     const pattern =
@@ -1092,10 +895,6 @@ describe('the Swift case list against the shared table', () => {
   };
 
   it('has one case per row of the shared table, in the same order', () => {
-    // The Swift file and `A11Y_CONTROLS` are two lists of the same controls, kept
-    // in two languages. Without this, a renamed case in Swift measures a control nobody
-    // asked about and its own case silently reports "not measured" — and a control that
-    // quietly leaves the suite is the failure this whole file is built to prevent.
     expect(swiftCases()).toEqual(
       A11Y_CONTROLS.map((entry) => ({
         id: entry.id,
@@ -1106,8 +905,6 @@ describe('the Swift case list against the shared table', () => {
   });
 
   it('goes red when the two lists disagree about a label', () => {
-    // The same comparison must be able to fail, so it is proved here on a copy rather than
-    // trusted because the two files happen to agree today.
     const table = A11Y_CONTROLS.map((entry) => ({ ...entry }));
     table[0] = { ...table[0], label: 'Renamed switch' };
     expect(swiftCases()).not.toEqual(
@@ -1120,9 +917,6 @@ describe('the Swift case list against the shared table', () => {
   });
 
   it('has a testID in the Swift list for every case the iOS rule reads', () => {
-    // `hosted-picker` is the one case whose announcement the rule cannot grade (its debt
-    // row says why), and it still has an anchor, because the wrapper's box is what the
-    // finding is measured against.
     for (const entry of A11Y_CONTROLS) {
       expect(typeof entry.anchorTestId).toBe('string');
     }

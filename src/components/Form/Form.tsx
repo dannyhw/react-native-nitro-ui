@@ -33,56 +33,32 @@ import {
 const IOS = Platform.OS === 'ios';
 
 /**
- * The trailing accessory of a form row, as an app names it.
+ * The trailing accessory of a form row: `'none'`, `'disclosure'` or `'checkmark'`.
  *
- * `disclosure` is UIKit's `UICellAccessory.disclosureIndicator` and Material Symbols'
- * `chevron_right`; `checkmark` is `UICellAccessory.checkmark` and `check`. Neither is
- * drawn from a typed-out path (D43).
- *
- * The public name of `NitroUiFormAccessory` in `Form.nitro.ts`, which the native side
- * answers to — the same three strings, one definition, exported under the name the
- * entry point publishes so api-extractor does not ask for the internal one.
+ * `disclosure` is UIKit's disclosure indicator and Material Symbols' `chevron_right`;
+ * `checkmark` is UIKit's checkmark and Material Symbols' `check`.
  */
 export type { FormAccessory };
 
 /**
- * The room an Android accessory takes at a row's trailing edge: the section draws the glyph
- * there (`FormListMetrics` in `HybridNitroUiFormSection.kt`, whose comment says this file
- * reserves the room), and a row's content is React Native's, so only this file can move it
- * out of the way. Values mirror that object plus an 8 dp gap, the Material spacing between
- * content and an accessory; `androidRow` already carries the 16 dp edge padding, so what a
- * row adds is the glyph and the gap.
+ * The room an Android accessory takes at a row's trailing edge, where the section draws the
+ * glyph: 24 dp, which must match `FormListMetrics` in `HybridNitroUiFormSection.kt`, plus an
+ * 8 dp gap. `androidRow` already carries the 16 dp edge padding.
  */
 const ANDROID_ACCESSORY_RESERVE = 24 + 8;
 
 /**
- * `Form`, `Form.Section` and `Form.Row` — grouped settings-style lists whose rows are
- * ordinary React Native views (D45, Q10 Appendix C1).
+ * How the layout works:
  *
- * What the platform draws is the *grouping*: on iOS a `UICollectionView` in `.insetGrouped`
- * appearance whose list cells hold the rows; on Android the Material 3 Expressive
- * segmented-list shapes behind rows that stay exactly where Yoga put them. What React
- * Native lays out is the *row*: any view can be a row, with no wrapper, and a nitro-ui
- * control in a row is the same standalone control it is anywhere else.
- *
- * Three things every reader of this file needs:
- *
- * 1. **iOS lays rows out at the width a cell gives them**, which is narrower than the
- *    list's idea of a cell, and *that* box is per row: a cell drawing a trailing accessory
- *    shrinks its own margins for that row. So each row takes the width *its* cell reported
- *    (`Form.Row`'s `onContentBox`), with the Form's one list-wide `onContentBox` as the
- *    estimate a row starts from before its cell has laid it out. A row's Yoga height is then
- *    the height of its content; the cell adds its own chrome, which is the `gap` of item 2.
- * 2. **A section reserves what the platform draws around its rows** — the header and footer
- *    bands, because those are drawn natively while the rows between them are laid out by
- *    Yoga, and the space between adjacent rows (`onMetrics`, spent as each row's
- *    `marginVertical`). On iOS the section also takes the vertical position the list gave it
- *    (`onPlacement`), so a row's Yoga origin *is* the position its cell is drawn at. That is
- *    what lets the Form's shadow node correct `measure` with one number — the scroll offset
- *    (D45 item 3) — and it is only true because all three numbers come from the platform.
- * 3. **Android has no platform `Form`**, so the scroller is React Native's own `ScrollView`
- *    and the rows sit in it in place. Everything else about Android — the shapes, the header
- *    band, the pressed state — is the Section's one Compose layer.
+ * - iOS: a `UICollectionView` list whose cells hold the rows. Each row takes the width its
+ *   own cell reports (`Form.Row`'s `onContentBox`), starting from the Form's list-wide
+ *   estimate, and each section takes the vertical position the list gave it (`onPlacement`),
+ *   so a row's Yoga origin is where its cell is drawn.
+ * - Both: a section reserves what the platform draws around its rows (`onMetrics`): the
+ *   header and footer bands, and the gap between rows, spent as each row's `marginVertical`.
+ * - Android: there is no platform form, so the scroller is React Native's `ScrollView` and
+ *   the rows stay where Yoga put them. The section's Compose layer draws the shapes, the
+ *   header band and the pressed state.
  */
 
 /** What a `Form` publishes to the sections below it. */
@@ -96,81 +72,51 @@ const EMPTY_LAYOUT: FormLayout = { contentWidth: 0 };
 const FormLayoutContext = createContext<FormLayout>(EMPTY_LAYOUT);
 
 /**
- * Whether the nearest wrapper above is already a `Form.Row`.
+ * Whether the nearest wrapper above is a `Form.Row`.
  *
- * Only {@link RowRoot} sets it, for its own children. It exists so a Row written inside a Row
- * says so instead of drawing a cell inside a cell: on iOS the inner row's content ends up in
- * the outer cell and the inner row never reaches a cell of its own; on Android it gets a row
- * rect inside a row rect.
- */
-/**
- * Whether the nearest wrapper above is a {@link RowRoot}.
- *
- * @internal Not app API (DECISIONS D14): exported for `ListItem`, whose row content
- * has to stand down inside a row — the cell has already paid for its insets, its
- * shape and its highlight, and a leaf that paid for them again draws a band inside a
- * band (DECISIONS D46 item 2). An app never passes this; the context is the whole
- * mechanism, so a `ListItem` in a `Form.Row` is right without being configured.
+ * @internal Exported for `ListItem`, which leaves insets, shape and highlight to the row's
+ * cell when it is inside one.
  */
 export function useInsideFormRow(): boolean {
   return useInsideRow();
 }
 
 /**
- * What an item inside a {@link RowRoot} hands *up* to the row: the press it wants the
- * cell to own, and whether it is disabled.
- *
- * `null` outside a row. The callback is stable, so an item can report from an effect and
- * clear the report on unmount without a re-render loop; the row ignores a report that
- * says what it already had.
- *
- * This is the other half of {@link useInsideFormRow}. D46 item 2 says the row is the cell
- * and the item is content - which is also what the README tells an app to write
- * (`list-item-in-form`: a `<Form.Row>` with no handler, holding a `<ListItem onPress>`).
- * A leaf that keeps that handler for itself can obey every other half of the rule - no
- * insets, no shape, no highlight of its own - and still press in silence, because the
- * thing that draws a pressed row is the cell, and the cell only paints for a row it was
- * told is pressable. So the handler travels up, the cell presses, and the cell highlights.
- *
- * @internal Not app API (DECISIONS D14): exported for `ListItem`, which reports through it.
+ * What an item inside a row hands up to it: the press it wants the cell to own, and whether
+ * it is disabled. `null` outside a row. The cell draws the pressed state, and only for a row
+ * it was told is pressable, so the item's handler travels up to the row.
  */
 const RowItemPressContext = createContext<RowItemPressReporter | null>(null);
 
-/** Report the press an item wants its `Form.Row` to own. @internal Not app API (D14). */
+/** Reports the press an item wants its `Form.Row` to own. @internal */
 export type RowItemPressReporter = (
   onPress: (() => void) | null,
   disabled: boolean
 ) => void;
 
 /**
- * The reporter a `ListItem` hands its press to, or `null` outside a {@link RowRoot}.
+ * The reporter a `ListItem` hands its press to, or `null` outside a `Form.Row`.
  *
- * @internal Not app API (DECISIONS D14).
+ * @internal
  */
 export function useFormRowItemPressReporter(): RowItemPressReporter | null {
   return useContext(RowItemPressContext);
 }
 
-/**
- * Said once per process when a row and one of its items both have an `onPress`, which is
- * the shape the warning exists to point at rather than a failure: the row's own handler
- * wins (the cell is the touch target), and the item's is then decoration.
- */
+/** Logged once per process. The row's handler wins: the cell is the touch target. */
 const BOTH_HANDLERS_WARNING =
   'nitro-ui: a `Form.Row` with an `onPress` has a `ListItem` inside it with an `onPress` ' +
   'too. The row is the cell and the cell is the touch target, so the row\u2019s handler is ' +
   'the one that fires and the item\u2019s is never called. Wire the press on one of the two.';
 
-/** Set the first time {@link BOTH_HANDLERS_WARNING} is logged. */
 let warnedBothHandlers = false;
 
-/** What a Row inside a Row is told, once per process — a 50-row list should not log 50 lines. */
+/** Logged once per process. */
 const NESTED_ROW_WARNING =
   'nitro-ui: a `Form.Row` was rendered inside another `Form.Row`. v1 supports `Form.Row` ' +
   'only as a direct child of a `Form` or a `Form.Section`: the outer row is the cell, and a ' +
   'row inside it never reaches a cell of its own. Move the inner row out of the outer one.';
 
-/** Set the first time {@link NESTED_ROW_WARNING} is logged. */
 let warnedNestedRow = false;
 
 function onPressNotProvided(): void {
@@ -183,20 +129,16 @@ function onPressNotProvided(): void {
 export interface FormProps extends ViewProps {
   children?: ReactNode;
   /**
-   * Keep the focused row visible while the keyboard is up. Default `true`.
+   * Keeps the focused row visible while the keyboard is up. Default `true`.
    *
-   * Neither platform does this by itself for an input hosted inside a row, so the Form owns
-   * it: iOS grows the list's bottom inset and scrolls the row in; Android reserves the IME
-   * inset in the scroll content and asks its scroll ancestor to make the focused row
-   * visible (D45 item 1).
+   * iOS grows the list's bottom inset and scrolls the row into view; Android pads the scroll
+   * content by the keyboard's height and scrolls the focused row into view.
    */
   keyboardAvoidance?: boolean | undefined;
   /**
-   * The Hybrid View handle, as every control's `hybridRef` gives it.
+   * The native view's handle.
    *
-   * @internal Not app API (DECISIONS D14). The shape is `NitroUiFormHandle` in
-   * `NativeFormViews.ts`, written inline (as `TextField.tsx` does) so api-extractor does
-   * not demand that an internal native type be exported.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -225,9 +167,8 @@ function FormRoot({
   const reportContentWidth = useStableCallback((width: number): void => {
     setContentWidth((previous) => (previous === width ? previous : width));
   }) as NitroCallbackProp<(width: number) => void>;
-  // How far the list is scrolled, as of its last settle. Held on the Form alone and sent as
-  // one prop: `children` is the app's own element tree, so React re-renders nothing below
-  // here, and the shadow node is the only consumer (see `nuiContentOffsetY`).
+  // How far the list is scrolled, as of its last settle. The native view corrects `measure`
+  // with it.
   const [contentOffsetY, setContentOffsetY] = useState(0);
   const reportContentOffset = useStableCallback((y: number): void => {
     setContentOffsetY((previous) =>
@@ -245,10 +186,8 @@ function FormRoot({
 
   const layout = useMemo<FormLayout>(() => ({ contentWidth }), [contentWidth]);
   const body = (
-    // A `Form` rendered inside a `Form.Row` (a sheet, say) is a new list, not a row inside the
-    // outer row's cell, so the "is the nearest wrapper above me a row?" answer resets here.
-    // Without the `false`, the flag set by an ancestor row leaks into every row of that inner
-    // Form, and each of them is reported as nested inside a row it is not a row of.
+    // A `Form` inside a `Form.Row` (a sheet, say) is a new list, so the "inside a row" flag
+    // resets here.
     <InsideRowContext.Provider value={false}>
       <FormLayoutContext.Provider value={layout}>
         {children}
@@ -276,14 +215,12 @@ function FormRoot({
   return (
     <ScrollView
       style={style}
-      // `flexGrow` so a short form still fills the viewport and paints it with the grouped
-      // page colour, which belongs to the Form's own view (read from the M3 scheme, not a
-      // hex constant) rather than to a colour this file would have to invent.
+      // `flexGrow` so a short form still fills the viewport with the grouped page colour.
       contentContainerStyle={
         imeInset > 0 ? [styles.fill, { paddingBottom: imeInset }] : styles.fill
       }
       // A tap outside a focused field should reach the control under it, not merely dismiss
-      // the keyboard (React Native's own `handled` mode).
+      // the keyboard.
       keyboardShouldPersistTaps="handled"
     >
       {native}
@@ -296,14 +233,14 @@ function FormRoot({
 /** Props of {@link Form.Section}. */
 export interface FormSectionProps extends ViewProps {
   children?: ReactNode;
-  /** The header above the rows, as text. A React Native header node is later (C1). */
+  /** The header above the rows, as text. */
   title?: string | null | undefined;
   /** The footer below the rows, as text. */
   footer?: string | null | undefined;
   /**
-   * The Hybrid View handle.
+   * The native view's handle.
    *
-   * @internal Not app API (D14). The shape of `NitroUiFormSectionHandle`, inline.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -370,15 +307,12 @@ function SectionRoot({
       gap: number
     ) => void
   >;
-  // iOS: where the list put this section, in the list's own content coordinates. With the
-  // section standing there, each row's Yoga origin is its position in that content, and the
-  // Form's single scroll-offset correction is enough to make `measure` right (D45 item 3).
-  // Android reports 0 and flows normally inside the scroll view.
+  // iOS: where the list put this section, in the list's content coordinates, so each row's
+  // Yoga origin is where its cell is drawn. Android reports 0 and flows normally inside the
+  // scroll view.
   const [top, setTop] = useState(0);
-  // Not clamped at 0: this is a measured content coordinate, and a section one chrome above
-  // where the list starts is a section whose rows are still drawn where they are drawn. A
-  // `0` here would be a position the platform never reported, which is the difference
-  // between a `measure` that agrees with the pixels and one that is a few points out.
+  // Not clamped at 0: a measured content coordinate can be negative, and `measure` has to
+  // agree with where the rows are drawn.
   const reportTop = useStableCallback((y: number): void => {
     setTop((previous) => (Math.abs(previous - y) < 0.25 ? previous : y));
   }) as NitroCallbackProp<(y: number) => void>;
@@ -398,9 +332,8 @@ function SectionRoot({
         style={[
           styles.band,
           {
-            // The header and footer are drawn by the platform in these bands, and a row must
-            // never paint over them: the reservation is what keeps the two apart, so the
-            // harness compares the band with the text it holds instead of trusting it.
+            // The platform draws the header and footer in these bands, so no row may be laid
+            // out over them.
             paddingTop: metrics.headerHeight,
             paddingBottom: metrics.footerHeight,
             paddingHorizontal: metrics.inset,
@@ -414,29 +347,12 @@ function SectionRoot({
 }
 
 /**
- * One row per direct child, keeping the app's own keys.
+ * One row per direct child, flattening arrays and `Fragment`s and keeping the app's keys.
  *
- * Walked rather than mapped, because a row has to be one row whatever the app wrapped it in:
- * an array, a `Fragment` from a `map`, or the `Form.Row` the app wrote for `onPress`. A
- * `Fragment` child would otherwise become one row holding several children, and a key the
- * app set would be lost by `Children.map` over a fragment.
- *
- * The keys are the ones React itself would build, and that is the whole point: this function
- * flattens the app's tree into one array, so it becomes the thing deciding which row is the
- * same row from one render to the next.
- *
- * - **a slot, not a counter.** An unkeyed child's key is its position in its own list,
- *   *including* the slots taken by `null` and `false`. Counting only the rows emitted — which
- *   is what this did — means `{showBanner && <Text/>}` above a list re-keys every row below it
- *   when the banner appears, and React remounts them: a `TextField` in row four loses its
- *   text, its focus and its caret because row one changed.
- * - **scoped by nesting.** React gives a nested array or a `Fragment` its own key scope, so
- *   two `{items.map(...)}`s whose items share keys do not collide. A flattened list without
- *   that prefix hands React two children with one key, which is a dev warning and a row that
- *   may be reconciled against the wrong one.
- *
- * So a row's key is the path to it: slot indices and `$key` parts joined by `/`, exactly the
- * shape React's own traversal builds, with the same `$` mark on a key the app wrote.
+ * A row's key is the path to it, as React itself would build it: slot indices and `$key`
+ * parts joined by `/`. An unkeyed child's slot counts the `null` and `false` siblings before
+ * it, so a conditional sibling does not re-key (and remount) the rows below it. Each array or
+ * `Fragment` is its own key scope, so equal keys in two lists do not collide.
  */
 function wrapRows(
   children: ReactNode,
@@ -446,14 +362,12 @@ function wrapRows(
   const out: ReactNode[] = [];
   /** The path of one child: its slot in this scope, with the app's key marked `$`. */
   const slot = (path: string, index: number, key: string | null): string => {
-    // `/` is this function's nesting separator, so a key that contains one is escaped:
-    // React escapes the separators it uses (`:` and `=`) for exactly this reason.
+    // `/` is the nesting separator, so a key that contains one is escaped.
     const own = key != null ? `$${escapeKey(key)}` : `${String(index)}`;
     return path === '' ? own : `${path}/${own}`;
   };
   const visitOne = (node: ReactNode, path: string, index: number): void => {
-    // Slot first, then the skip: a `false` from `{flag && <Row/>}` still holds its slot,
-    // which is the only reason the rows below it keep their keys.
+    // Slot first, then the skip: a `false` from `{flag && <Row/>}` still holds its slot.
     const here = slot(path, index, isValidElement(node) ? node.key : null);
     if (node == null || typeof node === 'boolean') return;
     if (Array.isArray(node)) {
@@ -461,8 +375,7 @@ function wrapRows(
       return;
     }
     if (!isValidElement(node)) {
-      // A bare string or number is a row of text, the same rule RN's lists use. Its slot is
-      // its identity, and React agrees: an unkeyed child is its index.
+      // A bare string or number is a row of text; its slot is its identity.
       out.push(
         <RowRoot key={here} width={contentWidth} gap={gap}>
           {node}
@@ -471,8 +384,7 @@ function wrapRows(
       return;
     }
     if (node.type === Fragment) {
-      // Expanded, but into *its* scope: the fragment's slot is the prefix its children's keys
-      // hang off, so two fragments whose children share keys stay apart.
+      // Expanded into its own scope: the fragment's slot prefixes its children's keys.
       visitChildren((node.props as { children?: ReactNode }).children, here);
       return;
     }
@@ -499,9 +411,7 @@ function wrapRows(
       node.forEach((child, index) => visitOne(child, path, index));
       return;
     }
-    // One child is slot 0 of its own scope. It has no index of its own from React's point of
-    // view, and the path it inherits from its parent is what keeps it out of the way of a
-    // sibling two levels up with the same key.
+    // One child is slot 0 of its own scope.
     visitOne(node, path, 0);
   };
   visitChildren(children, '');
@@ -522,9 +432,9 @@ function escapeKey(key: string): string {
 export interface RowProps extends ViewProps {
   children?: ReactNode;
   /**
-   * Tapping the row: the cell's highlight, and one button element for a screen reader, on
-   * iOS; the shape's pressed state and one merged node on Android. A row without it leaves
-   * its content alone, so a `Switch` inside it keeps its own element.
+   * Called when the row is tapped. A row with `onPress` highlights when pressed and is one
+   * button for a screen reader; a row without it leaves its content alone, so a `Switch`
+   * inside it keeps its own accessibility element.
    */
   onPress?: (() => void) | undefined;
   /** The trailing accessory. Default `'none'`. */
@@ -532,10 +442,9 @@ export interface RowProps extends ViewProps {
   /** Selected state. Default `false`. */
   selected?: boolean | undefined;
   /**
-   * The Hybrid View handle.
+   * The native view's handle.
    *
-   * @internal Not app API (D14). The shape of `NitroUiFormRowHandle`, inline — hence
-   * `FormAccessory` rather than the internal name it aliases.
+   * @internal
    */
   hybridRef?:
     | ((view: {
@@ -550,11 +459,7 @@ export interface RowProps extends ViewProps {
 
 /**
  * One row of a form: the cell-level behaviour (`onPress`, `accessory`, `selected`) around
- * React Native content.
- *
- * A row is not self-sizing (`sizing: null`): Yoga sizes it from its children and the cell
- * takes that height. `Form.Section` wraps every child in one, so an app only writes the
- * component when it wants `onPress` or an accessory.
+ * React Native content. Yoga sizes it from its children and the cell takes that height.
  */
 function RowRoot({
   children,
@@ -572,9 +477,8 @@ function RowRoot({
   /** The segmented gap, set by {@link wrapRows} — not app API. */
   gap?: number;
 }) {
-  // What the item inside this row reported (`RowItemPressContext`). A ref plus a bump,
-  // rather than state carrying a function: the report arrives from the child's effect, and
-  // the only thing that has to change is what this row hands its own native view.
+  // What the item inside this row reported. A ref plus a bump, not state carrying a function:
+  // the report arrives from the child's effect.
   const reported = useRef<{ onPress: (() => void) | null; disabled: boolean }>({
     onPress: null,
     disabled: false,
@@ -591,11 +495,8 @@ function RowRoot({
     },
     []
   );
-  // The cell presses for whichever of the two the app wired it for. The row's own handler
-  // wins outright: a row asked to do something itself is not made inert by a disabled item
-  // inside it. An item's handler is used only when the row has none, and a disabled item
-  // contributes nothing - the row stops being pressable and stops highlighting, which is
-  // what "a tap on a disabled item does nothing" has to mean when the tap lands on the cell.
+  // The row's own handler wins. An item's handler is used only when the row has none, and a
+  // disabled item contributes nothing: the row stops being pressable and stops highlighting.
   const reportedItem = reported.current;
   if (
     __DEV__ &&
@@ -612,18 +513,13 @@ function RowRoot({
     effectiveOnPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
-  // The box *this row's* cell gives it, which iOS reports per row (`onContentBox`). The Form's
-  // `width` is one number for the whole list and the boxes are not one number: a cell drawing
-  // a trailing accessory shrinks its own margins for that row, so the list-wide number is
-  // wrong for one row whatever it says, and a row laid out wider than its own box draws its
-  // right-hand content past its bounds, where UIKit's hit-test never looks. Until this row's
-  // cell has spoken, the Form's estimate is what the row starts from.
+  // The box this row's own cell gives it (iOS). It can be narrower than the Form's list-wide
+  // width: a cell drawing a trailing accessory shrinks its margins for that row, and a row
+  // laid out wider than its box draws content where UIKit's hit-test never looks.
   //
-  // The report is stamped with the `width` it arrived under, because it is an answer about the
-  // list that asked it: after a rotation, an iPad resize, or an app changing a parent's width,
-  // the number this row's cell reported belongs to a layout that no longer exists, and a row
-  // that is off screen is not laid out again until it is scrolled back — which is how a row
-  // shown once went on measuring at the old orientation's width (fix round 2, item 2).
+  // The report is stamped with the `width` it arrived under: after a rotation or resize it
+  // describes a layout that no longer exists, and an off-screen row is not laid out again
+  // until it is scrolled back.
   const [ownBox, setOwnBox] = useState({ width: 0, under: 0 });
   const reportOwnBox = useStableCallback((next: number): void => {
     setOwnBox((previous) =>
@@ -632,13 +528,9 @@ function RowRoot({
         : { width: next, under: width }
     );
   }) as NitroCallbackProp<(width: number) => void>;
-  // A row's own box, trusted while it still describes the list this row is in. When it does
-  // not, the row falls back on the list — but never *wider* than the number the list has just
-  // published: wider is the direction that draws content past the row's bounds, where UIKit's
-  // hit-test never looks, and an accessory row that falls back to the plain-row number would
-  // be over that line by exactly the accessory's 22 pt. The Form re-tells every row it has
-  // (`pushRowBoxEstimates`) as soon as the new box is known, which is what replaces the stale
-  // number with the right one rather than a safe guess at it.
+  // The row's own box is trusted while it still describes the current list width. When it
+  // does not, the row takes the narrower of the two: wider draws content past the row's
+  // bounds.
   let laid = width;
   if (ownBox.width > 0) {
     laid =
@@ -646,29 +538,15 @@ function RowRoot({
         ? ownBox.width
         : Math.min(ownBox.width, width);
   }
-  // The row centres its own content (`alignItems: 'center'` on the row style, which the app's
-  // `style` can still override). It needs no wrapper to do that: what stopped it was each
-  // self-sizing control's `alignSelf: 'flex-start'` base style, which `Form.Row` now answers
-  // with `alignSelf: 'center'` — see `src/core/useSelfSizing.ts`. A row written
-  // `alignItems: 'stretch'` stops centring exactly when the app asked it not to, and E7
-  // measures a row's child against the row's own box.
   const insideRow = useInsideRow();
   if (__DEV__ && insideRow && !warnedNestedRow) {
     warnedNestedRow = true;
     console.error(NESTED_ROW_WARNING);
   }
-  // Every platform draws a row at exactly its Yoga box, so every platform has to be paid
-  // for the space it leaves *between* rows: `gap` is that space as the platform measured it
-  // (the Material segmented list's gap on Android, the list cell's 4 pt chrome above and
-  // below a row on iOS), and half of it goes above and below each row. That is what makes
-  // the rows' pitch the pitch they are drawn at, which is what a `measure` of a row has to
-  // agree with — a Form that reported `0` here measured its 14th row 104 pt above its own
-  // pixels (E7).
-  //
-  // iOS also takes the *width* this row's cell gives it, or the row's Yoga height would not be
-  // the cell's height either — and it takes it per row, because the box is per row (see
-  // `ownWidth` above). Android gives up the trailing room a row's accessory is drawn in, which
-  // the section - not the row - paints.
+  // `gap` is the space the platform leaves between rows, as it measured it. Half goes above
+  // and below each row, so the rows' Yoga positions match where they are drawn. iOS also
+  // takes the width this row's cell gives it; Android gives up the trailing room the section
+  // draws a row's accessory in.
   const box: ViewStyle = {
     marginVertical: gap / 2,
     ...(IOS
@@ -701,12 +579,9 @@ function RowRoot({
 }
 
 const styles = StyleSheet.create({
-  // iOS only: what an *unstyled* `<Form>` gets. Every iOS section is `position: 'absolute'`
-  // (see `iosSection`), so the Form's own view has no in-flow content to be measured against
-  // and an unstyled Form is 0 pt tall — which is a Form that draws nothing in a README
-  // example. `flexGrow` takes the space the parent offers and `flexShrink` keeps a Form
-  // taller than its parent from pushing past it; Android gets both from the `ScrollView` this
-  // file wraps the native view in.
+  // iOS only. Every iOS section is `position: 'absolute'`, so an unstyled Form has no in-flow
+  // content and would be 0 pt tall. Android gets both from the `ScrollView` around the native
+  // view.
   iosBox: {
     flexGrow: 1,
     flexShrink: 1,
@@ -738,22 +613,15 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   iosSection: {
-    // iOS: absolutely positioned at the y the list gave this section, so the rows inside it
-    // are laid out at the same offsets the cells are drawn at. The box takes no part in the
-    // list's scrolling — the list scrolls, and this is what it reads.
+    // Absolutely positioned at the y the list gave this section, so the rows inside it are
+    // laid out at the offsets their cells are drawn at.
     position: 'absolute',
     left: 0,
     width: '100%',
   },
 });
 
-/**
- * `Form`, with `Form.Section` and `Form.Row` on it (C1).
- *
- * Named because the entry point exports the value: a `const` written as
- * `Object.assign(FormRoot, …)` would otherwise put three unexported functions in the API
- * report, and a grouped list is one component with two sub-components, not three exports.
- */
+/** The type of `Form`: the component itself, with `Form.Section` and `Form.Row` on it. */
 export interface FormComponent {
   (props: FormProps): JSX.Element;
   /** The group: a header, the rows, a footer. */
@@ -762,7 +630,11 @@ export interface FormComponent {
   Row(props: RowProps): JSX.Element;
 }
 
-/** The public shape: `Form`, with `Form.Section` and `Form.Row` on it (C1). */
+/**
+ * A grouped, settings-style list whose rows are ordinary React Native views: an inset-grouped
+ * list on iOS, Material 3 grouped rows on Android. Use `Form.Section` for a group with a
+ * header and a footer, and `Form.Row` for a row with `onPress` or an accessory.
+ */
 export const Form: FormComponent = Object.assign(FormRoot, {
   Row: RowRoot,
   Section: SectionRoot,

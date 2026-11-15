@@ -15,11 +15,7 @@ import {
   type ButtonVariant,
 } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance — same helper `SwitchScreen` uses.
- * `Text` gets no dynamic default colour from React Native, and the screen has to
- * read in both light and dark mode for the screenshots in `docs/components/`.
- */
+/** `Text` gets no dynamic default colour from React Native. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -44,18 +40,8 @@ const VARIANTS: readonly ButtonVariant[] = [
 
 const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
 
-/** The title of the button that changes on a timer, in order. */
 const TICKER = ['Save', 'Saving…', 'Saved ✓'] as const;
 
-/**
- * Every Button configuration G2 has to prove, on one screen: each variant at
- * each size, disabled, tinted, a long title, a title that changes on a timer,
- * a row of different-width buttons, and 200 buttons in a scrolling list.
- *
- * This is also the screen the screenshots in `docs/components/button.md` come
- * from. The on-device assertions live in
- * `example/__tests__/Button.harness.tsx`, which renders its own trees.
- */
 export default function ButtonScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
@@ -77,15 +63,10 @@ export default function ButtonScreen() {
     setPresses((current) => current + 1);
   }, []);
 
-  // Shared by the enabled *and* the disabled Button in the "Real input" block
-  // below, so a stray press on the disabled one is a number on screen rather
-  // than the absence of a callback (`scripts/real-input`, T15b).
   const countRealInputPress = useCallback(() => {
     setRealInputPresses((current) => current + 1);
   }, []);
 
-  // 200 buttons, cycling variants and sizes, so a recycled row is a different
-  // configuration than its neighbour (the case `RecyclableView` exists for).
   const list = useMemo(
     () =>
       Array.from({ length: 200 }, (_, index) => ({
@@ -117,11 +98,7 @@ export default function ButtonScreen() {
         </Text>
 
         {/*
-          The real-input suite's pair (`scripts/real-input`, T15b): one enabled
-          Button and one disabled Button, both wired to the same counter, so the
-          suite can prove two things from the screen alone - an OS tap on the
-          enabled one arrives, and an OS tap on the disabled one does not. It is
-          first on the page on purpose: `uiautomator dump` lists no off-screen
+          First on the page on purpose: `uiautomator dump` lists no off-screen
           nodes, so a control near the bottom would have nothing to aim a tap at.
         */}
         <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
@@ -219,18 +196,17 @@ export default function ButtonScreen() {
           App icon (Android)
         </Text>
         <View style={styles.wrapRow}>
-          {/* The form D43 adds: the app owns the file and imports it, and Metro
-              carries it — an ordinary drawable in a release build, a dev-server
-              file while you develop. The SF Symbol beside it is what iOS draws;
-              each platform ignores the other's prop. */}
+          {/* An icon file the app owns and imports, carried by Metro. The SF
+              Symbol beside it is what iOS draws; each platform ignores the
+              other's prop. */}
           <Button
             title="Share"
             systemImage="square.and.arrow.up"
             androidIcon={require('../src/assets/icons/share_24px.xml')}
             testID="icon-imported"
           />
-          {/* The form that was here first, for an app that already ships
-              drawables: `example/android/app/src/main/res/drawable/`. */}
+          {/* A drawable the app already ships:
+              `example/android/app/src/main/res/drawable/`. */}
           <Button
             title="Star"
             systemImage="star"
@@ -346,8 +322,6 @@ const styles = StyleSheet.create({
   value: {
     fontVariant: ['tabular-nums'],
   },
-  // A caller's width wins over the measured size; the label truncates instead of
-  // painting outside the box (docs/components/button.md).
   capped: {
     width: 180,
   },

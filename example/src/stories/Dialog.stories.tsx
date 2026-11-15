@@ -1,17 +1,3 @@
-/**
- * Dialog stories (G11): `AlertDialog` and `ConfirmationDialog`, the two exports
- * over one native view. Props and events: `docs/components/dialog.md`.
- *
- * A dialog has no box: the view React Native lays out is a `0 x 0` anchor, and the
- * window is the platform's (UIKit's `UIAlertController` on iOS, Material 3's
- * `AlertDialog` / `ModalBottomSheet` on Android). So every story pairs the dialog
- * with a plain button that opens it, and a readout of the events it reported.
- *
- * `actions` gets no Controls row: it is a list of objects, which the on-device
- * Controls panel cannot type, so the Playground picks between action lists on chips.
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and
- * benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -25,7 +11,6 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 
 import { Column, Note, Showcase } from './showcase';
 
-/** Module-level so `actions` keeps one identity across renders. */
 const ACTION_LISTS = {
   deleteOrKeep: [
     { id: 'keep', title: 'Keep', role: 'cancel' },
@@ -108,7 +93,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -121,7 +105,6 @@ function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** The events a dialog reported, newest last. */
 function useEventLog() {
   const [log, setLog] = useState<string[]>([]);
   const record = useCallback((entry: string) => {
@@ -130,7 +113,6 @@ function useEventLog() {
   return { log, record };
 }
 
-/** Every public prop on the Controls panel, the action list on chips. */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const { onIsPresentedChange, onAction, ...rest } = props;
@@ -184,7 +166,6 @@ export const Playground: Story = {
   },
 };
 
-/** An alert with a cancel, a destructive and a disabled action. */
 export const Alert: Story = {
   render: function AlertStory() {
     const [open, setOpen] = useState(false);
@@ -217,10 +198,6 @@ export const Alert: Story = {
   },
 };
 
-/**
- * A confirmation: an action sheet on iOS (with the Cancel UIKit adds when none is
- * given), a Material bottom sheet of rows on Android.
- */
 export const Confirmation: Story = {
   render: function ConfirmationStory() {
     const [open, setOpen] = useState(false);
@@ -257,7 +234,6 @@ export const Confirmation: Story = {
   },
 };
 
-/** Only an action closes it: Back and a tap outside do nothing. */
 export const NotDismissible: Story = {
   render: function NotDismissibleStory() {
     const [open, setOpen] = useState(false);
@@ -278,16 +254,8 @@ export const NotDismissible: Story = {
   },
 };
 
-/**
- * The same confirmation with nothing else on screen: one trigger, and the sheet.
- *
- * iOS 27 draws a confirmation as a popover anchored to the dialog's own box, and
- * the box is where its host View sits. So in `Confirmation` the popover lands on
- * the showcase's copy and hides half of it - right to read, wrong to photograph.
- * This is the story `docs/images/components/confirmation-dialog-ios.png` is taken
- * from: one button low on an empty page, with the room above it that makes the
- * popover open upward and point back down at the button rather than over it.
- */
+// iOS 27 draws a confirmation as a popover anchored to the dialog's own box. One
+// button low on an empty page gives the popover room to open upward.
 export const ConfirmationPlain: Story = {
   render: function ConfirmationPlainStory() {
     const [open, setOpen] = useState(false);
@@ -311,10 +279,6 @@ export const ConfirmationPlain: Story = {
   },
 };
 
-/**
- * The app refuses a dismissal: it ignores `onIsPresentedChange(false)`, so the
- * dialog comes back (DECISIONS D33) and a development build warns once.
- */
 export const RefusedDismissal: Story = {
   render: function RefusedDismissalStory() {
     const [open, setOpen] = useState(false);
@@ -352,8 +316,7 @@ export const RefusedDismissal: Story = {
 
 const styles = StyleSheet.create({
   playground: { padding: 24, gap: 16, alignItems: 'flex-start' },
-  // The screenshot story: one trigger low on the page, where the popover has room
-  // to open upward. Centred or near the top, iOS puts the card *over* the button.
+  // Low on the page: near the top, iOS puts the popover over the button.
   plain: {
     flex: 1,
     alignItems: 'flex-end',

@@ -1,45 +1,3 @@
-/**
- * Mount/unmount churn gate (task B1).
- *
- * A settings screen that is opened, closed and opened again is a mount loop, and
- * on Android every hosted control brings its own Compose composition. The bench
- * found that such a loop runs the Java heap out at `mount.<component>:nitro-ui:200`
- * (`docs/tasks/A1-baselines.report.md`): the bench retained 16.5 MiB per cycle of
- * 200 controls, so a 192 MiB heap died after a handful of cycles. This file is the
- * same leak measured in the harness, where it was 8.18 MiB per cycle (~42 KiB per
- * control); the two runs are both measurements of it and the gap between them is
- * not attributed.
- *
- * The gate is therefore retention, not duration: after a full collect, the Java
- * heap a churn loop is *holding* must not climb cycle over cycle. Wall-clock is
- * never gated here (D21) - the loop is slow on any loaded machine, and being slow
- * is not the bug.
- *
- * Two things make the number mean something:
- * - every measured cycle is warm (pre-warmed, and asserted to cost 0 sizing
- *   corrections), so the heap cannot be growing because the sizing engine learned
- *   something new;
- * - the bound is on the *floor* after garbage collection, which is what survives
- *   an iteration. A transient allocation storm returns to the floor; a leak moves
- *   it.
- *
- * The file gates two controls and three shapes, because each adds a failure mode the
- * others cannot show: a `Picker`'s menu is a Compose `Popup` - a real `PopupWindow` in
- * the window list - and it is a child of the composition, so the composition that a
- * leak retains also retains the popup of a control that is already gone (the cycle
- * therefore opens one menu and unmounts the tree while it is open, which is the
- * `onDropView` → `host.drop()` path - G6, review M4). A `<Host>` changes what one
- * teardown is: N children share one composition, so a reference held anywhere in it
- * holds a whole screen (H1). And a Host holding four *kinds* of control has four
- * different object graphs that could hold it, which is the mixed cycle H2a adds -
- * "the Switch case is green" is not evidence about a Slider's gesture state.
- *
- * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
- * views with a different lifetime, so there is nothing to assert there. X37 removed the
- * `it.skip` that used to stand in for that branch: a sentence as a test title is a
- * placeholder, not a gate. The scoping is in the *file name* — `.android.harness.tsx` —
- * for the reason at the bottom of this file: iOS must not collect the file at all.
- */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -61,21 +19,15 @@ import {
 } from 'react-native-nitro-ui';
 import { userEvent } from '@react-native-harness/ui';
 
-/** Controls per cycle: the N the bench died at. */
 const COUNT = 200;
 
-/** Churn cycles between two heap readings. */
 const CYCLES = 3;
 
 /**
- * How much the post-GC heap floor may climb per cycle, in MiB.
- *
- * Placed between the two outcomes this gate has to tell apart: the leak measured
- * 8.18 MiB per cycle of 200 controls, and a loop that frees everything returns to
- * roughly the same floor (ART keeps a few hundred KiB of slack between collects).
- * Two MiB per cycle is about 4x below that bug and far above the spread of the
- * fixed runs (0.13 MiB), so it is red for the leak and green for the fix without
- * riding on machine load.
+ * How much the post-GC heap floor may climb per cycle, in MiB. A loop that
+ * frees everything returns to roughly the same floor (ART keeps a few hundred
+ * KiB of slack between collects); a control leaked per mount costs about 8 MiB
+ * per cycle of 200.
  */
 const MAX_FLOOR_GROWTH_MIB_PER_CYCLE = 2;
 
@@ -90,12 +42,8 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
 ) as unknown as HarnessUiModule;
 
 /**
- * What `NitroUiProbe.heapStats` answers - the Java heap, seen from inside the
- * process after the collectors were asked to run.
- *
- * Hermes reports only its own heap to JS, so the number has to come from the app.
- * The probe is an example-app module (test-only), fetched lazily rather than at
- * module scope: on iOS it does not exist, and this file must still load there.
+ * Hermes reports only its own heap to JS, so the Java heap comes from the
+ * example app's probe module.
  */
 type HeapStats = {
   usedBytes: number;
@@ -141,11 +89,8 @@ async function waitForTestId(testId: string, timeoutMs: number) {
 }
 
 /**
- * Mount `COUNT` Switches, let the batch draw, and unmount it again.
- *
- * The settle after the mount is what makes a failure mean retention: a host that
- * is dropped before its first frame could still legitimately be waiting on work it
- * scheduled for that frame. The settle after the unmount lets teardown run.
+ * The settle after the mount lets the batch draw its first frame; the settle
+ * after the unmount lets teardown run.
  */
 async function churnCycle(prefix: string) {
   const { unmount } = await render(
@@ -167,17 +112,12 @@ async function churnCycle(prefix: string) {
   await settle(300);
 }
 
-/** The three titles every churned Picker shows - one configuration per row mod 3. */
 const PICKER_OPTIONS = ['Cinder', 'Mica', 'Shale'];
 
 /**
- * Mount `COUNT` Pickers, open one of their menus, and unmount the lot.
- *
- * Same shape as [churnCycle], with one addition: the menu of the first row is open
- * when the tree goes away. A `PopupWindow` is owned by the composition, and the
- * composition is owned by `host.drop()` in `onDropView`, so this is the churn that
- * fails if that call is ever dropped - the window and everything behind it stay
- * reachable from the window's own list.
+ * The first row's menu is open when the tree goes away: a `PopupWindow` is
+ * owned by the composition, so a composition that is not dropped keeps the
+ * window reachable.
  */
 async function churnPickerCycle(prefix: string) {
   const { unmount } = await render(
@@ -191,13 +131,12 @@ async function churnPickerCycle(prefix: string) {
         />
       ))}
     </View>,
-    // 200 Material fields need the same generous wait the Switches do.
     { timeout: 40000 }
   );
   await waitForTestId(`${prefix}-${String(COUNT - 1)}`, 30000);
   await settle(300);
-  // The anchor is in the app's window, so a real press reaches it (only the popup's
-  // rows do not, which is why the pick itself is a `nuiTestSelect`/real-input case).
+  // The anchor is in the app's window, so a real press reaches it; the popup's
+  // rows are not.
   const anchor = harnessUi.queryByTestId(`${prefix}-0`);
   expect(anchor).not.toBeNull();
   await userEvent.pressAt(
@@ -210,27 +149,15 @@ async function churnPickerCycle(prefix: string) {
 }
 
 /**
- * The box a hosted batch needs: 48 dp per Switch is the box the sizing engine gives
- * that configuration on Android, and a Host with no `height` of its own would be
- * exactly that sum anyway (D24). Module-level, so the churn does not hand the Host a
- * new style object per cycle.
+ * 48 dp per Switch is the box the sizing engine gives that configuration on
+ * Android. Module-level, so the churn does not hand the Host a new style object
+ * per cycle.
  */
 const HOST_STYLE = { width: '100%' as const, height: COUNT * 48 };
 
 /**
- * Mount `COUNT` Switches inside **one** `<Host>`, let the batch draw, unmount.
- *
- * The Host is the answer to this leak, not an exemption from it: two hundred hosted
- * Switches are one Compose composition and one `AndroidComposeView`, so what a cycle
- * can retain is one composition plus two hundred Fabric nodes — and the unmounted
- * `NitroUiHostView` stays reachable if anything in that composition still points at
- * it. A leak here is therefore bigger per node than the one above, which is what makes
- * it worth gating separately rather than assuming the shared path inherits B1's fix.
- *
- * Returns the last child's box so the caller can prove the batch was hosted: a hosted
- * control declines to measure, so its own view is laid out at `0x0` (review S1 - not
- * `GONE`; Fabric re-asserts `VISIBLE` on it every layout pass). A Host that silently
- * composed nothing would churn an empty tree and pass every heap assertion below.
+ * Returns the last child's box so the caller can prove the batch was hosted: a
+ * hosted control declines to measure, so its own view is laid out at 0x0.
  */
 async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
   const { unmount } = await render(
@@ -243,8 +170,6 @@ async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
         />
       ))}
     </Host>,
-    // The same generous wait the unhosted batch needs; hosting does not make 200
-    // nodes cheaper to attach, only cheaper to compose.
     { timeout: 40000 }
   );
   await waitForTestId(`${prefix}-${String(COUNT - 1)}`, 30000);
@@ -256,47 +181,21 @@ async function churnHostedCycle(prefix: string): Promise<ViewInfo | null> {
 }
 
 /**
- * Controls per mixed cycle — a quarter of `COUNT` of each kind.
- *
- * Not `COUNT` itself for one reason and one only: the harness's 30 s per-test floor
- * (`AGENTS.md`, wall-clock is not gated but the runner enforces one). A cycle of 200
- * mixed controls plus four forced collects does not fit it; 100 does, and a leak that
- * measured 42 KiB per control is still four times the 2 MiB bound at 100.
+ * A quarter of `COUNT` of each kind: a cycle of 200 mixed controls plus four
+ * forced collects does not fit the harness's per-test timeout.
  */
 const MIXED_COUNT = 100;
 
-/** One of each kind per four rows, in this order. */
 const MIXED_KINDS = ['switch', 'slider', 'progress', 'button'] as const;
 
-/** The box that batch needs: `48` dp is the engine's row for the tallest of the four. */
 const MIXED_HOST_STYLE = {
   width: '100%' as const,
   height: MIXED_COUNT * 48,
 };
 
 /**
- * Mount `MIXED_COUNT` controls of four kinds inside **one** `<Host>`, let them draw,
- * unmount.
- *
- * Mixed because a Host's teardown has to let go of four different kinds of Compose
- * content, and the one H1 churned is the simplest of them: a `Slider` carries gesture
- * state, a `Progress` may be mid-animation, a `Button` carries press state, and
- * anything in the composition that still holds any of them holds the composition,
- * which holds the Host.
- *
- * Returns the box of one child of **each** kind, which is the witness that all four
- * were still declining to measure themselves when the cycle ended: a hosted control is
- * laid out at `0 × 0` (D24 — not `GONE`, and not an absent view either). That is the
- * half this can see, and it is the expensive half: a control that started measuring
- * again would build a composition of its own per cycle, and the boxes below answer a
- * real frame instead of `0 × 0`.
- *
- * What it cannot see is the allowlist. A control that had quietly come off it is
- * measured by the same gate that a hosted one is (`isHostedByParent`, not `isHostable`),
- * so it keeps answering `0 × 0` here and churns exactly as before — measured, with the
- * `Slider` marked non-hostable, and this witness stayed green. Whether each control is
- * really composed by the Host is gated in `HostControls.harness.tsx`, by the two gates
- * that only a shared composition can satisfy (a hit-tested track and a semantics node).
+ * Returns the box of one child of each kind: a hosted control is laid out at
+ * 0x0, and one that started measuring itself again would answer a real frame.
  */
 async function churnMixedCycle(
   prefix: string
@@ -322,14 +221,9 @@ async function churnMixedCycle(
         );
       })}
     </Host>,
-    // Four kinds of composable, and the first cycle pays for all of them.
     { timeout: 60000 }
   );
-  // Layout first: the point of the boxes below is where Fabric ended up putting the
-  // child's own view, which is only an answer once the batch has been laid out.
   await settle(600);
-  // One of each kind, taken from the first four rows, so the witness below names the
-  // kind it is talking about rather than a row number.
   const boxes = {} as Record<(typeof MIXED_KINDS)[number], ViewInfo | null>;
   MIXED_KINDS.forEach((kind, index) => {
     boxes[kind] = harnessUi.queryByTestId(`${prefix}-${String(index)}`);
@@ -341,29 +235,16 @@ async function churnMixedCycle(
 }
 
 /**
- * Hosts per cycle for the leak a shared Host cannot see (review M1).
- *
- * `churnHostedCycle` churns **one** Host, and the floor bound below is 2 MiB per
- * cycle, so a Host that leaks on unmount climbs the floor by one Host's ~42 KiB per
- * cycle and passes while leaking every screen the app visits. Many small Hosts make
- * the same bug a per-cycle event: 200 of them is the N this file already churns, and
- * 200 leaked Hosts is ~8 MiB, four times what the bound allows.
- *
- * One Switch each is what an app actually writes - a Host per settings row, a Host
- * per card - and it is the shape where the leak is worst, because a Host is a whole
- * composition, an `AndroidComposeView` and a lifecycle observer.
+ * Many small Hosts make a leaked Host a per-cycle event: one leaked Host per
+ * cycle is far below the floor bound, 200 are about four times over it.
  */
 const HOST_COUNT = 200;
 
-/** One row per Host, so every Host has a reason to exist and a box to be in. */
 const SMALL_HOST_STYLE = { width: '100%' as const, height: 48 };
 
 /**
- * Mount `HOST_COUNT` Hosts of one Switch each, let them draw, unmount the lot.
- *
- * Returns the last Host's box and its child's box: a real Host is a real height and
- * its child is 0x0 (composed by the Host, not by its own view), which is the witness
- * that the cycle churned 200 compositions rather than 200 empty `FrameLayout`s.
+ * Returns the last Host's box and its child's: a real Host has a height and its
+ * child is 0x0.
  */
 async function churnManyHostsCycle(prefix: string): Promise<{
   host: ViewInfo;
@@ -384,7 +265,6 @@ async function churnManyHostsCycle(prefix: string): Promise<{
         </Host>
       ))}
     </View>,
-    // 200 compositions plus 400 Fabric nodes: the generous end of the file.
     { timeout: 60000 }
   );
   await waitForTestId(`${prefix}-${String(HOST_COUNT - 1)}`, 45000);
@@ -464,10 +344,8 @@ if (Platform.OS === 'android') {
       `of ${String(COUNT)} Switches inside one <Host>`;
     it(hostedTitle, async () => {
       nitroUiCore.prewarmSizing([COMPONENT]);
-      // The witness that the fixture is what the title says. A `Host` that drew
-      // nothing would still churn 200 Fabric nodes and free them, and the heap would
-      // be flat for the wrong reason; a hosted control declines to measure and is
-      // laid out at 0x0, so 0x0 here means the Host took the batch over.
+      // A Host that drew nothing would still churn 200 Fabric nodes and free
+      // them; 0x0 here means the Host took the batch over.
       const warmUp = await churnHostedCycle('hosted-warmup');
       expect(warmUp).not.toBeNull();
       expect([Math.round(warmUp!.width), Math.round(warmUp!.height)]).toEqual([
@@ -503,23 +381,13 @@ if (Platform.OS === 'android') {
           `corrections=${String(corrections)}`
       );
 
-      // D24 again, this time as a churn assertion: a hosted control reports nothing,
-      // so a warm hosted loop cannot be growing the heap because the engine learned a
-      // size. Zero here is also the number that makes the heap slope mean retention.
+      // A hosted control reports no size, so a warm hosted loop costs no
+      // corrections.
       expect(corrections).toBe(0);
       expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
     });
 
-    /**
-     * The churn a single kind of hosted child cannot show (H2a, brief item 5).
-     *
-     * H1's two churn gates see one composition per Host and one kind of composable
-     * inside it. With three more controls on the allowlist, the teardown has four
-     * kinds of Compose content to release, and a reference held by a Slider's gesture
-     * state or a Progress's animation is the same leak by the same route - but it is
-     * not the same object graph, and "the Switch case is green" does not cover it.
-     */
     const mixedTitle =
       `keeps the post-GC heap floor flat across ${String(CYCLES)} churn cycles ` +
       `of ${String(MIXED_COUNT)} mixed controls inside one <Host>`;
@@ -531,13 +399,6 @@ if (Platform.OS === 'android') {
         'NitroUiButton',
       ]);
       const warmUp = await churnMixedCycle('mixed-warmup');
-      // Every kind has to still be *hosted* when the cycle starts: 0x0 is what a hosted
-      // control's own Android view is laid out at, because a hosted control declines to
-      // measure (D24). A control that stopped declining would build a composition of its
-      // own every cycle, and the heap numbers below would be measuring a different
-      // fixture than the one the title names. The allowlist is not what this half can
-      // see - see the note on `churnMixedCycle` for what it answers when a control comes
-      // off it, and which gates cover that instead.
       for (const kind of MIXED_KINDS) {
         const box = warmUp[kind];
         expect(box).not.toBeNull();
@@ -581,18 +442,9 @@ if (Platform.OS === 'android') {
     });
 
     /**
-     * The leak a shared Host hides (review M1).
-     *
-     * A Host's teardown is `onDropView` -> `host.drop()`. Without it the observer
-     * armed at attach keeps the Host alive on the activity's `LifecycleRegistry` for
-     * the life of the process, which is B1's bug one level up: one leak per Host
-     * rather than one per control. The cycle above cannot see that - one Host per
-     * cycle against a 2 MiB bound is two orders of magnitude too quiet - so this
-     * churns 200 of them and gates the same floor.
-     *
-     * It was shown red: with the `onDropView` override deleted from
-     * `HybridNitroUiHost`, the floors climb by ~11 MiB per cycle here (the report has
-     * the numbers); with it, they are flat.
+     * A Host's teardown is `onDropView` -> `host.drop()`. Without it the
+     * observer armed at attach keeps the Host alive on the activity's
+     * `LifecycleRegistry` for the life of the process.
      */
     const manyHostsTitle =
       `keeps the post-GC heap floor flat across ${String(CYCLES)} churn cycles ` +
@@ -600,8 +452,6 @@ if (Platform.OS === 'android') {
     it(manyHostsTitle, async () => {
       nitroUiCore.prewarmSizing([COMPONENT]);
       const warmUp = await churnManyHostsCycle('many-hosts-warmup');
-      // The witness, both ways round: the Host is a box (it drew something) and its
-      // child is not (the Host drew it).
       expect(Math.round(warmUp.host.height)).toBeGreaterThan(20);
       expect([
         Math.round(warmUp.child.width),
@@ -637,8 +487,6 @@ if (Platform.OS === 'android') {
           `corrections=${String(corrections)}`
       );
 
-      // A hosted control reports no size (D24), so a warm loop has nothing else that
-      // could legitimately grow the heap.
       expect(corrections).toBe(0);
       expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(20);
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
@@ -684,22 +532,5 @@ if (Platform.OS === 'android') {
     });
   });
 }
-// Why the platform lives in the file name and not in the `if` above.
-//
-// X37 item 1 deleted this file's `it.skip`, which left iOS collecting a file with no
-// tests in it, and that is an error, not an empty pass: `@jest/core`'s TestScheduler
-// fails a file that reports zero tests with "Your test suite must contain at least one
-// test." unconditionally — there is no flag for it, and `--passWithNoTests` covers "no
-// files matched", not "a matched file has no tests". It was shown red as
-// `harness:ios -- MountChurn` on 2026-11-15, before the rename below fixed it.
-//
-// So the file is named for its platform: `react-native-harness` turns the other
-// platforms' ids into a `--testPathIgnorePatterns` argument (its
-// `jest-platform-ignore-pattern.js`, pushed from the CLI's own entry), which means
-// iOS never collects it and Android collects it normally. The runner reads the id from
-// the `applePlatform`/`androidPlatform` factories in `rn-harness.config.mjs`, and
-// `jest.harness.config.mjs` already relies on that argument existing.
-//
-// The `Platform.OS` guard above is therefore redundant, and kept anyway: it is the
-// sentence that says what the suite gates when someone reads the file on the platform
-// that skips it, and it costs nothing.
+// The platform is in the file name: jest fails a collected file that reports no
+// tests, and `react-native-harness` ignores files named for another platform.

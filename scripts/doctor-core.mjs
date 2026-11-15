@@ -1,47 +1,38 @@
 /**
- * The decisions behind `scripts/doctor.mjs`, with no process or filesystem access.
- *
- * Everything here takes the output of a tool (a version string, `simctl list -j`,
- * `emulator -list-avds`) and answers a question about it, so the rules a new
- * maintainer machine is judged by are unit tests rather than prose
- * (`scripts/__tests__/doctor.test.js`).
+ * The decisions behind `scripts/doctor.mjs`, with no process or filesystem access:
+ * each function takes a tool's output and answers a question about it.
  */
 
 import path from 'node:path';
 
 import { RESERVED_EMULATOR_PORTS } from './lease-core.mjs';
 
-/** Local alias so `mainCheckoutPath` stays a pure string function. */
 const nodePath = path;
 
-/** The emulator port every script refuses (the human's own emulator). */
+/** The emulator port every script refuses: it is the machine owner's own. */
 export const RESERVED_EMULATOR_PORT = RESERVED_EMULATOR_PORTS[0];
 
-/** What a gate machine runs, kept in one place so a version bump is one edit. */
+/** What a gate machine runs. */
 export const REQUIREMENTS = {
   xcodeMajor: 27,
   iosRuntimeMajor: 27,
-  // The gates and baselines run on 27.0; a later 27.x runtime may not carry the
-  // iPhone models the device pairs use (27.1 shipped for one new device only).
+  // A later 27.x runtime may not carry the iPhone models the device pairs use.
   iosRuntime: '27.0',
   jdkMajor: 17,
   androidSystemImage: 'system-images;android-35;google_apis;arm64-v8a',
   androidApiLevel: 35,
   avdProfile: 'pixel_9',
   minFreeDiskGb: 40,
-  // Below this a device gate does not start. A task worktree with both apps built is
-  // 10-18 GB, and a run that meets ENOSPC half-way dies as an unreadable device
-  // failure; on 2026-11-13 that stopped every task on a machine for 34 hours.
+  // Below this a device gate does not start: a worktree with both apps built is
+  // 10-18 GB, and running out of disk mid-run looks like a device failure.
   deviceRunMinFreeDiskGb: 10,
 };
 
 /**
  * Why a device gate must not start on this disk, or `null` when it may.
  *
- * `freeGb` is `null` when the volume could not be read, and that is not a refusal:
- * a check that cannot see is not evidence the disk is full. An ephemeral CI runner
- * is exempt because the cause this guards - worktrees nobody removed - cannot
- * accumulate on a machine that is thrown away after the job.
+ * A `freeGb` of `null` (the volume could not be read) is not a refusal, and an
+ * ephemeral CI runner is exempt because stale worktrees cannot pile up on it.
  *
  * @param {{freeGb: number | null, floorGb?: number, ci?: boolean}} facts
  * @returns {string | null}
@@ -61,9 +52,8 @@ export function diskRefusal({
 }
 
 /**
- * Is this an ephemeral CI runner? Only the two spellings CI systems set count:
- * `CI=false`, `CI=0` and an empty `CI` are a person's shell, and exempting those
- * would be a way round the floor that nobody meant to offer.
+ * Whether this is an ephemeral CI runner. Only the two spellings CI systems set
+ * count: `CI=false`, `CI=0` and an empty `CI` are a person's shell.
  *
  * @param {NodeJS.ProcessEnv} env
  * @returns {boolean}
@@ -73,14 +63,10 @@ export function isCiRunner(env) {
 }
 
 /**
- * Free space as the gate reads it.
- *
- * Outside a test this is the measured value and nothing else: no variable can raise
- * it. Inside one (`JEST_WORKER_ID`, which jest sets and a spawned CLI inherits) the
- * measurement is not used at all, because a suite that drives `gate.mjs` through a
- * leased device gate must not turn red on a developer's nearly-full disk. There a
- * case asks about the disk by naming a value in `NITRO_UI_GATE_FREE_DISK_GB`, and a
- * case that names none is not asked (`null`, see `diskRefusal`).
+ * Free space as the gate reads it: the measured value, which no variable can
+ * raise. Under jest (`JEST_WORKER_ID`, inherited by a spawned CLI) the measurement
+ * is ignored so a nearly-full disk cannot fail a suite; a test names a value in
+ * `NITRO_UI_GATE_FREE_DISK_GB` or gets `null`.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {number | null} measuredGb
@@ -93,11 +79,7 @@ export function freeDiskGbFrom(env, measuredGb) {
   return null;
 }
 
-/**
- * The two device pairs a fresh machine gets: the same models and ports the
- * gates were written against, under names that cannot collide with a person's
- * own simulators or AVDs.
- */
+/** The two device pairs a fresh machine gets. */
 export const DEFAULT_PAIRS = [
   {
     id: 'pair-a',
@@ -120,9 +102,8 @@ export const DEFAULT_PAIRS = [
 ];
 
 /**
- * AVD settings that matter for comparable numbers, copied from the AVDs the
- * committed Android baselines were measured on. Everything else stays at the
- * `avdmanager` default for the profile.
+ * AVD settings that must match the AVDs the committed Android baselines were
+ * measured on. Everything else stays at the `avdmanager` default for the profile.
  */
 export const AVD_CONFIG = {
   'hw.cpu.ncore': '4',
@@ -213,8 +194,8 @@ export function pickIosRuntime(listing, version) {
 /**
  * The device type to create a simulator with, taken from the runtime's own
  * `supportedDeviceTypes` when it lists them: `simctl list devicetypes` spans every
- * installed Xcode and runtime, and a type from there that this runtime does not
- * support fails `simctl create` with "Incompatible device" (code 403).
+ * installed runtime, and a type this runtime does not support fails
+ * `simctl create` with "Incompatible device".
  *
  * @param {{ devicetypes?: Array<{ identifier: string, name: string }> }} listing
  *   `xcrun simctl list devicetypes -j`, the fallback for a runtime without the list.
@@ -385,9 +366,6 @@ export function exitCode(results) {
 /**
  * The simulators in a `simctl list devices -j`, keyed by UDID, with their state.
  *
- * `simulatorsByUdid` above drops the state, and the whole point of the unowned
- * check is to know which pool devices are *Booted*, so this keeps it.
- *
  * @param {{ devices?: Record<string, Array<{ udid: string, name: string, state?: string, isAvailable?: boolean }>> }} listing
  * @returns {Map<string, { udid: string, name: string, state: string, runtime: string }>}
  */
@@ -424,12 +402,7 @@ export function parseAdbDevices(text) {
 }
 
 /**
- * The pair ids every *live* lease holds.
- *
- * A lease records `holds: [pairId]` (`lease.mjs`), and an `--exclusive` lease
- * holds every pair. `lease.mjs list` is the human answer to "who has what", and
- * this is the same question for the script. Expired leases are already gone from
- * the file by the time `pruneExpired` has run, so callers pass what that left.
+ * The pair ids the given leases hold. Callers pass live leases only.
  *
  * @param {object[]} leases
  * @returns {Set<string>}
@@ -445,23 +418,9 @@ export function leasedPairIds(leases) {
 }
 
 /**
- * Pool devices that are booted while no lease holds them.
- *
- * The failure this reports (X9): a task boots a pool simulator or emulator and
- * dies before releasing its lease, or boots a device by hand instead of leasing
- * it. Either way the next task's `lease.mjs acquire` happily hands out that pair,
- * and two tasks now share one device - which is what the lease system exists to
- * prevent. The lease file says who *owns* a pair; only `simctl` and `adb` say what
- * is *awake*; nobody compared them, so nobody knew.
- *
- * A report, never an action: shutting down a device this script did not start is
- * against the rules this repo runs by (AGENTS.md), and a device that is awake for
- * a good reason - a person's own debugging, a bench that booted it deliberately -
- * is nobody's business to power off.
- *
- * Only devices in the *pool* are considered, and only when something booted them:
- * a machine with an idle pool and an unrelated booted simulator says nothing, and
- * an unleased simulator that is off is the normal state of a fresh machine.
+ * Pool devices that are booted while no lease holds them: the next lease would
+ * hand that pair out and two tasks would share one device. Reported only, never
+ * shut down, and devices outside the pool are ignored.
  *
  * @param {object} options
  * @param {{pairs: Array<{id: string, ios?: {udid?: string} | null, android?: {avd?: string, emulatorPort?: number} | null}>}} pool the normalised devices.json
@@ -496,8 +455,6 @@ export function unownedBootedDevices({
       for (const entry of emulators ?? []) {
         if (entry.avd !== avd) continue;
         const port = Number(/^emulator-(\d+)$/.exec(entry.serial)?.[1] ?? NaN);
-        // The human's own emulator is never this script's to comment on, let
-        // alone touch (AGENTS.md): it is not unowned, it is someone's.
         if (reservedPorts.includes(port)) continue;
         warnings.push(
           `${pair.id}: emulator ${entry.serial} (AVD ${avd}) is running and no lease holds it`
@@ -511,12 +468,9 @@ export function unownedBootedDevices({
 /**
  * The attached emulators, with the AVD each serial belongs to.
  *
- * `adb devices` reports serials and states but never the AVD name, and asking the
- * device (`adb -s <serial> emu avd name`) costs a server round-trip per device and
- * fails on an offline one. The pool already assigns one port per AVD, so that
- * mapping is the answer, and it works for an offline device too — which is exactly
- * the state a leaked emulator is usually in. A serial outside the pool's ports is
- * somebody else's emulator and gets `null`, so no warning can blame it on a pair.
+ * `adb devices` never reports the AVD name, and asking the device fails when it
+ * is offline, so the AVD comes from the pool's port assignment. A serial outside
+ * the pool's ports gets `null`.
  *
  * @param {string} text `adb devices` output
  * @param {Array<{android?: {avd?: string, emulatorPort?: number} | null}>} pairs the normalised pool
@@ -541,11 +495,8 @@ export function emulatorsFromAdbDevices(text, pairs) {
 }
 
 /**
- * Whether an unowned-device check can say anything at all.
- *
- * A silently-skipped check is the worst version of this feature: it reads as "all
- * clear" when the truth is "no adb on this machine". So the caller states which
- * tool is missing instead of printing a clean bill of health.
+ * Names the tool the unowned-device check is missing, or `null` when it can
+ * run, so a skipped check is not read as "all clear".
  *
  * @param {{ xcrunOk: boolean, adbOk: boolean }} tools
  * @returns {string | null}
@@ -562,25 +513,10 @@ export function unownedCheckProblem(tools) {
 /* ------------------------------- cold caches ------------------------------ */
 
 /**
- * Whether a machine's build caches look cold, from `ccache -s` (X9).
+ * Whether a machine's build caches look cold, from `ccache -s`.
  *
- * The signal, and why this one: the first native build on a fresh machine took
- * 9.5 min on iOS and 4 m 43 s on Android against 138 s and 17 s warm (X6), so
- * "is this machine warm?" is really "has a native compile ever run here that this
- * one can reuse?". Gradle's caches and Xcode's module cache grow only as a
- * by-product of the same compiles, so they cannot say anything ccache's hit rate
- * does not also say - and unlike a build-directory existence check, ccache
- * distinguishes "this machine has built *this kind* of code" from "this machine
- * has a stale build directory from another branch". An empty Gradle cache with a
- * full ccache is a machine that will still build fast, which a directory check
- * would report backwards.
- *
- * A machine with no ccache at all is `unknown`, not cold: nothing here can judge
- * it, and saying "cold" would be a guess about a tool that is not installed.
- *
- * The threshold is a hit *count*, not a hit rate: a machine with two calls and no
- * misses is not warm, it is untouched, and 100 hits is below what one real build
- * of this repo produces. The rate is still printed, because it is the readable part.
+ * A machine with no ccache is `unknown`, not cold. The threshold is a hit count,
+ * not a hit rate: two calls with no misses is an untouched cache, not a warm one.
  *
  * @param {string | null} statsText `ccache --show-stats` output, or null when ccache is missing
  * @param {{ minHits?: number }} [thresholds]
@@ -618,14 +554,9 @@ export function coldCacheWarning(statsText, thresholds = {}) {
 }
 
 /**
- * The commands `--prime` runs, in order, for a given checkout.
- *
- * Pulled out of `doctor.mjs` (which cannot be imported by jest) because the whole
- * point of `--prime` is that it does *not* invent its own build command: it calls
- * `build-app.mjs`, which is where the stamp, the ccache launcher, the arch default
- * and the machine-wide build slot live. A prime that re-implemented the build would
- * skip the slot and be the exact load-13 situation it exists to prevent, and that
- * claim is only a claim until something checks the argv.
+ * The commands `--prime` runs, in order, for a given checkout. It calls
+ * `build-app.mjs` rather than building itself, so the machine-wide build slot
+ * and the ccache launcher apply.
  *
  * @param {string} checkout the main checkout's path
  * @returns {{platform: 'ios'|'android', file: string, args: string[], cwd: string}[]}
@@ -633,8 +564,7 @@ export function coldCacheWarning(statsText, thresholds = {}) {
 export function primeCommands(checkout) {
   return ['ios', 'android'].map((platform) => ({
     platform: /** @type {'ios' | 'android'} */ (platform),
-    // The checkout's *own* script: it may be on a different branch than the worktree
-    // `--prime` was called from, and the caches worth warming are that tree's.
+    // Relative, so it is the checkout's own script and not the caller's.
     file: 'scripts/build-app.mjs',
     args: ['--platform', platform],
     cwd: checkout,
@@ -642,21 +572,16 @@ export function primeCommands(checkout) {
 }
 
 /**
- * Where the shared caches of this repo actually live, given git's own answers.
- *
- * `--prime` must build in the *main* checkout, not the worktree it happens to be
- * called from: ccache and Gradle's cache are shared anyway, but Xcode's derived
- * data and the pod install are per directory, and a task's throwaway worktree
- * would throw that build away. `git rev-parse` says which is which: a linked
- * worktree reports an absolute `--git-common-dir` inside the main checkout, the
- * main checkout reports a relative `.git`.
+ * The main checkout, where `--prime` builds: Xcode's derived data and the pod
+ * install are per directory, and a throwaway worktree would discard them. A
+ * linked worktree reports an absolute `--git-common-dir` inside the main
+ * checkout; the main checkout reports a relative `.git`.
  *
  * @param {{ toplevel: string | null, commonDir: string | null }} git
  * @returns {string | null} absolute path to the main checkout, or null when git did not answer
  */
 export function mainCheckoutPath({ toplevel, commonDir }) {
   if (toplevel == null || toplevel === '') return null;
-  // A relative common dir means "this very checkout is the main one".
   if (commonDir == null || !nodePath.isAbsolute(commonDir)) return toplevel;
   return nodePath.basename(commonDir) === '.git'
     ? nodePath.dirname(commonDir)

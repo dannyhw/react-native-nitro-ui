@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { Form, ListItem } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -27,26 +26,11 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/**
- * The ListItem's example screen: the real-input block first, then the slots
- * (title, subtitle, value, leading icon, disclosure), a long piece of text that
- * truncates, the same leaf inside a `Form.Row`, and a disabled row.
- *
- * The README screenshots come from the Storybook story, not this screen. The
- * on-device assertions live in `example/__tests__/ListItem.harness.tsx`, which
- * renders its own trees.
- */
 export default function ListItemScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  //
-  // The real-input suite's block (`scripts/real-input`): a pressed item, a disabled
-  // item on its own counter, and an item inside a `Form.Row`. Every echo is React's
-  // own render, so a number moves only if a real touch reached the hosted row, the
-  // row told Nitro, and Nitro told JS.
-  //
   const [presses, setPresses] = useState(0);
   const [last, setLast] = useState('none');
   const onPress = useCallback((title: string) => {
@@ -54,14 +38,10 @@ export default function ListItemScreen() {
     setPresses((count) => count + 1);
   }, []);
   const onRealPress = useCallback(() => onPress('real'), [onPress]);
-  // Its own counter, so a tap that leaked through a disabled item is a number on
-  // screen rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
   const onDisabledPress = useCallback(() => {
     setDisabledEvents((count) => count + 1);
   }, []);
-  // The `Form.Row` item: the one place in this app where a leaf presses from inside a
-  // cell, which is what DECISIONS D46 item 2 has to get right.
   const [formPresses, setFormPresses] = useState(0);
   const onFormPress = useCallback(() => {
     setFormPresses((count) => count + 1);

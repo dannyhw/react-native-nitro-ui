@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { BottomSheet, type BottomSheetDetent } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -31,7 +30,6 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** A plain RN button, so neither the opener nor the content is a nitro-ui control. */
 function Opener({
   label,
   testID,
@@ -59,16 +57,6 @@ const DETENTS_FRACTION: BottomSheetDetent[] = ['medium', { fraction: 0.85 }];
 const ROWS = Array.from({ length: 30 }, (_, index) => `Row ${index + 1}`);
 const CHIPS = Array.from({ length: 12 }, (_, index) => `Chip ${index + 1}`);
 
-/**
- * Every BottomSheet configuration G14 shows on one screen: a `fit` sheet whose
- * content is a `Pressable` and a growing list; a `medium`/`large` sheet with a
- * `ScrollView`; a fractional one; a sheet only its own button can close; and one
- * presented from inside an RN `Modal`.
- *
- * The log line (`sheet-log`) is what real input reads: every event the app received,
- * in order, so a press inside the sheet and the close it is followed by are a string
- * comparison.
- */
 export default function BottomSheetScreen() {
   const ink = useInk();
   const topInset = useTopInset();
@@ -146,11 +134,9 @@ export default function BottomSheetScreen() {
             <Text testID="sheet-presses" style={{ color: ink.ink }}>
               {`Pressed ${presses} times`}
             </Text>
-            {/* A TextInput disallows its parents' interception from every touch-down
-                (React Native's `ReactEditText`), so a tap's UP reaches JS only if the
-                sheet's root keeps intercepting regardless - real input taps it and
-                reads both halves of the press. No soft keyboard: the check is about
-                the touch, not the IME. */}
+            {/* A TextInput disallows its parents' interception from every
+                touch-down (React Native's `ReactEditText`), so a tap's UP
+                reaches JS only if the sheet's root keeps intercepting. */}
             <TextInput
               testID="sheet-input"
               accessibilityLabel="Notes"
@@ -167,9 +153,9 @@ export default function BottomSheetScreen() {
             <Text testID="sheet-input-touches" style={{ color: ink.ink }}>
               {`Input touches: in ${inputIn} out ${inputOut}`}
             </Text>
-            {/* A horizontal list: dragging it disallows its parents' interception for
-                that gesture, which must not cost JS the gesture's end (real input
-                presses the Pressable again after a scroll here). */}
+            {/* A horizontal list: dragging it disallows its parents'
+                interception for that gesture, which must not cost JS the
+                gesture's end. */}
             <ScrollView
               horizontal
               testID="sheet-hscroll"

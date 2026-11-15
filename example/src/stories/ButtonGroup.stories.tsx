@@ -1,13 +1,3 @@
-/**
- * ButtonGroup stories (G20). Props and events: `docs/components/button-group.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and
- * benchmark handles, not app API (DECISIONS D14).
- *
- * Every item names both glyphs — `systemImage` for iOS and `androidIcon` for
- * Android — because each platform ignores the other's, and a row that only names
- * one is a row with half its icons missing on half the devices.
- */
 import { useCallback, useState } from 'react';
 import { Platform, StyleSheet, Text } from 'react-native';
 import {
@@ -23,7 +13,7 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 
 import { Column, Frame, Note, Row, Showcase } from './showcase';
 
-/** A drawable the example app ships in `res/drawable/` — the resource-name form. */
+/** A drawable the example app ships in `res/drawable/`, named as a resource. */
 const DRAWABLE = 'nitroui_test_star';
 
 const APPEARANCES: readonly ButtonGroupAppearance[] = ['standard', 'connected'];
@@ -48,7 +38,6 @@ const LABEL_STYLES: readonly ButtonGroupLabelStyle[] = [
   'titleAndIcon',
 ];
 
-/** The three commands the README pair and most rows use. */
 const COMMANDS: ButtonGroupItem[] = [
   {
     id: 'copy',
@@ -65,7 +54,6 @@ const COMMANDS: ButtonGroupItem[] = [
   },
 ];
 
-/** A toolbar's worth of independent toggles — the *Bold | Italic | Underline* case. */
 const FORMAT: ButtonGroupItem[] = [
   {
     id: 'bold',
@@ -180,15 +168,11 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The playground, with a readout — a tap is one event, and this shows it. */
 export const Playground: Story = {};
 
 /**
- * The two appearances, then the same two with toggles in them.
- *
- * The fourth row is the one worth reading: a connected iOS group whose items include a
- * toggle draws the standard row, because `ControlGroup` shows no on state (measured).
- * Android keeps its connected toggles. Same props in both columns.
+ * On iOS a connected group that contains a toggle draws the standard row, because
+ * `ControlGroup` shows no on state. Android keeps its connected toggles.
  */
 export const Appearances: Story = {
   render: function AppearancesStory() {
@@ -270,7 +254,6 @@ export const Appearances: Story = {
   },
 };
 
-/** The ladder, and what the five label styles do with a glyph. */
 export const SizesAndLabels: Story = {
   render: function SizesAndLabelsStory() {
     return (
@@ -316,12 +299,6 @@ export const SizesAndLabels: Story = {
   },
 };
 
-/**
- * Overflow, at three widths of the same six items.
- *
- * This is the story that shows the control is `fillWidth`: nothing here changes the
- * items, only the box, and the box is what decides.
- */
 export const Overflow: Story = {
   render: function OverflowStory() {
     const [presses, setPresses] = useState<string[]>([]);
@@ -366,7 +343,6 @@ export const Overflow: Story = {
   },
 };
 
-/** Controlled and uncontrolled toggles in one row, and what a refused flip does. */
 export const Toggles: Story = {
   render: function TogglesStory() {
     const [spellcheck, setSpellcheck] = useState(false);

@@ -1,35 +1,24 @@
 /**
- * Aggregate, print and gate existing benchmark results.
+ * Aggregates, prints and gates existing benchmark results. Reads results files
+ * and never touches a device.
  *
  *   node scripts/bench/report.mjs [results.json] [--compare <git-ref|results-file>]
  *
- * This is the offline half of the bench: it reads results files and never touches a
- * device. The live half is `scripts/bench/run.mjs`, which calls the same
- * `comparisonSections()` with the same arguments, so the reporter cannot drift away
- * from the runner.
+ * Every headline number is a median of per-launch medians with the MAD of
+ * those launch medians beside it; `p95` is over the pooled iterations. Smaller
+ * is better everywhere.
  *
- * Reading the output
- * -----------------
- * Every headline number is a **median of per-launch medians** with the MAD of
- * those launch medians beside it, which is the unit the protocol varies (a fresh
- * process per launch, launches interleaved ABBA across implementations). `p95`
- * is over the pooled iterations, because a tail only shows up there.
- * Smaller is better everywhere.
+ * What gates (implemented once in `gate()`):
  *
- * What gates (docs/DECISIONS.md D9, implemented once in `gate()`):
- *
- * 1. Every metric is first turned into a **launch-paired ratio to `rn-core`**:
- *    launch N's arm median over launch N's control median, so machine drift cancels
- *    instead of being measured and excused.
- * 2. A comparison gates `head(x/rn-core) / base(x/rn-core)`, where base is another
- *    run measured on this machine — `--compare-release` measures both sides in one
- *    session, and this command renders any two results files you already have.
- * 3. A ratio over 1.20 fails only when its bootstrap 95% CI excludes 1.05 *and*
- *    the within-run spread of that (scenario, N, metric) is quiet. Noise is
- *    judged per cell and metric inside the run - never by absolute drift against
- *    another session, which used to make the gate unable to fire.
+ * 1. Every metric is first turned into a launch-paired ratio to `rn-core`:
+ *    launch N's arm median over launch N's control median, so machine drift
+ *    cancels.
+ * 2. A comparison gates `head(x/rn-core) / base(x/rn-core)`, where base is
+ *    another run measured on this machine.
+ * 3. A ratio over 1.20 fails only when its bootstrap 95% CI excludes 1.05 and
+ *    the within-run spread of that (scenario, N, metric) is quiet.
  * 4. Only `nitro-ui` arms are gated. `rn-core` is the control and `expo-ui-*`
- *    are reference arms: they inform review, they do not fail a nitro-ui change.
+ *    are reference arms.
  */
 
 import fs from 'node:fs';
@@ -51,10 +40,9 @@ export function readJson(file) {
 }
 
 /**
- * Resolve `--compare <ref|file>` to a results file. A bare ref resolves to the
- * newest *clean* results file of that sha (dirty runs are named `-dirty-` and
- * only match when nothing clean exists), so two runs of one commit can no
- * longer overwrite each other.
+ * Resolves `--compare <ref|file>` to a results file. A bare ref resolves to the
+ * newest clean results file of that sha; a dirty run (named `-dirty-`) matches
+ * only when nothing clean exists.
  */
 export function resolveCompareTarget(value, platform) {
   if (fs.existsSync(value)) {
@@ -87,10 +75,8 @@ export function writeReportFiles({ run, markdown, fileName }) {
 }
 
 /**
- * The raw records a device produced, saved next to the results *before* anything
- * can throw. Re-aggregating is cheap and offline; a 10-minute device run is
- * not, so a bug in the maths must not cost the measurement. `bench/results/` is
- * gitignored.
+ * Saves the raw records a device produced next to the results, so a bug in the
+ * aggregation does not cost the measurement. `bench/results/` is gitignored.
  */
 export function writeRawRecords({ fileName, records }) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });

@@ -1,39 +1,3 @@
-/**
- * On-device tests for the IconButton (task G23).
- *
- * An IconButton is Button's box and Chip's value, so this suite asks each of them's
- * questions, plus two the control has on its own.
- *
- * - **Button's**: is the laid-out box the size the control measured, for every
- *   configuration the sizing key names
- *   (`variant|size|width|form|systemImage|androidIcon`)?
- *   Every cold configuration is **poisoned** first (`seedSizingSize` with a size no
- *   icon button has, then an environment bump), so a correction that never arrives
- *   leaves a visible wrong box *and* costs a correction this file requires
- *   (`Button.harness.tsx` explains the precedent, and why the fallback being *exact*
- *   for the default rung does not weaken it: the poison is the wrong answer).
- * - **Chip's**: does the event-count handshake hold — a controlled selection both
- *   ways, a toggle JS refused reverting, a value written from JS applying?
- * - **Its own first**: the ladder. A rung here is one of Material's own
- *   `IconButtonDefaults` container tokens, and `width` costs width and never height —
- *   a control that ignored `width` would still measure *a* box, so the grid is
- *   asserted, not logged. Asserted against the artifact's own numbers
- *   (`MATERIAL_LADDER`), floored where Material floors it: the 48 dp
- *   `MinInteractiveComponentSize` is part of the box, which is why the two bottom
- *   rungs share one height on Android and why the box is not the token. On iOS the
- *   same ladder is the *glyph*'s — iOS has no icon-button containers, so the rung sets
- *   the symbol's point size and the button style's padding does the rest.
- * - **Its own second**: the glyph is the whole control, so "is it drawn, in the
- *   control's content colour, at the size the rung asked for?" is the one drawing
- *   contract no prop echo answers. G19's pixel probe answers it, on the platform that
- *   draws a glyph at all.
- *
- * The readings: `harnessUi.queryByTestId` (the box Fabric gave the view),
- * `hybridRef.measureContent()` (the size the hosted control measured),
- * `nitroUiCore.sizingStats()` (what the engine did), the control's own
- * `nuiTestStateReport()` (what it is drawing, and on Android what its accessibility
- * node says) and `nuiTestPixelProbe`/`nuiTestPixelReport` (what it painted).
- */
 import { useState } from 'react';
 import {
   Platform,
@@ -70,7 +34,6 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/** What `hybridRef` hands back — declared, not imported (DECISIONS D14). */
 type IconButtonHandle = {
   readonly accessibilityLabel: string;
   readonly systemImage: string | null;
@@ -112,9 +75,8 @@ const recordPress = (testId: string) => (): void => {
 const setters = new Map<string, (next: boolean) => void>();
 
 /**
- * The parents' *form* setters, by testID — how a test takes the toggle form away.
- * `IconButton.tsx` derives the form from which props the caller passed, so the only
- * way to change it is to re-render with a different set of them.
+ * The parents' form setters, by testID. The form follows which props the caller
+ * passed, so the only way to change it is to re-render with a different set of them.
  */
 const formSetters = new Map<string, (next: 'press' | 'toggle') => void>();
 
@@ -221,7 +183,6 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
   );
 }
 
-/** Poll until the box of `testId` is `size`, i.e. until a size has really arrived. */
 async function waitForBox(testId: string, size: Size, what: string) {
   return pollUntil(
     () => (sameSize(sizeOf(testId), size) ? sizeOf(testId) : null),
@@ -234,11 +195,8 @@ async function waitForBox(testId: string, size: Size, what: string) {
   );
 }
 
-/**
- * Mount each id, then wait until each one's *laid-out* box equals what its own control
- * measured. Every assertion in this file sits behind this: a box still standing at the
- * planted size would make "it corrected" and "it never corrected" read the same.
- */
+// Waits until each id's laid-out box equals what its own control measured, so a box
+// still standing at a planted size cannot pass.
 async function settleEach(
   testIds: readonly string[]
 ): Promise<Map<string, Size>> {
@@ -252,7 +210,6 @@ async function settleEach(
   return sizes;
 }
 
-/** The control's own report, as `key -> value`. */
 function reportOf(testId: string): Record<string, string> {
   const fields: Record<string, string> = {};
   const text = handles.get(testId)?.nuiTestStateReport() ?? '';
@@ -264,13 +221,8 @@ function reportOf(testId: string): Record<string, string> {
 }
 
 /**
- * The iOS control's `control=` field: what the glyph measured **before** the 44 pt
- * touch-target floor widened the control, as a `Size`.
- *
- * iOS-only — the field exists because iOS floors the *target* and Android floors the
- * *container*, so only iOS loses the laid-out box as evidence that the rung moved the
- * artwork. Android's box already is `max(token, 48)`, and the ladder above reads it
- * directly.
+ * The iOS report's `control=` field: what the glyph measured before the 44 pt
+ * touch-target floor widened the control.
  */
 function artworkOf(testId: string): Size | null {
   const field = reportOf(testId).control;
@@ -293,7 +245,6 @@ async function waitForDisplayed(testId: string, displayed: string) {
 /** How long `waitForEvents` waits for a surplus event after the count is reached. */
 const EVENT_QUIET_MS = 400;
 
-/** Wait until the app has been told exactly `wanted` since `from`. */
 async function waitForEvents(from: number, wanted: readonly string[]) {
   await pollUntil(
     () => {
@@ -306,23 +257,13 @@ async function waitForEvents(from: number, wanted: readonly string[]) {
           JSON.stringify(events.slice(from))
       )
   );
-  // Then a quiet period, and everything that arrived — Chip's rule: returning the
-  // moment the count is reached let a surplus event through, and a control that fires
-  // twice per tap is exactly what this suite has to be able to see.
+  // Then a quiet period, so a control that fires twice per tap is seen.
   await sleep(EVENT_QUIET_MS);
   return events.slice(from);
 }
 
-/**
- * Press an icon button the way this platform's harness can.
- *
- * Android: a harness tap, which Compose takes like any touch. iOS: the control's own
- * `nuiTestPress()`, which runs the tap's path. The harness's iOS tap is a `UITouch`
- * with no HID event behind it and SwiftUI's button gesture refuses it — measured for
- * `Button` (G2), for `Chip` (G12) and for `Checkbox` (G15), all of which are the same
- * element an iOS icon button is. The real tap is `real-input:ios`'s, which is where
- * SwiftUI's own gesture is proved, once per tap.
- */
+// The harness's iOS tap is a `UITouch` with no HID event behind it, which SwiftUI's
+// button gesture ignores, so iOS presses through the control's `nuiTestPress()`.
 async function pressButton(testId: string): Promise<void> {
   if (Platform.OS === 'android') {
     await userEvent.press(await waitForTestId(testId));
@@ -331,7 +272,6 @@ async function pressButton(testId: string): Promise<void> {
   handleOf(testId).nuiTestPress();
 }
 
-/** Wait for the next accessibility probe, and return its `a11y` field. */
 async function probeAccessibility(testId: string): Promise<string> {
   const handle = handleOf(testId);
   const before = Number(reportOf(testId).probes ?? '0');
@@ -345,7 +285,6 @@ async function probeAccessibility(testId: string): Promise<string> {
   );
 }
 
-/** Ask what colour is on screen, and wait for the answer. */
 async function pixelProbe(
   testId: string,
   color: number,
@@ -375,17 +314,13 @@ async function pixelProbe(
   return report;
 }
 
-/** The `hits=` count of a probe line. */
 function probeHits(report: string): number {
   const hits = / hits=(\d+)/.exec(report);
   return hits == null ? 0 : Number(hits[1]);
 }
 
-/**
- * The key `IconButton.tsx` builds: `variant|size|width|systemImage|androidIcon`.
- * Written out rather than imported, so a wrong helper cannot poison and pass its own
- * test (`Button.harness.tsx` and `Chip.harness.tsx` each carry the same rule).
- */
+// Must match the sizing key `IconButton.tsx` builds. Written out rather than
+// imported, so a wrong key helper cannot pass its own test.
 function sizingKey(
   variant: IconButtonVariant,
   size: IconButtonSize,
@@ -401,19 +336,9 @@ function sizingKey(
 const WRONG_SIZE = { width: 17.5, height: 63.5 };
 
 /**
- * Material's own container ladder for this control, in dp.
- *
- * `IconButtonDefaults.{extraSmall…extraLarge}ContainerSize(option)` returns
- * `DpSize(iconSize + 2 × the option's leading space, the rung's height)` and the five
- * glyph tokens are 20 / 24 / 24 / 32 / 40 — the constants read out of the
- * `material3` artifact's bytecode (`icon + 2 × 4|6|10` for XS, `+ 4|8|14` for S,
- * `+ 12|16|24` for M, `+ 16|32|48` for L, `+ 32|48|72` for XL, with heights
- * 32 / 40 / 56 / 96 / 136), and the same table `Q9` C4 predicted from the spec.
- *
- * Nothing here is this file's number, which is the point: the Android assertions are
- * `max(token, MIN_TARGET)` of this table, so a build that stops asking for the rung,
- * or asks for it somewhere Material's own `smallContainerSize` can clamp it, is red
- * against Material rather than against a copy of what the device happened to say.
+ * Material's `IconButtonDefaults` container sizes for each rung and width option,
+ * and each rung's glyph size, in dp. These are Material's own numbers, not readings
+ * from a device.
  */
 const MATERIAL_LADDER: Record<
   IconButtonSize,
@@ -435,23 +360,9 @@ const MATERIAL_LADDER: Record<
 /** Material's `MinInteractiveComponentSize`, in dp — the floor under every rung. */
 const MIN_TARGET = 48;
 
-/**
- * Apple's minimum tappable region, in points — the floor under every iOS rung, and
- * the same rule one platform over. `HybridNitroUiIconButton.swift` keeps it as
- * `IconButtonContent.minimumTouchTarget`; this is the harness's own copy, spelled here
- * for the same reason `MIN_TARGET` is: the assertion is against the platform's number,
- * not against a second reading of what the device said.
- */
+/** Apple's minimum tappable region, in points — the floor under every iOS rung. */
 const IOS_MIN_TARGET = 44;
 
-/**
- * The default control's own numbers, spelled once.
- *
- * `standard`/`medium`/`uniform` with this glyph is the configuration
- * `scripts/conformance-core.mjs`'s fallback row claims, and the one
- * `Conformance.harness.tsx` mounts — so the two files read one definition rather than
- * each keeping its own copy of "the default".
- */
 const DEFAULT_GLYPH = { systemImage: 'xmark', androidIcon: SHIPPED };
 
 function poison(keys: readonly string[]): void {
@@ -478,10 +389,8 @@ afterEach(() => {
 
 describe('IconButton · G23', () => {
   it('lays every rung and width out at the size the control measured', async () => {
-    // One control per rung × width — fifteen on Android, five on iOS, where Material's
-    // width option has no counterpart and the platform's own box follows the symbol.
-    // Each configuration is poisoned first, so a box that came back at the planted
-    // size is a visible failure rather than a passing one.
+    // Each configuration is seeded with a wrong size first, so a box that stays at the
+    // planted size fails.
     const ids: string[] = [];
     for (const size of RUNGS) {
       for (const width of WIDTHS) {
@@ -538,9 +447,8 @@ describe('IconButton · G23', () => {
     ).join('\n  ');
     console.log(`icon-button ladder:\n  ${grid}\n  corrections=${made}`);
 
-    // 15 cold configurations, and each owes its own correction. Fifteen is the floor
-    // rather than the expectation: iOS folds the three widths into one configuration,
-    // so it pays five, and the count is asserted per platform below.
+    // iOS ignores `width`, so its three widths per rung are one configuration and it
+    // owes five corrections where Android owes fifteen.
     expect(made).toBeGreaterThanOrEqual(
       Platform.OS === 'android' ? ids.length : RUNGS.length
     );
@@ -549,25 +457,9 @@ describe('IconButton · G23', () => {
       expect(sameSize(box, WRONG_SIZE)).toBe(false);
     }
 
-    // 2. Android: every one of the fifteen boxes *is* Material's token, floored at
-    //    Material's own minimum interactive size. Asserted against the artifact's
-    //    numbers rather than against a ladder this file invented, because the claim on
-    //    the docs page is "a rung here is one of Material's own tokens". Two failures
-    //    land here, and the first device run hit exactly the first one:
-    //
-    //      - the rung asked for on the control's *content* instead of its modifier is
-    //        measured under each composable's own `smallContainerSize()` and coerced
-    //        into it, which is how fifteen different configurations came back
-    //        `48.00x48.00` here;
-    //      - dropping `minimumInteractiveComponentSize()` gives the 28 dp `small`
-    //        token its own box, three dp off the floor, which is the second line.
-    //
-    //    That floor is also why the ladder is not strictly increasing on Android:
-    //    `small` (32) and `medium` (40) are both raised to 48, which is Material's
-    //    design for those two rungs and what `Button.harness.tsx` ("the top of the
-    //    ladder") already asserts for the same reason. `docs/components/icon-button.md`
-    //    prints the same two-column truth — token and box — rather than the token
-    //    alone, which is what made the first version of this table read as a promise.
+    // Android: every box is Material's token, floored at Material's 48 dp minimum
+    // interactive size. The floor raises `small` (32) and `medium` (40) to 48, so the
+    // ladder is not strictly increasing.
     if (Platform.OS === 'android') {
       for (const size of RUNGS) {
         for (const width of WIDTHS) {
@@ -585,8 +477,6 @@ describe('IconButton · G23', () => {
           ).toBe(true);
         }
       }
-      // The floor itself, spelled as its own failure: the two rungs whose tokens are
-      // below 48 dp are the ones that can lose it.
       for (const size of RUNGS) {
         for (const width of WIDTHS) {
           const box = boxes.get(`rung-${size}-${width}`);
@@ -598,13 +488,8 @@ describe('IconButton · G23', () => {
           expect((box?.height ?? 0) >= MIN_TARGET - 0.6).toBe(true);
         }
       }
-      // `width` costs width and never height — in Material's own order, and strictly
-      // only where the 48 dp floor does not hide the difference. Below the floor the
-      // three options are legitimately one box (`small`'s 28/32/40 are all under it),
-      // which is the same fact the grid above asserts and the docs page prints; from
-      // `medium` up the options separate, and `large`/`xlarge`/`xxlarge` separate all
-      // three. Dropping `width` from the container ask makes every one of these
-      // strict lines red.
+      // `width` changes width and never height. Below the 48 dp floor the three
+      // options are legitimately one box (`small`'s 28/32/40 are all under it).
       for (const size of RUNGS) {
         const token = MATERIAL_LADDER[size];
         const floored = (dp: number): number => Math.max(dp, MIN_TARGET);
@@ -626,8 +511,7 @@ describe('IconButton · G23', () => {
         );
       }
     } else {
-      // iOS ignores `width`, so the three controls of a rung are one configuration and
-      // must be the same box — the sentence `docs/components/icon-button.md` prints.
+      // iOS ignores `width`, so the three controls of a rung must be the same box.
       for (const size of RUNGS) {
         const forRung = WIDTHS.map((width) => ({
           width,
@@ -639,28 +523,9 @@ describe('IconButton · G23', () => {
         }
       }
 
-      // iOS has no icon-button containers: what the rung sizes is the *glyph*, and
-      // the box is that glyph plus the button style's own padding (`.controlSize`
-      // alone measured two boxes for five rungs here — 15.33 x 15.00 and 17.67 x
-      // 16.00 — which is the reason the rung sets the symbol's font directly).
-      //
-      // Since `HybridNitroUiIconButton` floors the box at Apple's 44 pt touch target
-      // — the counterpart of the 48 dp floor asserted for Android above — the glyph's
-      // own box is no longer visible in the laid-out one at the bottom of the ladder:
-      // every `standard` rung's glyph measures under 44 pt (20.33 x 19 up to 40.67 x
-      // 38), so every one of them is laid out at 44 x 44. That is the point of the
-      // floor, not a hole in the test, so the ladder is asserted in two halves, from
-      // the two different fields each half can actually see:
-      //
-      //   1. the **glyph ladder**, from the control's own `control=` read-out: the
-      //      artwork grows on every step where Material's glyph token grows, and
-      //      stays level across `medium` -> `large`, where the token is 24 both. Pin
-      //      the symbol to one point size and these lines go red even though every
-      //      box stays a correct 44 x 44.
-      //   2. the **floor**, from the laid-out box: it is `max(glyph, 44)` on each
-      //      axis, so the target never shrinks below 44 and the box never grows past
-      //      a glyph that is itself bigger than the target. Remove the floor and the
-      //      first four rungs are red; make it 60 and all five are.
+      // iOS has no icon-button containers: the rung sizes the glyph. Every `standard`
+      // glyph measures under the 44 pt touch-target floor, so every box is 44 x 44;
+      // the glyph ladder is read from the report's `control=` field instead.
       const glyphAt = (size: IconButtonSize): Size =>
         artworkOf(`rung-${size}-uniform`) as Size;
       const rungGrid = RUNGS.map((size) => {
@@ -679,8 +544,6 @@ describe('IconButton · G23', () => {
           `"${size}" never reported what its glyph measures — the control's report ` +
             `is "${handleOf(`rung-${size}-uniform`).nuiTestStateReport()}"`
         ).not.toBeNull();
-        // The glyph really did grow at all: a `medium` rung drawing a 20 pt symbol
-        // would be caught by the per-step lines below but not by the floor.
         expect(glyph.width).toBeGreaterThan(0);
         expect(glyph.height).toBeGreaterThan(0);
 
@@ -715,8 +578,7 @@ describe('IconButton · G23', () => {
                 `so the ${axis} of the glyph must grow with it (${was} -> ${now})`
             ).toBeGreaterThan(was);
           } else {
-            // The one step where Material's token repeats is allowed to be one box —
-            // and only that one, which is what makes the line above bite.
+            // Material's glyph token repeats on this step, so it may be one box.
             expect(now).toBeGreaterThanOrEqual(was);
           }
         }
@@ -725,20 +587,9 @@ describe('IconButton · G23', () => {
   });
 
   it('keys the Android-only width option, so a narrow control cannot inherit the uniform box', async () => {
-    // C4's red proof for the key: drop `width` from it and the `narrow` control below
-    // is served the `uniform` size the engine was *told* about, and every assertion in
-    // the ladder test above still passes because both are real boxes. So this test
-    // plants the uniform rung's own size under the narrow key and requires the narrow
-    // control to disagree with it.
-    //
-    // `xlarge`, not the default `medium`, because the two options have to be two
-    // *different numbers* for a planted size to be a lie: Material's `small` rung is
-    // 28/32/40 dp wide and its `medium` rung 32/40/52, and the 48 dp floor raises all
-    // but the last of those to 48 — on the two bottom rungs `narrow` and `uniform`
-    // genuinely are one box, and a planted size the control agrees with would prove
-    // nothing. At `xlarge` the narrow and uniform containers are 64 and 96 dp, both
-    // above the floor, so Android must disagree and iOS — which ignores `width` — must
-    // still agree.
+    // Plants the uniform size under the narrow key and requires the narrow control to
+    // disagree with it. `xlarge` because its narrow and uniform containers (64 and
+    // 96 dp) are both above the 48 dp floor; on the two bottom rungs they are one box.
     const uniform = 'standard|xlarge|uniform|press|xmark|nitroui_test_star';
     const narrow = 'standard|xlarge|narrow|press|xmark|nitroui_test_star';
     await render(
@@ -758,7 +609,6 @@ describe('IconButton · G23', () => {
     const warm = await settleEach(['key-uniform']);
     const uniformSize = warm.get('key-uniform') as Size;
 
-    // Plant *the other option's answer* under the narrow key, warm-cache the rest.
     nitroUiCore.seedSizingSize(
       COMPONENT,
       narrow,
@@ -792,37 +642,20 @@ describe('IconButton · G23', () => {
     );
 
     if (Platform.OS === 'android') {
-      // The planted size has to be corrected away: `width` is in the key, so the
-      // narrow control asks for its own configuration and the engine's answer for it
-      // was a lie.
       expect(sameSize(narrowSize, uniformSize)).toBe(false);
       expect(made).toBeGreaterThanOrEqual(1);
     } else {
-      // On iOS the two options are one configuration by design, so the planted size is
-      // the *right* size and there is nothing to correct. Asserting a correction here
-      // would be asserting the platform has an option it does not.
+      // iOS ignores `width`, so the planted size is the right size and nothing is
+      // corrected.
       expect(sameSize(narrowSize, uniformSize)).toBe(true);
     }
   });
 
   it('keeps one box across the toggle states, and needs no correction for a state change', async () => {
-    // A toggle repaints — its colours, its corner, maybe a border — and resizes
-    // nothing, on either platform. `Chip.harness.tsx` measures the Android filter chip
-    // whose selection *does* move the box; this control is not that control, and the
-    // difference is what lets `checked` stay out of the sizing key.
-    //
-    // What is *in* the key is the form, not the value: on iOS the press form is a
+    // The form, not the value, is in the sizing key: on iOS the press form is a
     // `Button` and the toggle form a `Toggle(.button)`, and their styles pad
-    // differently — the first device run measured `tonal`/`large` at 31.67 x 30.00 pt
-    // for the first and 41.67 x 30.00 pt for the second. One cached size cannot be
-    // both, so `state-press` was laid out at the toggles' box and never converged —
-    // which is what the `press` field in `sizingKey` exists for.
-    //
-    // `xxlarge`, not `large`: since iOS floors the box at its 44 pt touch target
-    // (`IOS_MIN_TARGET`), the two `large` boxes above are both *under* the floor and
-    // come back one 44 x 44 pt box — correct, and useless as evidence that the form
-    // is in the key. At the top rung the glyph is 40 pt, both forms measure past 44,
-    // and the two configurations are two numbers again.
+    // differently. `xxlarge` because on smaller rungs both forms fall under the 44 pt
+    // floor on iOS and come back as one box.
     const keyFor = (icon: string) =>
       sizingKey(
         'tonal',
@@ -881,18 +714,14 @@ describe('IconButton · G23', () => {
         `on=${describeSize(on)}`
     );
     expect(sameSize(off, on)).toBe(true);
-    // The press form too, on the platform whose press and toggle are different
-    // composables with the same tokens. Android composes `IconButton` vs
-    // `IconToggleButton`; iOS composes a `Button` vs a `Toggle(.button)`, and
-    // SwiftUI's toggle style brings its own padding — the difference
-    // `docs/components/icon-button.md` prints instead of hiding.
+    // Android's press and toggle composables share their tokens; SwiftUI's toggle
+    // style brings its own padding.
     if (Platform.OS === 'android') {
       expect(sameSize(press, off)).toBe(true);
     }
 
-    // A state change must not open a new configuration either: a *fresh* control of
-    // the same configuration after a toggled one has drawn still needs zero
-    // corrections, which is what "one box" means to the engine.
+    // A fresh control of the same configuration, mounted after a toggled one has
+    // drawn, must need no correction.
     nitroUiCore.invalidateSizingEnvironment();
     const before = stats();
     await render(
@@ -955,9 +784,8 @@ describe('IconButton · G23', () => {
   });
 
   it('reverts a toggle JS refused, and shows the value JS wrote', async () => {
-    // The refused half: the app keeps `checked={false}`, so every press asks for
-    // `true` again — Chip's and SegmentedControl's oracle. A control that had kept a
-    // refused change would ask for `false` on the second press.
+    // The app keeps `checked={false}`, so every press must ask for `true` again. A
+    // control that kept a refused change would ask for `false` on the second press.
     const REFUSING = 'Refusing icon toggle';
     function Refusing() {
       return (
@@ -978,19 +806,8 @@ describe('IconButton · G23', () => {
 
     await pressButton('refusing');
     await waitForEvents(0, ['refusing:true']);
-    // Native took the flip optimistically and the echo that carried the event count
-    // also carried `checked={false}` again, so the control is back on the app's value.
-    //
-    // The optimistic frame itself is deliberately not polled. Between the flip and the
-    // reverting commit there is one JS round trip — the event, the echo, one render,
-    // one shadow-tree batch — and `waitForEvents` above has already waited a 400 ms
-    // quiet period to be sure no second event arrived, so by the time a poll could look
-    // the revert has landed. `DatePicker.harness.tsx` reached the same conclusion
-    // ("a polling test cannot see the round trip") and Chip's refusal test asserts what
-    // this one asserts instead: the value the control settles on, and — below, the part
-    // that cannot be faked — the next press asking for `true` again. A control that had
-    // kept the refused change would ask for `false`, and a control whose handshake
-    // refused every write would never leave `displayed=0` to begin with.
+    // The optimistic frame is not polled: the revert lands one JS round trip after
+    // the flip, well inside the quiet period `waitForEvents` has already waited.
     await waitForDisplayed('refusing', '0');
     const afterFirst = events.length;
 
@@ -1000,26 +817,12 @@ describe('IconButton · G23', () => {
       `refused toggle: events=${JSON.stringify(seen)} ` +
         `report=${handleOf('refusing').nuiTestStateReport()}`
     );
-    // Both presses asked for `true`. `false` on the second is a control that kept the
-    // change the app refused.
     expect(seen).toEqual(['refusing:true']);
     await waitForDisplayed('refusing', '0');
     expect(handleOf('refusing').mostRecentEventCount).toBeGreaterThanOrEqual(2);
   });
 
   it('becomes a press button again when the app stops using the toggle form', async () => {
-    // The form is a *prop*, not a decision the control gets to keep.
-    //
-    // `IconButton.tsx` derives it from which props the caller passed
-    // (`checked`/`defaultChecked`/`onCheckedChange` any one of them), so the only way
-    // to take a toggle form away is to re-render the same control with a different set
-    // of them. Native's signal for it is `defaultChecked` being non-null, which goes
-    // back to null on exactly that re-render — so `afterUpdate()` can read the form
-    // every batch and does. A setter that *latched* `isToggle = true` could only ever
-    // answer "still a toggle", and the control would go on drawing a Toggle that
-    // nobody asked for: `onPress` never fires, `displayed` keeps reporting a value,
-    // and on iOS the toggle's box is published under the press configuration's key,
-    // because the key is built in JS from the props that are there now.
     const SWITCHED = 'Toggle that becomes a button';
 
     function Switching() {
@@ -1041,9 +844,8 @@ describe('IconButton · G23', () => {
             variant="tonal"
             hybridRef={captureHybrid('form-off')}
           />
-          {/* The same configuration, press form from the first frame. iOS's box for a
-              control is what its own style measures, so "the switch-back draws a
-              Button" is only visible as this control's number. */}
+          {/* The same configuration in press form from the first frame: the size the
+              switched control has to end up measuring. */}
           <IconButton
             accessibilityLabel="Always a button"
             androidIcon={SHIPPED}
@@ -1062,14 +864,11 @@ describe('IconButton · G23', () => {
     await settleEach(['form-off', 'form-fresh']);
     await waitForDisplayed('form-off', '0');
 
-    // Still a toggle: the tap flips a value, and `onPress` is not the form's event.
     await pressButton('form-off');
     await waitForEvents(0, ['form-off:true']);
 
     formSetters.get('form-off')?.('press');
-    // The value belongs to the form, so it goes: `none` is "not drawing a selection",
-    // which is what a Toggle never reports. Red with the latch: the report stays a
-    // `0`/`1` because the control is still a Toggle.
+    // `none` means "not drawing a selection", which a toggle never reports.
     await waitForDisplayed('form-off', 'none');
     const switched = events.length;
 
@@ -1081,21 +880,12 @@ describe('IconButton · G23', () => {
         `measured=${describeSize(measured('form-off'))} ` +
         `fresh=${describeSize(measured('form-fresh'))}`
     );
-    // Exactly one `onPress`, and no `onCheckedChange` left over from the old form.
     expect(seen).toEqual(['form-off:press']);
     expect(handleOf('form-off').checked).toBeNull();
 
-    // The control now measures what a press button of the same configuration
-    // measures. Read from each control's own hosted measurement, not from the laid-out
-    // box: once the forms agree the two share a size configuration, and the box is
-    // that shared answer — `measureContent()` per control is the number that says
-    // which view is actually being drawn. On Android the two forms come from one
-    // container, so the same line is the weaker statement there (the events above are
-    // that platform's evidence); on iOS a `Toggle(.button)` pads wider than the
-    // `Button` beside it, which is what goes red with the latch put back.
-    //
-    // Polled, because a form flip is a re-measure and not a re-paint: the size the
-    // hosted view reports follows the new SwiftUI view by a layout pass.
+    // Compared through each control's own `measureContent()`, not the laid-out box:
+    // once the forms agree the two share a sizing key, and the box is that shared
+    // answer. Polled, because the measured size follows the new view by a layout pass.
     await pollUntil(
       () =>
         sameSize(measured('form-off'), measured('form-fresh')) ? true : null,
@@ -1184,9 +974,7 @@ describe('IconButton · G23', () => {
     );
 
     if (Platform.OS === 'android') {
-      // The merged node a reader is handed. `label` is the control's only name — an
-      // IconButton has no text — so a missing `contentDescription` here is a button
-      // TalkBack announces as "button", which is the whole failure this line is for.
+      // An IconButton has no text, so `label` is the control's only name.
       expect(off).toContain('label=Bookmark this');
       expect(off).toContain('toggle=Off');
       expect(on).toContain('toggle=On');
@@ -1195,11 +983,7 @@ describe('IconButton · G23', () => {
       expect(disabled).toContain('disabled=true');
       expect(off).toContain('disabled=false');
     } else {
-      // Nothing to read in-process (the spec says why); the name and the toggle state
-      // are XCUITest's in `real-input:ios`, which reads the element's `value` 1/0
-      // after a real tap. Asserting the refusal is the point: a probe here that
-      // started answering from a copied prop would be a fake, and this line is where
-      // it would show up.
+      // iOS has nothing to read in-process, so the probe must answer `unavailable`.
       for (const report of [off, on, disabled]) {
         expect(report).toBe('unavailable');
       }
@@ -1207,25 +991,9 @@ describe('IconButton · G23', () => {
   });
 
   it('draws the glyph in the control content colour, at the size the rung asked for', async () => {
-    // A `standard` control has no container and no border, so the glyph is the only
-    // thing that can carry the tint: `hits` then means "the icon is painted in the
-    // content colour", not "something pink is somewhere on screen".
-    //
-    // All five rungs are probed, not the two ends. "The top rung paints more than the
-    // middle one" is a statement about two numbers, and a slot pinned to one size can
-    // still satisfy it — if the pin is the bigger one. Asking for every pair of
-    // neighbours turns it into the ladder, which is what `iconSize()` promises.
-    // Material's glyph token is 20 / 24 / 24 / 32 / 40 dp, so four steps of the ladder
-    // must grow the ink and exactly one — `medium` -> `large`, where Material's own
-    // token repeats — must hold it level.
-    //
-    // The last-but-two control is the glyph a caller hands over as a *file*: the
-    // `require('…/share_24px.xml')` road D43 opened, which has to reach the same probe
-    // counter as a resource name. That it loads at all is G19's coverage
-    // (`Button.harness.tsx`'s "draws the imported icon, and does not move the box when
-    // the bytes arrive", whose release-build half is the `sharp-name` / `sharp-metro`
-    // pair beside it); that it draws **in this control's content colour** is this
-    // control's, and no road an app can name an icon by should be able to opt out.
+    // A `standard` control has no container and no border, so only the glyph can
+    // carry the tint. Material's glyph token is 20 / 24 / 24 / 32 / 40 dp: four steps
+    // of the ladder grow the ink and `medium` -> `large` holds it level.
     const tint = processColor('#FF00A0') as number;
     const TINT_CSS = '#FF00A0';
     const SHARE_ASSET = require('../src/assets/icons/share_24px.xml');
@@ -1286,12 +1054,8 @@ describe('IconButton · G23', () => {
     for (const id of ids) {
       reports.set(id, await pixelProbe(id, tint, id));
     }
-    // The imported drawable is the one glyph that arrives rather than being there: in
-    // development Metro serves the `require`'d file and the control loads it, so the
-    // first probe can be earlier than the ink. Wait for the **file**, not for the
-    // colour — the assertion below still reads the colour, and this only stops
-    // "not yet" being read as "never" (Button's `probeUntilDrawn` is the same helper,
-    // for the same reason, and `ms` is the same reading of D43's round trip).
+    // In development Metro serves the `require`d file and the control loads it
+    // asynchronously, so the first probe can be earlier than the ink.
     if (Platform.OS === 'android') {
       const started = nitroUiCore.now();
       while (
@@ -1319,9 +1083,6 @@ describe('IconButton · G23', () => {
     };
 
     if (Platform.OS === 'android') {
-      // Every rung paints *something* in the content colour. A rung whose slot came
-      // back empty — a glyph that never resolved, a tint that never reached the painter
-      // — is invisible to every box assertion in this file.
       for (const size of RUNGS) {
         expect(
           hitsOf(rungId(size)),
@@ -1330,32 +1091,22 @@ describe('IconButton · G23', () => {
         ).toBeGreaterThan(0);
       }
 
-      // A name the app does not have draws nothing, and keeps the box it would have
-      // had: the glyph is sized by the ladder, never by the file (D43).
       expect(hitsOf('probe-missing')).toBe(0);
-      // Material repaints disabled content at 38%, so the *pure* tint is no longer on
-      // screen. A glyph tinted with a constant instead of the control's content colour
-      // keeps its exact colour here and fails this line — C4's red proof for the tint.
+      // Material repaints disabled content at 38%, so the pure tint is no longer on
+      // screen.
       expect(hitsOf('probe-disabled')).toBe(0);
-      // The file road draws too, in the same colour the name road does.
       expect(
         hitsOf('probe-asset'),
         'an `androidIcon` the app `require`s drew nothing in the content colour, so ' +
           "the imported artwork never reached this control's painter"
       ).toBeGreaterThan(0);
 
-      // The rung sizes the art: the top rung's glyph is 40 dp against the medium
-      // rung's 24, so the same colour covers more pixels. This line is asserted first
-      // on purpose. A slot pinned to one point size makes the span 1, and this is the
-      // line that says so — not the step loop below arriving at the same verdict one
-      // rung earlier. Both reds are recorded: pinned, this line is red and the loop is
-      // never reached; with one rung flattened to its neighbour's token, the span is
-      // still over 1.5 and only the loop goes red.
+      // The top rung's glyph is 40 dp against the medium rung's 24, so the same colour
+      // covers more pixels.
       const span = hitsOf(rungId('xxlarge')) / hitsOf(rungId('medium'));
       console.log(`glyph grows with the rung: span=${span.toFixed(2)}`);
       expect(span).toBeGreaterThan(1.5);
 
-      // The ladder, one step at a time, in Material's own token order.
       RUNGS.forEach((size, index) => {
         const previous = RUNGS[index - 1];
         if (previous == null) {
@@ -1376,8 +1127,8 @@ describe('IconButton · G23', () => {
               `so the tint must cover more pixels (${was} -> ${now})`
           ).toBeGreaterThan(1.05);
         } else {
-          // The rung Material separates with its *container* (40 -> 56 dp) and not
-          // with its glyph: level here, and two different boxes in the ladder test.
+          // Material separates these two rungs by container (40 -> 56 dp), not by
+          // glyph, so the ink stays level.
           expect(
             Math.abs(ratio - 1),
             `${previous} -> ${size}: the glyph token is ` +
@@ -1386,13 +1137,13 @@ describe('IconButton · G23', () => {
         }
       });
     } else {
-      // iOS draws `systemImage` and has no Android glyph to sample: it refuses in the
-      // shape the probe helper refuses to read as an answer.
+      // iOS draws `systemImage` and has no Android glyph to sample, so the probe
+      // refuses.
       for (const id of ids) {
         expect(reports.get(id) ?? '').toContain('no pixels');
       }
     }
-    // The missing glyph and the drawn one are the same box, on both platforms.
+    // A glyph the app does not have keeps its box: the rung sizes it, never the file.
     expect(
       sameSize(
         boxes.get('probe-missing') ?? null,
@@ -1402,8 +1153,6 @@ describe('IconButton · G23', () => {
   });
 
   it('takes no press while disabled, on either form', async () => {
-    // The toggle form gets its own disabled control: M3 refuses the tap inside the
-    // toggleable modifier, and `press()` refuses it here — two doors, one answer.
     const DISABLED_TOGGLE = 'Disabled icon toggle';
     function DisabledToggle() {
       return (

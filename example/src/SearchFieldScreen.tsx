@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SearchField, type SearchFieldHandle } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -29,10 +28,8 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** The query a field refuses to leave: every edit is reverted by the handshake. */
 const FROZEN = 'frozen';
 
-/** A plain RN button, so a tap target is not itself a nitro-ui control. */
 function Action({
   label,
   testID,
@@ -55,11 +52,6 @@ function Action({
   );
 }
 
-/**
- * The search rows do not sit in a grey well: a search field brings its own
- * container with it (a Material 3 search bar, a bordered UIKit field), which a well
- * behind it would only muddy.
- */
 function Row({
   title,
   children,
@@ -77,13 +69,7 @@ function Row({
 }
 
 /**
- * Every SearchField configuration G17 has to show, and the fields the real-input
- * suite types into (`CHECKS['search-field']` in `scripts/real-input/android.mjs`,
- * `testRealInputSearchField` in `RealInputTests.swift`). Those checks find a field by
- * its `accessibilityLabel` and read only the `Text` below it, so every echo has a
- * testID and says what JS saw.
- *
- * The focus row and its two buttons come first: a keyboard that is up covers the
+ * The focus row and its two buttons come first: an open keyboard covers the
  * lower half of the screen, and a button under it cannot be tapped.
  */
 export default function SearchFieldScreen() {
@@ -105,8 +91,6 @@ export default function SearchFieldScreen() {
   );
   const focusRef = useRef<SearchFieldHandle>(null);
 
-  // Every edit is refused: JS keeps `FROZEN`, so the echo is what brings the text
-  // back (docs/architecture/core.md §4).
   const refuseEdit = useCallback(() => {
     setFrozenEdits((count) => count + 1);
   }, []);
@@ -114,9 +98,8 @@ export default function SearchFieldScreen() {
   const noteBlur = useCallback(() => setBlurCount((count) => count + 1), []);
   const focusFromJs = useCallback(() => focusRef.current?.focus(), []);
   const blurFromJs = useCallback(() => focusRef.current?.blur(), []);
-  // A keyboard prop that changes while the field keeps focus: two seconds after the
-  // field takes focus it asks for the number pad, with nothing tapped in between (a
-  // button would sit under the open keyboard). A blur puts it back.
+  // The keyboard type changes on a timer, not a button: a button would sit
+  // under the open keyboard.
   const switchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startSwitch = useCallback(() => {
     if (switchTimer.current != null) clearTimeout(switchTimer.current);
@@ -218,10 +201,8 @@ export default function SearchFieldScreen() {
           />
         </Row>
 
-        {/*
-          The keyboard rows come last: every row above sits where the older checks on
-          this screen aim, and these two are reached by the scroll a person makes.
-        */}
+        {/* The keyboard rows come last, so the rows above keep the positions
+            the real-input tests aim at. */}
         <Row title='keyboardType="number-pad"'>
           <SearchField
             testID="search-number"

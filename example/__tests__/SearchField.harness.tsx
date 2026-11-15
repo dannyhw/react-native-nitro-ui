@@ -1,30 +1,3 @@
-/**
- * On-device tests for the SearchField (G17).
- *
- * The typing here is IME-level on both platforms, never a write into the field's state -
- * the same two seams `TextField.harness.tsx` documents and the reasons there still
- * apply: `HarnessUI.typeChar` on iOS (`insertText(_:)` on the first responder, which
- * runs the field's delegate and its `editingChanged`), and the example app's
- * `NitroUiProbe.imeInput` on Android (a Compose field has no `EditText` for
- * `typeChar` to reach, so the text goes in through the focused view's own
- * `InputConnection`, running the `InputTransformation` like a keyboard's would). The
- * field is `UISearchTextField` on iOS and Material 3's search input on Android, and
- * neither distinction changes what the seams do.
- *
- * The clear button and the Search key are this component's own two affordances, so they
- * have their own seams (`nuiTestClear`, `nuiTestSubmit`), each of which runs the control's
- * own handler and its own guard rather than writing the result.
- *
- * The OS-level oracle - keystrokes from outside the app - is the real-input suite
- * (`CHECKS['search-field']`, `testRealInputSearchField`). The "first frame at the
- * declared size, then one correction" half of the sizing rule runs in
- * `Conformance.harness.tsx`, which poisons every control's declaration from one shared
- * table; test 9 here poisons *this* component again on its own, so that a SearchField
- * laid out at a size that belongs to nothing is caught in the file that owns the
- * component too.
- *
- * @file Gates: `harness:ios`, `harness:android`.
- */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -104,13 +77,12 @@ type FieldState = {
 };
 
 /**
- * The `hybridRef` handle, declared here (D14: no public Hybrid View types).
- * `nuiSizingId` is read by the poisoned-sizing test to pick its own events out of the
- * engine's trace.
+ * The `hybridRef` handle. `nuiSizingId` is read by the poisoned-sizing test to pick its
+ * own events out of the engine's trace.
  */
 type FieldHandle = {
-  /** This instance's sizing id, as sent. Read the way `ColdSizing.harness.tsx` reads
-   * it: a prop on the native object, which the wrapper's handle type does not list. */
+  /** This instance's sizing id: a prop on the native object, which the wrapper's
+   * handle type does not list. */
   readonly nuiSizingId?: number;
   measureContent(): { width: number; height: number };
   focus(): void;
@@ -122,9 +94,8 @@ type FieldHandle = {
 };
 
 const handles = new Map<string, FieldHandle>();
-/** A handle this file only *measures*: TextField's, for the test that puts the other
- * control next to this one. Kept apart because `FieldHandle` lists the SearchField
- * seams (`nuiTestState`, `nuiTestClear`) that TextField has no equivalent of. */
+/** A handle this file only measures: the TextField's, for the test that puts it next
+ * to a SearchField. */
 type Measurable = { measureContent(): { width: number; height: number } };
 const measurableHandles = new Map<string, Measurable>();
 const capture = (id: string) => (view: FieldHandle) => {
@@ -190,11 +161,8 @@ async function focusField(id: string) {
 }
 
 /**
- * Move the field's focus away and back, then wait for its report to satisfy `check`.
- *
- * Step 2 of the keyboard test proves a change reaches a field that keeps focus; the
- * loops after it refocus so that every value is also read from a session that *started*
- * with it, which is the path a field that is tapped after a prop change takes.
+ * Move the field's focus away and back, then wait for its report to satisfy `check`,
+ * so the value is read from an input session that started with it.
  */
 async function refocusAndRead(
   id: string,
@@ -327,9 +295,7 @@ function Controlled({
 
 /**
  * A field whose three keyboard props come from the test, so one `rerender` can move
- * them while the field holds the keyboard. `hybridRef` is how the test reads the field
- * back, which is the point: the assertions below are answered by the control, not by
- * the props React was given.
+ * them while the field holds the keyboard.
  */
 function Keyboard({
   keyboardType,
@@ -353,12 +319,9 @@ function Keyboard({
 }
 
 /**
- * What each `keyboardType` is expected to read back as. Both columns are the same
- * mapping (`docs/components/text-field.md`'s table) seen from the other end, and they
- * differ in exactly one row: Android offers one keyboard for both `numeric` and
- * `decimal-pad`, so there the read-back names the keyboard the IME was handed rather
- * than repeating the spelling that asked for it. That is the honest answer, not a lost
- * prop — which is why it is spelled out per platform instead of asserted away.
+ * What each `keyboardType` is expected to read back as. The platforms differ in one
+ * row: Android offers one keyboard for both `numeric` and `decimal-pad`, so there the
+ * read-back names the keyboard the IME was handed.
  */
 const KEYBOARD_READ_BACK: Record<TextFieldKeyboardType, string> = iOS
   ? {
@@ -471,9 +434,8 @@ describe('SearchField', () => {
   });
 
   it('holds maxLength in UTF-16 units and never splits an emoji', async () => {
-    // The Android input path is new even though the rule is TextField's:
-    // `NitroUiTextLimit` is reached through Material's `inputTransformation` here, not
-    // through `BasicTextField`'s, so it is asserted again rather than trusted.
+    // On Android the limit runs through Material's `inputTransformation` here, a
+    // different input path from TextField's.
     render(<Controlled id="capped" initial="" maxLength={5} />);
     await waitForTestId('capped');
     await focusField('capped');
@@ -578,11 +540,10 @@ describe('SearchField', () => {
     ]);
     expect(after.returnKeyType).toBe('search');
 
-    // The barrier twin: a focused field with nothing in it cannot submit — the state of
-    // somebody hammering the Search key before typing. A *fresh* empty field, not this
-    // one: submitting does not clear the query, so "tea" is still in the box here. iOS
-    // gets this from `enablesReturnKeyAutomatically`, Android from a guard on the Search
-    // handler, and the seam runs that same guard either way.
+    // A fresh empty field, not this one: submitting does not clear the query, so "tea"
+    // is still in the box here. iOS refuses an empty submit through
+    // `enablesReturnKeyAutomatically`, Android through a guard on the Search handler,
+    // and the seam runs that same guard either way.
     render(<Controlled id="unsubmitted" initial="" />);
     await waitForTestId('unsubmitted');
     await focusField('unsubmitted');
@@ -595,15 +556,9 @@ describe('SearchField', () => {
   });
 
   it('takes no submit from a Return pressed on a query it has just cleared', async () => {
-    // The route the keyboard's Search key and a **hardware Return** share: `nuiTestSubmit`
-    // runs the field's own `textFieldShouldReturn` (iOS) and its own `onSearch` handler
-    // (Android), guard included. It used to run a mirror of the rule instead - iOS read
-    // `enablesReturnKeyAutomatically` and then submitted past the delegate - which is why
-    // an empty query slipped through a hardware Return unnoticed: UIKit greys out the
-    // software key on an empty field and ignores that distinction for a real key.
-    //
-    // A field that has *had* a query and lost it is the state this catches: the clear
-    // button has just run, the field is still focused, and somebody presses Return.
+    // `nuiTestSubmit` runs the field's own `textFieldShouldReturn` (iOS) and `onSearch`
+    // handler (Android), the route a hardware Return takes. UIKit greys out the
+    // software key on an empty field but still delivers a hardware Return.
     render(<Controlled id="recleared" initial="" />);
     await waitForTestId('recleared');
     await focusField('recleared');
@@ -613,8 +568,7 @@ describe('SearchField', () => {
     const before = eventsOf('recleared').length;
     (await handleOf('recleared')).nuiTestSubmit();
     await sleep(150);
-    // The clear is the last thing this field is told: no `submit:` carrying an empty
-    // query, and no `blur` either - refusing a submit does not send the field away.
+    // No `submit:` carrying an empty query, and no `blur` either.
     expect(eventsOf('recleared').slice(before)).toEqual([]);
     expect((await handleOf('recleared')).nuiTestState().focused).toBe(true);
   });
@@ -628,9 +582,8 @@ describe('SearchField', () => {
           width={300}
         />
         <Controlled id="empty" initial="" width={300} />
-        {/* A TextField in the same column: the two are different controls, and the
-            whole reason SearchField is its own Hybrid View is that their heights
-            differ (docs/architecture/sizing.md §5, D38 item 2). */}
+        {/* A TextField in the same column: the two are different controls, and
+            their heights differ. */}
         <View style={{ width: 300 }}>
           <TextField
             testID="plain-field"
@@ -655,13 +608,12 @@ describe('SearchField', () => {
     // The box is what the field measured, and text does not move it.
     expect(Math.abs((box?.height ?? 0) - wide.height)).toBeLessThan(1);
     expect(Math.abs(empty.height - wide.height)).toBeLessThan(1);
-    // One configuration: two fields measured on their own agree, so the key the wrapper
-    // sends really is a constant.
+    // Two fields measured on their own agree.
     expect(Math.abs((emptyBox?.height ?? 0) - (box?.height ?? 0))).toBeLessThan(
       1
     );
-    // And it is *not* TextField's height: a SearchField that composed TextField's
-    // control would measure 22 pt / 24 dp here and pass every assertion above.
+    // And it is not TextField's height (22 pt / 24 dp), which a SearchField that
+    // composed TextField's control would measure here.
     const plain = await measuredTextBox('plain-field');
     console.log(
       `search field height ${wide.height.toFixed(2)} vs text field ${plain.height.toFixed(2)}`
@@ -693,14 +645,9 @@ describe('SearchField', () => {
     const handle = await handleOf('steady');
     const after = handle.measureContent();
     const boxAfter = harnessUi.queryByTestId('steady');
-    // Two oracles, proved apart. This line is not a constant on Android: it is the
-    // `mutableStateOf` the bar is drawn from, `onExpandedRequest` is the one place a
-    // results view would ever write it, and letting that request store `next` reddens
-    // this line alone - a docked bar keeps its height whatever the flag says. The height
-    // checks below are the oracle iOS has, whose field reports no expanded state to
-    // write, and they are reddened by the thing they actually watch for: give a focused
-    // field a taller minimum and the box moves under the keyboard while this line,
-    // correctly, stays green.
+    // On Android `expanded` is the state the bar is drawn from, and a docked bar keeps
+    // its height whatever that flag says, so the flag is asserted directly. iOS reports
+    // no expanded state, so the height checks below are its oracle.
     expect(handle.nuiTestState().expanded).toBe(false);
     expect(Math.abs(after.height - before.height)).toBeLessThan(1);
     expect(
@@ -724,11 +671,9 @@ describe('SearchField', () => {
       'the placeholder it was given'
     );
     expect(prompted.placeholder).toBe('Search recipes');
-    // "The platform's own word" is a claim per platform, and the device run says which
-    // way each one goes: Material 3's search input answers with the framework's localized
-    // hint, while UIKit's *standalone* `UISearchTextField` has no prompt of its own —
-    // UIKit only writes "Search" inside a search bar — so an unset `placeholder` draws
-    // nothing there. Neither one is English because the library said so.
+    // Material 3's search input answers with the framework's localized hint. UIKit's
+    // standalone `UISearchTextField` has no prompt of its own (UIKit only writes
+    // "Search" inside a search bar), so an unset `placeholder` draws nothing there.
     const unprompted = handles.get('unprompted')?.nuiTestState();
     if (iOS) {
       expect(unprompted?.placeholder).toBe('');
@@ -739,10 +684,8 @@ describe('SearchField', () => {
   });
 
   it('draws its search glyph as a magnifier: a painted ring around an unpainted lens', async () => {
-    // Android only. 0.7.0 drew this glyph from a hand-typed copy of Material's path with
-    // a mistake in it, which filled the lens and drew a key; every other test passed,
-    // because none looks at pixels. The glyph is now Google's Material Symbols `search`
-    // (D43), and this reads what it paints. iOS draws UIKit's own glyph.
+    // Android only: reads the pixels the search glyph paints, which no other test
+    // looks at. iOS draws UIKit's own glyph.
     if (iOS) return;
     render(<Controlled id="glyph" initial="" />);
     await waitForTestId('glyph');
@@ -784,10 +727,8 @@ describe('SearchField', () => {
     await waitForTestId('keyboard');
     await focusField('keyboard');
 
-    // 1. The defaults, read back from a focused field. These three are what v1 fixed
-    // them to, so an app that passes no keyboard prop has to get the field it always
-    // got — and the answer has to come from the control rather than from the snapshot's
-    // own initial value, which says the same words for a field that was never told.
+    // 1. The defaults, read back from a focused field: what an app that passes no
+    // keyboard prop gets.
     const asFound = await stateWhen(
       'keyboard',
       (current) => current.keyboardType !== 'pending',
@@ -799,12 +740,11 @@ describe('SearchField', () => {
     expect(asFound.autoCorrect).toBe(true);
     expect(asFound.returnKeyType).toBe('search');
 
-    // 2. A keyboard change *while the keyboard is up* reaches the focused field, with
-    // focus never moving, so a change that only took effect at the next focus is caught.
-    // iOS: a `UITextInputTraits` setter does not reach a visible keyboard, so the apply
-    // step reloads it (TextField's rule). Android: Compose restarts the input session
-    // when a focused field's keyboard options change; this reads the `EditorInfo` the
-    // field now hands the IME, and real-input reads the IME's own record of the restart.
+    // 2. A keyboard change while the keyboard is up reaches the focused field, with
+    // focus never moving. iOS: a `UITextInputTraits` setter does not reach a visible
+    // keyboard, so the field reloads its input views. Android: Compose restarts the
+    // input session when a focused field's keyboard options change; this reads the
+    // `EditorInfo` the field now hands the IME.
     await rerender(<Keyboard keyboardType="number-pad" />);
     const reloaded = await stateWhen(
       'keyboard',
@@ -817,11 +757,9 @@ describe('SearchField', () => {
     expect(reloaded.focused).toBe(true);
     expect(reloaded.returnKeyType).toBe('search');
 
-    // 3. Every keyboard type, one at a time, each with the field taking focus again: a
-    // prop that is read once at first composition and never again cannot get through this
-    // loop. iOS reads the traits back off the `UITextField`; Android asks the focused
-    // field for the `EditorInfo` it hands the IME, so what is asserted is what the
-    // keyboard was built from, not what the wrapper was passed.
+    // 3. Every keyboard type, one at a time, each with the field taking focus again.
+    // iOS reads the traits back off the `UITextField`; Android asks the focused field
+    // for the `EditorInfo` it hands the IME.
     for (const type of Object.keys(
       KEYBOARD_READ_BACK
     ) as TextFieldKeyboardType[]) {
@@ -837,15 +775,13 @@ describe('SearchField', () => {
           `(return key "${applied.returnKeyType}", focused ${String(applied.focused)})`
       );
       expect(applied.keyboardType).toBe(expected);
-      // Whatever the keys are, the key that submits a query stays Search's: the one
-      // thing a keyboard prop must never move.
+      // Whatever the keys are, the key that submits a query stays Search.
       expect(applied.returnKeyType).toBe('search');
       expect(applied.focused).toBe(true);
     }
 
-    // 4. The two remaining props, each moved on a text keyboard and on its own, so a
-    // failure names the prop that did not move. They are flags of Android's *text* input
-    // class, which is why step 5 asks about them on a keyboard that has them.
+    // 4. The two remaining props, each moved on its own on a text keyboard: they are
+    // flags of Android's text input class.
     for (const capitalisation of [
       'words',
       'characters',
@@ -876,9 +812,7 @@ describe('SearchField', () => {
     );
     expect(refused.autoCorrect).toBe(false);
 
-    // 5. All three at once, on the keyboard that carries only two of them: a number
-    // keyboard has no capitalisation to report on Android (it is a text-class flag), and
-    // the Search key is still the key that submits.
+    // 5. All three at once, on a number keyboard.
     await rerender(
       <Keyboard
         keyboardType="number-pad"
@@ -932,9 +866,8 @@ describe('SearchField', () => {
       render(<Owner second={false} />);
       await waitForTestId('pooled');
       await focusField('pooled');
-      // Short on purpose: `maxLength={9}` caps the field, and both controls truncate an
-      // insertion that would pass it. The claim here is that *some* of what the first
-      // owner typed is sitting in the box, not how much of it.
+      // Short on purpose: `maxLength={9}` caps the field, and an insertion that would
+      // pass it is truncated.
       await typeText('due');
       await stateWhen('pooled', (s) => s.text === 'firstdue', 'the residue');
       cleanup();
@@ -949,8 +882,7 @@ describe('SearchField', () => {
         'the second owner’s default'
       );
       expect(state.focused).toBe(false);
-      // UIKit's own prompt, not the previous row's; Android's, likewise. Either way the
-      // claim is "not the first owner's", which is the residue that matters.
+      // The platform's own prompt, not the first owner's.
       expect(state.placeholder).not.toBe('first owner');
       expect(state.maxLength).toBe(-1);
       expect(state.accessibilityLabel).toBe('');
@@ -958,8 +890,7 @@ describe('SearchField', () => {
       expect(state.nativeEvents).toBe(0);
       expect(state.jsEvents).toBe(0);
       expect(state.returnKeyType).toBe('search');
-      // A keyboard is part of what the previous owner configured, so it goes with the
-      // rest of it: back from the pool the field is the default field again.
+      // The previous owner's keyboard goes with the rest of its configuration.
       expect(state.keyboardType).toBe('default');
       expect(state.autoCapitalize).toBe('none');
       expect(state.autoCorrect).toBe(true);
@@ -969,8 +900,7 @@ describe('SearchField', () => {
       if (recycled) {
         // The reset itself, recorded by `prepareForRecycle` before the second owner's
         // props land. The assertions above cannot see it: every prop is always passed,
-        // so the second owner's own defaults would mask a reset that kept the first
-        // owner's number pad.
+        // so the second owner's defaults would mask a reset that kept the number pad.
         expect(lifetime).toContain('resetKeyboard=default/none/true');
       }
       cleanup();
@@ -983,15 +913,13 @@ describe('SearchField', () => {
   });
 
   it('lays out at its declared fallback and corrects to what it measures', async () => {
-    // Last, because poisoning is a process-wide act: `seedSizingSize` writes the
-    // component's declared size as well as its cached guess, so this leaves the number
-    // back where `scripts/conformance-core.mjs` says it belongs before it finishes.
+    // Last, because poisoning is process-wide: `seedSizingSize` writes the component's
+    // declared size as well as its cached guess, so this puts the number back before it
+    // finishes.
     const POISON = iOS ? { width: 97, height: 11 } : { width: 111, height: 13 };
-    // Must agree with the component's own declaration — `fallbackSize` in
+    // Must agree with the component's own declaration: `fallbackSize` in
     // `HybridNitroUiSearchField.swift`, `FALLBACK_HEIGHT_DP` in
-    // `HybridNitroUiSearchField.kt`, and the table in `scripts/conformance-core.mjs`
-    // that the Conformance rule measures against (which is how 37 pt became 28 pt:
-    // this number was a guess until a device run measured the field).
+    // `HybridNitroUiSearchField.kt`, and the table in `scripts/conformance-core.mjs`.
     const DECLARED = iOS
       ? { width: 200, height: 28 }
       : { width: 200, height: 56 };
@@ -1028,8 +956,7 @@ describe('SearchField', () => {
             `instance's trace: ${traced.map(describeEvent).join(', ') || '(empty)'}`
         );
       }
-      // The first frame is the poison: the engine answered for a cold configuration with
-      // the size the component declared, and nothing else could have produced 11.
+      // The first frame is the poison: only the declared size could have produced it.
       expect(Math.abs(firstFrame.height - POISON.height)).toBeLessThan(1);
       // And it was corrected, to the size the control really is.
       expect(Math.abs(lastCorrection.height - measured.height)).toBeLessThan(1);

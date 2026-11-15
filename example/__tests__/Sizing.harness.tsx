@@ -1,19 +1,3 @@
-/**
- * On-device tests for intrinsic sizing (task T11).
- *
- * These are the questions a JS test cannot answer: did the box a control was
- * laid out with come from the control, was the frame that got drawn already the
- * corrected one, how many Fabric state updates did a mount cost, and what did
- * 200 of them cost. The oracle is three things read together:
- *
- *  - `harnessUi.queryByTestId` - the frame Fabric gave the view (the box);
- *  - `hybridRef.measureContent()` - the size the hosted control measured;
- *  - `nitroUiCore.sizingStats()` / `drainSizingTrace()` - what the sizing engine
- *    decided, and the box each instance was actually drawn at.
- *
- * Counters are process-global and monotonic (the engine outlives a runtime
- * reset), so every assertion is a delta over a snapshot taken in the test.
- */
 import { Modal, Platform, Text, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -45,22 +29,14 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
 type SwitchHandle = {
   readonly value: boolean | null;
   measureContent(): { width: number; height: number };
-  /**
-   * Read through an optional member: v0.1 keeps the Hybrid View prop types off the
-   * public surface (D14), so `@internal` `NitroUiSwitchHandle` does not name it.
-   * The getter exists on both platforms, and it is how a test attributes a trace
-   * event to *its* control instead of to whatever else is mounted (see the cold
-   * test below). `null` here would make that test fail loudly.
-   */
+  /** How a test attributes a trace event to its own control. */
   readonly nuiSizingId?: number;
 };
 
 /**
- * The size this platform's control really is, written out rather than imported
- * (asserting a constant against itself proves nothing): iOS 26+ lays a SwiftUI
- * `Toggle(.switch)` out at 61x28 pt, earlier at 51x31, and a Material 3 Switch
- * is 52x48 dp. Under T11 these numbers must come out of the control, so the
- * point of most tests below is that the box, the measured size and this agree.
+ * The size this platform's control really is, written out rather than imported:
+ * a SwiftUI `Toggle(.switch)` is 61x28 pt on iOS 26+ and 51x31 before, and a
+ * Material 3 Switch is 52x48 dp.
  */
 const osVersion = (
   Platform.constants as { readonly osVersion?: string } | undefined
@@ -74,11 +50,7 @@ const expectedBox = Platform.select({
       : { width: 51, height: 31 },
 });
 
-/**
- * The library's other self-sizing control, for the rule in FIX2: `fillWidth`, a
- * different host, and a height of its own (48 dp on Android, 31 pt on iOS -
- * D14, the same numbers `ColdSizing.harness.tsx` and `Slider.harness.tsx` use).
- */
+/** The Slider fills its container's width and has a height of its own. */
 const SLIDER_COMPONENT = 'NitroUiSlider';
 const SLIDER_HEIGHT = Platform.select({ android: 48, default: 31 })!;
 /** What the Slider declares on this platform, restored after poisoning it. */
@@ -89,7 +61,6 @@ const SLIDER_FALLBACK = Platform.select({
 /** A height that belongs to no control, to make the next Slider cold-wrong. */
 const WRONG_SLIDER = { width: 100, height: 13 };
 
-/** Yoga's box, the size a host measured, or the size a test wants: all the same. */
 type Size = { width: number; height: number };
 
 /** A size is right when it is within what Yoga rounds to. */
@@ -102,9 +73,8 @@ function boxMatches(box: Size | null, size: Size) {
 }
 
 /**
- * The row `example/src/SwitchScreen.tsx` puts a Switch in: a `flex: 1` label that
- * swallows whatever width the control does not take. That is what turns "the
- * control lost its measurement" into something a person can see (FIX2).
+ * A row whose `flex: 1` label swallows whatever width the control does not take,
+ * so a control that loses its width shows up in the label's box too.
  */
 const ROW_STYLE = {
   flexDirection: 'row',
@@ -175,13 +145,8 @@ async function pollUntil<T>(
 
 /**
  * Read the trace until `done` is satisfied, keeping every event read on the way.
- *
- * A `drew` event is sampled one runloop turn after the frame it describes (that
- * is the only way to read a box the platform has actually committed), and a frame
- * only happens when the platform has drawn something - inside a `Modal`, that is
- * after the dialog has been presented. So reading the trace races the sample, and
- * `drainSizingTrace` consumes the ring, which is why the events have to be
- * accumulated across reads (the T10 suite reads the perf ring the same way).
+ * A `drew` event is sampled one runloop turn after the frame it describes, so a
+ * read races the sample, and `drainSizingTrace` consumes the ring.
  */
 async function collectTrace(
   done: (events: NitroUiSizingTraceEvent[]) => boolean,
@@ -199,15 +164,8 @@ async function collectTrace(
 }
 
 /**
- * The `hybridRef` handle for the control a test just rendered, once it arrives.
- *
- * `hybridRef` fires on a props turn *after* the mount that puts the view on screen, so
- * reading the module-level capture right after a render is a race the runner wins at
- * load and loses at rest: CI 41282238854 measured the box at `61.00x28.00` and the
- * content as `null` in the same test, at load1 394 on 3 cores. The box is Fabric's, so
- * it was already right; the handle had simply not been handed over yet. Waiting for the
- * handle is waiting for a thing to exist, which is allowed; the assertions on what it
- * then reports are untouched.
+ * `hybridRef` fires on a props turn after the mount that puts the view on screen,
+ * so the handle is waited for rather than read straight after a render.
  */
 async function handleArrived(what: string): Promise<SwitchHandle> {
   return pollUntil(
@@ -220,14 +178,8 @@ async function handleArrived(what: string): Promise<SwitchHandle> {
 }
 
 /**
- * What the hosted control measured, once it has measured.
- *
- * Same race one level in: the host caches `nil` until its first layout pass has run,
- * and `measureContent()` answers that as `0x0` rather than blocking for the main thread.
- * So a read can be early in two different ways — no handle, or a handle that has not
- * measured yet — and both are "not yet", not "wrong". This waits for a real size, which
- * is the only answer the test can compare against; a control that never measures one
- * still goes red, on the message below.
+ * What the hosted control measured, once it has measured. The host answers `0x0`
+ * until its first layout pass has run, so this waits for a real size.
  */
 async function measuredContent(what: string): Promise<Size> {
   const handle = await handleArrived(what);
@@ -249,7 +201,7 @@ const captureHybrid = (view: SwitchHandle) => {
   hybrid = view;
 };
 
-/** Only `value` is read here; see `NitroUiSliderHandle` for the rest. */
+/** Only `value` is read here. */
 type SliderHandle = {
   readonly value: number | null;
 };
@@ -260,7 +212,10 @@ const captureSliderHybrid = (view: SliderHandle) => {
 
 const stats = () => nitroUiCore.sizingStats();
 
-/** `after - before` for the counters a test asserts on. */
+/**
+ * `after - before` for the counters a test asserts on. The counters are
+ * process-global and monotonic, so every assertion is a delta.
+ */
 function delta(before: NitroUiSizingStats, after: NitroUiSizingStats) {
   return {
     corrections:
@@ -281,24 +236,16 @@ function delta(before: NitroUiSizingStats, after: NitroUiSizingStats) {
 }
 
 /**
- * A size that is *not* this control's size, seeded as the engine's guess before a
- * cold test so those tests can fail (review S8): if a correction is lost, the box
- * stays at this and every "the box was right all along" assertion below catches
- * it. With a guess equal to the real size - which is what the declared fallback
- * is - the same tests pass even when no correction ever arrives, which is how
- * review B1 got through. Provisional since B2, so this is a guess and not an
- * answer, which is exactly what a cold mount starts from.
+ * A size that is not this control's, seeded as the engine's guess before a cold
+ * test. If a correction is lost the box stays at this; a guess equal to the real
+ * size would pass even when no correction arrives.
  */
 const WRONG_GUESS = { width: 40, height: 20 };
 
 /**
- * Make the engine's next cold layout wrong: seed, then drop the answers.
- *
- * `invalidateSizingEnvironment` drops cached answers and keeps the component's
- * last known size as the guess - which the seed just made this one. Every test
- * that cares which guess it starts from declares one: the fallback is
- * process-global and self-heals to whatever was last corrected, so a test that
- * inherits it from its neighbour silently changes what it measures.
+ * Make the engine's next cold layout start from `size`: invalidating drops the
+ * cached answers and keeps the component's last known size as the guess. The
+ * guess is process-global, so every test that depends on it seeds its own.
  */
 function seedGuess(size: { width: number; height: number }) {
   nitroUiCore.seedSizingSize(COMPONENT, '', size.width, size.height);
@@ -320,17 +267,9 @@ function sameSize<T extends Size>(candidate: T | null, size: Size): T | null {
 }
 
 /**
- * How many of the drawn samples were a size that is not the control's.
- *
- * A first frame can legitimately be the guess - that is the whole iOS/Android
- * difference in `docs/architecture/sizing.md` §3 - so a stale sample is counted
- * against each platform's own bar rather than forbidden outright, and every
- * sample must still be either the guess or the real size. There is one sample per
- * mounted instance - `markFirstFrameIfNeeded` samples the frame a host first
- * commits and disarms until its next recycle - so for a cold first instance this
- * counts the one frame D17 allows to be the declared fallback. A correction that
- * never arrives shows up in the box a test asserts, not in a second sample that
- * was never going to exist.
+ * How many of the drawn samples were a size that is not the control's. There is
+ * one sample per mounted instance: the first frame its host commits, which may
+ * legitimately be the guess.
  */
 function drawnFrames(
   trace: NitroUiSizingTraceEvent[],
@@ -354,11 +293,7 @@ function drawnFrames(
   };
 }
 
-/**
- * The width `nuiTestWidth` asks the control for. TEMPORARY (review S1): it is the
- * only size-affecting prop a Switch has until the G2 Button lands, and it is
- * deleted with that task's test (DECISIONS D16).
- */
+/** `nuiTestWidth` is the only size-affecting prop a Switch has. */
 const TEST_WIDTH = 100;
 const wideBox = { width: TEST_WIDTH, height: expectedBox.height };
 
@@ -377,8 +312,8 @@ afterEach(() => {
 describe('Sizing · intrinsic (T11)', () => {
   beforeAll(async () => {
     // Pay the one-time costs (Nitro's first hybrid call, the first hosting
-    // controller / composition) here, as the T10 suite does, so every number
-    // below is a steady-state mount and not the app's first.
+    // controller / composition) here, so every number below is a steady-state
+    // mount and not the app's first.
     const { unmount } = await render(
       <Switch defaultValue testID="size-warm-up" />,
       {
@@ -389,9 +324,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('lays a cold Switch out at the size the control measures', async () => {
-    // The P1 headline: no style anywhere, and the box is the control. It starts
-    // from a guess that is deliberately wrong, so "the box is the control" is only
-    // reachable by a correction that actually happened (review S8).
+    // The guess is deliberately wrong, so the box can only be right through a
+    // correction.
     seedWrongGuess();
     nitroUiCore.setSizingTraceEnabled(true);
     const before = stats();
@@ -415,27 +349,9 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(Math.abs(box!.width - content.width)).toBeLessThan(0.6);
     expect(Math.abs(box!.height - content.height)).toBeLessThan(0.6);
 
-    // The first instance of a configuration pays exactly one state update: the
-    // shadow tree has to learn the size it will keep handing out - asserted on
-    // *this instance's* trace events rather than on the process's counters.
-    //
-    // `toBe(1)` on the global delta was the flake (`corrections=0`, measured on
-    // iOS; the same shape as the Android `sizes a control inside a Modal` flake in
-    // docs/tasks/FOLLOWUPS.md, which G1 could not reproduce either). Both counters
-    // and the seeded guess are process-global, so the delta is this mount's
-    // correction *plus* every other Switch in the process that measured in the
-    // same window - a control an earlier test left mounted, or one of this file's
-    // own, since the runtime is reset between files while the engine is not. And
-    // because the guess is shared, whoever measures first also repairs it: when
-    // that was not this instance it mounted from the right size with nothing left
-    // to correct, and a second control's correction breaks the assertion from the
-    // other side. (G1's other suspect for the Android case is the `wrongGuess`
-    // test that runs immediately before it - docs/tasks/G1-slider.report.md.)
-    //
-    // What a lost correction cannot survive is the box assertions above - a Switch
-    // that was never corrected stays 40x20 (review S8) - and what a *second*
-    // correction cannot survive is this: at most one push for this instance, and
-    // if it did start from the wrong guess then it paid that push.
+    // Asserted on this instance's own trace events, not on the process's counters:
+    // the counters and the seeded guess are process-global, so another Switch that
+    // measures in the same window both moves the delta and repairs the guess.
     const mine = trace.filter(
       (event: NitroUiSizingTraceEvent) =>
         event.instanceId === (hybrid?.nuiSizingId ?? -1)
@@ -449,27 +365,17 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(laidOut.length).toBeGreaterThan(0);
     expect(corrected.length).toBeLessThanOrEqual(1);
     if (boxMatches(laidOut[0]!, WRONG_GUESS)) {
-      // Started from the poison: it must have been outranked, by exactly one push,
-      // with the control's own size as the result.
+      // Started from the wrong guess: exactly one push, to the control's own size.
       expect(corrected.length).toBe(1);
       expect(boxMatches(corrected[0]!, expectedBox!)).toBe(true);
     } else {
-      // Or its guess was already right when it mounted (another Switch in the
-      // process consumed the poison first) - then the only sizes it ever knew are
-      // the two real ones.
+      // Another Switch in the process repaired the guess first: nothing to correct.
       expect(boxMatches(laidOut[0]!, expectedBox!)).toBe(true);
       expect(corrected.length).toBe(0);
     }
-    // What reached a frame. The guess here is deliberately wrong, so this is the
-    // case that separates the platforms (`docs/architecture/sizing.md` §3):
-    // Android's pre-draw listener cancels the draw whose layout was stale, iOS
-    // commits one frame before a size measured natively can exist. What both must
-    // guarantee is that no *third* size appears, and that at most the one frame
-    // D17 allows carries the declared fallback (DECISIONS D17). Whether even that
-    // frame appears is a race this harness cannot decide: the correction is issued
-    // in the same turn, and whether UIKit committed before or after it is not
-    // observable from here - so the count is the assertion, and the box above is
-    // what proves the correction arrived.
+    // With a wrong guess the platforms differ: Android's pre-draw listener cancels
+    // the draw whose layout was stale, iOS can commit one frame before a natively
+    // measured size exists. Neither may draw a third size.
     const frames = drawnFrames(trace, expectedBox!, WRONG_GUESS);
     expect(frames.drawn).toBeGreaterThan(0);
     expect(frames.everySampleExplained).toBe(true);
@@ -481,8 +387,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('costs the next instance nothing at all', async () => {
-    // Same epoch, same configuration: the cache has the answer, so the ledger
-    // marks the instance exact and the report is dropped instead of queued.
+    // Same epoch, same configuration: the cache has the answer, so the report is
+    // dropped instead of queued.
     const before = stats();
     const { unmount } = await render(
       <Switch defaultValue testID="warm" hybridRef={captureHybrid} />
@@ -500,11 +406,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('pre-warms from the declared size so the first mount is exact', async () => {
-    // `prewarmSizing` seeds from the component's *declared* number - the one D14
-    // says must be accurate per OS - and `seedSizingSize` writes that same declared
-    // number, so a test that pre-warms has to declare one instead of inheriting the
-    // last test's poisoned guess. An accurate declaration is the library's own case;
-    // a wrong one is what `corrects a wrong guess before the user sees it` covers.
+    // `prewarmSizing` seeds from the component's declared size, which
+    // `seedSizingSize` overwrites, so this test declares the right one first.
     seedRightGuess();
     nitroUiCore.invalidateSizingEnvironment();
     expect(nitroUiCore.prewarmSizing(['NitroUiNoSuchComponent'])).toBe(0);
@@ -525,8 +428,7 @@ describe('Sizing · intrinsic (T11)', () => {
         `trace=${JSON.stringify(trace.map((e) => `${e.stage}:${e.width.toFixed(1)}`))}`
     );
     expect(boxMatches(box, expectedBox!)).toBe(true);
-    // Pre-warmed is the zero-correction case: the first instance is laid out
-    // from the cache, so there is nothing to push.
+    // The first instance is laid out from the cache, so there is nothing to push.
     expect(d.corrections).toBe(0);
     expect(
       trace.filter((e: NitroUiSizingTraceEvent) => e.stage === 'corrected')
@@ -548,9 +450,7 @@ describe('Sizing · intrinsic (T11)', () => {
           />
         ))}
       </View>,
-      // The default render wait is one second, which is a single control's
-      // budget: 200 hosted controls - a Compose composition each on Android -
-      // need more than that to mount.
+      // The default render wait is one second; 200 hosted controls need more.
       { timeout: 25000 }
     );
     await waitForTestId(`${prefix}-${count - 1}`, 20000);
@@ -558,14 +458,9 @@ describe('Sizing · intrinsic (T11)', () => {
   }
 
   /**
-   * Wait until every row of a mounted batch is laid out at `size`.
-   *
-   * A batch that has *mounted* is not a batch that has been corrected: a flush
-   * may push only two synchronous updates (D17), so the rest of a cold batch
-   * reaches its control's size on a later frame than the one that mounted it.
-   * The last view appearing therefore says nothing about the other 199, and
-   * sweeping their boxes the moment it does is a race that loses on a loaded
-   * machine - while still asserting, in the end, that all of them are right.
+   * Wait until every row of a mounted batch is laid out at `size`. A flush pushes
+   * only a few corrections synchronously, so the rest of a cold batch reaches its
+   * size on a later frame than the one that mounted it.
    */
   async function waitForAllBoxes(prefix: string, count: number, size: Size) {
     const wrongRows = () => {
@@ -596,10 +491,8 @@ describe('Sizing · intrinsic (T11)', () => {
   }
 
   it('mounts 200 at the measured size with nothing to correct', async () => {
-    // The pre-warmed batch (R4 answered the easy way): one configuration, one
-    // cached size, so 200 instances cost 200 layouts and no state updates. Declared
-    // first, for the same reason: pre-warming is only the zero-cost case when the
-    // declared number is the control's own.
+    // One configuration, one cached size: 200 instances cost no state updates.
+    // Pre-warming is only free when the declared size is the control's own.
     seedRightGuess();
     nitroUiCore.invalidateSizingEnvironment();
     nitroUiCore.prewarmSizing([COMPONENT]);
@@ -607,8 +500,6 @@ describe('Sizing · intrinsic (T11)', () => {
     const { mountedIn, unmount } = await mountMany(200, 'many-warm');
     const d = delta(before, stats());
 
-    // All 200, not a sample: a batch where only the first few got the cached size
-    // is exactly the failure this suite must not sleep through (review S8).
     for (let row = 0; row < 200; row += 1) {
       const box = harnessUi.queryByTestId(`many-warm-${row}`);
       expect(boxMatches(box, expectedBox!)).toBe(true);
@@ -622,19 +513,14 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('corrects a cold batch of 200 with one correction each, few of them immediate', async () => {
-    // R4: N instances missing the cache in one turn. They share a configuration,
-    // so the first report corrects every instance that needs it and the other
-    // 199 reports are dropped; what must stay bounded is how many of those
-    // updates are synchronous (`unstable_Immediate`), because each one can force
-    // a same-turn commit.
+    // The instances share a configuration, so the first report corrects every one
+    // and the other 199 reports are dropped. What must stay bounded is how many of
+    // those updates are synchronous, because each can force a same-turn commit.
     seedWrongGuess();
     const before = stats();
     const { mountedIn, unmount } = await mountMany(200, 'many-cold');
     const d = delta(before, stats());
 
-    // Every one of the 200, once the batch has settled: the guess was wrong for
-    // all of them, so a correction that was dropped shows up here as a box that
-    // never moves off it.
     await waitForAllBoxes('many-cold', 200, expectedBox!);
     // The flush this batch caused, sampled while it is still the most recent one.
     const flushMs = stats().lastFlushMs;
@@ -644,61 +530,24 @@ describe('Sizing · intrinsic (T11)', () => {
         `changedFlushes=${d.changedFlushes} flushMs=${flushMs.toFixed(3)} ` +
         `maxFlushMs=${d.maxFlushMs.toFixed(3)}`
     );
-    // One update per instance, and never more synchronous ones than the platform
-    // is allowed to spend per flush: 2 on iOS, where `flush` runs at the end of a
-    // turn whose commit has not happened yet (T11 measured 8.5ms for this batch),
-    // and 1 on Android, whose flush runs inside the pre-draw pass it is about to
-    // cancel. One is the floor D17 asks for, not a known way to correct a whole
-    // batch: the synchronous push clones one family, so the other 199 keep the
-    // measurement they cached until their own update arrives. What T12 measured at
-    // budget 1 is that this batch drew `stale=0` on one device (the test below logs
-    // it and does not assert it). A second push buys nothing measured: first batch
-    // in a process, 38.80ms with two pushes against 36.76ms with one; median of
-    // three rounds, 18.88ms against 12.84ms - and at 500 rows 42.51ms against
-    // 26.77ms (-32% / -37%).
+    // Synchronous updates allowed per flush: iOS flushes at the end of a turn whose
+    // commit has not happened yet, Android inside the pre-draw pass it is about to
+    // cancel.
     const immediateBudget = Platform.OS === 'android' ? 1 : 2;
     expect(d.corrections).toBe(200);
     expect(d.immediate).toBeLessThanOrEqual(
       immediateBudget * Math.max(d.flushes, 1)
     );
-    // At least one: the instance that reported must be corrected inside the frame
-    // this flush cancels, which is the Android half of D17 (`stale=0` for a single
-    // cold control is asserted by the cold-Switch test above).
+    // At least one: the instance that reported is corrected inside the frame this
+    // flush cancels.
     expect(d.immediate).toBeGreaterThanOrEqual(1);
     expect(d.batched).toBe(d.corrections - d.immediate);
-    // The engine's work must stay small next to the mount, and must not be 200
-    // synchronous commits. One report corrects every instance that shares the
-    // configuration, so the batch costs one flush. Cap-ing corrections per flush is
-    // not the knob it looks like: T12 phase 2 found the whole cost is the one
-    // synchronous commit, so spending it on fewer instances would keep the ms and
-    // lose the correction. The knob is the budget above - how many commits, not how
-    // many instances per commit.
-    //
-    // `maxFlushMs` cannot carry this assertion: it is a process-wide high-water
-    // mark, so it also reports every other test's flushes - a test that never
-    // flushed at all reads back the slowest flush of the run. `lastFlushMs` is
-    // this batch's own. Measured here, debug build: 8.5ms on iOS. On Android it is
-    // the re-layout the synchronous push triggers inside the pre-draw pass, which
-    // is the same pass that cancels the wrong-size frame (D17) - the frame it
-    // spends is the frame it replaces. T12 phase 2 attributed that re-layout: it is
-    // the single Fabric commit, and the engine's own work around it (200 reports,
-    // one correction, 199 async enqueues) is 0.09ms. One commit of a 200-host tree
-    // cost 38.80ms as the first batch in a process and 14.08-18.88ms in the rounds
-    // after it, and T11 measured 84-125ms for the same batch on a loaded one, so
-    // this is the load-bound number, not a target. X37 removed the two duration bars
-    // that used to sit here (`flushMs` under a tenth of the batch's own mount, and
-    // T11's 40 ms / 250 ms bar): no gate run judges a wall-clock bar - `HARNESS_TIMING`
-    // is unset in every one - and this test's verdict is structural and on every run:
-    // one correction per instance, one flush for the batch, at most
-    // `immediateBudget` of them immediate. `flushMs` is still printed above, so a
-    // regression is visible in the log; a duration gets its verdict in `bench/`.
     unmount();
   });
 
   it('keeps an explicit width, height and flex in charge', async () => {
-    // Acceptance: measured sizing must not take a user's layout away. The base
-    // style is a default, applied before the caller's, so anything the caller
-    // decides - including the stretch this base style avoids - still wins.
+    // The base style is a default, applied before the caller's, so anything the
+    // caller decides still wins.
     const { unmount } = await render(
       <View style={{ width: 300 }}>
         <Switch
@@ -724,27 +573,19 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     expect(Math.abs(fixed!.width - 120)).toBeLessThan(0.6);
     expect(Math.abs(fixed!.height - 60)).toBeLessThan(0.6);
-    // `flex: 1` grows the axis it applies to; the measured size keeps the other
-    // one. What keeps the cross axis from filling is the wrapper's
-    // `alignSelf: 'flex-start'` base style - a measured size never stops a
-    // stretch, so the fill has to be asked for, below (review N6).
+    // `flex: 1` grows the main axis; the wrapper's `alignSelf: 'flex-start'` base
+    // style keeps the cross axis at the measured size.
     expect(Math.abs(flexed!.width - 300)).toBeLessThan(0.6);
     expect(Math.abs(flexed!.height - expectedBox!.height)).toBeLessThan(0.6);
-    // And stretch does what it says, on the axis it stretches.
     expect(Math.abs(stretched!.width - 300)).toBeLessThan(0.6);
     expect(Math.abs(stretched!.height - expectedBox!.height)).toBeLessThan(0.6);
     unmount();
   });
 
   it('corrects a wrong guess before the user sees it', async () => {
-    // R2, the case the plan is actually about: a size the engine believes that is
-    // not the control's size. The box must become the control's real size, and the
-    // frames in between must not show the wrong one.
-    //
-    // Both phases seed *after* the epoch they are about (a measured size also
-    // overwrites the component's fallback, so one correction self-heals the guess
-    // for the next epoch) - which is what an app does when it pre-warms a number
-    // for an environment that has since moved.
+    // Both phases seed after the epoch they are about: a measured size overwrites
+    // the component's fallback, so one correction repairs the guess for the next
+    // epoch.
     const wrong = { width: 120, height: 90 };
     nitroUiCore.invalidateSizingEnvironment();
     nitroUiCore.seedSizingSize(COMPONENT, '', wrong.width, wrong.height);
@@ -754,20 +595,15 @@ describe('Sizing · intrinsic (T11)', () => {
       <Switch defaultValue testID="poisoned" hybridRef={captureHybrid} />
     );
     await waitForTestId('poisoned');
-    // Review B2: a seeded size is a *guess*, not an answer, so the very first
-    // instance corrects it instead of being told to stay wrong. It used to cost
-    // nothing here - which was the bug, because the wrong size then outlived every
-    // later report for that configuration, and a box that is the wrong size is how
-    // T10's paint-outside-and-dead-touch bug reached a screen.
+    // A seeded size is a guess, not an answer, so the first instance corrects it.
     expect(delta(before, stats()).corrections).toBe(1);
     expect(boxMatches(harnessUi.queryByTestId('poisoned'), expectedBox!)).toBe(
       true
     );
     first.unmount();
 
-    // The environment moves (what `traitCollectionDidChange` and
-    // `onConfigurationChanged` do for real): the cached answer is gone, and the
-    // guess left behind belongs to a control that is no longer that size.
+    // The environment moves, as a trait or configuration change does: the cached
+    // answer is gone and the guess left behind is wrong.
     nitroUiCore.invalidateSizingEnvironment();
     nitroUiCore.seedSizingSize(COMPONENT, '', wrong.width, wrong.height);
     expect(stats().environmentEpoch).toBe(cold + 1);
@@ -787,19 +623,12 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(boxMatches(repairedBox, expectedBox!)).toBe(true);
     expect(d.corrections).toBe(1);
     expect(d.immediate).toBe(1);
-    // The log of one correction: laid out at the stale size, corrected, and what
-    // the platform reported drawing. On Android a frame whose layout was stale is
-    // cancelled (`OnPreDrawListener` returns false), which is what
-    // `changedFlushes` counts; iOS flushes below Core Animation's commit
-    // observer, so its stale layout is never committed.
     const stages = trace.map((e: NitroUiSizingTraceEvent) => e.stage);
     expect(stages).toContain('laidOut');
     expect(stages).toContain('corrected');
-    // What reached a frame. A size measured natively cannot arrive before the
-    // native side has laid the control out, so the turn a stale guess is laid out
-    // in can be committed before the correction exists: iOS commits it (one
-    // frame), Android cancels the draw (`changedFlushes`). Either way no
-    // third size appears, and the last frame drawn is the control's own.
+    // A natively measured size cannot arrive before the control is laid out, so the
+    // stale layout can be committed first: iOS draws it for one frame, Android
+    // cancels the draw (`changedFlushes`). Either way no third size appears.
     const drawn = trace.filter(
       (event: NitroUiSizingTraceEvent) => event.stage === 'drew'
     );
@@ -815,21 +644,8 @@ describe('Sizing · intrinsic (T11)', () => {
       (event: NitroUiSizingTraceEvent) =>
         Math.abs(event.width - expectedBox!.width) >= 1.5
     ).length;
-    // The platforms differ here, and each is asserted at its own bar (review S6):
-    // Android's pre-draw flush cancels the draw whose layout was stale, so a
-    // correction inside the per-turn budget paints nothing wrong - 0 stale frames,
-    // and an Android regression to 1 has to fail this test rather than pass it.
-    // iOS flushes below Core Animation's commit observer, which fixes a correction
-    // that arrives within the turn but not one that can only exist in the next -
-    // and a natively measured size can. So iOS gets at most one stale frame. No
-    // third size appears on either, and what stays on screen is the box asserted
-    // above, which is the control's own. A correction *past* the per-turn budget
-    // is not covered by this case; the cold-batch test above measures that, and
-    // `docs/architecture/sizing.md` states the honest number for it.
-    // iOS is `<= 1` rather than `= 1` on purpose: with the first-commit measure
-    // (review S5) a correction can land inside the turn that mounted the view, in
-    // which case 0 is the right answer there too. Tightened to what the run
-    // measures; Android is pinned at 0 either way.
+    // Android gets no stale frame. iOS gets at most one: a correction can also land
+    // inside the turn that mounted the view, and then there is none.
     expect(staleFrames).toBeLessThanOrEqual(Platform.OS === 'android' ? 0 : 1);
     console.log(
       `poison frames: drawn=${String(drawn.length)} stale=${String(staleFrames)} ` +
@@ -837,7 +653,7 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     second.unmount();
 
-    // Self-healing: the real size is the cache's now, so a third mount is clean.
+    // The real size is cached now, so a third mount is clean.
     const afterRepair = stats();
     const third = await render(<Switch defaultValue testID="after-repair" />);
     expect(boxMatches(await waitForTestId('after-repair'), expectedBox!)).toBe(
@@ -848,37 +664,10 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('sizes a control inside a Modal', async () => {
-    // R6, for sizing. RN's `Modal` is a second window with its own
-    // `ViewTreeObserver`, which stops scheduling draws once the dialog has been
-    // presented. That makes it the shape of test that asks whether a queued
-    // correction lands on its own: Android's flush is a pre-draw listener, and a
-    // pre-draw listener is a request to be consulted at the next draw, not a
-    // request for one. `scheduleSizingFlush` therefore requests the draw as well
-    // (`postInvalidateOnAnimation`), and the poisoned fallback below is what makes
-    // the cold mount in it about more than the happy path.
-    //
-    // Being exact about what this can prove, because the review asked for a red: a
-    // correction is only ever *produced* by a native measure (Compose's `Layout`
-    // block is the only caller of `reportToSizingEngine`), so a report always
-    // arrives inside a traversal - and an RN dialog does not stop at that
-    // traversal. Instrumented on `nitroui_t01`, the dialog traversed again 4 ms and
-    // 11 ms after the report, and with the draw request removed this test passed 9
-    // runs out of 9. The round-0 flake that started this (one run in three,
-    // `queued=1, flushes=0`) is the rare ordering where the composition's
-    // invalidations and Fabric's layout pass collapse into a single traversal, and
-    // no JS-side arrangement of mounts, re-renders, hidden wrappers or settled
-    // dialogs reproduced it. So the drain cannot be forced from JS, and the
-    // mechanism is guarded where a guard can see it:
-    // `scripts/check-sizing-flush-draw-request.sh`, which is red without the
-    // request and runs inside `bun run check`. What is asserted here is the
-    // behaviour that depends on it - in both shapes the dialog offers: the cold
-    // mount below, and a size that changes while the dialog is already presented
-    // and quiet, where there is no presenting draw left to hide behind.
-    //
-    // The harness cannot query a testID inside that window (H9, H10), so both
-    // oracles are read from inside the host: the size the control measured, and
-    // this instance's own trace events - not the process's counters, and not any
-    // instance's `drew` sample, which stops on the wrong side of a race.
+    // RN's `Modal` is a second window that stops scheduling draws once the dialog is
+    // presented, and Android's flush runs in a pre-draw listener, so a queued
+    // correction has to request a draw as well. The harness cannot query a testID
+    // inside that window, so the size and the trace are read from the control.
     seedWrongGuess();
     nitroUiCore.setSizingTraceEnabled(true);
     const before = stats();
@@ -905,9 +694,8 @@ describe('Sizing · intrinsic (T11)', () => {
         ),
       15000
     );
-    // This instance's own `corrected`, and nothing less: it is recorded when a
-    // flush pushes the correction into this instance's Fabric state, so a report
-    // left queued in a window nobody redraws fails right here.
+    // `corrected` is recorded when a flush pushes the correction into this
+    // instance's Fabric state, so a report left queued never satisfies the wait.
     const trace = await collectTrace(
       (events) =>
         events.some(
@@ -932,10 +720,8 @@ describe('Sizing · intrinsic (T11)', () => {
         `trace=${String(JSON.stringify(own.map(sizingEventLabel)))} d=${JSON.stringify(cold)}`
     );
 
-    // The dialog mounted from the poisoned guess (the wait above proves a report
-    // reached the engine, and `laidOut` names the box the first measure answered
-    // with), so `corrected` is the control's own measurement outranking it - and
-    // it can only be that instance's own.
+    // The dialog mounted from the wrong guess, and the control's own measurement
+    // outranked it.
     expect(laidOut.length).toBeGreaterThan(0);
     expect(Math.abs(laidOut[0]!.width - WRONG_GUESS.width)).toBeLessThan(1.5);
     expect(Math.abs(laidOut[0]!.height - WRONG_GUESS.height)).toBeLessThan(1.5);
@@ -946,24 +732,17 @@ describe('Sizing · intrinsic (T11)', () => {
       expect(Math.abs(event.width - content.width)).toBeLessThan(0.6);
       expect(Math.abs(event.height - content.height)).toBeLessThan(0.6);
     }
-    // The dialog is the only window doing work, so the flush that pushed this
-    // correction is this mount's.
+    // The dialog is the only window doing work, so the flush is this mount's.
     expect(cold.flushes).toBeGreaterThan(0);
-    // And no third box: whatever the dialog drew (a `drew` sample may or may not
-    // exist for a dialog host - RN mounts its tree on the second surface
-    // separately, so the sample can miss the sizing id), every sample is the guess
+    // A `drew` sample may not exist for a dialog host; any that does is the guess
     // or the control's size.
     expect(drawnFrames(own, content!, WRONG_GUESS).everySampleExplained).toBe(
       true
     );
 
-    // A size that arrives *after* the dialog has been presented, drawn, and gone
-    // quiet. The wide configuration is cold, so this control is laid out at the
-    // component's guess and has to be corrected to the wide size - and the only
-    // thing that can apply that correction is a traversal of a dialog window that
-    // has no reason left to draw. This is the shape `postInvalidateOnAnimation`
-    // exists for, and the phase that would fail first if the request were dropped
-    // on a device slow enough to miss the redraw the composition itself causes.
+    // A size that arrives after the dialog has been presented, drawn and gone quiet:
+    // the wide configuration is cold, and only a traversal of a window with no
+    // reason left to draw can apply its correction.
     nitroUiCore.drainSizingTrace();
     const beforeWide = stats();
     await rerender(
@@ -995,13 +774,8 @@ describe('Sizing · intrinsic (T11)', () => {
     const lateCorrected = lateOwn.filter(
       (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
     );
-    /**
-     * Read directly rather than through `measuredContent`, because this handle has
-     * already reported a *different* size: the control above was laid out at the
-     * narrow box, and `measuredContent` waits only for "a size", which this one still
-     * holds. Same reason it is read before the second render below — inside one test,
-     * the module-level capture can name either control.
-     */
+    // Read directly: `measuredContent` waits only for "a size", and this handle
+    // already holds the narrow one.
     const wideContent = hybrid?.measureContent() ?? null;
     console.log(
       `modal late: content=${describeBox(wideContent)} ` +
@@ -1015,12 +789,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('takes a storm of prop changes without re-sizing', async () => {
-    // R9. Rapid props are what a drag, a slider or a keyboard does: many turns in
-    // a row, none of which change a size. Every one of them runs the measure path,
-    // so the questions are whether the engine re-reports a size it already got
-    // right - each re-report being a Fabric state update and a possible re-render -
-    // and whether the control's state and its box both still match the last props.
-    // A colour prop is in there because it is processed natively every turn.
+    // None of these turns changes a size. The colour prop is there because it is
+    // processed natively every turn.
     nitroUiCore.invalidateSizingEnvironment();
     let value = false;
     const { rerender, unmount } = await render(
@@ -1041,10 +811,8 @@ describe('Sizing · intrinsic (T11)', () => {
         />
       );
     }
-    // One turn per `rerender`, and nothing awaited between the render and the
-    // read: ten renders queued in a single JS turn is not expressible here,
-    // because the harness waits for its render callback per turn and the second
-    // concurrent one times out ("Element did not update within 1000ms").
+    // One turn per `rerender`: the harness waits for its render callback per turn,
+    // so several renders queued in one JS turn would time out.
 
     const box = harnessUi.queryByTestId('storm');
     const d = delta(mid, stats());
@@ -1056,20 +824,12 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     expect(hybrid?.value).toBe(value);
     expect(boxMatches(box, expectedBox!)).toBe(true);
-    // Nothing here changed a size: zero state updates, and the variant key stayed
-    // the one entry it was. How the turn got there is logged rather than asserted:
-    // the engine is on the layout and native-measure paths, not on props, so a
-    // prop turn does not even reach the report path - which is the cheap answer to
-    // R9, and the log is where the counter that proves it can be read.
+    // Nothing here changed a size: no state updates and no new cache entry.
     expect(d.corrections).toBe(0);
     expect(stats().cachedSizes).toBe(cached);
     unmount();
   });
 
-  /**
-   * Wait for the box of `testID` to be `size`, so a size is asserted once the
-   * correction has actually reached the layout.
-   */
   async function waitForBoxSize(testId: string, size: Size, what: string) {
     return await pollUntil(
       () => {
@@ -1089,8 +849,8 @@ describe('Sizing · intrinsic (T11)', () => {
   }
 
   /**
-   * Wait for the box of `testID` to be `height` tall. A `fillWidth` control's
-   * width belongs to its container, so its height is the half a test can name.
+   * A `fillWidth` control's width belongs to its container, so its height is the
+   * half a test can name.
    */
   async function waitForBoxHeight(
     testId: string,
@@ -1112,28 +872,8 @@ describe('Sizing · intrinsic (T11)', () => {
     );
   }
 
-  /**
-   * FIX2 (found by T15's real-input runner, and it reproduces with no touch).
-   *
-   * A controlled `Switch` re-rendered with a new `value` was laid out as though it
-   * had no width at all: the row's label grew by exactly the Switch's 61 pt, and
-   * SwiftUI drew the `Toggle` at its intrinsic size past the right edge of the
-   * window, out of the accessibility tree. `value` changes no size, so the turn may
-   * cost no measure of the control and no state update - the box has to stay the
-   * one the control already earned.
-   *
-   * It starts from `seedWrongGuess`, because that is the state the bug needs: an
-   * instance the engine had to *correct*. That is an ordinary cold mount (a first
-   * answer that is not the control's size - the pre-T14 first frame, a control
-   * whose real size differs from the number it declares, the first mount after an
-   * environment change), and it is the only state in which React's own revision can
-   * still be carrying the superseded box - its Yoga cache and `layoutMetrics_` both
-   * predate the correction, and nothing re-dirties them (D20): with the
-   * bug the box below comes back 40x20, the seeded guess, and stays there for the
-   * rest of the mount, because `measureContent` is never reached again to notice.
-   * Mounting a second Switch heals it - that correction is for every instance of
-   * the configuration - which is how T15 saw a box that only broke once.
-   */
+  // Starts from a wrong guess, because the box is only at risk on an instance the
+  // engine had to correct: React's own revision can still carry the superseded box.
   it('keeps a mounted Switch laid out when only its value changes', async () => {
     seedWrongGuess();
     const row = (value: boolean) => (
@@ -1171,24 +911,15 @@ describe('Sizing · intrinsic (T11)', () => {
         hybrid?.measureContent() ?? null
       )} d=${String(JSON.stringify(d))}`
     );
-    // Both halves: the control's own box is the bug, and the sibling's is what a
-    // person sees - Yoga gave the row's other child the width that went missing.
+    // The sibling too: Yoga gives the row's other child any width the control loses.
     expect(boxMatches(box, expectedBox!)).toBe(true);
     expect(sameFrame(box, startSwitch)).toBe(true);
     expect(sameFrame(label, startLabel)).toBe(true);
-    // The turn costs a re-ask, not another commit: fixing this by pushing state on
-    // every prop change would show up here.
+    // The turn must cost no state update.
     expect(d.corrections).toBe(0);
     unmount();
   });
 
-  /**
-   * The same turn for the other self-sizing control, so the rule is tested as a
-   * rule and not as a Switch workaround: `fillWidth`, a different host, and a
-   * sibling stacked above it instead of beside it. A Slider's `value` never moves
-   * its size, so its box and its sibling's both have to stand still - and, as for
-   * the Switch, without a state update to make them.
-   */
   it('keeps a mounted Slider laid out when only its value changes', async () => {
     nitroUiCore.seedSizingSize(
       SLIDER_COMPONENT,
@@ -1233,8 +964,8 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(sameFrame(label, startLabel)).toBe(true);
     expect(d.corrections).toBe(0);
     unmount();
-    // Seeding overwrites the declaration for this process, so the accurate one
-    // goes back on the way out (the rule `ColdSizing.harness.tsx` follows).
+    // Seeding overwrites the declared size for this process, so the accurate one
+    // goes back on the way out.
     nitroUiCore.seedSizingSize(
       SLIDER_COMPONENT,
       '',
@@ -1244,11 +975,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   /**
-   * Wait for the box of `testID` to be `width` wide, so a size is asserted once it
-   * has actually reached the layout rather than at the moment the props were sent.
-   * A correction is asynchronous by nature (the native measure has to happen
-   * first), so "the box is right" is always a wait, never an instant read - the
-   * message names the configuration that failed to arrive, with the box it did.
+   * A correction is asynchronous (the native measure has to happen first), so the
+   * box is waited for, never read once.
    */
   async function waitForBoxWidth(testId: string, width: number, what: string) {
     return await pollUntil(
@@ -1267,16 +995,9 @@ describe('Sizing · intrinsic (T11)', () => {
   }
 
   it('re-measures when a size-affecting prop changes the configuration', async () => {
-    // Review S1: `shouldNewRevisionDirtyMeasurement` compared a node with itself,
-    // so a `nuiSizingKey` change never dirtied Yoga's measurement and the instance
-    // kept its old size forever. The discriminator is that both configurations are
-    // already *warm* when the key moves: then the new size has to come out of the
-    // measure pass, and the turn must cost no state update. With the bug the node
-    // keeps the old measurement, and the only road to the new size is a correction
-    // - which is exactly what the zero below refuses to accept.
-    // The guess is this platform's real size: with a wrong one every mount below
-    // would pay a correction of its own and the zero would be measuring the wrong
-    // thing.
+    // Both configurations are warm when the key moves, so the new size has to come
+    // out of the measure pass, at no state update. The guess is the real size: with
+    // a wrong one every mount below would pay a correction of its own.
     seedRightGuess();
     const warm = await render(
       <View>
@@ -1328,30 +1049,16 @@ describe('Sizing · intrinsic (T11)', () => {
       )} d=${JSON.stringify(d)}`
     );
     expect(boxMatches(box, wideBox)).toBe(true);
-    // The measure pass answered it: no Fabric state update was needed, and no new
-    // configuration appeared - the key that moved was already measured.
+    // The measure pass answered it: no state update, and no new cache entry.
     expect(d.corrections).toBe(0);
     expect(stats().cachedSizes).toBe(cached);
     unmount();
   });
 
   it('measures the width that arrived with the first commit', async () => {
-    // The mount-time half of the review S1 rule, and round 3's root cause:
-    // `commit()` measured in the same turn as `model.objectWillChange.send()`, and
-    // `send()` only *invalidates* SwiftUI's graph - the body is re-evaluated in a
-    // later update pass. The first measure therefore numbered the content the props
-    // had just replaced (the plain Switch), and the engine filed that as this
-    // configuration's size and stopped asking: 61x28 handed to a control that is
-    // 100 wide, believed exact, and never corrected again.
-    //
-    // The fixture starts from the *accurate* declared size (D14), and that choice
-    // is the test. A poisoned guess is the reflex and is wrong here: it makes the
-    // box move on the first correction, and on iOS a box move is what triggers the
-    // re-measure that then finds the real content - the stale number survives one
-    // frame and the test passes anyway. Starting at the declared 61x28, the stale
-    // number agrees with the guess, the box never moves, and nothing but a measure
-    // of the actual content can reach 100. This is also the case a real control
-    // hits: its declared fallback is right for the library and wrong for it.
+    // The guess is the accurate declared size on purpose. A wrong guess makes the box
+    // move on the first correction, and on iOS a box move triggers a re-measure that
+    // finds the real content, which would hide a first measure of stale content.
     seedRightGuess();
     nitroUiCore.setSizingTraceEnabled(true);
     const before = stats();
@@ -1382,25 +1089,20 @@ describe('Sizing · intrinsic (T11)', () => {
       )}`
     );
     expect(boxMatches(box, wideBox)).toBe(true);
-    // The control's own number rather than Yoga's box: this is what gets cached as
-    // the configuration's size, and it was 61x28 while the model asked for 100.
+    // The control's own number, which is what gets cached for the configuration.
     expect(boxMatches(measured, wideBox)).toBe(true);
-    // One state update, because this configuration had never been measured: the
-    // declared number it started from was provisional and the control outranks it
-    // (review B2). Zero here would mean the wide control was never asked.
+    // One state update: this configuration had never been measured. Zero would
+    // mean the wide control was never asked.
     expect(d.corrections).toBe(1);
-    // Frames: at most the declared size for one frame (D17), and no third size -
-    // in particular not a size belonging to another instance of this host.
+    // At most one frame at the declared size, and no third size.
     const frames = drawnFrames(trace, wideBox, expectedBox!);
     expect(frames.everySampleExplained).toBe(true);
     expect(frames.stale).toBeLessThanOrEqual(Platform.OS === 'android' ? 0 : 1);
     wide.unmount();
 
-    // ...and the number a host measured must stay with the instance it measured.
     // RN recycles views, so the plain Switch below very likely inherits the host
-    // that just numbered a 100-wide control. Its own configuration is already
-    // answered, so the correct outcome costs nothing; a leaked 100x28 would
-    // outrank the cache, cost a correction, and leave the control 100 wide.
+    // that just measured a 100-wide control. Its configuration is cached, so the
+    // correct outcome costs nothing; a leaked size would cost a correction.
     const recycled = stats();
     const plain = await render(
       <Switch defaultValue testID="after-recycle" hybridRef={captureHybrid} />,
@@ -1412,11 +1114,6 @@ describe('Sizing · intrinsic (T11)', () => {
       'a plain control mounted on a host that measured a wider one'
     );
     const recycledDelta = delta(recycled, stats());
-    /**
-     * Read directly, as before, for the reason at `wideContent` above: this is the
-     * second control in one test, so the capture may still hold the first one's
-     * handle, and `measuredContent` would accept that one's size as an answer.
-     */
     console.log(
       `after recycle: box=${describeBox(plainBox)} measured=${describeBox(
         hybrid?.measureContent() ?? null
@@ -1431,25 +1128,9 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('corrects a control that is already mounted when the environment moves', async () => {
-    // Review S2: `invalidateEnvironment` used to clear the ledger, so the next
-    // report of a mounted control was answered "nothing ever laid out" and it kept
-    // its old size until it remounted. A Switch does not move with the text size,
-    // so the environment is moved under a mounted control and the control is then
-    // asked for a genuinely new size.
-    //
-    // What this proves on device is what a host test cannot: the bump keeps a
-    // mounted instance alive and commits nothing for a size that did not move, and
-    // a control that really does change size afterwards is still corrected in the
-    // new epoch. What it does *not* pin is S2 itself - the `nuiTestWidth` re-render
-    // changes the sizing key, which dirties the measurement, and the resulting
-    // `measure` rebuilds the very ledger entry a dropping bump would have deleted,
-    // so round 1's code passes here too (round-2 review F1/F2 found this). The gate
-    // for the dropping bug is `testEnvironmentChangeCorrectsAReportWithNoMeasure`
-    // in `scripts/native-tests/sizing.test.cpp`, which reports after a bump with no
-    // re-measure - the order a real trait change happens in.
-    //
-    // The guess is this platform's real size so the mount itself costs nothing:
-    // every correction counted below belongs to the environment change.
+    // A Switch does not move with the text size, so the environment is moved under
+    // a mounted control and the control is then asked for a new size. The guess is
+    // the real size, so every correction counted below belongs to that change.
     seedRightGuess();
     const epoch = stats().environmentEpoch;
     const { rerender, unmount } = await render(
@@ -1462,8 +1143,6 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     const mounted = stats();
     expect(mounted.environmentEpoch).toBe(epoch);
-    // Mounted, laid out, and the engine knows it: this is the entry the bump used
-    // to delete.
     expect(mounted.ledgerEntries).toBeGreaterThan(0);
     expect(mounted.registryEntries).toBeGreaterThan(0);
     expect(delta(mounted, mounted).corrections).toBe(0);
@@ -1473,8 +1152,7 @@ describe('Sizing · intrinsic (T11)', () => {
     await settle();
     const bump = delta(mounted, stats());
     console.log(`env change while mounted: d=${JSON.stringify(bump)}`);
-    // The bump commits nothing by itself, and it did not forget the instance: a
-    // control whose size did not move is not pushed a size it already has.
+    // The bump commits nothing by itself, and it does not forget the instance.
     expect(bump.corrections).toBe(0);
     expect(stats().ledgerEntries).toBeGreaterThan(0);
     expect(stats().registryEntries).toBeGreaterThan(0);
@@ -1498,38 +1176,18 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     const d = delta(mid, stats());
     console.log(`env change then a real size change: d=${JSON.stringify(d)}`);
-    // The control was already on screen, in the new epoch, with no cached size -
-    // and its own measure still reached the instance that had to be corrected, so
-    // the new size arrived rather than waiting for a remount. Read together with
-    // the note at the top of this test: this is the correction working, not the
-    // gate for a dropped report (a host test owns that one).
+    // The control was already on screen in the new epoch with no cached size, and
+    // its own measure corrected it without a remount.
     expect(boxMatches(box, wideBox)).toBe(true);
     expect(d.corrections).toBe(1);
     unmount();
   });
 
   /**
-   * The control the two cases below drive: the same `Switch`, optionally hidden with
-   * `display: 'none'`, and optionally given a different `nuiTestWidth` — the only
-   * size-affecting prop a Switch has (`SwitchProps.nuiTestWidth`, TEMPORARY per S1).
-   *
-   * Round 1's forgotten-id guard refused to file a layout for an id the engine had
-   * finished, on the assumption that an id which mounts again is a new id. It is not:
-   * `useSizingId` mints one per **React** mount (`src/core/useSizingId.ts`), so on iOS a
-   * hide that tears the native view down (`onDropView` → `host.drop()` → `forget(id)`)
-   * without ending the React mount leaves an id that comes back later attached to a
-   * brand-new native view — laid out one step *before* the mount transaction re-binds it.
-   * Round 1 refused that layout, the bind then cleared the mark, and the instance was
-   * left bound with no ledger entry: `report` returns at its first line without one, and
-   * `invalidateSizingEnvironment` re-keys `ledger_` and so cannot reach it. The control
-   * kept the size it was laid out at for the rest of its life — one lost correction per
-   * hide/show, and a `sizingKey` change made while hidden was the visible case.
-   *
-   * Both cases therefore move the size *while hidden* and then re-show, with a guess
-   * seeded to a size that is not the control's (review S8), so a correction that never
-   * arrives leaves the box visibly at 40x20 instead of passing quietly. Every prop is
-   * passed on every render, `nuiTestWidth` included (nitro#1184); `null` is that prop's
-   * own default, i.e. the control's normal configuration.
+   * The same `Switch`, optionally hidden with `display: 'none'` and optionally
+   * given a different `nuiTestWidth`. A sizing id is minted per React mount, so on
+   * iOS a hide that tears the native view down leaves an id that comes back on a
+   * new native view. Every prop is passed on every render (nitro#1184).
    */
   const reShownSwitch = (hidden: boolean, width: number | null) => (
     <Switch
@@ -1543,27 +1201,10 @@ describe('Sizing · intrinsic (T11)', () => {
   );
 
   /**
-   * Assert which of the two `display: none` paths a run actually took, and describe it.
-   *
-   * The property is platform-divergent, and the difference is the whole point of the two
-   * cases below. iOS Fabric creates **no native view** for a hidden node, so hiding one is
-   * a real teardown and the engine forgets the instance (`ledgerEntries` falls) — the
-   * re-show path the forgotten-id rule exists for. Android reaches the view as `INVISIBLE`
-   * (`NitroComposeHost.kt:424`), so nothing is torn down, nothing is forgotten, and its
-   * "re-show" is a visibility flip that cannot lose a correction.
-   *
-   * Asserted rather than printed, because `console.log` from a harness file reaches
-   * neither the gate log nor the report (X4 round 2 found that for this suite's own
-   * findings): a note about which path ran is worth nothing if nobody can read it. And
-   * asserted in both directions — if iOS ever starts leaving a hidden view alive, these
-   * cases would pass for the same reason Android's does, and the regression guard would
-   * be gone with no red anywhere to notice. Measured, not assumed: `1→0` on iOS and
-   * `1→1` on Android, both read from runs of this case.
-   *
-   * On iOS the drop arrives with the transaction that removes the view and the
-   * deallocation with it, so the fall is waited for rather than read once — the same
-   * reason `Conformance`'s leak rule waits for its drops instead of assuming unmount is
-   * synchronous.
+   * Assert which `display: none` path a run took, and describe it. iOS Fabric
+   * creates no native view for a hidden node, so hiding is a teardown and the
+   * engine forgets the instance; Android keeps the view as `INVISIBLE`. On iOS the
+   * drop arrives with the deallocation, so the fall is waited for.
    */
   async function expectHidePath(
     mountedLedger: number,
@@ -1607,7 +1248,6 @@ describe('Sizing · intrinsic (T11)', () => {
     seedWrongGuess();
     const before = stats();
 
-    // Mounted and correct.
     const { rerender, unmount } = await render(reShownSwitch(false, null));
     await waitForBoxWidth(
       'reshown',
@@ -1618,16 +1258,15 @@ describe('Sizing · intrinsic (T11)', () => {
     const mounted = stats();
     expect(mounted.ledgerEntries).toBeGreaterThan(0);
 
-    // Hidden, with its size-affecting prop moved while it is hidden — the case the
-    // reviewer reproduced, where the new configuration has never been laid out.
+    // Hidden, with its size-affecting prop moved while it is hidden.
     await rerender(reShownSwitch(true, TEST_WIDTH));
     const hidePath = await expectHidePath(
       mounted.ledgerEntries,
       Platform.OS === 'ios' ? 'torn-down' : 'kept-alive'
     );
 
-    // Shown again with no further change: the re-shown view's own layout is the first
-    // thing the engine sees for this configuration, and round 1 refused to file it.
+    // Shown again with no further change: the re-shown view's own layout is the
+    // first thing the engine sees for this configuration.
     await rerender(reShownSwitch(false, TEST_WIDTH));
     const box = await waitForBoxWidth(
       'reshown',
@@ -1640,11 +1279,11 @@ describe('Sizing · intrinsic (T11)', () => {
         `corrections=${String(d.corrections)}`
     );
     expect(boxMatches(box, wideBox)).toBe(true);
-    // Exactly one, counted across the whole hide→show window: correcting the size while
-    // hidden and again afterwards is paying for one change twice.
+    // Exactly one across the whole hide and show: correcting while hidden and again
+    // afterwards would pay for one change twice.
     expect(d.corrections).toBe(1);
 
-    // And the entry that came back left nothing on hold for the rest of the run.
+    // The entry that came back is released on unmount.
     unmount();
     await settle(600);
     const dropped = stats();
@@ -1673,9 +1312,7 @@ describe('Sizing · intrinsic (T11)', () => {
     );
 
     // The environment moves while it is hidden: every ledger entry is re-keyed and
-    // marked inexact so that its next report is a correction (`invalidateEnvironment`,
-    // review S2). An instance with no entry is not in that walk at all — the second way
-    // round 1 lost a correction, and the one no later re-measure repairs.
+    // marked inexact, and an instance with no entry is not in that walk.
     nitroUiCore.invalidateSizingEnvironment();
     await settle(300);
     expect(stats().environmentEpoch).toBe(epoch + 1);
@@ -1701,13 +1338,9 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('never lets a pre-warmed size outlive the control that contradicts it', async () => {
-    // Review B2, the case DECISIONS D16 was written for: an app pre-warms the
-    // library's declared number at startup - on iOS 26 the 61x28 SwiftUI Switch -
-    // while the control it really hosts is another size, which is what
-    // `UIDesignRequiresCompatibility` does (a 51x31 control). The harness cannot
-    // boot in compat mode, so it makes the declared number wrong the same way and
-    // asserts the control wins: a wrong pre-warm may cost at most the correction a
-    // cold mount pays, and must not survive into the next mount.
+    // An app can pre-warm the declared size while the control it hosts is another
+    // size (`UIDesignRequiresCompatibility` gives a 51x31 Switch on iOS 26). The
+    // harness cannot boot in that mode, so it makes the declared size wrong instead.
     nitroUiCore.invalidateSizingEnvironment();
     nitroUiCore.seedSizingSize(
       COMPONENT,
@@ -1741,9 +1374,6 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('keeps the engine flat while views mount and unmount', async () => {
-    // Review S3: entries used to leave only when a report happened to find a dead
-    // state, so every instance a session ever mounted stayed in the ledger and the
-    // registry. A list that scrolls is exactly this, for the life of the app.
     const cycle = async (prefix: string, count: number) => {
       for (let index = 0; index < count; index += 1) {
         const { unmount } = await render(
@@ -1756,9 +1386,7 @@ describe('Sizing · intrinsic (T11)', () => {
       await settle(600);
     };
 
-    // A first cycle to reach steady state, then two identical cycles compared with
-    // each other - what must not grow is what a cycle costs, not what the engine
-    // happens to hold when the test starts.
+    // A first cycle to reach steady state; the second must not grow the engine.
     await cycle('churn-warm', 8);
     const before = stats();
     await cycle('churn-measured', 8);
@@ -1780,10 +1408,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('survives unmounting a batch while its corrections are in flight', async () => {
-    // A missing scenario from review S8: the guess is wrong for every instance
-    // below, and each batch is torn down before its corrections have landed. What
-    // is under test is that a correction is never applied to a view that is gone
-    // (a host forgets its instance on drop) and that the engine still works after.
+    // The guess is wrong for every instance, and each batch is torn down before its
+    // corrections have landed.
     for (let round = 0; round < 3; round += 1) {
       seedWrongGuess();
       const { unmount } = await render(
@@ -1820,11 +1446,8 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   it('takes rapid prop changes across a list and half its unmounts', async () => {
-    // The other missing scenario from review S8: a list whose rows keep changing
-    // while rows disappear. None of it changes a size, so nothing may be pushed -
-    // and the rows that stay must still be laid out at the control's size - so the
-    // declaration here is the control's real size, which lets a row be checked the
-    // moment it is queried instead of mid-correction.
+    // Nothing here changes a size. The declared size is the control's real one, so
+    // a row can be checked the moment it is queried instead of mid-correction.
     seedRightGuess();
     nitroUiCore.invalidateSizingEnvironment();
     nitroUiCore.prewarmSizing([COMPONENT]);
@@ -1881,10 +1504,6 @@ describe('Sizing · intrinsic (T11)', () => {
       `storm list: survivors=${String(drawn)} of ${String(shrunk)} ` +
         `d=${JSON.stringify(d)}`
     );
-    // Five of twelve rows were removed on the last turns; every survivor is laid
-    // out at the control's size, and none of this cost a state update - a row that
-    // disappeared mid-turn is the easy way to lose an instance's size or to push a
-    // correction into a view that is already gone.
     expect(drawn).toBe(shrunk);
     expect(d.corrections).toBe(0);
     expect(stats().cachedSizes).toBe(cached);

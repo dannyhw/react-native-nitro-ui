@@ -1,32 +1,11 @@
-/**
- * The iOS real-input log tells you which control had to press again.
- *
- * M2 exists because a regression that made every iOS control need a second press
- * was invisible: `pressUntil` printed "answered on tap 2/3" to
- * `.real-input/ios/xcodebuild-test.log`, a file the next run overwrites, and the
- * gate's own log kept only lines matching `Test Case|Test Suite|error:`. Twenty-five
- * iOS real-input logs hold no retry line, and every one of them reads `10/10` —
- * which cannot distinguish "never retried" from "retried every time". The fix is
- * a parse and a counter, and the failure mode of a parse is to keep passing while
- * counting nothing, which looks exactly like a healthy run.
- *
- * So: the fixtures are real shapes taken from a `gate.mjs` log of this suite
- * (`Test Case ... started`, four spaces of indent on the child's own `print`),
- * and the assertions are on the *counts*, because the count is what the report
- * prints. Each one is paired with the mutation it catches, in the file's red
- * proof in `F1-determinism.report.md`.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import { parseTestResults, realInputLine } from '../real-input/ios-log.mjs';
 
 /**
- * A two-case run where the Switch needed a second press and the Button did not.
- *
- * The suite's header precedes any case. The retry line is indented the way
- * xcodebuild indents a case's own stdout; a matcher anchored to `^` would drop
- * every one of them, which is the same silence as not printing it.
+ * A run where the Switch needed a second press and the Button did not. The suite's
+ * header precedes any case, and a case's own output is indented the way xcodebuild
+ * indents it.
  */
 const RUN = [
   'real-input (ios): nitro-ui A · 49D5024D · Metro 8295 · scheme NitroUiExampleUITests',
@@ -53,32 +32,25 @@ describe('real-input iOS log', () => {
 
     expect(sw.retries).toHaveLength(1);
     expect(sw.retries[0]).toContain('answered on tap 2/3');
-    // The Button never got an answer on a later tap, so nothing here may be
-    // counted for it: two unanswered presses is a control that failed or
-    // aborted, not a control that needed a retry.
+    // Two unanswered presses are not a retry: a retry is an answer on a later tap.
     expect(button.retries).toEqual([]);
     expect(button.notes).toHaveLength(2);
   });
 
   it('does not charge the suite header to whichever case reads next', () => {
     const results = parseTestResults(RUN);
-    // The header is printed before any `Test Case ... started`, so it belongs to
-    // nobody. Attaching it to the first case would give every run one retry-free
-    // note on Switch, and, if the tag ever moved, could count as a retry.
+    // The header is printed before any case starts, so it belongs to no case.
     const all = [...results.values()].flatMap((r) => [
       ...r.notes,
       ...r.retries,
     ]);
     expect(all.some((line) => line.includes('Metro 8295'))).toBe(false);
-    // The header is the only line before a case starts, so Switch keeps exactly
-    // the one line it printed.
     expect(results.get('testRealInputSwitch').retries).toHaveLength(1);
   });
 
   it('still recognises a suite line when xcodebuild adds a prefix', () => {
-    // Observed shapes: xcodebuild's own console indents a case's stdout, and a
-    // log gathered from a result bundle quotes it with a timestamp. Matching the
-    // tag rather than the line start is what survives both.
+    // xcodebuild's console indents a case's stdout, and a log taken from a result
+    // bundle prefixes a timestamp.
     for (const line of [
       'real-input (ios): dwell-probe: RESULT target=x dwell=0.05s switch=1/12 js-toggle=3/3',
       '    real-input (ios): the first real tap: foo answered on tap 3/3 - x',
@@ -90,10 +62,8 @@ describe('real-input iOS log', () => {
   });
 
   it('tells an unanswered press apart from a retried one', () => {
-    // The two lines differ by four words and the difference is the whole
-    // measurement: "answered on tap 2/3" says the OS dropped a touch, "tap 1/3
-    // left" says the check is still waiting. Counting both would report drops
-    // that were only slowness.
+    // "answered on tap 2/3" means a touch was dropped; "tap 1/3 left" means the
+    // check is still waiting.
     expect(
       realInputLine(
         '    real-input (ios): the first tap: foo answered on tap 2/3 - never delivered'
@@ -107,13 +77,6 @@ describe('real-input iOS log', () => {
   });
 
   it('counts a re-typed keystroke as the retry it is', () => {
-    // X21 flake 1. `typeKey` types one character and waits for that character's
-    // echo, re-typing a key the field never received — the same synthesised-input
-    // drop `pressUntil` was written for, on the keyboard path instead of the touch
-    // path. The matcher used to name only `tap`, so five branches' worth of
-    // `frozen: 1 edits refused` would re-type their way to green while the summary
-    // printed `0 press sequence(s) needed a retry` — F1 M2's silence again, on a
-    // line the fix did print.
     expect(
       realInputLine(
         '    real-input (ios): the first refused edit: key "x" answered on key 2/3 - ' +
@@ -127,8 +90,6 @@ describe('real-input iOS log', () => {
       )?.isRetry
     ).toBe(false);
 
-    // And it is charged to the case that typed it, which is the whole point of
-    // parsing the log instead of grepping it.
     const field = parseTestResults(RUN).get('testRealInputTextField');
     expect(field.retries).toHaveLength(1);
     expect(field.retries[0]).toContain('answered on key 2/3');
@@ -137,9 +98,7 @@ describe('real-input iOS log', () => {
   });
 
   it('reports the counted line once, not also as a note', () => {
-    // A real run caught this: the retry line appeared twice under the control,
-    // because it sat in both `notes` and `retries`, and the caller prints both
-    // arrays. Two lists that mean different things must not both hold one line.
+    // The caller prints both arrays, so one line must not be in both.
     const sw = parseTestResults(RUN).get('testRealInputSwitch');
     const answered = [...sw.notes, ...sw.retries].filter((line) =>
       line.includes('answered on tap 2/3')
@@ -163,9 +122,8 @@ describe('real-input iOS log', () => {
   });
 
   it('reports no results at all for a log with no cases', () => {
-    // A build failure produces a log with `error:` lines and no cases. Returning
-    // nothing is what makes `ios.mjs` say "the case never reported" rather than
-    // calling an empty run green.
+    // A build failure has `error:` lines and no cases; it must not read as an
+    // empty green run.
     expect(
       parseTestResults('** TEST BUILD FAILED **\nerror: clang failed').size
     ).toBe(0);

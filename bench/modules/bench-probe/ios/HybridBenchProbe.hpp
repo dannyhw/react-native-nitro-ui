@@ -1,14 +1,5 @@
-//
-//  HybridBenchProbe.hpp
-//  nitro-bench-probe
-//
-//  iOS implementation of the `BenchProbe` HybridObject (spec:
-//  src/BenchProbe.nitro.ts).
-//
-//  This is deliberately ObjC++ rather than Swift: it needs Mach/task APIs and
-//  a guarded Objective-C runtime hook, both of which are direct C calls here.
-//  See docs/architecture/benchmarks.md ("Why the probe is ObjC++ on iOS").
-//
+// iOS implementation of the `BenchProbe` HybridObject. ObjC++ rather than Swift:
+// it needs Mach task APIs and an Objective-C runtime hook, both direct C calls.
 
 #pragma once
 
@@ -27,10 +18,9 @@ namespace margelo::nitro::benchprobe {
 
   /**
    * Timestamps are absolute nanoseconds on `CLOCK_UPTIME_RAW`, the same clock
-   * base as `NitroUiCore.now()` (docs/DECISIONS.md D1), so a probe stamp and a
-   * library perf mark can be lined up in one trace. There is no process-load
-   * offset: `CLOCK_UPTIME_RAW` only passes 2^53 ns after ~104 days of awake
-   * uptime, and at 1e15 the ULP of a `double` is 0.125 ns.
+   * base as `NitroUiCore.now()`, so a probe stamp and a library perf mark can
+   * be lined up in one trace. A `double` holds them exactly: the clock only
+   * passes 2^53 ns after ~104 days of awake uptime.
    */
   class HybridBenchProbe: public HybridBenchProbeSpec {
     public:

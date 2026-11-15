@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { Tooltip, type TooltipAction } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -30,12 +29,11 @@ function useTopInset() {
 }
 
 /**
- * The real-input tooltip's one action, spelled as `CHECKS.tooltip` and
- * `testRealInputTooltip` spell it. `Got it` appears nowhere else on the screen.
+ * The real-input suite finds this action by its title, so `Got it` must appear
+ * nowhere else on the screen.
  */
 const RICH_ACTIONS: TooltipAction[] = [{ id: 'ok', title: 'Got it' }];
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({
   label,
   testID,
@@ -58,16 +56,6 @@ function Opener({
   );
 }
 
-/**
- * Every Tooltip configuration G18 shows on one screen: a rich tooltip with a title and
- * an action around a star button, a plain one around a label, one that prefers the
- * side below, and one inside an RN `Modal`.
- *
- * The log line (`tooltip-log`) is what real input reads: every event the app received,
- * in order, so "the action before the close" is a string comparison. The star counts
- * its own presses (`tooltip-anchor-presses`): a closed tooltip must leave every tap on
- * its anchor to the anchor.
- */
 export default function TooltipScreen() {
   const ink = useInk();
   const topInset = useTopInset();

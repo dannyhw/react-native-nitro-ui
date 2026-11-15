@@ -1,13 +1,3 @@
-/**
- * Progress stories (S1). Props and events: `docs/components/progress.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- *
- * Progress is the library's only non-interactive component, so it has no events
- * and the Actions panel stays empty - the readouts below are what a caller can
- * observe instead.
- */
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { Progress } from 'react-native-nitro-ui';
@@ -69,13 +59,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * There is nothing to tap, so the readout is the story: it prints what React
- * last sent, which for a Progress is also what native shows - React always owns
- * `value`.
- */
 export const Playground: Story = {
   render: ({ value, ...props }) => (
     <View style={styles.playground}>
@@ -95,7 +78,6 @@ export const Playground: Story = {
   ),
 };
 
-/** The whole shape grid: both variants x determinate, indeterminate, tinted. */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -168,14 +150,6 @@ export const States: Story = {
   ),
 };
 
-/**
- * The 60 Hz case from `docs/components/progress.md`: a sawtooth fraction written
- * on every frame, which is the shape of a download callback.
- *
- * The commit count beside it is the proof of cost - one `number` prop and one
- * commit per frame, with no round trip to wait for, because nothing on a
- * Progress can be changed by the user.
- */
 export const Live: Story = {
   render: function LiveStory() {
     const [fraction, setFraction] = useState(0);
@@ -210,12 +184,6 @@ export const Live: Story = {
   },
 };
 
-/**
- * Sizing (README "Sizing"): the two variants use the two different policies.
- * `linear` is `fillWidth`, so its width is the box; `circular` is `intrinsic`
- * and adds `alignSelf: 'flex-start'` so a stretching parent cannot turn the ring
- * into an ellipse.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>
@@ -251,11 +219,6 @@ export const Sizing: Story = {
   ),
 };
 
-/**
- * The bars as the current appearance draws them, plus the note about why a story
- * cannot show two appearances at once. A component (not an inline `render`)
- * because it reads the appearance with a hook.
- */
 function AppearancePanel() {
   const scheme = useColorScheme();
   return (
@@ -281,19 +244,9 @@ function AppearancePanel() {
 }
 
 /**
- * The progress palette comes from the OS appearance, and this story shows the
- * one the device is set to.
- *
- * It used to draw the same row twice, the second time on a black card labelled
- * "on a dark surface". That was not dark mode: only the card's background
- * changed, so the light-palette tracks were near-invisible against the black.
- * React Native 0.88 has no per-subtree appearance override (no
- * `overrideAppearance` prop; `Appearance.setColorScheme()` is app-wide), so a
- * story cannot honestly paint a dark panel. Change the device appearance
- * instead - `xcrun simctl ui <udid> appearance dark` on iOS, `adb -s <serial>
- * shell cmd uimode night yes` on Android - and this screen follows. Among the
- * component docs only `docs/components/button.md` carries a captured light/dark
- * pair; this control's doc does not.
+ * React Native 0.88 has no per-subtree appearance override
+ * (`Appearance.setColorScheme()` is app-wide), so this story shows the
+ * appearance the device is set to.
  */
 export const Appearances: Story = {
   render: () => <AppearancePanel />,

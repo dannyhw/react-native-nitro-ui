@@ -1,20 +1,3 @@
-/**
- * The benchmark gate must be able to fail.
- *
- * T02 round 1 shipped a gate that could not: `--check` vetoed the whole run
- * whenever `rn-core`'s *absolute* numbers had moved since the baseline, which
- * between sessions is nearly always, and `--compare` only ever compared
- * `nitro-ui` against nothing. The reviewer proved it from the committed data
- * (docs/tasks/T02-bench.review.md B1). These fixtures are the regression test
- * for that, with no device involved: a synthetic run where a `nitro-ui` arm got
- * twice as slow has to produce a conclusive failure, and the levers that are
- * *not* evidence - control drift, a slow reference arm, a noisy cell - must not
- * suppress or manufacture one.
- *
- * The same `gate()` is used by `run.mjs --compare-release`, by `run.mjs
- * --compare` and by `report.mjs --compare` (review S11), so covering it covers all three.
- */
-
 import { describe, expect, it } from '@jest/globals';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -60,18 +43,10 @@ const LAUNCHES = 4;
 const ITERATIONS = 20;
 
 /**
- * The arms a component's cells must carry.
- *
- * `IMPLEMENTATIONS` is every arm the runner knows about; `ARM_SCOPES` narrows the
- * ones that render only some controls (`nitro-ui-host`, the seven hostable controls on
- * Android). Naming the arms a cell must have, rather than "all of them", is what keeps
- * these assertions true when an arm exists that cannot serve the component - a missing
- * arm is only acceptable when it is a scoped one.
- *
- * `ARMS_WITHOUT_COMPONENT` narrows the same way the scheduler does: an arm with no
- * mountable cell on the named platform is not a missing arm. It only narrows when a
- * platform is named, because a platform-less schedule asks for every arm that mounts
- * the control somewhere.
+ * The arms a component's cells must carry: every unscoped arm, plus the scoped
+ * ones (`ARM_SCOPES`) that render this component, minus the arms with no
+ * mountable cell on the named platform (`ARMS_WITHOUT_COMPONENT`). The last
+ * only narrows when a platform is named.
  */
 function armsFor(component, platform = null) {
   return new Set(
@@ -103,10 +78,9 @@ const QUIET = [1, 1.01, 0.995, 1.005];
 const LOUD = [1, 1.7, 0.62, 1.35];
 
 /**
- * Records for one cell.
- *
- * `values` are per-op nanoseconds; latency metrics are written per iteration and
- * CPU as one bracket per launch, exactly like the bench app does.
+ * Records for one cell. `values` are per-op nanoseconds; latency metrics are
+ * written per iteration and CPU as one bracket per launch, as the bench app
+ * does.
  */
 function cellRecords({
   scenario = 'mount',
@@ -134,9 +108,9 @@ function cellRecords({
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
-      // The waiting rule this fixture's app reports (iOS's defaults). A run whose app
-      // records none is called out in its own problems list rather than stamped with
-      // today's defaults, so a fixture has to carry one.
+      // The waiting rule this fixture's app reports (iOS's defaults). A run
+      // whose app records none is flagged in its problems list, so a fixture
+      // has to carry one.
       mountTimeoutMs: 1_500,
       presentedTimeoutMs: 8_000,
     },
@@ -157,7 +131,7 @@ function cellRecords({
         jsCommitNs: jsCommit * factor * wiggle,
         mountedNs: mounted * factor * wiggle,
         // The Android probe answers `-1` when no frame arrived in time, which
-        // the app records as a missing sample (round 4).
+        // the app records as a missing sample.
         presentedNs:
           index < missingPresented ? null : presented * factor * wiggle,
       });
@@ -300,8 +274,8 @@ function leakRun({ rnCore, nitroUi }) {
 }
 
 /**
- * `makeRun` plus the metadata a results file carries: the whole run object a
- * release comparison writes (clean tree, `full` plan, 8 launches, quiet machine).
+ * `makeRun` plus the metadata a results file carries (clean tree, `full` plan,
+ * 8 launches, quiet machine).
  */
 function measuredRun(overrides = {}) {
   return {
@@ -343,8 +317,7 @@ describe('benchmark gate', () => {
   });
 
   it('never gates the reference arms', () => {
-    // Expo gets twice as slow, nitro-ui does not move. An `@expo/ui` bump must
-    // not fail a nitro-ui pull request (review S9).
+    // Expo gets twice as slow and nitro-ui does not move.
     const result = gate({
       head: makeRun({
         'expo-ui-host-per-control': { mounted: 420_000 },
@@ -361,8 +334,8 @@ describe('benchmark gate', () => {
   });
 
   it('is not suppressed by control drift, and not triggered by it either', () => {
-    // The exact failure mode of round 1: `rn-core` 5x slower in head. On its own
-    // that is machine state, not a regression...
+    // `rn-core` 5x slower in head: on its own that is machine state, not a
+    // regression...
     const drifted = makeRun({
       'rn-core': {
         jsCommit: 200_000,
@@ -432,8 +405,6 @@ describe('benchmark gate', () => {
   });
 
   it('sees a costlier teardown as its own metric', () => {
-    // Review S5: mount and unmount used to share one CPU bracket, so a slower
-    // teardown was reported as a slower mount.
     const result = gate({
       head: makeRun({ 'nitro-ui': { unmountMainCpuPerOp: 24_000 } }),
       base: makeRun(),
@@ -456,8 +427,8 @@ describe('benchmark gate', () => {
       )
     ).toBe(true);
 
-    // A slope fitted over a series that is not climbing is not "a monotonic
-    // increase" (§6's wording), so it is not comparable and cannot gate.
+    // A slope fitted over a series that is not climbing is not comparable and
+    // cannot gate.
     const wobbling = aggregateRecords(
       memoryRecords({
         scenario: 'leak',
@@ -474,10 +445,8 @@ describe('benchmark gate', () => {
   });
 
   it("labels a reference arm's monotonic climb as reported, not gated (X15)", () => {
-    // Only `GATED_IMPLEMENTATIONS` can fail the gate, so the same word in both
-    // arms' cells told a reviewer that a third-party leak refused a run it cannot
-    // refuse (A5 review). The word is the claim: the arm that carries no verdict
-    // says so.
+    // Only `GATED_IMPLEMENTATIONS` can fail the gate, so a reference arm's
+    // climb is labelled as reported.
     const cells = aggregateRecords(
       [
         ...memoryRecords({
@@ -532,22 +501,14 @@ describe('benchmark gate', () => {
 });
 
 /**
- * The idle-machine rule judges **the run, not its last minute** (R4).
- *
- * A1b's iOS run is the fixture this block is written against: `--plan full`, 1120
- * launches over 154 minutes, no problems, `load5` 4.06 against a 7.0 ceiling - and
- * a single `loadavg1` of 7.60 taken in its final minute is what refused it.
- *
- * The fixtures deliberately never sit on the answer (AGENTS.md): the quiet band is
- * 1.6-5.0, the ceiling is 7.0, the busy band is 8.4-13.6, so a rule that read the
- * wrong quantile, the wrong comparison, or the wrong field could not produce these
- * verdicts by accident. The two boundary tests are the only places a value touches
- * a threshold, and they are named for it.
+ * The fixtures never sit on a threshold: the quiet band is 1.6-5.0, the ceiling
+ * is 7.0 and the busy band is 8.4-13.6. The two boundary tests are the only
+ * places a value touches one.
  */
 describe('the idle-machine rule samples the run (R4)', () => {
   const CPU_COUNT = 14;
   const CEILING = loadCeiling(CPU_COUNT);
-  /** A1b's iOS run: three quiet hours, then one noisy minute at the very end. */
+  /** One noisy minute at the end of an otherwise quiet run. */
   const A1B_SPIKE = 7.6;
 
   const quiet = (count) =>
@@ -581,8 +542,8 @@ describe('the idle-machine rule samples the run (R4)', () => {
   });
 
   /**
-   * The bug: one sample at the end of a 154-minute run. The spike is still
-   * recorded and still visible in `max`, it just cannot condemn the run.
+   * The spike is still recorded and still visible in `max`; it cannot condemn
+   * the run on its own.
    */
   it('calls the shape that condemned A1b quiet - hours of quiet, a spike at the end', () => {
     const run = sampledRun({
@@ -596,7 +557,6 @@ describe('the idle-machine rule samples the run (R4)', () => {
     });
     expect(loadOverCeiling(run.machine)).toBeNull();
     expect(run.machine.quiet).toBe(true);
-    // The same instant, read on its own, is still what it looks like.
     expect(
       loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
     ).toContain('load average 7.60');
@@ -614,9 +574,8 @@ describe('the idle-machine rule samples the run (R4)', () => {
   });
 
   /**
-   * The case a single sample cannot see at all: the machine settles down again, so
-   * the end-of-run load average is quiet, but a seventh of the run was spent over
-   * the ceiling. This is the test the old rule fails on its own terms.
+   * The machine settles down again, so the end-of-run load average is quiet,
+   * but a seventh of the run was spent over the ceiling.
    */
   it('calls a run busy with more than 10 % of its samples over the ceiling', () => {
     const run = sampledRun({
@@ -663,7 +622,6 @@ describe('the idle-machine rule samples the run (R4)', () => {
   });
 
   it('keeps the single-sample rule for files recorded before the sampler', () => {
-    // The two real A1b numbers, read from a file that has no samples at all.
     expect(
       loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
     ).toContain(
@@ -725,8 +683,7 @@ describe('the idle-machine rule samples the run (R4)', () => {
 });
 
 /**
- * The same verdict through the shipped binary, so the exit code that CI keys on
- * is covered too - `run.mjs` uses the identical `comparisonSections()`.
+ * The same verdict through the shipped binary, so the exit code is covered too.
  */
 describe('bench report CLI', () => {
   const script = resolve(process.cwd(), 'scripts/bench/report.mjs');
@@ -787,10 +744,8 @@ describe('bench report CLI', () => {
 
 describe('memory aggregation', () => {
   /**
-   * Round 2 regression: the Android heap breakdown stored an undefined variable,
-   * which killed the runner *after* it had measured 48 launches. iOS reports -1
-   * for both heaps, so no iOS run - and no iOS-shaped fixture - ever reached that
-   * line. Android has to be in the fixture for that to be worth testing.
+   * iOS reports -1 for both heaps, so only an Android-shaped fixture reaches
+   * the heap breakdown.
    */
   it('folds the Android heap breakdown into per-instance bytes', () => {
     const n = 200;
@@ -825,10 +780,8 @@ describe('memory aggregation', () => {
 
 describe('a gated arm with no base value', () => {
   /**
-   * The first run after a component lands has ratios to `rn-core` but no ratio to
-   * regress against, because the base run's cell was skipped. Silently reporting
-   * that as `ok` reads like a pass, so the gate labels it and prints how the arm
-   * compares to the control.
+   * The first run after a component lands has ratios to `rn-core` but no base
+   * ratio to regress against. The gate labels that rather than reporting `ok`.
    */
   it('is labelled, not silently passed', () => {
     const base = makeRun();
@@ -857,8 +810,8 @@ describe('a gated arm with no base value', () => {
 describe('native perf marks (--perf-marks)', () => {
   /**
    * The marks a `--perf-marks` launch writes: one `perf` record per measured
-   * iteration, folded per instance. `propsPerFlip = 2` is the interesting case -
-   * it is what a redundant commit looks like from the inside.
+   * iteration, folded per instance. `propsPerFlip = 2` is what a redundant
+   * commit looks like.
    */
   function markRecords({
     implementation = 'nitro-ui',
@@ -942,11 +895,9 @@ describe('native perf marks (--perf-marks)', () => {
 
 describe('sample completeness (round 4)', () => {
   /**
-   * Round 3's Android mount table printed `presented` medians built from 35 of
-   * 80 iterations (`rn-core`) and 13 of 80 (`expo-ui-shared-host`), and quoted
-   * "1.15x" from them. A signal that arrives on a third of the iterations is
-   * broken, not slow, and the survivors are not a sample of the cell (review
-   * rounds 2-3, fix 2). Such a metric is now `n/a` everywhere and ungated.
+   * A latency signal that arrives on a minority of the iterations is broken,
+   * not slow, and the survivors are not a sample of the cell: such a metric is
+   * `n/a` everywhere and ungated.
    */
   it('drops a latency metric whose samples are mostly missing', () => {
     const run = makeRun({ 'nitro-ui': { missingPresented: 12 } });
@@ -982,8 +933,8 @@ describe('sample completeness (round 4)', () => {
   });
 
   it('will not divide an arm by an incomplete control', () => {
-    // The exact round-3 shape: the arm drew 80 of 80 presenting frames while
-    // `rn-core` drew 13, so the ratio was a survivor over a survivor.
+    // The control is missing most of its presenting frames, so a ratio would be
+    // a full sample over a survivor.
     const run = makeRun({ 'rn-core': { missingPresented: 20 } });
     expect(ratioTable(run)['mount:nitro-ui:50'].metrics).not.toHaveProperty(
       'presentedNs'
@@ -1006,17 +957,15 @@ describe('sample completeness (round 4)', () => {
 });
 
 /**
- * `--component` (`bun bench --component button`, task G2): a component is part of the
- * scenario cell (`mount.button`), and the filter schedules one whole component.
+ * A component is part of the scenario cell (`mount.button`), and the filter
+ * schedules one whole component.
  */
 describe('the Button cells (--component button)', () => {
   /**
-   * A cell is paired with the `rn-core` control of the **same cell**. Two components
-   * in one run, with controls far apart (`mount` 100 us, `mount.button` 200 us) and
-   * arms that sit at different ratios over their own control (1.1x and 1.5x): a
-   * Button arm divided by the Switch control reads 3.0x, and a Switch arm divided by
-   * the Button control 0.55x, so neither expected number is reachable by a crossed
-   * pairing.
+   * A cell is paired with the `rn-core` control of the same cell. The two
+   * controls are far apart (100 us and 200 us) and the arms sit at different
+   * ratios over their own control (1.1x and 1.5x), so a crossed pairing reads
+   * 3.0x or 0.55x.
    */
   it('divides a Button arm by the Button control, never the Switch control', () => {
     const records = [
@@ -1055,9 +1004,8 @@ describe('the Button cells (--component button)', () => {
 
   it('schedules one complete component per --component, never a mix', () => {
     const button = buildSchedule({ plan: 'quick', component: 'button' });
-    // Every cell is a Button cell, and all four arms are there - including the
-    // control, or the ratios would be computed against an arm that is never
-    // measured.
+    // All four arms are there, including the control the ratios are computed
+    // against.
     expect([...new Set(button.map((entry) => entry.scenario))]).toEqual([
       'mount.button',
       'update.button',
@@ -1071,9 +1019,6 @@ describe('the Button cells (--component button)', () => {
       true
     );
     // `null` stays "every component", which is what a plain `bun bench` runs.
-    // G3's Progress cells are the fourth component, so this list and the count
-    // grow with every component that lands - a cell missing from the plan shows
-    // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
     const QUICK_COMPONENTS = [
       'switch',
@@ -1091,20 +1036,11 @@ describe('the Button cells (--component button)', () => {
       new Set(QUICK_COMPONENTS)
     );
     /**
-     * Ten components in the quick plan (G13's TextField and G24's Form are benched
-     * but not hostable, so the Host arm's scope stays at eight), each with the cells
-     * of that component's own plan entry run through the four unscoped arms, plus one
-     * scoped arm's cells for each component it renders. Both halves are measured
-     * rather than folded into a product: a component losing a cell moves the first
-     * number, and an arm escaping (or losing) its scope moves the second. Summed
-     * per component rather than one component's length times ten, because a Form's
-     * `n` is rows inside one container and it is priced at two row counts (20 and
-     * 50, S6's question 6) where every other component is priced at one.
-     * Since H2b every bench control is hostable, so no component's schedule is naturally
-     * free of the Host arm any more: the base is that same schedule with the scoped
-     * arms taken out, which measures the quantity instead of assuming a probe. The half
-     * that rode on the probe is asserted in its own right below — the Host arm is scoped
-     * to Android, so an iOS schedule must not carry one.
+     * Each component's own plan cells through the four unscoped arms, plus one
+     * scoped arm's cells for each component it renders. Summed per component,
+     * because a Form is priced at two row counts where every other component is
+     * priced at one. The Host arm is scoped to Android, so an iOS schedule must
+     * not carry one.
      */
     const unscopedCells = QUICK_COMPONENTS.reduce(
       (total, component) =>
@@ -1133,23 +1069,15 @@ describe('the Button cells (--component button)', () => {
 });
 
 /**
- * The DatePicker cells (`bun bench --component date-picker`, task G5): the arms that
- * have no DatePicker cell on Android (`ARMS_WITHOUT_COMPONENT`).
+ * The arms that have no DatePicker cell on Android (`ARMS_WITHOUT_COMPONENT`).
  */
 describe('the DatePicker cells (--component date-picker)', () => {
   /**
-   * `@expo/ui` has no mountable date *field* on Android: its only picker form is
-   * the inline M3 calendar, whose month pager is horizontally scrollable, so the
-   * `matchContents` host every self-sizing arm gets measures it with infinite
-   * width and the app dies with `IllegalStateException`. Bounding the width makes
-   * it mountable but prices a full-screen calendar against a compact field at
-   * ~2.45 s per mount iteration, past the runner's per-launch budget. So those
-   * cells do not exist on Android, and the schedule says so instead of burning
-   * 180 s timeouts per launch.
-   *
-   * `nitro-ui-host` is on this list's other side: a hosted date field is a Compose
-   * `Dialog` opened from the Host's composition, which mounts on Android (H2b), so its
-   * cells are here. The two names this test is about stay out either way.
+   * `@expo/ui` has no mountable date field on Android: its only picker form is
+   * the inline Material 3 calendar, whose horizontally scrollable month pager
+   * cannot be measured by the `matchContents` host with infinite width. A
+   * hosted nitro-ui date field does mount there, so `nitro-ui-host` keeps its
+   * cells.
    */
   it('omits the Android arms that cannot mount a DatePicker', () => {
     const android = buildSchedule({
@@ -1187,15 +1115,9 @@ describe('the DatePicker cells (--component date-picker)', () => {
 });
 
 /**
- * The shared-`<Host>` arm's scope (H1, widened to four controls by H2a and to seven by H2b).
- *
- * The arm composes what a `<Host>` can draw - Switch, Slider, linear Progress, Button,
- * SegmentedControl, Picker, DatePicker - and refuses what a Host refuses (an RN view, a
- * nested Host); on iOS `<Host>` is a passthrough rather than a shared composition. Either way a
- * cell outside that scope is a launch that measures nothing under a name that promises
- * something, so the claim these tests hold is that such cells are never scheduled - and
- * that the arm is still measured where it *does* apply, or the D15 ratio against
- * `expo-ui-shared-host` would silently lose its head row for a whole component.
+ * The arm composes what a `<Host>` can draw; on iOS `<Host>` is a passthrough
+ * rather than a shared composition. A cell outside that scope would be a launch
+ * that measures nothing, so such cells are never scheduled.
  */
 describe('the shared-Host arm is scheduled only where it renders something', () => {
   const HOST = 'nitro-ui-host';
@@ -1212,16 +1134,11 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   ];
 
   /**
-   * The arm's scope, as two files write it.
-   *
-   * `ARM_SCOPES` decides which cells are scheduled and
-   * `bench/src/implementations/index.ts` repeats the same list as the arm's
-   * `components`, which is what the report prints and what `NitroUiHostList` holds
-   * itself to (it throws for anything else). A schedule widened without the list is a
-   * cell that launches and throws, which reads as a broken bench run rather than as
-   * drift, so the pair is asserted here. The bench app cannot be imported into this
-   * file - its `@expo/ui` arm is ESM that jest cannot transform - so the second list
-   * is read from the source it is written in.
+   * `ARM_SCOPES` decides which cells are scheduled, and
+   * `bench/src/implementations/index.ts` repeats the list as the arm's
+   * `components`. The bench app cannot be imported here (its `@expo/ui` arm is
+   * ESM that jest cannot transform), so the second list is read from its
+   * source.
    */
   it('keeps its component scope in one place across the two lists', () => {
     const scoped = ARM_SCOPES[HOST].components;
@@ -1247,8 +1164,7 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     expect(
       listed[1]
         .split('\n')
-        // the generated region's markers live inside this array (X3); the list itself
-        // is what the assertion is about
+        // The generated region's markers are comment lines inside this array.
         .filter((line) => !line.trim().startsWith('//'))
         .join('\n')
         .split(',')
@@ -1257,11 +1173,6 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
     ).toEqual(scoped);
   });
 
-  /**
-   * Every hostable control gets its cells, per launch, like every other
-   * arm. A component quietly dropping out of the arm is how a ratio table loses a
-   * head row without any test going red.
-   */
   it('schedules a full set of cells for every control a Host can draw', () => {
     for (const component of ARM_SCOPES[HOST].components) {
       const schedule = buildSchedule({
@@ -1286,11 +1197,8 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   });
 
   /**
-   * Since H2b the arm covers every planned control, so the loop below walks an empty
-   * list. That is asserted out loud rather than left to pass silently: an empty loop is
-   * exactly how a scope grows without any test noticing, and the rule the loop guards -
-   * never schedule a cell for an arm that would render nothing - still has to hold for
-   * whatever a future plan adds that a Host cannot draw.
+   * The arm covers every planned control today, so the loop below walks an
+   * empty list, and that is asserted rather than left to pass silently.
    */
   it('schedules no cell of a control a Host refuses', () => {
     const refused = EVERY_COMPONENT.filter(
@@ -1308,10 +1216,6 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
         expect(
           schedule.filter((entry) => entry.implementation === HOST)
         ).toEqual([]);
-        // The refused component keeps its other arms: the scope is one arm's
-        // property, not a hole in the cell. (`armsFor` is not asserted here because
-        // `ARMS_WITHOUT_COMPONENT` already removes the Expo arms from Android's
-        // date-picker cells, which is a different rule with its own tests.)
       }
     }
   });
@@ -1335,9 +1239,8 @@ describe('the shared-Host arm is scheduled only where it renders something', () 
   );
 
   /**
-   * Asking for nothing but the scoped arm on a platform it does not exist on has
-   * to be an error, not an empty schedule: an empty schedule exits green, and a
-   * green run that measured nothing is the failure mode this file exists for.
+   * An empty schedule exits green, so asking for only the scoped arm on a
+   * platform it does not exist on has to be an error.
    */
   it('refuses an --only that the platform leaves nothing to measure', () => {
     for (const component of ARM_SCOPES[HOST].components) {

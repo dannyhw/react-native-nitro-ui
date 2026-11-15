@@ -1,56 +1,3 @@
-/**
- * View-recycling gate (task F6).
- *
- * The library implements `RecyclableView` on every control, which makes each Hybrid
- * View *poolable* — but a pool only exists where the platform runs one, and on Android
- * that is React Native's `enableViewRecycling` flag, whose RN 0.88 default is `false`.
- * So for every gate this repo ran before F6, the recycle reset was written and never
- * executed on Android, and `docs/tasks/X4-conformance.report.md` recorded that as a
- * platform fact: "Android never reaches `prepareForRecycle`… `prepareToRecycleView`'s
- * only caller is the legacy `ViewManager.recycleView`".
- *
- * **That is not true of RN 0.88, and this file is what measures it instead of reading
- * it off a call graph.** `ViewManager.onDropViewInstance` (decompiled from
- * `react-android-0.88.0`) calls `prepareToRecycleView` and pushes the view onto the
- * pool's stack whenever `enableViewRecycling` allocated that stack, and
- * `ViewManager.createViewInstance(tag, …)` pops it. Nitro's generated manager overrides
- * both, and its `prepareToRecycleView` is what calls our `prepareForRecycle()`. The
- * example app now turns the flag on (`NitroUiFeatureFlags.kt`), so the state the harness
- * drives is the state a host app opts into — and the recycle rule in
- * `Conformance.harness.tsx` is now a live path on Android rather than an iOS-only one.
- *
- * Three things have to be true before "the reset is tested on Android" means anything,
- * and each is a test here:
- *
- * 1. **The drop really went to the pool and not to the garbage collector.** Both paths
- *    run `onDropView`, so a drop is not evidence. The pool path is the one that also
- *    runs `prepareForRecycle`, so the two are told apart by *marks*: `NitroUiPerf`
- *    records `dropped` and `recycled` (`dropped` with no `recycled` after it is a real
- *    unmount). Those marks are what the first test reads, via the one channel that
- *    already crosses to JS — `nitroUiCore.drainPerf()`.
- * 2. **The instance the next mount gets is that same object.** A mark says a reset ran;
- *    only a counter that *survives* a recycle says who ran on it. `nuiTestLifetimeReport`
- *    reads two per-object counters (`drops=`, `recycles=`) that `prepareForRecycle`
- *    deliberately does not clear, so a second mount that reads `recycles=1` can only be
- *    looking at an instance the pool handed back. A fresh instance answers `drops=0
- *    recycles=0`, which is why the assertion cannot pass by accident.
- * 3. **Pooling does not leak.** A pooled host is a retained object by design — the pool
- *    is a cache — so the question is whether the *floor* after a collect keeps climbing
- *    cycle over cycle while the pool is being reused. Same shape as
- *    `MountChurn.android.harness.tsx`, whose 2 MiB/cycle bound this reuses, with one addition
- *    that churn alone does not need: the loop has to prove it recycled, or a heap that
- *    is flat because nothing was ever pooled would pass for the wrong reason.
- *
- * The residue probes themselves live in `Conformance.harness.tsx`, one per control; this
- * file gates the machinery those probes now depend on. Both platforms run tests 1 and 2;
- * the leak test is Android-only, for the reason `MountChurn.android.harness.tsx` gives — the
- * question is about the Compose hosting lifecycle, and iOS hosts SwiftUI with a
- * different lifetime, so the iOS branch registers one pending test that says so.
- *
- * @file Gates: `harness:ios`, `harness:android`. Discovered automatically:
- *       `example/jest.harness.config.mjs` matches any `*.harness.tsx` under a
- *       `__tests__` directory.
- */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -67,21 +14,15 @@ import { DatePicker, Switch, nitroUiCore } from 'react-native-nitro-ui';
 /** The `nuiPerfId` every view in this file mounts with, so its marks are findable. */
 const PERF_ID = 71;
 
-/** Controls per churn cycle. 200 is the batch `MountChurn.android.harness.tsx` dies at. */
+/** Controls per churn cycle. */
 const COUNT = 200;
 
 /** Churn cycles between two heap readings. */
 const CYCLES = 3;
 
-/**
- * Post-GC heap floor growth allowed per cycle, in MiB. The same bound
- * `MountChurn.android.harness.tsx` uses, and for the same reason: it sits between the leak that
- * gate was written for (8.18 MiB/cycle) and a loop that frees everything (~0.13 MiB of
- * ART slack), so a pooled-but-leaking host shows up here without riding on machine load.
- */
+/** Post-GC heap floor growth allowed per cycle, in MiB. */
 const MAX_FLOOR_GROWTH_MIB_PER_CYCLE = 2;
 
-/** The Switch handle, narrowed to what this file reads. */
 type SwitchHandle = {
   readonly value: boolean | null;
   nuiTestLifetimeReport(): string;
@@ -95,20 +36,13 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
 ) as unknown as HarnessUiModule;
 
-/**
- * Handles in the order they were handed to JS.
- *
- * A list rather than a `testID → handle` map because identity is the subject: the last
- * entry is the object the most recent mount reported, and the length says whether a
- * second mount reported one at all.
- */
+/** Handles in the order they were handed to JS; the last belongs to the latest mount. */
 const delivered: SwitchHandle[] = [];
 
 function capture(handle: SwitchHandle): void {
   delivered.push(handle);
 }
 
-/** The most recent handle, or a failure that names what never happened. */
 function latestHandle(): SwitchHandle {
   const handle = delivered[delivered.length - 1];
   if (handle == null) {
@@ -120,13 +54,7 @@ function latestHandle(): SwitchHandle {
   return handle;
 }
 
-/**
- * `drops=<n> recycles=<m> …`, as numbers.
- *
- * Parsed strictly on purpose: a probe that answered a shape this file does not know
- * would otherwise read `undefined`, and `undefined >= 1` is false, which is the kind of
- * silence that turns a broken probe into a permanent pass.
- */
+/** `drops=<n> recycles=<m> …`, as numbers. Throws when either field is missing. */
 function lifetime(handle: SwitchHandle): { drops: number; recycles: number } {
   const raw = handle.nuiTestLifetimeReport();
   const drops = /drops=(\d+)/.exec(raw)?.[1];
@@ -151,10 +79,8 @@ function drainKinds(instanceId: number = PERF_ID): string[] {
 }
 
 /**
- * The Android drop-path counters `nuiTestLifetimeReport` answers, in the report's own words.
- *
- * Android only: iOS hosts SwiftUI, which has no measure pass to decline after a drop and no
- * `ViewTreeObserver` listener to lose, so its report is the two lifetime counters alone.
+ * The Android drop-path counters in `nuiTestLifetimeReport`. The iOS report carries only
+ * the two lifetime counters.
  */
 const DROP_PATH_FIELDS = [
   'measuresAfterDrop',
@@ -164,13 +90,8 @@ const DROP_PATH_FIELDS = [
 ] as const;
 
 /**
- * The four drop-path fields, as numbers, refusing a report that does not carry them.
- *
- * The refusal is the point. Every one of these is expected to stay at zero, so a probe that
- * stopped answering the field would make a silent `undefined` look exactly like the pass —
- * which is the failure mode a "this must never happen" gate has and a "this must happen"
- * gate does not. Comparing the field as a string (`field=0`) keeps a missing field and a
- * wrong one in the same shape the assertion prints.
+ * The drop-path fields as numbers. Throws on a missing field: every one is expected to
+ * stay at zero, and a missing field must not read as zero.
  */
 function lifetimeFields(raw: string): Record<string, number> {
   const seen: Record<string, number> = {};
@@ -207,12 +128,8 @@ async function waitForTestId(testId: string, timeoutMs: number) {
 }
 
 /**
- * One Switch, mounted with the perf id the marks are keyed on.
- *
- * `value` is passed explicitly because every prop is always passed (nitro#1184), and
- * because a *controlled* value is what the second mount can be asked about. `key` is for
- * the identity test: swapping it deletes this instance and asks for another, which is the
- * drop-and-create pair the pool turns into a hand-back.
+ * One controlled Switch, mounted with the perf id the marks are keyed on. Swapping `key`
+ * drops this instance and asks for another.
  */
 function oneSwitch(second: boolean, key = 'single') {
   return (
@@ -239,7 +156,7 @@ type HeapStats = {
 type ProbeModule = {
   heapStats(forceGc: boolean): Promise<HeapStats>;
   viewRecyclingEnabled(): Promise<boolean>;
-  /** Android only: drives B1's N5 shape and reports what the guard answered. */
+  /** Android only: drops a hosted control while it is attached, then measures it. */
   simulatePostDropMeasure(): Promise<string>;
 };
 
@@ -254,13 +171,8 @@ function probeModule(): ProbeModule {
 }
 
 /**
- * The process-wide drop-path totals, as the library's own line, read through whichever
- * control answers.
- *
- * A mount is needed to ask at all — the probe is a method on a live control — so this
- * mounts one, reads it while it is on screen, and takes it away. The read is of the
- * library's process-wide counters, so which control answers is beside the point. Callers
- * hand the line to `lifetimeFields`, which is what refuses a missing field.
+ * The process-wide drop-path totals. The report is a method on a live control, so a Switch
+ * is mounted just to ask.
  */
 async function readLifetimeLine(): Promise<string> {
   delivered.length = 0;
@@ -281,13 +193,8 @@ const MIB = 1024 * 1024;
 const toMib = (bytes: number) => Number((bytes / MIB).toFixed(2));
 
 /**
- * The flag the example app installs, read back from the process.
- *
- * This is the difference between a gate that measures recycling and one that measures
- * its own absence: if a future RN starts refusing the app's override, or a refactor
- * moves the install after the first flag read, every assertion below would still be
- * green on Android while nothing recycled. iOS has no such flag — Fabric pools every
- * recyclable view unconditionally — so this is asked where a flag exists.
+ * React Native's `enableViewRecycling` flag as the process sees it. iOS has no such flag:
+ * Fabric pools every recyclable view.
  */
 async function viewRecyclingEnabled(): Promise<boolean> {
   if (Platform.OS !== 'android') {
@@ -302,18 +209,9 @@ async function viewRecyclingEnabled(): Promise<boolean> {
 }
 
 /**
- * Mount `COUNT` Switches, let the batch draw, unmount the lot.
- *
- * The settle after the mount is what makes a failure mean retention: a host dropped
- * before its first frame could still legitimately be waiting on work scheduled for that
- * frame. `key` is stable across cycles, but each cycle is a fresh tree, so the whole
- * batch is torn down and the whole pool refilled — the churn a settings screen does.
- *
- * Every row carries `nuiPerfId`, which the leak gate reads back as its witness: with
- * them unset, `drainPerf()` would answer nothing for the churn and the heap numbers
- * below would be measuring a run that never recycled. Sharing one id across a batch is
- * what makes that cheap — the marks are counted per cycle, and the ring is drained
- * between cycles so the count is a rate rather than a running total.
+ * Mount `COUNT` Switches, let the batch draw, unmount the lot. The settle after the mount
+ * matters: a host dropped before its first frame may still hold work scheduled for that
+ * frame. Every row carries `nuiPerfId` so the cycle's recycle marks can be counted.
  */
 async function churnCycle(prefix: string) {
   const { unmount } = await render(
@@ -344,11 +242,8 @@ afterEach(() => {
 
 describe('recycling · the pool is real on both platforms (F6)', () => {
   beforeAll(async () => {
-    // Precondition, asserted rather than assumed: on Android every assertion in this
-    // file is only about recycling if the flag that creates the pool is on, and the app
-    // installs that override at launch. If a future RN refuses it, or the install moves
-    // after the first flag read, this goes red instead of the three tests below passing
-    // on a process that never pooled anything. iOS has no such flag.
+    // Android pools views only when the app turned `enableViewRecycling` on; without it
+    // nothing below tests recycling.
     if (Platform.OS === 'android') {
       const enabled = await viewRecyclingEnabled();
       console.log(
@@ -359,10 +254,8 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
   });
 
   it('sends a dropped control to the pool, not just to the collector', async () => {
-    // The mark half of the evidence, and the platform-independent half: `dropped` comes
-    // from `onDropView`, which both an unmount and the front door of recycling run, so
-    // it is the *pair* that says which one happened. Nothing here knows or assumes that
-    // Android pools — it asks the ring, which only the native reset can write to.
+    // `dropped` is marked by a plain unmount and by recycling alike; only the pair with
+    // `recycled` says the view went to the pool.
     nitroUiCore.setPerfEnabled(true);
     try {
       delivered.length = 0;
@@ -391,29 +284,10 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
   });
 
   it('hands the next mount a host with no sizing policy left behind', async () => {
-    // The reset rule that F6's flag exposed, and the one that actually broke a suite.
-    // `sizingPolicy` is per-*host* state that a prop setter moves: DatePicker's `variant`
-    // setter sends `compact` → intrinsic and anything else → `fillWidth`, because an
-    // inline calendar takes its width from Yoga's box while a field sizes to its own
-    // text. The setter compares against `model.variant`, and `prepareForRecycle()` puts
-    // that back to `compact` — so the next mount, wanting the default, is "no change"
-    // and returns without touching the policy. The previous owner's `fillWidth` then
-    // survives into a control that is a field, and the field is laid out at its
-    // parent's width. That is how `DatePicker.harness.tsx` · G5 went red on this
-    // branch: three tests failed with a 131.05 dp field laid out at the row's 411.43.
-    //
-    // Shape of a round: an `inline` picker is mounted so its host is legitimately moved
-    // to `fillWidth`, then unmounted — which is what puts that host in the pool — and the
-    // next round mounts a plain `compact` field, the default variant, in a full-width row.
-    // If the policy survived the reset, the field is stretched to the row. So the bound
-    // is `box < row`, and it can only be reached by a control that asked the sizing
-    // engine the *right* question.
-    //
-    // Both mounts carry one perf id, so the `recycled` mark is attributable: without that
-    // witness the box bound below could be satisfied by a run that allocated a fresh view
-    // every time and never ran the reset at all. Three rounds, because which pooled
-    // instance comes back is the pool's choice — the fact this needs is that some round
-    // both recycled and stayed narrow.
+    // Each round leaves an `inline` picker's `fillWidth` host in the pool, then mounts a
+    // `compact` field in a full-width row. A sizing policy that survived the reset would
+    // stretch the field to the row. Three rounds, because the pool chooses which instance
+    // comes back.
     const POLICY_PERF_ID = 72;
     const pickers = (variant: 'inline' | 'compact') => (
       <View testID="policy-row">
@@ -437,9 +311,7 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
         await waitForTestId('policy-date', 10000);
         await settle(300);
         previous.unmount();
-        // Long enough for the drop and, on iOS, for the instance to reach the pool:
-        // `enqueueComponentViewWithComponentHandle` runs `prepareForRecycle` on the
-        // mounting transaction that removes the view (see the identity test below).
+        // Long enough for the dropped view to reach the pool.
         await settle(500);
 
         // 2. Mount the default variant, which cannot fix the policy itself.
@@ -471,20 +343,9 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
         await settle(300);
       }
 
-      // The witness first: a run that never pooled would leave the bound below
-      // trivially true, so the loop has to show it reached the reset at all. What it
-      // shows precisely is that *this control class* went through the drop-and-pool path
-      // — `recycled` is marked for the shared perf id, so it counts the inline picker's
-      // own pool entry as well as the field's. That is weaker than the identity test's
-      // per-object proof, and it is the weaker witness on purpose: DatePicker has no
-      // `nuiTestLifetimeReport`, and adding one to a second control for a witness the
-      // Switch already settles is more API surface than the claim is worth.
+      // A run that never pooled would pass the bound below trivially.
       expect(sawRecycle).toBe(true);
-      // The claim. `widestField` and `narrowestRow` are deliberately the pessimistic
-      // pair across rounds: the assertion holds only if *every* round's field was
-      // narrower than *every* round's row, so a single stretched field fails it. The
-      // two numbers are not from one layout pass, which is what makes this about the
-      // rule rather than about a particular measurement.
+      // Widest field against narrowest row across rounds, so one stretched field fails.
       if (widestField >= narrowestRow - 1) {
         throw new Error(
           `a compact field was laid out at its row's width — widest field ` +
@@ -499,25 +360,9 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
   });
 
   it('gives a later mount an instance the pool took back', async () => {
-    // The identity half. A mark says a reset ran somewhere; this says the object a mount
-    // is looking at *is* the one that was reset, because its own counter — which the
-    // reset does not clear — says it has been through a mount already.
-    //
-    // **The read happens while the control is still mounted**, and that is the whole
-    // test. Read after the unmount, every handle says `drops=1 recycles=1`: the drop and
-    // the pool entry have both run on it by then, so a freshly allocated instance reads
-    // exactly like a reused one and the assertion proves nothing. Read while mounted, a
-    // fresh view can only say `drops=0 recycles=0` — nothing has dropped it yet — and
-    // `recycles >= 1` is reachable only by a view the pool popped for this mount.
-    //
-    // The churn is one `render` plus rerenders, and the swap is by `key`, for two
-    // reasons. A swap by key deletes and re-adds inside the same parent, which is what
-    // drops one instance and asks for another; and it stays on the *same surface*, which
-    // matters because RN's pool is keyed by `surfaceId` and `onSurfaceStopped` empties it
-    // — a churn that tore the root down between rounds would be paying for a new pool
-    // every time. Alternating `value` as well, so every round's control has to have
-    // received its own props: a recycled view that came back as a corpse with tidy
-    // counters would satisfy a counter assertion without being a control anyone could use.
+    // The counters are read while the control is mounted: after an unmount every handle
+    // reads `drops=1 recycles=1`, reused or not. The swap is by `key` within one render,
+    // because React Native's pool is per surface and is emptied when a surface stops.
     delivered.length = 0;
     const KEYS = ['a', 'b', 'a', 'b', 'a', 'b'];
     const { rerender, unmount } = await render(oneSwitch(false, KEYS[0]), {
@@ -536,8 +381,6 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
       await waitFor(() => expect(latestHandle().value).toBe(value), {
         timeout: 8000,
       });
-      // The read, while this mount is live. `latestHandle()` is the handle *this* round
-      // delivered, so the numbers are about the instance currently on screen.
       const counters = lifetime(latestHandle());
       whileMounted.push(counters);
       console.log(
@@ -549,10 +392,8 @@ describe('recycling · the pool is real on both platforms (F6)', () => {
 
     const reused = Math.max(...whileMounted.map((c) => c.recycles));
     const dropped = Math.max(...whileMounted.map((c) => c.drops));
-    // Thrown, not `expect`, and with every round in the message: the assertion is only
-    // convincing next to the whole series, and a device run carries a thrown Error out of
-    // the process where `console.log` goes nowhere (the lesson `Conformance.harness.tsx`
-    // learned the hard way).
+    // Thrown with every round in the message: a device run reports a thrown Error, while
+    // `console.log` output may not leave the device.
     if (dropped < 1 || reused < 1) {
       throw new Error(
         `no mounted control reported a previous mount — highest on a mounted view was ` +
@@ -573,10 +414,8 @@ if (Platform.OS === 'android') {
     it(title, async () => {
       nitroUiCore.setPerfEnabled(true);
       try {
-        // Pay the one-time costs first, and fill the pool: it is a cache, so the first
-        // cycle legitimately raises the floor to hold its contents. Measuring from the
-        // second floor is what makes the slope about retention rather than about a cache
-        // reaching its working set (MountChurn.android.harness.tsx does the same).
+        // The pool is a cache, so the first cycle legitimately raises the floor: warm up
+        // first and measure from the second.
         nitroUiCore.prewarmSizing(['NitroUiSwitch']);
         nitroUiCore.drainPerf();
         await churnCycle('pool-warmup');
@@ -611,15 +450,11 @@ if (Platform.OS === 'android') {
             `(marks for nuiPerfId=${String(PERF_ID)} only)`
         );
 
-        // The witness that the loop recycled at all. Every churned row carries
-        // `nuiPerfId`, and the ring is drained each cycle, so this is that cycle's own
-        // hand-backs and not a running total. Zero across every cycle would mean the pool
-        // never ran, and the flat heap below would be measuring something else entirely.
+        // Zero across every cycle would mean the pool never ran.
         expect(
           recycledPerCycle.reduce((sum, value) => sum + value, 0)
         ).toBeGreaterThan(0);
-        // The last floor still has room to grow: a run that passes the slope while
-        // sitting at the heap limit is not a pass.
+        // A run that passes the slope while sitting at the heap limit is not a pass.
         expect(toMib(last.maxBytes) - toMib(last.usedBytes)).toBeGreaterThan(
           20
         );
@@ -629,29 +464,8 @@ if (Platform.OS === 'android') {
       }
     });
 
-    /**
-     * The drop-path branches B1 could only measure once, by hand: nothing happens, and
-     * nothing happens across a whole churn.
-     *
-     * B1's re-review called both "honest, but unasserted": the post-drop measure and
-     * layout path (its N5 — `stopSurface` drops views before taking the root out, so a
-     * dropped host can still be measured while attached) and the listener shape it filed
-     * as near-unreachable (M2 — a sizing flush scheduled while detached, then attach,
-     * then detach before a frame, then drop). The counting lives in the shipping code
-     * (`NitroComposeHost`'s companion: `processMeasuresAfterDrop`,
-     * `processLayoutsAfterDrop`, `giveUpUnregisters`, `floatingFlushSchedules`) and all
-     * four are **process-wide totals**, which is what makes a zero mean anything: the
-     * host whose guard fired is the one object a harness holds no handle for, and the
-     * population is every mount the process has done, not the one control being read.
-     *
-     * A delta across a churn, not an absolute: the totals are monotonic and other tests
-     * in this file mount and drop controls, so an absolute zero would be a claim about
-     * test ordering. A delta of zero says 600 mounts, 600 drops and 600 pool entries
-     * produced no post-drop ask, which is the measured negative B1's re-review asked for.
-     *
-     * The number is only as honest as the counter, and that is the next test's job: it
-     * drives the shape and shows the counter can move.
-     */
+    // The totals are process-wide and monotonic, and other tests here mount and drop
+    // controls, so the assertion is a delta of zero across the churn.
     it('measures the drop-path branches B1 called unreachable at zero across a churn', async () => {
       const before = lifetimeFields(await readLifetimeLine());
       await churnCycle('drop-path');
@@ -665,9 +479,6 @@ if (Platform.OS === 'android') {
           `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`
       );
       if (grew.length > 0) {
-        // Thrown with both reports inside the message, the way `Conformance.harness.tsx`
-        // learned to report: a device run carries a thrown Error out of the process and
-        // carries `console.log` out of it in none of the runs anyone has tried.
         throw new Error(
           `${grew.join(', ')} ${grew.length === 1 ? 'rose' : 'rose'} across a churn ` +
             `of ${String(COUNT)} controls, so B1's unreachable drop-path branch is a ` +
@@ -677,28 +488,9 @@ if (Platform.OS === 'android') {
       }
     });
 
-    /**
-     * B1's N5 shape, driven on purpose, to show the guard fires and the counter counts.
-     *
-     * A zero from a counter nobody has ever seen move is an assumption wearing a number.
-     * So this asks the example app to do the thing `stopSurface` does — drop a hosted
-     * control while it is still attached, then let the framework measure it — and reads
-     * the answer two ways: the view's own `measuredWidth` (`0` = the guard declined; any
-     * other number = it composed a UI for a mount that no longer exists, which is the
-     * leak) and the same process-wide counters as the test above, which have to have moved
-     * by *exactly one* — the probe makes exactly one measure call.
-     *
-     * It is also the only place the guard is *seen working* on Android. With recycling on,
-     * `onDropView` and `prepareToRecycleView` arrive back to back, so in normal operation
-     * the window the guard covers is entered only by `stopSurface`, which no harness here
-     * produces. That is what made the rule deletable before this round.
-     *
-     * Ordering matters twice over. The control must still be **mounted** when the probe
-     * walks the tree (the harness tears the whole root down between tests, so a probe run
-     * after the last `unmount()` sees an empty app and says `no-host`), and the "after"
-     * read must go through a *live* handle for the same reason. So: read the totals, mount
-     * the control, probe, read again, then unmount.
-     */
+    // The probe does what `stopSurface` does: it drops a hosted control while it is still
+    // attached, then measures it. The control must be mounted when the probe walks the
+    // tree, and the second read must go through a live handle, so the unmount comes last.
     it('declines, and counts, a host dropped while it is still attached', async () => {
       const before = lifetimeFields(await readLifetimeLine());
 
@@ -707,9 +499,6 @@ if (Platform.OS === 'android') {
       await settle();
 
       const answer = await probeModule().simulatePostDropMeasure();
-      // Read through the handle this test's own render delivered, which is still on
-      // screen. The probe has dropped the view it found, which may or may not be this
-      // one; either way the numbers are the process's.
       const after = lifetimeFields(latestHandle().nuiTestLifetimeReport());
       console.log(
         `    · post-drop measure, driven: ${answer} ` +
@@ -724,52 +513,16 @@ if (Platform.OS === 'android') {
             `The probe's own look at the tree: ${answer}`
         );
       }
-      // The precondition, stated as data: the guard only matters for a dropped host that
-      // is still attached, so a probe that found an already-detached view would be
-      // measuring the wrong thing and reporting a passing width.
+      // The guard only matters for a dropped host that is still attached.
       expect(answer).toContain('attached=true');
-      // The guard. `measuredWidth=0` is the decline: the alternative is a view that
-      // measured, and so composed, for a mount whose composition was already disposed.
+      // `measuredWidth=0` means the guard declined to measure, and so to compose.
       expect(answer).toContain('measuredWidth=0');
-      // The counter, moved by exactly the one ask the probe made. Without this half the
-      // assertion above could be satisfied by a guard that never ran, which is the failure
-      // mode a "must not happen" gate has and a "must happen" gate does not.
+      // Exactly one: the probe makes one measure call.
       expect(after.measuresAfterDrop).toBe((before.measuresAfterDrop ?? 0) + 1);
     });
   });
 } else {
-  /**
-   * iOS has no recycling leak gate, and the reason is that **no native iOS probe has been
-   * written yet — and the retention to gate is native**, not JS. X37 removed the pending
-   * test that used to stand here: the gate is the absence of a probe, and this comment is
-   * where the reason lives, beside the FOLLOWUPS line it names.
-   *
-   * ## Why that is the reason, and what earlier drafts of this comment got wrong
-   *
-   * Round 1 said Hermes was absent and `performance.memory` unimplemented. Both were
-   * false: `HermesInternal` is there, and `usedJSHeapSize` is readable and live. Round 2
-   * then argued from three facts about the JS side and was wrong in the same way twice
-   * more, by reasoning about plain JS when the Android gate does not use plain JS at all:
-   *
-   * - "No way to force a collection" holds only from JS. Android's forced `System.gc()`
-   *   happens *inside the app*, in `NitroUiProbeModule`, not in JS; an iOS probe could
-   *   collect the same way (JSI `instrumentation().collectGarbage()`), so the absence is
-   *   in our probe, not in the platform.
-   * - "Native retention" does not need a collect at all under ARC. A refcount release is
-   *   synchronous, so a live-host count — an init/deinit pair on `NitroSwiftUIHost` — or
-   *   the process footprint is deterministic without any GC question.
-   *
-   * The Android gate reads the Java heap because that is where B1's retention lived
-   * (`host` → `ComposeContent` → `AndroidComposeView`, plus one lifecycle observer per
-   * control). iOS's equivalent is SwiftUI/UIKit objects in native memory, so the readout
-   * that would gate it is a native one: an iOS `NitroUiProbe` module with a live-host
-   * counter or a footprint reading. Neither exists. That is the whole gap, and it is the
-   * follow-up in `docs/tasks/FOLLOWUPS.md`.
-   *
-   * What is deliberately *not* asserted here: any of the engine facts above. They go red
-   * only when Hermes or React Native changes, never when nitro-ui regresses, and a gate
-   * that can only fail for the wrong reason trains people to ignore it. What iOS *is*
-   * gated on is the recycle machinery itself — the marks and the per-object identity
-   * checks above run on both platforms, and they are the part of the rule that broke.
-   */
+  // TODO: iOS has no recycling leak gate. The retention to gate is native (SwiftUI and
+  // UIKit objects), and it needs a native iOS probe that counts live hosts or reads the
+  // process footprint.
 }

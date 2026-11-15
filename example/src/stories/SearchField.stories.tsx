@@ -1,12 +1,3 @@
-/**
- * SearchField stories (G17). The API is `SearchFieldProps`, documented on the
- * component itself in `src/components/SearchField/SearchField.tsx`: TextField's
- * prop names, minus every keyboard option - a search field is one line, and its
- * Return key is the Search key.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and
- * benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SearchField, type SearchFieldHandle } from 'react-native-nitro-ui';
@@ -72,11 +63,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel. Typing moves a local copy of `value`
- * (so the field feels alive) and reports to the Actions panel; moving the `value`
- * row writes the field.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onChangeText, value, ...props }) {
     const [current, setCurrent] = useState(value ?? '');
@@ -104,7 +90,6 @@ export const Playground: Story = {
   },
 };
 
-/** The field's looks, side by side: the README screenshot candidate. */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -137,11 +122,6 @@ export const States: Story = {
   ),
 };
 
-/**
- * `placeholder`, including what an empty field says with the prop unset: both
- * platforms put their own localized Search there, so an unset placeholder reads
- * in the device language.
- */
 export const Placeholder: Story = {
   render: () => (
     <Showcase>
@@ -162,7 +142,6 @@ export const Placeholder: Story = {
   ),
 };
 
-/** The controlled contract, a refused edit, and `ref.focus()` / `ref.blur()`. */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const ink = useShowcaseInk();
@@ -215,10 +194,6 @@ export const Controlled: Story = {
   },
 };
 
-/**
- * `maxLength`, counted the way JavaScript counts `string.length` - UTF-16 code
- * units, so an emoji is two of them.
- */
 export const MaxLength: Story = {
   render: function MaxLengthStory() {
     const ink = useShowcaseInk();
@@ -254,10 +229,6 @@ export const MaxLength: Story = {
   },
 };
 
-/**
- * The Search key: `onSubmitEditing` gets the query itself, then the field loses
- * focus, so the blur count moves with the submission.
- */
 export const Submit: Story = {
   render: function SubmitStory() {
     const ink = useShowcaseInk();
@@ -337,10 +308,6 @@ const RECIPES = [
   },
 ];
 
-/**
- * What the field is for: a list that narrows as the query grows, which is the
- * shape every search field ends up in.
- */
 export const SearchResults: Story = {
   render: function SearchResultsStory() {
     const ink = useShowcaseInk();
@@ -387,10 +354,6 @@ export const SearchResults: Story = {
   },
 };
 
-/**
- * A search field is `fillWidth`: its width belongs to the box and the measured
- * size it reports back is the height at that width.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>

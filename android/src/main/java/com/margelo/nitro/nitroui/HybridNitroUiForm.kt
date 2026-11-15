@@ -23,37 +23,9 @@ import com.margelo.nitro.views.RecyclableView
 import com.margelo.nitro.nitroui.views.HybridNitroUiFormStateUpdater
 
 /**
- * The `Form` of the S6 spike on Android: React Native's own scrollable column of sections,
- * painted with Material 3's grouped page colour (Q10 Appendix C1).
- *
- * **Android has no platform Form**, so there is nothing to host and no composition to
- * carry: the box is a `ReactViewGroup` and the rows stay where Yoga put them - which is also
- * what gives Android `measure()`, `ScrollView` recycling and keyboard scrolling for free from
- * React Native. The one thing the Hybrid View adds over a `View` is the colour: it comes
- * from the same Material 3 scheme every other control draws with ([NitroUiColorSchemes])
- * rather than from a hex literal in a JS file, which is the difference between using M3 and
- * imitating it (D38.1). Everything per row is drawn by the section's single Compose layer
- * (`HybridNitroUiFormSection.kt`).
- *
- * **The scroller is React Native's**, and that single fact decides three things here:
- *
- * - `onContentOffset` is never called, and `nuiContentOffsetY` is never read. React Native's
- *   own `ScrollView` shadow node already answers `getContentOriginOffset` for everything
- *   inside it, which is the very hook a Form's shadow node exists to override on iOS. Reporting
- *   an offset here would subtract the scroll twice (D45 item 3);
- * - a section reports `onPlacement(0)` and flows in place, so a row's Yoga origin is already
- *   where it is drawn;
- * - the keyboard is React Native's problem too, and it solves neither half of it. A focused
- *   field asks its scroller through `requestChildRectangleOnScreen`, which `ReactScrollView`
- *   asks of its *direct* children only, so a Form's rows never reach it: [NitroUiFormView] and
- *   the section's view forward the request with the rectangle moved into their own space. And
- *   the scroller that is asked keeps its viewport where it was — `adjustResize` resizes
- *   nothing under API 35's edge-to-edge, measured on the lease's API 35 AVD — so scrolling a
- *   row "into the viewport" scrolls it to the bottom edge of the screen, *behind* the
- *   keyboard. The two halves that make a field actually visible are both the Form's:
- *   [onImeInset] reserves the keyboard's height at the end of the scroll content so the last
- *   row can be scrolled clear of it at all, and [NitroUiFormView.revealFocusedRow] moves it
- *   into what is left above the keyboard.
+ * The `Form` on Android: a `ReactViewGroup` painted with Material 3's grouped page colour.
+ * The rows stay where Yoga put them, inside React Native's own `ScrollView`, so the scroll
+ * offset is that scroll view's business and only keyboard avoidance is handled here.
  */
 internal class HybridNitroUiForm(
   private val reactContext: ThemedReactContext,
@@ -62,7 +34,6 @@ internal class HybridNitroUiForm(
 
   private var avoidsKeyboard = true
 
-  /** Whether the box may move a focused row for the keyboard — the `keyboardAvoidance` prop. */
   internal val avoidsKeyboardForIme: Boolean
     get() = avoidsKeyboard
   private var perfInstanceId = NitroUiPerf.NO_INSTANCE
@@ -71,30 +42,21 @@ internal class HybridNitroUiForm(
   private var reportedImeInsetDp = -1f
 
   /**
-   * Received and never read. The scroll correction inside a React Native `ScrollView` is that
-   * scroll view's own shadow node's job, and doing it here as well would subtract the offset
-   * twice — which is why `Form.tsx` sends the number on both platforms and only iOS acts on it.
+   * Ignored: React Native's `ScrollView` shadow node already applies the scroll offset, and
+   * applying it here as well would subtract it twice.
    */
   override var nuiContentOffsetY: Variant_NullType_Double
     get() = Variant_NullType_Double.First(NullType.NULL)
     set(@Suppress("UNUSED_PARAMETER") value) {
-      // Deliberately dropped; see the class header.
+      // Deliberately dropped.
     }
 
-  /**
-   * Never called on Android, for the same reason in the other direction: the scroller above
-   * this view already tells the shadow tree how far it has scrolled. Declared because the spec
-   * declares it, and because `Form.tsx` sends every prop on both platforms.
-   */
+  /** Never called on Android: the scroll view above already reports its own offset. */
   override var onContentOffset: ((y: Double) -> Unit)? = null
 
   /**
-   * The `ime` inset this window did not consume by resizing, in dp, whenever it changes.
-   *
-   * The Form cannot add it to the viewport — that view is React Native's `ScrollView`, above
-   * the Form — so the number goes back to `Form.tsx`, which grows the scroll content by it.
-   * Under the example app's `adjustResize` the window *does* resize and this is 0, which is the
-   * correct answer and not a missing one: there is nothing left to reserve.
+   * The `ime` inset the window did not consume by resizing, in dp, reported on change. The
+   * scroll view is React Native's, so JavaScript grows the scroll content by this amount.
    */
   override var onImeInset: ((inset: Double) -> Unit)?
     get() = imeInsetCallback
@@ -131,16 +93,8 @@ internal class HybridNitroUiForm(
   override fun prepareForRecycle() {
     reportedWidthDp = -1f
     reportedImeInsetDp = -1f
-    // The report is a cache, and a read on the JS thread answers with whatever was last built
-    // (see [nuiTestFormReport]) - so a box that goes back to the pool still holding its last
-    // build answers for its previous owner until somebody asks again. Going back to the pool is
-    // the normal ending here: React Native keeps recycled views per `surfaceId`
-    // (`ViewManager.mRecyclableViews`) and hands a stopped surface's id to the next one, so the
-    // first report read from a recycled Form was the *previous* Form's - rows, `inCells` and
-    // offset included. X23 measured that as a recycled Form "starting" at the 200 dp its case
-    // had scrolled the first Form to, in a box whose real scroller is a fresh `ScrollView` at 0.
-    // Dropping the cache gives the report the reset every other number above gets; the next
-    // read answers `pending` and is rebuilt from the box as it now stands.
+    // The report is a cache; without this a recycled Form's first read would describe its
+    // previous owner.
     report = "pending"
     view.resetAccessibility()
   }
@@ -171,12 +125,7 @@ internal class HybridNitroUiForm(
     onContentBox?.invoke(dp.toDouble())
   }
 
-  /**
-   * The rows under this Form, read by walking the box rather than from a table the rows
-   * register themselves in. Android keeps rows in place, so the tree *is* the answer, and a
-   * walker cannot go stale when a mount or an unmount races a report — the failure iOS's
-   * reparenting had to design around, which Android does not have.
-   */
+  /** The rows under this Form, read by walking the view tree. */
   private val rows: List<NitroUiFormRowView>
     get() = view.rowViews()
 
@@ -190,12 +139,8 @@ internal class HybridNitroUiForm(
   }
 
   /**
-   * The report as JavaScript sees it.
-   *
-   * A Nitro method runs on the JS thread and every number here is the UI thread's, so
-   * the read is eventually consistent - built on the UI thread and returned as it last
-   * stood, the rule `HybridNitroUiBottomSheet.nuiTestStateReport` sets. The harness
-   * polls a report until it says what the test is waiting for.
+   * The cached test report. A Nitro method runs on the JS thread and the state is the UI
+   * thread's, so a read returns the last build and posts a rebuild for the next one.
    */
   @Volatile private var report = "pending"
   private val reportHandler = Handler(Looper.getMainLooper())
@@ -226,8 +171,6 @@ internal class HybridNitroUiForm(
       "taps=${rows.sumOf { it.taps }}",
       "pressed=${rows.count { it.pressed }}",
       "scroll=${String.format("%.1f", scrollOffsetDp())}",
-      // The Form's own answer to "did anything reach React about the keyboard": the inset JS
-      // was told to reserve, and whether the scroller is even allowed to try.
       "keyboard=${if (avoidsKeyboard) "rn" else "off"}",
       "ime=${String.format("%.2f", if (reportedImeInsetDp < 0f) 0f else reportedImeInsetDp)}",
       "offset=0.00",
@@ -236,16 +179,7 @@ internal class HybridNitroUiForm(
     ).joinToString(";")
   }
 
-  /**
-   * How far the Form's own `ScrollView` has scrolled, in dp.
-   *
-   * S6b question 4 needs this number to be read rather than assumed: React Native's
-   * `measure` walks the shadow tree and subtracts no scroll offset (0.88's
-   * `UIManagerBinding.cpp` calls the shared `dom::measureInWindow`, which sums Yoga
-   * origins and never looks at a view), so a row in this `ScrollView` measures where it
-   * was laid out, not where it is drawn. The `E7` case adds this back on Android and
-   * asserts it is the whole difference.
-   */
+  /** How far the `ScrollView` above the Form has scrolled, in dp. */
   private fun scrollOffsetDp(): Double {
     val density = view.resources.displayMetrics.density
     var parent: Any? = view.parent
@@ -260,10 +194,7 @@ internal class HybridNitroUiForm(
     reportHandler.post { scrollToDp(y) }
   }
 
-  /**
-   * There is no platform `Form` on Android to compare with, so question 2's reference is an
-   * iOS-only seam and every command here does nothing. The report keeps `kind=prototype`.
-   */
+  /** The test commands act on the iOS list; there is nothing for them to do on Android. */
   override fun nuiTestCommand(command: String) = Unit
 
   private fun scrollToDp(y: Double) {
@@ -288,10 +219,7 @@ internal class NitroUiFormView(
     paint()
   }
 
-  /**
-   * `surfaceContainerLow`: one tonal step below a row's `surface`
-   * (`ListTokens.ItemSegmentedContainerColor`), the way iOS's grouped colours sit.
-   */
+  /** `surfaceContainerLow`: one tonal step below a row's `surface`. */
   fun paint() {
     val dark =
       resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
@@ -317,12 +245,8 @@ internal class NitroUiFormView(
   }
 
   /**
-   * Ask the window for its `ime` inset, and keep asking.
-   *
-   * `setOnApplyWindowInsetsListener` on a view React Native owns is safe in the one way that
-   * matters here: the return value is this view's *own* consumed insets, and returning
-   * [ViewCompat.onApplyWindowInsets] unchanged leaves the dispatch to the app exactly as it
-   * found it. Nothing here eats an inset another view needed.
+   * Listen for the window's `ime` inset. The listener returns the insets unchanged, so it
+   * consumes nothing another view needs.
    */
   fun watchImeInset() {
     ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
@@ -333,12 +257,8 @@ internal class NitroUiFormView(
   }
 
   /**
-   * Take the previous mount's accessibility identity off before this view goes to the pool.
-   *
-   * Same rule as the Row's and the Section's: React Native's `prepareToRecycleView` clears its
-   * own `accessibility_label` tag and leaves `contentDescription` and
-   * `importantForAccessibility` alone, so a pooled Form comes back still named by whoever had
-   * one before (fix round 1).
+   * React Native's `prepareToRecycleView` leaves `contentDescription` and
+   * `importantForAccessibility` alone, so a pooled view would keep its previous identity.
    */
   fun resetAccessibility() {
     contentDescription = null
@@ -355,7 +275,7 @@ internal class NitroUiFormView(
     pendingImeReveal = false
   }
 
-  // MARK: The keyboard (D45 item 1)
+  // MARK: The keyboard
 
   /** The `ime` inset the window has not consumed by resizing, in px. 0 with no keyboard up. */
   private var imeInsetPx = 0
@@ -363,18 +283,11 @@ internal class NitroUiFormView(
   /** Whether the focused row still has to be moved clear of the keyboard. */
   private var pendingImeReveal = false
 
-  /** Attempts spent on the current keyboard. See [IME_REVEAL_ATTEMPTS]. */
   private var revealAttempts = 0
 
   /**
-   * The Form's own answer to the keyboard, in px of [imeInsetPx].
-   *
-   * Two numbers come from one inset, and they go to different places: the height goes back to
-   * React through [HybridNitroUiForm.noteImeInsetPx], which reserves it at the end of the
-   * scroll content, and the same height is what this view measures "clear of the keyboard"
-   * against. Reserving without revealing leaves the field at the bottom edge of the screen,
-   * behind the keyboard, which is exactly the shape S6b measured red and this branch shipped
-   * red through two rounds: the row moved `ime=` from 0 to 336.48 dp and never moved itself.
+   * The `ime` inset changed. Its height is reported to JavaScript, which reserves it at the
+   * end of the scroll content, and the focused row is then scrolled clear of the keyboard.
    */
   fun noteImeInsetPx(px: Int) {
     val inset = px.coerceAtLeast(0)
@@ -387,21 +300,9 @@ internal class NitroUiFormView(
   }
 
   /**
-   * Move the focused row into the part of the scroll view above the keyboard.
-   *
-   * `deficit` is the whole claim: how far the focused view's bottom edge hangs below the
-   * bottom of the visible band. Zero or less means the field is already clear and nothing is
-   * scrolled — a Form that yanked the page every time a field was tapped would fail the
-   * same person who just scrolled somewhere else to read while typing.
-   *
-   * One attempt is rarely enough, because the reservation is a React round trip: the inset
-   * arrives here first, and until the content has grown by it the scroller cannot move the
-   * row as far as it has to. So an attempt that ended at the end of the content leaves the
-   * claim pending and asks again, a bounded number of times, and a form whose row is clear
-   * stops asking on the first try.
-   *
-   * The scroll is `scrollBy` on React Native's own `ScrollView`, so the offset the shadow
-   * tree reports and every `onScroll` event go through the path React Native already owns.
+   * Scroll the focused view into the part of the scroll view above the keyboard. Retried a
+   * bounded number of times: the scroll content only grows by the reserved inset after a
+   * React round trip, and until then the scroll view cannot move the row far enough.
    */
   private val revealFocusedRow =
     object : Runnable {
@@ -453,14 +354,7 @@ internal class NitroUiFormView(
     return null
   }
 
-  /**
-   * A field focused while the keyboard is already up wants the same treatment.
-   *
-   * `requestChildFocus` is the hook `ViewGroup` actually offers for this: a Form's rows are
-   * several levels below it, so the framework reports the focus here rather than to the row
-   * that took it. `ViewGroup` has no `onChildFocus` to override — it asks for the `child`
-   * whose branch the focus is in, which is why the signature reads like this.
-   */
+  /** A field focused while the keyboard is already up is revealed the same way. */
   override fun requestChildFocus(
     child: View,
     focused: View,
@@ -484,14 +378,6 @@ internal class NitroUiFormView(
     if (pendingImeReveal) post(revealFocusedRow)
   }
 
-  /**
-   * How many times one keyboard is answered for, and how far apart the attempts are.
-   *
-   * Bounded because the alternative is a `Runnable` that outlives the question: the React
-   * round trip the reservation needs is a couple of frames on an idle device, and 12 attempts
-   * at 50 ms is half a second, which is longer than the reservation and shorter than anything
-   * a person would notice as the page moving under their finger.
-   */
   private companion object {
     const val IME_REVEAL_ATTEMPTS = 12
     const val IME_REVEAL_INTERVAL_MS = 50L
@@ -501,13 +387,8 @@ internal class NitroUiFormView(
   }
 
   /**
-   * A descendant — a focused field, three views down — wants to be seen.
-   *
-   * `ReactScrollView.onRequestChildFocus` asks its *direct* children this, so a Form nested
-   * inside a scroll view is never asked at all, and the row under the keyboard stays under it
-   * (S6b measured this as the red real-input case). Answering is a translation, not a scroll:
-   * move the rectangle into this view's space and pass the request up with `this` as the child,
-   * which is the contract `ReactScrollView` expects from a child it has been given.
+   * `ReactScrollView` only scrolls to a rectangle its direct child asks for, so a request
+   * from a descendant is passed up with the rectangle moved into this view's coordinates.
    */
   override fun requestChildRectangleOnScreen(
     child: View,
@@ -537,16 +418,7 @@ internal class NitroUiFormView(
     return scrolled || (parent == true)
   }
 
-  /**
-   * A rectangle given in [child]'s coordinates, in ours — which is what `requestChildRectangleOnScreen`
-   * means when the child it is handed is `this`.
-   *
-   * The offset is the child's position, not a guess at it, because the framework's own
-   * implementation does the same addition (`ViewGroup.requestChildRectangleOnScreen` →
-   * `offsetDescendantRectToMyCoords`). A Form's box does not scroll, so there is no scroll
-   * correction to fold in; the scroll lives in the `ScrollView` above, which is exactly the
-   * view being asked to do something about it.
-   */
+  /** A rectangle given in [child]'s coordinates, moved into this view's. */
   private fun translateIntoSelf(
     child: View,
     rectangle: Rect,
@@ -578,13 +450,8 @@ internal class NitroUiFormView(
 }
 
 /**
- * The Fabric manager of `NitroUiForm` - hand-written and registered instead of nitrogen's
- * generated `HybridNitroUiFormManager`, for the `<Host>`/BottomSheet/ContextMenu reason: a
- * generated manager is a `SimpleViewManager` with no `IViewGroupManager` half, and a Form's
- * whole content is React Native children.
- *
- * Unlike a ContextMenu's, this view has no extra child to keep out of Fabric's indices, so
- * the group methods are `ReactViewManager`'s own and only the props batch is redirected.
+ * The Fabric manager of `NitroUiForm`, used instead of nitrogen's generated one: a generated
+ * manager is a `SimpleViewManager`, which cannot take React Native children.
  */
 internal class NitroUiFormViewManager : ReactViewManager() {
   private class Holder(

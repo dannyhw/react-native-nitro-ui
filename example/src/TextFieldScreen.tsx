@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { TextField, type TextFieldHandle } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -29,10 +28,8 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** The text a field refuses to leave: every edit is reverted by the handshake. */
 const FROZEN = 'frozen';
 
-/** A plain RN button, so a tap target is not itself a nitro-ui control. */
 function Action({
   label,
   testID,
@@ -55,7 +52,6 @@ function Action({
   );
 }
 
-/** One labelled field in a grey well, the way a form draws an undecorated field. */
 function Row({
   title,
   children,
@@ -74,16 +70,8 @@ function Row({
   );
 }
 
-/**
- * Every TextField configuration G13 has to show, and the fields the real-input
- * suite types into (`CHECKS['text-field']` in `scripts/real-input/android.mjs`,
- * `testRealInputTextField` in `RealInputTests.swift`). Those checks find a field
- * by its `accessibilityLabel` and read only the `Text` below it, so every echo
- * has a testID and says what JS saw.
- *
- * The focus row and its two buttons come first: a keyboard that is up covers the
- * lower half of the screen, and a button under it cannot be tapped.
- */
+// The focus row and its two buttons come first: a keyboard that is up covers
+// the lower half of the screen, and a button under it cannot be tapped.
 export default function TextFieldScreen() {
   const ink = useInk();
   const topInset = useTopInset();
@@ -97,16 +85,14 @@ export default function TextFieldScreen() {
   const [notes, setNotes] = useState('');
   const [corrected, setCorrected] = useState('');
   const [correctedChanges, setCorrectedChanges] = useState(0);
-  // Autocorrect on: Gboard holds each word in an IME composition while it types it,
-  // so this echo is how a person sees that every key is still reported (G13 round 1).
+  // With autocorrect on, Gboard holds each word in an IME composition while it
+  // is typed; this echo shows that every key is still reported.
   const onCorrectedText = useCallback((text: string) => {
     setCorrected(text);
     setCorrectedChanges((count) => count + 1);
   }, []);
   const focusRef = useRef<TextFieldHandle>(null);
 
-  // Every edit is refused: JS keeps `FROZEN`, so the echo is what brings the
-  // text back (docs/architecture/core.md §4).
   const refuseEdit = useCallback(() => {
     setFrozenEdits((count) => count + 1);
   }, []);

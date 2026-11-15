@@ -5,28 +5,16 @@
  *   node scripts/build-app.mjs --platform ios
  *   node scripts/build-app.mjs --platform android [--arch arm64-v8a] [--clean]
  *
- * This is the step `react-native-harness` deliberately does not do, and the two
- * ways it goes wrong are both fixed here (see `scripts/app-stamp-core.mjs`):
+ * The build ends by stamping the tree it compiled. On Android the finished APK
+ * is checked per component, because gradle can report `packageDebug`
+ * up-to-date while the dex is missing a generated class.
  *
- *   1. the artifact is older than the sources, so a green run tests code nobody
- *      wrote - so the build ends by stamping the tree it compiled, and every
- *      device gate refuses when that stamp no longer matches;
- *   2. gradle reports `packageDebug` up-to-date while the dex is missing a
- *      generated hybrid - so the finished APK is inspected per component, and a
- *      missing one re-runs `packageDebug --rerun` instead of trusting the build.
- *
- * Output paths are fixed per worktree (never `~/Library/Developer/Xcode/…`), so
- * a run says which checkout it came from:
+ * Output paths are fixed per worktree:
  *
  *   ios      example/ios/build            (-derivedDataPath) -> …/Debug-iphonesimulator/NitroUiExample.app
  *   android  example/android/app/build                      -> …/apk/debug/app-debug.apk
  *
- * Both are what `HARNESS_APP_PATH` wants. The stamp is written next to the build
- * directory, and `example/rn-harness.config.mjs` reads it from there, so
- * `bun run harness:ios` needs no environment at all in the usual case.
- *
- * Devices and ports are *not* this script's business: it builds, it does not run
- * anything (AGENTS.md: only touch devices you started).
+ * Builds only: this script starts no device.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -70,10 +58,8 @@ import {
 import { installPods } from './pod-install.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
-/** This checkout, wherever the worktree happens to be. */
 const REPO_ROOT = repoRootOf(path.dirname(fileURLToPath(import.meta.url)));
 
-/** Resolved once: ccache is either on this machine or it is not. */
 const ccache = ccacheSetup();
 
 const USAGE =
@@ -110,9 +96,8 @@ function parseArg(argv, name) {
 }
 
 /**
- * Where ccache is, or null. A scan of `PATH` rather than `command -v` in a shell:
- * this decides whether a build gets a launcher at all, and it must not depend on
- * which shell happens to be configured.
+ * Where ccache is, or null. Scans `PATH` rather than asking a shell, so the
+ * answer does not depend on which shell is configured.
  *
  * @returns {string | null}
  */
@@ -139,8 +124,7 @@ function findCcache() {
 
 /**
  * ccache, if this machine has it. Everything ccache-related is conditional on
- * this one lookup, so a machine without it - a CI runner, a new contributor -
- * builds exactly the way it did before (the no-op the brief asks for).
+ * this one lookup, so a machine without it builds as usual.
  */
 function ccacheSetup() {
   const binary = ccacheRequested(process.env) ? findCcache() : null;
@@ -149,8 +133,8 @@ function ccacheSetup() {
   }
   const env = {
     ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT, binary }),
-    // Read by scripts/gradle-ccache.init.gradle: the file is passed with -I
-    // only when ccache exists, and it needs the path, not a guess.
+    // Read by scripts/gradle-ccache.init.gradle, which is passed with -I only
+    // when ccache exists.
     CCACHE_GRADLE_LAUNCHER: binary,
   };
   // ccache ignores an environment variable it does not recognise, so the two
@@ -173,9 +157,8 @@ function ccacheSetup() {
     enabled: true,
     binary,
     env,
-    // The NDK's CMake projects live in `android/` of the published package and
-    // in nitro-modules, neither of which this repo may edit for packaging
-    // reasons, so the launcher goes in through an init script instead.
+    // The NDK's CMake projects live in the published package's `android/` and
+    // in nitro-modules, so the launcher goes in through an init script.
     gradleArgs: gradleCcacheArgs({
       enabled: true,
       initScript: path.join(REPO_ROOT, 'scripts', 'gradle-ccache.init.gradle'),
@@ -220,10 +203,8 @@ function removeIfPresent(dir, log) {
 }
 
 /**
- * Where the Pods project records what it was last shown. Inside `Pods/`
- * because that is the thing being kept in step, and gitignored because it is
- * build state. `--clean` deletes it too (see `iosCleanTargets`), which is what
- * makes a clean build mean "show the pods the sources again".
+ * Where the Pods project records what it was last shown. Inside `Pods/`,
+ * gitignored, and deleted by `--clean`.
  */
 function podInputsFile(iosDir) {
   return path.join(iosDir, 'Pods', POD_INPUTS_RECORD);
@@ -252,9 +233,8 @@ function writeMarker(file, value) {
 /**
  * A digest of the files CocoaPods reads to build the Pods project: this
  * library's native sources, nitrogen's output, and the Podfile. Path plus size
- * plus mtime, not content - the question is "did the file list move", and a new
- * file is the case that bites. Ignored build output is skipped so a compile
- * cannot make the next build reinstall.
+ * plus mtime, not content: the question is "did the file list move". Ignored
+ * build output is skipped so a compile cannot make the next build reinstall.
  *
  * @returns {string}
  */
@@ -301,10 +281,8 @@ function iosInputFingerprint() {
     }
   };
   for (const root of roots) walk(root, 0);
-  // The Pods project records whether it was told to use ccache, which is a
-  // property of *this machine* as much as of these sources: installing ccache
-  // after a `pod install` has to re-run it, or the CC build settings would keep
-  // naming plain clang and the cache would stay cold forever.
+  // The Pods project records whether it was told to use ccache, so installing
+  // ccache after a `pod install` has to re-run it.
   lines.push(`ccache:${ccache.binary ?? 'none'}`);
   return createHash('sha256').update(lines.sort().join('\n')).digest('hex');
 }
@@ -313,9 +291,8 @@ function buildIos({ clean, log }) {
   const iosDir = path.join(REPO_ROOT, 'example', 'ios');
   const derivedData = path.join(iosDir, 'build');
   if (clean) {
-    // DerivedData *and* the pod-inputs record, so the pod-install decision below
-    // is asked again rather than answered from the record this clean was meant
-    // to invalidate.
+    // DerivedData and the pod-inputs record, so the pod-install decision below
+    // is asked again.
     for (const target of iosCleanTargets({ iosDir })) {
       removeIfPresent(target, log);
     }
@@ -326,14 +303,10 @@ function buildIos({ clean, log }) {
   const podsAreStale =
     !fs.existsSync(manifest) ||
     fs.readFileSync(manifest, 'utf8') !== fs.readFileSync(podfileLock, 'utf8');
-  // The lock matching the manifest is not the only thing that can make the Pods
-  // project wrong. This library's own sources arrive through the podspec's
-  // `source_files` globs, so a *new* file under `cpp/` or
+  // The library's own sources reach the Pods project through the podspec's
+  // `source_files` globs, so a new file under `cpp/` or
   // `nitrogen/generated/ios/` is invisible to an existing Pods project until
-  // someone runs pod install - and xcodebuild then builds an app that simply
-  // lacks the new component, which the harness reports as a failing test rather
-  // than a missing file (review S6). Comparing what the last install saw is what
-  // notices.
+  // pod install runs again.
   const inputs = podInputsFile(iosDir);
   const seen = readMarker(inputs);
   const inputsChanged = seen !== iosInputFingerprint();
@@ -348,9 +321,7 @@ function buildIos({ clean, log }) {
     // tracked `Podfile.lock` does not become a version-only diff.
     const pods = installPods({ dir: iosDir });
     if (pods.status !== 0) {
-      // S8: continuing here builds against whatever headers were there before,
-      // and the failure shows up as a compile error or - worse, for a new file -
-      // as an app that is missing a component while still exiting green.
+      // Continuing here would build against whatever headers were there before.
       throw new Error(
         `pod install failed with exit code ${String(pods.status)} - the build ` +
           'stopped there rather than compiling against a Pods project that ' +
@@ -360,10 +331,9 @@ function buildIos({ clean, log }) {
     writeMarker(inputs, iosInputFingerprint());
   }
 
-  // The module cache this build writes is the one a ccache build owns: the
-  // compiler here has CCACHE_BASEDIR, and clang records what it resolves into
-  // the .pcm files, so sharing that directory with a plain xcodebuild hands it
-  // two spellings of one module and a fatal error. See iosModuleCacheDir.
+  // This build's module cache is its own: with CCACHE_BASEDIR set, clang
+  // records paths in the .pcm files differently from a plain xcodebuild, and
+  // sharing the directory is a fatal error. See iosModuleCacheDir.
   const moduleCacheArgs = iosModuleCacheArgs({
     derivedData,
     ccache: ccache.enabled,
@@ -372,10 +342,8 @@ function buildIos({ clean, log }) {
     log(`module cache ${moduleCacheArgs[0].split('=')[1]}`);
   }
 
-  // M3: this is the "before" tree. It is taken *after* pod install, because pod
-  // install legitimately rewrites the tracked Podfile.lock (the CocoaPods stamp)
-  // - hashing before it would report the tooling's own bookkeeping as the tree
-  // having moved.
+  // The "before" tree is taken after pod install, which legitimately rewrites
+  // the tracked Podfile.lock.
   const treeBefore = currentCodeTree();
 
   run(
@@ -405,10 +373,8 @@ function buildIos({ clean, log }) {
 }
 
 function buildAndroid({ abis, abisFrom, clean, log }) {
-  // M3: nothing in this build is expected to write to tracked files (gradle,
-  // codegen and the RN autolinker all write under ignored build directories),
-  // so the tree at entry is the tree the compiler reads. Verified on the run
-  // recorded in docs/tasks/X1-dev-tooling.report.md.
+  // Nothing in this build writes to tracked files, so the tree at entry is the
+  // tree the compiler reads.
   const treeBefore = currentCodeTree();
   const androidDir = path.join(REPO_ROOT, 'example', 'android');
   const appBuild = path.join(androidDir, 'app', 'build');
@@ -438,13 +404,10 @@ function buildAndroid({ abis, abisFrom, clean, log }) {
         'nitrogen registers them - gradle called the dex up-to-date over stale ' +
         'output, re-running packageDebug'
     );
-    // `--rerun` skips the up-to-date checks for every task in this graph, which
-    // is the documented fix for a generated hybrid that never got dexed. The
-    // gradle arguments have to match the build above exactly, init script
-    // included: without it the rerun is a different configuration-cache key and
-    // a CMake reconfigure with no launcher, so the slowest possible path becomes
-    // the one the safety net takes - and it forces the same reconfigure again on
-    // the next normal build.
+    // `--rerun` skips the up-to-date checks for every task in this graph. The
+    // gradle arguments must match the build above exactly, init script
+    // included: otherwise the rerun is a different configuration-cache key and
+    // a CMake reconfigure with no launcher.
     run(
       gradlew,
       [':app:packageDebug', '--rerun', ...architectures, ...ccache.gradleArgs],
@@ -471,9 +434,7 @@ function buildAndroid({ abis, abisFrom, clean, log }) {
 }
 
 /**
- * How long a build may queue for its slot. Overridable for one shell the same
- * way the lease poll interval is, so a test or a machine with a slow queue can
- * name a different number without a code change (X9).
+ * How long a build may queue for its slot, overridable from the environment.
  *
  * @param {Record<string, string | undefined>} env
  * @returns {number}
@@ -506,19 +467,17 @@ function main(argv) {
   const force = argv.includes('--force');
   const noStamp = argv.includes('--no-stamp');
 
-  // Resolved before the skip decision, not after it: the ABIs are part of what
-  // the caller asked for, and an artifact that does not contain them is not the
-  // build that was requested even when the code tree matches (review M1).
+  // Resolved before the skip decision: an artifact that does not contain the
+  // requested ABIs is not the build that was asked for, even when the code tree
+  // matches.
   const { abis, source: abisFrom } = resolveAndroidAbis({
     flag: parseArg(argv, '--arch'),
     env: process.env,
     hostArch: os.arch(),
   });
 
-  // Nothing changed since the last build, and the artifact still proves it? Then
-  // there is nothing to build. The check is the same one the device gates run,
-  // so "fresh" cannot mean one thing here and another thing there; anything it
-  // cannot confirm, it builds.
+  // Skips when the stamp still matches the tree. The check is the one the
+  // device gates run; anything it cannot confirm, it builds.
   if (!force && !clean && !noStamp) {
     const decision = checkFreshApp({ platform, warn: () => {} });
     const skip = decideSkipBuild({
@@ -545,16 +504,9 @@ function main(argv) {
     log(`building: ${skip.reason}`);
   }
 
-  // One heavy native build at a time, machine-wide (X9): two app builds plus
-  // `check` pushed a 10-core machine to load 13, and the lease pool only limits
-  // *device* tasks, because a build needs no device.
-  //
-  // Taken *after* the stamp-fresh skip above, so a build that has nothing to do
-  // takes no slot - the skip is a file read, and a queue of tasks waiting behind
-  // a machine that is not compiling would be worse than no queue at all.
-  //
-  // `--clean` and `--force` still queue: they are slower than a normal build, not
-  // exempt from what they do to the machine.
+  // One heavy native build at a time, machine-wide. The slot is taken after the
+  // stamp-fresh skip above, so a build with nothing to do takes none; `--clean`
+  // and `--force` still queue.
   const slot = buildSlotState(process.env);
   if (slot.note != null) log(slot.note);
   const held = takeBuildSlot({
@@ -567,12 +519,10 @@ function main(argv) {
     log,
     waitMinutes: buildSlotWaitMinutes(process.env),
   });
-  // Timed from here, not from process entry: the wait belongs in its own number,
-  // and a 9-minute build that queued for 20 should not read as a 29-minute build.
+  // Timed from here, not from process entry, so the queue wait is not counted
+  // as build time.
   const startedAt = Date.now();
-  // Release on every exit path, including the throw out of `run()`: a slot that
-  // outlives its build would hold the machine until the ttl, and the next task
-  // would wait for a compile that already finished.
+  // Released on every exit path, including a throw out of `run()`.
   process.once('exit', held.release);
   try {
     const { artifact, treeBefore } =

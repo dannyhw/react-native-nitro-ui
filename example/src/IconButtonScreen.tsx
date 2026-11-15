@@ -16,7 +16,6 @@ import {
   type IconButtonWidth,
 } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -32,7 +31,6 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** The rungs, in ladder order - the row the docs table is read from. */
 const RUNGS: readonly IconButtonSize[] = [
   'small',
   'medium',
@@ -41,7 +39,6 @@ const RUNGS: readonly IconButtonSize[] = [
   'xxlarge',
 ];
 
-/** The four looks, in Material's order. */
 const VARIANTS: readonly IconButtonVariant[] = [
   'standard',
   'filled',
@@ -49,22 +46,13 @@ const VARIANTS: readonly IconButtonVariant[] = [
   'outlined',
 ];
 
-/** Material's three width options for a rung. */
 const WIDTHS: readonly IconButtonWidth[] = ['narrow', 'uniform', 'wide'];
 
-/**
- * Every IconButton configuration G23 has to show, and the controls the real-input
- * suite taps (`scripts/real-input`).
- *
- * The control has no text of its own, so each one here is named by its
- * `accessibilityLabel` - which is also the only thing a screen reader gets.
- */
 export default function IconButtonScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  // ---- Real input (`scripts/real-input`): one press, one flip, one refusal. ----
   const [pressed, setPressed] = useState(0);
   const onPress = useCallback(() => {
     setPressed((count) => count + 1);
@@ -77,8 +65,6 @@ export default function IconButtonScreen() {
     setToggleEvents((count) => count + 1);
   }, []);
 
-  // Controlled to `false` and never written: every flip is refused, and the echo is
-  // what the control was *asked* to show, so a snap-back has a witness.
   const [refusedLast, setRefusedLast] = useState('none');
   const [refusedEvents, setRefusedEvents] = useState(0);
   const onRefusedChange = useCallback((next: boolean) => {
@@ -86,8 +72,6 @@ export default function IconButtonScreen() {
     setRefusedEvents((count) => count + 1);
   }, []);
 
-  // Shared by the enabled and the disabled control, so a stray tap on the disabled
-  // one is a number that did not move rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
   const onDisabled = useCallback(() => {
     setDisabledEvents((count) => count + 1);
@@ -96,7 +80,6 @@ export default function IconButtonScreen() {
     setDisabledEvents((count) => count + 1);
   }, []);
 
-  // ---- The gallery below the real-input block. ----
   const [bookmarked, setBookmarked] = useState(true);
 
   return (
@@ -117,13 +100,7 @@ export default function IconButtonScreen() {
           the whole control, so accessibilityLabel is required.
         </Text>
 
-        {/*
-          The real-input suite's block (`scripts/real-input`): a press button, a
-          toggle, a toggle JS refuses, and a disabled control wired to its own
-          counter - so an OS tap on the disabled one is a number that did not move.
-          It is first on the page because `uiautomator dump` lists no off-screen
-          nodes.
-        */}
+        {/* First on the page: `uiautomator dump` lists no off-screen nodes. */}
         <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
         <View style={styles.row}>
           <IconButton
@@ -275,8 +252,8 @@ export default function IconButtonScreen() {
             onCheckedChange={setBookmarked}
             testID="toggle-uncontrolled"
           />
-          {/* The glyph cannot be resolved: nothing is drawn, and the box is the
-              same size — which is what the harness measures. */}
+          {/* An icon name that cannot be resolved: nothing is drawn, and the
+              box keeps its size. */}
           <IconButton
             accessibilityLabel="Missing artwork"
             systemImage="not-a-real-symbol"
@@ -294,7 +271,6 @@ export default function IconButtonScreen() {
   );
 }
 
-/** One on-screen value the real-input suite reads. */
 function Echo({
   label,
   testID,

@@ -13,11 +13,8 @@ import {
 import { Progress } from 'react-native-nitro-ui';
 
 /**
- * Text colours for the current appearance.
- *
- * Copied from `SliderScreen.tsx` for the same reason: `Text` gets no dynamic
- * default colour from React Native, so a screen that has to read in both light and
- * dark mode picks its own.
+ * `Text` gets no dynamic default colour from React Native, so a screen that has
+ * to read in both light and dark mode picks its own.
  */
 function useInk() {
   const dark = useColorScheme() === 'dark';
@@ -29,8 +26,6 @@ function useInk() {
 }
 
 /**
- * Status bar height the system reserves for itself on Android.
- *
  * Android draws every app edge to edge, and RN's `SafeAreaView` only applies the
  * iOS safe area, so the top inset has to be added by hand.
  */
@@ -38,26 +33,12 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** One display frame. The scenario is a download callback, which ticks per frame. */
 const FRAME_MS = 16;
 
-/** How far one frame moves the clock's fraction: ~1.5 s from empty to full. */
 const FRAME_STEP = 0.011;
 
-/** Rows in the list section - the case `RecyclableView` exists for. */
 const LIST_ROWS = 200;
 
-/**
- * Every Progress configuration this task has to prove, on one screen: a `value`
- * written from JS at 60 Hz, both indeterminate shapes, both determinate ones,
- * tints, a value that overshoots, `NaN`, a caller's box, a live variant switch,
- * and 200 indicators in a scrolling list.
- *
- * The list can be dropped from the tree with one press, which is how the
- * "indeterminate animation stops when nobody can see it" CPU check is run by hand:
- * watch the CPU with 200 spinning indicators, drop them, and watch it fall to
- * idle (`docs/components/progress.md`).
- */
 export default function ProgressScreen() {
   const ink = useInk();
   const [clockValue, setClockValue] = useState(0);
@@ -67,9 +48,6 @@ export default function ProgressScreen() {
   const [listMounted, setListMounted] = useState(true);
   const writesRef = useRef(0);
 
-  // The 60 Hz scenario: a sawtooth fraction written on every frame, which is the
-  // shape of a download progress callback. It is the expensive thing on the page,
-  // so it can be stopped - and it stops by itself when this screen unmounts.
   useEffect(() => {
     if (!clockRunning) {
       return undefined;
@@ -89,8 +67,6 @@ export default function ProgressScreen() {
     () =>
       Array.from({ length: LIST_ROWS }, (_, index) => ({
         id: `row-${index}`,
-        // Every third row is indeterminate, so the recycled rows carry both kinds
-        // of state across a recycle.
         value: index % 3 === 0 ? null : (index % 11) / 10,
       })),
     []
@@ -325,8 +301,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
   },
-  // A bar inside a row, so the label can sit beside it: the bar takes the width the
-  // row gives it and keeps its own height.
   shortBar: {
     width: 140,
   },

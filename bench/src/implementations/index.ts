@@ -10,13 +10,7 @@ import { RnCoreList } from './rnCore';
 
 /**
  * The implementations the runner can measure, in ABBA-interleaving order.
- *
- * `rn-core` is the control arm and always runs. `nitro-ui` is the library under
- * development - the only arm with native perf marks, and the only gated one.
- *
- * Adding a new component to the matrix means one branch per arm here (they
- * dispatch on `BenchListProps.component`) plus the plan cells; the arm names, the
- * runner and the gate do not change.
+ * `rn-core` is the control arm; `nitro-ui` is the only gated one.
  */
 export const implementations: BenchImplementation[] = [
   {
@@ -55,14 +49,9 @@ export const implementations: BenchImplementation[] = [
     enablePerfMarks: enableNitroUiPerfMarks,
     drainPerfMarks: drainNitroUiPerfMarks,
   },
-  // The same library's controls inside one shared `<Host>`, so one Compose
-  // composition for the batch instead of one per control (H1, widened by H2a and H2b). All
-  // seven hostable controls are listed, which `components` makes visible in the report rather
-  // than silently measuring an empty tree on another component's cell: an RN view, a plain
-  // text child or a nested `<Host>` stay refused by a Host. This arm is where D24's numbers come from. Not
-  // gated (`GATED_IMPLEMENTATIONS` is `nitro-ui` alone): like the two `expo-ui-*` arms it
-  // is a reference arm — measured and reported, never gated against a baseline (T02 S9).
-  // H1's re-review F3 caught an earlier draft of this comment claiming otherwise.
+  // The library's controls inside one shared `<Host>`: one Compose composition
+  // for the batch instead of one per control. A reference arm like the two
+  // `expo-ui-*` arms: measured and reported, never gated against a baseline.
   {
     name: 'nitro-ui-host',
     available: true,

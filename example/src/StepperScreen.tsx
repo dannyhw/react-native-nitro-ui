@@ -12,9 +12,8 @@ import {
 import { Stepper } from 'react-native-nitro-ui';
 
 /**
- * Text colours for the current appearance - the helper the other screens use.
  * `Text` gets no dynamic default colour from React Native, and the screen has to
- * read in both light and dark mode for the README screenshots.
+ * read in both light and dark mode.
  */
 function useInk() {
   const dark = useColorScheme() === 'dark';
@@ -30,65 +29,34 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/**
- * The Stepper's example screen: the real-input block first, then a quantity row
- * (the shape the control exists for: a stepper beside a number the app renders),
- * the controlled pair with a refusing parent, tenths, and the disabled pair.
- *
- * The README screenshots come from the Storybook story, not this screen. The
- * on-device assertions live in `example/__tests__/Stepper.harness.tsx`, which
- * renders its own trees.
- */
 export default function StepperScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  // The real-input suite's controls (`scripts/real-input`). The echo is React's own
-  // render, so it only moves if a real touch reached the hosted control, the control
-  // told Nitro, and Nitro told JS. The range is deliberately two steps wide: the
-  // suite taps each half, then taps a half at its bound.
   const [realValue, setRealValue] = useState(1);
   const [realEvents, setRealEvents] = useState(0);
   const onRealValueChange = useCallback((next: number) => {
     setRealValue(next);
     setRealEvents((count) => count + 1);
   }, []);
-  // The refusing parent: `value` never moves, so every step is refused and has to
-  // snap back. The last *requested* value is the oracle - a stepper that kept the
-  // refused value would ask for the next one, not repeat the refused one.
   const [refusedLast, setRefusedLast] = useState('-');
   const [refusedEvents, setRefusedEvents] = useState(0);
   const onRefusedValueChange = useCallback((next: number) => {
     setRefusedLast(String(next));
     setRefusedEvents((count) => count + 1);
   }, []);
-  // The hold-to-repeat control, and the only stepper on this page that is wide
-  // enough for one: `0...10` leaves five steps in the direction the check presses,
-  // so "one press, several steps" is countable. The two-step stepper above is the
-  // bounds fixture and cannot show a repeat at all — it runs out of range after one
-  // step, which is the behaviour its own assertions are about.
   const [held, setHeld] = useState(5);
   const [heldEvents, setHeldEvents] = useState(0);
   const onHeldValueChange = useCallback((next: number) => {
     setHeld(next);
-    // Counted in the same callback that moves the value, so the two echoes are one
-    // number read twice: `events == value - 5` is the claim "every repeat is one step
-    // and one event", and a half that emitted twice per step shows as twice the
-    // value's own movement.
     setHeldEvents((count) => count + 1);
   }, []);
-  // A range that does not end on its step, which is the shape SwiftUI has to supply
-  // its own stride for: `0...1.05` by `0.1` is drawn without a `step:`, and the control
-  // may take only the *direction* of what it is written. One plus tap from 0 owes
-  // `0.1`; taking the write itself would owe `1` — ten steps, to a number the app never
-  // asked for.
+  // Drives a stepper whose range (`0...1.05` by `0.1`) does not end on its step.
   const [sparse, setSparse] = useState(0);
   const onSparseValueChange = useCallback((next: number) => {
     setSparse(next);
   }, []);
-  // Shared by the enabled and the disabled stepper, so a stray tap on the disabled
-  // one is a number on screen rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
   const onDisabledValueChange = useCallback(() => {
     setDisabledEvents((count) => count + 1);
@@ -116,10 +84,8 @@ export default function StepperScreen() {
         </Text>
 
         {/*
-          The real-input suite's block (`scripts/real-input`): a controlled stepper
-          over a two-step range, a refusing one, and a disabled one wired to its own
-          counter - so an OS tap on the disabled one is a number that did not move.
-          It is first on the page because `uiautomator dump` lists no off-screen nodes.
+          First on the page: `uiautomator dump` lists no off-screen nodes, so the
+          controls the real-input suite taps have to be on screen when the tab opens.
         */}
         <Text style={[styles.section, { color: ink.ink }]}>Real input</Text>
         <View style={styles.column}>

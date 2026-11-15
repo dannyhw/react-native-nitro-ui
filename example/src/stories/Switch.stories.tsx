@@ -1,9 +1,3 @@
-/**
- * Switch stories (S1). Props and events: `docs/components/switch.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`, `nuiTestWidth`) are hidden: they
- * are harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { Switch } from 'react-native-nitro-ui';
@@ -53,13 +47,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel.
- *
- * `value` stays authoritative: taps move the local echo of it (so the control
- * feels alive) and report to the Actions panel, and moving the `value` row moves
- * the control.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onValueChange, value, ...props }) {
     const [current, setCurrent] = useState<boolean>(value ?? false);
@@ -88,10 +75,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * No `value` anywhere: native owns each Switch, so a tap costs no React render
- * and `defaultValue` is what decides the starting position.
- */
 export const Uncontrolled: Story = {
   render: () => (
     <Showcase>
@@ -109,7 +92,6 @@ export const Uncontrolled: Story = {
   ),
 };
 
-/** The controlled contract: the Text is the prop, the Switch follows it. */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const [value, setValue] = useState(false);
@@ -135,7 +117,6 @@ export const Controlled: Story = {
   },
 };
 
-/** The whole state grid at once: on/off x enabled/disabled, plus a tint. */
 export const States: Story = {
   render: () => (
     <Showcase>
@@ -167,11 +148,6 @@ export const States: Story = {
   ),
 };
 
-/**
- * Sizing (README "Sizing"): a Switch measures itself. `alignSelf: stretch` is
- * the only way to make it wider than its own measurement, and a parent width
- * alone leaves it at its measured size.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>
@@ -198,11 +174,6 @@ export const Sizing: Story = {
   ),
 };
 
-/**
- * The switches as the current appearance draws them, plus the note about why a
- * story cannot show two appearances at once. A component (not an inline
- * `render`) because it reads the appearance with a hook.
- */
 function AppearancePanel() {
   const scheme = useColorScheme();
   return (
@@ -228,22 +199,8 @@ function AppearancePanel() {
   );
 }
 
-/**
- * The switch palette comes from the OS appearance, and this story shows the one
- * the device is set to.
- *
- * It used to draw the same row twice, the second time on a black card labelled
- * "on a dark surface". That was not dark mode: only the card's background
- * changed, so the light-palette switches - a *disabled* one most of all - were
- * near-invisible against the black. React Native 0.88 has no per-subtree
- * appearance override (no `overrideAppearance` prop;
- * `Appearance.setColorScheme()` is app-wide), so a story cannot honestly paint
- * a dark panel. Change the device appearance instead - `xcrun simctl ui <udid>
- * appearance dark` on iOS, `adb -s <serial> shell cmd uimode night yes` on
- * Android - and this screen follows. Among the component docs only
- * `docs/components/button.md` carries a captured light/dark pair; this control's
- * doc does not.
- */
+// React Native has no per-subtree appearance override, so a story cannot show
+// light and dark side by side: this one follows the device appearance.
 export const Appearances: Story = {
   render: () => <AppearancePanel />,
 };

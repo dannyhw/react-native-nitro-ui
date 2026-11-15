@@ -1,24 +1,3 @@
-/**
- * The device operations, against stub binaries rather than a device.
- *
- * Every other test in this directory injects `ops`, which is the right call for testing *decisions*
- * — a pool that talks to a real emulator in a unit test is a slower, flakier test — but it also
- * means the code that turns a device's raw answer into a fact never runs. X11 re-review N3 found
- * that by deleting the parser in front of every Android kill (`emulatorAvdName`, the thing that
- * decides whether `emulator-5574` really is `nitro-ui_a`) and watching the whole suite stay green:
- * every fake answers with an AVD name, so a version that returned the first line of *any* answer was
- * indistinguishable from the real one.
- *
- * So this file does the opposite of the rest: it builds the real `deviceOperations` and points
- * `NITRO_UI_ADB_BIN` / `NITRO_UI_SIMCTL_BIN` at shell stubs — the trick `lease-pool-cli.test.js`
- * uses for the CLI — and answers with the shapes the real tools produce, including the ones that
- * mean "nothing was answered" (X11 re-review N2).
- *
- * The stubs read their answers from files rather than env vars because `deviceOperations`' `env` is
- * only read for the tool paths: `spawnSync` inherits the *process* environment, so a fixture that
- * tried to pass `FAKE_AVD_NAME` that way was silently ignored and every case answered "no output".
- */
-
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import {
   chmodSync,
@@ -34,9 +13,10 @@ import { join } from 'node:path';
 import { deviceOperations } from '../device-pool.mjs';
 
 /**
- * One stub for each tool: print the answer file for the subcommand being run, then exit with its
- * status file. An absent answer file means "printed nothing", and an absent status file means 0, so
- * the two things a real tool does when it is wedged are both expressible.
+ * One stub for each tool: print the answer file for the subcommand being run, then exit
+ * with its status file. No answer file means "printed nothing"; no status file means 0.
+ * Answers come from files because `spawnSync` inherits the process environment, not the
+ * `env` handed to `deviceOperations`.
  */
 const STUB = (kind) =>
   [
@@ -57,11 +37,9 @@ const STUB = (kind) =>
   ].join('\n');
 
 /**
- * A stub `emulator` whose only job is to report how it was started: its argv, and the adb server in
- * the environment it was handed. That environment is the whole point — an emulator registers with
- * the adb server named by `ANDROID_ADB_SERVER_PORT` in *its own* environment, so a boot that uses the
- * pair's private server port for its later calls but not at launch produces a device that comes up
- * perfectly and is invisible to the pool for the entire boot timeout.
+ * A stub `emulator` that records how it was started: its argv and the adb server port in
+ * its environment. An emulator registers with the adb server named by
+ * `ANDROID_ADB_SERVER_PORT` in its own environment, not the one later adb calls use.
  */
 const EMULATOR_STUB = [
   '#!/bin/sh',
@@ -150,12 +128,6 @@ describe('the identity check in front of an Android kill', () => {
     ['only whitespace', '   \n'],
   ]) {
     it(`answers "no name" for ${what}`, () => {
-      // "No name" is what `shutdownDevice` turns into a refusal. The parser's job is that it answers
-      // only when the answer is a name: `error: device offline` starts with a line, and a parser
-      // that returned the first line of anything would compare *that* against the record, refuse,
-      // and leave a warm device off every idle clock. And `OK` is the banner a successful answer ends
-      // with, so accepting it is accepting the answer to the previous question. Every injected fake
-      // hides all of this by answering with a name, which is how the mutation got through.
       answer('avd_name', fixture);
       expect(asked()).toBe(null);
     });
@@ -172,8 +144,6 @@ describe('did the tool answer at all (X11 re-review N2)', () => {
   });
 
   it('reads an empty listing from a healthy server as "nothing attached"', () => {
-    // The distinction the next case makes, and it has to go both ways or the pool never forgets a
-    // record: an empty listing with exit 0 is evidence the emulator is off, which is `already`.
     answer('devices', 'List of devices attached\n', 0);
     expect(ops().attachedSerialsResult(5043)).toMatchObject({
       ok: true,
@@ -182,9 +152,8 @@ describe('did the tool answer at all (X11 re-review N2)', () => {
   });
 
   it('says "unknown" when adb answers with a nonzero exit', () => {
-    // A wedged server is killed at its timeout: no stdout, which is character-for-character what "no
-    // emulator is attached" looks like. The exit status is the only thing that separates them, and
-    // reading the empty one as "off" is how a live emulator left the pool's memory.
+    // A wedged server killed at its timeout prints nothing, exactly like an empty
+    // listing. Only the exit status tells them apart.
     answer('devices', 'List of devices attached\n', 1);
     const res = ops().attachedSerialsResult(5043);
     expect(res.ok).toBe(false);
@@ -253,12 +222,8 @@ describe('what an emulator is started with', () => {
   };
 
   it('launches the emulator on the adb server the pair owns', async () => {
-    // The bug this case exists for, found by the first cold boot on hardware rather than by any
-    // fake: an emulator registers with the adb server named in *its own* environment, so a boot that
-    // uses the pair's private server only in its later calls leaves a device that comes up in 31
-    // seconds (`Boot completed in 31078 ms` in its log) while `adb -P 5043 devices` stays empty for
-    // the whole 7-minute wait. `acquire --boot` is exactly that case: it boots before the env file
-    // that exports `ANDROID_ADB_SERVER_PORT` exists, so the port has to be passed explicitly.
+    // The port has to be in the emulator's own environment at launch: with it only on
+    // the later adb calls, the device boots and never appears on the pair's server.
     const result = await opsWithEmulator().bootEmulator({
       avd: 'nitro-ui-a',
       port: 5574,
@@ -270,9 +235,7 @@ describe('what an emulator is started with', () => {
   });
 
   it('leaves the server alone when the pair names none', async () => {
-    // No adbPort is a real configuration (a machine with one default server), and the launch must
-    // then inherit the environment rather than invent a port - `none` is what the stub writes when
-    // the variable is absent, and `undefined` or an empty string would be a different bug.
+    // `none` is what the stub writes when the variable is absent.
     await opsWithEmulator().bootEmulator({ avd: 'nitro-ui-a', port: 5574 });
     expect(await recorded('emu.adb_server')).toBe('none');
   });

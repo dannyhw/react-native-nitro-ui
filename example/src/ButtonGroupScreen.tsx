@@ -18,7 +18,6 @@ import {
   type ButtonGroupProps,
 } from 'react-native-nitro-ui';
 
-/** Text colours for the current appearance - the helper the other screens use. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -34,10 +33,8 @@ function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/** The two appearances, in the order the docs table reads them. */
 const APPEARANCES: readonly ButtonGroupAppearance[] = ['standard', 'connected'];
 
-/** The five looks, in Material's order. */
 const VARIANTS: readonly NonNullable<ButtonGroupProps['variant']>[] = [
   'filled',
   'tonal',
@@ -46,7 +43,6 @@ const VARIANTS: readonly NonNullable<ButtonGroupProps['variant']>[] = [
   'elevated',
 ];
 
-/** The rungs, in ladder order. */
 const SIZES: readonly NonNullable<ButtonGroupProps['size']>[] = [
   'small',
   'medium',
@@ -55,7 +51,6 @@ const SIZES: readonly NonNullable<ButtonGroupProps['size']>[] = [
   'xxlarge',
 ];
 
-/** The four label styles, including the platform default. */
 const LABEL_STYLES: readonly ButtonGroupLabelStyle[] = [
   'automatic',
   'titleOnly',
@@ -63,7 +58,6 @@ const LABEL_STYLES: readonly ButtonGroupLabelStyle[] = [
   'titleAndIcon',
 ];
 
-/** The three actions the real-input block and most stories use. */
 const ACTIONS: ButtonGroupItem[] = [
   {
     id: 'copy',
@@ -80,7 +74,6 @@ const ACTIONS: ButtonGroupItem[] = [
   },
 ];
 
-/** A toolbar's worth of formatting toggles - the *Bold | Italic | Underline* case. */
 const FORMAT_TOGGLES: ButtonGroupItem[] = [
   {
     id: 'bold',
@@ -98,10 +91,6 @@ const FORMAT_TOGGLES: ButtonGroupItem[] = [
   },
 ];
 
-/**
- * Six items with titles long enough that they cannot share a 220 pt box, which is
- * what makes this the overflow row rather than a row that happens to be narrow.
- */
 const MANY_ITEMS: ButtonGroupItem[] = [
   { id: 'day', title: 'Day' },
   { id: 'week', title: 'Week' },
@@ -112,19 +101,15 @@ const MANY_ITEMS: ButtonGroupItem[] = [
 ];
 
 /**
- * Every ButtonGroup configuration G20 has to show, and the controls the real-input
- * suite taps (`scripts/real-input`).
- *
- * The real-input block is first on the page for Chip's reason: `uiautomator dump`
- * lists no off-screen nodes, so a control the suite has to find has to be on screen
- * when the tab opens.
+ * The real-input block is first on the page: `uiautomator dump` lists no
+ * off-screen nodes, so a control the real-input suite has to find has to be on
+ * screen when the tab opens.
  */
 export default function ButtonGroupScreen() {
   const ink = useInk();
   const dark = useColorScheme() === 'dark';
   const topInset = useTopInset();
 
-  // ---- Real input (`scripts/real-input`): one tap, one report, one refusal. ----
   const [presses, setPresses] = useState(0);
   const [lastPressed, setLastPressed] = useState('none');
   const onPress = useCallback((id: string) => {
@@ -143,8 +128,6 @@ export default function ButtonGroupScreen() {
     );
   }, []);
 
-  // Controlled to "nothing checked" and never written: every flip is refused, and
-  // the echo is what the control was *asked* to show, so a snap-back has a witness.
   const [refusedLast, setRefusedLast] = useState('none');
   const [refusedEvents, setRefusedEvents] = useState(0);
   const onRefusedChange = useCallback((id: string, checked: boolean) => {
@@ -152,24 +135,19 @@ export default function ButtonGroupScreen() {
     setRefusedEvents((count) => count + 1);
   }, []);
 
-  // Shared by the disabled group and its disabled item, so a stray tap is a number
-  // that did not move rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
   const onDisabled = useCallback(() => {
     setDisabledEvents((count) => count + 1);
   }, []);
 
-  // The overflow group's own `disabled`, flipped by a control the real-input suite
-  // taps. D29's rule is that a disabled group cannot keep a menu open, and iOS has no
-  // way to open a SwiftUI `Menu` from code (`isExpanded` is iOS 18; the target is
-  // 15.1), so the iOS half of the proof is a real tap on the real indicator followed by
-  // a real prop change: `testRealInputButtonGroup` step 7.
+  // iOS has no way to open a SwiftUI `Menu` from code (`isExpanded` is iOS 18; the
+  // target is 15.1), so a test that disables the group while its overflow menu is
+  // open taps the menu open and then presses the control that flips this.
   const [overflowDisabled, setOverflowDisabled] = useState(false);
   const onOverflowDisabled = useCallback(() => {
     setOverflowDisabled((current) => !current);
   }, []);
 
-  // ---- The gallery below the real-input block. ----
   const [toggled, setToggled] = useState<string[]>(['bold']);
   const onToggled = useCallback((id: string, checked: boolean) => {
     setToggled((current) =>
@@ -379,7 +357,6 @@ export default function ButtonGroupScreen() {
   );
 }
 
-/** The controlled form of a toggle list: every item gets this render's checked set. */
 function withChecked(
   items: readonly ButtonGroupItem[],
   checked: readonly string[]
@@ -451,11 +428,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 2,
   },
-  /**
-   * A box narrow enough that six titles cannot share it, which is the only way the
-   * overflow path is on screen at all: the group is `fillWidth`, so the width it is
-   * given is the width it overflows at.
-   */
   narrowWell: {
     width: 220,
     marginTop: 8,

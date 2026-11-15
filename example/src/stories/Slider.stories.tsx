@@ -1,9 +1,3 @@
-/**
- * Slider stories (S1). Props and events: `docs/components/slider.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are
- * harness/benchmark handles, not app API (DECISIONS D14).
- */
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Slider } from 'react-native-nitro-ui';
@@ -73,13 +67,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * Every public prop on the Controls panel, with the three events logging to
- * Actions.
- *
- * The drag writes into a local echo of `value` so the thumb follows the finger
- * and the `value` row keeps the authority - move the row and the thumb moves.
- */
 export const Playground: Story = {
   render: function PlaygroundStory({ onValueChange, value, ...props }) {
     const [current, setCurrent] = useState<number>(value ?? 0);
@@ -111,10 +98,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * Continuous vs quantised, side by side. `step` snaps natively, so what the
- * Actions panel logs is always exactly what the thumb shows.
- */
 export const Steps: Story = {
   render: () => (
     <Showcase>
@@ -141,7 +124,6 @@ export const Steps: Story = {
   ),
 };
 
-/** Controlled: the readout is React state, so it can never disagree. */
 export const Controlled: Story = {
   render: function ControlledStory() {
     const [value, setValue] = useState(0.5);
@@ -169,7 +151,6 @@ export const Controlled: Story = {
   },
 };
 
-/** Uncontrolled: no `value`, so a drag costs no React render at all. */
 export const Uncontrolled: Story = {
   render: () => (
     <Showcase>
@@ -187,10 +168,6 @@ export const Uncontrolled: Story = {
   ),
 };
 
-/**
- * Sizing (README "Sizing"): a Slider is a `fillWidth` control, so its width is
- * the box its parent gives it and only its height is its own.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>

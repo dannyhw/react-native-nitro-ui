@@ -1,28 +1,6 @@
-/**
- * The stranded-Modal hazard (DECISIONS D35 item 5) for Tooltip, in an app instance of
- * its own.
- *
- * React Native closes a `Modal` by dismissing *its own* controller. A dialog presented
- * in that controller's chain is what UIKit dismissed instead, and the `Modal`'s host
- * stayed over the app for good (G11's finding). A tooltip opened inside a `Modal` is
- * the plainest way to get there. On iOS a tooltip always presents from a window of its
- * own (`docs/components/tooltip.md`, "Presenting"), for a reason measured elsewhere: a
- * popover in the app's chain makes UIKit refuse the next `Modal` (`Tooltip.harness.tsx`).
- * With the popover put back in the chain, the full-screen case below did *not* strand
- * (G18, measured) - it went red on the window it presented from - so this file pins the
- * outcome either way rather than claiming the strand.
- *
- * This file closes the Modal *while the tooltip inside it is up*. Were a Modal host ever
- * left over the app, every later file in the same process would lay out under it, so
- * this file must never run in the shared harness process. `example/jest.harness.config.mjs` keeps `__tests__/isolated/` out of
- * the shared run; run it alone with
- *
- *   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- TooltipModalHazard
- *
- * Android has no chain to strand - Material's popup is a window, and so is the Modal -
- * so there the same moves pin the other half: closing the Modal takes the tooltip in
- * it down with it, and leaves no popup behind.
- */
+// Runs in an app instance of its own: a Modal host left over the app would cover every
+// later file in a shared process. Run it alone with
+//   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- TooltipModalHazard
 import { useState } from 'react';
 import { Modal, Platform, View } from 'react-native';
 import {
@@ -35,7 +13,7 @@ import {
 } from 'react-native-harness';
 import { nitroUiCore, Tooltip } from 'react-native-nitro-ui';
 
-/** What `hybridRef` hands back - declared, not imported (D14). */
+/** What `hybridRef` hands back. */
 type TooltipHandle = {
   nuiTestStateReport(): string;
 };
@@ -149,11 +127,10 @@ describe('Tooltip · the stranded-Modal hazard (own app instance)', () => {
       await sleep(600);
       setters.get('tip')?.(true);
       const shown = await waitForReport('tip', up, 'up inside the Modal');
-      // The move that strands a popover in the Modal's chain. On iOS React Native keeps
-      // a closing Modal's content mounted until its native dismissal has ended, so the
-      // tooltip sees its window go first - the window-loss close, reported once - and is
-      // unmounted after. On Android the unmount comes first: a drop, which reports
-      // nothing. Pinned both ways (measured), so a change on either side is seen.
+      // React Native closes a Modal by dismissing its own controller, which would strand
+      // a popover presented in that controller's chain. On iOS the Modal's content stays
+      // mounted until the dismissal ends, so the tooltip loses its window first and
+      // reports one close; on Android the unmount comes first and reports nothing.
       setters.get('modal')?.(false);
       await sleep(1500);
       cleanup();
@@ -173,8 +150,7 @@ describe('Tooltip · the stranded-Modal hazard (own app instance)', () => {
       );
       expect(after.presented).toBe('0');
       if (IOS) {
-        // Why, asserted after the strand itself so a regression reads as the strand: a
-        // window of its own, so RN's dismissal of the Modal reaches the Modal.
+        // Presented from a window of its own, so RN's dismissal reaches the Modal.
         expect(shown.presenter).toBe('ownWindow');
         expect(shown.appTop).toContain('ModalHostViewController');
       }

@@ -64,47 +64,18 @@ import {
 } from './shared';
 
 /**
- * =====================================================================================
- *  THE ONE-FILE CHANGE - the `nitro-ui` arm
- * =====================================================================================
- *
- * This is the only file in the harness that renders `react-native-nitro-ui`, plus
- * the only place its native perf marks are read. Everything else (plan, runner,
- * reporter) is runtime-agnostic.
- *
- * Adding a *second* component to the matrix means one entry in
- * `bench/src/plan.ts`/`docs` scenario props and one `List` per platform here - see
- * docs/architecture/benchmarks.md "Per-component checklist".
- *
- * `Switch` is a **named import** from T10 onwards, so the props passed below are
- * typechecked against the real component by `bun run bench:typecheck`
- * (`paths: { "react-native-nitro-ui": ["../src/index.ts"] }` in
- * `bench/tsconfig.json` is the TS mirror of Metro's `extraNodeModules`, which
- * resolves the package to the repository root and asks for its
- * `react-native-nitro-ui-source` export condition).
- *
- * Cost fairness: the arm passes what the reference arms pass - `value`, a stable
- * no-op `onValueChange`, `testID`, and the shared `rowStyle`, so every arm lays
- * out the same box and diffs the same JS props. `tintColor` and `disabled` stay
- * unset: the comparison is each control's platform default. What the arm cannot
- * avoid passing is what the library's own wrapper always sends
- * (`defaultValue`, `mostRecentEventCount`, `nuiPerfId`, `null` for the rest,
- * DECISIONS D7) - that is the library's props contract being measured, not bench
- * bias, and it is the same cost a consumer pays.
- * =====================================================================================
+ * The `nitro-ui` arm: the only bench file that renders `react-native-nitro-ui`
+ * and reads its native perf marks. Each control gets what the reference arms
+ * pass (value, a stable no-op handler, `testID`, the shared row style) and
+ * otherwise stays at its platform default, so every arm prices the same thing.
  */
 
-/** `nitroUiCore.now()` and every perf mark are ms; the probe speaks ns (D1). */
+/** Perf marks are in ms; the probe speaks ns. */
 const MS_TO_NS = 1_000_000;
 
 /**
- * Whether this process turned marks on.
- *
- * `nuiPerfId` alone is not enough to record anything (a marked view with
- * recording off pays one relaxed atomic load and writes nothing), and a drained
- * buffer is JS work, so both halves stay behind this flag: a normal measured run
- * of the `nitro-ui` arm is instrumented exactly as much as the reference arms
- * are, i.e. not at all.
+ * Whether this process turned marks on. Off in a normal measured run, so the
+ * arm is instrumented no more than the reference arms.
  */
 let marksEnabled = false;
 
@@ -116,10 +87,8 @@ export function enableNitroUiPerfMarks(): void {
 
 /**
  * Every mark recorded since the last call, in the probe's nanosecond base.
- *
- * The library's ring is 4096 events and a 25-iteration x 50-instance run writes
- * thousands, so the caller drains between iterations rather than once at the end
- * - a full ring drops its oldest marks, which would silently under-count.
+ * Drain between iterations: the library's ring holds 4096 events and a full
+ * ring drops its oldest marks.
  */
 export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
   if (!marksEnabled) {
@@ -137,17 +106,9 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
 }
 
 /**
- * One grouped Form holding the whole batch, for the `nitro-ui` arm.
- *
- * `n` is the number of *rows*, so this arm renders one `Form` (one
- * `UICollectionView` on iOS, one Compose layer on Android) with `n` rows in it,
- * which is the tree an app writes. The other arms are asked for the same tree in
- * their own runtime, and `rn-core` for the plain column without a grouped list.
- *
- * The arm is unmarkable: `Form` is the one component whose public props carry no
- * `nuiPerfId`, because its own wrapper is what owns the ids its sections and rows
- * send. A `--perf-marks` run therefore reads the `nitro-ui` form cell from the
- * probe's signals alone, which is what every reference arm is measured by anyway.
+ * One grouped Form holding the whole batch: `n` counts rows, not Forms. `Form`
+ * takes no `nuiPerfId`, so a perf-marks run reads this cell from the probe's
+ * signals alone.
  */
 function BenchForm({
   n,
@@ -160,11 +121,9 @@ function BenchForm({
 }) {
   return (
     <Form testID="bench-nitro-ui-form" style={style}>
-      {/* A one-child row is a bare child - `Form.Section` wraps it, which is what an
-          app writes for a row with nothing to configure, so the arm pays the
-          wrapper's JS cost rather than skipping it. A row with more than one child
-          has to name `Form.Row`, because the wrapper walks fragments and arrays into
-          separate rows. */}
+      {/* A row with one child is passed bare. A row with several children must
+          name `Form.Row`, because fragments and arrays split into separate
+          rows. */}
       <Form.Section title="Settings">
         {range(n).map((index) => {
           const kind = formRowKind(index);
@@ -191,11 +150,9 @@ function BenchForm({
             );
           }
           if (kind === 'press') {
-            // The same visible content as a `label` row: what this kind prices is
-            // the row answering to a press, not an extra glyph. The Form's
-            // `disclosure` accessory stays out of the mix for that reason - the
-            // reference arms have no row-level accessory to set it against, so it
-            // would compare a drawn chevron with nothing drawn.
+            // Same visible content as a `label` row, so this kind prices the
+            // press handler alone. No `disclosure` accessory: the reference
+            // arms have no chevron to set against it.
             return (
               <Form.Row key={index} onPress={onRowPress}>
                 <Text>{label}</Text>
@@ -210,30 +167,9 @@ function BenchForm({
 }
 
 /**
- * `n` nitro-ui controls inside **one** `<Host>` (H1, widened to Slider, Progress and
- * Button by H2a, and to SegmentedControl, Picker and DatePicker by H2b): one Compose
- * composition and one `AndroidComposeView` for the batch instead of one per control.
- *
- * The box is the `expo-ui-shared-host` arm's box (`stackStyle`), and the child's props
- * are the `nitro-ui` arm's props - same `rowStyle`, same stable no-op handler - so the
- * difference this cell prices is only *where the control composes*. That is deliberate:
- * the Expo arm's children carry no box at all (a Compose child has no Yoga node to size),
- * and giving this arm's children no box either would fold "no intrinsic sizing round
- * trip" into a number that is supposed to be about compositions. The sizing consequence
- * of that is real and belongs in the report, not in the ratio.
- *
- * `Host` stacks its children itself (a Compose `Column`), which is the same arrangement
- * the Expo arm builds with an explicit `<Column>`.
- *
- * D24 makes the cells mean slightly different things, and the rows say so: the
- * `fillWidth` controls (Slider, linear Progress) take the Host's inner width in the Column
- * rather than their own `style.width`, and `Switch` and `Button` keep their intrinsic width
- * at the column's leading edge. H2b's three (`SegmentedControl`, `Picker`, `DatePicker`)
- * are `isSizedByContent`, so they get the hugging row and the hugging host: the batch's
- * height is the Compose column's own height, which is what makes its `Host` box height a
- * measured quantity rather than a declared one. The *box RN lays out* is the same one the other arms get
- * (`rowStyle`), because that is the box the ratio is about; what the control draws inside
- * it is the library's documented Host sizing, not a per-arm styling choice.
+ * `n` nitro-ui controls inside one `<Host>`: one Compose composition for the
+ * batch instead of one per control. The children keep the `nitro-ui` arm's
+ * props and row box, so the cell prices only where the control composes.
  */
 export function NitroUiHostList({
   n,
@@ -348,70 +284,45 @@ export function NitroUiHostList({
       );
     }
     if (component === 'text-field') {
-      // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): the plan never asks
-      // this arm for it (`BenchImplementation.components`), and a Host would refuse it.
+      // The plan never asks this arm for a control a Host refuses, so reaching
+      // one of these throws means the plan and the arm's list disagree.
       throw new Error(
         'nitro-ui-host cannot compose text-field: a Host refuses it'
       );
     }
     if (component === 'icon-button') {
-      // Not hostable either, for the same reason as `text-field` and with the same
-      // loud failure: the plan never asks this arm for it, so reaching here means a
-      // manifest changed without the host arm's list, and rendering something else
-      // would publish a number nobody asked for.
       throw new Error(
         'nitro-ui-host cannot compose icon-button: a Host refuses it'
       );
     }
     if (component === 'form') {
-      // Not hostable either, for the same reason it is not a `<Host>` child in an app:
-      // a Form is a container that owns a scroller and its own rows, and a Host
-      // composes controls, not containers. Named here rather than left to the catch-all
-      // below so a plan that ever asks for it fails with this sentence.
       throw new Error(
         'nitro-ui-host cannot compose form: a Host refuses a container'
       );
     }
     if (component === 'stepper') {
-      // Not hostable either (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`), so the plan
-      // never asks this arm for it and reaching here is a manifest that moved under
-      // the arm's list — the icon-button's failure, for the same reason.
       throw new Error(
         'nitro-ui-host cannot compose stepper: a Host refuses it'
       );
     }
     if (component === 'button-group') {
-      // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): its Compose
-      // `ButtonGroup` opens its own overflow popup, and no round has measured a second
-      // popup inside the Host's shared composition. Loud, like `icon-button`'s line —
-      // reaching here means a manifest changed without the host arm's list.
       throw new Error(
         'nitro-ui-host cannot compose button-group: a Host refuses it'
       );
     }
     if (component === 'list-item') {
-      // Not hostable either (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): a row is a
-      // leaf an app puts in a `Form.Row` or its own list row, and no round has measured
-      // this one inside the Host's shared composition. Loud, like `stepper`'s line —
-      // reaching here means a manifest changed without the host arm's list.
       throw new Error(
         'nitro-ui-host cannot compose list-item: a Host refuses it'
       );
     }
-    // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
-    // them, so the plan should never ask (`BenchImplementation.components`) and
-    // rendering an empty tree here would be a number nobody asked for.
     throw new Error(`nitro-ui-host cannot compose ${component}`);
   };
   return <Host style={stackStyle(n, component)}>{range(n).map(child)}</Host>;
 }
 
 /**
- * The item group every `nitro-ui` Menu arm mounts, built once.
- *
- * Module-level for the reason the other arms' option lists are: `group` is an
- * object prop, so a literal in the JSX would be a fresh identity on every flip and
- * hand this arm a prop diff no other arm pays.
+ * The item group every `nitro-ui` Menu mounts. Module-level so its identity is
+ * stable: a literal in the JSX would be a prop diff on every flip.
  */
 const MENU_GROUP: MenuGroup = {
   actions: menuItems().map((title, index) => ({
@@ -421,12 +332,8 @@ const MENU_GROUP: MenuGroup = {
 };
 
 /**
- * `n` real nitro-ui switches.
- *
- * `nuiPerfId` is the library's own per-instance mark id, and it stays `null`
- * unless the launch asked for marks: passing an id is nearly free but not
- * literally free (one integer compare per mark site), and the numbers in the
- * published tables should be the numbers a consumer gets.
+ * `n` nitro-ui controls. `nuiPerfId` stays `null` unless the launch asked for
+ * marks, so the published numbers are the ones a consumer gets.
  */
 export function NitroUiList({
   n,
@@ -443,13 +350,6 @@ export function NitroUiList({
     return <BenchForm n={n} value={value} style={style as ViewStyle} />;
   }
   if (component === 'date-picker') {
-    // The `compact` `date` picker: the control's default presentation, and the
-    // only one whose box the reference arms can also take (`matchContents` on
-    // the Expo hosts). `dateValue(value)` is the same instant every arm shows,
-    // so `update.date-picker` is a real value change here: the field's text
-    // changes, the control re-emits nothing, and the controlled handshake runs.
-    // `disabled` and `tintColor` stay at their defaults - the arms compare each
-    // control's platform default, including the size that default measures.
     return (
       <>
         {range(n).map((index) => (
@@ -466,13 +366,6 @@ export function NitroUiList({
     );
   }
   if (component === 'picker') {
-    // `pickerSelection(value)` is the same index the other arms paint and the
-    // options list is the list they mount, so the `update` cell is a real selection
-    // change here: the painted title changes, the sizing key moves, the control
-    // re-measures, and the cost of that round trip is in the numbers. `variant`,
-    // `label`, `disabled` and `tintColor` stay at their defaults - the arms compare
-    // each control's platform default, including the size that default measures
-    // (Material 3's 280 dp field floor included).
     return (
       <>
         {range(n).map((index) => (
@@ -490,15 +383,7 @@ export function NitroUiList({
     );
   }
   if (component === 'menu') {
-    // `menuTitle(value)` is the same label the other arms draw, so the `update` cell
-    // is a real title change here: the trigger's text changes, the sizing key moves,
-    // the control re-measures, and the cost of that round trip is in the numbers.
-    // `MENU_GROUP` is the item list they mount too, and it is built once, so a flip
-    // costs one string prop rather than a fresh object identity. `variant`, `size`,
-    // `disabled`, `systemImage` and `tintColor` stay at their defaults - the arms
-    // compare each control's platform default, trigger box included. The popup is
-    // never opened by the bench: no arm can price a real popup gesture on three
-    // runtimes, so the cell measures the mounted control (see the report).
+    // The popup is never opened: the cell measures the mounted trigger.
     return (
       <>
         {range(n).map((index) => (
@@ -516,11 +401,6 @@ export function NitroUiList({
     );
   }
   if (component === 'segmented-control') {
-    // `segmentedOptions(value)` is the same list the other arms draw, so the
-    // `update` cell is a real options change here: the sizing key changes, the
-    // control re-measures, and the cost of that round trip is in the numbers.
-    // `disabled` and `tintColor` stay at their defaults - the arms compare each
-    // control's platform default, including the size that default measures.
     return (
       <>
         {range(n).map((index) => (
@@ -538,12 +418,6 @@ export function NitroUiList({
     );
   }
   if (component === 'button') {
-    // `buttonTitle(value)` is the same string the other arms draw, so the
-    // `update` scenario is a real title change here: the sizing key changes, the
-    // control re-measures, and that cost is in the measured numbers.
-    // `variant`, `size`, `disabled` and `tintColor` stay at their defaults - the
-    // arms compare each control's platform default, and the size a default
-    // `filled`/`medium` button measures is part of what the arm costs.
     return (
       <>
         {range(n).map((index) => (
@@ -576,11 +450,6 @@ export function NitroUiList({
     );
   }
   if (component === 'stepper') {
-    // The control G25 is asked to price: SwiftUI's `Stepper`, and on Android the two
-    // Material 3 tonal icon buttons that stand in for a control Material does not
-    // have. `update.stepper` flips `value` (`stepperValue`), which is the one write
-    // every arm can be charged for identically — it goes through the event-count
-    // handshake here, which is the thing this library costs.
     return (
       <>
         {range(n).map((index) => (
@@ -600,12 +469,6 @@ export function NitroUiList({
     );
   }
   if (component === 'icon-button') {
-    // The default `variant`/`size`/`width`, and the press form: the control G23 is
-    // asked to price. `update.icon-button` swaps the glyph (`iconButtonGlyph`), the
-    // one flip every other arm can be charged for too, and the icon is the whole
-    // control here, so it is a real redraw rather than a repaint of an unchanged box.
-    // `disabled` and `tintColor` stay at their defaults — the arms compare each
-    // control's platform default, including the box that default measures.
     const glyph = iconButtonGlyph(value);
     return (
       <>
@@ -625,11 +488,6 @@ export function NitroUiList({
     );
   }
   if (component === 'button-group') {
-    // Three plain action items at the defaults, which is the shape the brief asks to
-    // price: a group whose items are all actions is the group with no handshake in
-    // its render path, so the cell measures the row and not a value round trip.
-    // `update.button-group` swaps the item list (`buttonGroupItems`), the one flip
-    // every other arm can be charged for too.
     const items = buttonGroupItems(value);
     return (
       <>
@@ -647,12 +505,6 @@ export function NitroUiList({
     );
   }
   if (component === 'list-item') {
-    // The leaf G30 prices: UIKit's own `UIListContentView` row on iOS and Material 3's
-    // `ListItem` content on Android, standalone so it draws its own list insets.
-    // `update.list-item` flips the trailing value (`listItemValue`), which is one text
-    // commit on a row that keeps its box — every slot is capped to one line (DECISIONS
-    // D46), so the sizing key does not move and the cell measures the commit, not a
-    // re-measure.
     return (
       <>
         {range(n).map((index) => (
@@ -670,8 +522,6 @@ export function NitroUiList({
     );
   }
   if (component === 'text-field') {
-    // A controlled single-line field: `update.text-field` writes new text
-    // through the handshake, the path an app's `setText` takes.
     return (
       <>
         {range(n).map((index) => (
@@ -688,10 +538,6 @@ export function NitroUiList({
     );
   }
   if (component === 'progress') {
-    // The default `variant` (`'linear'`) and a determinate value: that is the
-    // control G3 is asked to price, and the one whose box every arm can match.
-    // `tintColor`/`trackColor` stay unset like the other arms' colours - the
-    // comparison is each runtime's platform default.
     return (
       <>
         {range(n).map((index) => (

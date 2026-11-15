@@ -1,6 +1,4 @@
-/**
- * The launch loop of a run, apart from the CLI so it can be driven without a device.
- */
+/** The launch loop of a run, apart from the CLI so it can be driven without a device. */
 
 import { launchPlanString, summarizeMissingReasons } from './lib.mjs';
 

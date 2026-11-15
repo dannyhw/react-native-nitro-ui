@@ -1,9 +1,3 @@
-/**
- * The launch loop of a bench run, with the device replaced by a fake. The records of
- * an hours-long run are written only once the loop returns, so what it does when an
- * install fails half-way decides whether they are kept.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import { drive } from '../bench/drive.mjs';
@@ -108,7 +102,6 @@ describe('the bench launch loop', () => {
 
   it('keeps what it measured when the second app cannot be installed', async () => {
     const run = session({ failInstallOf: 'head' });
-    // Resolves: a rejection here is what used to lose the base side's two launches.
     const out = await drive(run.options);
     expect(out.records.map((r) => `${r.side}:${r.implementation}`)).toEqual([
       'base:rn-core',

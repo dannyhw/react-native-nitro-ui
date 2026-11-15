@@ -1,12 +1,3 @@
-/**
- * What `scripts/doctor.mjs` judges a machine by, without a machine.
- *
- * The CLI only gathers tool output; these are the rules applied to it: which
- * tool versions are usable, which simulator runtime is picked, whether a
- * `devices.json` points at devices that exist, and that `--setup` writes a pool
- * `scripts/lease.mjs` accepts.
- */
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -96,7 +87,7 @@ describe('simulators', () => {
     expect(pickIosRuntime(runtimes, '27.0')?.identifier).toBe(
       'com.apple.CoreSimulator.SimRuntime.iOS-27-0'
     );
-    // 27.1 is installed but unavailable here; it is never picked for 27.0 anyway.
+    // 27.1 is installed but unavailable.
     expect(pickIosRuntime(runtimes, '27.1')).toBeNull();
     expect(pickIosRuntime(runtimes, '28.0')).toBeNull();
   });
@@ -248,15 +239,6 @@ it('fails the run only on a failing result', () => {
   expect(exitCode([{ status: 'ok' }, { status: 'fail' }])).toBe(1);
 });
 
-/**
- * Who owns what is booted, and how warm the machine is (X9 items 6 and 3).
- *
- * Both features exist because a symptom was read as something else for days: harness
- * numbers moved and nobody could say why (an unleased simulator eating cores), and a
- * first build took 9.5 min because nothing on that machine had ever compiled this
- * code. A check that stays quiet in those states is worse than no check, so each
- * rule below has a case that says "and it must still say something".
- */
 describe('unowned devices', () => {
   const pool = normalizeDevices(
     renderDevicesConfig(
@@ -287,7 +269,6 @@ describe('unowned devices', () => {
     );
     expect(byUdid.get('UDID_1').state).toBe('Booted');
     expect(byUdid.get('UDID_2').state).toBe('Shutdown');
-    // An unavailable device is not one anybody can lease or leave running.
     const withGone = simulatorsByUdidWithState({
       devices: {
         runtime: [
@@ -353,8 +334,8 @@ describe('unowned devices', () => {
   });
 
   it('never reports the reserved emulator, whoever booted it', () => {
-    // The reserved serial has the *pool's* AVD behind it in a misconfigured file;
-    // the port rule still has to win, because that device belongs to the human.
+    // A misconfigured pool that puts its own AVD on the reserved port: the port
+    // rule still has to win.
     const warnings = unownedBootedDevices({
       pool: {
         pairs: [{ id: 'pair-x', android: { avd: 'mine', emulatorPort: 5560 } }],
@@ -436,8 +417,8 @@ describe('where --prime must build', () => {
   });
 
   it('is the main checkout when called from a linked worktree', () => {
-    // ccache and Gradle's cache are shared anyway; Xcode's derived data and the
-    // pod install are not, so priming a throwaway worktree warms nothing durable.
+    // Xcode's derived data and the pod install are per checkout, so priming a
+    // throwaway worktree warms nothing durable.
     expect(
       mainCheckoutPath({
         toplevel: '/oss/nitro-ui-worktrees/X9',
@@ -451,10 +432,6 @@ describe('where --prime must build', () => {
   });
 
   it('lists the two builds a prime runs, through the build script', () => {
-    // The claim under test is that `--prime` delegates: `build-app.mjs` is where the
-    // stamp, the ccache launcher, the arch default and the machine-wide build slot
-    // live, so a prime that invented its own command line would warm the caches while
-    // skipping the slot the feature exists to protect.
     const commands = primeCommands('/Users/me/nitro-ui');
     expect(commands.map((command) => command.platform)).toEqual([
       'ios',
@@ -463,7 +440,6 @@ describe('where --prime must build', () => {
     for (const command of commands) {
       expect(command.file).toBe('scripts/build-app.mjs');
       expect(command.args).toEqual(['--platform', command.platform]);
-      // The main checkout's own tree, not the worktree `--prime` was called from.
       expect(command.cwd).toBe('/Users/me/nitro-ui');
     }
   });

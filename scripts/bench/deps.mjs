@@ -1,29 +1,8 @@
 /**
- * Which app versions a measurement belongs to, and where that answer came from.
- *
- * A baseline's ratios divide by `rn-core`, so an `@expo/ui` bump moves the two
- * reference arms and a React Native bump moves every row in the file. That makes
- * both versions a **comparability regime** — the same kind of thing as a simulator
- * runtime or an ART compile state (`docs/architecture/benchmarks.md`) — so a run
- * and a baseline record which versions their cells were measured with (X14).
- *
- * Three sources, in order of what they can prove:
- *
- * 1. `bun.lock` — what `bun install` would install for this commit's
- *    `bench/package.json`.
- * 2. The workspace manifest — the range the app asks for (`"react-native":
- *    "0.88.0"`). Recorded as the `requested` half so a caret range and an exact
- *    pin are not silently the same claim.
- * 3. The installed package — what Metro actually folded into the bundle. The only
- *    direct evidence about the binary that was measured, and the one an out-of-date
- *    `node_modules` can contradict; `installedDependenciesProblem()` is that check.
- *
- * No `import.meta` here, for the reason `format.mjs` documents: the paths come in
- * as arguments, so `scripts/__tests__/bench-deps.test.js` can hand this a fixture
- * lock file instead of the repo's.
+ * Which React Native and `@expo/ui` versions a bench measurement belongs to: a bump
+ * of either moves the ratios, so runs and baselines record them.
  */
 
-/** The two dependencies a baseline records, and what a run should call them. */
 export const TRACKED_DEPENDENCIES = {
   reactNative: 'react-native',
   expoUi: '@expo/ui',
@@ -34,9 +13,7 @@ export const TRACKED_DEPENDENCIES = {
  *
  * The lock's `packages` table maps a name to `["name@version", …]`, with peer
  * resolutions spelled `name@1.2.3(peer@4)` and workspace entries spelled
- * `name@workspace:.`. Only a plain `name@version` counts; anything else is null,
- * because a version this function invented would be a comparison the guard then
- * passed for no reason.
+ * `name@workspace:.`. Only a plain `name@version` counts; anything else is null.
  *
  * @param {any} lock parsed `bun.lock`
  * @param {string} name e.g. `@expo/ui`
@@ -71,10 +48,7 @@ export function requestedVersion(manifest, name) {
 }
 
 /**
- * Reads one package's identity out of an install directory.
- *
- * `node_modules/<name>/package.json` is the only record of what was actually
- * bundled, and a package that is not installed at all is null rather than a guess.
+ * The version an installed package's manifest names, or null.
  *
  * @param {any} manifest parsed `node_modules/<name>/package.json`
  */
@@ -86,20 +60,10 @@ export function installedVersion(manifest) {
 /**
  * Parses a lock file bun actually wrote.
  *
- * `bun.lock` is JSON5-ish, not JSON: bun writes a trailing comma before every
- * `}` and `]` (and allows `//` comments). `JSON.parse` therefore fails on the
- * shipped file — "Expected double-quoted property name" — and a reader that only
- * tries strict JSON resolves *nothing*, on every machine, forever. That is the
- * bug this exists because of: the fixture lock in `bench-deps.test.js` was
- * hand-written strict JSON, so the reader looked fine while the real file
- * resolved nothing.
- *
- * Strict JSON is tried first, so a file that is already canonical is never
- * rewritten on the way through. The tolerant pass then walks the text outside
- * string literals: comments are dropped, and a comma whose next non-whitespace
- * token is a closer is dropped. It reuses no dependency, for the reason
- * `format.mjs` documents — this module has to stay importable from the unit
- * tests, which do not install a JSON5 parser.
+ * `bun.lock` is not strict JSON: bun writes a trailing comma before every `}`
+ * and `]` and allows `//` comments, so `JSON.parse` fails on the real file.
+ * Strict JSON is tried first; the tolerant pass then drops comments and trailing
+ * commas outside string literals.
  *
  * @param {string} text
  * @returns {{ value: any, error: string | null }}
@@ -124,16 +88,8 @@ export function parseLockFile(text) {
   }
 }
 
-/**
- * The above, in one pass over the text, in linear time.
- *
- * "Is the last thing I emitted a comma?" is the whole trailing-comma test, so the
- * scan remembers the index of the last non-whitespace character it emitted and asks
- * that in O(1). The obvious version called `out.trimEnd()` at every closer, which
- * re-scans the output built so far and made the read quadratic: 503 ms for the
- * 518 KB `bun.lock`, which a run parses about three times (review L3). Characters
- * are collected in an array rather than appended to a string for the same reason.
- */
+// One linear pass: the scan remembers the last non-whitespace character it emitted
+// instead of trimming the output at every closer, which would be quadratic.
 function stripJson5Syntax(text) {
   const parts = [];
   let inString = false;
@@ -175,9 +131,7 @@ function stripJson5Syntax(text) {
       continue;
     }
     if (ch === ',' || ch === '}' || ch === ']') {
-      // A comma directly before a closer is the trailing one bun writes. The
-      // closer is emitted either way, so nothing has to be re-scanned after the
-      // drop: this character becomes the last meaningful one.
+      // A comma directly before a closer is the trailing one bun writes.
       if (ch !== ',' && lastMeaningful >= 0 && parts[lastMeaningful] === ',') {
         parts.length = lastMeaningful;
       }
@@ -192,10 +146,8 @@ function stripJson5Syntax(text) {
 /**
  * The versions a measurement belongs to, from a lock file and a manifest.
  *
- * `reactNative`/`expoUi` are the *resolved* versions — the ones that decide
- * comparability — and `requested*` is what the manifest asked for, kept because a
- * lock that resolved a caret range to something else is exactly the surprise the
- * `source` field exists to make visible.
+ * `reactNative`/`expoUi` are the resolved versions, the ones that decide
+ * comparability; `requested*` is the range the manifest asked for.
  *
  * @param {{ lockText: string | null, manifestText: string | null, source: string }} input
  * @returns {{reactNative: string | null, expoUi: string | null, source: string,
@@ -205,10 +157,7 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
   const problems = [];
   let lock = null;
   let manifest = null;
-  // Whether the lock itself was unreadable, which is one problem and explains
-  // every null in it. Tracked separately from `problems` because a *missing
-  // package* also pushes a message that starts with `source`, and testing for
-  // that prefix instead suppressed the second package's own complaint.
+  // An unreadable lock is one problem, not one per package missing from it.
   let lockUnreadable = false;
   if (lockText == null) {
     lockUnreadable = true;
@@ -226,8 +175,7 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
     try {
       manifest = JSON.parse(manifestText);
     } catch {
-      // The manifest is the weaker half of the record; a lock still answers the
-      // comparability question on its own, so this is not a problem to report.
+      // Not reported: the lock alone answers the comparability question.
       manifest = null;
     }
   }
@@ -252,11 +200,8 @@ export function resolvedDependencies({ lockText, manifestText, source }) {
 /**
  * Why the installed packages do not match the lock the run's own commit names.
  *
- * The numbers come from the binary Metro built, so a stale `node_modules` makes
- * the recorded versions a statement about a file that was never measured. Null
- * means "nothing contradicts the lock" — including the case where nothing is
- * installed to check, which is what a checkout that has not run `bun install`
- * looks like from here.
+ * Null means nothing contradicts the lock, including when nothing is installed
+ * to check.
  *
  * @param {{ resolved: {reactNative: string|null, expoUi: string|null}, installed?: {reactNative: string|null, expoUi: string|null} | null }} input
  * @returns {string | null}

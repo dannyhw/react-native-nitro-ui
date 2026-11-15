@@ -1,22 +1,3 @@
-/**
- * On-device tests for `Form`, `Form.Section` and `Form.Row` (G24, DECISIONS D45).
- *
- * The `(E…)` on each case is the question of Q10 Appendix E that the case answers, kept
- * because `docs/tasks/Q10-form-list-research.report.md` is where the answers are read.
- *
- * The container is a `UICollectionView` inset-grouped list on iOS and a Material 3
- * segmented column on Android, so the honest channel is the test seams
- * (`nuiTestFormReport`, `nuiTestSectionReport`, `nuiTestRowReport`, whose fields
- * `src/components/Form/Form.nitro.ts` documents) plus React's own counters. The report is
- * not a stand-in for what the screen would show: `heights` is the layout's own answer for
- * a row, `where` is which superview a row's component view is in right now, and `x` / `w` /
- * `radius` / `headerH` are the container's own geometry, as the list answers for it.
- *
- * What these cases *cannot* prove is a finger's touch: `react-native-harness` delivers
- * events by tag, so they show that a reparented row and its hosted Switch are addressable
- * and wired, while `testRealInputForm` (`example/ios/NitroUiExampleUITests`) and the `form`
- * check in `scripts/real-input/android.mjs` synthesise the same taps through the OS.
- */
 import type { ReactElement } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import {
@@ -60,7 +41,6 @@ const forms: Record<string, FormHandle> = {};
 const sections: Record<string, SectionHandle> = {};
 const rows: Record<string, RowHandle> = {};
 
-/** The report as `key -> value`. */
 function parse(line: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const pair of line.split(';')) {
@@ -81,7 +61,6 @@ function raw(report: Record<string, string>, key: string): string {
   return report[key] ?? '<missing>';
 }
 
-/** Read the Form's report until `ok` holds, and fail naming the report if it never does. */
 async function formReport(
   ok: (r: Record<string, string>) => boolean,
   what: string,
@@ -92,9 +71,8 @@ async function formReport(
     const handle = forms[which];
     if (handle != null) {
       const report = parse(handle.nuiTestFormReport());
-      // A first read is often still "pending", which parses to {} - and a predicate that
-      // reads a missing field throws rather than returning false, so the poll must swallow
-      // it rather than let it out through the assertion.
+      // A first read can still be "pending", which parses to {}, and a predicate that
+      // reads a missing field throws.
       try {
         if (ok(report)) return report;
       } catch {
@@ -112,7 +90,6 @@ async function formReport(
   }
 }
 
-/** Print the few Form fields that say what the list is doing, tagged with the step. */
 function trace(what: string, report: Record<string, string>): void {
   console.log(
     `FORM TRACE ${what}: ` +
@@ -139,20 +116,13 @@ function trace(what: string, report: Record<string, string>): void {
   );
 }
 
-/** Fail loudly rather than reading a method off `undefined`. */
 function need<T>(handle: T | undefined): T {
   if (handle == null)
     throw new Error('expected a hybridRef handle and there is none');
   return handle;
 }
 
-/**
- * Assert the Form holds these rows in this relative order, judged by the words inside each
- * row - the `order=` field of its report. Relative rather than absolute because the field is
- * the rows' own labels joined, and a label is whatever the aggregated text of a row is; the
- * claim this makes is only that one row sits after another, which is the claim a keyed
- * insert or reorder has to satisfy.
- */
+// Asserts relative order only: the report's `order=` field is the rows' labels joined.
 function expectOrder(
   report: Record<string, string>,
   names: readonly string[]
@@ -178,15 +148,8 @@ function expectOrder(
   }
 }
 
-/**
- * How many items the list says it is drawing - the fourth number of `screen=`, with the number
- * of cells it has actually realised as the fifth.
- *
- * `inCells` counts the visible cells that hold a row; this counts the items the list has
- * realised. They are equal exactly when nothing on screen is a blank row, which is the claim
- * E1 now makes at every step: a row can be alive, counted, and in a section's model while the
- * cell drawing its item holds nothing, and no other field in the report says so.
- */
+// The fourth number of `screen=`: how many items the list says it is drawing. It equals
+// `inCells` exactly when no cell on screen is blank.
 function visibleItems(report: Record<string, string>): number {
   const box = report.screen;
   if (box == null) throw new Error('the Form report has no "screen=" field');
@@ -196,12 +159,7 @@ function visibleItems(report: Record<string, string>): number {
   return value;
 }
 
-/**
- * Wait until every item on screen is drawn from a cell that holds a row.
- *
- * iOS only: Android has no cells to come short of (`inCells` is the row count there, because a
- * row never leaves its Yoga box), and the report's `screen=` field is the collection view's.
- */
+// iOS only: on Android a row never leaves its Yoga box, so there are no cells to wait for.
 async function drawnOnScreen(step: string, which = 'form') {
   const report = await formReport(
     (r) => num(r, 'inCells') === visibleItems(r),
@@ -217,38 +175,8 @@ async function formRef(): Promise<FormHandle> {
   return handleOf(() => forms.form, 'the Form');
 }
 
-/**
- * Fail if this Form's providers had to answer with something they did not have.
- *
- * `giveUps` counts the times a cell or a band provider was asked for an item its models had
- * already forgotten and answered with a blank of the list's own registration — the branch
- * that keeps the app up when the list's snapshot and the mount stream disagree
- * (`HybridNitroUiForm.giveUpCell`, and the three sibling branches beside it). Nothing else in
- * these cases asserts it: what they assert are the *symptoms* a give-up used to produce —
- * the churn case is red when the answer is a view nobody dequeued, E1 and E4 when the answer
- * is a row missing from its cells. Those are witnesses, not the count, and they go quiet as
- * soon as the give-up is answered well enough for the layout to recover, which is exactly
- * what the X25 and X29 rounds made it do. A Form that quietly gave up twice and redrew
- * itself correct on the next settle is a Form with a bug nobody can see.
- *
- * So it is asserted on the cases that churn a Form on purpose. What each of those calls is
- * worth is not the same, and the difference is stated where it is read rather than here:
- *
- * - the churn case is a *witness*. Round 1's mutation — count a give-up wherever the cell
- *   provider is asked about a row whose Section has gone — turned it red at 8 give-ups, which
- *   is the counter agreeing with a window that case really opens.
- * - E1 and E4 are *guards*. Neither removes a Section, and the four branches that increment
- *   this counter are a stale Section, two casts that cannot fail with the classes `makeList`
- *   registers, and the `else` of a guard on an enum with one case. No branch here reaches 0 by
- *   the case's own doing: the same mutation left them green. They are wired (the same
- *   mutation, moved to a line every cell ask runs, turns both red at their own
- *   `expectNoGiveUps`), and they fail if a future version of the Form starts giving up here.
- *
- * iOS only: Android's Form has no cells to answer with a blank and counts no give-ups.
- *
- * Printed before it is graded, like the press case: on red the numbers beside it say which
- * disagreement the give-up came out of, which `1 !== 0` does not.
- */
+// `giveUps` counts the times the list asked for a cell or header whose item the Form had
+// already forgotten. iOS only: Android's Form has no cells.
 function expectNoGiveUps(report: Record<string, string>, step: string): void {
   if (!IOS) return;
   console.log(
@@ -271,39 +199,10 @@ function expectNoGiveUps(report: Record<string, string>, step: string): void {
   expect(num(report, 'giveUps')).toBe(0);
 }
 
-/**
- * Wait until the Form is in the state a press is graded in, and hand back the report that said
- * so. iOS only.
- *
- * Five things have to be true before ten presses mean anything, and the Form — not a row
- * handle — answers every one of them. A handle is only a handle: a row view another case unmounted goes
- * on answering for itself, `where=holding`, at a frame nothing is drawing, while the Form on
- * screen has that row in a cell. The Form is also asked about *every* row on screen rather than
- * the two this case has handles for, which is the difference between a precondition and a hope.
- *
- * - `boxMismatch` — the worst gap anywhere on screen between a row's own box and the width
- *   React laid its content out at. A row laid out wider than its box has its right-hand content
- *   drawn past its bounds, and UIKit's hit-test stops at those bounds: a press there lands on
- *   the cell, React Native walks up from wherever the hit-test stopped and never reaches the
- *   `Pressable`, so the press counts nothing. Laid out *narrower* is not dangerous, only wrong —
- *   the content moves inward, where a finger still reaches it — but the witness is the absolute
- *   difference in either direction, because a Form that only looked for an excess would be green
- *   while a row was drawn 22 pt inside its own cell, and this case is about content being where
- *   it is drawn. It used to be non-zero on some row whatever the Form said: one list-wide width
- *   cannot match a plain row's box and its accessory row's narrower one side by side.
- * - `rowsInCells` against `rows` — every row this Form owns is sitting in a cell. A row left in
- *   its section's *holding view* is not drawn at all (that view is hidden), and its live view is
- *   still measurable, so a press aimed at it lands on whichever cell happens to be at those
- *   pixels: zero presses for a row that is wired perfectly (X29).
- * - `distinctDrawn` against `inCells` — no row is drawn by two cells, which is the other half of
- *   the count above: nine cells naming eight rows reads as a full list.
- * - `wrongCells` — every cell on screen is holding the row its own item names. Without this one
- *   the two counts above can disagree *silently*: a recycled cell can be on screen holding a
- *   perfectly live row that belongs to a different item, which reads as a full cell to every
- *   "does this cell hold a row?" question while the row its item owns draws nothing from its
- *   section's hidden holding view. That was X29: `rows` 9, `inCells` 9, `rowsInCells` 8, and a
- *   press delivered ten times at a row whose pixels were somewhere else.
- */
+// iOS only. A press is aimed at a row's measured position, so before pressing, every row
+// must be drawn by exactly one cell, by the cell its own item names, and laid out at its
+// own box: UIKit's hit-test stops at a row's bounds, and a row left in its hidden holding
+// view is still measurable but not drawn.
 async function formReadyToPress(step: string): Promise<Record<string, string>> {
   return formReport(
     (report) =>
@@ -317,7 +216,6 @@ async function formReadyToPress(step: string): Promise<Record<string, string>> {
   );
 }
 
-/** The reference for a testID, retried: the first pass can find nothing. */
 async function boxOf(
   testId: string
 ): Promise<Parameters<typeof userEvent.press>[0]> {
@@ -332,21 +230,9 @@ async function boxOf(
   }
 }
 
-/**
- * Wait until exactly one live view answers each testID, and return the counts as seen.
- *
- * `userEvent.press` names the view to press, not a screen coordinate: it takes the native view
- * the query answered with and delivers the tap at that view's centre in the window. So a second
- * live view with the same testID — the previous case's surface, on its way out — leaves the case
- * measuring whichever copy the query happened to answer with, which is a property of the query
- * and not of the Form.
- *
- * Waiting for one is a precondition, not a loosening: with two live copies there is no fact of
- * the matter about whether "a finger at the row content's drawn position reaches it". It is not
- * the reason E4 was red on one simulator and green on the other (X29: the row's cell had lost its
- * row to another cell, and the Form could not see that its own cell was blank) — that is what the
- * five counts in `formReadyToPress` are for.
- */
+// `userEvent.press` presses the view its query answered with. While the previous case's
+// surface is still on its way out, two live views share a testID and the press could land
+// on either.
 async function oneLiveViewPer(testIds: readonly string[]): Promise<string> {
   const deadline = Date.now() + 8000;
   for (;;) {
@@ -365,27 +251,16 @@ async function oneLiveViewPer(testIds: readonly string[]): Promise<string> {
   }
 }
 
-/**
- * The Form's box for E1, short enough that its 646 pt of content is taller than the list.
- * Measured: at `flex: 1` on this device the list is 874 pt, so `nuiTestScrollTo` moved
- * nothing and no cell was ever given back - the cycles ran and proved nothing.
- */
+// Shorter than the probe's 646 pt of content, so the list can scroll and recycle cells.
 const SHORT_BOX = { maxHeight: 420 } as const;
 
 const LONG_TEXT =
   'Airplane mode turns off every radio at once, including Bluetooth, Wi-Fi and cellular.';
 
-/** What `Probe` renders, and the counters a case reads back. */
 type Mode = 'base' | 'inserted' | 'removed' | 'grown' | 'reordered';
 
-/**
- * The first section's row order, per mode.
- *
- * Written as an order rather than five JSX children so that `reordered` is a *move* and not a
- * rebuild: every row keeps its key, so React asks Fabric to move the child, which is the path
- * a "pinned rows first" toggle takes. It is also what turns the order into an assertion - the
- * mode picks the order, and the case reads the Form's own list back.
- */
+// The first section's row order, per mode. Every row keeps its key, so `reordered` is a
+// Fabric move and not a rebuild.
 const FIRST_ROWS: Record<Mode, readonly string[]> = {
   base: ['wifi', 'bt', 'cell', 'pressable'],
   inserted: ['wifi', 'bt', 'hotspot', 'cell', 'pressable'],
@@ -418,19 +293,11 @@ function counters() {
 
 type ProbeProps = ReturnType<typeof counters> & {
   mode: Mode;
-  /**
-   * Extra style for the probe's Form. E1 needs one: at full height the Form's list is
-   * 874 pt and its content is 646 pt, so it cannot scroll a point and no cell is ever
-   * recycled - the cycles below would exercise nothing while still counting as run.
-   */
   formStyle?: StyleProp<ViewStyle>;
 };
 
-/**
- * The form under test: three sections, nine rows, a hosted Switch, a `Pressable`, and a
- * `Text` that wraps at the cell width. Nine = 4 + 3 + 2 in `base`; `inserted` makes ten and
- * `removed` eight, so a keyed change is a real insert or removal rather than a rebuild.
- */
+// Three sections and nine rows (4 + 3 + 2) in `base`; `inserted` makes ten and `removed`
+// eight.
 function Probe({
   mode,
   log,
@@ -439,8 +306,6 @@ function Probe({
   onPressablePress,
   onSwitchChange,
 }: ProbeProps) {
-  // The first section's rows, built here so the handlers above stay the fixture's own, and
-  // keyed so `reordered` moves a row rather than rebuilding it. See {@link FIRST_ROWS}.
   const firstSectionRows: Record<string, ReactElement> = {
     wifi: (
       <Form.Row
@@ -545,7 +410,6 @@ function Probe({
   );
 }
 
-/** The same rows outside any native container - question 6's comparison. */
 function Column({ count }: { count: number }) {
   return (
     <ScrollView contentContainerStyle={styles.column}>
@@ -577,19 +441,10 @@ function CostForm({ count }: { count: number }) {
   );
 }
 
-/** The parts the churn can ask for, in the order the Form holds them. */
 const CHURN_PARTS = ['a', 'b', 'c'] as const;
 
-/**
- * The Form the churn mounts: `parts` sections of `perSection` rows apiece, in a box short
- * enough that its content scrolls.
- *
- * Several sections rather than the bench's one because the crash needs an index path the
- * diffable *snapshot* still holds while this Form's models have dropped it, and a
- * one-section Form can only lose index 0 — the one section index that stays valid as long as
- * any model is left at all. Three sections also give the churn something to take away one at
- * a time, which is what a settings screen does when a group is switched off.
- */
+// Several sections: a one-section Form can only lose section index 0, which stays valid
+// for as long as any section is left.
 function ChurnForm({
   parts,
   perSection,
@@ -620,14 +475,8 @@ function ChurnForm({
   );
 }
 
-/**
- * The churn's surface: the Form, or nothing, at the same place in the same tree.
- *
- * Toggling it is how the bench's arm tears a Form down and mounts it again — one surface, so
- * React Native's pool hands the next mount the views the last one dropped. A fresh `render`
- * per cycle would be a fresh surface and a fresh pool, which is a different mount (see
- * `OneRow`'s `rowKey`), and the crash is about what the *previous* mount left in the list.
- */
+// The Form, or nothing, in one surface: React Native's view pool is per surface, so only a
+// remount inside the same surface is handed the views the last mount dropped.
 function Churn({
   on,
   parts,
@@ -644,21 +493,10 @@ function Churn({
   );
 }
 
-/** A press that asks for nothing, so no case mounts an inline closure as a native callback. */
 function pressNow(): void {
-  // The harness counts what it likes; this row's `onPress` exists to make the row pressable.
+  // Exists only to make a row pressable.
 }
 
-/**
- * One titled, pressable row - for the cases that care about what a *previous* mount left on a
- * recycled view.
- *
- * React Native hands the next mount the same section and row views (`setupViewRecycling`, the
- * F6 gate), so anything the first mount did not take back off them is the second mount's
- * problem: a disposed Compose layer is a section that draws nothing, and a `contentDescription`
- * React Native did not clear is a row announced under a name its own app never gave it. Both
- * were found by mounting this twice.
- */
 function OneRow({
   title,
   label,
@@ -667,14 +505,9 @@ function OneRow({
 }: {
   title: string | null;
   label: string | null;
-  /** `false` leaves the `Form` with no `style` at all - the README's `<Form>`. */
   styled: boolean;
-  /**
-   * Swapping it asks Fabric for another row instance *in the same surface*, which is the
-   * drop-and-create pair RN's pool turns into a hand-back (F6's `oneSwitch`). A fresh
-   * `render` is a fresh surface, and the pool is per surface, so it is not the way to get a
-   * recycled view.
-   */
+  // Swapping the key drops and creates a row in the same surface, which is how React
+  // Native's per-surface view pool hands back a recycled view.
   rowKey?: string;
 }) {
   return (
@@ -708,7 +541,6 @@ function OneRow({
   );
 }
 
-/** What the last `OneRow` Form reported for its own box. */
 const formBox = { height: Number.NaN };
 
 const styles = StyleSheet.create({
@@ -717,23 +549,17 @@ const styles = StyleSheet.create({
   pressable: { paddingHorizontal: 8 },
   column: { gap: 8 },
   columnRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center' },
-  // E7: the measured box has to *be* the row's box, so the row's own alignment and padding
-  // are neutralised here - otherwise the child sits inset by them and the case would be
-  // comparing a row with its content's inset copy. `measureInWindow` on the child then
-  // answers the question the case asks, because the two boxes have the same origin.
+  // No alignment or padding, so a child that fills the row has the row's own box.
   measuringRow: { alignItems: 'stretch', paddingHorizontal: 0 },
   measured: { flex: 1 },
-  // The `Sections` story's box, which the moved E2/X24 cases measure: a Form with a
-  // height inside a padded container, so its rows move after their first layout.
+  // A Form with a fixed height inside a padded container: its rows move after their
+  // first layout.
   storyOuter: { flex: 1, padding: 16 },
   storyForm: { height: 420 },
 });
 
-/**
- * The same `Pressable` and `Switch` with no Form in sight - E4's positive control. On iOS
- * the copies inside a row receive nothing from the test's press channel, and these have to
- * receive everything, or the finding would only say that pressing is broken on this device.
- */
+// The same `Pressable` and `Switch` outside any Form: a positive control for the press
+// channel itself.
 function Loose({
   onPressablePress,
   onSwitchChange,
@@ -759,7 +585,6 @@ function Loose({
   );
 }
 
-/** A handle, printed without assuming it is plain data. */
 function describeBox(box: unknown): string {
   try {
     return JSON.stringify(box);
@@ -768,25 +593,20 @@ function describeBox(box: unknown): string {
   }
 }
 
-/** Mount the probe and wait for the Form's handle and first laid-out row. */
 async function mount(props: ProbeProps) {
-  // Forget every handle the previous case left behind before mounting. A `hybridRef`
-  // cleanup from a case that has already ended can arrive after this render, and a report
-  // read from the dying Form says "nine rows, all in cells" once and then never again -
-  // which is how E1 came to assert against a Form that had already been dropped.
+  // Forget the previous case's handles first: a handle to a Form that is being torn down
+  // still answers reports.
   for (const map of [forms, sections, rows]) {
     for (const key of Object.keys(map)) delete map[key];
   }
   const { rerender } = await render(<Probe {...props} />);
   await formRef();
   await boxOf('label-wifi');
-  // The `rerender` rides along so a case can keep working in *this* surface. A second
-  // `mount` is a second surface, in which every row mounts in document order - which for
-  // E1 would mean an insert always landing where React put it, by accident.
+  // `rerender` keeps a case in this surface: a second `render` is a new surface, where
+  // every row mounts in document order.
   return Object.assign(props, { rerender });
 }
 
-/** Element `index` of a parsed height list, or a failure naming the list. */
 function nth(values: number[], index: number): number {
   const value = values[index];
   if (value == null || !Number.isFinite(value))
@@ -794,10 +614,8 @@ function nth(values: number[], index: number): number {
   return value;
 }
 
-/**
- * Read a Row's or Section's report until `ok` holds. Every native report is refreshed on
- * main and read on the JS thread, so the first read is often still `"pending"`.
- */
+// A native report is refreshed on the main thread and read on the JS thread, so the first
+// read is often still "pending".
 async function reportUntil(
   read: () => string | undefined,
   ok: (r: Record<string, string>) => boolean,
@@ -817,13 +635,8 @@ async function reportUntil(
   }
 }
 
-/**
- * Poll an async probe until its own verdict passes, and hand back the last verdict either
- * way. A settle is not a fixed wait: a published position travels native -> JS -> React ->
- * Fabric and every hop is a turn of a queue, so the case asks again instead of sleeping. The
- * failed verdict comes back rather than a timeout error, because the assertion that reads it
- * names the rows that are still wrong.
- */
+// Polls a probe until its verdict passes. On timeout the last verdict is returned, not
+// thrown, so the caller's assertion can name what is still wrong.
 async function until<T>(
   probe: () => Promise<T>,
   ok: (value: T) => boolean,
@@ -846,10 +659,7 @@ describe('Form (G24)', () => {
   afterEach(() => {
     cleanup();
     forgetPromisedHandles();
-    // `measured` too: a ref callback that only ever stores (`if (handle != null)`) leaves a
-    // case able to measure a view the previous case unmounted, and a dead view answers
-    // `measureInWindow` with its right size at (0, 0) - the exact shape of a row the shadow
-    // tree has misplaced (fix round 1).
+    // An unmounted view still answers `measureInWindow`, with its size at (0, 0).
     for (const map of [forms, sections, rows, measured]) {
       for (const key of Object.keys(map)) delete map[key];
     }
@@ -862,11 +672,9 @@ describe('Form (G24)', () => {
     expect(num(report, 'orphans')).toBe(0);
     if (IOS) {
       expect(num(report, 'items')).toBe(9);
-      // Rows on screen are inside a cell; the rest are in a section's holding view.
       expect(num(report, 'inCells')).toBeGreaterThan(0);
     } else {
       expect(num(report, 'inCells')).toBe(num(report, 'rows'));
-      // Question 2's Android half: one shape per row, so the count is the row count.
       const section = await reportUntil(
         () => sections.first?.nuiTestSectionReport(),
         (r) => r.shapes != null,
@@ -888,20 +696,11 @@ describe('Form (G24)', () => {
     );
     expect(num(second, 'rows')).toBe(3);
     expect(num(second, 'index')).toBe(1);
-    // Every row view in a section is a row the Form was told about. The shape a phantom
-    // takes - a recycled component view registered by a recovery scan - is exactly this.
     if (IOS) expect(num(report, 'stale')).toBe(0);
-    // Mounted, laid out, and nothing had to be answered with a blank on the way here. A
-    // guard rather than a witness — a clean mount never opens a stale-index window, so
-    // nothing in this case can make this counter move on its own. See `expectNoGiveUps`.
     expectNoGiveUps(report, 'E1 at rest');
   });
 
   it('keeps the tree intact through an insert, a removal and 50 scrolls (E1)', async () => {
-    // One surface for the whole case, and every step a `rerender` of it. A second `render`
-    // would be a new surface mounting all ten rows in document order, where the index the
-    // holding view reports happens to be the one React used - so the case below would pass
-    // without ever asking the question (fix round 1).
     const probe = await mount({
       mode: 'base',
       formStyle: SHORT_BOX,
@@ -913,15 +712,8 @@ describe('Form (G24)', () => {
     const { rerender } = probe;
 
     if (IOS) {
-      // The state the insert is going to happen in: every row of the section is drawn from a
-      // cell, so none of them is in the holding view any more, and that is the only state in
-      // which the holding view's own subview count can disagree with the index React used.
-      // Asking for it here is what stops the order assertion below passing because nothing had
-      // been adopted yet - scrolling first does the opposite (a scroll hands rows *back*), so
-      // this reads the list at rest.
-      // Some of the section's rows, not all of them: at this box a screen holds six of the
-      // nine, and the state the insert needs is "rows have left the holding view for
-      // cells", which is what makes the holding view's own count the wrong answer.
+      // The insert must happen after rows have left the holding view for cells: only then
+      // can the holding view's subview index differ from the index React used.
       const resting = await formReport(
         (r) => num(r, 'inCells') > 1,
         'rows to be drawn from cells before the insert'
@@ -931,7 +723,6 @@ describe('Form (G24)', () => {
       await drawnOnScreen('at rest');
     }
 
-    // A keyed insert in the middle of the first section, in this same surface.
     await rerender(
       <Probe mode="inserted" formStyle={SHORT_BOX} {...counters()} />
     );
@@ -941,19 +732,12 @@ describe('Form (G24)', () => {
     expect(parse(need(forms.form).nuiTestFormReport()).orphans).toBe('0');
 
     if (IOS) {
-      // ...and the insert landed *third*, which is where React put it. A count of ten says a
-      // row arrived; this says where. The index the Form was handed used to be the holding
-      // view's position among the subviews still in it, and by the time a third row has been
-      // shown that is 0 - so a keyed insert jumped to the front of the section.
       expectOrder(parse(need(forms.form).nuiTestFormReport()), [
         'Wi-Fi',
         'Bluetooth',
         'Personal hotspot',
         'Cellular data',
       ]);
-      // Ten rows is a count; this is the screen. Fix round 1's logs show this step at
-      // `inCells=3` with 5 items on screen: two rows drawn as nothing, and every counter in
-      // the report content with the step.
       await drawnOnScreen('after the insert');
     }
 
@@ -966,18 +750,10 @@ describe('Form (G24)', () => {
     );
     trace('removed', parse(need(forms.form).nuiTestFormReport()));
     if (IOS) {
-      // The same field, asked *after* a removal rather than at first mount. `stale` is a row
-      // view sitting in a section's holding view that this Form never agreed to hold: on a
-      // clean mount it is 0 by definition, and it is after a removal - when a cell hands back
-      // a row another cell has already adopted - that it can become a row drawn in one place
-      // and mounted in another.
       expect(parse(need(forms.form).nuiTestFormReport()).stale).toBe('0');
       await drawnOnScreen('after the removal');
     }
 
-    // A keyed reorder: the same four rows, `cell` moved from third to first, every key
-    // intact - so React moves the child instead of rebuilding it, which is the path a
-    // "pinned rows first" toggle takes and the one the Form's index used to lose.
     await rerender(
       <Probe mode="reordered" formStyle={SHORT_BOX} {...counters()} />
     );
@@ -994,15 +770,9 @@ describe('Form (G24)', () => {
         'Bluetooth',
         'Ring on receipt',
       ]);
-      // The order is right and two of the five rows on screen are blank: the first is what
-      // the index fix proved, this is what the *screen* says after a move.
       await drawnOnScreen('after the reorder');
     }
     if (!IOS) {
-      // Question 2 again: the layer follows the new order. The count is still four - a
-      // reorder moves a row, it does not remove one - so what this can say is that the
-      // section recounted rather than keeping the mount that ended (fix round 1: this read
-      // `3`, which is the count from the removal two steps above, not the one here).
       const section = await reportUntil(
         () => sections.first?.nuiTestSectionReport(),
         (r) => r.shapes != null,
@@ -1018,12 +788,10 @@ describe('Form (G24)', () => {
     );
     expect(settled.orphans).toBe('0');
 
-    // The leak probe is growth across the cycles, not equality with the row count: a row
-    // React has thrown away can still be alive in Fabric's own component-view pool, and
-    // that is RN's retention, not the list's.
+    // The leak check is growth across the cycles, not equality with the row count:
+    // Fabric's component-view pool can keep alive a row React has thrown away.
     const beforeCycles = parse(need(forms.form).nuiTestFormReport());
     trace('before the cycles', beforeCycles);
-    // 50 scroll-through cycles: cells are reused, so rows move in and out of them.
     for (let cycle = 0; cycle < 50; cycle += 1) {
       need(forms.form).nuiTestScrollTo(cycle % 2 === 0 ? 400 : 0);
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -1033,15 +801,10 @@ describe('Form (G24)', () => {
     trace('after the cycles', after);
     expect(after.orphans).toBe('0');
     expect(num(after, 'rows')).toBe(9);
-    // Nothing was left behind by the churn or by 50 cycles of cell reuse.
     expect(num(after, 'alive')).toBe(num(beforeCycles, 'alive'));
     if (IOS) {
-      // The cycles have to have moved the list, or they exercised nothing: the box is
-      // 420 pt and its content 646 pt, so 400 is reachable and `offset` is the proof.
-      // Asked for explicitly, because the loop above was measured reading `offset=-62` the
-      // whole way through - 50 `nuiTestScrollTo` calls with nothing waiting for them leave
-      // the list where UIKit settled it, and every counter beside it describes a list that
-      // never moved (fix round 1).
+      // The loop above does not wait for each scroll to land, so one more scroll is waited
+      // for here to see the list really move.
       need(forms.form).nuiTestScrollTo(400);
       const scrolled = await formReport(
         (r) => num(r, 'offset') > 100,
@@ -1049,21 +812,15 @@ describe('Form (G24)', () => {
       );
       trace('scrolled for the cycles', scrolled);
       expect(num(scrolled, 'offset')).toBeGreaterThan(100);
-      // 0 of 4 items drawn at offset 400 in fix round 1's log, with `reparents` 103 and
-      // `reclaims` 100 behind it: every give-back landed and no re-adopt followed it.
       await drawnOnScreen('at offset 400');
-      // Cells really did take rows, and really did hand them back, once the list moved:
-      // measured across the scroll, `reparents` 4 -> 103 and `reclaims` 0 -> 100. The two
-      // are not compared with each other: UIKit keeps a cell across a snapshot apply, so a
-      // row can be given back and re-adopted without the provider running again.
+      // The two counters are not compared with each other: UIKit keeps a cell across a
+      // snapshot apply, so a row can be given back and re-adopted without the cell
+      // provider running again.
       expect(num(scrolled, 'reparents')).toBeGreaterThan(
         num(after, 'reparents')
       );
       expect(num(scrolled, 'reclaims')).toBeGreaterThan(0);
       need(forms.form).nuiTestScrollTo(0);
-      // The question the counters cannot answer, and the one this case exists for: after
-      // fifty give-backs, is the row on screen sitting in a cell? A give-back with no
-      // re-adopt looks like a blank row, not like a wrong count.
       const home = await reportUntil(
         () => rows.wifi?.nuiTestRowReport(),
         (r) => r.where != null,
@@ -1071,12 +828,6 @@ describe('Form (G24)', () => {
       );
       expect(home.where).toBe('cell');
     }
-    // The counter runs for the whole mount, so one read at the end is a claim about every
-    // insert, removal, reorder and one of the 50 scroll cycles above - each of which is a
-    // window in which the list can be holding an index path the models have let go of. It is
-    // a guard at the end of a run rather than a witness in one: this case removes a *row*,
-    // never a Section, and the give-up branches need a Section to have gone (see
-    // `expectNoGiveUps` — the churn case is the one with a red proof behind its count).
     expectNoGiveUps(
       parse(need(forms.form).nuiTestFormReport()),
       'E1 after an insert, a removal, a reorder and 50 cycles'
@@ -1103,13 +854,8 @@ describe('Form (G24)', () => {
     );
     const items = (settled.heights ?? '').split(',').map(Number);
     expect(items.length).toBeGreaterThanOrEqual(4);
-    // The delta between what the list says an item is and what Yoga says its row is is the
-    // cell's own chrome. It must be the same for every row - that is "the cell follows
-    // Yoga", and it is a comparison rather than a threshold.
-    // iOS: the delta is the cell's own chrome, and it is not zero. Android has no cell -
-    // the section draws behind rows Yoga laid out - so its delta is zero by construction,
-    // and the case proves only that the number tracks the row. That asymmetry is the
-    // answer to question 3 for the platform, and the report says it as one.
+    // The difference between the list's item height and the row's Yoga height is the
+    // cell's own padding, the same for every row. Android has no cell, so it is zero there.
     const chrome = nth(items, 0) - num(wifi, 'h');
     if (IOS) expect(chrome).toBeGreaterThan(0);
     else expect(Math.abs(chrome)).toBeLessThanOrEqual(1);
@@ -1117,9 +863,6 @@ describe('Form (G24)', () => {
       1
     );
 
-    // Grow the wrapped row's text: its cell follows, and its neighbours do not move. A
-    // rerender of the same tree, not a second mount: a second mount leaves the first tree's
-    // row views behind in recycled holding views, which is not what this measures.
     await probe.rerender(<Probe {...probe} mode="grown" />);
     const grown = await formReport(
       (r) =>
@@ -1149,35 +892,15 @@ describe('Form (G24)', () => {
       `FORM TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
     if (IOS) {
-      // Everything the ten presses below are graded on is waited for here, and of the Form
-      // rather than of `rows.pressable`/`rows.silent`: a handle is only a handle, and a row
-      // view that another case unmounted answers for itself forever (it reports
-      // `where=holding` for as long as you ask, whether or not the Form on screen has that row
-      // in a cell). What the case needs is the Form's own account of every row it is drawing —
-      // drawn, once each, by a cell that holds it, at the box that cell gives it. Without that,
-      // the press count below is a property of the list's state at the moment of the aim.
       await drawnOnScreen('before the presses');
       const geometry = await formReadyToPress('before the presses');
       const live = await oneLiveViewPer(['inner-press', 'switch-silent']);
-      // Re-aim from the certified tree: a press names a view, never a place. The JavaScript side
-      // sends (0, 0) beside the `nativeId` the query answered with (`@react-native-harness/ui`'s
-      // `userEvent.ts:80`), the native side substitutes the centre of the view the registry holds
-      // under that id (`HarnessUI.mm:248`) and hit-tests *that* — and the rejection it prints
-      // formats the *arguments*, so a rejected press reads `No view found at point (0.00, 0.00)`
-      // whatever the point was (`HarnessUI.mm:277`). Handles taken before the waits above answer
-      // for wherever their views ended up: a row at rest in a section's holding view keeps the
-      // absolute position its cell would have had (`NitroUiFormViews.swift:18-23`), and a settle
-      // moves rows through that state. Pressed then, the aim lands on a neighbour and every
-      // counter below stays at zero, or it lands outside the window's bounds and `hitTest:`
-      // answers nil — the two texts pair-b produced from one tree, 35 minutes apart (X29). A
-      // fresh query cannot name the row that has left: E6's `f49` is `Unable to find element`, not
-      // a press.
+      // Queried again after the waits: a press is delivered at the centre of the view the
+      // query answered with, and a settle moves rows.
       const aim = {
         pressable: await boxOf('inner-press'),
         toggle: await boxOf('switch-silent'),
       };
-      // Print them before grading them: when one of them stops holding, the numbers say
-      // which, and a press count on its own says only "something was wrong".
       console.log(
         `FORM TAP geometry rows=${geometry.rows} rowsInCells=${geometry.rowsInCells} ` +
           `inCells=${geometry.inCells} distinct=${geometry.distinctDrawn} ` +
@@ -1186,33 +909,13 @@ describe('Form (G24)', () => {
           `mismatch=${geometry.boxMismatch} boxSpan=${geometry.boxSpan} ` +
           `width=${geometry.width} boxW=${geometry.boxW} live=${live}`
       );
-      // Asserted rather than only waited for, so that a Form which stops reaching this state
-      // fails by name. A row counted twice (`distinctDrawn` short of `inCells`) and a row in no
-      // cell at all (`rowsInCells` short of `rows`) are the same mix-up seen from the two ends;
-      // a cell `claims` a row it is not holding is the reason the Form could not see either.
       expect(Number(geometry.rowsInCells)).toBe(Number(geometry.rows));
       expect(Number(geometry.distinctDrawn)).toBe(Number(geometry.inCells));
       expect(Number(geometry.claims)).toBe(0);
       expect(Number(geometry.wrongCells)).toBe(0);
-      // The box wait is only worth anything because the rows on this screen do *not* share a
-      // box: `boxSpan` is the widest row box minus the narrowest, and a Form whose rows were all
-      // the same width would satisfy `boxMismatch` 0 with one list-wide number — which is the
-      // code that was wrong. It is asserted rather than remembered from a measurement so that a
-      // future iOS that stops reserving the accessory's room fails here instead of quietly
-      // turning this case into one that proves nothing.
+      // The rows on this screen must not all share one width (an accessory row is
+      // narrower), or `boxMismatch` 0 would hold for a single list-wide width.
       expect(Number(geometry.boxSpan)).toBeGreaterThan(0);
-      // Question 4, the half that is not a finger, and it splits by who hit-tests the touch.
-      // A press lands on whichever UIView UIKit says owns the point, and a row drawn from its
-      // cell owns the points inside itself: React Native walks *up* the view tree from wherever
-      // that stopped until it finds a view that can emit a touch, so a `Pressable` in a row
-      // answers here just as it does on Android — ten of ten, which is what `testRealInputForm`
-      // counts with real fingers (D45) and what Android has always counted. It stopped answering
-      // for the point in one row for two reasons, and the wait above is what keeps this case out
-      // of both (X29): a row laid out *wider* than its own box has that content drawn past the
-      // bounds UIKit will hit-test, and a row that is not in a cell at all is drawn nowhere —
-      // the tap then lands on whatever cell owns those pixels, and the row's own content counts
-      // nothing. A hosted control takes all ten for a third reason: it is a native control, and
-      // it answers for its own point without React Native in the path at all.
       for (let index = 0; index < 10; index += 1) {
         await pressAimed(aim.pressable, 'inner-press');
         await pressAimed(aim.toggle, 'switch-silent');
@@ -1220,18 +923,11 @@ describe('Form (G24)', () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
       expect(probe.log.pressable).toBe(10);
       expect(probe.log.switches).toBe(10);
-      // Twenty presses, each landing on whichever view UIKit says owns the point, and no
-      // cell had to be filled with a blank on the way. Read here rather than at the end of
-      // the case: the positive control below unmounts this Form. A guard, not a witness —
-      // nothing a press does reaches a give-up branch today, so what this catches is a Form
-      // that starts needing one while rows are being pressed (see `expectNoGiveUps`).
+      // Read here: the positive control below unmounts this Form.
       expectNoGiveUps(
         parse(need(forms.form).nuiTestFormReport()),
         'E4 after twenty presses into row content'
       );
-      // The positive control: the very same two callbacks, outside any Form, where React
-      // Native's hit-test has its content where it is drawn. Both counters are the ones the
-      // loop above just drove ten times, so this is graded as a delta.
       const loose = {
         pressable: probe.log.pressable,
         switches: probe.log.switches,
@@ -1243,10 +939,6 @@ describe('Form (G24)', () => {
           onSwitchChange={probe.onSwitchChange}
         />
       );
-      // The same for the positive control: `cleanup()` is still on its way out when this render
-      // lands, so until the pair is the only live copy of itself the query can answer with the
-      // copy that is going away — an aim whose view leaves with it is pressed at wherever its last
-      // frame was, which is the pair of texts above rather than a control.
       await oneLiveViewPer(['loose-press', 'loose-switch']);
       await pressAimed(await boxOf('loose-press'), 'loose-press');
       await pressAimed(await boxOf('loose-switch'), 'loose-switch');
@@ -1261,11 +953,7 @@ describe('Form (G24)', () => {
     expect(probe.log.pressable).toBe(10);
     expect(probe.log.switches).toBe(10);
     expect(probe.log.silent).toBe(true);
-    // The row stayed where it belongs after ten taps in its content.
     expect(parse(need(forms.form).nuiTestFormReport()).orphans).toBe('0');
-    // The same claim as the iOS branch above. `giveUps` is an iOS counter — Android's Form
-    // has no cells to answer with a blank — so this is the branch's own no-op, kept in place
-    // so the case says the same thing about both platforms in one line each.
     expectNoGiveUps(
       parse(need(forms.form).nuiTestFormReport()),
       'E4 after twenty presses into row content'
@@ -1285,9 +973,6 @@ describe('Form (G24)', () => {
       const native = Date.now() - started;
       cleanup();
       delete forms.cost;
-      // The same rows outside any native container, same probe: `native` versus `plain`,
-      // wall-clock from `render()` to the report agreeing on the row count. Question 6's
-      // harness stand-in for a bench arm - the report says so in as many words.
       const plainStart = Date.now();
       render(<Column count={count} />);
       await boxOf(`c${count - 1}`);
@@ -1301,41 +986,18 @@ describe('Form (G24)', () => {
       expect(num(report, 'alive')).toBe(count);
       if (IOS) {
         expect(num(report, 'items')).toBe(count);
-        // The cell-reuse claim, measured: on screen, not mounted-and-visible, is a window.
+        // Fewer cells than rows: cells are reused.
         expect(num(report, 'inCells')).toBeLessThan(count);
       }
     }
   });
 
-  /**
-   * The bench's `mount.form` arm, in the harness (X25).
-   *
-   * That arm mounts a Form of 20 or 50 rows and drops it again, in a loop, in one surface —
-   * and on `main` it took the app with it on every one of eight launches, inside the
-   * reconfigure that `readoptRowlessCells()` applies one turn after a settle:
-   * `-[UICollectionView _reconfigureCell:forItemAtIndexPath:]`, `NSInternalInconsistencyException`,
-   * at N=20 and at N=50, with and without anything else changing.
-   *
-   * The turn between a settle and that apply is where React's removals land. The list is then
-   * still holding items this Form has forgotten about, and the provider run for one of those
-   * index paths has nothing to draw — and a *reconfigure* is not allowed to answer with a
-   * cell other than the one already on screen. So the case changes the Form's shape in every
-   * way that turn can be met: a scroll (the give-backs that empty a cell in place), a Section
-   * taken away with the rest staying (the index path the snapshot keeps), and the whole Form
-   * gone and back (the bench's own teardown).
-   *
-   * The assertions are that the app is still there and still telling the truth: every shape
-   * has to converge to its own counts, nothing on screen may be a cell holding nothing, and
-   * the Form the loop ends on has to answer for its own rows. A crash inside the loop shows
-   * up as a report that never arrives, and then as the suite's own channel going dead.
-   */
   it('survives a Form scrolled, reduced and torn down in a loop (X25)', async () => {
     const PER_SECTION = 7;
     const PARTS = CHURN_PARTS.length;
     const SCROLL = 400;
     const CYCLES = 4;
 
-    /** Wait for the churn's Form to report this shape, snapshot included on iOS. */
     const settledTo = async (parts: number, step: string) => {
       const want = parts * PER_SECTION;
       const report = await formReport(
@@ -1347,10 +1009,7 @@ describe('Form (G24)', () => {
         'churn'
       );
       if (IOS) await drawnOnScreen(step, 'churn');
-      // Graded on every settle rather than once at the end, because the counter is a
-      // mount's own and the loop drops and remounts the Form four times: the report read
-      // after the remount says nothing about the give-ups the teardown before it caused.
-      // Each of these four settles is one of the shapes the case exists to visit.
+      // On every settle: the counter belongs to one mount, and the loop remounts the Form.
       expectNoGiveUps(report, `churn ${step}`);
       return report;
     };
@@ -1367,8 +1026,6 @@ describe('Form (G24)', () => {
       );
       let report = await settledTo(PARTS, `${step}: mounted`);
 
-      // Scrolled, so rows are handed back while their cells stay on screen — one of the
-      // three ways a cell comes up empty, and the one a settle then chases.
       churn.nuiTestScrollTo(SCROLL);
       if (IOS) {
         report = await formReport(
@@ -1378,8 +1035,6 @@ describe('Form (G24)', () => {
         );
       }
 
-      // A Section away with the others staying, and back: a removed index path in a
-      // snapshot that has not been told yet.
       await rerender(
         <Churn on={true} parts={PARTS - 1} perSection={PER_SECTION} />
       );
@@ -1405,7 +1060,6 @@ describe('Form (G24)', () => {
             .join(';')
       );
 
-      // The bench's own teardown and its next mount.
       await rerender(
         <Churn on={false} parts={PARTS} perSection={PER_SECTION} />
       );
@@ -1416,19 +1070,13 @@ describe('Form (G24)', () => {
       await handleOf(() => forms.churn, `the churn Form (${step}, remounted)`);
     }
 
-    // Alive, and answering for the rows it has: the loop ends on a mounted Form, so these
-    // reads are the positive control for "the app is still here".
     const last = await settledTo(PARTS, 'after the loop');
     trace('after the loop', last);
     expect(num(last, 'orphans')).toBe(0);
     if (IOS) expect(num(last, 'stale')).toBe(0);
 
-    // The seat the churn leaves behind, taken by a Section with a heading in it. The abort is
-    // not in the tearing down: a dropped Form leaves the recycled list holding the items and the
-    // bands of the Form that just ended, and the layout of the *next* mount asks this Form's
-    // provider for them. For a Section band the answer used to be `nil`, and UIKit asserts on
-    // that, so the case cannot end at "the loop survived" — it has to hand the seat to a titled
-    // Section and still have an app.
+    // A dropped Form leaves its recycled list holding the old items and headers, and the
+    // next mount's layout asks the new Form for them. Mount a titled Section into it.
     surface.unmount();
     for (const map of [forms, sections, rows]) {
       for (const key of Object.keys(map)) delete map[key];
@@ -1442,10 +1090,6 @@ describe('Form (G24)', () => {
       'the Section that took the churn seat to hold its row'
     );
     expect(Number(refilled.rows)).toBe(1);
-    // And it took the seat without the list having to answer with a blank. This Form mounts
-    // into the list the churn dropped, whose snapshot still holds the items and bands of the
-    // Form that just ended — which is the shape the band give-up branch was written for, so
-    // the seat being refilled with one row is only half of what this step can say.
     const refilledForm = await formReport(
       (r) => num(r, 'rows') === 1,
       'the Form that took the churn seat to answer for its own row',
@@ -1456,7 +1100,6 @@ describe('Form (G24)', () => {
   });
 
   it('composes a recycled Section, and drops the band of a gone title', async () => {
-    // The mount -> unmount -> mount cycle React Native's view pool makes real.
     const first = await render(
       <OneRow label="Named" styled={true} title="First" />
     );
@@ -1476,12 +1119,8 @@ describe('Form (G24)', () => {
     );
     const second = await reportUntil(
       () => sections.one?.nuiTestSectionReport(),
-      // `layerH` is what the Compose layer was last measured at and `boxH` the section's own
-      // height. Equal is the whole claim that the layer came back: a section whose composition
-      // was dropped *with its view* - which is what `onDropView` used to do, one turn before
-      // React Native put the view in the pool - reports a box and no layer at all, and draws
-      // its rows over the page background forever. iOS has no Compose layer to lose, so the
-      // case asks it only for the rows.
+      // Android: `layerH` is the Compose layer's measured height and `boxH` the section's
+      // own. They are equal when the recycled section composed its layer again.
       (r) =>
         Number(r.rows) === 1 &&
         (IOS || Math.abs(num(r, 'layerH') - num(r, 'boxH')) < 1),
@@ -1491,30 +1130,17 @@ describe('Form (G24)', () => {
       expect(num(second, 'headerBand')).toBeGreaterThan(0);
     }
     if (IOS) {
-      // Before believing anything the section says about what its Form drew, ask whether the
-      // Form it answers to is the one that holds it. A recycled Section that kept the Form of
-      // the mount that ended would read a heading out of a list nobody is looking at.
       expect(second.form).toBe('held');
-      // The other half of the same recycled section: a *changed* title string. The section's
-      // identity is its model and the model did not change, so the snapshot the Section applies
-      // is a no-op and UIKit never runs the provider that fills the band in — the old heading
-      // stays painted, at the old height. `drawnTitle` is what the band is painted with, the
-      // only field here that separates a title the Form stored from one it drew (fix round 1).
+      // A changed title does not change the snapshot, so UIKit does not run the header
+      // provider on its own. `drawnTitle` is what the header is painted with.
       const redrawn = await reportUntil(
         () => sections.one?.nuiTestSectionReport(),
-        // Asked as a wait because the promise is about where the screen ends up: a band
-        // re-painted one turn after the snapshot is still a band that says what its model
-        // says. What must not happen is that it goes on saying "First" forever.
         (r) => r.drawnTitle === 'Second',
         'the recycled band to be painted with the new title'
       );
       expect(redrawn.drawnTitle).toBe('Second');
     }
 
-    // A title that goes to null leaves nothing behind to measure, and Android reported the band
-    // from the heading's own `onSizeChanged` - which stops running the moment the `Text` is
-    // gone. Without a second path the height of a heading that no longer exists stays reserved
-    // in the layout forever, so a section keeps a blank band where its title used to be.
     await again.rerender(<OneRow label="Named" styled={true} title={null} />);
     if (!IOS) {
       const untitled = await reportUntil(
@@ -1544,17 +1170,8 @@ describe('Form (G24)', () => {
     );
     if (!IOS) expect(named.desc).toBe('Named row');
 
-    // Unmount this row and let a row with no label arrive - the shape that leaves a recycled
-    // `ReactViewGroup` answering for a mount that ended, because React Native's
-    // `prepareToRecycleView` clears its own tag and not the framework's name. It has to be a
-    // *key swap in this surface*: the pool RN keeps is per surface, so a second `render` would
-    // be handed a brand-new view and could not carry a name over.
-    //
-    // What this case guards is `recycles >= 1` and the promise that a fresh row carries no
-    // name; the row's own a11y reset (`resetRow`) is NOT proven by it. With the reset commented
-    // out and the APK verified rebuilt, `desc` still came back empty, so that reset is defence
-    // in depth (fix round 1's red proof says so). The upstream bug's reproducer is the plain
-    // labelled `<View>` on the Form screen, which the a11y sweep grades.
+    // A key swap in this surface, not a second `render`: React Native's view pool is per
+    // surface, and only a recycled view could carry the previous row's name over.
     await rerender(
       <OneRow label={null} styled={true} title="B" rowKey="plain" />
     );
@@ -1564,14 +1181,9 @@ describe('Form (G24)', () => {
       'the second row to be laid out'
     );
     if (!IOS) {
-      // The seam has to be able to see the bug at all. Only an instance the pool handed back
-      // can carry the previous mount's name, and `recycles=` is the one number that says this
-      // view was reused rather than built (F6's reason for counting it per object).
       expect(num(plain, 'recycles')).toBeGreaterThanOrEqual(1);
       expect(plain.desc).toBe('-');
-      // The other half of the promise: a row that is one clickable element to TalkBack has to
-      // answer the action the framework offers. `isClickable` only *offers* it - the press came
-      // from `dispatchTouchEvent`, which a screen reader never sends.
+      // TalkBack presses with `ACTION_CLICK`, never with a touch event.
       const before = num(plain, 'presses');
       need(rows.one).nuiTestA11yClick();
       await reportUntil(
@@ -1583,9 +1195,8 @@ describe('Form (G24)', () => {
   });
 
   it('has a height when the app gave it no style at all', async () => {
-    // Every iOS section is `position: 'absolute'` inside the Form, so before the base style an
-    // unstyled `<Form>` had nothing in flow and was 0 pt tall: the README, `form.md` and
-    // `readme-examples.tsx` snippets all drew nothing at all.
+    // Every iOS section is `position: 'absolute'` inside the Form, so nothing in flow gives
+    // an unstyled Form a height.
     formBox.height = Number.NaN;
     await render(<OneRow label={null} styled={false} title="Unstyled" />);
     const deadline = Date.now() + 8000;
@@ -1603,11 +1214,6 @@ describe('Form (G24)', () => {
   });
 
   it('reports a settle that no drag announced', async () => {
-    // The delegate had a `scrollViewDidLayout`, which is not a `UIScrollViewDelegate` method,
-    // so nothing ran it: a settle that was not a drag ending was reported only by the one hop
-    // a snapshot apply queues. Move the content from inside the library *without* reporting it
-    // and the shadow tree is left with the offset from before the move - the same 72 pt class
-    // of wrong that E7 measures, reached by a different door.
     render(<MeasureForm />);
     const form = await handleOf(() => forms.measure, 'the measuring Form');
     await formReport(
@@ -1615,10 +1221,8 @@ describe('Form (G24)', () => {
       `${MEASURE_ROWS} rows`,
       'measure'
     );
-    // Let UIKit place a page of rows before comparing. A row still sitting in its section's
-    // holding view has no pixels to compare and is skipped, and on a loaded machine the list
-    // has not necessarily realised its cells by the turn the rows report their count - which
-    // made the number of comparisons below a race rather than a measurement.
+    // Wait on state: the list may not have realised its cells by the turn the rows report
+    // their count.
     await formReport(
       (r) => num(r, 'inCells') >= 10,
       'ten rows to be drawn from cells',
@@ -1640,8 +1244,6 @@ describe('Form (G24)', () => {
       await formReport(
         (r) => Math.abs(num(r, 'origin') - num(moved, 'offset')) < 0.5,
         'the shadow tree to be told the offset the list is at',
-        // This case mounted `MeasureForm`, whose handle is `forms.measure`. Reading the
-        // default `form` here asked a Form that was never mounted to report.
         'measure'
       );
     }
@@ -1649,24 +1251,13 @@ describe('Form (G24)', () => {
 
   it('starts a recycled Form at the top of its own content', async () => {
     // A `UICollectionView` keeps its `contentOffset` when its view goes back to React
-    // Native's pool, and the Form mounted into it inherits that scroll. This is not
-    // hypothetical: E7's at-rest reading of `offset=-2` against a 62 pt top inset is the
-    // `+60` the settle case above moves the list by, arriving in a Form that case never
-    // scrolled (fix round 2, item 2).
-    //
-    // Ending the surface and mounting another is the shape React Native really recycles, and
-    // `recycles=` on the new Form's report is the witness. A key swap inside one surface is
-    // not that shape, which an earlier draft of this case assumed: measured on this tree, the
-    // swap leaves `recycles`, `alive` and `applies` exactly where they were — Fabric keeps the
-    // same subtree, so nothing is being mounted and there is no new mount to reset.
+    // Native's pool. The view is only recycled when its surface ends, so this case ends the
+    // surface and mounts another.
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     need(forms.form).nuiTestScrollTo(200);
-    // Each platform reports its scroller under its own field: iOS publishes the list's real
-    // `contentOffset` as `offset`, while Android's report answers that question with `scroll`
-    // and keeps `offset=0.00` as a placeholder, because its rows are measured through the
-    // shadow tree instead (S6b). Asking one platform the other's question is how this case
-    // first went red on Android.
+    // iOS reports the list's `contentOffset` as `offset`; Android reports its scroll
+    // position as `scroll` and keeps `offset` at 0.
     const offsetField = IOS ? 'offset' : 'scroll';
     const scrolled = await formReport(
       (r) => num(r, offsetField) > 100,
@@ -1674,8 +1265,8 @@ describe('Form (G24)', () => {
     );
     trace('scrolled before the recycle', scrolled);
     {
-      // `recycles` is iOS's witness that a view came back out of the pool; Android's Form
-      // report has no such field, so on Android the mount itself is the witness.
+      // `recycles` counts views that came back out of the pool. Android's report has no
+      // such field.
       const recycled = IOS ? num(scrolled, 'recycles') : 0;
       cleanup();
       // The pool gets the view when the surface is really gone, not when React says so.
@@ -1688,16 +1279,13 @@ describe('Form (G24)', () => {
       await formRef();
       await boxOf('label-wifi');
       const next = await formReport(
-        // `recycles` is iOS's witness that a view came back out of the pool; Android's report
-        // has no such field, so there the mount itself is the witness.
         (r) =>
           num(r, 'rows') === 9 && (!IOS || num(r, 'recycles') >= recycled + 1),
         'a Form mounted into the list the case above left scrolled (`recycles` to move)'
       );
       trace('the recycled Form', next);
-      // The top of the content is wherever the list's own inset says it is, so this is one
-      // number rather than a constant. Android's scroller has no content inset at all, so its
-      // top is 0.
+      // The top of the content is at the list's own inset on iOS. Android's scroller has no
+      // content inset.
       const top = IOS ? num(next, 'insetTop') : 0;
       if (IOS) expect(top).toBeGreaterThan(0);
       expect(Math.abs(num(next, offsetField) + top)).toBeLessThanOrEqual(1);
@@ -1705,16 +1293,12 @@ describe('Form (G24)', () => {
   });
 
   it('publishes a settle for a scroll it started, not a frame', async () => {
-    // The keyboard path's `setContentOffset(animated: true)`, and a status-bar scroll to the
-    // top, set none of `isDragging`, `isTracking` or `isDecelerating`, so every frame of them
-    // walked past the delegate's guard and into `onContentOffset` - a re-render of the Form and
-    // its sections per frame of an animation nobody flicked (fix round 2, item 3).
+    // A scroll UIKit animates for a caller sets none of `isDragging`, `isTracking` or
+    // `isDecelerating`.
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
     if (!IOS) {
-      // `offsetPublishes` counts publishes from UIKit's delegate, and Android's Form has
-      // neither the delegate nor the field: its scroller is React Native's own `ScrollView`,
-      // which does this work in `onScroll`. The case is iOS-only, so it says so before it
-      // asks for a number Android's report does not have.
+      // Android's scroller is React Native's own `ScrollView`, and its report has no
+      // `offsetPublishes` field.
       return;
     }
     const atRest = await formReport(
@@ -1724,9 +1308,8 @@ describe('Form (G24)', () => {
     const before = num(atRest, 'offsetPublishes');
     const target = num(atRest, 'offset') + 60;
     need(forms.form).nuiTestCommand('scroll-animated');
-    // The offset is not the settle. `setContentOffset` writes the model value before UIKit
-    // has drawn a frame of the animation, so an offset at the target only says the scroll
-    // started; the settle is the publish, and that is what has to be waited for.
+    // `setContentOffset` writes the offset before UIKit has drawn a frame of the animation,
+    // so the wait is on the publish, not on the offset alone.
     await formReport(
       (r) =>
         Math.abs(num(r, 'offset') - target) <= 1 &&
@@ -1734,8 +1317,7 @@ describe('Form (G24)', () => {
       `the Form to have published the settle at ${String(target)} pt (` +
         `offsetPublishes was ${String(before)})`
     );
-    // A beat longer than the animation, so the ceiling below counts a scroll that is over:
-    // read mid-flight, even an unguarded one looks quiet.
+    // Longer than the animation, so the count below is of a scroll that is over.
     await new Promise((resolve) => setTimeout(resolve, 600));
     const settled = parse(need(forms.form).nuiTestFormReport());
     const published = num(settled, 'offsetPublishes') - before;
@@ -1744,18 +1326,14 @@ describe('Form (G24)', () => {
         atRest.offset
       )} -> ${String(settled.offset)}`
     );
-    // One for the settle it came to rest at, and room for the inset change that came with it.
-    // The floor matters as much as the ceiling: a Form that publishes nothing is quiet too.
+    // One for the settle, and room for the inset change that can come with it.
     expect(published).toBeGreaterThanOrEqual(1);
     expect(published).toBeLessThanOrEqual(2);
   });
 
   it('grows a row when UIKit is not watching its height constraint (E3, iOS 15)', async () => {
-    // `selfSizingInvalidation` is iOS 16 and later. Below it - and in a list the
-    // `self-sizing-off` command has just switched off - the only thing that can tell the layout
-    // a row's height constraint moved is the `rowResized` fallback, which asks for one
-    // invalidation. Without it a row that grew was drawn at its old height forever (fix round 2,
-    // item 4), and no test on this host could see that, because every simulator here is modern.
+    // `selfSizingInvalidation` is iOS 16 and later. The `self-sizing-off` command switches
+    // it off, to exercise the fallback older systems rely on.
     const probe = await mount({ mode: 'base', ...counters() });
     const settled = await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     if (!IOS) return;
@@ -1780,8 +1358,6 @@ describe('Form (G24)', () => {
       'form'
     );
     const grownItems = (grown.heights ?? '').split(',').map(Number);
-    // The neighbours did not move, either: one invalidation re-asks the layout, it does not
-    // rebuild the section at a different pitch.
     expect(Math.abs(nth(grownItems, 0) - nth(items, 0))).toBeLessThanOrEqual(1);
     expect(Math.abs(nth(grownItems, 1) - nth(items, 1))).toBeLessThanOrEqual(1);
     const tall = await reportUntil(
@@ -1789,8 +1365,6 @@ describe('Form (G24)', () => {
       (r) => Number(r.h) > num(short, 'h') + 4,
       'the wrapped row to have grown'
     );
-    // The same delta as at rest - the cell followed the row, which is the whole claim, reached
-    // by the fallback rather than by UIKit noticing on its own.
     const chrome = nth(items, 3) - num(short, 'h');
     expect(
       Math.abs(nth(grownItems, 3) - num(tall, 'h') - chrome)
@@ -1798,37 +1372,24 @@ describe('Form (G24)', () => {
   });
 
   it('leaves the window with the app still running', async () => {
-    // UIKit scrolls a scroll view *on its way out of the window*: removing one shifts its own
-    // `contentOffset`, and `scrollViewDidScroll` fires for that shift. By then the JS function
-    // behind a section's placement callback can already be gone, and calling into a callback
-    // that has been torn down is fatal, not a no-op. The shape this took was not a failing
-    // assertion but the next test suite in the same app refusing to start - "the app bridge
-    // disconnected" - so the proof here is that the app answers afterwards (fix round 1).
-    // `Probe`, not E7's `MeasureForm`: mounting a second Form with the same row test ids as
-    // the case that runs after it is how that case came to measure a dead view.
+    // UIKit shifts a scroll view's `contentOffset` as it leaves the window, and
+    // `scrollViewDidScroll` fires for that shift after the JS callbacks may be gone.
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
     const resting = await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     need(forms.form).nuiTestScrollTo(400);
     await formReport(
-      // The claim is "scrolled", not "scrolled past 100": `SHORT_BOX` gives a 9-row Form
-      // about 84 dp of travel, so a fixed 100 is unreachable on Android however well the
-      // scroll works. Each platform publishes one of the two numbers — iOS moves the list's
-      // own `offset`, Android's scroll view updates `scroll` — so the case compares both
-      // against the reading taken before `nuiTestScrollTo`, and asks for 20 dp of movement
-      // out of either (fix round 1: this waited for a number that only iOS can reach).
+      // Android has only about 84 dp of travel in this box, so the wait is for 20 dp of
+      // movement in whichever field the platform reports.
       (r) =>
         num(r, 'offset') > num(resting, 'offset') + 20 ||
         num(r, 'scroll') > num(resting, 'scroll') + 20,
       'the list to have scrolled before it goes'
     );
-    // The screen goes away with the list scrolled: the moment UIKit moves the list out on
-    // its own.
     delete forms.one;
     delete rows.one;
     cleanup();
     await new Promise((resolve) => setTimeout(resolve, 250));
 
-    // A fresh Form has to answer. If the app died with the previous surface, this never does.
     render(<OneRow label="Alive" styled={true} title="After" />);
     const alive = await reportUntil(
       () => rows.one?.nuiTestRowReport(),
@@ -1839,15 +1400,9 @@ describe('Form (G24)', () => {
   });
 
   it('names the aim when a press is refused (X31)', async () => {
-    // iOS only, because only iOS refuses one: the Android module resolves the promise with
-    // whatever it injected, so on that platform this case could only assert that nothing
-    // happened.
+    // Only iOS refuses a press: the Android harness module resolves whatever it injected.
     if (!IOS) return;
-    // A press the platform has to refuse, made on purpose. The view is mounted 6 000 pt down,
-    // so the native side resolves the identifier to a real box, hit-tests its centre outside
-    // the window's bounds, and gets nothing back — the branch whose text used to be two
-    // zeros whatever was aimed at. Being refused is the only way to see what `pressAimed`
-    // adds, and a case that grades a message nobody produced passes for free.
+    // Mounted 6 000 pt down, so the hit-test at its centre is outside the window.
     render(
       <View
         testID="aimed-off-window"
@@ -1875,17 +1430,11 @@ describe('Form (G24)', () => {
           'named only on the branch that refuses'
       );
     }
-    // Printed before graded, as everywhere else in this file.
     console.log(`FORM AIM refusal message: ${message}`);
-    // What it was aimed at, by name and by id: the two things the upstream string cannot
-    // carry because the JS side never sends them over the bridge.
     expect(message).toContain('aimed-off-window');
     expect(message).toContain('nativeId=');
-    // And the point that was pressed, which is the number the old text refused to print. The
-    // fixture is `left: 40, top: 6000, 120 x 60`, so its centre is (100, 6030) give or take
-    // wherever the root view sits under the status bar — tens of points, never hundreds, and
-    // a shift of hundreds is exactly what reading the number is for. Zeros, or no centre at
-    // all, is the regression this line exists for.
+    // The fixture's centre is (100, 6030), plus wherever the root view sits under the
+    // status bar.
     const centre = message.match(
       /centre is \((-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)\)/u
     );
@@ -1894,23 +1443,18 @@ describe('Form (G24)', () => {
     expect(Number(centre?.[1])).toBeLessThanOrEqual(101);
     expect(Number(centre?.[2])).toBeGreaterThanOrEqual(6000);
     expect(Number(centre?.[2])).toBeLessThanOrEqual(6100);
-    // Upstream's own words survive the wrapping: the diagnosis adds, it does not replace.
     expect(message).toContain('No view found at point');
   });
 });
 
-// MARK: - E7: does `measure` say where the row is, or where the Form is?
+// MARK: - Does `measure` say where the row is, or where the Form is?
 
-/** 24 rows: enough that the list scrolls on any phone, which is half the question. */
+// Enough rows that the list scrolls on any phone.
 const MEASURE_ROWS = 24;
 
-/**
- * How many rows one pass compares. The go line is ten; this is ten with room, and it is what
- * keeps the case inside the suite's 30 s per-test budget rather than a claim about speed.
- */
+// Each comparison is two round trips, and the case has a 30 s budget.
 const COMPARE_LIMIT = 14;
 
-/** The row content of `MeasureForm`, kept by ref so a case can `measureInWindow` it. */
 const measured: Record<
   string,
   {
@@ -1920,10 +1464,6 @@ const measured: Record<
   }
 > = {};
 
-/**
- * A Form whose every row is measurable from JavaScript (`ref`) and reportable from native
- * (`hybridRef`), so one case can ask both trees the same question.
- */
 function MeasureForm() {
   return (
     <Form
@@ -1955,7 +1495,6 @@ function MeasureForm() {
   );
 }
 
-/** `measureInWindow` as a promise - the shadow tree's answer, in window points. */
 function measureInWindow(
   testId: string
 ): Promise<[number, number, number, number]> {
@@ -1969,7 +1508,6 @@ function measureInWindow(
   });
 }
 
-/** `[x, y, w, h]` from a report's `window=` field, or null for a row with no window. */
 function windowOf(
   report: Record<string, string>
 ): [number, number, number, number] | null {
@@ -1981,35 +1519,13 @@ function windowOf(
     : null;
 }
 
-/**
- * Ask both trees where every row in a cell is, and return what disagrees.
- *
- * Rows without a cell are skipped rather than counted: their published position is derived
- * from the list's layout, while `window=` is a view's real position, and there is no view to
- * read for a recycled row. That is also why the case insists on a minimum count - "all zero
- * rows agree" is a pass that proves nothing.
- *
- * The pass is bounded at {@link COMPARE_LIMIT} comparisons. Every comparison is two round
- * trips - one to a report refreshed on main, one to the shadow tree - and the suite's per-test
- * budget is 30 s, which this case shares with the scroll and the settle poll. Ten in-cell rows
- * is the go line; fourteen is the same claim with a margin, and a pass that stops at the limit
- * is still a pass on rows it actually read.
- *
- * `scrolledBy` is a correction the case applies to the shadow-tree answer, and S6b measured
- * that it is `0` on both platforms - which is the most useful thing this case found.
- * `measure`/`measureInWindow` are one shared C++ walk (`UIManagerBinding.cpp:689` ->
- * `dom::measureInWindow` -> `LayoutableShadowNode::computeRelativeLayoutMetrics`), and per
- * ancestor that walk adds two things: the node's Yoga `frame.origin` and its
- * `getContentOriginOffset(true)`. RN's `ScrollView` overrides the second to `-contentOffset`
- * (`ScrollViewShadowNode.cpp:67`, fed from `scrollViewDidScroll`), so an Android Form - whose
- * scroller *is* an RN `ScrollView` (`Form.tsx`) - already measures where its rows are drawn,
- * mid-scroll and at rest: after a 180 dp scroll its rows measured `-178.7` against UIKit's
- * `-178.7`. iOS gets the same `0` for the opposite reason: a `UICollectionView` is not a
- * shadow node, so nothing in the walk knows about its scroll, and the Form publishes each
- * cell's resting place into the row's own `top`/`left` to put it there (question 4).
- * Subtracting the scroll offset on Android, which an earlier draft of this case did, made all
- * fourteen comparisons wrong by exactly the scroll - a wrong assumption, not a wrong Form.
- */
+// Asks the shadow tree and the native view where every row in a cell is, and returns what
+// disagrees. Rows without a cell have no view position to read and are skipped.
+//
+// `scrolledBy` is 0 on both platforms. Android's scroller is an RN `ScrollView`, whose
+// shadow node already subtracts its content offset in `measureInWindow`. A
+// `UICollectionView` is not a shadow node, so on iOS the Form writes each cell's resting
+// place into the row's own layout position.
 async function compareRows(
   what: string,
   scrolledBy: number
@@ -2024,8 +1540,6 @@ async function compareRows(
     const id = `m${index}`;
     const report = await reportUntil(
       () => rows[id]?.nuiTestRowReport(),
-      // A row in a section's holding view has no pixels to report (`-`), so it may answer
-      // with that instead of a box; anything else has to produce a box to be compared.
       (r) =>
         windowOf(r) != null || r.where === 'holding' || r.where === 'detached',
       `${id} to have a window or be off screen`
@@ -2034,11 +1548,6 @@ async function compareRows(
     if (native == null) continue;
     const measured2 = await measureInWindow(id);
     compared += 1;
-    // The view has been drawn `scrolledBy` higher than Yoga laid it out; the shadow-tree
-    // answer does not know that (see above), so it has to be taken off before comparing.
-    // Both platforms answer `0` today, so this subtraction is a seam rather than a
-    // correction: it stays because the day a Form scrolls inside itself on iOS without
-    // publishing (or a platform stops applying the ancestor hook) is the day it is needed.
     const expectY = measured2[1] - scrolledBy;
     const off = Math.max(
       Math.abs(measured2[0] - native[0]),
@@ -2052,8 +1561,6 @@ async function compareRows(
       );
     }
   }
-  // The two constants and the two offsets the comparison is built from, so a mismatch says
-  // which number moved rather than leaving the arithmetic to be reconstructed from points.
   const geometry = need(forms.measure).nuiTestFormReport();
   console.log(
     `S6b MEASURE ${what}: compared=${compared} scroll=${round1(scrolledBy)} ` +
@@ -2071,16 +1578,8 @@ async function compareRows(
   return { compared, bad };
 }
 
-/**
- * How far the Form has scrolled, as its own report says - Android only.
- *
- * Asked, not assumed: the case compares a number it read from the device against a number it
- * read from the device, and a wrong guess here reads as a `measure` bug on the other side.
- * The report is eventually consistent (a read answers with whatever main published last), so
- * one read straight after `nuiTestScrollTo` can answer with the offset from *before* it; the
- * poll waits for an offset that has both moved past `minimum` and stopped moving, which is
- * the same shape `readReport()` polls in.
- */
+// Android only. A read straight after `nuiTestScrollTo` can still answer with the offset
+// from before it, so this waits for an offset that has passed `minimum` and stopped moving.
 async function formScrollY(minimum: number): Promise<number> {
   const deadline = Date.now() + 12000;
   let previous = Number.NaN;
@@ -2121,9 +1620,6 @@ describe('Form measure (E7)', () => {
       `${MEASURE_ROWS} rows`,
       'measure'
     );
-    // Every row has to have registered the view this case measures, or the first comparison
-    // below reads a box from a mount that has already ended (fix round 1: m0 came back
-    // 338x44 at (0, 0), which is a dead view's answer, not a misplaced row's).
     const registered = await until(
       async () => Object.keys(measured).length,
       (n) => n >= MEASURE_ROWS,
@@ -2132,15 +1628,8 @@ describe('Form measure (E7)', () => {
     );
     expect(registered).toBe(MEASURE_ROWS);
 
-    // At rest. Android is the control here: its rows never leave Yoga's box, so both trees
-    // have always agreed and a case that cannot see the difference is not worth running.
-    // Polled for the same reason the pass below is: a row answers with the frame Fabric last
-    // wrote it, and the frames arrive per view. Mounting 24 rows behind one heading re-lays
-    // the section out once the heading's band has been measured, and a comparison that reads
-    // m3 and m8 mid-that pass sees the frame from before it (fix round 1: `m3 ... vs UIKit
-    // 12.2,37.3` and `m8 ... vs UIKit 12.2,0.0`, in a pass where twelve of fourteen rows
-    // agreed). Nothing is loosened here — the verdict is still "no row disagrees" — this just
-    // gives the layout the same chance to settle the scrolled pass has always had.
+    // Polled: frames arrive per view, and the section is laid out again once its header
+    // has been measured.
     const atRest = await until(
       () => compareRows('at rest', 0),
       (r) => r.bad.length === 0 && r.compared >= 10,
@@ -2148,25 +1637,12 @@ describe('Form measure (E7)', () => {
       'every row to measure where its own tree put it'
     );
     expect(atRest.bad).toEqual([]);
-    // The floor is the go line, ten comparisons, and it is reachable: this Form is `flex: 1`
-    // in an 874 pt window, its rows are 52 pt, and the pass is capped at `COMPARE_LIMIT` (14)
-    // - every green run in the ledger logs `compared=14` at rest. An earlier draft called eight
-    // the ceiling, which counted a screenful of rows on a box this case does not use.
     expect(atRest.compared).toBeGreaterThanOrEqual(10);
 
-    // Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do
-    // not, until the Form publishes where they came to rest - and on Android that the list
-    // really moved is asked of the device, not assumed, because a case that compared two
-    // numbers with nothing scrolled would pass on the at-rest readings.
     const height = 180;
     form.nuiTestScrollTo(height);
-    // Asked of the device, not assumed on both sides of the comparison below: what the case
-    // measures is a shadow-tree number against a UIKit number, and it expects the difference
-    // to be the scroll. A list that never moved leaves the two agreeing and the case passing
-    // on the at-rest readings - which is what it did, until this line went in: with
-    // `nuiTestScrollTo` made to do nothing, every row still "matched". Each platform is asked
-    // where its own scroller got to: iOS answers with the list's content offset from the
-    // Form's report, Android with its scroll view's.
+    // Confirm the list really moved, or the comparison below passes on the at-rest
+    // readings.
     if (IOS) {
       await formReport(
         (r) => Math.abs(num(r, 'offset') - height) <= 2,
@@ -2186,47 +1662,32 @@ describe('Form measure (E7)', () => {
       'every row in a cell to measure where UIKit put it'
     );
     expect(scrolled.bad).toEqual([]);
-    // A 180 pt scroll leaves a full page of rows on screen in an 874 pt window, so the same
-    // ten apply here as at rest - and the same reason: a pass over one or two rows is not a
-    // pass on the scroll.
     expect(scrolled.compared).toBeGreaterThanOrEqual(10);
     cleanup();
   });
 });
 
-// MARK: - X24: does a row's content reach the row's trailing edge, level with its label?
+// MARK: - Does a row's content reach the row's trailing edge, level with its label?
 
-/** `[left, top, width, height]` in the window's own units (pt on iOS, dp on Android). */
+// `[left, top, width, height]`, in pt on iOS and dp on Android.
 type WindowBox = [number, number, number, number];
 
-/** Anything React gave a `measureInWindow` handle to. */
 type Measurable = {
   measureInWindow: (
     callback: (x: number, y: number, width: number, height: number) => void
   ) => void;
 };
 
-/**
- * The boxes of {@link TrailingEdgeForm}, held by ref.
- *
- * Every one of them is a plain `View`, because a nitro-ui control takes no `ref`:
- * its handle (`hybridRef`) reports the size its native side measured and never
- * where it sits, and `measureInWindow` is a walk of the shadow tree, which only a
- * view React Native lays out answers. So each measured box is a wrapper that hugs
- * the thing it holds — in a row that centres its children a `View` with no style
- * is exactly as wide and as tall as the control inside it, which is the box that
- * control draws in.
- */
+// Each measured box is a plain `View` wrapping a control: a library control takes no
+// `ref`, and only a view React Native lays out answers `measureInWindow`.
 const contentBoxes: Record<string, Measurable> = {};
 
-/** Hold one box under `key`, ignoring the unmount `null` (E7's pattern). */
 function keepBox(key: string): (handle: Measurable | null) => void {
   return (handle) => {
     if (handle != null) contentBoxes[key] = handle as never;
   };
 }
 
-/** One box, or null while the shadow tree has no size for it yet. */
 async function readBox(key: string): Promise<WindowBox | null> {
   const handle = contentBoxes[key];
   if (handle == null) throw new Error(`no box registered for "${key}"`);
@@ -2238,15 +1699,8 @@ async function readBox(key: string): Promise<WindowBox | null> {
   return box[2] > 0 && box[3] > 0 ? box : null;
 }
 
-/**
- * Every box once the layout has settled, or a complaint naming the last reading.
- *
- * Settled means two reads in a row that agree on the probe row's width. On iOS a
- * row starts at `width: '100%'` and narrows to the width the list's cell reported,
- * so a box read between those two answers is the row's first frame and not the row
- * a screenshot shows — and a case that measured then would be comparing a form
- * that was still being laid out.
- */
+// Settled means two reads in a row agree on the probe row's width: on iOS a row starts
+// at `width: '100%'` and then narrows to the width its cell reports.
 async function settledBoxes<const K extends readonly string[]>(
   keys: K
 ): Promise<Record<K[number], WindowBox>> {
@@ -2274,22 +1728,10 @@ async function settledBoxes<const K extends readonly string[]>(
   }
 }
 
-/** One child that takes all the room its row offers — the probe's whole job. */
 const x24Fill = { flex: 1 } as const;
 
-/**
- * A stand-in for a self-sizing control: a box React Native *can* measure, carrying the
- * base style the real controls carry because it reads it from the same hook they do.
- *
- * This is the whole trick of the case. `measureInWindow` walks the shadow tree, and a
- * hybrid view's handle reports the size its native side measured, never where it sits —
- * so the question "where does a `Switch` land in a row?" can only be asked through a
- * proxy. Reading `useSelfSizingBaseStyle` instead of retyping `{ alignSelf:
- * 'flex-start' }` is what keeps the proxy honest: the answer the case measures is the
- * answer the row gives a real control, and on a `Form.Row` that predates the row-aware
- * base style the proxy follows `flex-start` to the row's top edge and the case goes red
- * for the reason it exists, not for the reason it was written.
- */
+// A measurable stand-in for a self-sizing control: a `View` carrying the same base style
+// the real controls read from `useSelfSizingBaseStyle`.
 function SelfSizingProbe({
   boxKey,
   children,
@@ -2304,7 +1746,6 @@ function SelfSizingProbe({
   );
 }
 
-/** The same pair inside a box of an app's own — what an app that copied round 1 has. */
 const x24Box = {
   alignItems: 'center',
   flex: 1,
@@ -2317,15 +1758,9 @@ const x24Styles = StyleSheet.create({
   text: { fontSize: 16 },
 });
 
-/**
- * The README's `form` example, with measurable boxes.
- *
- * Row one is a probe: one child that takes all the room, so its box *is* the row's
- * content box, insets and all, on a platform this file has to know nothing about.
- * Row two is the README's row written the obvious way — a `flex: 1` label and a
- * switch, both direct children of the row. Row three is that pair inside a box of
- * the app's own, so the case also covers an app that wrapped its content already.
- */
+// Row one is a probe whose single `flex: 1` child has the row's content box. Row two is a
+// label and a switch as direct children of the row. Row three is that pair inside a box
+// of the app's own.
 function TrailingEdgeForm() {
   return (
     <Form style={x24Styles.form}>
@@ -2361,8 +1796,7 @@ function TrailingEdgeForm() {
 describe('Form row content (X24)', () => {
   afterEach(() => {
     cleanup();
-    // A ref callback that only ever stores leaves the next case able to measure a
-    // view this one unmounted, and a dead view answers with its right size at (0, 0).
+    // An unmounted view still answers `measureInWindow`, with its size at (0, 0).
     for (const key of Object.keys(contentBoxes)) delete contentBoxes[key];
   });
 
@@ -2380,15 +1814,11 @@ describe('Form row content (X24)', () => {
     const right = (box: WindowBox): number => box[0] + box[2];
     const centre = (box: WindowBox): number => box[1] + box[3] / 2;
     const issues: string[] = [];
-    // The same three promises, asked of the bare pair the README prints and of the
-    // pair inside an app's own box.
     const pairs: Record<string, { label: WindowBox; control: WindowBox }> = {
       'a bare row': { label, control },
       'a boxed row': { label: boxedLabel, control: boxedControl },
     };
     for (const [name, pair] of Object.entries(pairs)) {
-      // (How wide the row's content box *is* — the width the cell handed the row — is
-      // what the E7 case checks against the list, so nothing is repeated here.)
       if (Math.abs(pair.label[0] - probe[0]) > 1) {
         issues.push(
           `${name}: the label starts at x=${pair.label[0].toFixed(1)} while the row's content starts at x=${probe[0].toFixed(1)}`
@@ -2399,12 +1829,8 @@ describe('Form row content (X24)', () => {
           `${name}: the control ends at x=${right(pair.control).toFixed(1)} while the row's content ends at x=${right(probe).toFixed(1)}`
         );
       }
-      // The one round 1's `Form.Row` failed: a control whose base style is
-      // `alignSelf: 'flex-start'` was left directly in a row taller than its content
-      // followed that style to the row's top edge, because a child's `alignSelf` beats
-      // the row's `alignItems`. A row now answers that base style with `alignSelf:
-      // 'center'` (`src/core/useSelfSizing.ts`), so the control lands on its label's
-      // middle — within a point, which is what "level" means to a reader of a screenshot.
+      // A child's `alignSelf` beats the row's `alignItems`, so a self-sizing control's
+      // base style must be `center` inside a row for it to sit level with its label.
       if (Math.abs(centre(pair.control) - centre(pair.label)) > 1) {
         issues.push(
           `${name}: the control is centred at y=${centre(pair.control).toFixed(1)} while its label is centred at y=${centre(pair.label).toFixed(1)}`
@@ -2426,22 +1852,11 @@ describe('Form row content (X24)', () => {
   });
 });
 
-// MARK: - X29 fix round 2: the box a row is told, and who is told about it
+// MARK: - The box a row is told, and who is told about it
 
-/**
- * A Form inside a box of the app's own, whose width the app changes mid-case.
- *
- * The two deep rows are what the case is about. Twelve 52 pt rows in a 420 pt box put them
- * off screen at rest; the case scrolls them into view so their own cells report a box, then
- * scrolls them back out again, which parks them in their section's holding view. From there
- * nothing lays them out again — not the resize, and not a `measure`, which reads the shadow
- * tree. What they answer afterwards is the width the row *remembers*, which is exactly the
- * thing a rotation used to leave behind.
- *
- * Row 2 has an accessory and stays on screen: it is what teaches the Form what an accessory
- * costs under the new width, so the parked accessory row's expected number is measured in this
- * Form rather than typed here.
- */
+// A Form in a box whose width the case changes. Twelve rows in a 420 pt box leave the two
+// deep rows (10 and 12) off screen at rest. Row 2 has an accessory and stays on screen,
+// so the Form can learn what an accessory costs at the new width.
 function SizedForm({ boxWidth }: { boxWidth: number }) {
   return (
     <View style={{ height: 420, width: boxWidth }} testID="resize-host">
@@ -2477,13 +1892,6 @@ function SizedForm({ boxWidth }: { boxWidth: number }) {
   );
 }
 
-/**
- * Three rows, the middle of which the case gives a trailing accessory between two renders.
- *
- * A visible row gaining an accessory is the cheapest way to make one cell report a narrower
- * box than its neighbours *after* the list has already settled — which is the case the
- * list-wide number has to survive without moving.
- */
 function AccessoryForm({ accessoried }: { accessoried: boolean }) {
   return (
     <Form
@@ -2522,16 +1930,13 @@ describe('Form row boxes (X29 r2)', () => {
   });
 
   it('hands no row back as a loss across 400 pt scrolls (X29 r2, item 1)', async () => {
-    // iOS only: a give-back is a cell emptying, and Android has no cells — its rows stay where
-    // Yoga put them, so there is nothing here for Android to be red about.
+    // iOS only: Android has no cells.
     if (!IOS) return;
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
 
-    // A cycle is one jump down and one back up, each asked of the list rather than assumed:
-    // `nuiTestScrollTo(400)` is clamped to the bottom of a 646 pt content in a 420 pt box, and
-    // a list at rest sits at its own top inset, so the only honest target is "moved away from
-    // where it was" — which is what recycles a cell, which is what this case counts.
+    // Each scroll waits for the offset to move relative to where it was: `nuiTestScrollTo`
+    // is clamped to the content, and a list at rest sits at its own top inset.
     let rest = await formReport(() => true, 'the report at rest');
     const cycle = async (step: string): Promise<void> => {
       const at = num(rest, 'offset');
@@ -2548,8 +1953,7 @@ describe('Form row boxes (X29 r2)', () => {
       );
       await drawnOnScreen(`${step} back up`);
     };
-    // A warm-up cycle first, so the reading below is taken from a list that has already
-    // recycled once and is not still settling from its own mount.
+    // Warm up first, so the baseline is read from a list that has already recycled.
     await cycle('warm-up 1');
     await cycle('warm-up 2');
     const lossesAtRest = num(rest, 'losses');
@@ -2558,25 +1962,14 @@ describe('Form row boxes (X29 r2)', () => {
       await cycle(`cycle ${step}`);
     }
     const after = await formReport(() => true, 'the report after four scrolls');
-    // The rows on screen are still the ones their items name — the claim the chase exists to
-    // repair, asked directly so this case cannot go green by the chase never having run.
     expect(num(after, 'claims')).toBe(0);
     expect(num(after, 'wrongCells')).toBe(0);
-    // Four 400 pt scrolls move a 9-row Form's whole content twice over, so every cell on
-    // screen was emptied and refilled several times. A give-back is not a lost row: before fix
-    // round 2 the container was still naming the row while `onGiveBack` moved it, so each one
-    // read back as a take, and the Form queued a walk of the visible cells for every one of
-    // them.
+    // A cell handing its own row back while it scrolls off is not a lost row.
     expect(num(after, 'losses') - lossesAtRest).toBe(0);
-    // `applies` — the chases that ran — is deliberately not asserted: every settle asks the
-    // same question of the visible cells (`reportGeometry` -> the chase), and a settle that
-    // lands while UIKit is mid-reuse really does find a cell to reconfigure. What had to stop
-    // moving is the number above, because each loss queued that walk on its own turn.
   });
 
   it('re-lays a row that is off screen at the Form’s new width (X29 r2, item 2)', async () => {
-    // iOS only, and iOS-only by cause: the row's own box is reported by its iOS cell, and
-    // Android lays every row out at the width the list gives it.
+    // iOS only: Android lays every row out at the width the list gives it.
     if (!IOS) return;
     const { rerender } = await render(<SizedForm boxWidth={400} />);
     await handleOf(() => forms.resize, 'the resizable Form');
@@ -2586,23 +1979,15 @@ describe('Form row boxes (X29 r2)', () => {
         num(r, 'width') > 100 &&
         num(r, 'boxMismatch') <= 0.5 &&
         num(r, 'inCells') === visibleItems(r),
-      // `inCells` against the items on screen, not against twelve: five of these rows are
-      // parked off screen by design, and a Form that drew every visible row from a cell is the
-      // settle this case can ask for.
       'the wide Form to draw every visible row at its own box',
       'resize'
     );
     const wideWidth = num(wide, 'width');
     const restingOffset = num(wide, 'offset');
 
-    // Show the deep rows, so the cells that draw them are the ones that tell them their box —
-    // and wait on the Form's own witness that every row on screen sits at the box of the cell
-    // drawing it. Reading a row before that settles reads the box its view carried in from the
-    // case that ran *before* this one: a row view is pooled and reused, and its content keeps
-    // the last Yoga width until the new one arrives. That is what this case first went red on —
-    // an accessory row apparently 2 pt wider than the list drawing it — and it is the same race
-    // that made E4 depend on which case ran ahead of it, so the wait is the finding, not a
-    // workaround for it.
+    // Scroll the deep rows into view so their own cells tell them their box, and wait
+    // until every row on screen is at its cell's box: a pooled row view keeps the width of
+    // its previous use until the new one arrives.
     need(forms.resize).nuiTestScrollTo(400);
     const shown = await formReport(
       (r) =>
@@ -2612,10 +1997,7 @@ describe('Form row boxes (X29 r2)', () => {
       'the list to have scrolled to the deep rows, each drawn by its own cell at its own box',
       'resize'
     );
-    // What an accessory costs, from two real cell reports rather than a typed constant — and
-    // from the Form rather than from a row, because this is the number the Form goes on to hand
-    // the rows that cannot ask their own cell. Asked before the rows are read, so a Form that
-    // never learned it cannot make the accessory expectations below coincide with the plain one.
+    // What an accessory costs, as the Form measured it from its own cells.
     const wideInset = num(shown, 'accessoryInset');
     expect(wideInset).toBeGreaterThan(4);
     await reportUntil(
@@ -2631,12 +2013,9 @@ describe('Form row boxes (X29 r2)', () => {
       `the deep accessory row to be drawn in a cell at ${wideWidth} - ${wideInset} pt`
     );
 
-    // Park them again: off screen, in the section's holding view, remembered at the wide box.
+    // Scroll them back off screen, into the section's holding view.
     need(forms.resize).nuiTestScrollTo(0);
     await formReport(
-      // Relative, like every other scroll in this file: the list is clamped by its own content
-      // and rests at its top inset, so "came back up" is the claim and an absolute number is
-      // one this Form cannot make.
       (r) => num(r, 'offset') < num(shown, 'offset') - 60,
       'the list to be back at the top again',
       'resize'
@@ -2650,14 +2029,12 @@ describe('Form row boxes (X29 r2)', () => {
         (r) => r.where === 'holding',
         `the deep ${name} row to be off screen again`
       );
-      // Still the box their own cells last reported: nothing lays a parked row out, which is
-      // exactly the state a rotation used to find them in and leave.
       expect(Math.abs(Number(parked.laid) - remembered)).toBeLessThanOrEqual(
         0.5
       );
     }
 
-    // The app changes a parent's width — the same thing a rotation does to the Form's box.
+    // A parent's width changes, as it does on rotation.
     await rerender(<SizedForm boxWidth={320} />);
     const narrow = await formReport(
       (r) =>
@@ -2669,15 +2046,12 @@ describe('Form row boxes (X29 r2)', () => {
       'resize'
     );
     const narrowWidth = num(narrow, 'width');
-    // What an accessory costs is the cell's own margins, which a width change does not move, and
-    // the Form had to learn it again from the cells it has now. Both rows are graded against
-    // this measured number, and it is checked to be real before either is read.
     const narrowInset = num(narrow, 'accessoryInset');
     expect(narrowInset).toBeGreaterThan(4);
     const expectedAccessory = narrowWidth - narrowInset;
 
-    // Neither row was in a cell for that layout pass. The Form has to tell them anyway: a row
-    // measured at a width the list stopped having is D45.4's promise broken at rest.
+    // Neither deep row was in a cell for that layout pass, so only the Form can tell them
+    // their new width.
     const plainRelaid = await reportUntil(
       () => rows.resizePlain?.nuiTestRowReport(),
       (r) => Math.abs(Number(r.laid) - narrowWidth) <= 0.5,
@@ -2693,9 +2067,7 @@ describe('Form row boxes (X29 r2)', () => {
     );
     expect(accessoryRelaid.where).toBe('holding');
 
-    // Then the Form's own witnesses, which have to agree with the rows: the published number is
-    // the plain box, and what an accessory costs did not move with the width. Asked after the
-    // rows, so a Form that never re-told them fails on its rows first.
+    // An accessory costs the cell's own margins, which do not change with the width.
     expect(Math.abs(narrowInset - wideInset)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(num(narrow, 'plainBox') - narrowWidth)).toBeLessThanOrEqual(
       0.5
@@ -2703,8 +2075,8 @@ describe('Form row boxes (X29 r2)', () => {
   });
 
   it('moves no row of the list when one row gains an accessory (X29 r2, items 3 and 5)', async () => {
-    // iOS only: on Android the section paints the accessory and the row reserves its room with
-    // padding, so there is one box for every row and nothing to flip.
+    // iOS only: on Android the row reserves the accessory's room with padding, so every
+    // row has the same box.
     if (!IOS) return;
     const { rerender } = await render(<AccessoryForm accessoried={false} />);
     await handleOf(() => forms.toggle, 'the accessory Form');
@@ -2719,14 +2091,10 @@ describe('Form row boxes (X29 r2)', () => {
     );
     const plainBox = num(before, 'plainBox');
     const published = num(before, 'widthPublishes');
-    // The published number is the plain box, and with no accessories every box is that one.
     expect(Math.abs(num(before, 'width') - plainBox)).toBeLessThanOrEqual(0.5);
     expect(num(before, 'boxSpan')).toBeLessThanOrEqual(0.5);
 
     await rerender(<AccessoryForm accessoried={true} />);
-    // Item 5: the row that gained the accessory has to be re-aimed at its own narrower box —
-    // `boxMismatch` is the Form's own answer to "is every row on screen laid out at the box of
-    // the cell drawing it", and one wide row on screen is the whole of X29.
     const after = await formReport(
       (r) =>
         num(r, 'boxMismatch') <= 0.5 &&
@@ -2747,10 +2115,8 @@ describe('Form row boxes (X29 r2)', () => {
     );
     expect(toggled.where).toBe('cell');
 
-    // Item 3: and it moved nothing else. The narrower box belongs to that one row; the
-    // list-wide number is the plain box, published once per list width — every Section and
-    // `RowRoot` renders again for each publish, so this is the difference between one row
-    // changing and the Form re-rendering its whole tree because a cell laid out last.
+    // The list-wide width is the plain box and is not published again: every publish
+    // re-renders every Section and row.
     expect(num(after, 'widthPublishes')).toBe(published);
     expect(Math.abs(num(after, 'width') - plainBox)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(num(after, 'plainBox') - plainBox)).toBeLessThanOrEqual(
@@ -2759,22 +2125,10 @@ describe('Form row boxes (X29 r2)', () => {
   });
 });
 
-/**
- * The two Android regressions `FormFidelity.harness.tsx` carried (X37).
- *
- * That file answered Q10 question 2 — this Form against a SwiftUI `Form`, to the point — and
- * needed a seam in the published package to do it (`NitroUiFormReference.swift`, hosted by the
- * `show-reference` command). The comparison has caught nothing outside the tasks that built
- * Form, so the iOS half and that seam are gone. These three cases are what the file also
- * carried: claims about *this* Form that no other case on this platform can see, because no
- * React Native frame, and no count of what a layer was *handed*, shows where a Compose layer
- * finally put a pixel.
- *
- * Android only, for that reason: iOS draws its rows through UIKit cells, which have no painted
- * container, no band layer beneath the rows, and no placement step to get wrong.
- */
+// Android only from here: the section draws its headers, footers and row containers in a
+// Compose layer beneath the rows. iOS draws rows through UIKit cells and has no such layer.
 
-/** One of the `left,top,width,height` dp fields the reports carry. */
+// `left,top,width,height` in dp.
 type PlacedBox = [number, number, number, number];
 
 function placedBox(field: string | undefined): PlacedBox {
@@ -2790,13 +2144,6 @@ function placedBox(field: string | undefined): PlacedBox {
   ];
 }
 
-/**
- * Read a section's own report until `ok` holds.
- *
- * The bands and the layer are not in the Form's report and cannot be: a Form has several
- * sections, and the numbers belong to one of them. So the case asks the section that owns
- * them, the way the cases above ask a section for its shapes.
- */
 async function sectionReport(
   which: string,
   ok: (r: Record<string, string>) => boolean = () => true
@@ -2819,13 +2166,7 @@ async function sectionReport(
   }
 }
 
-/**
- * Say how a placed accessory differs from the row it belongs to.
- *
- * A disclosure sits inside the row's trailing edge, level with its middle — the same thing the
- * layer's own offset asks for, so every number here is the row's rather than a copy of a
- * constant from `FormListMetrics`.
- */
+// A disclosure accessory sits inside the row's trailing edge, level with its middle.
 function accessoryIssues(accessory: PlacedBox, rowBox: PlacedBox): string[] {
   const issues: string[] = [];
   const centre = (b: PlacedBox) => b[1] + b[3] / 2;
@@ -2850,13 +2191,6 @@ function accessoryIssues(accessory: PlacedBox, rowBox: PlacedBox): string[] {
   return issues;
 }
 
-/**
- * The settings page the band cases measure: three sections, the first with a footer, in a Form
- * that fills its parent.
- *
- * Eight rows, so "the list is up" is a number rather than a hope, and a footer on the first
- * section, because a band is only worth measuring where there are two of them.
- */
 function SettingsForm() {
   return (
     <Form
@@ -2905,16 +2239,9 @@ function SettingsForm() {
   );
 }
 
-/**
- * The `Sections` story's box: a padded container and a Form with a height, rather than a Form
- * that fills the window.
- *
- * That is the shape a settings screen has, it is the page the README picture is taken from,
- * and — because a section learns its header and footer bands from a round trip through
- * JavaScript — it is a Form whose rows move *after* their first layout, which is the moment the
- * shape layer has to keep up with. The fixture above is filled by its parent from the first
- * frame and never shows it.
- */
+// A Form with a fixed height in a padded container. A section learns its header and footer
+// heights from a round trip through JavaScript, so here the rows move after their first
+// layout.
 function StoryForm() {
   return (
     <View style={styles.storyOuter}>
@@ -2964,18 +2291,10 @@ describe('Form section drawing (E2, Android)', () => {
       'drawing'
     );
 
-    // The header and footer are Compose text in a layer *under* the rows, so the rows cover
-    // whatever Yoga failed to reserve: S6 reserved the glyphs alone and every header lost its
-    // lower half (form-android.png). The band therefore has to be the glyphs *plus* its
-    // padding — the padding itself is FormListMetrics' (16 dp / 12 dp), and what this insists
-    // on is that the reservation is not the glyph box: put `onSizeChanged` back inside the
-    // padding and both lines below go red at once.
+    // The header and footer are Compose text in a layer under the rows, so the rows cover
+    // whatever Yoga did not reserve. The reserved height must be the text plus its padding.
     const bands = await sectionReport('first', (r) => {
-      // Asked until both bands have been *measured*, not merely published: before the
-      // section's round trip comes back both read `0.0`, and the difference between two
-      // zeros is nothing. `FormFidelity` read them the same way and got its settle for
-      // free from a 400 ms pause that existed to name a screenshot; the wait is here
-      // instead, so the case cannot pass or fail on how fast the host answered.
+      // Both read 0 until the section's measurement has come back.
       const header = num(r, 'headerBand');
       const footer = num(r, 'footerBand');
       return header > 0 && footer > 0;
@@ -2986,15 +2305,9 @@ describe('Form section drawing (E2, Android)', () => {
     expect(padding('headerBand', 'headerText')).toBeGreaterThanOrEqual(8);
     expect(padding('footerBand', 'footerText')).toBeGreaterThanOrEqual(4);
 
-    // The other thing only Android can get wrong, and the one no View frame can show. The
-    // layer is placed by Compose, and Compose places inside the box it was *measured* under —
-    // which is not the section's box unless the section says so, because a Nitro host's
-    // content is measured with an unbounded height (`NitroUiMeasuredRoot`). A decoration that
-    // answered those constraints with `fillMaxSize` filled its own content instead: measured
-    // here at 54.1 dp inside a section 296.4 dp tall, which is a footer bottom-aligned over
-    // the header and a section whose rows have no container at all. Read once the section has
-    // really grown into its footer band, so this cannot pass by being early; `layerH` is the
-    // layer's own `onSizeChanged`, not a constant.
+    // Compose measures a hosted view's content with an unbounded height, so the layer is
+    // only as tall as the section if the section says so. Read once the section has grown
+    // to include its footer.
     const settled = await sectionReport('first', (r) => {
       const lastRowBottom = (r.rects ?? '')
         .split(',')
@@ -3028,19 +2341,7 @@ describe('Form section drawing (E2, Android)', () => {
     if (IOS) return;
     await render(<StoryForm />);
 
-    // The one thing no React Native frame can show: where the drawing layer actually *put*
-    // something. Every number that feeds a draw can be right and the pixels still wrong,
-    // because the layer places its children with a section-relative offset added to a Box
-    // alignment, and that sum is reported by nothing — not a View frame, not the list of boxes
-    // the layer was handed. It is also how the `Sections` story shipped: a disclosure placed a
-    // whole section-width outside the layer, so no `Form.Row` with `accessory="disclosure"`
-    // drew a chevron at all.
-    //
-    // So two numbers have to be one number — the box the row says it has, and the box the
-    // layer says it *placed* its accessory in — read live against each other, on the story's
-    // own box (see `StoryForm` for why that is the fixture that moves). The row containers are
-    // placed by the same `align`/`offset` pair in the same layer, so a layer that ignored it
-    // would put this out of the row by the same amount.
+    // Compares the row's own box with the box the Compose layer placed the accessory in.
     const disagreement = (): string[] => {
       const report = parse(
         sections.story?.nuiTestSectionReport() ?? '<no handle>'
@@ -3079,11 +2380,8 @@ describe('Form section drawing (E2, Android)', () => {
         rows.storyFirst?.nuiTestRowReport()
       )}`
     );
-    // And it has to *stay* agreed. A settings page is laid out more than once — the container
-    // around the list settles after the list itself, and a section grows when its bands come
-    // back from JavaScript — so a layer that gets the first placement right and the second
-    // wrong is the bug this case is for, not a pass. Sample again after the page has had two
-    // seconds to stop moving.
+    // Sampled again after two seconds: the section is laid out more than once, and the
+    // layer has to follow the later layouts too.
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const late = disagreement();
     if (late.length > 0) {
@@ -3097,34 +2395,12 @@ describe('Form section drawing (E2, Android)', () => {
     expect(num(story, 'shapes')).toBe(2);
   });
 
-  /**
-   * Every row sits inside the card its section draws behind it (task X24 round 3).
-   *
-   * `form-android.png` shipped with the rows and their cards disagreeing: one card, drawn
-   * across the boundary between two rows, so the first row had no container at all and the
-   * second was half in and half out. Nothing else sees it: the case above reads
-   * `drawnAccessory` against `frame` — one row, and the accessory's own box — and the
-   * `layerH`/`boxH` pair reads the layer's box, not what it drew inside it. A section can
-   * report two shapes, a layer as tall as the section, an accessory in its row, and still
-   * paint both shapes at one row's y.
-   *
-   * So read the placement itself: `drawnCards`, each row container's box as the layout pass
-   * left it (section-relative dp — the same space the row's own `frame` is in, and rows are
-   * direct children of the section, which is what `shapes=rows` proves), against every row's
-   * box, in React's order, on both axes. `cardBoxes` is what the layer was *handed* and stays
-   * in the failure message beside it, because the two disagree in different ways: a wrong
-   * `cardBoxes` is a row whose frame the layer was never told about, and a wrong `drawnCards`
-   * is a container that was handed the right box and landed somewhere else. The report used to
-   * carry these as `top-height` pairs only, which cannot show a card that is a centimetre wide.
-   * A card may fall short of its row by the segmented gap the layer trims off
-   * (`top = row.top + gap/2`, `height = row.height - gap`) and by nothing else; half a row is
-   * what this case is for.
-   */
   it('lays every row of a section inside its own card (X24)', async () => {
     if (IOS) return;
     await render(<StoryForm />);
 
-    /** Why the cards and the rows disagree, as one line each; empty means they agree. */
+    // `drawnCards` is where the layer placed each row's container; `cardBoxes` is the box
+    // it was handed. A card may fall short of its row by the gap between cards only.
     const disagree = (): string[] => {
       const report = parse(
         sections.story?.nuiTestSectionReport() ?? '<no handle>'
@@ -3135,11 +2411,8 @@ describe('Form section drawing (E2, Android)', () => {
       if (rowsInStory.length < 2)
         return ['the story section has no two rows yet'];
       const gap = num(report, 'gap');
-      // `drawnCards` is a placement *inside* the layer, and `layerH` is the size Compose gave
-      // that layer's root, so neither of them can see a layer that is the right size and in the
-      // wrong place. `hostBox` is the layer's own frame in the section, read from the View tree
-      // above it: at the section's origin and as tall as the section, or every card below is
-      // being painted somewhere else than where its numbers say.
+      // `hostBox` is the layer's own frame in the section: it must be at the section's
+      // origin and as tall as the section, or every card is painted somewhere else.
       const layer = placedBox(report.hostBox);
       const layerIssues: string[] = [];
       if (layer[0] !== 0 || layer[1] !== 0) {
@@ -3156,9 +2429,8 @@ describe('Form section drawing (E2, Android)', () => {
           )} dp tall (hostBox=${String(report.hostBox)})`
         );
       }
-      // ... and the box that box's content is laid out in has to be at the top of it, at the
-      // section's size: every card is drawn at a number relative to *that*, so a box the host's
-      // root placed lower moves the picture with every card still "inside" its own row.
+      // `layerBox` is the box the layer's content is laid out in, which the cards are
+      // drawn relative to.
       const root = placedBox(report.layerBox);
       if (root[0] !== 0 || root[1] !== 0) {
         layerIssues.push(
@@ -3173,8 +2445,7 @@ describe('Form section drawing (E2, Android)', () => {
         );
       }
       if (layerIssues.length > 0) return layerIssues;
-      // `0:l,t,w,h|1:l,t,w,h`, by row index — the index travels so a row that was never placed
-      // is a missing entry rather than a box that belongs to whichever row came first.
+      // `0:l,t,w,h|1:l,t,w,h`, by row index.
       const drawn = new Map<number, PlacedBox>();
       for (const entry of (report.drawnCards ?? '').split('|')) {
         const at = entry.indexOf(':');
@@ -3194,7 +2465,6 @@ describe('Form section drawing (E2, Android)', () => {
       const cards = rowsInStory.map(
         (_, index) => drawn.get(index) as PlacedBox
       );
-      // Beside it, for the message only: what the layer was handed.
       const handed = (report.cardBoxes ?? '')
         .split('|')
         .filter((entry) => entry.includes(','))
@@ -3214,8 +2484,6 @@ describe('Form section drawing (E2, Android)', () => {
           0, 0, 0, 0,
         ];
         const slack = gap / 2 + 0.5;
-        // A card with nothing to fill draws nothing, and looks exactly like a card that was
-        // never placed: `form-android.png` shipped one of these two.
         if (cardWidth <= 0 || cardHeight <= 0) {
           out.push(
             `row ${index}: the container drawn for it is ${cardWidth} x ${cardHeight}`
@@ -3247,8 +2515,6 @@ describe('Form section drawing (E2, Android)', () => {
       });
       return out;
     };
-    // A report that cannot be read at all ("not yet") is one more reason to disagree, never
-    // an exception that escapes the poll.
     const issues = (): string[] => {
       try {
         return disagree();
@@ -3275,8 +2541,7 @@ describe('Form section drawing (E2, Android)', () => {
         rows.storyFirst?.nuiTestRowReport()
       )} / ${String(rows.storySecond?.nuiTestRowReport())}`
     );
-    // And it has to stay agreed, for the same reason the accessory case waits: the bands come
-    // back from JavaScript and the rows move after their first layout.
+    // Sampled again after two seconds: the rows move after their first layout.
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const late = issues();
     if (late.length > 0) {

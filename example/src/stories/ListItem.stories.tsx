@@ -1,12 +1,6 @@
 /**
- * ListItem stories (G30). Props and events: `docs/components/list-item.md`.
- *
- * The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness and
- * benchmark handles, not app API (DECISIONS D14).
- *
- * Every row with an icon names both glyphs — `systemImage` for iOS and `androidIcon`
- * for Android — because each platform ignores the other's, and a row that names only
- * one is a row with half its icons missing on half the devices.
+ * Every row with an icon names both glyphs, `systemImage` for iOS and `androidIcon`
+ * for Android, because each platform ignores the other's.
  */
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -18,11 +12,8 @@ import type { Meta, StoryObj } from '@storybook/react-native';
 import { Column, Frame, Note, Showcase, useShowcaseInk } from './showcase';
 
 /**
- * A drawable the example app ships in `res/drawable/` — the resource-name form.
- *
- * A Material Symbols bell, because every row here names both glyphs and the pair has to be
- * one glyph: `bell.badge` beside Google's star drew a bell on iOS and a star on Android, and
- * the two screenshots in `docs/images/` were two different rows.
+ * A drawable the example app ships in `res/drawable/`: a Material Symbols bell, the
+ * Android twin of the SF Symbol `bell`.
  */
 const DRAWABLE = 'nitroui_test_notifications';
 
@@ -87,7 +78,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Every public prop on the Controls panel. */
 export const Playground: Story = {
   render: function PlaygroundStory({ onPress, ...props }) {
     const [last, setLast] = useState('never');
@@ -108,12 +98,6 @@ export const Playground: Story = {
   },
 };
 
-/**
- * The slots, one row each: a bare headline, a headline with its supporting line, a
- * trailing value, and the row that has all three plus a leading glyph and a chevron.
- *
- * This is the README screenshot.
- */
 export const Slots: Story = {
   render: () => (
     <Showcase>
@@ -147,14 +131,6 @@ export const Slots: Story = {
   ),
 };
 
-/**
- * Pressable, disabled, and a label: three rows that differ only in `onPress` and
- * `disabled`.
- *
- * A row with no `onPress` is not a button to a screen reader and a tap on it goes to
- * whatever is behind the row. A disabled row keeps its shape and takes nothing: no
- * press, no highlight, and no event.
- */
 export const Pressing: Story = {
   render: function PressingStory() {
     const ink = useShowcaseInk();
@@ -196,14 +172,6 @@ export const Pressing: Story = {
   },
 };
 
-/**
- * Every slot capped to one line, which is what makes a row’s height a function of
- * *which* slots are filled rather than of what was typed into them.
- *
- * The row is the same height at every width it can be drawn at, so a `FlashList` row
- * keeps its pitch and a warm mount needs no correction. Wrap-to-fit rows are a
- * follow-up, not an oversight.
- */
 export const Truncation: Story = {
   render: () => (
     <Showcase>
@@ -225,16 +193,6 @@ export const Truncation: Story = {
   ),
 };
 
-/**
- * The leaf inside a `Form`, which is what it was built for.
- *
- * `Form.Row` is the cell, and a cell has already paid for its insets, its shape and its
- * press, so the item drops all three inside one and draws its content edge-to-edge in
- * the box the row gives it. The context does that: nothing here is configured by hand,
- * and the same `<ListItem>` standalone is the same component with its own insets back.
- *
- * This is the second README screenshot.
- */
 export const InsideAForm: Story = {
   render: function InsideAFormStory() {
     const [account, setAccount] = useState('Work');
@@ -293,12 +251,6 @@ export const InsideAForm: Story = {
   },
 };
 
-/**
- * `fillWidth`: the row is as wide as the list it is in, and only its height is its own.
- *
- * Inside a box narrower than the screen the row takes the box — and the value still
- * sits at its trailing edge, because that edge is the box’s, not the screen’s.
- */
 export const Sizing: Story = {
   render: () => (
     <Showcase>

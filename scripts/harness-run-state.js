@@ -1,27 +1,6 @@
 /**
- * Publishes what a harness *run* decided, so the app under test can read it back.
- *
- * The app's JS cannot read this process's environment, and some assertions depend on
- * a premise the run chose rather than on anything the app was launched with — today
- * one: whether the run opted out of its own locale pin
- * (`NITRO_UI_ALLOW_LOCALE_MISMATCH`, read by `example/__tests__/runState.ts` and
- * enforced by the conformance rule that compares a locale-dependent box). So the
- * runner publishes it next to the project and the app reads it over the dev server.
- *
- * It has to be the Metro port: an emulator reaches this machine only through the
- * `adb reverse` the harness sets up for Metro, so a second port would be readable on
- * iOS and unreachable on Android. Metro serves no project files of its own - the
- * first run of this route found its file answered 404 at every path tried, under a
- * dot-directory or not - so the route is declared here and reads the file per request.
- *
- * The file is gitignored and owned by the running harness, and the middleware answers
- * one exact path - nothing here browses the project. The refresh timer is `unref()`'d
- * so it can never keep the CLI alive, and an old file says nothing about a run: every
- * reader checks `metroPort` and the age of `updatedAt` before believing it.
- *
- * X37 removed the other thing this used to publish - the load average, for the
- * wall-clock gates (D21). Those gates judged nothing: `HARNESS_TIMING` is unset in
- * every gate run, and the durations moved to `bench/`.
+ * Publishes what a harness run decided (whether it opted out of its locale pin), so
+ * the app under test can read it back from Metro's dev server.
  */
 
 const fs = require('node:fs');
@@ -31,7 +10,10 @@ const process = require('node:process');
 /** Path of the state file, relative to `example/` (Metro's project root). */
 const RUN_STATE_FILE = path.join('harness-run', 'state.json');
 
-/** The same path as the URL the middleware serves it under. */
+/**
+ * The same path as the URL the middleware serves it under. Served on the Metro port:
+ * an emulator reaches this machine only through the `adb reverse` set up for Metro.
+ */
 const RUN_STATE_URL = '/harness-run/state.json';
 
 /** How often the published state is refreshed while the harness runs. */
@@ -46,11 +28,8 @@ const REFRESH_MS = 2000;
  */
 function runState({ env = process.env } = {}) {
   return {
-    // Whether this run said "I meant to test a locale the shared table was not
-    // measured in". It is published rather than passed as a launch argument because
-    // it is a premise about the *run*: `localePremiseMiss` in
-    // `example/__tests__/Conformance.harness.tsx` fails a locale-dependent comparison
-    // unless this is true, which is what stops that rule degrading into a silent skip.
+    // Whether this run meant to test a locale the shared size table was not
+    // measured in. Without it, a locale-dependent comparison fails.
     allowLocaleMismatch: env.NITRO_UI_ALLOW_LOCALE_MISMATCH === '1',
   };
 }
@@ -162,7 +141,7 @@ function publishRunState({ exampleDir, port, log = () => {} }) {
     try {
       fs.rmSync(file, { force: true });
     } catch {
-      // Evidence, not a failure: the run is over either way.
+      // The run is over either way.
     }
   };
 }

@@ -1,51 +1,27 @@
 #!/usr/bin/env node
 /**
- * The gate ledger: run a named gate, record what it proved, and answer the two
- * questions that used to cost hours per task.
+ * The gate ledger: runs a named gate and records what it proved, keyed to the
+ * code tree it ran on.
  *
- *   node scripts/gate.mjs check
- *   node scripts/gate.mjs harness:android
- *   node scripts/gate.mjs harness:android -- ColdSizing
- *     ^ records `harness:android:ColdSizing`, which satisfies nothing: a filtered
- *       run is not the platform gate
- *   node scripts/gate.mjs status
- *   node scripts/gate.mjs need --for review
- *   node scripts/gate.mjs need --for merge
- *   node scripts/gate.mjs table
+ *   node scripts/gate.mjs <gate> [--background] [-- <args>]
+ *   node scripts/gate.mjs wait [--gate <name>] [--timeout-minutes N]
+ *   node scripts/gate.mjs status [--for review|merge]
+ *   node scripts/gate.mjs need --for review|merge [--base <ref>]
+ *   node scripts/gate.mjs table [--for review|merge] [--full]
  *   node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]
  *
- * Every run appends one JSON line to `.gates/<branch>.jsonl` (gitignored) keyed
- * to the **code tree**, not to HEAD - the digest `app.stamp` already uses
- * (`currentCodeTree()`), which excludes `docs/` and Markdown. That one choice is
- * what removes the re-runs: a docs commit leaves the digest alone, so a green
- * gate is still green, and the process review's "re-ran on the final tree" pass
- * (11 reports) becomes a lookup. See `scripts/gate-core.mjs` for the rules.
+ * Gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |
+ * smoke:<pack|expo|rn-cli> | bench. A filtered run
+ * (`harness:android -- ColdSizing`) is recorded as `harness:android:ColdSizing`
+ * and does not satisfy the full gate. A device gate reads its device from a
+ * sourced `node scripts/lease.mjs acquire`.
  *
- * A run's **log** does not live next to the ledger: it goes in the clone's gate
- * log store - `<git-common-dir>/nitro-ui-gates/<branch>/` - which every worktree
- * of this clone shares and `git worktree remove` never deletes (X12). `.gates/`
- * goes with the checkout, and Q3 could not read the failing runs of a merged
- * branch for exactly that reason. `gate.mjs logs` lists the store; the ledger's
- * `logPath` is relative to it. The store is kept to 35 days and 64 MiB.
+ * Each run appends one JSON line to `.gates/<branch>.jsonl` and writes its log
+ * to `<git-common-dir>/nitro-ui-gates/<branch>/`, which outlives the worktree.
  *
- * Each line also carries `trees: {ios, android}` - that same digest restricted to
- * the files belonging to each platform. At `review` a device gate is accepted on
- * its own platform's tree, so a fix round that edits only `android/` does not
- * re-owe an iOS run; at `merge` everything is matched on the whole tree. A run
- * that starts a device gate on one tree and ends on another records `treeAfter`
- * and never reads green.
- *
- * A device gate reads its device from the lease (X1), so source the lease first
- * and this file never needs to know a UDID:
- *
- *   set -a; source <(node scripts/lease.mjs acquire --task X2 --platform android); set +a
- *   node scripts/build-app.mjs --platform android
- *   node scripts/gate.mjs harness:android
- *   node scripts/lease.mjs release X2
- *
- * What it refuses: it never claims a gate passed on a tree it did not run on,
- * and `need` exits non-zero with the list of what is missing, so a round can be
- * checked instead of asserted.
+ * Exit codes: a gate run and `wait` exit with the gate's own code; 1 for a gate
+ * refused before the run or an unmet `need`; 2 for a usage error; 13 from
+ * `wait` while the gate is still running.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -175,40 +151,28 @@ const USAGE =
   "        list to runs the store's own record says failed (a log it cannot judge is\n" +
   '        reported as unknown, not silently skipped), --all shows every branch)\n';
 
-/**
- * How often a running gate samples the load average. R4's lesson is that one
- * sample at the end judges a ten-minute run by its last minute, and a harness run
- * on a shared machine is exactly where that matters: the number in the ledger is
- * what lets a reader discount a red row that happened under a Gradle storm.
- */
+/** Sampled across the whole run, so the ledger's load is not one moment's. */
 const LOAD_SAMPLE_INTERVAL_MS = 15_000;
 
 /**
- * Signals to forward to the child. A timeout or a task runner that stops
- * `gate.mjs` by PID used to leave a harness holding the leased device while the
- * ledger recorded nothing; forwarding gives the child its own cleanup, and the
- * signal is re-raised on self afterwards so the exit status is still the signal.
+ * Forwarded to the child so it can clean up, then re-raised on this process so
+ * the exit status is still the signal.
  */
 const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
-/**
- * The flags `gate.mjs` itself owns on a gate run, which must never reach the
- * gate's command line. `--background=true` is accepted because `--for=review`
- * style spelling is how the rest of this CLI's flags are written.
- */
+/** The flags this script owns on a gate run; they never reach the gate. */
 const BACKGROUND_FLAGS = ['--background', '--background=true'];
 
-/** Set to run a device gate on a device another live run has claimed (see `runGate`). */
+/** `NITRO_UI_GATE_DEVICE_FORCE` values: claim a device another run holds. */
 const DEVICE_FORCE_RE = /^(1|true|yes)$/i;
 
-/** Set to start on a Metro port another process is already serving (see `metroPreflight`). */
+/** `NITRO_UI_GATE_METRO_FORCE` values: start on a Metro port already served. */
 const METRO_FORCE_RE = /^(1|true|yes)$/i;
 
 /**
- * How long a finished run's output is given to drain before the ledger is written (see the
- * drain in `runGateUnclaimed`). Two seconds because the thing being waited for is the last
- * few kilobytes of a harness summary, and the thing being refused is waiting on a descendant
- * that has already outlived the run it came from.
+ * How long a finished run's output may drain before the ledger is written:
+ * enough for the tail of a test summary, bounded so a leaked descendant holding
+ * the pipes cannot keep the run open.
  */
 const EXIT_DRAIN_MS = 2_000;
 
@@ -232,31 +196,14 @@ function ledgerFile(branch) {
   return path.join(repoRoot, ledgerRelativePath(branch));
 }
 
-/* ------------------------- the clone's gate log store (X12) ------------------ */
+/* ----------------------- the clone's gate log store ----------------------- */
 
 /**
- * The directory that holds one run's log, and why it is not in the worktree.
- *
- * `git rev-parse --git-common-dir` is the shared half of a clone: every linked
- * worktree points at the same one, and `git worktree remove` deletes the worktree's
- * own `.git` file and directory but never this. That is the whole of X12 - logs
- * written under `.gates/` in a worktree died with the worktree, so Q3 could not
- * read the failing runs of the branch it was diagnosing.
- *
- * Layout: `<common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`.
- *
- * A run's log, its background record and its step timings all go here, and the
- * record says which worktree started the run: the store is shared by every worktree
- * of the clone, so `wait` and `status` need something to tell "my background gate"
- * from another task's (X12 fix round, M1).
- *
- * Falls back to the worktree's own `.gates/` when git cannot be asked (no git
- * binary, a sandbox): losing the move is better than a gate that cannot run, and
- * the fallback keeps the paths under a gitignored directory.
- *
- * `NITRO_UI_GATE_LOG_STORE` overrides the location, which is how a test aims the
- * store at a scratch directory instead of a real clone's common dir. Production
- * never sets it.
+ * Where run logs, background records and step timings live:
+ * `<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log`. The git
+ * common dir is shared by every worktree and survives `git worktree remove`.
+ * Falls back to the worktree's `.gates/` when git cannot be asked.
+ * `NITRO_UI_GATE_LOG_STORE` overrides the location, for tests.
  */
 function store(env = process.env) {
   if (store.cached == null) {
@@ -277,45 +224,22 @@ function store(env = process.env) {
       // Whether that is a real shared store or the worktree fallback.
       shared: commonDir != null,
       commonDir,
-      // The absolute path of *this* checkout. The store cannot tell two worktrees
-      // of one clone apart, and `wait` has to (M1), so every record carries it.
+      // The store is shared by every worktree of the clone, so each record
+      // names the checkout that wrote it.
       worktree: repoRoot,
     };
   }
   return store.cached;
 }
 
-/** Where one run's log, its background record and its step timings live. */
 function storeLogsDir() {
   return store().dir;
 }
 
 /**
- * The two paths of one run, decided in one place (review N7).
- *
- * Both halves of a backgrounded gate need them - the launcher opens the file and
- * writes a record naming it, the runner writes into it and the ledger line names it -
- * and they used to be derived twice.
- *
- * So: the absolute path is the truth, and the ledger's `logPath` is derived from it,
- * spelled store-relative. The record, the ledger line and `wait` therefore cannot
- * point at three different files.
- *
- * @param {{branch: string, gate: string, startedAt: number, fromEnv?: string | null}} run
- * @returns {{logPath: string, absolute: string, recordPath: string, backgrounded: boolean}}
- */
-/**
- * The real path of `file`, resolving through symlinks as far as the filesystem can.
- *
- * Two reasons this is not just `fs.realpathSync`: a log that has not been created yet
- * has no realpath, and "cannot resolve" is not a reason to return nothing - so the
- * nearest existing ancestor is resolved and the remainder re-joined. Otherwise a first
- * run in a new directory would compare differently from every later one. The second
- * reason is why any of this exists: on macOS `/var` is a symlink to `/private/var`, so
- * a checkout created under one spelling does not prefix-match the other, and
- * `logPathsFor` decides permission with a prefix test.
- *
- * @param {string} file
+ * `fs.realpathSync` that also answers for a path that does not exist yet: the
+ * nearest existing ancestor is resolved and the rest re-joined. Callers compare
+ * by prefix, and on macOS `/var` is a symlink to `/private/var`.
  */
 function realpathOrResolved(file) {
   const absolute = path.resolve(file);
@@ -339,27 +263,24 @@ function realpathOrResolved(file) {
   }
 }
 
+/**
+ * The paths of one run: the absolute log, the ledger's store-relative spelling
+ * of it and the record beside it. `fromEnv` is the log a background launcher
+ * already opened.
+ */
 function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
-  // Resolved, not merely absolutised, and everywhere in this function: on macOS `/var`
-  // is a symlink to `/private/var`, so a checkout created under one spelling does not
-  // prefix-match the other, and the checks below are prefix tests. Comparing mixed
-  // spellings can turn a *legitimate* launcher path into an apparent intrusion.
+  // Real paths throughout: the checks below are prefix tests.
   const storeDir = realpathOrResolved(storeLogsDir());
   let absolute = null;
   if (fromEnv != null && fromEnv !== '') {
     const candidate = realpathOrResolved(path.resolve(fromEnv));
     const ownBranchDir = path.join(
       storeDir,
-      // This branch's own directory in the store: the only place the launcher that
-      // sets this variable ever writes (`logPathsFor` with no `fromEnv`).
       ledgerFileName(branch).replace(/\.jsonl$/, '')
     );
-    // Narrower than round 1's "anywhere in the store" (review N8): the store is one
-    // directory shared by the whole clone, so that rule admitted another worktree's
-    // run and another branch's. An inherited or leaked `NITRO_UI_GATE_LOG` would then
-    // have this run append its output into *that* log, name it in this branch's ledger
-    // line, and mark that run's `.gate.json` done - which is how one task's `wait`
-    // ends up returning while its own gate is still running.
+    // Only this branch's own directory, where its launcher writes: the store is
+    // shared by the whole clone, and a leaked `NITRO_UI_GATE_LOG` must not make
+    // this run append to another run's log and mark that run's record done.
     const allowed =
       candidate.endsWith('.log') &&
       candidate.startsWith(`${ownBranchDir}${path.sep}`);
@@ -387,10 +308,6 @@ function logPathsFor({ branch, gate, startedAt, fromEnv = null }) {
   };
 }
 
-/**
- * Every path a ledger line's log could be at, first existing first. Order and the
- * reasoning behind it are in `ledgerLogCandidates`.
- */
 function resolveLedgerLog(entry) {
   return ledgerLogCandidates(entry, {
     storeDir: storeLogsDir(),
@@ -406,16 +323,8 @@ function resolveLedgerLog(entry) {
 }
 
 /**
- * Applies the retention rule (35 days, then 64 MiB) to the store.
- *
- * Runs before a gate writes another log, so the directory bounds itself without a
- * cron job nobody sets up. Never touches a log touched in the last two hours - a
- * `check` on a cold machine runs longer than that and a `wait` reading its log
- * would find nothing - and never touches another worktree's in-flight run either,
- * because that run's file is being appended to and is therefore young.
- *
- * @param {{dryRun?: boolean}} [options]
- * @returns {{removed: Array<{file: string, reason: string}>, scanned: number, bytes: number}}
+ * Applies the retention rule to the store. A recently written log is never
+ * removed, so a run in flight in any worktree keeps its file.
  */
 function pruneLogStore(options = {}) {
   const logs = listStoredLogs(storeLogsDir());
@@ -441,18 +350,7 @@ function pruneLogStore(options = {}) {
   };
 }
 
-/**
- * Applies retention and says out loud what it deleted, for both run paths.
- *
- * Both a foreground run and a backgrounded launch call it, before the log is opened:
- * a store nobody ever prunes is a store that fills a disk during an orchestration.
- * Printing when and only when something went is what makes the rule auditable - a
- * silent `rm` of evidence at the start of an unrelated command is not, and the line
- * is also how a test tells "retention ran here" from "the other half ran it later".
- *
- * @param {string} [context] the prefix, so a caller can read as itself
- * @returns {{removed: Array<{file: string, reason: string}>, scanned: number, bytes: number, kept: number}}
- */
+/** Applies retention and reports on stderr what it removed, if anything. */
 function pruneStoredLogs(context = 'gate') {
   const pruning = pruneLogStore();
   if (pruning.removed.length > 0) {
@@ -468,20 +366,9 @@ function pruneStoredLogs(context = 'gate') {
 }
 
 /**
- * How long a log is untouchable.
- *
- * Two hours by default, extended to cover the *oldest running background gate*:
- * a 20-minute harness run is inside the grace anyway, but a bench that has run
- * for nine hours is not, and deleting the log of a run that is happening is not a
- * retention win. Reads the records it is about to spare, which is why this is a
- * function rather than a constant.
- *
- * A *foreground* run has no record to read, so it is protected only by its mtime: a
- * run that writes nothing for two hours while the store sits over the cap can have
- * its log swept mid-flight. That is a pathological case (the sweep only runs at the
- * start of a run, and a store over 64 MiB of five-thousand-file age on a machine
- * running gates is not what happens here), so the answer is this sentence rather than
- * a lock file per run.
+ * How long a log is untouchable: two hours, extended to cover the oldest
+ * running background gate. A foreground run has no record to read, so only its
+ * log's mtime protects it.
  */
 function runningLogGraceMs() {
   const base = 2 * 60 * 60_000;
@@ -511,14 +398,8 @@ function listStoredLogs(dir) {
         walk(absolute);
         continue;
       }
-      // The `.gate.json` records travel with their log, `steps.json` with the run that
-      // wrote it (X10), `suites.json` with the harness run that wrote it (X11), its
-      // `suites.json.isolated.json` with the isolated launch of that run, and a run's
-      // `runner.json` record, so all of them are swept together - a directory of
-      // orphaned records is not evidence either. Anything named
-      // `<log>.<something>.json` that is left out of this list is a file that can never
-      // be deleted: it sits in the store forever, growing past the cap retention is
-      // supposed to hold.
+      // A run's sidecar files are swept with its log. A sidecar suffix missing
+      // from this pattern is never deleted and grows the store past its cap.
       if (
         !/\.(log|gate\.json|steps\.json|suites\.json|isolated\.json|runner\.json)$/.test(
           entry.name
@@ -559,37 +440,10 @@ function appendLedgerLine(branch, line) {
 }
 
 /**
- * What a failed device gate was sitting on top of (X12 item 3).
- *
- * Four probes, and a fifth on Android:
- *
- *   - `simctl list devices booted` — which simulators exist on this machine right
- *     now, because "the harness timed out waiting for a boot" is only diagnosable
- *     if you know whether it booted at all;
- *   - `adb -s <leased serial> get-state` — the same question for an emulator, asked
- *     of *one* device: the one this run's lease names. Nothing here lists devices.
- *     A host-side `adb devices` reports every emulator the adb server can see, the
- *     maintainer's `emulator-5560` among them; the whole discipline of X1 is that a
- *     script names its own device and asks nothing about anyone else's;
- *   - the lease list, read from the lease file (no subprocess, no mutation) — which
- *     task holds what, and whether this run's lease is even still live;
- *   - `load1`, beside the samples the ledger already carries;
- *   - Android only: the last ~500 lines of `logcat` for the app's pid, from the
- *     leased serial. A Compose crash, a native exception and an ANR are all in that
- *     buffer and in none of the harness's own output.
- *
- * **The device comes from the lease, not from the environment** (review N6). A
- * leftover `ANDROID_SERIAL` in a shell would otherwise have an iOS failure probe
- * somebody else's emulator, and a gate that never took a lease would probe a device
- * it has no claim on. With no lease there is no device probe: the block says so, in
- * as many words, because "we did not touch a device" is itself the fact a reader
- * needs.
- *
- * Everything here is read-only, capped, and allowed to fail. A gate's verdict is
- * already on disk before any of it runs.
- *
- * @param {{platform: 'ios'|'android', lease: string | null, env?: NodeJS.ProcessEnv, run?: (command: string, args: string[]) => {ok: boolean, text: string} | null, leaseFile?: string | null, devicesFile?: string | null, now?: number}} options
- * @returns {Array<{label: string, ok: boolean, text: string}>}
+ * Read-only probes of what a failed device gate was running on: the booted
+ * simulators, the leased emulator's state, the lease list, the load and, on
+ * Android, the app's logcat tail. The device comes from the lease record, never
+ * from the environment, and adb is only ever asked about that one serial.
  */
 function collectDeviceContext({
   platform,
@@ -641,10 +495,8 @@ function collectDeviceContext({
   const claimed = claimedDevice({ lease, env, leaseFile, devicesFile, now });
   const adb = env.NITRO_UI_ADB_BIN ?? adbFromSdk(env);
   const serial = claimed.serial;
-  // adb is asked only of an *Android* gate, and only of the serial this run's lease
-  // names. A pair holds an iOS simulator and an emulator together, so without the
-  // platform check a failed iOS gate would be probing its pair's emulator too - not
-  // another task's device, but still a device this gate never touched.
+  // A leased pair holds a simulator and an emulator, so an iOS gate must not
+  // probe the emulator it never touched.
   const asksAdb = platform === 'android';
   if (!asksAdb) {
     note(
@@ -652,8 +504,6 @@ function collectDeviceContext({
       '(not an Android gate, so no emulator is asked about)'
     );
   } else if (claimed.reason != null) {
-    // No lease, an expired lease, or a reserved serial: `claimedDevice` refused and
-    // said which, and the sentence is the same for both adb commands.
     note('adb get-state', claimed.reason);
   } else if (serial == null || serial === '') {
     note('adb get-state', `(${claimed.missing})`);
@@ -710,11 +560,9 @@ function collectDeviceContext({
       }
     }
   }
-  // One pass over every probe's text, answers and error messages alike, for the
-  // identifiers this run does not own (review N6). The questions are host-wide -
-  // `simctl list devices booted` answers with every simulator on the Mac, and adb
-  // puts a serial in its own error text - so without this the block names another
-  // task's device, or the maintainer's.
+  // The probes are host-wide (simctl lists every booted simulator, adb names
+  // serials in its error text), so identifiers this run does not own are
+  // redacted from every answer.
   const own = deviceFromEnv(env, platform);
   return probes.map((probe) => ({
     ...probe,
@@ -727,19 +575,9 @@ function collectDeviceContext({
 }
 
 /**
- * The device this run may ask about, from **its own lease record**.
- *
- * `leases.json` names the pair the lease holds and `devices.json` says which serial
- * that pair's emulator has (`emulator-<console port>`, the same derivation
- * `lease.mjs acquire` prints into the env file it hands out), so the answer comes
- * from the same pair of files the lease itself was granted from — never from a shell
- * variable that outlived the task that set it.
- *
- * Deliberately conservative: anything unreadable, unleased or expired means "do not
- * probe", with a sentence explaining which. A probe of a device this run does not
- * own is a hygiene breach; a missing probe is a gap in one log.
- *
- * @returns {{file: string | null, reason: string | null, missing: string, serial: string | null, udid: string | null, entry: object | null}}
+ * The device this run may ask about, from its own lease in `leases.json` and
+ * that lease's pair in `devices.json`. Anything unreadable, unleased or expired
+ * sets `reason`, which means "do not probe".
  */
 function claimedDevice({
   lease,
@@ -777,11 +615,8 @@ function claimedDevice({
   }
   out.entry = entry;
   const holds = Array.isArray(entry.holds) ? entry.holds : [];
-  // `devices.json` is read here rather than through `normalizeDevices` on purpose:
-  // the pool validator refuses a whole file over one bad pair, and a diagnostic probe
-  // that loses everything because of an unrelated pair is worse than one that reads
-  // the fields it needs and then applies the serial rule itself. The reserved check
-  // below is that rule, and it is reachable - which is the point of not pre-validating.
+  // Not `normalizeDevices`: it rejects the whole file over one bad pair, and a
+  // diagnostic should still read the pair it needs.
   try {
     const config = readJson(devicesFile ?? paths.devices, {});
     for (const pair of Array.isArray(config?.pairs) ? config.pairs : []) {
@@ -798,10 +633,8 @@ function claimedDevice({
   if (out.serial == null && platformWantsAndroid(entry)) {
     out.missing = `the lease holds ${holds.join(', ') || 'no pair'}, which has no emulator serial in devices.json`;
   }
-  // The reserved serial is refused here, in one place, so every adb command below is
-  // covered rather than each checking for itself. It is reachable even though
-  // `lease.mjs` refuses to grant such a pair: a `devices.json` can be edited, and a
-  // pool file that names the maintainer's emulator is the failure X1 exists for.
+  // Refused here so every adb command is covered. The lease tooling never
+  // grants this serial, but `devices.json` can be edited by hand.
   if (isReservedSerial(out.serial)) {
     out.reason = `(refused: ${out.serial} is the maintainer’s reserved emulator, and no gate may address it)`;
     out.serial = null;
@@ -809,23 +642,16 @@ function claimedDevice({
   return out;
 }
 
-/** Does this lease's record claim a device on the Android side at all? */
 function platformWantsAndroid(entry) {
   const platform = String(entry?.platform ?? '');
   return platform === 'android' || platform === 'both';
 }
 
-/** How many logcat lines a failure block carries. The brief's "~500". */
 const LOGCAT_TAIL_LINES = 500;
 
 /**
- * Runs one probe: `{ok, text}`, where `ok: false` means "no answer".
- *
- * The distinction matters beyond cosmetics. `pidof` output becomes an argument to
- * the *next* command, so a probe that failed and returned its own error text would
- * hand `adb logcat --pid` a paragraph of shell error as a pid - which is how the
- * first version of this function behaved until a test's fake adb tripped it. Every
- * caller treats `ok: false` as a note in the block rather than as data.
+ * Runs one probe. `ok: false` means "no answer" and its text is an error
+ * message, never data: `pidof` output becomes the next command's argument.
  */
 function runProbe(command, args) {
   try {
@@ -855,7 +681,7 @@ function runProbe(command, args) {
   }
 }
 
-/** Where `adb` lives, or the bare name when no SDK root is set (as in `lease.mjs`). */
+/** Where `adb` lives, or the bare name when no SDK root is set. */
 function adbFromSdk(env) {
   const sdk = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;
   return sdk != null && fs.existsSync(path.join(sdk, 'platform-tools/adb'))
@@ -863,15 +689,7 @@ function adbFromSdk(env) {
     : 'adb';
 }
 
-/**
- * The lease list, from the lease file.
- *
- * Read *without pruning*, because the run that just failed may have been pruned for
- * a ttl it exceeded and that is exactly the fact worth recording.
- *
- * The file is named as `<lease file>`, not as an absolute path: a reader on the
- * machine that ran the gate knows where the lease file is.
- */
+/** The live leases, and whether this run's own lease is still among them. */
 function describeLeases({ lease, leaseFile, now }) {
   try {
     const file =
@@ -894,13 +712,8 @@ function describeLeases({ lease, leaseFile, now }) {
 }
 
 /**
- * The block appended to the log, framed by the markers `splitDeviceContext` finds.
- *
- * Starts with the two paths a reader wants and must not have to guess: where this
- * log's full copy is, and which checkout ran it. Both in placeholder form
- * (`<store>/task/X3/check-….log`, `<repo>`), like the lease file above — and the
- * store-relative half is the useful half, because it is what a `gate.mjs logs`
- * invocation takes.
+ * The block appended to a failed run's log, framed by the device-context
+ * markers. Paths are written as placeholders (`<store>/…`, `<repo>`).
  */
 function renderDeviceContext(probes, { logPath = null } = {}) {
   const lines = [
@@ -918,15 +731,8 @@ function renderDeviceContext(probes, { logPath = null } = {}) {
 }
 
 /**
- * The per-step timings `check.mjs` left behind, or null.
- *
- * Null on every problem - no file, unreadable, wrong shape - because the breakdown
- * is a report on the run, not evidence about it: the gate's own exit code decided
- * pass or fail, and a missing timing file must never turn a green `check` red or
- * invent durations for steps that did not run.
- *
- * @param {string | null} file
- * @returns {object | null}
+ * The per-step timings `check.mjs` left behind, or null on any problem (no
+ * file, unreadable, wrong shape): a missing breakdown is not a failed run.
  */
 function readStepTimings(file) {
   if (file == null) return null;
@@ -956,17 +762,9 @@ function readStepTimings(file) {
 /* ---------------------------- backgrounded gates --------------------------- */
 
 /**
- * Reads a background gate's record, or null when it is missing or unreadable.
- *
- * Unreadable is null rather than a throw: `wait` polls this file while another
- * process is writing it, and `writeJsonAtomic` makes a torn read rare but not
- * impossible (a rename is atomic, a reader can still land between the old file
- * leaving and the new one arriving on some filesystems). Treating that as "no
- * record yet" makes `wait` poll again; treating it as an error would turn a
- * 1-in-a-million race into a red gate.
- *
- * @param {string} file
- * @returns {object | null}
+ * A background gate's record, or null when it is missing or unreadable. `wait`
+ * polls this file while another process writes it, so a torn read means "no
+ * record yet", not an error.
  */
 function readBackgroundRecord(file) {
   try {
@@ -977,12 +775,9 @@ function readBackgroundRecord(file) {
 }
 
 /**
- * The records `wait` and `status` may consider: this checkout's, still running.
- *
- * Both filters are load-bearing. `foreground` marks a record written by a run that
- * was not backgrounded - the store keeps those so `logs --failed` can name the
- * outcome after the worktree is gone, and they are never something to wait for.
- * `ownBackgroundRecords` then drops the other worktrees' runs (M1).
+ * The records `wait` and `status` consider: this checkout's backgrounded runs.
+ * A `foreground` record exists only so `logs --failed` can name an outcome, and
+ * is never something to wait for.
  */
 function ownRunningGates(records, own) {
   return ownBackgroundRecords(
@@ -997,31 +792,19 @@ function ownRecordScope() {
 }
 
 /**
- * Load the lease state a device gate has to be checked against (X28).
- *
- * The same two files `lease.mjs list` prints — `leases.json` for who holds what,
- * `devices.json` for the devices behind each lease — so the gate and the CLI can
- * never disagree about whether a lease is live, and there is no flag that skips the
- * question. A bench host passes it the way the brief allows only because it holds an
- * exclusive lease, which is the state this reads, not because it asked to be excused.
- *
- * Unreadable is not "no lease": it is its own refusal, with the validator's reason,
- * because "cannot prove you own a device" must not read as "you may use any device".
- *
- * @param {NodeJS.ProcessEnv} env
- * @returns {{leases: object[], pairs: object[] | null, poolProblem: string | null}}
+ * The lease state a device gate is checked against: the same `leases.json` and
+ * `devices.json` that `lease.mjs list` prints. An unreadable device pool is its
+ * own refusal (`poolProblem`), not "no lease".
  */
 function leaseStoreForGate(env = process.env) {
   const paths = statePaths(stateHome(env));
   let leases = [];
   try {
-    // The raw file, not `pruneExpired`'s answer: the refusal says *why* the lease is
-    // no good ("released" and "outlived by its own ttl" are different fixes for
-    // different mistakes), and pruning first collapses both into "not here".
+    // Unpruned, so a refusal can tell a released lease from an expired one.
     leases = readJson(paths.leases, { leases: [] }).leases ?? [];
   } catch (error) {
-    // An unreadable lease file says nothing about any lease, which is the same
-    // answer as no lease file at all: every gate from here is refused.
+    // An unreadable lease file is the same as none: every device gate is
+    // refused.
     process.stderr.write(
       `gate: could not read ${paths.leases}: ${String(error?.message ?? error)}\n`
     );
@@ -1048,18 +831,9 @@ function leaseStoreForGate(env = process.env) {
 }
 
 /**
- * Refuse a device gate that no live lease authorises, before anything runs (X28).
- *
- * The point of doing it here, ahead of the Metro pre-flight, the device claim and the
- * ledger, is that all three of those are already work: the incident this closes (G30,
- * 2026-11-11) started two `real-input:android` runs from a shell with no lease env,
- * and only the runner's own AVD-name scan decided which emulator got driven. Nothing
- * is recorded for a refusal — it is not evidence about a tree, and a red row for a
- * command that never started would ask the next round to debug the code.
- *
- * @param {object} resolved `resolveGate`'s answer
- * @param {NodeJS.ProcessEnv} env
- * @returns {string | null} the message to print, when the gate must not start
+ * The refusal message for a device gate that no live lease authorises, or
+ * null. Nothing is recorded for a refusal: the run never started, so a red row
+ * would be evidence about nothing.
  */
 function deviceGateLeaseBlock(resolved, env = process.env) {
   if (!isDeviceGate(resolved)) return null;
@@ -1072,14 +846,8 @@ function deviceGateLeaseBlock(resolved, env = process.env) {
 }
 
 /**
- * A device gate does not start on a disk too full to finish it.
- *
- * Read from the worktree the gate runs in, because that is the volume its build,
- * its Metro cache and its log are written to.
- *
- * @param {object} resolved `resolveGate`'s answer
- * @param {NodeJS.ProcessEnv} env
- * @returns {string | null} the message to print, when the gate must not start
+ * The refusal message for a device gate on a disk too full to finish it, or
+ * null. Measured on the volume the gate's build, Metro cache and log go to.
  */
 function deviceGateDiskBlock(resolved, env = process.env) {
   if (!isDeviceGate(resolved)) return null;
@@ -1088,7 +856,7 @@ function deviceGateDiskBlock(resolved, env = process.env) {
     const stats = fs.statfsSync(process.cwd());
     measuredGb = Math.floor((stats.bavail * stats.bsize) / 2 ** 30);
   } catch {
-    // Best effort: an unreadable volume is not a refusal (see `diskRefusal`).
+    // Best effort: an unreadable volume is not a refusal.
   }
   return diskRefusal({
     freeGb: freeDiskGbFrom(env, measuredGb),
@@ -1097,32 +865,12 @@ function deviceGateDiskBlock(resolved, env = process.env) {
 }
 
 /**
- * Starts a gate detached, and returns straight away.
- *
- * Why (X9): implementers polled background gates with `sleep N; tail` loops, which
- * is both the wrong shape (it cannot see the exit code, so it re-reads the ledger
- * by hand and can misread it) and a waste of a turn per poll. `--background`
- * re-runs *this same command* without the flag, in its own session, with stdout
- * and stderr pointed at the log the ledger will name - so:
- *
- *   - the ledger line is written by the identical code path a foreground run uses
- *     (one implementation of "what a gate run records", not two);
- *   - `wait` has a pid, a log and a record to read, and can therefore report the
- *     gate's real exit code.
- *
- * `detached` plus `unref` is what survives the caller's shell: the gate must not
- * die when the agent's command finishes, and it must not hold the launcher open.
- *
- * @param {string} name
- * @param {object} resolved
- * @returns {number} 0 once the child is confirmed running
+ * Starts a gate detached and returns 0 once it is confirmed running. It re-runs
+ * this same command without the flag, with stdout and stderr pointed at the
+ * log, so the ledger line is written by the same code as a foreground run.
  */
 async function startBackgroundGate(name, resolved) {
   const startedAt = Date.now();
-  // The log and the record both live in the clone's log store, so the log outlives
-  // `git worktree remove` of the worktree that started the run (X12). They are *not*
-  // shared between worktrees in the sense that matters to `wait`: the record names
-  // the worktree that started it, and only that worktree waits for it (M1).
   pruneStoredLogs('gate');
   const logsDir = storeLogsDir();
   fs.mkdirSync(logsDir, { recursive: true });
@@ -1135,17 +883,13 @@ async function startBackgroundGate(name, resolved) {
     gate: name,
     startedAt,
   });
-  // The branch subdirectory, not just the store root: this is the process that
-  // opens the file, and a first run on a new branch has no directory to write into.
+  // The branch subdirectory: a first run on a new branch has none yet.
   fs.mkdirSync(path.dirname(absoluteLog), { recursive: true });
   const logHandle = fs.openSync(absoluteLog, 'a');
 
-  // Written *before* the child starts: a `wait` that runs one second later must
-  // find a pid, not an empty directory and a mystery. `done: false` is explicit so
-  // a reader never has to guess whether a missing field means "running" or "old
-  // format". `branch` and `worktree` are what make this record *mine*: the store is
-  // shared by every worktree of the clone, and `wait` has to tell my run from the
-  // other tasks' runs in the same directory (M1).
+  // Written before the child starts, so a `wait` run a moment later finds a
+  // record. `branch` and `worktree` tell this checkout's runs from the other
+  // worktrees' runs in the shared store.
   writeJsonAtomic(recordPath, {
     version: 1,
     gate: name,
@@ -1159,9 +903,6 @@ async function startBackgroundGate(name, resolved) {
     worktree: store().worktree,
   });
 
-  // Re-run *this same command* minus --background, spelled from argv[1] rather
-  // than from the caller's own argv: assuming the flag was the last argument would
-  // silently drop whatever else happened to sit there.
   const childArgs = [
     process.argv[1],
     ...process.argv.slice(2).filter((arg) => !BACKGROUND_FLAGS.includes(arg)),
@@ -1169,7 +910,6 @@ async function startBackgroundGate(name, resolved) {
   const child = spawn(process.execPath, childArgs, {
     cwd: repoRoot,
     env: { ...process.env, NITRO_UI_GATE_LOG: absoluteLog },
-    // 'ignore' rather than an fd we open ourselves: Node owns and closes it.
     stdio: ['ignore', logHandle, logHandle],
     detached: true,
   });
@@ -1187,28 +927,18 @@ async function startBackgroundGate(name, resolved) {
     return 1;
   }
 
-  // The record is rewritten with the real pid the moment it is known, and the
-  // launcher then waits briefly for the child to either start cleanly or fail
-  // immediately: a mistyped gate name should be reported now, not discovered by
-  // `wait` five minutes later as a corpse.
-  //
-  // Only while the record still says "not done". A gate that finishes inside the
-  // few milliseconds between spawn and this write would otherwise have its own
-  // `done: true` record overwritten back to a running one by the parent - a race
-  // that turns a passed gate into a phantom. `wait` also cross-checks the ledger,
-  // so a resurrected record cannot lie about the result; not creating one is the
-  // difference between a guarded race and an unguarded one.
+  // Record the pid, but only while the record still says "not done": a gate
+  // that finished between the spawn and this write must not be marked running
+  // again.
   const before = readBackgroundRecord(recordPath);
   if (before?.done !== true) {
     writeJsonAtomic(recordPath, { ...before, pid: child.pid });
   }
+  // A short wait, so a gate that fails to start is reported now and not by
+  // `wait` later.
   const earlyExit = await new Promise((resolvePromise) => {
-    // Deliberately *not* unref'd, and `child.unref()` happens after this await:
-    // unref'd both the timer and the child while still awaiting the child's `exit`
-    // event left the event loop empty, so the launcher exited with an unsettled
-    // top-level await (Node's own exit code 13) and no answer at all. The handle
-    // has to stay live for the window, then go, or the launcher would never return
-    // while its detached child runs.
+    // The timer and the child stay ref'd until this settles: with both unref'd
+    // the event loop empties and Node exits 13 on the pending top-level await.
     const timer = setTimeout(() => resolvePromise(null), 750);
     child.once('exit', (code, signal) => {
       clearTimeout(timer);
@@ -1217,12 +947,8 @@ async function startBackgroundGate(name, resolved) {
   });
   child.unref();
   if (earlyExit != null) {
-    // Two different things can end this early: a gate that could not start at all,
-    // and a gate that *finished* inside the launcher's own observation window (a
-    // stamp-fresh `check`, or a fixture that exits instantly). The record tells them
-    // apart, because only the finished one wrote it. Collapsing the two would report
-    // a passed gate as "exited immediately" with a failure code - and, worse, hand
-    // back a code that contradicts the ledger line sitting on disk.
+    // Either the gate could not start, or it finished inside this window. Only
+    // a finished gate wrote `done`, and then its own exit code is the answer.
     const after = readBackgroundRecord(recordPath);
     if (after?.done === true) {
       const code =
@@ -1259,19 +985,9 @@ async function startBackgroundGate(name, resolved) {
 }
 
 /**
- * Blocks until a backgrounded gate finishes, then exits with *its* code.
- *
- * One progress line a minute (elapsed plus the log's last line) rather than a
- * `sleep; tail` loop the caller has to write: the point is that waiting for a
- * twenty-minute gate costs one blocked command and a predictable exit code.
- *
- * Exit codes: the gate's own, or `STILL_RUNNING_EXIT` for "not finished yet"
- * (timeout, or a runner that died without recording). A caller can branch on that
- * difference, which is the whole reason for the distinct code.
- *
- * @param {object} options
- * @param {string | null} options.gate which gate to wait for (default: the newest)
- * @param {number} options.timeoutMinutes
+ * Blocks until a backgrounded gate finishes, printing one progress line a
+ * minute. Returns the gate's own exit code, or `STILL_RUNNING_EXIT` at the
+ * timeout or when the runner died without recording a result.
  */
 async function commandWait({ gate, timeoutMinutes }) {
   const timeoutMs = timeoutMinutes * 60_000;
@@ -1288,13 +1004,10 @@ async function commandWait({ gate, timeoutMinutes }) {
     );
     return 2;
   }
-  // Newest first: `wait` with no `--gate` means "the thing I just started", and
-  // several runs of the same gate name in one branch is normal (a re-run after a
-  // fix), so "latest" has to be the tie-break.
+  // Newest first: several runs of one gate on a branch are normal, and `wait`
+  // means the latest.
   records.sort((a, b) => Number(b.startedAt ?? 0) - Number(a.startedAt ?? 0));
   const target = records[0];
-  // Resolved the same way a ledger line's log is: the record names the store-relative
-  // path, and this worktree may not be the one that started the run.
   const absoluteLog =
     resolveLedgerLog({ logPath: target.logPath }).file ?? 'dev/null';
   process.stderr.write(
@@ -1305,10 +1018,8 @@ async function commandWait({ gate, timeoutMinutes }) {
   for (;;) {
     const elapsedMs = Date.now() - startedWaiting;
     const record = readBackgroundRecord(target.recordPath) ?? target;
-    // The ledger line for *this* run, matched on its log path - the one field that
-    // is unique per run (a gate name repeats across re-runs on the same branch). It
-    // is both the fallback answer when a runner dies and the proof that a
-    // backgrounded gate recorded exactly what a foreground one would.
+    // This run's ledger line, matched on its log path: the one field unique to
+    // a run. It is the fallback answer when the runner died.
     const ledgerEntry = readLedger(currentBranch()).entries.find(
       (entry) => entry.logPath === target.logPath
     );
@@ -1342,15 +1053,8 @@ async function commandWait({ gate, timeoutMinutes }) {
 }
 
 /**
- * Every background record in the log store, newest files first.
- *
- * Walks the store rather than reading one directory, because logs are keyed by
- * branch (`<store>/task/X12-…/check-….log`), and a `wait` that only looked at the
- * top level would report "no background gate" for every run anyone started after
- * X12 - the exact wrong answer for a tool whose whole job is not polling.
- *
- * @param {string} logsDir the store root
- * @returns {object[]}
+ * Every background record in the log store. Walks it, because logs sit in
+ * per-branch directories and branch names nest.
  */
 function listBackgroundRecords(logsDir) {
   const found = [];
@@ -1378,16 +1082,9 @@ function listBackgroundRecords(logsDir) {
 }
 
 /**
- * The digests a decision needs: the full code tree and the two platform halves of it.
- *
- * The halves are built here rather than in `app-stamp.mjs` so the stamp stays
- * what it is (one digest for one binary, X1) and `build-app.mjs` - which task X6
- * is editing right now - is untouched. The file listing and the hashing rules
- * mirror `currentCodeTree()` exactly, including the skip-what-is-deleted and
- * hash-the-link-target cases, so a platform digest is the same hash function over
- * a subset of the same file set and nothing else.
- *
- * @returns {{tree: string, head: string, files: number, trees: Record<string, string>}}
+ * The digests a decision needs: the full code tree and its two platform
+ * halves. The file listing and hashing must match `currentCodeTree()`, so a
+ * half is the same hash over a subset of the same files.
  */
 function readTrees() {
   const full = currentCodeTree({ repoRoot });
@@ -1406,8 +1103,7 @@ function readTrees() {
   const entries = {};
   for (const file of String(listing).split('\0')) {
     if (file === '' || !isCodeFile(file)) continue;
-    // Tooling and docs are in no platform's half; this is what keeps a fix round
-    // that edits `scripts/gate.mjs` from re-owing two device runs.
+    // Tooling and docs are in no platform's half.
     if (platformsOwningFile(file).length === 0) continue;
     const absolute = path.join(repoRoot, file);
     let stats;
@@ -1429,21 +1125,14 @@ function readTrees() {
 }
 
 /**
- * The code paths this branch changed, against the review base (default `main`).
- *
- * Three sources, because a round is usually part-committed: committed diff,
- * uncommitted tracked edits, and untracked new files. The last one matters most -
- * a new `example/harness/New.harness.tsx` is the reason a suite needs running, and
- * it is invisible to `git diff`.
- *
- * @returns {{paths: string[], base: string | null, unknown: boolean}}
+ * The code paths this branch changed against the base: the committed diff,
+ * uncommitted tracked edits and untracked new files, which `git diff` misses.
  */
 function changedCodePaths({ base }) {
   const mergeBase = git(['merge-base', base, 'HEAD']);
   if (mergeBase == null || mergeBase === '') {
-    // No merge-base (a shallow clone, or a base ref that does not exist here).
-    // `need` then asks for both platforms and says why: guessing "nothing"
-    // would let a diff nobody could read silently satisfy a round.
+    // No merge-base (a shallow clone, a missing base ref): report unknown, so
+    // `need` asks for both platforms instead of reading the diff as empty.
     return { paths: [], base: null, unknown: true };
   }
   const paths = new Set();
@@ -1457,46 +1146,16 @@ function changedCodePaths({ base }) {
 }
 
 /**
- * Run one gate: tee its output to a log, sample the load while it goes, and
- * record the result against the tree the command actually saw.
- *
- * The tree is read *before* the spawn and again after it. Reading it only before
- * would let an edit that happened during a five-minute run be recorded as if the
- * run had seen it; recording only the starting tree would let a run that started
- * on one tree and finished on another be read as evidence about either. Both are
- * recorded, and a line where they differ is never green (N1).
- */
-/**
- * Runs one gate, holding a claim on the device it is about to use (X11).
- *
- * Two rules make this worth a wrapper around the runner:
- *
- *   - a device gate marks its lease's devices *in use* for the duration of the run, so a reap
- *     started by another task cannot power off an emulator mid-suite, and a second gate on the
- *     same device is refused before it spends four minutes building rather than after it fought
- *     over Metro and the screenshots;
- *   - the claim dies with the process whether the run ends well or not, because a claim is a pid
- *     and a reaper treats a dead pid as no claim. No `finally` has to succeed for the device to
- *     become reclaimable - which is why a killed gate cannot wedge a device.
- *
- * Nothing is claimed when the environment names no lease (a plain `bun run check`, CI): the
- * claim is about a machine's pool, not about a run in general. `NITRO_UI_GATE_DEVICE_FORCE=1`
- * claims a device another live run holds, for the one case where that is the point - it is an env
- * var rather than a flag because a backgrounded gate is re-spawned from this command line, and a
- * flag here would need stripping in two places to keep it out of the gate's own argv.
- *
- * Then the Metro pre-flight (X15 item 1), which the claim cannot cover: a claim is a pid in a
- * pool record, and the server on a pair's Metro port can belong to a run whose lease has already
- * ended, so no claim exists to conflict with. That is X4's incident, so the port is asked about
- * directly, before the build rather than after the app has joined a stranger's Metro.
+ * Runs one gate while holding a claim on its lease's devices, so a reap cannot
+ * power them off mid-run and a second gate on the same device is refused. The
+ * claim is a pid: it ends with this process even when the run is killed. The
+ * Metro port is checked separately, because a server can outlive the lease
+ * that started it and then no claim exists to conflict with.
  */
 async function runGate(name, resolved, options = {}) {
   let claim = null;
   if (resolved.platform != null) {
     const preflight = metroPreflight();
-    // A number, not `{ status }`: reading `.status` off it is `undefined`, which is
-    // "not 0", so every device gate would have returned `undefined` here - the run
-    // never started, nothing was recorded, and the process exited 0 on the silence.
     if (preflight !== 0) return preflight;
     try {
       claim = claimDevicesFromEnv({
@@ -1518,9 +1177,7 @@ async function runGate(name, resolved, options = {}) {
   try {
     return await runGateUnclaimed(name, resolved, options);
   } finally {
-    // Best-effort and never fatal: an unreachable state file must not turn a
-    // passing run into a failing one, and the pid rule above already frees the
-    // device if this does not happen.
+    // Best effort: a failed release must not fail the run.
     if (claim != null) {
       try {
         claim.pool.releaseClaim(claim);
@@ -1532,30 +1189,10 @@ async function runGate(name, resolved, options = {}) {
 }
 
 /**
- * Does a Metro server belong to the run that has just ended?
- *
- * The one question with a trustworthy answer, because the alternative is killing another
- * task's server — which is the X4 incident this feature exists to prevent, not the thing it
- * permits. Attributing a listener by its environment (`ps eww`, hunting for a lease id) was
- * the other option: `ps` truncates its env block at a width nobody controls, so an id past
- * the cut reads as somebody else's server, and the safe branch there is the leak this is
- * meant to fix. Process groups are not approximated: the gate spawns its child `detached`, so
- * a server the child started (or any descendant's server) reports that group, and a server
- * from any other group is not ours. A pid the kernel will not answer for is not ours either.
- *
- * Best-effort in the direction that matters: never throws, never changes the run's exit code,
- * because a gate that passed must not go red over a janitor. SIGTERM first with a short grace
- * (Metro tidies up on a term; a killed one can leave a lock file), SIGKILL for what ignores
- * it. `groupOf` and `kill` are injected so the rule is testable without a real server.
- *
- * @param {object} options
- * @param {number} options.port the leased port (`METRO_PORT`)
- * @param {number | null} options.leaderPid the run's direct child, which led its own group
- * @param {(pid: number) => number | null} [options.groupOf]
- * @param {(pid: number, signal: NodeJS.Signals) => void} [options.kill]
- * @param {(pid: number) => boolean} [options.isAlive]
- * @param {(message: string) => void} [options.log]
- * @returns {Promise<number[]>} the pids it stopped
+ * Stops a Metro server the run that just ended left on the leased port, and
+ * returns the pids it stopped. Only listeners in the run's own process group
+ * are touched: the child is spawned detached, so its descendants report that
+ * group and no other task's server does. Never throws.
  */
 async function stopOwnMetro({
   port,
@@ -1580,10 +1217,11 @@ async function stopOwnMetro({
     groupOf,
   });
   if (owned.length === 0) {
-    // Somebody else's Metro on our port. The pre-flight owns the verdict on that state; this
-    // function's job is to leave it standing.
+    // Somebody else's Metro on our port: leave it standing.
     return [];
   }
+  // SIGTERM first: Metro tidies up on a term, and a killed one can leave a
+  // lock file.
   for (const pid of owned) {
     try {
       kill(pid, 'SIGTERM');
@@ -1591,9 +1229,8 @@ async function stopOwnMetro({
       /* already gone */
     }
   }
-  // Bounded, and paid for only by a run that leaked a server. `Atomics.wait` because this is a
-  // CLI process at the end of its work: nothing else is waiting on the loop, and a timer would
-  // need the unref dance to avoid holding the process open.
+  // A bounded synchronous wait: nothing else needs the event loop at the end
+  // of a run.
   for (let waited = 0; waited < 10; waited += 1) {
     if (owned.every((pid) => !isAlive(pid))) break;
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
@@ -1610,13 +1247,7 @@ async function stopOwnMetro({
   return owned;
 }
 
-/**
- * The process group id of `pid`, or null when the kernel will not say.
- *
- * `ps -o pgid=` rather than a syscall binding: no native dependency, and this runs at most
- * once per gate. A dead pid makes `ps` print nothing, which is null - the answer a caller has
- * to treat as "not mine".
- */
+/** The process group id of `pid`, or null when `ps` gives none (a dead pid). */
 function processGroupId(pid) {
   try {
     const result = spawnSync('ps', ['-o', 'pgid=', '-p', String(pid)], {
@@ -1632,14 +1263,9 @@ function processGroupId(pid) {
 }
 
 /**
- * The runner sidecars in the log store: which process group belongs to which gate run.
- *
- * Written by `gate-runner.mjs` as each run starts (see `writeRunnerRecord`). Read here only to
- * explain a busy Metro port, which is why it is a scan of the whole store and not of one branch:
- * a leftover server does not care which branch its dead gate was running.
- *
- * @param {string} logsDir the store root
- * @returns {Array<{group?: number, gatePid?: number, logPath?: string, gate?: string, startedAt?: number}>}
+ * The sidecars `gate-runner.mjs` writes: which process group belongs to which
+ * gate run. Scans every branch, because a leftover Metro server can come from
+ * any branch's dead gate.
  */
 function readRunnerRecords(logsDir) {
   const found = [];
@@ -1661,8 +1287,7 @@ function readRunnerRecords(logsDir) {
         const record = JSON.parse(fs.readFileSync(absolute, 'utf8'));
         found.push({ ...record, recordFile: absolute });
       } catch {
-        // A torn or unparseable sidecar describes a run nobody can attribute anyway, and the
-        // pre-flight must not go red over a janitor's file.
+        // An unreadable sidecar describes a run nobody can attribute.
       }
     }
   };
@@ -1671,23 +1296,9 @@ function readRunnerRecords(logsDir) {
 }
 
 /**
- * The extra sentence for a port served by a gate that died (X34 item 2).
- *
- * Returns null when the ordinary refusal is the honest answer — the server belongs to a run that
- * is still going, or to no run this store has ever heard of. When it does answer, it answers the
- * question the person in front of it is actually asking: not "what is on my port" but "did a run
- * die on me, and where is its evidence".
- *
- * Every input is injected so the rule can be tested without a store, a port, or a corpse.
- *
- * @param {object} options
- * @param {Array<{pid: number, command?: string}>} options.listeners
- * @param {NodeJS.ProcessEnv} [options.env]
- * @param {() => Array<object>} [options.records]
- * @param {(pid: number) => number | null} [options.groupOf]
- * @param {(pid: number) => boolean} [options.pidAlive]
- * @param {() => Set<string>} [options.ledgerLogPaths]
- * @returns {string | null}
+ * The extra warning for a Metro port served by a gate that died without a
+ * ledger line, or null when the server belongs to a live run or to none this
+ * store knows.
  */
 function deadGateHint({
   listeners,
@@ -1720,8 +1331,7 @@ function deadGateHint({
     : 'unknown time';
   const stopped =
     record.stopped == null
-      ? // No `stopped` means the supervisor never reported a sweep — which is the worse case: a
-        // run killed so hard that even the process watching it died. Saying so is the point.
+      ? // No `stopped` note: the supervisor died before it could report a sweep.
         'its supervisor left no note, so the run was killed hard enough to take that too'
       : `${String(record.stopped.left?.length ?? 0)} process(es) survived its sweep`;
   return (
@@ -1735,28 +1345,16 @@ function deadGateHint({
 }
 
 /**
- * The leased Metro port, asked before the run starts (X15 item 1).
- *
- * Returns an exit code - 0 means "run it". A port someone else serves is a refusal that
- * names the process, because the alternative is the X4 failure: the app joins the other
- * Metro and the suite dies as `The app bridge was replaced by a newer app connection`,
- * three runs later and with an error message that does not mention a port. Nothing is
- * recorded for a refusal, the same way a device-claim refusal records nothing: the run
- * never started, so there is no evidence to log.
- *
- * `NITRO_UI_GATE_METRO_FORCE=1` runs anyway, for the case where the server on the port is
- * this task's own - a Metro started by hand for a debugging session, which the harness
- * then attaches to on purpose.
- *
- * @param {NodeJS.ProcessEnv} [env]
- * @param {(command: string, args: string[]) => {ok: boolean, text: string} | null} [run]
- * @returns {number}
+ * Checks the leased Metro port before the run starts and returns an exit code
+ * (0 means run). A port another process serves is refused: the app would join
+ * that server and the suite would fail later with an error that names no port.
+ * `NITRO_UI_GATE_METRO_FORCE=1` runs anyway, for a Metro started by hand.
  */
 function metroPreflight(env = process.env, run) {
   const answer = metroPreflightFromEnv(env, run);
   if (answer.warning != null) {
-    // Loud, and still a run: a machine that cannot ask about the port must not be
-    // unable to run its gates (CI, a container without `lsof`).
+    // Still a run: a machine that cannot inspect the port (CI, a container
+    // without `lsof`) must be able to run its gates.
     process.stderr.write(
       `gate: WARN the Metro pre-flight was skipped - ${answer.warning}\n`
     );
@@ -1775,10 +1373,8 @@ function metroPreflight(env = process.env, run) {
       '        wait for that run, or set NITRO_UI_GATE_METRO_FORCE=1 to start on this port anyway.\n' +
       `        (checked because ${env.NITRO_UI_LEASE_ID ?? 'this shell'} exported METRO_PORT=${String(answer.port)})\n`
   );
-  // A busy port has two very different causes and the pre-flight has only ever named one of them
-  // (X34 item 2): a run still going, and a *dead* run whose server outlived it — the X32 incident,
-  // which cost a whole round because the second story looked like the first. When the server can
-  // be attributed to a gate that is gone and left no ledger line, that is what gets said.
+  // A busy port is either a run still going or a dead run whose server
+  // outlived it; the second case gets its own warning.
   const hint = deadGateHint({ listeners: answer.listeners ?? [], env });
   if (hint != null) process.stderr.write(`${hint}\n`);
   return 1;
@@ -1786,12 +1382,11 @@ function metroPreflight(env = process.env, run) {
 
 async function runGateUnclaimed(name, resolved, options = {}) {
   const branch = currentBranch();
+  // The tree is read before the run and again after it; a run during which it
+  // moved is recorded with both and never reads green.
   const before = readTrees();
-  // A bench says which device it drives (`--platform`) and a lease covers both
-  // halves of a pair, so the bench's own answer wins over the environment's guess -
-  // which is how A5's iOS bench came to be recorded on an Android serial (X15 item 4).
-  // Every other gate passes its platform, or null, which keeps the old reading: no
-  // platform of its own means the lease's environment describes the run.
+  // A lease covers both halves of a pair, so a bench's own `--platform` wins
+  // over what the environment suggests.
   const device = deviceFromEnv(
     process.env,
     resolved.platform ?? resolved.benchPlatform ?? null
@@ -1803,11 +1398,6 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     samples.push(os.loadavg()[0] ?? Number.NaN);
   }, LOAD_SAMPLE_INTERVAL_MS);
 
-  // Logs go in the clone's store, shared by every worktree and untouched by
-  // `git worktree remove` (X12). A backgrounded run's log path is the file the
-  // launcher opened, passed down as an absolute path, and `logPathsFor` derives the
-  // ledger's spelling from it - one function for both, so the record, the ledger line
-  // and the file cannot name three things (N7).
   pruneStoredLogs('gate');
   const logsDir = storeLogsDir();
   fs.mkdirSync(logsDir, { recursive: true });
@@ -1823,39 +1413,22 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     fromEnv: backgroundLog,
   });
   fs.mkdirSync(path.dirname(absoluteLog), { recursive: true });
-  // Per-suite timings for a harness run (X11, ledger v6). Named from the run's log,
-  // which is how X10's review N7 settled this for `check`'s steps: one run's file has
-  // one namer, derived from a name the launcher and the runner already agree on, so a
-  // reader is never sent to a file that was never written. It therefore lands in the
-  // clone's log store and outlives `git worktree remove` like the log does, and
-  // retention sweeps it with the log (`listStoredLogs`). It used to be
-  // `<repo>/.gates/suite-timing/<gate>-<ts>-<pid>.json` — in the worktree, outside the
-  // retention walk, and named by a second function. Nothing in a ledger cites the old
-  // path (the line carries the parsed record, not a pointer), so those files die with
-  // their worktree.
+  // Per-suite timings for a harness run, named from the run's log so they sit
+  // in the store beside it and retention sweeps them together.
   const suiteTimingFile =
     resolved.platform == null ? null : suiteTimingPath(absoluteLog);
-  // Appending for a backgrounded run: the launcher already has that file open in
-  // append mode for this process's own stdout/stderr, and truncating it here would
-  // erase the lines that explain a crash.
+  // Append for a backgrounded run: the launcher has this file open as this
+  // process's stdout and stderr, and truncating would erase those lines.
   const logStream = fs.createWriteStream(absoluteLog, {
     flags: backgrounded ? 'a' : 'w',
   });
   let logText = '';
-  // A backgrounded run's stdout *is* the log file, so echoing there as well as
-  // writing the stream would put every line in the log twice. The ledger parses
-  // `logText` rather than the file, so a doubled run would still record correct
-  // counts - the damage is to the reader who follows the `gate: log …` line and
-  // finds a transcript with every line in it twice. Foreground runs still echo.
+  // A backgrounded run's stdout is the log file, so echoing would put every
+  // line in it twice.
   const echo = !backgrounded;
   let logStreamOpen = true;
-  /**
-   * The gate's own news, in the transcript as well as on the terminal (X15 review 4). What the
-   * evidence store keeps is the log file, and a sweep that stopped a server or a signal that
-   * was re-raised is exactly the fact a reader needs three days later: on stderr alone it is
-   * gone the moment the run scrolls past. Written to both, not moved, because the person
-   * watching the run needs it now too.
-   */
+  // The gate's own messages go to the log as well as stderr, because the log
+  // is what is kept.
   const note = (message) => {
     process.stderr.write(message);
     logText += message;
@@ -1863,97 +1436,65 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   };
   const tee = (chunk, output) => {
     logText += String(chunk);
-    // Guarded, because the drain above can end the stream while a descendant of the run is
-    // still talking through it - and a write after `end()` throws asynchronously, which on an
-    // unhandled stream error is an exit the ledger never records. Better a log missing its
-    // tail than a green run reporting nothing at all.
+    // A descendant of the run can still write after the stream has ended, and
+    // a write after `end()` is an unhandled stream error.
     if (logStreamOpen) logStream.write(chunk);
     if (echo) output.write(chunk);
   };
 
   const cwd =
     resolved.cwd === 'example' ? path.join(repoRoot, 'example') : repoRoot;
-  // `check` is the one gate long enough that its total is not an actionable
-  // number, so the runner is asked to leave its per-step timings somewhere this
-  // process can read back (X10). Named from the log so one run cannot read another
-  // run's breakdown, and removed from the child env by `check.mjs` itself so a
-  // nested check cannot answer for its parent.
+  // `check` leaves its per-step timings in a file named from this run's log,
+  // so one run cannot read another's breakdown.
   const stepTimingsPath =
     resolved.gate === 'check' ? `${absoluteLog}.steps.json` : null;
   process.stderr.write(
     `gate: ${name}\n` +
       `gate: ${resolved.argv.join(' ')} (cwd ${path.relative(repoRoot, cwd) || '.'})\n` +
       `gate: code tree ${before.tree.slice(0, 12)} at HEAD ${git(['rev-parse', '--short', 'HEAD'], '?')}\n` +
-      // Store-relative, and the absolute path beside it: `logPath` is what the
-      // ledger and `table --full` print, and the absolute one is what you actually
-      // open - which is no longer inside the worktree you are standing in.
+      // The store-relative path the ledger prints, then the absolute one to
+      // open.
       `gate: log ${logPath}\n` +
       `gate:       ${absoluteLog}\n`
   );
 
   let childPid = null;
-  // The run's output as one question: has *all* of it arrived? Answered by the child's two
-  // pipes closing, counted rather than taken from the first `close` to arrive (X15 review 2):
-  // stdout and stderr close independently, and treating either one as the end loses the other
-  // one's tail - which for a harness run is the test summary the ledger's counts are parsed
-  // from. Declared out here because the answer arrives from inside the promise below and is
-  // read after it.
+  // The run's output is complete only when both of the child's pipes have
+  // closed: stdout and stderr close independently, and the test summary the
+  // ledger's counts are parsed from can be in either tail.
   let childStreamsClosed = false;
   let streamsClosedCount = 0;
   let drainNow = null;
   let childStreams = null;
-  // The command runs under `gate-runner.mjs` (X34 item 2), the only process that can still see
-  // whether this gate is alive: a `gate.mjs` that is killed runs no handlers, and the X32 incident
-  // is exactly what that leaves - a run serving the lease's Metro port with no ledger line, read by
-  // the next task as a mystery busy port. The supervisor is spawned the way the command used to be
-  // (detached, so it leads a session whose id is its own pid) and starts the command *into that
-  // same group*, so every fact the code below depends on is unchanged: the signal handlers'
-  // `process.kill(-child.pid, signal)` still reaches the harness and the Metro it spawned, and
-  // `ownMetroPids` still attributes a leftover server to `child.pid`'s group - by a number this
-  // spawn produced, not a `ps` query about a supervisor that may be dead by then.
+  // The command runs under `gate-runner.mjs`, which notices when this process
+  // is killed and cannot clean up for itself. It starts the command in its own
+  // group, so `-child.pid` reaches the harness and the Metro it spawned.
   const exit = await new Promise((resolvePromise) => {
     const child = spawn(
       process.execPath,
-      // Beside this file, not under `repoRoot`: the supervisor is part of the same tool as the
-      // gate, and a checkout that runs `gate.mjs` out of one directory always has it there.
       [path.join(import.meta.dirname, 'gate-runner.mjs'), ...resolved.argv],
       {
         cwd,
-        // Its own process group, so "what did this run leave behind?" has a kernel answer
-        // (X15 review). A gate's Metro is a descendant of this child, and a run that was
-        // killed - or a wrapper whose `stopMetro` never ran - leaves it serving the leased
-        // port, which the *next* gate's pre-flight then refuses: exactly the merge sequence
-        // (`real-input:ios` -> `real-input:android` -> `harness:ios` -> `harness:android`)
-        // on one lease. `detached` does not mean ignored; it puts the child in a new group,
-        // and the signal handlers below reach that group, so a Ctrl-C still stops the
-        // descendants a terminal Ctrl-C used to reach through the shared group.
+        // Its own process group, so whatever the run leaves behind can be found
+        // and stopped by group. The signal handlers below forward to that
+        // group, so Ctrl-C still stops the descendants.
         detached: true,
-        // `NITRO_UI_GATE_LOG` is this runner's own instruction and must not go further:
-        // a `gate.mjs` nested inside a gate (a check that shells out to one, say) would
-        // otherwise append to *this* run's log and mark *this* run's record done with
-        // its own exit code. Deleting it here is what makes that variable mean "the log
-        // of the background run I am the launcher of", one level, not inherited.
+        // `NITRO_UI_GATE_LOG` is for this process only: a nested `gate.mjs`
+        // that inherited it would append to this run's log and mark this run's
+        // record done with its own exit code.
         env: (() => {
           const childEnv = { ...process.env };
           delete childEnv.NITRO_UI_GATE_LOG;
           if (stepTimingsPath != null) {
             childEnv.NITRO_UI_CHECK_STEPS_FILE = stepTimingsPath;
           }
-          // Per-suite timings (X11, ledger v6): the harness's plugin writes durations
-          // into the file named from this run's log, and the ledger line below cites the
-          // parsed record. Only a harness run can produce them. The gate's own name goes
-          // with it because the file's name is a folded spelling of it (`:` -> `+`), and
-          // a header that says which gate a timing belongs to should not be approximate.
           if (suiteTimingFile != null) {
             childEnv[SUITE_TIMING_ENV] = suiteTimingFile;
             childEnv[SUITE_TIMING_GATE_ENV] = name;
           }
-          // The supervisor's own instructions, meaningful one level (the same rule as
-          // `NITRO_UI_GATE_LOG` above): the group whose death it must notice, and the log its notes
-          // have to reach once the pipe into this process has died with it. The *group* and not only
-          // the pid because a pid is not a fact that stays true across a 50-minute run - a runner
-          // watching a reused pid would run on past its own gate's death, which is the failure this
-          // exists to prevent arriving as its opposite. See `gate-runner.mjs`'s header.
+          // The supervisor's instructions, cleared first so they are never
+          // inherited from an outer gate. It gets this process's group as well
+          // as its pid, because a pid can be reused during a long run.
           for (const supervisorName of [
             GATE_PID_ENV,
             GATE_PGID_ENV,
@@ -1968,36 +1509,27 @@ async function runGateUnclaimed(name, resolved, options = {}) {
           if (gatePgid != null) childEnv[GATE_PGID_ENV] = String(gatePgid);
           childEnv[GATE_NAME_ENV] = name;
           childEnv[RUNNER_LOG_ENV] = absoluteLog;
-          // The same file in the ledger's spelling, so the supervisor's sidecar and this run's line
-          // name one run with one string (`logPathsFor` is the single namer for both).
+          // The same log in the ledger's store-relative spelling.
           childEnv[RUNNER_LOG_RELATIVE_ENV] = logPath;
           return childEnv;
         })(),
-        // stdin is a pipe this process holds open and never writes: its EOF is how the supervisor
-        // learns this gate died (X34 item 2, `gateStdinDeath`). A `SIGKILL`, a segfault or a closed
-        // terminal all close the kernel's end, and no pid has to be believed for the run to end.
-        // 'ignore' here would hand the supervisor /dev/null, which reports EOF immediately and would
-        // make it sweep a healthy run.
+        // stdin is a pipe this process holds open and never writes: its EOF
+        // tells the supervisor this gate died, however it died. 'ignore' would
+        // give it /dev/null, which reports EOF at once.
         stdio: ['pipe', 'pipe', 'pipe'],
       }
     );
-    // The write end is held open for the run's whole life and closed when it exits. Never written
-    // to, and an error listener regardless: a stream that errors with nobody listening is an
-    // uncaught exception in the gate, which is precisely the sort of death whose evidence this is.
+    // Never written to; without a listener a stream error would be an uncaught
+    // exception.
     child.stdin?.on('error', () => {});
-    // Remembered for the sweep and the release below: `child` is inside this promise's scope,
-    // and both run after it settles.
     childPid = child.pid ?? null;
     childStreams = { out: child.stdout, err: child.stderr };
     let forwarded = null;
     const handlers = FORWARDED_SIGNALS.map((signal) => {
       const handler = () => {
-        // The whole group, not just the direct child: the child is detached (above), so a
-        // signal that used to reach its Metro through the *shared* group now has to be
-        // sent to that group on purpose. Killing only the leader is the regression this
-        // avoids - a harness that dies while its bundle server keeps serving the leased
-        // port (N4's failure, one level down). The direct child is still the fallback: a
-        // platform where the negative pid is refused must not lose its signal entirely.
+        // The whole group: the child is detached, so its Metro does not share
+        // this process's group. The direct child is the fallback where a
+        // negative pid is refused.
         forwarded = signal;
         try {
           process.kill(-child.pid, signal);
@@ -2030,9 +1562,6 @@ async function runGateUnclaimed(name, resolved, options = {}) {
         forwarded: null,
       });
     });
-    // Both pipes, counted: see `streamsClosedCount`. A leaked descendant holds *both* open
-    // (it inherits them), so waiting for the pair costs nothing in the case the drain exists
-    // for, and saves the tail in the ordinary one where the two close a chunk apart.
     const markClosed = () => {
       streamsClosedCount += 1;
       if (streamsClosedCount < 2) return;
@@ -2043,24 +1572,15 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     child.stderr.on('close', markClosed);
     child.on('exit', (code, signal) => {
       stopListening();
-      // Drop the write end of the stdin pipe (see the spawn above). The supervisor is gone with the
-      // command it was watching, so nothing is left to notice, and a socket handle this process
-      // still holds would keep the event loop alive through the drain below and past it.
+      // Drop the stdin pipe: a handle still held keeps the event loop alive.
       child.stdin?.destroy();
       resolvePromise({ code, signal, failedToStart: false, forwarded });
     });
   });
 
-  // The await above resolves on the child's *exit*, not its `close`, because a run that
-  // leaves a Metro up makes the two differ by minutes or forever: the server inherits the
-  // child's stdout and stderr, so its end holds both pipes open long after the harness is
-  // gone. Resolving on `close` is what hung a gate for its whole timeout, and a leaked
-  // server must not be able to do that. So the pipes get a bounded moment to drain - long
-  // enough for the tail of a normal run, which is what the test-count parse reads - and
-  // whatever is still holding them at the end of that moment is dealt with below: the sweep
-  // stops a Metro this run owns, and the release below drops our read ends whatever it is,
-  // because a descendant the sweep may not touch is not a reason to stay alive. The drain is
-  // a constant rather than a knob: nobody should tune how much of their own log they read.
+  // The promise resolves on the child's `exit`, not its `close`: a leaked
+  // Metro inherits the child's stdout and stderr and can hold them open
+  // indefinitely. The pipes get a bounded moment to deliver the tail instead.
   if (!childStreamsClosed) {
     await new Promise((resolveDrain) => {
       const timer = setTimeout(() => {
@@ -2077,27 +1597,13 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   }
 
   clearInterval(sampler);
-  // The Metro this run started, if it left one behind (X15 review). A device gate's own
-  // child may spawn a bundle server and either exit without stopping it (a killed run, a
-  // wrapper whose cleanup did not run) or keep it up by design; on one lease that is enough
-  // to make the *next* gate in the sequence refuse on its own leftover. Stop exactly what
-  // this run owns - the listeners in the child's process group - and say so. Never anything
-  // else's Metro: that is the X4 incident, and the whole reason the group is the test.
-  // A supervisor that went down by a signal, or that reported the death of *this* process from the
-  // other side (it cannot have been by this one's hand), is a supervisor that may not have finished
-  // the job it was started for: the command it was running is in the same group and can still be up,
-  // holding the leased port. So the gate does the sweep itself, with the group id it created, and
-  // only when the group still has members - a run that came down cleanly leaves an empty group and
-  // pays nothing for the check. This is the net under the net: the supervisor handles its gate's
-  // death, and this handles the supervisor's own.
+  // A supervisor that died by a signal, or that reported this process dead,
+  // may not have stopped the command: it shares the group and can still hold
+  // the leased port. So the group is swept from here if it still has members.
   const supervisorDied = exit.signal != null || exit.code === GATE_DEATH_EXIT;
   if (supervisorDied && childPid != null) {
-    // Two things must hold before this process may signal that group, and `maySweepRunnerGroup`
-    // asks them: the pid has still got to describe *this* run (pids are recycled, and `ps -g` about
-    // a recycled one reads a stranger's tree), and the supervisor must have left no note saying it
-    // had already swept. A run whose supervisor finished the job, or whose pid has been taken, is
-    // therefore not swept at all — and says so, because "why is my Metro still up" should be
-    // answerable from the log rather than from this file.
+    // Only while the pid still describes this run (pids are recycled) and the
+    // supervisor left no note that it already swept.
     const owed = maySweepRunnerGroup({
       runnerPid: childPid,
       recordFile:
@@ -2126,6 +1632,8 @@ async function runGateUnclaimed(name, resolved, options = {}) {
       }
     }
   }
+  // A Metro this run left on the leased port would make the next gate on the
+  // same lease refuse to start.
   const leftover = await stopOwnMetro({
     port: process.env.METRO_PORT,
     leaderPid: childPid,
@@ -2138,17 +1646,9 @@ async function runGateUnclaimed(name, resolved, options = {}) {
       )} - the next gate on this lease gets a free port\n`
     );
   }
-  // Our read ends on the child's output are done with, unconditionally (X15 review 3): the run
-  // is recorded and swept, so there is nothing left to read and two ways a held pipe still
-  // hurts. A descendant that is not a Metro on the leased port (a real-input server on the
-  // 8291 default, with no `METRO_PORT` in the environment to sweep by) is not ours to stop, and
-  // holding the read end is what keeps *this* process alive: a lease doing nothing until an
-  // orphan decides to close, and `wait` reporting a finished gate as still running. It also
-  // holds the tail hostage - the drain ends when both pipes have closed, and a gate that keeps
-  // reading after that is reading output it has already written up.
-  //
-  // `destroy`, not `end`: nothing is left to flush on a read stream, and `end` would wait for
-  // the other side.
+  // Release our read ends: a descendant the sweep may not stop would
+  // otherwise keep this process alive through the open pipes, and `wait`
+  // would report a finished gate as still running.
   for (const stream of [childStreams?.out, childStreams?.err]) {
     try {
       stream?.destroy();
@@ -2161,27 +1661,21 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   const after = readTrees();
   logStreamOpen = false;
   logStream.end();
-  // Wait for the log to reach the disk before any re-raise below can kill the
-  // process: a ledger line pointing at a truncated log is half the evidence.
+  // Wait for the log to reach the disk before a re-raised signal below can
+  // kill the process.
   await finished(logStream).catch(() => {});
 
   const stepTimings = readStepTimings(stepTimingsPath);
-  // `check` is the one gate whose own exit code can be a lie about doing work (M3).
-  // A runner that exits 0 without starting a step - the entry guard not matching, a
-  // plan that resolved to nothing - looks exactly like a green run from here, so for
-  // this gate a recorded step list is part of the evidence: no steps, no pass. Only
-  // when the breakdown exists at all: a runner that could not *write* the file (an
-  // unwritable log directory, an older runner) must stay green, which is what the
-  // null path below means.
+  // A `check` that exits 0 with an empty step list ran nothing, and is a fail.
+  // A missing breakdown (the runner could not write the file) decides nothing.
   const ranNothing =
     name === 'check' && stepTimings != null && stepTimings.steps.length === 0;
   const result =
     exit.code === 0 && exit.signal == null && !ranNothing ? 'pass' : 'fail';
   const summaries = parseTestSummaries(logText);
   const line = ledgerLineFromRun({
-    // The canonical name from `resolveGate`, never `argv[0]`: one harness suite
-    // run with `-- ColdSizing` used to be recorded as the full `harness:android`
-    // and then satisfied `need` (M1).
+    // The canonical name from `resolveGate`, never `argv[0]`: a filtered run
+    // must not be recorded as the full gate.
     gate: name,
     command: resolved.argv.join(' '),
     tree: before.tree,
@@ -2195,9 +1689,8 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     load: summarizeLoad({ start: startedLoad, samples }),
     durationMs,
     result,
-    // `counts` is the first summary (the unit-test step) and `summaries` all of
-    // them, so `check`'s row can report 391 jest tests rather than the 7-test
-    // perf step that happened to print last (M3).
+    // `counts` is the first summary (for `check`, the unit-test step), not
+    // whichever step printed last; `summaries` holds all of them.
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
     stepTimings,
@@ -2209,18 +1702,10 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     signal: exit.signal,
   });
   const file = appendLedgerLine(branch, line);
-  // The store's own record of this run, written whether it was backgrounded or not.
-  //
-  // For a backgrounded run this is the "done" mark `wait` returns on: the ledger line
-  // is on disk, so a `wait` that returns on this signal can read the row back and
-  // `need` can act on it. Marking it done earlier would report a gate whose evidence
-  // is not there yet.
-  //
-  // For a foreground run it is the only thing the store learns about the run, and
-  // that is what makes `logs --failed` answerable after `git worktree remove`: the
-  // ledger that says pass or fail goes with the checkout, so pass and fail have to be
-  // recorded where the log is (review M2). `foreground: true` keeps these out of
-  // `wait`/`status`, which look only for runs that are in progress.
+  // The store's record of this run. For a backgrounded run it is the "done"
+  // mark `wait` returns on, so it is written after the ledger line. For a
+  // foreground run it is what lets `logs --failed` answer once the worktree
+  // and its ledger are gone.
   const recordPath = backgroundRecordPath(absoluteLog);
   writeJsonAtomic(recordPath, {
     version: 1,
@@ -2258,10 +1743,6 @@ async function runGateUnclaimed(name, resolved, options = {}) {
         '        run `bun run check` by hand and look for the step list header.\n'
     );
   }
-  // Slowest suites first, on the terminal and in the log, because the point of
-  // recording them is that somebody reads them at the moment a run looks slow rather
-  // than months later. Written to the log as well as the terminal: for a backgrounded
-  // run the log is the only place anybody reads this, and `echo` is false there.
   const timings = line.suiteTimings;
   if (timings != null && timings.suites.length > 0) {
     const table = formatSuiteTimings(timings, { limit: 12 });
@@ -2278,15 +1759,9 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     );
   }
 
-  // Item 3 (X12): a failed *device* gate appends what the device was doing to the
-  // log it just wrote, so the red row arrives with its own context instead of with
-  // "re-run it and hope it prints something next time". Keyed on the gate's own
-  // platform, not on the environment: a `check` that happens to run with
-  // ANDROID_SERIAL set is still not a device gate. The device itself is read from
-  // this run's lease record, so a shell variable cannot point the probes at another
-  // task's emulator, and a run with no lease probes nothing (review N6). Best-effort
-  // by design: the verdict is already recorded and flushed above, so every probe here
-  // is allowed to fail and say so in one line.
+  // A failed device gate appends the device's state to its log. Keyed on the
+  // gate's own platform, not the environment. The verdict is already recorded,
+  // so every probe is allowed to fail.
   if (result === 'fail' && resolved.platform != null) {
     const context = collectDeviceContext({
       platform: resolved.platform,
@@ -2306,16 +1781,15 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     );
   }
   if (exit.forwarded != null) {
-    // The line is written and the log is flushed, so the signal can now do its
-    // default work and the caller's exit status still says "interrupted".
+    // The line is written and the log flushed, so the signal can do its default
+    // work and the caller's exit status still says "interrupted".
     process.stderr.write(`gate: re-raising ${exit.forwarded}\n`);
     process.kill(process.pid, exit.forwarded);
     return 1;
   }
   if (exit.signal != null) return 1;
-  // The recorded result decides, not the child's status alone: `check` can exit 0
-  // having started no steps, and a caller that read that 0 would merge on the fail
-  // line written above (M3). A child that failed on its own still reports its code.
+  // The recorded result decides, not the child's status alone: `check` can
+  // exit 0 having run no steps.
   if (result === 'fail') return exit.code === 0 ? 1 : (exit.code ?? 1);
   return exit.code ?? 0;
 }
@@ -2361,11 +1835,7 @@ function commandStatus({ stage }) {
   process.stdout.write(
     `\n${String(green)} green, ${String(rows.filter((r) => r.state === 'red').length)} red, ${String(rows.filter((r) => r.state === 'stale').length)} stale, ${String(rows.filter((r) => r.state === 'missing').length)} missing for this code tree (${stage})\n`
   );
-  // A gate started with `--background` is *happening right now*, and a row that
-  // says "missing" for it is the most misleading thing this command could print
-  // while someone decides whether to start the gate they are already running.
-  // Scoped to this checkout, for the same reason `wait` is: another worktree's run
-  // is not this branch's run (M1).
+  // A backgrounded gate still in progress would otherwise read as "missing".
   for (const entry of runningBackgroundGates(
     ownRunningGates(listBackgroundRecords(storeLogsDir()), ownRecordScope())
   )) {
@@ -2385,14 +1855,8 @@ function formatMaybe(ms) {
 }
 
 /**
- * Every branch ledger in `.gates/` except one, for `logs --failed`.
- *
- * Branch names nest (`task/X10-check-throughput` becomes
- * `.gates/task/X10-….jsonl`), which is why this walks rather than globs a flat
- * directory; the name it returns is the branch, recovered from the path.
- *
- * @param {string | null} exceptBranch a branch whose own ledger is left out
- * @returns {Array<{branch: string, entries: object[], source: string}>}
+ * Every branch ledger in `.gates/` except `exceptBranch`. Branch names nest, so
+ * this walks the directory and recovers each branch from its path.
  */
 function otherBranchLedgers(exceptBranch) {
   const found = [];
@@ -2495,18 +1959,10 @@ function commandTable({ stage, full }) {
   });
   process.stdout.write(`${table}\n`);
   if (full === true) {
-    // Per-step durations, for the one gate where the total is not the useful
-    // number. Under `--full`, because a report's gate table is five device rows and
-    // a step row apiece would bury them. Gates with no breakdown print nothing, so
-    // this stays `check`'s section in practice without naming it as such.
     const steps = renderStepTimings({ entries, gates: MERGE_GATES });
     if (steps !== '') process.stdout.write(`\n${steps}\n`);
-    // Per-suite durations for a harness run (X11, ledger v6), and the two breakdowns
-    // are not interchangeable: `check`'s steps say which *stage of the script* was
-    // slow, these say which *test file* was. Iterating the reported rows rather than
-    // the whole ledger matters - a branch with thirty recorded runs would otherwise
-    // print thirty tables - and a row with no timings prints nothing, so the section
-    // claims "measured" and never reads as "all fast".
+    // Per-suite durations for the reported rows only: the whole ledger would
+    // print one table per recorded run.
     const rows = summarizeGates({
       entries,
       tree: read.tree,
@@ -2524,30 +1980,13 @@ function commandTable({ stage, full }) {
 }
 
 /**
- * `gate.mjs logs` — what is in this clone's log store, newest first.
- *
- * The command the brief asks for, and the answer to "where are my logs" now that
- * they are not in the worktree: it prints the store's location in its header.
- *
- * Two things the orchestrator's cleanup step depends on, both from review M2:
- *
- *   - a log's branch comes from the **whole relative path**, not from a directory
- *     listing. Branch names nest, so `task/a/b/check-….log` belongs to `task/a/b`;
- *     reading only the store's top-level directories attributed every `task/…` log
- *     to `task`, and `--branch task/a/b` then listed nothing - for a *removed*
- *     worktree, which is the one time anyone asks.
- *   - pass or fail comes from the store's own record for the run, because the ledger
- *     that says it lives in the worktree and `git worktree remove` takes it. When
- *     neither is available the command says it cannot tell rather than printing a
- *     silent "0 log file(s) that failed", which reads as "nothing failed".
- *
- * @param {{branch: string | null, failedOnly: boolean, all: boolean}} options
+ * `gate.mjs logs`: what is in this clone's log store, newest first. Pass or
+ * fail comes from the store's own record of a run, because the ledger goes with
+ * the worktree; a log neither can judge is counted as unknown.
  */
 function commandLogs({ branch, failedOnly, all }) {
   const storeDir = storeLogsDir();
   const location = store();
-  // Listing the store is the moment someone is thinking about disk, so the
-  // retention rule is applied here too (as it is on every gate run).
   const pruning = pruneLogStore();
   process.stdout.write(
     `logs: store ${storeDir}${location.shared ? '' : ' (fallback: this checkout has no git common dir)'}\n`
@@ -2594,8 +2033,7 @@ function commandLogs({ branch, failedOnly, all }) {
     }\n`
   );
   if (failedOnly === true && unknown > 0) {
-    // The honest version of a zero: "nothing failed" and "I could not tell" are
-    // different answers and the orchestrator acts on the difference.
+    // "Nothing failed" and "could not tell" are different answers.
     process.stdout.write(
       `logs: ${String(unknown)} log(s) could not be judged - no record of the run` +
         `${wanted == null ? '' : ` for ${wanted.join(', ')}`} survives, so pass or fail is unknown\n`
@@ -2610,13 +2048,9 @@ function commandLogs({ branch, failedOnly, all }) {
 }
 
 /**
- * Store-relative path -> did that run fail? for every log the store can still say
- * anything about.
- *
- * The record written when the run finished is the primary source and survives
- * `git worktree remove`; the ledger lines in this checkout are consulted for logs
- * whose record has no `result` field or is missing. `null` for a log neither can judge, which is why the map's values are
- * `true | false | null` rather than a plain failed-only set.
+ * Maps each store-relative log path to whether that run failed. The record
+ * written when the run finished is the primary source; this checkout's ledger
+ * lines fill the gaps. `null` means neither can judge.
  */
 function outcomeOfStoredLogs(storeDir) {
   const records = listBackgroundRecords(storeDir);
@@ -2638,8 +2072,6 @@ function outcomeOfStoredLogs(storeDir) {
     const verdict = storedLogFailed(record, null);
     put(record.logPath, verdict, null);
   }
-  // A ledger line is evidence about a run even when its record is gone, so the
-  // lines fill the gaps.
   const entriesByLogPath = new Map();
   for (const ledger of [
     ...otherBranchLedgers(null),
@@ -2667,25 +2099,14 @@ function outcomeOfStoredLogs(storeDir) {
 }
 
 /**
- * The branch a stored log belongs to, from its full relative path.
- *
- * The path *is* the branch: logs are written to `<branch>/<gate>-<time>.log`, git
- * refs are path-safe, and a branch name's slashes are kept in the path. So this is
- * "the longest path that is a ledger directory of this store", not "the first
- * segment" (M2), and it needs no list of known branches - which is exactly why it
- * still works for a branch whose worktree, and whose ledger, is gone.
- *
- * A log loose in the store's root (one someone dropped there) has no branch to
- * report and says so.
- *
- * @param {string} relative store-relative path, `/`-separated
+ * The branch a stored log belongs to: its whole directory path, because branch
+ * names nest (`task/a/b/check-….log` belongs to `task/a/b`).
  */
 function branchOfStoredLog(relative) {
   const segments = String(relative ?? '')
     .split(path.sep)
     .join('/')
     .split('/');
-  // Everything but the file name: `task/a/b/check-….log` is branch `task/a/b`.
   return segments.length > 1 ? segments.slice(0, -1).join('/') : '(unknown)';
 }
 
@@ -2696,13 +2117,7 @@ function formatBytes(bytes) {
   return `${(value / 1024 / 1024).toFixed(1)} MiB`;
 }
 
-/**
- * `--for review|merge` for the read-only commands, defaulting to `review`.
- *
- * Review is the stricter question about *this* round, and it is the one a report
- * pastes, so it is the default; `--for merge` shows the bar the branch has to
- * clear as a whole. A stale row is never a FAIL and never a PASS in either view.
- */
+/** `--for review|merge` for the read-only commands, defaulting to `review`. */
 function parseStageOption({ rest, command }) {
   let stage = 'review';
   for (let index = 0; index < rest.length; index += 1) {
@@ -2732,16 +2147,8 @@ function parseStageOption({ rest, command }) {
 
 async function main(argv) {
   const [command, ...rest] = argv;
-  // A usage probe is answered before anything is resolved, launched or recorded. `gate.mjs
-  // bench --help` used to resolve as the bench gate with a `--help` filter, launch
-  // `scripts/bench/run.mjs --help` - which prints its usage and exits 2 - and append
-  // `bench:--help FAIL` to the branch ledger (X16 item 3, twice: G7b's and A6b's tables). A
-  // FAIL row is *evidence*: `table` sorts it first and `status` calls the branch red, for
-  // a command that measured nothing.
-  // `rest` is every argument on either side of `--`, which is the point: a probe is the user
-  // asking how to spell something, so where they put the flag decides nothing. The answer is
-  // this script's own usage, because that is the file they were holding; the runner's own
-  // flags come from running the runner.
+  // A usage probe (`<gate> --help`, on either side of `--`) is answered before
+  // anything is resolved, launched or recorded: it must not become a red row.
   if (isUsageProbe(command, rest)) {
     process.stdout.write(USAGE);
     return 0;
@@ -2849,15 +2256,9 @@ async function main(argv) {
     return commandLogs({ branch, failedOnly, all });
   }
 
-  // A gate is a name in this table, not a shell command: passing through whatever
-  // arrived would make `gate.mjs rm -rf` a thing that works.
-  //
-  // `--background` is pulled out before the separator check, so both
-  // `harness:android --background -- ColdSizing` and its position after the gate
-  // name work; anything *after* `--` is left alone, because past the separator the
-  // arguments belong to the gate's own command line and are not ours to eat - with
-  // one exception: `--background` is this script's flag however it is spelled, and
-  // past the separator it is a usage error rather than a gate argument (X30 item 3).
+  // A gate is a name `resolveGate` knows, never a shell command passed through.
+  // `--background` is this script's own flag: accepted before the separator,
+  // a usage error after it.
   const separator = rest.indexOf('--');
   const ownArgs = separator === -1 ? rest : rest.slice(0, separator);
   const background =
@@ -2873,22 +2274,15 @@ async function main(argv) {
     );
     return 2;
   }
-  // Past the separator the arguments belong to the gate's own command line, so they
-  // are passed through untouched; before it, the flags this script owns are taken
-  // out - leaving `--background` in would reach `check` as an argument of its own,
-  // which it rightly refuses.
+  // Arguments after `--` go to the gate untouched; before it, this script's
+  // own flags are taken out.
   const extraArgs =
     separator === -1
       ? ownArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg))
       : rest.slice(separator + 1);
-  // X30 item 3. `--background` after the separator reads like the flag this script
-  // owns, and it used to travel to the runner as an argument of the gate: a
-  // `check`-style gate rejected it under its own name and a harness gate folded it
-  // into the suite suffix (`harness:android -- --background` is a gate named
-  // `harness:android:--background`), the suite went red on an option nobody runs,
-  // and the ledger recorded a verdict about code that was never measured. Past the
-  // separator there is no gate called `--background`, so this is a misplaced flag:
-  // answer it before a runner, a log file or a ledger line exists.
+  // `--background` after the separator would reach the gate as an argument
+  // and record a red run about nothing, so it is refused before a runner, a
+  // log file or a ledger line exists.
   if (separator !== -1) {
     const misplaced = extraArgs.filter((arg) => BACKGROUND_FLAGS.includes(arg));
     if (misplaced.length > 0) {
@@ -2911,11 +2305,10 @@ async function main(argv) {
     process.stderr.write(`gate: ${String(error?.message ?? error)}\n${USAGE}`);
     return 2;
   }
-  // X28: the lease is checked here rather than inside `runGate` so a backgrounded
-  // gate is refused in the shell that asked for it, instead of leaving a record and
-  // a log for a run that never touched a device.
-  // The disk is asked last: a run with no lease is the more useful thing to be told,
-  // and a full disk is true for every task on the machine rather than this one.
+  // Checked here, not in `runGate`, so a backgrounded gate is refused in the
+  // shell that asked for it instead of leaving a record and a log for a run
+  // that never started. The disk is asked last: a missing lease is the more
+  // useful thing to be told.
   const leaseBlock =
     deviceGateLeaseBlock(resolved, process.env) ??
     deviceGateDiskBlock(resolved, process.env);
@@ -2927,12 +2320,7 @@ async function main(argv) {
   return await runGate(resolved.gate, resolved, backgroundOptions());
 }
 
-/**
- * The log a detached run was told to write, read from the variable the launcher set.
- *
- * Only the path travels: `logPathsFor` turns it into the ledger's spelling and the
- * record path. Validation lives there too.
- */
+/** The log a detached run was told to write, from its launcher's variable. */
 function backgroundOptions(env = process.env) {
   const fromEnv = env.NITRO_UI_GATE_LOG;
   if (fromEnv == null || fromEnv === '') return {};

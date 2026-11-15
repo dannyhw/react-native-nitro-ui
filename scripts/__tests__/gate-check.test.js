@@ -1,13 +1,3 @@
-/**
- * What `check` records.
- *
- * `check` used to be one number ("3 m 04 s"), so a step that doubled in cost was
- * invisible until someone timed it by hand. The per-step breakdown in the ledger
- * line is what makes `gate.mjs table --full` answer "which step?", and these tests
- * pin that the breakdown arrives, is shaped, and is tolerant when it does not
- * arrive at all.
- */
-
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -51,7 +41,6 @@ describe('stepTimingsOf (what a ledger line carries)', () => {
   });
 
   it('drops entries that are not steps rather than rendering an empty row', () => {
-    // A blank duration reads like a step that took no time, which is a claim.
     expect(
       stepTimingsOf({
         stepTimings: {
@@ -180,7 +169,7 @@ describe('renderStepTimings (what `table --full` prints)', () => {
       gates: ['check'],
     });
     expect(out).toContain('a \\| b');
-    // One row, four cells: the escaped pipe is content, not a column separator.
+    // One row of four cells: the escaped pipe is not a column separator.
     const row = out.split('\n').find((line) => line.includes('`lint`'));
     expect(row.split(/(?<!\\)\|/)).toHaveLength(6);
   });
@@ -190,15 +179,10 @@ describe('renderStepTimings (what `table --full` prints)', () => {
 
 describe('TOOLING_FILES (X10, X26 additions)', () => {
   it.each([
-    // Each of these used to count as "both platforms", so a one-line change to a
-    // dev-only script owed four device runs. None of them can reach the app binary:
-    // they run checks, schedule them, or describe a device pool the app never sees.
-    // The lease pair is X26's: `lease.mjs` is a machine's own allocator, it ships in
-    // no package, and no app binary contains it - what it decides is *when* a run may
-    // start, which is the same argument that put `build-slot-core.mjs` on this list.
+    // None of these can reach the app binary: they run checks, schedule them, or
+    // describe a device pool the app never sees.
     'scripts/check.mjs',
     'scripts/check-steps.mjs',
-    // X34: the supervisor a gate's command runs under, listed with `gate.mjs` beside it.
     'scripts/gate-runner.mjs',
     'scripts/gen-registry.mjs',
     'scripts/registry-core.mjs',
@@ -207,34 +191,24 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     'scripts/sync-example-lock.mjs',
     'scripts/lease.mjs',
     'scripts/lease-core.mjs',
-    // X30: the hand-in checker, listed the same way and proven the same way below.
     'scripts/task-ready.mjs',
     'scripts/task-ready-core.mjs',
-    // The ESLint config, whose rules directory is already tooling: a commit turning
-    // one of them on was asking for two harness runs.
     'eslint.config.mjs',
-    // The worktree lister and the watchdog: they read the machine and are proven below.
     'scripts/worktrees.mjs',
     'scripts/worktrees-core.mjs',
     'scripts/watchdog.mjs',
     'scripts/watchdog-core.mjs',
-    // The task-record retention tool: it reads git and `docs/tasks`, proven below.
     'scripts/task-records.mjs',
     'scripts/task-records-core.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);
-    // ... and belongs to neither platform's half, which is what stops a lease change
-    // from re-owing two device runs on top of `check`.
     expect(platformsOwningFile(file)).toEqual([]);
   });
 
   it('task-ready is on the list because nothing a device run touches reads it', () => {
-    // The claim a TOOLING_FILES entry rests on is "no binary contains this", and the
-    // honest form of it is a search, not a sentence: X30's own commit had to be
-    // tested as "both platforms" until this pair was listed, because an unclaimed
-    // path under `scripts/` is the expensive answer by design. If a device run ever
-    // does start importing the checker, this goes red and the entry comes off.
+    // An entry on the list claims that no device run reads the file, so the claim is
+    // checked with a search.
     for (const file of [
       'scripts/task-ready.mjs',
       'scripts/task-ready-core.mjs',
@@ -261,31 +235,21 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
       { cwd: process.cwd(), encoding: 'utf8' }
     );
     expect(hits.status).toBe(0);
-    // Everything left after the tooling paths are subtracted. Round 1 searched four
-    // app directories and stopped at the edge of `scripts/`, which is exactly where a
-    // device runner lives — `scripts/harness.mjs` importing the checker would have
-    // looked clean. So the search now covers `scripts/` too and removes only what the
-    // same list already calls tooling, which is the checker's own files, its tests and
-    // the comment in `gate-core.mjs` that names them. What must remain is the npm
-    // script that runs it, and nothing else: no import, no require, no harness config,
-    // no app source, no runner (X30 fix round 1).
+    // The search covers `scripts/` too, where the device runners live, and removes only
+    // what the list already calls tooling. Only the npm script that runs the checker
+    // may remain.
     const readers = hits.stdout
       .trim()
       .split('\n')
       .filter((file) => file !== '' && !isToolingPath(file));
     expect(readers).toEqual(['package.json']);
-    // The widening is real: without the tooling paths, `scripts/` does answer, so a
-    // search that silently matched nothing there would not look different from this.
+    // The search does match inside `scripts/`, so an empty result is not a typo.
     expect(hits.stdout).toContain('scripts/task-ready.mjs');
   });
 
   it('nothing a device run starts imports the worktree lister, the watchdog or the task-record tool', () => {
-    // Same shape as the task-ready search above, for the same reason: a file on this
-    // list is trusted to need no device run, so "no runner reads it" is asked of git.
-    // `gate.mjs` names `scripts/worktrees.mjs` in a refusal message and is itself
-    // tooling, which is why the tooling paths are subtracted rather than expected empty.
-    // File names, not the bare word: `watchdog` alone also matches the native dwell
-    // probe, which has a watchdog of its own and nothing to do with this script.
+    // File names, not bare words: `watchdog` alone also matches the native dwell probe,
+    // which has a watchdog of its own.
     for (const needle of [
       'worktrees-core',
       'worktrees.mjs',
@@ -317,18 +281,14 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
         .split('\n')
         .filter((file) => file !== '' && !isToolingPath(file));
       expect({ needle, readers }).toEqual({ needle, readers: [] });
-      // The search does answer inside `scripts/`, so an empty result is not a typo.
+      // The search does match inside `scripts/`, so an empty result is not a typo.
       expect(hits.stdout).toContain('scripts/');
     }
   });
 
   it('gate-runner is on the list because nothing a device run touches reads it', () => {
-    // The same search as the checker's claim, because the same mistake is available here:
-    // `scripts/gate-runner.mjs` wraps every device gate's command, which *sounds* like something
-    // a device run depends on. It is not: it decides whether the run's processes come down when
-    // its gate dies, and it is in neither binary. If a runner, a harness config or an app file
-    // ever imports it, this goes red and the entry comes off — which is the right direction to
-    // fail in, because the cost of a wrong entry is a device run nobody had.
+    // `gate-runner.mjs` wraps every device gate's command, but it only decides whether the
+    // run's processes are stopped when the gate dies; no device run imports it.
     expect(isToolingPath('scripts/gate-runner.mjs')).toBe(true);
     expect(platformsOwningFile('scripts/gate-runner.mjs')).toEqual([]);
     const hits = spawnSync(
@@ -354,20 +314,14 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
       .trim()
       .split('\n')
       .filter((file) => file !== '' && !isToolingPath(file));
-    // Nothing outside the tooling list names it: not `harness.mjs`, not a runner, not the app.
     expect(readers).toEqual([]);
-    // And the search really does answer, so a `git grep` that silently matched nothing in
-    // `scripts/` cannot pass this by being empty. `gate.mjs` is the importer that must be there:
-    // the supervisor exists to be started by it, and it is tooling too, so it belongs to no half.
+    // `gate.mjs` is the importer that must be found, so the search cannot pass by matching
+    // nothing.
     expect(hits.stdout).toContain('scripts/gate.mjs');
     expect(hits.stdout).toContain('scripts/gate-core.mjs');
   });
 
   it('a commit that only changes the checker re-owns check and no device run', () => {
-    // The X30 consequence, stated as behaviour rather than as membership: before the
-    // pair was listed this diff was *unmapped* code - the expensive answer, both
-    // platforms - so a round that touched nothing but the hand-in checker owed two
-    // harness runs no device needed and its task was not allowed to run.
     const touched = platformsTouchedByPaths([
       'scripts/task-ready.mjs',
       'scripts/task-ready-core.mjs',
@@ -383,21 +337,16 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
   });
 
   it('a gate run under the supervisor lands the same evidence as one without', () => {
-    // The wiring, end to end: `gate.mjs` starts its command through `gate-runner.mjs`, so the
-    // supervisor's own exit code and the command's stdout have to arrive unchanged — a wrapper that
-    // swallowed the exit code would turn every red gate green, and a wrapper that lost the output
-    // would empty every ledger line's test counts. The two assertions below are exactly those two
-    // things, on the same fixture run the timing cases above rely on.
+    // `gate.mjs` starts its command through `gate-runner.mjs`, so the command's exit code and
+    // stdout have to arrive unchanged.
     const dir = makeRepo();
     const store = path.join(dir, 'store');
     const run = runCli(
       dir,
       ['check'],
       { NITRO_UI_GATE_LOG_STORE: store },
-      // Asked of the kernel, not reported by the wrapper: which group is the *command* in, and what
-      // did the gate tell the supervisor about itself. `$$` is this script's own pid, and its group
-      // is the answer to "who could `kill(-pgid)` reach" — the group `ownMetroPids` attributes a
-      // leftover Metro by, and the group the gate's signal handlers aim at.
+      // The command reports its own process group (`$$` is the script's pid) and what the
+      // gate told the supervisor about itself.
       'echo "supervisor: pgid=$(ps -o pgid= -p $$ | tr -d \" \") of=${NITRO_UI_GATE_RUNNER_OF:-none} gate=${NITRO_UI_GATE_RUNNER_GATE:-none}"'
     );
     expect(run.status).toBe(0);
@@ -405,7 +354,6 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     expect(run.stdout).toContain('Tests: 665 passed, 665 total');
     const [line] = ledgerIn(dir, 'task/x10-check-throughput');
     expect(line).toBeTruthy();
-    // The command's counts still reached the ledger, through the supervisor's stdios.
     expect(line.counts.suites).toEqual({ passed: 33, total: 33 });
 
     const reported = /pgid=(\d+) of=(\d+) gate=(\S+)/.exec(run.stdout);
@@ -421,15 +369,13 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     );
     expect(fs.existsSync(sidecarFile)).toBe(true);
     const sidecar = JSON.parse(fs.readFileSync(sidecarFile, 'utf8'));
-    // THE claim, in the fixture that runs the real `gate.mjs`: the group the command is living in is
-    // the group the supervisor wrote down — which is the number `gate.mjs` got from its own spawn,
-    // so a server the command leaves behind is attributable, and sweepable, by a gate that is still
-    // alive. Start the command in a group of its own and this is the line that goes red.
+    // The process group the command runs in is the one the supervisor recorded, so anything
+    // the command leaves behind can be found and stopped by that group.
     expect(sidecar.group).toBe(commandGroup);
     expect(sidecar.gatePid).toBe(gatePid);
     expect(sidecar.gate).toBe('check');
     expect(sidecar.logPath).toBe(line.logPath);
-    // A finished run records no sweep: there was nothing to sweep.
+    // A run that finished by itself records no sweep.
     expect(sidecar.stopped).toBeUndefined();
   });
 
@@ -440,8 +386,6 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
   });
 
   it('what a device run really depends on is still mapped', () => {
-    // The other half of the claim: `build-app.mjs` takes the slot, so it stays
-    // both-platforms even though `build-slot-core.mjs` next to it does not.
     for (const file of [
       'scripts/build-app.mjs',
       'scripts/harness.mjs',
@@ -462,15 +406,9 @@ afterAll(() => {
 });
 
 /**
- * The environment every git call in this file makes runs with.
- *
- * `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR` and
- * `GIT_OBJECT_DIRECTORY` are inherited by every child process, and they *win* over `cwd` - so a
- * suite that runs `git commit`/`checkout`/`merge` with them set (a git hook, `submodule foreach`, a
- * wrapper script) acts on whoever set them. The X10 review reproduced exactly that: running one of
- * these tests with `GIT_DIR` pointed at a victim repo wrote a `base` commit into it and switched its
- * branch. These are the repo's first tests that mutate a repository, so the variables are removed
- * rather than passed through, and `gitIn` additionally asserts which repository it is talking to.
+ * The environment every git call in this file runs with. `GIT_DIR`, `GIT_WORK_TREE` and
+ * their relatives are inherited by child processes and win over `cwd`, so they are removed:
+ * with them set (by a git hook, say) these tests would commit into someone else's repository.
  */
 function gitEnv(dir) {
   const env = { ...withoutLeaseEnv(process.env) };
@@ -511,9 +449,8 @@ function gitIn(dir, args) {
 }
 
 /**
- * Runs a mutating git command, and refuses to if the repository it would reach is not this test's
- * own temp checkout. `--show-toplevel` is asked with the same environment as the command itself, so
- * a `GIT_DIR` that would redirect the command also fails this check instead of going unnoticed.
+ * Runs a mutating git command, and refuses to if the repository it would reach is not this
+ * test's own temp checkout.
  */
 function gitInTempRepo(dir, args) {
   const toplevel = gitIn(dir, ['rev-parse', '--show-toplevel']);
@@ -528,10 +465,8 @@ function gitInTempRepo(dir, args) {
 
 describe('the git helpers cannot be pointed at another repository (N1)', () => {
   it('strips every environment variable that overrides cwd', () => {
-    // The variables git obeys *instead of* cwd. Asserting they are absent only tests anything if
-    // something put them there first, so the process environment is poisoned for the duration - with
-    // a *different* repository, so an environment that failed to strip them answers about the wrong
-    // checkout and this goes red rather than passing by coincidence.
+    // The process environment is pointed at a different repository for the duration, so an
+    // environment that failed to strip the variables answers about the wrong checkout.
     const dir = makeRepo();
     const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-elsewhere-'));
     try {
@@ -555,8 +490,8 @@ describe('the git helpers cannot be pointed at another repository (N1)', () => {
         for (const name of Object.keys(poisoned)) {
           expect(gitEnv(dir)[name]).toBeUndefined();
         }
-        // One question, two environments: the helper's answers about `dir`; the inherited one is
-        // talking about the other checkout, which is the whole hazard.
+        // The helper's environment answers about `dir`; the inherited one answers about the
+        // other checkout.
         expect(gitIn(dir, ['rev-parse', '--show-toplevel'])).toBe(
           fs.realpathSync(dir)
         );
@@ -578,10 +513,6 @@ describe('the git helpers cannot be pointed at another repository (N1)', () => {
   });
 
   it('a redirected git really does reach the victim, and gitEnv stops it', () => {
-    // Both halves in one test, which is the red proof. Left half: the environment wins over `cwd`, so
-    // the naive `{...process.env}` the review flagged commits into an unrelated repo - asserted here
-    // so the scenario cannot rot into fiction. Right half: the helper's environment runs the same
-    // command against the caller's directory instead, leaving the victim's history alone.
     const victim = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-victim-'));
     const caller = makeRepo();
     try {
@@ -591,8 +522,8 @@ describe('the git helpers cannot be pointed at another repository (N1)', () => {
       gitIn(victim, ['commit', '-qm', 'victim base']);
       const before = gitIn(victim, ['rev-parse', 'HEAD']);
 
-      // `cwd` is the caller and the commit still lands in the victim: GIT_DIR chooses the repository,
-      // and a mutating command through `cwd` is not enough to stay in your lane.
+      // `cwd` is the caller, and the commit still lands in the victim: `GIT_DIR` chooses the
+      // repository.
       const redirect = {
         ...gitEnv(caller),
         GIT_DIR: path.join(victim, '.git'),
@@ -605,8 +536,8 @@ describe('the git helpers cannot be pointed at another repository (N1)', () => {
       expect(naive.status).toBe(0);
       expect(gitIn(victim, ['rev-parse', 'HEAD'])).not.toBe(before);
 
-      // The helper's environment cannot be redirected this way, because it does not carry the
-      // variable at all, so the same mutating call stays in the caller's checkout.
+      // The helper's environment does not carry the variable, so the same call stays in the
+      // caller's checkout.
       expect(gitEnv(caller).GIT_DIR).toBeUndefined();
       expect(gitIn(caller, ['rev-parse', '--show-toplevel'])).toBe(
         fs.realpathSync(caller)
@@ -617,9 +548,8 @@ describe('the git helpers cannot be pointed at another repository (N1)', () => {
       ).not.toThrow();
       expect(gitIn(victim, ['rev-parse', 'HEAD'])).toBe(victimHead);
 
-      // And the toplevel assertion below the guard is not decoration: with `GIT_WORK_TREE` pointing
-      // elsewhere, that is exactly what `--show-toplevel` reports - the victim - which is the
-      // condition `gitInTempRepo` throws on rather than acting.
+      // With `GIT_WORK_TREE` pointing elsewhere, `--show-toplevel` reports the victim, which is
+      // the condition `gitInTempRepo` throws on.
       const moved = spawnSync('git', ['rev-parse', '--show-toplevel'], {
         cwd: caller,
         encoding: 'utf8',
@@ -633,9 +563,9 @@ describe('the git helpers cannot be pointed at another repository (N1)', () => {
 });
 
 /**
- * A checkout with one code file, a `main`, and a task branch - the smallest thing
- * `gate.mjs` will run in. `.gates/` is gitignored here as it is in the real repo,
- * or the ledger's own logs count as code and every line reads stale.
+ * A checkout with one code file, a `main`, and a task branch: the smallest thing
+ * `gate.mjs` will run in. `.gates/` is gitignored, or the ledger's own logs would count as
+ * code and every line would read stale.
  */
 function makeRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x10-gate-'));
@@ -657,14 +587,9 @@ function makeRepo() {
 }
 
 /**
- * A fake `bun run check` that behaves like the real runner's contract with the
- * ledger: it writes the per-step timings `NITRO_UI_CHECK_STEPS_FILE` names, and it
- * prints a Jest summary. `FAKE_CHECK_NO_STEPS_FILE=1` leaves it out, which is the
- * case that must stay green.
- *
- * `hook` is extra shell run before the exit, for the tests that need the tree to move
- * *during* a run. It has to go here rather than in a script a test writes first,
- * because `runCli` calls this function and would otherwise overwrite it.
+ * A fake `bun run check`: it writes the per-step timings to the file
+ * `NITRO_UI_CHECK_STEPS_FILE` names (unless `FAKE_CHECK_NO_STEPS_FILE=1`) and prints a Jest
+ * summary. `hook` is extra shell run before the exit.
  */
 function fakeBin(dir, hook = '') {
   const bin = path.join(dir, 'fake-bin');
@@ -688,14 +613,8 @@ function fakeBin(dir, hook = '') {
 }
 
 /**
- * The lease this suite's runs are sourced with, and the store that backs it (X28).
- *
- * `harness:ios` here is a device gate, and a device gate now refuses to start unless
- * the store named by `NITRO_UI_HOME` holds the lease its environment names — so a
- * suite that names a device without one gets exit 1 and no ledger line, which is not
- * what these tests are about. The store lives in the fixture rather than at the
- * machine's `~/.nitro-ui` for the same reason: the CLI used to read the real one, and
- * what another task had leased is not this suite's business.
+ * The lease this suite's runs use. A device gate refuses to start unless the store named by
+ * `NITRO_UI_HOME` holds the lease its environment names, so the fixture has its own store.
  */
 const FIXTURE_LEASE = leaseRecord({
   id: 'X10-1',
@@ -706,8 +625,8 @@ const FIXTURE_LEASE = leaseRecord({
 function fixtureLeaseEnv(dir) {
   const home = path.join(dir, 'state');
   writeLeaseStore(home, { leases: [FIXTURE_LEASE] });
-  // `FREE_LSOF` because leasing a pair exports its Metro port, and the pre-flight then
-  // asks the kernel about it — on this machine that is another task's Metro.
+  // `FREE_LSOF`: a lease exports its Metro port, and the pre-flight would otherwise ask the
+  // real machine whether that port is in use.
   return {
     ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: FIXTURE_LEASE }),
     ...FREE_LSOF,
@@ -720,8 +639,6 @@ function runCli(dir, args, extraEnv = {}, hook = '') {
     cwd: dir,
     encoding: 'utf8',
     timeout: 120_000,
-    // Same reason as `gitEnv`: the CLI runs git in `dir`, and an inherited GIT_DIR
-    // would send it somewhere else.
     env: {
       ...gitEnv(dir),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
@@ -777,20 +694,16 @@ describe('gate.mjs check records the step timings', () => {
       ['test', 'pass'],
       ['lint', 'pass'],
     ]);
-    // The unit-test summary is still what the row reports (M3), next to the steps.
     expect(line.counts.tests.total).toBe(665);
 
     const table = runCli(dir, ['table', '--for', 'merge', '--full']);
     expect(table.stdout).toContain('### `check` steps - 4 job(s)');
     expect(table.stdout).toContain('| `test` | **PASS** | 2 m 27 s | — |');
-    // Without --full the report's table stays the short one a reviewer reads.
     const short = runCli(dir, ['table', '--for', 'merge']);
     expect(short.stdout).not.toContain('### `check` steps');
   }, 60_000);
 
   it('a check with no timing file is still green', () => {
-    // The breakdown is a report on the run, not evidence about it: a runner that
-    // could not write it must not turn a passing gate red.
     const dir = makeRepo();
     const run = runCli(dir, ['check'], { FAKE_CHECK_NO_STEPS_FILE: '1' });
     expect(run.status).toBe(0);
@@ -801,9 +714,7 @@ describe('gate.mjs check records the step timings', () => {
   }, 60_000);
 
   it('a check that reports zero steps is a fail, not a silent pass (M3)', () => {
-    // The other half of the entry-guard bug: a runner that exits 0 having started
-    // nothing writes an empty step list, and from here that looked like a green run.
-    // An empty list is now evidence of the opposite.
+    // A runner that exits 0 having started nothing writes an empty step list.
     const dir = makeRepo();
     const run = runCli(dir, ['check'], {
       FAKE_CHECK_STEPS_JSON: '{"version":1,"jobs":4,"wallMs":12,"steps":[]}',
@@ -812,7 +723,7 @@ describe('gate.mjs check records the step timings', () => {
     expect(run.stderr).toContain('reported no steps');
     const [line] = ledgerIn(dir, 'task/x10-check-throughput');
     expect(line.result).toBe('fail');
-    // The breakdown is still recorded, because it is the proof of the emptiness.
+    // The empty breakdown is still recorded.
     expect(stepTimingsOf(line)).toEqual([]);
     expect(line.stepTimings).not.toBeNull();
   }, 60_000);
@@ -838,8 +749,6 @@ describe('gate.mjs check records the step timings', () => {
 
 describe('the runner and the ledger agree on the step list', () => {
   it('the gate ledger and the runner read the same tooling list file', () => {
-    // `scripts/check.mjs` is on the allow-list, and it is the thing `check` runs, so
-    // editing it must not owe device gates - that is the point of X10's item 4.
     expect(isToolingPath('scripts/check.mjs')).toBe(true);
     expect(fs.existsSync(CHECK_STEPS)).toBe(true);
   });

@@ -1,22 +1,13 @@
 /**
- * The harness's Jest config.
- *
- * `__tests__/isolated/` holds suites that must run in an app instance of their own -
- * a case that, if it regressed, would break every file after it in the same process
- * (G14's stranded-Modal hazard, DECISIONS D35 item 5). The shared run never sees them;
- * `NITRO_UI_HARNESS_ISOLATED=1` runs only them:
- *
- *   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- BottomSheetModalHazard
+ * The harness's Jest config. `__tests__/isolated/` holds suites that must run in an app
+ * instance of their own; `NITRO_UI_HARNESS_ISOLATED=1` runs only them.
  */
 const isolated = process.env.NITRO_UI_HARNESS_ISOLATED === '1';
 
 /*
  * The exclusion is a negated `testMatch` glob, not `testPathIgnorePatterns`:
- * `react-native-harness` passes its own `--testPathIgnorePatterns` (for
- * platform-suffixed files), and a CLI flag replaces the config's list - so an
- * ignore pattern here was dropped, and the shared run ran `__tests__/isolated/`
- * after all (G14 fix round 1). The negation comes after the pattern it narrows,
- * as Jest's globs require.
+ * `react-native-harness` passes its own `--testPathIgnorePatterns`, and a CLI flag
+ * replaces the config's list. The negation must come after the pattern it narrows.
  */
 export default {
   preset: 'react-native-harness',

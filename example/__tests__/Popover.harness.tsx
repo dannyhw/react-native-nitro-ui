@@ -1,31 +1,3 @@
-/**
- * On-device tests for Popover (task G22, DECISIONS D44).
- *
- * A popover is a window the harness cannot tap into (H9/H10), so - as for Tooltip and
- * BottomSheet - these tests read three honest channels and drive the control through
- * seams that run the real paths:
- *
- *  - `hybridRef.nuiTestStateReport()`: what each platform actually built (the
- *    `UIPopoverPresentationController` on iOS, the composed `Popup` on Android), plus
- *    the process-wide counts that survive a drop (`live`, iOS `controllers`/`windows`/
- *    `touchRoots`, Android `roots`/`lifecycleObservers`), read through a mount that is
- *    still alive because a dropped one has nothing left to say;
- *  - the content's own `onLayout` and mount/unmount, which is Yoga's answer to "what
- *    box did native get" - the one number the no-measuring design is built on;
- *  - the events that reached JS, in order.
- *
- * The first block is the brief's headline claim: the first frame *is* the final size.
- * The witness is not an assertion about timing but a count of distinct drawn sizes
- * (iOS samples the presentation's layer every frame; Android watches its own
- * `OnDrawListener`), so a popover that resized and settled would show two sizes even
- * though its last frame looks right. The fixtures are deliberately not square and not
- * round numbers, and `contentWaits`/`firstDrawMs` say how long native waited for the
- * box, which is what a regression to "ask UIKit first" would move.
- *
- * The stranded-`Modal` hazard is *not* here: a run that reproduced it would leave RN's
- * `Modal` host over the app for every file after this one, so it lives in
- * `__tests__/isolated/PopoverModalHazard.harness.tsx`, which runs in its own app.
- */
 import { useEffect, useState } from 'react';
 import { Modal, Platform, View } from 'react-native';
 import {
@@ -44,7 +16,6 @@ import {
 } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
 
-/** What `hybridRef` hands back - declared, not imported (D14). */
 type PopoverHandle = {
   readonly presented: boolean;
   readonly mostRecentEventCount: number;
@@ -62,7 +33,6 @@ const captureHybrid =
     handles.set(testId, view);
   };
 
-/** A `BottomSheet`/`Tooltip` mount, for the fixtures that share a screen with one. */
 type SheetHandle = { nuiTestStateReport(): string };
 type TipHandle = { nuiTestStateReport(): string };
 const sheets = new Map<string, SheetHandle>();
@@ -115,11 +85,7 @@ function Content({
   );
 }
 
-/**
- * Content that has no box until `delayMs` after it mounts. The one shape of content that
- * can outlast native's wait for a layout: a lazy list, an image that sizes its own box, a
- * `Suspense` boundary that resolves after the popover was asked for.
- */
+/** Content that has no box until `delayMs` after it mounts. */
 function LateContent({
   testId,
   width,
@@ -153,10 +119,7 @@ function LateContent({
   );
 }
 
-/**
- * Content whose own height a test changes while the popover is up: the resize D44's
- * "the popover follows its content" claim is about, told from the content's side.
- */
+/** Content whose own height a test changes while the popover is up. */
 function GrowingContent({
   testId,
   width,
@@ -191,8 +154,7 @@ function GrowingContent({
 
 /**
  * A popover whose `isPresented` lives in a parent, as an app's would. `refuse` makes the
- * parent ignore every close (D33); `uncontrolled` leaves `onIsPresentedChange` off
- * altogether, which is the same refusal told from the other API.
+ * parent ignore every close; `uncontrolled` leaves `onIsPresentedChange` off altogether.
  */
 function Stage({
   testId,
@@ -258,10 +220,7 @@ function Stage({
   );
 }
 
-/**
- * A tooltip whose `isPresented` lives in a parent, exactly as `Stage` holds a popover's -
- * the pair fixture needs the two controls opened and closed by the same kind of hand.
- */
+/** A tooltip whose `isPresented` lives in a parent, as `Stage` holds a popover's. */
 function TipStage({ testId }: { testId: string }) {
   const [open, setOpen] = useState(false);
   setters.set(testId, setOpen);
@@ -369,9 +328,8 @@ async function waitForReport(
 }
 
 /**
- * Poll for a report built *after this call*. iOS returns the report it built last and
- * asks the main thread for the next, so a read made now can still describe the moment
- * before; `seq` says which build it is, so only a later one is accepted (G14's rule).
+ * Poll for a report built after this call. iOS returns the report it built last and asks
+ * the main thread for the next, so only a report with a higher `seq` is accepted.
  */
 async function waitForFreshReport(
   testId: string,
@@ -388,11 +346,7 @@ async function waitForFreshReport(
   );
 }
 
-/**
- * The same two questions of a handle that is not a popover's - a `BottomSheet`'s or a
- * `Tooltip`'s, for the fixtures that share a screen with one. Same report shape, same rule
- * about only believing a build newer than the one you read.
- */
+/** The same reads for a `BottomSheet`'s or a `Tooltip`'s handle. */
 function reportOfHandle(
   map: Map<string, { nuiTestStateReport(): string }>,
   testId: string
@@ -476,14 +430,7 @@ async function waitForUnmount(testId: string, count: number, what: string) {
 
 /**
  * The popover is up: the handshake says presented, the platform says the window is
- * there, and the presentation has been counted once. `asked` is the box native was
- * given, which is the number every size claim below is checked against.
- */
-/**
- * The popover is up: the handshake says presented, the platform says the window is
- * there, and the presentation has been counted once. Asking for the count too is what
- * keeps a caller from reading the one report where the window is up and the counter has
- * not moved yet.
+ * there, and the presentation has been counted once.
  */
 const isUp = (report: Report) =>
   report.presented === '1' &&
@@ -493,11 +440,8 @@ const isUp = (report: Report) =>
   num(report, 'presentCount') >= 1;
 
 /**
- * Nothing of this popover is on screen. `onScreen` is not the same claim on both
- * platforms - Android's is "React asked for this" (`model.presented`, in
- * `nuiTestStateReport`), iOS's is "the presentation is up" (`popoverIsUp`) - so each half
- * names what its own platform witnesses instead: no counted presentation, and no window of
- * the popover's to point at.
+ * Nothing of this popover is on screen. `onScreen` means "React asked for this" on Android
+ * and "the presentation is up" on iOS, so each platform checks its own fields.
  */
 const nothingUp = (report: Report) =>
   num(report, 'presentCount') === 0 &&
@@ -519,11 +463,9 @@ async function waitForUp(testId: string, timeoutMs = 10000): Promise<Report> {
 }
 
 /**
- * A report whose *drawn-size witness has finished*: iOS runs its display-link sampler for
- * a second after the present and publishes once more when it stops, and Android has seen
- * its popup draw twice. The report that first says "up" is built before either platform
- * has sampled a frame, so sizes read off it describe no witness at all — the failure that
- * came back as `expected [] to have a length of 1`.
+ * A report taken after the drawn sizes have been sampled: iOS samples frames for a second
+ * after the present, and Android has to have seen its popup draw twice. The first report
+ * that says "up" is built before any frame was sampled.
  */
 async function waitForDrawnSample(
   testId: string,
@@ -552,15 +494,8 @@ async function probe(): Promise<string> {
 
 /**
  * Nothing of any popover is left anywhere: no presentation counted, no window, and on
- * iOS no controller and no touch root beyond the baseline the probe read at the start.
- *
- * Android's `lifecycleObservers` is deliberately *not* part of the claim. It is the
- * Activity's own `LifecycleRegistry` count, and no view in this library has ever added an
- * observer to it — the whole Android suite runs on the number going up as the app mounts
- * anything, which is a claim about RN, not about a popover. It stays in the report as a
- * diagnostic (`live` and `roots` are Popover's own counters and are what the drop rule
- * needs); a full-suite run is what showed the difference, with `live=0;roots=0` sitting in
- * the same report as an observer count 13 higher than a five-rounds-older baseline.
+ * iOS no controller and no touch root beyond the baseline. Android's `lifecycleObservers`
+ * is not compared: it is the Activity's own count and rises as the app mounts anything.
  */
 const nothingLeft = (baseline: Report) => (report: Report) =>
   report.live === '0' &&
@@ -668,9 +603,8 @@ describe('Popover', () => {
   });
 
   describe('the first frame is the final size (D44)', () => {
-    // The content sizes itself: the box is the content's own width, capped, so the two
-    // capped fixtures ask for *more* than their cap rather than for `100%` of a popover
-    // that has no width of its own until the content has given it one.
+    // The two capped fixtures ask for more than their cap, not for `100%`: a popover has
+    // no width of its own until its content gives it one.
     const fixtures: {
       name: string;
       width: number;
@@ -704,8 +638,6 @@ describe('Popover', () => {
         );
         const up = await waitForDrawnSample(id);
         const scale = scaleOf(up);
-        // The content lives where the popover is, not where the anchor is: the node
-        // stays behind as the anchor's neighbour and its one child is what native moves.
         expect(num(up, 'children')).toBe(1);
         requireYes(
           up,
@@ -713,16 +645,12 @@ describe('Popover', () => {
           'the content moved into the popover'
         );
         const asked = askedPx(up);
-        // What native asked for *is* what Yoga laid out: no measuring, no guessing, and
-        // no platform default in between — except where the content asked for more than
-        // the cap, which is the one case the cap exists to catch.
+        // What native asked for is what Yoga laid out, capped at `maxWidth`.
         const cap = num(up, 'maxWidth');
         expect(
           Math.abs(num(up, 'askedW') - Math.min(box.width, cap))
         ).toBeLessThanOrEqual(1);
         expect(Math.abs(num(up, 'askedH') - box.height)).toBeLessThanOrEqual(1);
-        // And the cap is the one the wrapper promised: never wider than `maxWidth`,
-        // never wider than the window less its margins.
         expect(cap).toBeLessThanOrEqual((fixture.maxWidth ?? 320) + 1);
         expect(num(up, 'askedW')).toBeLessThanOrEqual(cap + 1);
         expect(
@@ -737,17 +665,12 @@ describe('Popover', () => {
         expect(isSize(seen.distinct[0] ?? '', asked.w, asked.h)).toBe(true);
         expect(isSize(seen.first, asked.w, asked.h)).toBe(true);
         expect(isSize(seen.last, asked.w, asked.h)).toBe(true);
-        // The witness saw more than the one frame it asserts on, so "one size" is a
-        // statement about a run of frames rather than about a single sample.
+        // "One size" has to cover more than a single sampled frame.
         expect(num(up, IOS ? 'visibleFrames' : 'draws')).toBeGreaterThan(1);
         expect(num(up, 'presentCount')).toBe(1);
-        // Native waited for a layout, and got one at once: a present that went out before
-        // Yoga had sized anything is the regression this number is here to catch. iOS
-        // counts its polling turns and stops asking at 60; Android counts the compositions
-        // it refused to build a popup from, which a healthy mount needs none or one of.
+        // iOS counts its polling turns for a layout (it stops at 60); Android counts the
+        // compositions it refused to build a popup from.
         expect(num(up, 'contentWaits')).toBeLessThan(IOS ? 12 : 24);
-        // The same numbers, printed: `bench: false` means no bench row is minted for a
-        // popover, and the first-frame claim has to be carried by the run that measures it.
         console.log(
           `first frame "${fixture.name}": asked=${String(asked.w)}x${String(
             asked.h
@@ -766,8 +689,7 @@ describe('Popover', () => {
       (r) => r.raw !== '' && r.live === '0',
       'a baseline with nothing up'
     );
-    // 400 dp of content with no useful `maxWidth`: the only thing left to cap it with is
-    // the window less its margins, and the box native asks for is that, not the 400.
+    // With no useful `maxWidth`, the cap is the window less its margins.
     const wide = 'cap-wide';
     await render(
       <Stage testId={wide} initial maxWidth={4000} width={400} height={70} />
@@ -799,11 +721,8 @@ describe('Popover', () => {
   });
 
   it('presents content that sizes itself after native stopped waiting', async () => {
-    // Both platforms refuse to ask for a popover at no size, and both wait a bounded
-    // number of turns for the box: iOS counts the turns and then stands down, Android
-    // composes on the layout that finally comes. A box that arrives *after* the wait is
-    // the case the wait cannot answer by waiting longer - iOS used to stand down for
-    // good, and the app was left with `isPresented` true and nothing on screen.
+    // Both platforms wait a bounded number of turns for a box before presenting. This
+    // box arrives after that wait.
     const id = 'late-box';
     await render(
       <Stage testId={id} initial>
@@ -811,8 +730,8 @@ describe('Popover', () => {
       </Stage>
     );
     await requireHandle(id);
-    // Past iOS's 60 turns (~1 s) and before the box: still nothing up, and the ask is
-    // not withdrawn - the app still wants the popover.
+    // Past iOS's 60 turns (about 1 s) and before the box: nothing is up, and the ask
+    // still stands.
     await sleep(1700);
     const waiting = reportOf(id);
     expect(waiting.presented).toBe('1');
@@ -831,11 +750,7 @@ describe('Popover', () => {
   });
 
   it('follows the content when it resizes while the popover is up', async () => {
-    // `docs/components/popover.md` promises a popover that grows with its content, and the
-    // promise is one write per platform: iOS moves `preferredContentSize`, Android re-composes
-    // the popup at the new box. Two witnesses each, because the number the platform was
-    // *told* and the frame it *drew* are different claims - a write that never reaches the
-    // window is exactly the bug a single assertion would miss.
+    // Two checks per platform: the size the platform was told, and the frame it drew.
     const id = 'grows';
     const width = 180;
     const grownHeight = 208;
@@ -853,8 +768,8 @@ describe('Popover', () => {
     const up = await waitForUp(id);
     expect(num(up, 'presentCount')).toBe(1);
     expect(Math.abs(num(up, 'askedH') - 92)).toBeLessThanOrEqual(1);
-    // `prefH` is the number UIKit was given; `viewH` is UIKit's own view, which it is free
-    // to round, so what the popover does with it is measured as a delta further down.
+    // `prefH` is the number UIKit was given. UIKit may round its own `viewH`, so that is
+    // compared as a delta further down.
     const beforeViewH = IOS ? num(up, 'viewH') : 0;
     if (IOS) {
       expect(Math.abs(num(up, 'prefH') - 92)).toBeLessThanOrEqual(1);
@@ -868,9 +783,8 @@ describe('Popover', () => {
     );
     const scale = scaleOf(up);
     const grownPx = Math.round(grownHeight * scale);
-    // The live number each platform holds differs by more than its name: Android's `askedH`
-    // is the content box as it stands, iOS's is `sizeAtPresent` - the box the present happened,
-    // which never moves - and the number iOS is *currently* told is `prefH`.
+    // Android's `askedH` follows the content. iOS's is the box at present time and never
+    // moves; its live number is `prefH`.
     const grownReport = await waitForFreshReport(
       id,
       (r) =>
@@ -882,18 +796,16 @@ describe('Popover', () => {
       'the popover at the content height it grew to',
       12000
     );
-    // The frame the window drew moved with it, and this is still the same presentation: a
-    // resize that took the popover down and put it back would pass the two lines above.
+    // The drawn frame moved too, and it is still the same presentation: a resize that
+    // closed and reopened the popover would also reach the new size.
     const last = drawn(grownReport).last.split('x').map(Number);
     expect(Math.abs((last[1] ?? 0) - grownPx)).toBeLessThanOrEqual(2);
     const box = rectOf(grownReport.popRect);
     expect(box).not.toBeNull();
     expect(Math.abs(box!.height - grownPx)).toBeLessThanOrEqual(2);
     expect(num(grownReport, 'presentCount')).toBe(1);
-    // And this mount still owns a presentation: the witnesses are its own, not the
-    // process-wide `live`, which iOS only moves when UIKit's entry transition *ends* -
-    // measured here at `live=0` beside `onScreen=1;windows=1;controllers=1`, because a
-    // popover grown as fast as this one grows is still animating in.
+    // This mount's own fields, not the process-wide `live`: iOS only raises `live` when
+    // UIKit's entry transition ends, and this popover can still be animating in.
     requireYes(grownReport, 'onScreen', 'the grown popover is still on screen');
     requireYes(
       grownReport,
@@ -906,9 +818,8 @@ describe('Popover', () => {
     const below = 'place-below';
     await render(<Stage testId={below} initial />);
     await requireHandle(below);
-    // Where the popover landed is a later fact than that it is up: the platform knows the
-    // window before it knows the frame it was given, so this waits for the report that has
-    // both rather than reading a report that is only half a presentation.
+    // The platform reports the window before the frame it was given, so wait for a report
+    // that has both.
     const up = await waitForReport(
       below,
       (r) => isUp(r) && rectOf(r.popRect) != null,
@@ -933,11 +844,8 @@ describe('Popover', () => {
         Math.abs(popup!.x + popup!.width / 2 - (anchor!.x + anchor!.width / 2))
       ).toBeLessThan(Math.max(anchor!.width, 40) + 24);
     } else {
-      // Our own provider: below the anchor, start-aligned — where "start" is the anchor's
-      // own edge unless the window margin is closer: the fixture's anchor sits at x=0, and
-      // content that hung over the edge of the screen is the one thing the margin exists
-      // to prevent, so the provider pulls the popup in to 16 dp. Asserting the anchor's x
-      // exactly would call that a bug.
+      // Below the anchor and start-aligned, pulled in to the 16 dp window margin when the
+      // anchor sits at the edge, as this one does.
       expect(popup!.y).toBeGreaterThanOrEqual(anchor!.y + anchor!.height - 2);
       expect(
         Math.abs(popup!.x - Math.max(anchor!.x, 16 * scale))
@@ -985,8 +893,6 @@ describe('Popover', () => {
       expect(eventLog).toEqual(['close:presented:false', 'close:dismiss']);
       expect(reportOf('close').userDismissals).toBe('1');
       expect(reportOf('close').unasked).toBe('0');
-      // The count went up: JS is expected to echo it, and the wrapper's
-      // `mostRecentEventCount` is what native then accepts a `presented` write from.
       expect(handles.get('close')?.mostRecentEventCount).toBe(1);
       await waitForUnmount('close', 1, 'its content unmounted');
     });
@@ -1003,16 +909,12 @@ describe('Popover', () => {
         'up again (presentCount=2)',
         12000
       );
-      // The content never left: the app never stopped asking for the popover, so the
-      // wrapper had no reason to unmount it.
+      // The app never stopped asking for the popover, so its content never unmounted.
       expect(unmounts.get('refuse') ?? 0).toBe(0);
       expect(again.userDismissals).toBe('1');
     });
 
     it('presents again when nothing is listening for the close', async () => {
-      // The same refusal told from the other API: an app that passes no
-      // `onIsPresentedChange` cannot be blamed for the state it was never told about,
-      // and the popover still must not go out of step with `isPresented`.
       await render(<Stage testId="unheard" initial uncontrolled />);
       await requireHandle('unheard');
       await waitForUp('unheard');
@@ -1024,9 +926,8 @@ describe('Popover', () => {
         12000
       );
       expect(again.userDismissals).toBe('1');
-      // Nothing reached JS as a *close* it could answer — that is what `uncontrolled`
-      // means — while the presentation that ended still reported its dismiss, and the
-      // event count moved so the next `isPresented` is not refused as stale.
+      // With no listener no close reaches JS, but the dismiss is still reported and the
+      // event count still moves, so the next `isPresented` is not refused as stale.
       await waitForEvent('unheard:dismiss', 12000);
       expect(eventLog.filter((e) => e.startsWith('unheard:'))).toEqual([
         'unheard:dismiss',
@@ -1040,10 +941,8 @@ describe('Popover', () => {
       await waitForUp('withdraw');
       clearEvents();
       setters.get('withdraw')?.(false);
-      // A change React asked for is not a native interaction: the app gets no
-      // `onIsPresentedChange` back for its own write (D33). The dismiss is the only event,
-      // and it arrives when the popover has really left the screen, not when the write
-      // landed - so the wait is the assertion, and the log then says it was only that.
+      // A close the app asked for sends no `onIsPresentedChange` back. The dismiss is the
+      // only event, and it arrives once the popover has left the screen.
       await waitForEvent('withdraw:dismiss', 12000);
       await waitForReport(
         'withdraw',
@@ -1066,18 +965,15 @@ describe('Popover', () => {
   });
 
   describe('lifetime', () => {
-    // Fifty open/close cycles in five tests of ten. react-native-harness 1.6 has one
-    // timeout for every test — `it` takes no third argument and `testTimeout` is one
-    // global number — and fifty animated popover cycles do not fit in it: the single-test
-    // version of this loop died with "Test timed out after 30000ms" with four open
-    // promises left behind. BottomSheet split the same loop the same way.
+    // Fifty open/close cycles in five tests of ten: react-native-harness has one timeout
+    // for every test, and fifty animated cycles do not fit in it.
     let cyclesBaseline: Report | null = null;
     let cycles = 0;
 
     for (let round = 0; round < 5; round += 1) {
       it(`cycles 10 more times (round ${String(round + 1)})`, async () => {
-        // Probe and cycling popover in one tree: the probe has to be a view of *this*
-        // test's app, or it reports a tree that was torn down before the round started.
+        // The probe has to be in this test's own tree, or it reports one that was torn
+        // down before the round started.
         await render(
           <>
             <Stage testId="cycles-probe" />
@@ -1093,8 +989,7 @@ describe('Popover', () => {
             'a baseline with nothing up'
           );
         }
-        // Read rather than assumed: a round whose predecessor failed mid-loop inherits
-        // its counters, and has to fail naming its own ten cycles.
+        // Read, not assumed: a round after one that failed mid-loop inherits its counters.
         const unmountBase = unmounts.get('cycles') ?? 0;
         for (let cycle = 0; cycle < 10; cycle += 1) {
           eventLog.length = 0;
@@ -1103,7 +998,7 @@ describe('Popover', () => {
           setters.get('cycles')?.(false);
           await waitForEvent('cycles:dismiss', 12000);
           // The unmount has to commit before the next open, or the two updates are one
-          // batch and the content is never dropped at all (BottomSheet's E2 lesson).
+          // batch and the content is never dropped at all.
           await waitForUnmount(
             'cycles',
             unmountBase + cycle + 1,
@@ -1128,7 +1023,7 @@ describe('Popover', () => {
     for (const delay of [0, 80, 150]) {
       it(`leaves nothing when dropped ${delay} ms into the entry`, async () => {
         // The probe is mounted before the drop and stays mounted, so it can never be the
-        // view the recycle pool hands back to a later mount (G14's lesson).
+        // view the recycle pool hands back to a later mount.
         const id = `drop-${String(delay)}`;
         await render(<DropScene testId={id} />);
         await requireHandle(id);
@@ -1154,12 +1049,8 @@ describe('Popover', () => {
     }
 
     it('takes the content back from a popover that never got up', async () => {
-      // `fill` is the content that cannot be honoured: `width: '100%'` of a box that has
-      // no width until the content gives it one, so neither platform ever composes a
-      // popover for it. React still asked, and the wrapper still mounted the content for
-      // the ask - so closing it owes the wrapper its second call, whether or not a
-      // presentation ever began. iOS and BottomSheet take that debt on the ask; Android
-      // took it only when a presentation ended, and this content stayed mounted forever.
+      // `fill` content asks for `100%` of a box that has no width until the content gives
+      // it one, so no popover is ever built. Closing still has to unmount the content.
       const id = 'never-up';
       await render(<Stage testId={id} fill />);
       await requireHandle(id);
@@ -1186,9 +1077,7 @@ describe('Popover', () => {
     it('reports nothing for a popover dropped while it is presented (D44 item 2)', async () => {
       const id = 'drop-open';
       // Mounted closed and opened by hand: with `initial` the popover presents in the
-      // same commit as the probe beside it, so the baseline below races the very
-      // presentation it measures from - under load the probe's first report already
-      // says `live=1` and the baseline never arrives.
+      // same commit as the probe, and the baseline below would race that presentation.
       await render(<DropScene testId={id} />);
       await requireHandle(id);
       const probeId = `${id}-probe`;
@@ -1211,10 +1100,7 @@ describe('Popover', () => {
         'nothing left after a drop of an open popover',
         12000
       );
-      // BottomSheet's rule, on both platforms: an unmounted popover closes silently.
-      // The app is gone, so a close event could only ever land on a dead handler - and
-      // on iOS it used to be worse than nothing, because the close it *did* send
-      // arrived as the app's next screen was being installed.
+      // An unmounted popover closes silently: its handlers are gone.
       expect(eventLog).toEqual([]);
     });
 
@@ -1242,9 +1128,8 @@ describe('Popover', () => {
         (l) => Math.abs(l.height - 90) <= 1,
         'at its own 90'
       );
-      // Whether the pool really handed the old view back is reported, not asserted: the
-      // claims above hold either way, and this is the line that says which world the run
-      // was in (F6's rule).
+      // Whether the pool handed the old view back is logged, not asserted: the claims
+      // above hold either way.
       console.log(
         `recycle: new view drops=${up.drops ?? '?'} recycles=${up.recycles ?? '?'}`
       );
@@ -1264,8 +1149,6 @@ describe('Popover', () => {
           </Modal>
         );
       }
-      // The probe is on the screen under the Modal from the start, so it is never a view
-      // the recycle pool hands back after the popover went.
       await render(
         <>
           <Stage testId="modal-probe" />
@@ -1279,20 +1162,14 @@ describe('Popover', () => {
         'a baseline with nothing up',
         20000
       );
-      // Opened here, not at mount: `initial` would present the popover in the same
-      // commit as the probe under the Modal, and the baseline above would be reading a
-      // race with it rather than a starting line. The Modal is up and settled by now,
-      // which is also the case a user actually hits.
+      // Opened here, not at mount, so the baseline above does not race the presentation.
       await requireHandle('in-modal');
       setters.get('in-modal')?.(true);
       const up = await waitForUp('in-modal', 15000);
       expect(up.presentCount).toBe('1');
       expect(up.anchored).toBe('1');
-      // Android places the popup inside the window the anchor is in, and a `Modal` is where
-      // that window stops being the app's own: the frame the provider places against comes
-      // from the host view's window, the anchor box comes from Compose, and the two are read
-      // back here in a third space (both rects on screen). A popover placed in the wrong one
-      // is off the Modal, not merely a few px out.
+      // Android places the popup in the anchor's window, which inside a `Modal` is not the
+      // app's own.
       const placed = await waitForReport(
         'in-modal',
         (r) => isUp(r) && rectOf(r.popRect) != null,
@@ -1304,17 +1181,16 @@ describe('Popover', () => {
       expect(popup.y).toBeGreaterThanOrEqual(anchor.y + anchor.height - 2);
       expect(popup.height).toBeGreaterThan(0);
       if (!IOS) {
-        // Our own provider is start-aligned (into the 16 dp margin when the anchor is at the
-        // edge, as it is here); UIKit centres its arrow on the anchor instead, which the
-        // placement test next door pins.
+        // Android is start-aligned, into the 16 dp margin when the anchor is at the edge;
+        // UIKit centres its arrow on the anchor instead.
         expect(
           Math.abs(popup.x - Math.max(anchor.x, 16 * scaleOf(placed)))
         ).toBeLessThanOrEqual(2);
         expect(num(placed, 'placed')).toBeGreaterThanOrEqual(1);
       }
       if (IOS) {
-        // A popover in the app's own presentation chain is what UIKit takes down when
-        // the `Modal` closes - and the thing that makes the next `Modal` be refused.
+        // In its own window: a popover in the app's presentation chain would be taken
+        // down with the `Modal`, and would make UIKit refuse the next `Modal`.
         expect(up.ownWindow).toBe('1');
         expect(num(up, 'modalHosts')).toBeGreaterThanOrEqual(1);
       }
@@ -1334,7 +1210,6 @@ describe('Popover', () => {
   });
 
   describe('beside another presenter', () => {
-    /** Up, by `BottomSheet.harness.tsx`'s own reading of its report. */
     const sheetUp = (report: Report) =>
       report.presented === '1' &&
       report.live === '1' &&
@@ -1345,19 +1220,13 @@ describe('Popover', () => {
           report.sheetValue !== 'Hidden' &&
           Number(report.inSheet) >= 1);
 
-    /** Up, by `Tooltip.harness.tsx`'s own reading of its report. */
     const tipUp = (report: Report) =>
       report.presented === '1' &&
       (IOS ? report.onScreen === '1' : report.kind === 'plain');
 
     it('presents inside a presented BottomSheet, and neither takes the other down', async () => {
-      // The sheet is the other presenter that matters for a popover: like a `Modal` it is a
-      // window of its own over the app, and unlike a `Modal` it is opened by an app that
-      // then expects its own popovers to work inside it. iOS has the sharp edge - give the
-      // popover presentation a source view from the app's own tree and UIKit puts the
-      // presentation back into that tree's chain, `ownWindow=0`, which is the residue
-      // Decision 1 exists to prevent and which the popover-over-a-`Modal` case cannot see
-      // because there the app's chain is not what the popover is asked to sit on.
+      // On iOS a popover given a source view from the app's own tree joins that tree's
+      // presentation chain; inside a sheet it still has to get a window of its own.
       function InSheet() {
         const [sheet, setSheet] = useState(true);
         setters.set('sheet-host', setSheet);
@@ -1392,10 +1261,8 @@ describe('Popover', () => {
         'the sheet, open',
         20000
       );
-      // The residue baseline is the sheet up and the popover never opened: a sheet is a
-      // presenter of its own (its controller, its touch root), and `nothingLeft` compares
-      // those counts, so a baseline from before the sheet would read the sheet as the
-      // popover's remains.
+      // The baseline is taken with the sheet up: a sheet has a controller and a touch
+      // root of its own, which would otherwise be counted as the popover's remains.
       const sheetBaseline = await waitForFreshReport(
         'sheet-probe',
         (r) => r.live === '0',
@@ -1443,10 +1310,6 @@ describe('Popover', () => {
       it(`presents a Tooltip and a Popover together, closing the ${
         closeTooltipFirst ? 'tooltip' : 'popover'
       } first`, async () => {
-        // Two of our own presentations on one screen is what an app ships (a hint and a menu
-        // on the same row), and both windows are ours - so a close that strands either is
-        // ours to fix. Both orders are pinned because the two go down by different paths: a
-        // tooltip's is a window UIKit or Material owns, a popover's a presentation.
         const id = `pair-${closeTooltipFirst ? 'tip-first' : 'pop-first'}`;
         await render(
           <>
@@ -1497,8 +1360,8 @@ describe('Popover', () => {
 
         const closeTip = async () => {
           setters.get(`${id}-tip`)?.(false);
-          // No `seq` in a tooltip's report, so no freshness rule: `live` was 1 a line
-          // above, and 0 is a fact that could not have been true before.
+          // A tooltip's report has no `seq`, so there is no freshness check; `live` was 1
+          // just above, so a 0 is new.
           await waitForHandleReport(
             tips,
             `${id}-tip`,
@@ -1515,10 +1378,8 @@ describe('Popover', () => {
           await closeTip();
           expect(isUp(reportOf(`${id}-pop`))).toBe(true);
           if (IOS) {
-            // Up is not enough: a close hands the key window back to whatever held it
-            // before, and a popover left visible in a window that is no longer key is a
-            // menu that is on screen and deaf to everything. The tooltip opened last, so
-            // its own window was key, and closing it is what must give the popover back.
+            // The tooltip opened last, so its window was key. Closing it must hand the key
+            // window back to the popover, or the popover is on screen and takes no input.
             const keyBack = await waitForReport(
               `${id}-pop`,
               (r) => r.windowKey === '1',
@@ -1536,9 +1397,8 @@ describe('Popover', () => {
           await closePop();
           expect(tipUp(reportOfHandle(tips, `${id}-tip`))).toBe(true);
           if (IOS) {
-            // The other half of the same rule: the popover was not key when it went
-            // (the tooltip's window was), so closing it has to leave the tooltip's
-            // window key - not hand key-ness back to the app behind both of them.
+            // The popover was not key when it closed, so the tooltip's window has to stay
+            // key rather than the app's window behind both.
             const keyBack = await waitForHandleReport(
               tips,
               `${id}-tip`,
@@ -1565,18 +1425,13 @@ describe('Popover', () => {
   });
 
   it('puts the content where the popover is, not where the anchor is', async () => {
-    // The redirect is the design: the node stays in the app's tree as the anchor's
-    // neighbour, and its one child - the content box - is what native moves into the
-    // popover's own window. A popover that leaves the content behind draws an empty
-    // bubble, which the size checks above would still pass.
+    // A popover that left its content behind would draw an empty bubble and still pass
+    // the size checks above.
     const id = 'moved';
     await render(<Stage testId={id} initial width={190} height={110} />);
     await requireHandle(id);
     const up = await waitForUp(id);
     expect(num(up, 'children')).toBe(1);
-    // The node is not the popover: it is the content's box, and the box itself is what
-    // moves - iOS puts it in the popover's own view controller, Android in the popup's
-    // root — so there is never a second copy left in the app's tree.
     requireYes(
       up,
       IOS ? 'inPopover' : 'inPopup',

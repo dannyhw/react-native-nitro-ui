@@ -8,42 +8,14 @@
  *   bun bench --platform android --plan quick --component button
  *   node scripts/bench/report.mjs <results.json> --compare <git-ref|results-file>
  *
- * `--compare-release [ref]` is the release check: it measures `ref` (the newest release
- * tag by default) and the working tree **in one session, on one device**, alternating
- * which of the two installed apps is launched, so the two library versions are subject
- * to the same machine at the same moment. It then gates `head(x/rn-core) /
- * base(x/rn-core)` per cell and exits non-zero on a regression (D9). The base side is a
- * second bench app, built from the ref in a checkout outside the repository
- * (`~/.nitro-ui/bench-base/<repo>/<ref>/`): one artifact per side, one install per side
- * switch (`scripts/bench/compare.mjs`).
+ * `--compare-release [ref]` measures `ref` (the newest release tag by default) and
+ * the working tree in one session on one device, and exits non-zero on a regression.
+ * `--compare <ref|results-file>` gates this run against an existing results file.
+ * `--component` restricts the run to one component's cells.
+ * `--skip-build` reuses the installed artifact instead of rebuilding.
+ * `--shutdown` powers off whatever this run booted; by default it stays running.
  *
- * `--compare <ref|results-file>` stays the offline half: it gates this run against a
- * results file that already exists, measured earlier on this machine.
- *
- * `--component` restricts the run to one component's cells. A component is part
- * of the scenario cell (`mount.button`), so the filter crosses the plan rather
- * than renaming the arms, and every component's ratios still divide by the same
- * `rn-core` control (scripts/bench/lib.mjs `componentOf`).
- *
- * Per cell of the matrix (scenario x implementation x N) the protocol is a
- * **fresh process**, a 1 s settle, 5 warmup + 20 measured iterations, and
- * `LAUNCHES_PER_CELL` passes over the whole matrix in alternating order so no
- * implementation always runs last (docs/research/setup-decisions.md SS6).
- *
- * Results come back as NDJSON from inside the app container; a launch counts as
- * complete when its `end` sentinel is there. `--skip-build` reuses the installed
- * artifact instead of rebuilding.
- *
- * Nothing here refuses a run for being busy: the load the session ran at is recorded
- * and printed, and a comparison made inside one session cancels that drift the same way
- * the launch-paired ratio to `rn-core` does.
- *
- * Devices come from the environment (see scripts/bench/devices.mjs) and must be
- * the ones your brief assigned. The runner boots what you point it at and leaves
- * it running, because booting an emulator costs minutes and `quick` plans run
- * back to back; pass `--shutdown` to power off whatever *this* run booted (AGENTS.md:
- * never touch a device you did not start).
- *
+ * Devices come from the environment (scripts/bench/devices.mjs).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -104,23 +76,10 @@ import {
 } from './report.mjs';
 
 /**
- * Wall-clock budget per launch, by scenario. Generous on an idle machine, so
- * hitting it means something is wrong, not that the component is slow.
- */
-/**
- * The wall-clock budget for one launch, by platform and scenario action.
- *
- * A budget has to exceed the most a launch can *legitimately* spend waiting for signals,
- * or a slow arm is killed as "stalled" for a reason the runner itself chose - and a killed
- * launch loses all 20 of its iterations' data, which is strictly worse than the 20 recorded
- * `probe-timeout` reasons it replaces. That ceiling is the platform's default waits times
- * the iterations of a launch: `mount` waits twice per iteration (its own signal, then the
- * teardown's) and once for the presenting frame, so 25 iterations at iOS's 1 500/8 000 ms
- * is 275 000 ms of possible waiting (A4 raised iOS's presented wait from 2 000 ms, at which
- * point 180 000 was no longer enough). Android keeps the pre-A4 table because its waits
- * never changed (review M1): 25 iterations at 1 500/2 000 ms is 125 000 ms, inside 180 000.
- * The `leak` scenario allocates 200 instances per iteration and does not wait for signals at
- * all, so it keeps its own larger allowance for the work rather than the waiting.
+ * The wall-clock budget for one launch, by platform and scenario action. It must exceed
+ * the most a launch can legitimately wait for signals (the platform's default waits
+ * times the iterations), or a slow arm is killed as stalled and loses all its data.
+ * `leak` does not wait for signals at all; its allowance is for the work.
  */
 const TIMEOUTS = {
   ios: {
@@ -137,9 +96,7 @@ const TIMEOUTS = {
   },
 };
 
-// A machine shared with other emulators or another agent's build can starve a
-// launch well past these budgets. Raise the ceiling rather than let a busy
-// laptop turn a bench run into a wall of timeouts.
+// A busy host can starve a launch well past these budgets; this raises the ceiling.
 const overrideSeconds = Number(process.env.BENCH_LAUNCH_TIMEOUT_S);
 if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) {
   for (const platformBudgets of Object.values(TIMEOUTS)) {
@@ -150,10 +107,8 @@ if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) {
 }
 
 /**
- * A git *question*, as opposed to a git step of the build: git answers these with a
- * `fatal:` on stderr as well as a non-zero exit, and the caller here already has an
- * answer for the failure. Without this, a plain `--dry-run` outside a repository prints
- * a git error and a bench refusal, and only one of them is ours.
+ * A git question whose failure the caller already answers: stderr is dropped so git's
+ * own `fatal:` is not printed beside the bench's message.
  */
 function gitProbe(args) {
   return execFileSync('git', args, {
@@ -209,15 +164,7 @@ function isGitDirty() {
   }
 }
 
-/**
- * The newest release tag, as `--compare-release` means it when given no ref.
- *
- * git's creatordate order is the answer ("the release that shipped last"), not a sort of
- * the version strings - a patch on an older line released after a newer minor release is
- * still the most recent thing the next release must not be slower than. The filtering
- * and the "that tag is this very commit" skip are `newestReleaseTag`'s, so the rule is
- * one function the unit tests can drive.
- */
+/** The newest release tag, as `--compare-release` means it when given no ref. */
 function chooseReleaseTag() {
   let tags = [];
   try {
@@ -255,10 +202,9 @@ function resolveRef(ref) {
 }
 
 /**
- * A flag whose value may be omitted: `--compare-release` alone means "the newest release
- * tag", `--compare-release v0.9.0` means that ref. Anything else that starts a flag is
- * the next flag, not this flag's value - `--compare-release --dry-run` is the common
- * spelling, and a ref that begins with `--` is not a thing git resolves anyway.
+ * A flag whose value may be omitted: `--compare-release` alone means the newest release
+ * tag, `--compare-release v0.9.0` means that ref. A next token that starts with `--`
+ * is the next flag, not this flag's value.
  */
 function readOptionalFlag(argv, name) {
   const at = argv.indexOf(name);
@@ -268,12 +214,8 @@ function readOptionalFlag(argv, name) {
 }
 
 /**
- * Flags the bench used to take and no longer does.
- *
- * An unknown flag is otherwise ignored, and these three were ignored into a *green*:
- * `--check` on today's runner would measure a plain run, print a plain report and exit
- * 0 while its author believed a baseline had been consulted (X36 deleted the committed
- * baselines). Silence is the failure, so each one is answered with what replaced it.
+ * Flags the bench no longer takes. An unknown flag is otherwise ignored, so each of
+ * these is refused with what replaced it.
  */
 const REMOVED_FLAGS = {
   '--check':
@@ -353,10 +295,8 @@ function iosTarget(device, appPath, bundleId, labelPrefix = '') {
       return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     },
     /**
-     * 'alive' | 'dead' | 'unknown' - see the note on `liveness` below.
-     *
-     * `ps` is asked for the process table and matched here, so a failed `ps`
-     * reads as 'unknown' (keep waiting) rather than as a dead app.
+     * 'alive' | 'dead' | 'unknown'. A failed `ps` reads as 'unknown' (keep waiting)
+     * rather than as a dead app.
      */
     liveness() {
       const ps = tryExec('xcrun', [
@@ -407,41 +347,11 @@ function iosTarget(device, appPath, bundleId, labelPrefix = '') {
 }
 
 /**
- * Get the app into the compiled state a device eventually leaves it in, and report
- * what that state turned out to be.
- *
- * Two steps, because neither does the other's job (all measured on API 35 with the
- * bench app):
- *
- * 1. `adb install` only *stores* the merged baseline profile in
- *    `assets/dexopt/baseline.prof`. Nothing consumes it on its own: the status stays
- *    `[status=verify]` after the install, after a `cmd package bg-dexopt-job` pass,
- *    and after a forced compile that runs before the profile has been written - the
- *    compiler reads the app's profile file, not the APK, and quietly falls back to
- *    verify when the file is not there. So ask `androidx.profileinstaller`, through
- *    the `INSTALL_PROFILE` broadcast its `ProfileInstallReceiver` exists for (the
- *    hook the benchmark library uses for the same reason), to write it.
- * 2. `cmd package compile -m speed-profile -f` compiles from it synchronously
- *    instead of waiting for an idle window, which is what produces
- *    `[status=speed-profile]`.
- *
- * `speed-profile` is the filter ART uses for a profile anyway, so this is the state a
- * phone reaches some time after an install; measuring before it means measuring the
- * interpreter. Every implementation shares one APK and one install, so this applies
- * to all of them identically (D9's pairing) and the only thing it can change is what
- * a profile is worth.
- *
- * The status is read back and logged because "the profile did nothing" and "the
- * profile was worth nothing" look identical in a results table. A run whose app has no
- * profileinstaller to ask still measures something - it just says so here.
- *
- * It returns the state it ended in, and the caller persists that in the results: the
- * two ART regimes are not comparable with each other (T12 round 2: the same code's
- * launch-paired ratio to the shared host moved 1.22x -> 0.99x on mount `presented`
- * with no library change at all), so a result file has to say which regime it
- * belongs to. A run that ends anywhere else measured the interpreter, and the report
- * reason, and Android numbers published before T12 are `verify` numbers with nothing
- * in the file saying so.
+ * Compile the app to `speed-profile`, the state a phone reaches some time after an
+ * install, and return the state it ended in: results from different ART states are not
+ * comparable, so the caller records it. Two steps, because `adb install` only stores
+ * the baseline profile: the app's profileinstaller writes it out when sent the
+ * `INSTALL_PROFILE` broadcast, and a forced compile then reads it.
  */
 function primeArtProfile(serial, packageName) {
   let status = 'unknown';
@@ -575,9 +485,6 @@ async function runLaunch(target, entry, platform) {
   let deadChecks = 0;
   const handle = await target.run(entry);
   const expected = launchPlanString(entry);
-  // Keyed by the *action*, because a scenario cell carries its component
-  // (`mount.slider`): the budget belongs to what the launch does, not to which
-  // control it mounts - plus any longer signal waits this launch was asked for.
   const budget = launchBudget(entry, platform);
   for (;;) {
     const text = target.read(handle);
@@ -607,11 +514,8 @@ async function runLaunch(target, entry, platform) {
         error: `no end sentinel within ${String(Math.round(budget / 1000))}s`,
       };
     }
-    // A crashed app writes nothing, so the old behaviour was to burn the whole
-    // budget per launch and print a timeout. Three consecutive "dead" answers
-    // (and never an 'unknown') stop that in a couple of seconds and say where
-    // the crash log is, which is the difference between a 5 second diagnosis and
-    // a 7 minute one.
+    // A crashed app writes nothing. Three consecutive 'dead' answers (and never an
+    // 'unknown') end the wait early instead of burning the whole budget.
     if (
       target.liveness != null &&
       Date.now() - started > 10_000 &&
@@ -638,16 +542,8 @@ async function runLaunch(target, entry, platform) {
 }
 
 /**
- * The wall-clock budget for one launch, widened by whatever signal waits that launch
- * was asked to make.
- *
- * The budgets above assume that platform's default waits: an iteration of `mount` waits
- * up to `mount` + `presented` for its own two signals and again `mount` in the teardown
- * that follows, so 25 iterations already contain 125 s of waiting on Android and 275 s on
- * iOS. Ask for a 40 s presenting wait and the same launch would be killed as *stalled*
- * for a reason the runner itself introduced - and a killed launch becomes a `problem`, a
- * worse record than the slow sample it was chasing. An explicit `BENCH_LAUNCH_TIMEOUT_S`
- * still wins: that override exists precisely to set the budget by hand.
+ * The wall-clock budget for one launch, widened by any longer signal waits the launch
+ * was asked to make. An explicit `BENCH_LAUNCH_TIMEOUT_S` still wins.
  */
 function launchBudget(entry, platform) {
   return launchBudgetMs(entry, {
@@ -683,8 +579,7 @@ export async function main(argv) {
     process.exitCode = 2;
     return;
   }
-  // Before anything is resolved or booted: a run that believes it gated something and
-  // did not is worse than one that stops.
+  // Refused before anything is resolved or booted.
   const removed = removedFlagProblem(argv);
   if (removed != null) {
     log(removed);
@@ -710,8 +605,6 @@ export async function main(argv) {
 
   const component = flag(argv, '--component');
   const perfMarks = argv.includes('--perf-marks');
-  // `--compare-release` takes its ref optionally: bare means "the newest release tag",
-  // so a value is only consumed when the next token is not another flag.
   const compareRelease = readOptionalFlag(argv, '--compare-release');
   if (compareRelease != null && perfMarks) {
     log(
@@ -739,9 +632,7 @@ export async function main(argv) {
     return;
   }
 
-  // Print what this run would resolve - and for `--compare-release`, the whole
-  // two-sided plan - then stop: no boot, no build, no measurement
-  // (`scripts/bench/dry-run.mjs`).
+  // Print what this run would resolve, then stop: no boot, no build, no measurement.
   if (argv.includes('--dry-run')) {
     process.exitCode = dryRun({
       argv,
@@ -749,9 +640,8 @@ export async function main(argv) {
       plan,
       launches,
       component: flag(argv, '--component'),
-      // The two-sided plan, for `--compare-release`. Reading a ref's plan needs its
-      // files but nothing else - `scripts/bench/lib.mjs` has no dependencies - so a dry
-      // run extracts the ref and asks it, without installing or building anything.
+      // Reading a ref's plan needs its files and nothing else, so a dry run extracts
+      // the ref without installing or building anything.
       prepareComparison:
         compareRelease == null
           ? null
@@ -824,8 +714,8 @@ export async function main(argv) {
     previousAnimations = prepareAndroid(device) ?? {};
   }
 
-  // Restore what the run changed on a shared device, on every exit path, and
-  // only power off a device this run booted when asked to (AGENTS.md).
+  // Restore what the run changed on the device, on every exit path. Power off only a
+  // device this run booted, and only when asked to.
   const shouldShutdown = argv.includes('--shutdown');
   process.on('exit', () => {
     if (platform === 'android') {
@@ -913,13 +803,10 @@ export async function main(argv) {
   );
   /* ------------------------- the release comparison ------------------------
    *
-   * The base side is a second bench app, built by the ref's own `build.mjs` in the
-   * ref's own checkout, outside this repository (`~/.nitro-ui/bench-base/...`). Both apps answer to the
-   * same app identifier, so exactly one is installed at a time and the session is
-   * driven in launch rounds: install a side, drive that round's launches for it, then
-   * install the other side for the next round. `sideOrderForRound` decides who goes
-   * first, and it is ABBA for the same reason the arms are: a host that drifts across
-   * two hours must not land on one library version (scripts/bench/compare.mjs).
+   * Both apps answer to the same app identifier, so exactly one is installed at a
+   * time and the session runs in launch rounds: install a side, drive that round's
+   * launches for it, then install the other side. `sideOrderForRound` decides who
+   * goes first.
    */
   let comparison = null;
   let baseDependencies = null;
@@ -1045,8 +932,7 @@ export async function main(argv) {
 
   /**
    * Install the side a launch belongs to, when it is not the side already on the
-   * device. The install is the price of pairing two library versions on one app
-   * identifier, and it is paid once per side switch - not once per launch.
+   * device: one install per side switch, not one per launch.
    */
   const installedSide = { current: null };
   async function targetFor(entry) {
@@ -1059,9 +945,7 @@ export async function main(argv) {
     return targets[side];
   }
 
-  // Android returns the ART state the app is in now that every arm is primed
-  // identically; iOS has no such state and contributes null. In a comparison each side
-  // is primed by its own install, and both states are recorded.
+  // Android returns the ART state the app ends in; iOS has none and contributes null.
   // A plain run installs its one app here. A comparison installs on demand inside the
   // drive loop, because which app is on the device changes with the round.
   let art = null;
@@ -1078,8 +962,8 @@ export async function main(argv) {
   }
 
   const started = Date.now();
-  // Sample the whole run rather than its last minute (R4): on a timer, so a long
-  // or stalled launch is still covered, and at each launch boundary from drive().
+  // Sample the whole run rather than its last minute: on a timer, so a long or
+  // stalled launch is still covered, and at each launch boundary from drive().
   const load = createLoadSampler(() => os.loadavg()[0]);
   load.sample();
   const loadTick = setInterval(() => {
@@ -1146,10 +1030,8 @@ export async function main(argv) {
   const raw = writeRawRecords({ fileName: resultsName, records: headRecords });
   const cells = aggregateRecords(headRecords, { keepRaw: true });
 
-  // The app versions these numbers belong to (X14). Read from `bun.lock` because
-  // that is the version list committed with this commit. The installed packages are
-  // recorded beside it because the measured thing is the install, and a stale one
-  // is a claim about an app that was never run.
+  // The app versions these numbers belong to: the list committed in `bun.lock`, and
+  // the installed packages beside it, because the install is what was measured.
   const dependencies = runDependencies({
     lockPath: path.join(REPO_ROOT, 'bun.lock'),
     nodeModulesDir: path.join(REPO_ROOT, 'node_modules'),
@@ -1221,12 +1103,7 @@ export async function main(argv) {
     }
   }
 
-  /**
-   * The release comparison: the base side's cells came from the same session, on the
-   * same device, with the other app installed, so this is the one pairing that answers
-   * "slower than the last release?" without a committed number to believe
-   * (scripts/bench/compare.mjs).
-   */
+  // The base side's cells came from the same session on the same device.
   if (comparison != null) {
     const baseRun = assembleRun({
       sha: comparison.sides[1]?.sha ?? 'unknown',
@@ -1281,8 +1158,7 @@ export async function main(argv) {
 
 /**
  * The results-file shape, from the parts a side contributed. Both sides of a release
- * comparison go through this, so the base side is described by exactly the same fields
- * as the head side and `gate()` sees two comparable runs.
+ * comparison go through this, so `gate()` sees two comparable runs.
  */
 function assembleRun({
   sha,
@@ -1312,11 +1188,9 @@ function assembleRun({
     art,
     dependencies,
     /**
-     * The waiting rule this run measured under (A4). Read back from the cells rather
-     * than echoed from the flags, so a run whose app binary predates the launch flag
-     * cannot claim a timeout it never applied - the problem below compares the two and
-     * says so. Zero means "nothing recorded", which is what a run of an app built
-     * before the flag looks like, and the problem below says so when that happens.
+     * The signal waits this run measured under, read back from the cells rather than
+     * echoed from the flags: an app built before the launch flag existed must not
+     * claim a timeout it never applied. Zero means nothing was recorded.
      */
     timeouts: requestedTimeouts({ cells }),
     clock: Object.values(cells)[0]?.clock ?? null,

@@ -1,17 +1,5 @@
-/**
- * BottomSheet stories (G14): a modal sheet whose content is React Native. Props and
- * events: `docs/components/bottom-sheet.md`.
- *
- * A sheet has no box in the screen that renders it - its content lives in the
- * platform's window (UIKit's sheet presentation on iOS, Material 3's
- * `ModalBottomSheet` on Android) - so every story pairs it with a plain button that
- * opens it and a readout of the events it reported.
- *
- * `detents` gets no Controls row: it is a list of strings and objects, which the
- * on-device Controls panel cannot type, so the Playground picks between lists on
- * chips. The internal props (`hybridRef`, `nuiPerfId`) are hidden: they are harness
- * and benchmark handles, not app API (DECISIONS D14).
- */
+// `detents` has no Controls row: the on-device Controls panel cannot type a
+// list of strings and objects.
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomSheet, type BottomSheetDetent } from 'react-native-nitro-ui';
@@ -104,7 +92,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A plain RN button, so the opener is not itself a nitro-ui control. */
 function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -117,7 +104,6 @@ function Opener({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** The events a sheet reported, newest last. */
 function useEventLog() {
   const [log, setLog] = useState<string[]>([]);
   const record = useCallback((entry: string) => {
@@ -126,7 +112,6 @@ function useEventLog() {
   return { log, record };
 }
 
-/** Every public prop on the Controls panel, the detent list on chips. */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
     const { onIsPresentedChange, onDetentChange, onDismiss, ...rest } = props;
@@ -176,7 +161,6 @@ export const Playground: Story = {
   },
 };
 
-/** A `fit` sheet that grows while it is up. */
 export const FitsItsContent: Story = {
   render: function FitStory() {
     const [open, setOpen] = useState(false);
@@ -202,7 +186,6 @@ export const FitsItsContent: Story = {
   },
 };
 
-/** `medium` and `large`, with a list inside. */
 export const MediumAndLarge: Story = {
   render: function MediumLargeStory() {
     const [open, setOpen] = useState(false);
@@ -237,7 +220,6 @@ export const MediumAndLarge: Story = {
   },
 };
 
-/** Only the sheet's own button closes it. */
 export const NotDismissible: Story = {
   render: function StickyStory() {
     const [open, setOpen] = useState(false);

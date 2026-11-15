@@ -1,33 +1,3 @@
-/**
- * `check` runs in a shell that has sourced a lease (X16 item 1, FOLLOWUPS 92).
- *
- * The claim under test is narrow and mechanical: a CLI child spawned by one of the gate suites must
- * not inherit the *calling shell's* lease. That matters because `gate.mjs` reads those variables as
- * instructions — with `METRO_PORT` exported it runs the Metro pre-flight (X15 item 1) and refuses
- * the run when the port is served, and with `NITRO_UI_HOME` it reads somebody else's lease file for
- * its device claim. The suites hand their children a throwaway checkout and a fake lease of their
- * own, so an inherited real one is a second, contradictory answer to the same question.
- *
- * G8 measured the cost: 25 failures across `gate.test.js`, `gate-check.test.js` and
- * `gate-logs.test.js` for a task that had followed AGENTS.md and sourced its lease first. The
- * reported workaround was "run `check` with the lease env unset" — a suite that passes only in a
- * shell nobody works in.
- *
- * ## How this is shown red
- *
- * Two ways, because the fixture has to be able to disagree with the answer:
- *
- *   1. `scripts/__tests__/gate.test.js`, `gate-check.test.js` and `gate-logs.test.js` fail when the
- *      suite runs under a sourced lease whose `METRO_PORT` is served — the real incident, with a
- *      real listener on the port rather than a stub.
- *   2. The end-to-end case below spawns a child that prints its own environment, so the assertion is
- *      on what the child *saw* rather than on a helper's return value. Point the scrubber at a name
- *      it should drop and the case stays green (that is the direction it cannot fake); revert the
- *      scrub and the printed names go non-empty.
- *
- * @file No device and no lease file: the child is `/bin/sh`, and the environment is the subject.
- */
-
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,13 +15,7 @@ import {
 
 const REPO_ROOT = join(__dirname, '..', '..');
 
-/**
- * The `export NAME=` lines `renderEnvFile` writes, read out of `lease-core.mjs`'s source.
- *
- * Deliberately a text scan rather than importing the module and calling the function: that would
- * need a pair object built to the shape the renderer wants, and a fixture that failed to render a
- * line would quietly check one variable fewer.
- */
+/** The `export NAME=` lines `renderEnvFile` writes, read out of `lease-core.mjs`'s source. */
 const RENDERED_NAMES = [
   ...require('node:fs')
     .readFileSync(`${__dirname}/../lease-core.mjs`, 'utf8')
@@ -59,10 +23,6 @@ const RENDERED_NAMES = [
 ].map((match) => match[1]);
 
 describe('jest starts with no lease in its environment', () => {
-  // The one place the lease is removed: `jest.globalSetup` runs before any worker starts, so no
-  // suite has to remember to scrub. Shown red by running this file from a shell that exports
-  // `NITRO_UI_LEASE_ID`, `METRO_PORT` and `ANDROID_SERIAL` with the `globalSetup` line taken out of
-  // `package.json`: the second and third cases then print the inherited names.
   it('removes every lease-scoped name and nothing else', () => {
     const env = {
       PATH: '/usr/bin',
@@ -99,7 +59,7 @@ describe('jest starts with no lease in its environment', () => {
 
   it('hands a child that was given no `env` an environment with no lease in it', () => {
     // No `env` option, so the child inherits what this jest process really has - not the copy a
-    // test file sees as `process.env`. This is the spawn no helper call can cover.
+    // test file sees as `process.env`.
     const printed = LEASE_SCOPED_PROBE_NAMES.map(
       (name) => `printf '%s=[%s]\\n' '${name}' "\${${name}-unset}"`
     ).join('\n');
@@ -117,10 +77,8 @@ describe('jest starts with no lease in its environment', () => {
 
 describe('a test child does not inherit this shell’s lease', () => {
   it('scrubs every name lease.mjs prints into an env file', () => {
-    // The list is what the incident is made of, and it comes from the shipped renderer. If
-    // `renderEnvFile` gains a variable and the scrubber does not cover it, this goes red — which is
-    // the direction that matters: a check that cannot see a new lease variable is a check that will
-    // be wrong the day one is added.
+    // The names come from the shipped renderer, so a new lease variable the scrub misses
+    // fails here.
     expect(RENDERED_NAMES.length).toBeGreaterThan(5);
     const missed = RENDERED_NAMES.filter((name) => !isLeaseScopedEnvName(name));
     expect(missed).toEqual([]);
@@ -136,7 +94,7 @@ describe('a test child does not inherit this shell’s lease', () => {
       ANDROID_AVD_HOME: '/Users/tester/.android/avd',
       JAVA_HOME:
         '/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home',
-      // A whole lease, as G8's shell had it.
+      // A whole lease.
       NITRO_UI_LEASE_ID: 'G8-abc',
       NITRO_UI_LEASE_TASK: 'G8',
       NITRO_UI_LEASE_PLATFORM: 'both',
@@ -150,14 +108,12 @@ describe('a test child does not inherit this shell’s lease', () => {
       ANDROID_SERIAL: 'emulator-5574',
       ANDROID_ADB_SERVER_PORT: '5043',
       METRO_PORT: '8295',
-      // A backgrounded launcher's log, and the device-stub overrides: same class, same reason.
       NITRO_UI_GATE_LOG: '/tmp/somebody-elses-run.log',
       NITRO_UI_HOME: '/Users/tester/.nitro-ui',
     });
     const left = Object.keys(env).filter(isLeaseScopedEnvName);
     expect(left).toEqual([]);
-    // And the machine's own facts survive: `PATH`, the SDK roots, and the AVD *home* (matched
-    // exactly as `ANDROID_AVD`, so a prefix rule would have taken this with it).
+    // `ANDROID_AVD` is matched exactly, not by prefix, so `ANDROID_AVD_HOME` survives.
     expect(env).toMatchObject({
       PATH: '/usr/bin',
       HOME: '/Users/tester',
@@ -170,10 +126,7 @@ describe('a test child does not inherit this shell’s lease', () => {
   });
 
   it('really does hand a child a scrubbed environment (end to end)', () => {
-    // Not a unit test of a pure function: this is the shape the three gate suites use — build the
-    // child env from `process.env`, spread a test's own values last, and spawn. The child prints
-    // its own environment back, so the assertion is about the process boundary the incident lived
-    // at. The fixture poisons `process.env` first, exactly as a sourced lease does.
+    // Poisons `process.env` first, as a sourced lease does.
     const poisoned = {
       NITRO_UI_LEASE_ID: 'X16-poison',
       NITRO_UI_LEASE_TASK: 'X16',
@@ -183,10 +136,7 @@ describe('a test child does not inherit this shell’s lease', () => {
       IOS_VERSION: '27.0',
       NITRO_UI_GATE_LOG: '/tmp/poison.log',
     };
-    // A fixture's own value for one of the same names, set on purpose. The scrub runs before a
-    // test's `extraEnv`, so this has to survive: the suites assert device-claim behaviour by
-    // handing a child a lease id and a `NITRO_UI_HOME` of their own, and a scrub that beat them
-    // would make those tests impossible to write.
+    // A test's own value for a lease-scoped name, which has to survive the scrub.
     const intentional = {
       METRO_PORT: '8299',
       ANDROID_AVD: 'nitro-ui-fixture',
@@ -204,7 +154,6 @@ describe('a test child does not inherit this shell’s lease', () => {
         encoding: 'utf8',
         env: {
           ...withoutLeaseEnv(process.env),
-          // What a test setting one on purpose looks like: it has to win.
           METRO_PORT: '8299',
           ...intentional,
         },
@@ -224,9 +173,7 @@ describe('a test child does not inherit this shell’s lease', () => {
         if (name in intentional) continue;
         expect(seen[name]).toBe('unset');
       }
-      // ...and where a test named one itself, its value is what the child sees — never the
-      // inherited one. That is the second half of the property: the scrub has to run *before*
-      // a test's own env, not instead of it.
+      // ...and where a test named one itself, its value is what the child sees.
       expect(seen.METRO_PORT).toBe('8299');
       expect(seen.ANDROID_AVD).toBe('nitro-ui-fixture');
     } finally {
@@ -238,15 +185,6 @@ describe('a test child does not inherit this shell’s lease', () => {
   });
 });
 
-/**
- * The same property, asked of the shape the X32/X33 reports actually named.
- *
- * Those two tasks did not lose a Metro pre-flight: a unit suite died on
- * `lease: ANDROID_SERIAL=… and EMULATOR_PORT=… disagree` because a bench suite (since removed)
- * gave its child `ANDROID_SERIAL: 'emulator-5599'` *on top of* the sourced lease's
- * `EMULATOR_PORT`. The fixture has to be that shape — a fixture with only `NITRO_UI_LEASE_ID` set
- * would pass without the scrub, which is the direction a guard must not be able to fake.
- */
 describe('a device-aware child of a suite cannot see the shell’s lease', () => {
   /** A complete lease, agreeing with itself, as `lease.mjs` prints it. */
   const FAKE_LEASE = {
@@ -268,12 +206,8 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
   };
 
   /**
-   * A child that answers the two questions the incident turned on: does the *real* lease check
-   * survive my environment, and which lease names did I actually receive?
-   *
-   * It calls the shipped function rather than a copy of its rule, so the case cannot drift from
-   * the refusal: `checkEmulatorEnv` is what threw in X32's log, and `requireLeaseDevice` is what
-   * X28 added on top of it.
+   * Spawns a child that runs the shipped lease checks on its own environment, then prints
+   * which lease names it received.
    */
   function spawnLeaseProbe(env) {
     const dir = mkdtempSync(join(tmpdir(), 'x34-env-probe-'));
@@ -333,17 +267,12 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
 
   it('scrubs the lease a suite overrides half of (the X32/X33 shape)', () => {
     withFakeLease(() => {
-      // Exactly the fixture shape that died: the test's own serial, the shell's port. Before
-      // X34 the suite inherited the port and `checkEmulatorEnv` refused the pair it was being
-      // handed.
       const child = spawnLeaseProbe(
         childEnv({ ANDROID_SERIAL: 'emulator-5599' })
       );
       expect(child.status).toBe(0);
-      // The only lease-shaped name the child may hold is the one this case handed it. Every
-      // other name the poison set is gone, which is the whole property.
+      // The only lease-shaped name the child may hold is the one this case handed it.
       expect(child.seen).toEqual(['ANDROID_SERIAL']);
-      // And every name the lease printed is one the child cannot have read.
       const left = (child.seen ?? []).filter(
         (name) => isLeaseScopedEnvName(name) && !(name in { ANDROID_SERIAL: 1 })
       );
@@ -352,9 +281,6 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
   });
 
   it('would have handed the same child a pair that disagrees (the same case without the scrub)', () => {
-    // The fixture's own red proof: an unscrubbed spread of the same poisoned environment has to
-    // fail for the same reason X32's `check` did. If this ever goes green, the poison has stopped
-    // being fatal and the case above is decoration — which is exactly how a scrub guard rots.
     withFakeLease(() => {
       const child = spawnLeaseProbe({
         ...process.env,
@@ -366,14 +292,9 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
   });
 
   it('keeps a test’s own lease values, which is what makes the scrub usable', () => {
-    // The suites assert device-claim behaviour by handing a child a lease id and a `NITRO_UI_HOME`
-    // of their own (`gate.test.js`, `lease.test.js`). A scrub that beat them would make those
-    // tests impossible to write, so the order matters: scrub first, `extra` last.
     withFakeLease(() => {
-      // A named Android half, spelled out the way `lease.mjs` prints it: `requireLeaseDevice`
-      // refuses a lease that names a platform and withholds that half's identifiers, so a child
-      // that gets here has received a *whole* Android half — from this case, never from the
-      // shell. The shell's own pair is a different one (5584), so any leak would also disagree.
+      // A whole Android half: `requireLeaseDevice` refuses a lease that names a platform and
+      // withholds some of that half's identifiers.
       const child = spawnLeaseProbe(
         childEnv({
           NITRO_UI_LEASE_ID: 'FIXTURE-1',
@@ -394,8 +315,6 @@ describe('a device-aware child of a suite cannot see the shell’s lease', () =>
         'NITRO_UI_HOME',
         'NITRO_UI_LEASE_ID',
       ];
-      // One assertion over the child's own answer, because a refusal here is a fact about the
-      // scrub and the reader needs the reason, not a bare exit code.
       expect({
         status: child.status,
         seen: [...(child.seen ?? [])].sort(),

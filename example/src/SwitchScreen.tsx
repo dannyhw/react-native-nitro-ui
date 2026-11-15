@@ -12,12 +12,7 @@ import {
 } from 'react-native';
 import { Switch } from 'react-native-nitro-ui';
 
-/**
- * Text colours for the current appearance.
- *
- * `Text` gets no dynamic default colour from React Native, so a screen that has
- * to read in both light and dark mode picks its own.
- */
+/** `Text` gets no dynamic default colour from React Native. */
 function useInk() {
   const dark = useColorScheme() === 'dark';
   return {
@@ -27,40 +22,21 @@ function useInk() {
   };
 }
 
-/**
- * Status bar height the system reserves for itself on Android.
- *
- * Android draws every app edge to edge, and RN's `SafeAreaView` only applies the
- * iOS safe area, so the top inset has to be added by hand. `StatusBar` is the
- * only built-in source for it; `react-native-safe-area-context` would be the
- * portable answer.
- */
+/** Android draws every app edge to edge and RN's `SafeAreaView` is iOS-only. */
 function useTopInset() {
   return Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
 }
 
-/**
- * Every Switch configuration T10 has to prove, on one screen:
- * controlled, uncontrolled, disabled, tinted, a change JS rejects, and 200
- * switches in a scrolling list (the case `RecyclableView` exists for).
- *
- * `react-native-harness` drives the same screen in `__tests__/Switch.harness.tsx`
- * through these testIDs.
- */
 export default function SwitchScreen() {
   const ink = useInk();
   const [controlled, setControlled] = useState(false);
   const [rejections, setRejections] = useState(0);
   const [tinted, setTinted] = useState(true);
 
-  // Native flips the Switch, then reverts it: JS never accepts the change, so the
-  // event-count handshake is what brings it back to `false`.
   const rejectChange = useCallback(() => {
     setRejections((count) => count + 1);
   }, []);
 
-  // Changes the prop without touching the control, to prove a JS-driven write
-  // reaches the hosted view.
   const flipFromJs = useCallback(
     () => setControlled((current) => !current),
     []
@@ -181,14 +157,7 @@ export default function SwitchScreen() {
   );
 }
 
-/**
- * The 200-row block: the case `RecyclableView` exists for, and the screen the
- * real-input suite calls "busy" when it counts whether a press survives a large
- * tree (`RealInputTests.assertBusyScreenDeliversEveryPress`).
- */
 function List({ rows }: { rows: ReadonlyArray<{ id: string; on: boolean }> }) {
-  // The screen's own palette rather than a literal: `Row` beside it uses `ink.muted`,
-  // and a hard-coded grey is the one that shows up wrong in dark mode.
   const ink = useInk();
   return (
     <View style={styles.list}>
@@ -263,8 +232,6 @@ const styles = StyleSheet.create({
   link: {
     color: '#3b82f6',
   },
-  // A user style wins over the platform default box; the control stays centred
-  // in it (docs/components/switch.md).
   bigSwitch: {
     width: 90,
     height: 50,

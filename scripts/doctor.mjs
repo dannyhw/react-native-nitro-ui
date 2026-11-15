@@ -9,13 +9,13 @@
  *
  * Checks: Xcode and its iOS runtime, CocoaPods, Node (`.nvmrc`) through fnm, bun
  * (`packageManager`), JDK 17, the Android SDK pieces `example/android` builds
- * with, the emulator system image, git/gh push access, disk, load, and whether `~/.nitro-ui/devices.json` describes devices that exist.
+ * with, the emulator system image, git/gh push access, disk, load, and whether
+ * `~/.nitro-ui/devices.json` describes devices that exist.
  *
- * `--setup` only ever *adds*: it creates simulators named `nitro-ui A`/`nitro-ui B`
+ * `--setup` only ever adds: it creates simulators named `nitro-ui A`/`nitro-ui B`
  * and AVDs `nitroui_a`/`nitroui_b` (reusing them if present), then writes
- * `devices.json` if there is none. It never edits or deletes a device it did not
- * create, never installs SDK packages or accepts licenses (it prints the command
- * instead), and never boots anything.
+ * `devices.json` if there is none. It never edits or deletes a device, never
+ * installs SDK packages or accepts licenses, and never boots anything.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -62,8 +62,6 @@ import {
   stateHome,
   statePaths,
 } from './lease-core.mjs';
-// The prime's per-build budget belongs to the module that owns the queue it waits
-// behind, not to this file (N4).
 import { primeBuildTimeoutMinutes } from './build-slot-core.mjs';
 
 const REPO_ROOT = path.resolve(
@@ -385,8 +383,7 @@ function checkAndroid() {
           dir === `android-${wanted.compileSdk}` ||
           dir.startsWith(`android-${wanted.compileSdk}.`)
       ),
-      // The SDK names platforms with a minor version from API 37 (`android-37.0`), and 37
-      // is the floor RN 0.88 compiles against (D39), so there is no older naming to ask for.
+      // The SDK names platforms with a minor version from API 37 (`android-37.0`).
       pkg: `platforms;android-${wanted.compileSdk}.0`,
     },
     {
@@ -481,9 +478,8 @@ function checkGitAndAgents() {
       : 'not installed (optional; faster native rebuilds)',
     fix: ccacheVersion.ok ? undefined : 'brew install ccache',
   });
-  // Whether the *caches* are warm, which is a different question from whether
-  // ccache is installed: the first native build on a fresh machine cost 9.5 min
-  // on iOS and 4 m 43 s on Android against 138 s and 17 s warm.
+  // Whether the caches are warm, which is a different question from whether
+  // ccache is installed: a cold native build takes several times longer.
   const stats = ccacheVersion.ok
     ? run('ccache', ['--show-stats'], { timeout: 20_000 }).stdout
     : null;
@@ -559,17 +555,9 @@ function checkDevices({ runtime, emulator, adb }) {
 }
 
 /**
- * Pool devices that are booted while no lease holds them (X9 item 6).
- *
- * `devices.json` says what *can* be leased; it never said what is running with no
- * owner, which is the state that makes harness numbers move: a stranger's
- * simulator competes for the same cores, and the only evidence was that the
- * machine felt slow. A live lease is a legitimate owner, so those pairs are left
- * alone, and so is the reserved emulator — nobody may lease it, so telling its
- * owner to shut it down is not this script's call.
- *
- * Warnings only, on purpose: doctor reports on a machine it does not own and
- * never shuts a device down.
+ * Pool devices that are booted while no lease holds them. Pairs under a live lease
+ * and the reserved emulator are left out. Warnings only: doctor never shuts a
+ * device down.
  *
  * @param {ReturnType<typeof normalizeDevices>} config
  * @param {object | null} listingJson raw `simctl list devices -j`, or null when xcrun did not answer
@@ -585,8 +573,7 @@ function checkUnownedDevices(config, listingJson, adb) {
       ? run(adb, ['devices']).stdout || null
       : null;
   const { leases: leaseFile } = statePaths(stateHome());
-  // Read-only: `activeLeases` drops what has outlived its ttl without rewriting the
-  // file, which is `lease.mjs`'s job, not a report's.
+  // Read-only: expired leases are skipped here, not removed from the file.
   let liveLeases = [];
   try {
     liveLeases = activeLeases(readJson(leaseFile, { leases: [] }), Date.now());
@@ -615,8 +602,7 @@ function checkUnownedDevices(config, listingJson, adb) {
     adbOk: adbText != null,
   });
   if (warnings.length === 0 && problem == null) {
-    // Nothing is loose: say so, so `warn`-free output is evidence rather than
-    // silence about a check that quietly did not run.
+    // Say that nothing is loose, so a clean report shows the check ran.
     return [
       {
         area: 'devices',
@@ -811,22 +797,11 @@ function setupDevices({ runtime, tools }) {
 }
 
 /**
- * Builds both platforms once, in the main checkout, so the first real build of the
- * first task is not the cold one (`coldCacheWarning` is what points here).
- *
- * Why the main checkout: ccache and Gradle's build cache are shared per user
- * anyway, but Xcode's derived data and `Pods/` live in the directory that built,
- * so priming from a task's worktree would warm only the shared half and then be
- * deleted with the worktree.
- *
- * The work is done by `scripts/build-app.mjs` rather than a copy of its two
- * command lines: that is where the stamp, ccache launcher, arch default and the
- * machine-wide build slot live, and a prime that skipped the slot would be the
- * exact load-13 situation it exists to prevent.
- *
- * The per-build budget comes from the build-slot module (`primeBuildTimeoutMinutes`)
- * rather than a number written here: a prime waits *behind* whoever is building, so a
- * timer shorter than that queue kills a build that had not started (N4).
+ * Builds both platforms once, in the main checkout, so the first build of the first
+ * task is not the cold one. The main checkout, because Xcode's derived data and
+ * `Pods/` live in the directory that built. `scripts/build-app.mjs` does the work,
+ * so the prime queues for the machine-wide build slot like any build, and its
+ * timeout has to outlast that queue.
  *
  * @param {{ log?: (message: string) => void, env?: Record<string, string | undefined>, timeoutMinutes?: number }} [options]
  * @returns {Result[]}
@@ -851,9 +826,8 @@ function primeCaches({
       },
     ];
   }
-  // The main checkout's *own* script, run from its own directory: it may be on a
-  // different branch than this worktree, and the point is to warm the caches that
-  // checkout's builds use.
+  // The main checkout's own script, run from its own directory: it may be on a
+  // different branch than this worktree.
   const results = [];
   // The build's own output goes to *this process's stderr*, live: a cold build
   // takes minutes and a caller watching it wants to see why it is slow. Stdout
@@ -941,9 +915,7 @@ export function main(argv = process.argv.slice(2)) {
       adb: android.tools.adb,
     })
   );
-  // Last, and not part of a plain doctor run: priming is a dozen minutes of
-  // compiling that nobody asked for while reading a report. `--json` still gets
-  // the rows so a machine-mint script can read what it cost.
+  // Not part of a plain doctor run: priming is minutes of compiling.
   if (argv.includes('--prime')) {
     results.push(...primeCaches());
   }
