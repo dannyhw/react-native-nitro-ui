@@ -780,6 +780,9 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     'scripts/worktrees-core.mjs',
     'scripts/watchdog.mjs',
     'scripts/watchdog-core.mjs',
+    // The task-record retention tool: it reads git and `docs/tasks`, proven below.
+    'scripts/task-records.mjs',
+    'scripts/task-records-core.mjs',
   ])('%s is check-only tooling', (file) => {
     expect(TOOLING_FILES).toContain(file);
     expect(isToolingPath(file)).toBe(true);
@@ -838,7 +841,7 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     expect(hits.stdout).toContain('scripts/task-ready.mjs');
   });
 
-  it('nothing a device run starts imports the worktree lister or the watchdog', () => {
+  it('nothing a device run starts imports the worktree lister, the watchdog or the task-record tool', () => {
     // Same shape as the task-ready search above, for the same reason: a file on this
     // list is trusted to need no device run, so "no runner reads it" is asked of git.
     // `gate.mjs` names `scripts/worktrees.mjs` in a refusal message and is itself
@@ -850,6 +853,8 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
       'worktrees.mjs',
       'watchdog-core',
       'watchdog.mjs',
+      'task-records-core',
+      'task-records.mjs',
     ]) {
       const hits = spawnSync(
         'git',

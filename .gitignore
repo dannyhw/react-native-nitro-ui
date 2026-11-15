@@ -123,3 +123,6 @@ example/.rnstorybook/storybook.requires.*
 # evidence, not reviewable source - what a report cites is the committed copy
 # `node scripts/gate.mjs export --task <ID>` writes into docs/tasks/<ID>/.
 .gates/
+
+# Failure excerpts are never committed: they stay in the local log store.
+docs/tasks/*/failures/

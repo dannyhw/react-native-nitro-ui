@@ -13,9 +13,6 @@
  * @file Unit gate: `check`.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { describe, expect, it } from '@jest/globals';
 
 import {
@@ -779,38 +776,6 @@ describe('which report file a task refers to', () => {
     ]);
     expect(slugReportNames('G29')).toEqual([]);
     expect(slugReportNames(null, ['G29-a.report.md'])).toEqual([]);
-  });
-});
-
-/* ------------------------- the reports this repo really has ------------------------ */
-
-describe('every report in docs/tasks is findable by its own id (X30 fix 2)', () => {
-  const names = fs
-    .readdirSync(path.join(process.cwd(), 'docs', 'tasks'))
-    .filter((name) => name.endsWith('.report.md'));
-
-  it('none is named for the bare id, which is the rule the docs used to claim', () => {
-    // 125 reports, every one `<ID>-<slug>.report.md`. Had this been true, the
-    // two-candidate lookup would have worked and this fix would not exist.
-    expect(names.length).toBeGreaterThan(50);
-    expect(
-      names.filter((name) => /^[A-Za-z0-9]+\.report\.md$/.test(name))
-    ).toEqual([]);
-  });
-
-  it('a fix-round branch for any of them resolves to that report', () => {
-    // The property the fix exists for, run over the real directory instead of a
-    // fixture: for each task, `task/<ID>-fix1` (which knows the id and nothing else)
-    // has to land on that task's report. Two reports sharing an id would make this
-    // red on purpose — the rule refuses to guess, so the checker would say so.
-    for (const name of names) {
-      const id = taskIdFromBranch(name.replace(/\.report\.md$/, ''));
-      if (id == null) continue;
-      const found = reportCandidates(id, `${id}-fix1`, names).find(
-        (candidate) => names.includes(candidate.replace('docs/tasks/', ''))
-      );
-      expect(found).toBe(`docs/tasks/${name}`);
-    }
   });
 });
 

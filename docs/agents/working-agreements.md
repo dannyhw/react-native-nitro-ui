@@ -64,6 +64,11 @@ quoting anyone.
   (2026-11-12)
 - A task's worktrees are removed when it merges (`node scripts/worktrees.mjs --prune`).
   (2026-11-14)
+- Task records (brief, report, reviews, the task's folder) stay in git for 14 days after the task
+  merges and are then archived locally by `node scripts/task-records.mjs --archive`. Failure logs
+  are never committed. The removal is staged into the next merge commit, never a commit of its
+  own. A `docs/tasks/` path cited in a comment or a document may therefore name a record that is
+  now only in git history. (2026-11-15)
 - CI is checked after every push to `main`. (2026-10-31)
 - No periodic self-check runs inside the orchestrator's own conversation. The hourly watchdog is
   separate: it runs outside and is silent unless something changed. (2026-10-28, 2026-11-14)

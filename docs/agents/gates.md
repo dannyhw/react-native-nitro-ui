@@ -45,7 +45,7 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
   ledger to `docs/tasks/<ID>/gates.jsonl` beside it **by merging** (X30): what is already in the
   file stays byte-for-byte, this branch's lines are appended, and a line already there (same ts +
   gate + code tree) is not written twice — so a fix round adds its runs instead of erasing
-  round 1's, and a failure excerpt that is already committed is left alone.
+  round 1's, and a failure excerpt that is already there is left alone.
 - **Every failure leaves evidence.** A run's log goes in the clone's gate log store —
   `<git-common-dir>/nitro-ui-gates/<branch>/<gate>-<started-at>.log` — which every worktree of the
   clone shares and `git worktree remove` never deletes; `gate.mjs logs [--branch b] [--failed]
@@ -54,7 +54,10 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
   excerpt of every **failed** run to `docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names,
   the assertion messages, the last 150 lines, the load at both ends and, for a device gate, the
   device context — and records its path in that line's `failureLogPath`. Passing runs get no file.
-  A committed excerpt holds no secret and no machine identity (D25): scrubbed are PEM blocks, URL
+  The excerpt is written there locally and ignored by git (`.gitignore`): failure logs are never
+  committed (2026-11-15), so a report cites a failed run by its gate and start time, not by an
+  excerpt path.
+  An excerpt holds no secret and no machine identity (D25): scrubbed are PEM blocks, URL
   userinfo, `curl -u user:pass` and `user:pass@host`, credential-shaped assignments (`.npmrc`
   `_auth=`/`_authToken=`, `TOKEN=`, `"secret":`, `--api-key`, a config file's whole `password: some
   phrase`), `Authorization:`/`Cookie:` **whole** (any scheme), bare token shapes (`ghp_`, `npm_`, `xox`,
@@ -67,7 +70,7 @@ Run gates through `node scripts/gate.mjs <gate>` (see its header for the names) 
 The merge step, as the playbook recorded it:
 
 5. Merge (`git merge --no-ff task/<ID>-…`), confirm `bun run check` on the
-   merged tree, push, and update `STATUS.md` / `RECOVERY.md` in the same push.
+   merged tree, push, and update `STATUS.md` in the same push.
    "Confirm" is sometimes a look, not a re-run (X10): `need --for merge` accepts
    a `check` whose recorded **`fullTree` equals the merge result's** — git's own
    `rev-parse HEAD^{tree}`, the whole tracked tree, `docs/` and `bench/` and every
@@ -121,10 +124,10 @@ Each record also names the worktree that started the run, so `wait` and `status`
 background gate rather than the newest run of that gate somewhere else in the store — which matters
 because several tasks run `check --background` at once. The per-branch ledger `.gates/<branch>.jsonl`
 *is* removed with its worktree, so export it before cleanup (`gate.mjs export --task <ID>` commits
-the ledger plus a scrubbed excerpt of each failed run under `docs/tasks/<ID>/failures/`; an excerpt
-carries no home path and no credential). Deleting the *clone* deletes its store: archive a store only
-when you are about to do that. The orchestrator's own scripts log under `~/.nitro-ui/orchestrator-logs/`,
-not `/tmp`.
+the ledger and writes a scrubbed excerpt of each failed run under `docs/tasks/<ID>/failures/`, which
+git ignores; an excerpt carries no home path and no credential). Deleting the *clone* deletes its
+store: archive a store only when you are about to do that. The orchestrator's own scripts log under
+`~/.nitro-ui/orchestrator-logs/`, not `/tmp`.
 
 `node scripts/worktrees.mjs --prune` is the cleanup command. Before it removes a worktree it
 copies everything under that worktree's `.gates/` except `logs/` (which the shared store already
