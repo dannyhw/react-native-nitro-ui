@@ -5,10 +5,9 @@ description: Handle a red or intermittent nitro-ui gate or test - decide whether
 
 # Flake
 
-Half of all gate runs here have been red, and about half of the red full device runs
-were on code that later passed unchanged. Two habits made that expensive: rerunning
-until green and logging "known flake" (one of those was a real hit-test bug), and
-spending ten to sixteen hours of device time proving a race could be made to happen.
+A red gate is a bug or a flake. This says how to tell which, how many reruns are
+allowed, when a test is quarantined, and how to fix a flake without making it happen
+on demand.
 
 ## When a gate goes red
 
