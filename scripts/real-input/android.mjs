@@ -153,7 +153,9 @@ function resolveDevice(env) {
   if (listed.status !== 0) {
     throw new Error(
       `real-input: \`adb devices\` failed: ` +
-        (listed.stderr.trim() === '' ? listed.stdout.trim() : listed.stderr.trim())
+        (listed.stderr.trim() === ''
+          ? listed.stdout.trim()
+          : listed.stderr.trim())
     );
   }
   const serials = listed.stdout
@@ -264,7 +266,7 @@ function runE2E({ files, env }) {
   const reportFile = path.join(root, E2E_DIR, E2E_OUTPUT, 'report.json');
   fs.rmSync(reportFile, { force: true });
   console.log(
-    `real-input: e2e artifacts in ${path.join(root, E2E_DIR, E2E_OUTPUT)}`,
+    `real-input: e2e artifacts in ${path.join(root, E2E_DIR, E2E_OUTPUT)}`
   );
   const argv = [
     binary,
@@ -325,6 +327,8 @@ function runE2E({ files, env }) {
 function recordResults(suite, controls, report) {
   const results = Array.isArray(report?.results) ? report.results : [];
   let anyResult = false;
+  /** Checks the report says did not pass, whatever e2e itself exited with. */
+  let failures = 0;
   for (const control of controls) {
     const file = `real-input/${control.id}${TEST_SUFFIX}`;
     const fromFile = results.filter(
@@ -335,6 +339,7 @@ function recordResults(suite, controls, report) {
       // driver enforced with `markMissing`, kept for the case where the file
       // exists but collected nothing (a filter, a skipped test, a bad import).
       suite.markMissing(control.id);
+      failures += 1;
       continue;
     }
     anyResult = true;
@@ -345,6 +350,7 @@ function recordResults(suite, controls, report) {
         log.check(title, true);
         continue;
       }
+      failures += 1;
       if (result.status === 'skipped') {
         log.check(`${title} — skipped, which is not a pass`, false);
         continue;
@@ -357,7 +363,9 @@ function recordResults(suite, controls, report) {
       log.check(`${title}: ${String(failure).split('\n')[0]}`, false);
     }
   }
-  return anyResult;
+  // Whether the report proves the run passed — not merely that it produced
+  // something. e2e's own exit code is a second, weaker opinion on top of this one.
+  return anyResult && failures === 0;
 }
 
 /**
@@ -381,7 +389,9 @@ function stopAgentDeviceDaemon(env, stateDir) {
   if (stopped.status !== 0) {
     // Not a red run: a daemon that will not stop is cleaned up by its own idle
     // timeout, and the suite's verdict has already been decided.
-    console.log('agent-device: daemon stop did not confirm (idle timeout will)');
+    console.log(
+      'agent-device: daemon stop did not confirm (idle timeout will)'
+    );
   }
 }
 
