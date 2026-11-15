@@ -87,7 +87,6 @@ ios/components/Dialog/HybridNitroUiDialog.swift
 ios/components/Form/HybridNitroUiForm.swift
 ios/components/Form/HybridNitroUiFormRow.swift
 ios/components/Form/HybridNitroUiFormSection.swift
-ios/components/Form/NitroUiFormReference.swift
 ios/components/Form/NitroUiFormViews.swift
 ios/components/Host/HybridNitroUiHost.swift
 ios/components/IconButton/HybridNitroUiIconButton.swift
