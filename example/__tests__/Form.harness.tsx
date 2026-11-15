@@ -9,8 +9,8 @@
  * (`nuiTestFormReport`, `nuiTestSectionReport`, `nuiTestRowReport`, whose fields
  * `src/components/Form/Form.nitro.ts` documents) plus React's own counters. The report is
  * not a stand-in for what the screen would show: `heights` is the layout's own answer for
- * a row, `where` is which superview a row's component view is in right now, and `kind` /
- * `x` / `w` / `radius` / `headerH` are the measurements question 2 compares.
+ * a row, `where` is which superview a row's component view is in right now, and `x` / `w` /
+ * `radius` / `headerH` are the container's own geometry, as the list answers for it.
  *
  * What these cases *cannot* prove is a finger's touch: `react-native-harness` delivers
  * events by tag, so they show that a reparented row and its hosted Switch are addressable
@@ -723,6 +723,10 @@ const styles = StyleSheet.create({
   // answers the question the case asks, because the two boxes have the same origin.
   measuringRow: { alignItems: 'stretch', paddingHorizontal: 0 },
   measured: { flex: 1 },
+  // The `Sections` story's box, which the moved E2/X24 cases measure: a Form with a
+  // height inside a padded container, so its rows move after their first layout.
+  storyOuter: { flex: 1, padding: 16 },
+  storyForm: { height: 420 },
 });
 
 /**
@@ -2752,5 +2756,531 @@ describe('Form row boxes (X29 r2)', () => {
     expect(Math.abs(num(after, 'plainBox') - plainBox)).toBeLessThanOrEqual(
       0.5
     );
+  });
+});
+
+/**
+ * The two Android regressions `FormFidelity.harness.tsx` carried (X37).
+ *
+ * That file answered Q10 question 2 — this Form against a SwiftUI `Form`, to the point — and
+ * needed a seam in the published package to do it (`NitroUiFormReference.swift`, hosted by the
+ * `show-reference` command). The comparison has caught nothing outside the tasks that built
+ * Form, so the iOS half and that seam are gone. These three cases are what the file also
+ * carried: claims about *this* Form that no other case on this platform can see, because no
+ * React Native frame, and no count of what a layer was *handed*, shows where a Compose layer
+ * finally put a pixel.
+ *
+ * Android only, for that reason: iOS draws its rows through UIKit cells, which have no painted
+ * container, no band layer beneath the rows, and no placement step to get wrong.
+ */
+
+/** One of the `left,top,width,height` dp fields the reports carry. */
+type PlacedBox = [number, number, number, number];
+
+function placedBox(field: string | undefined): PlacedBox {
+  const parts = (field ?? '').split(',').map((n) => Number(n));
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+    throw new Error(`"${String(field)}" is not a left,top,width,height box`);
+  }
+  return [
+    parts[0] as number,
+    parts[1] as number,
+    parts[2] as number,
+    parts[3] as number,
+  ];
+}
+
+/**
+ * Read a section's own report until `ok` holds.
+ *
+ * The bands and the layer are not in the Form's report and cannot be: a Form has several
+ * sections, and the numbers belong to one of them. So the case asks the section that owns
+ * them, the way the cases above ask a section for its shapes.
+ */
+async function sectionReport(
+  which: string,
+  ok: (r: Record<string, string>) => boolean = () => true
+): Promise<Record<string, string>> {
+  const deadline = Date.now() + 12000;
+  for (;;) {
+    try {
+      const report = parse(need(sections[which]).nuiTestSectionReport());
+      if (ok(report)) return report;
+    } catch {
+      /* not yet: a first read is often "pending", which parses to {} */
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `the "${which}" section report never satisfied its condition - last was ` +
+          `${String(sections[which]?.nuiTestSectionReport() ?? '<no handle>')}`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/**
+ * Say how a placed accessory differs from the row it belongs to.
+ *
+ * A disclosure sits inside the row's trailing edge, level with its middle — the same thing the
+ * layer's own offset asks for, so every number here is the row's rather than a copy of a
+ * constant from `FormListMetrics`.
+ */
+function accessoryIssues(accessory: PlacedBox, rowBox: PlacedBox): string[] {
+  const issues: string[] = [];
+  const centre = (b: PlacedBox) => b[1] + b[3] / 2;
+  const rowRight = rowBox[0] + rowBox[2];
+  if (accessory[0] < rowBox[0] - 1) {
+    issues.push(
+      `the accessory starts at x=${accessory[0]} dp, left of its row at x=${rowBox[0]} dp`
+    );
+  }
+  if (accessory[0] + accessory[2] > rowRight + 1) {
+    issues.push(
+      `the accessory ends at x=${(accessory[0] + accessory[2]).toFixed(1)} dp, past its ` +
+        `row's trailing edge at x=${rowRight.toFixed(1)} dp`
+    );
+  }
+  if (Math.abs(centre(accessory) - centre(rowBox)) > 1) {
+    issues.push(
+      `the accessory is centred at y=${centre(accessory).toFixed(1)} dp while its row is ` +
+        `centred at y=${centre(rowBox).toFixed(1)} dp`
+    );
+  }
+  return issues;
+}
+
+/**
+ * The settings page the band cases measure: three sections, the first with a footer, in a Form
+ * that fills its parent.
+ *
+ * Eight rows, so "the list is up" is a number rather than a hope, and a footer on the first
+ * section, because a band is only worth measuring where there are two of them.
+ */
+function SettingsForm() {
+  return (
+    <Form
+      hybridRef={(view) => {
+        if (view != null) forms.drawing = view;
+      }}
+      style={styles.form}
+    >
+      <Form.Section
+        footer="These settings apply to this device only."
+        hybridRef={(view) => {
+          if (view != null) sections.first = view;
+        }}
+        title="Connectivity"
+      >
+        <Form.Row>
+          <Text>Wi-Fi</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text>Bluetooth</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text>Cellular data</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text>Ring on receipt</Text>
+        </Form.Row>
+      </Form.Section>
+      <Form.Section title="Sound">
+        <Form.Row>
+          <Text>ringer</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text>alert</Text>
+        </Form.Row>
+        <Form.Row>
+          <Text>notification</Text>
+        </Form.Row>
+      </Form.Section>
+      <Form.Section title="About">
+        <Form.Row>
+          <Text>nitro-ui 0.4.0</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+
+/**
+ * The `Sections` story's box: a padded container and a Form with a height, rather than a Form
+ * that fills the window.
+ *
+ * That is the shape a settings screen has, it is the page the README picture is taken from,
+ * and — because a section learns its header and footer bands from a round trip through
+ * JavaScript — it is a Form whose rows move *after* their first layout, which is the moment the
+ * shape layer has to keep up with. The fixture above is filled by its parent from the first
+ * frame and never shows it.
+ */
+function StoryForm() {
+  return (
+    <View style={styles.storyOuter}>
+      <Form style={styles.storyForm}>
+        <Form.Section
+          footer="Push arrives on this device only."
+          hybridRef={(view) => {
+            if (view != null) sections.story = view;
+          }}
+          title="Notifications"
+        >
+          <Form.Row
+            accessory="disclosure"
+            hybridRef={(view) => {
+              if (view != null) rows.storyFirst = view;
+            }}
+          >
+            <Text>Push notifications</Text>
+          </Form.Row>
+          <Form.Row
+            hybridRef={(view) => {
+              if (view != null) rows.storySecond = view;
+            }}
+          >
+            <Text>Play a sound</Text>
+          </Form.Row>
+        </Form.Section>
+      </Form>
+    </View>
+  );
+}
+
+describe('Form section drawing (E2, Android)', () => {
+  afterEach(() => {
+    cleanup();
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+  });
+
+  it('reserves a band with its padding and draws into a layer as tall as its section (E2)', async () => {
+    if (IOS) return;
+    await render(<SettingsForm />);
+    await formReport(
+      (r) => num(r, 'rows') === 8,
+      'the settings Form list',
+      'drawing'
+    );
+
+    // The header and footer are Compose text in a layer *under* the rows, so the rows cover
+    // whatever Yoga failed to reserve: S6 reserved the glyphs alone and every header lost its
+    // lower half (form-android.png). The band therefore has to be the glyphs *plus* its
+    // padding — the padding itself is FormListMetrics' (16 dp / 12 dp), and what this insists
+    // on is that the reservation is not the glyph box: put `onSizeChanged` back inside the
+    // padding and both lines below go red at once.
+    const bands = await sectionReport('first', (r) => {
+      num(r, 'headerBand');
+      num(r, 'footerBand');
+      return true;
+    });
+    console.log(`FORM BANDS first section ${JSON.stringify(bands)}`);
+    const padding = (band: string, text: string) =>
+      num(bands, band) - num(bands, text);
+    expect(padding('headerBand', 'headerText')).toBeGreaterThanOrEqual(8);
+    expect(padding('footerBand', 'footerText')).toBeGreaterThanOrEqual(4);
+
+    // The other thing only Android can get wrong, and the one no View frame can show. The
+    // layer is placed by Compose, and Compose places inside the box it was *measured* under —
+    // which is not the section's box unless the section says so, because a Nitro host's
+    // content is measured with an unbounded height (`NitroUiMeasuredRoot`). A decoration that
+    // answered those constraints with `fillMaxSize` filled its own content instead: measured
+    // here at 54.1 dp inside a section 296.4 dp tall, which is a footer bottom-aligned over
+    // the header and a section whose rows have no container at all. Read once the section has
+    // really grown into its footer band, so this cannot pass by being early; `layerH` is the
+    // layer's own `onSizeChanged`, not a constant.
+    const settled = await sectionReport('first', (r) => {
+      const lastRowBottom = (r.rects ?? '')
+        .split(',')
+        .filter((entry) => entry.includes('-'))
+        .reduce((bottom, entry) => {
+          const edge = entry.split('-').map(Number);
+          return Math.max(bottom, (edge[0] ?? 0) + (edge[1] ?? 0));
+        }, 0);
+      return (
+        num(r, 'layerH') > 0 &&
+        num(r, 'boxH') >= lastRowBottom + num(r, 'footerBand')
+      );
+    });
+    console.log(`FORM LAYER first section ${JSON.stringify(settled)}`);
+    const outBy = num(settled, 'boxH') - num(settled, 'layerH');
+    if (Math.abs(outBy) > 1) {
+      throw new Error(
+        `question 2: the section draws into a layer ${num(
+          settled,
+          'layerH'
+        )} dp tall while the section itself is ${num(
+          settled,
+          'boxH'
+        )} dp, so the footer is bottom-aligned against, and the row shapes clipped to, a ` +
+          `box that is not the section's (out by ${outBy.toFixed(1)} dp)`
+      );
+    }
+  });
+
+  it('places a drawn accessory inside the row it belongs to, and keeps it there (E2)', async () => {
+    if (IOS) return;
+    await render(<StoryForm />);
+
+    // The one thing no React Native frame can show: where the drawing layer actually *put*
+    // something. Every number that feeds a draw can be right and the pixels still wrong,
+    // because the layer places its children with a section-relative offset added to a Box
+    // alignment, and that sum is reported by nothing — not a View frame, not the list of boxes
+    // the layer was handed. It is also how the `Sections` story shipped: a disclosure placed a
+    // whole section-width outside the layer, so no `Form.Row` with `accessory="disclosure"`
+    // drew a chevron at all.
+    //
+    // So two numbers have to be one number — the box the row says it has, and the box the
+    // layer says it *placed* its accessory in — read live against each other, on the story's
+    // own box (see `StoryForm` for why that is the fixture that moves). The row containers are
+    // placed by the same `align`/`offset` pair in the same layer, so a layer that ignored it
+    // would put this out of the row by the same amount.
+    const disagreement = (): string[] => {
+      const report = parse(
+        sections.story?.nuiTestSectionReport() ?? '<no handle>'
+      );
+      const rowReport = parse(
+        rows.storyFirst?.nuiTestRowReport() ?? '<no handle>'
+      );
+      if (num(rowReport, 'h') <= 0) {
+        return ['the row has no height yet'];
+      }
+      if (
+        report.drawnAccessory === undefined ||
+        report.drawnAccessory === '-'
+      ) {
+        return ['the layer has placed no accessory at all'];
+      }
+      return accessoryIssues(
+        placedBox(report.drawnAccessory),
+        placedBox(rowReport.frame)
+      );
+    };
+    const story = await sectionReport(
+      'story',
+      (r) => num(r, 'shapes') > 0 && disagreement().length === 0
+    ).catch(() => {
+      throw new Error(
+        `question 2: ${disagreement().join('; ')} - the row is where Yoga put it and the ` +
+          `layer's drawing is not, which is the layer placing its chrome somewhere other ` +
+          `than the row it belongs to (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )}; row ${String(rows.storyFirst?.nuiTestRowReport() ?? '<no handle>')})`
+      );
+    });
+    console.log(
+      `FORM DRAWN story section ${JSON.stringify(story)} row ${String(
+        rows.storyFirst?.nuiTestRowReport()
+      )}`
+    );
+    // And it has to *stay* agreed. A settings page is laid out more than once — the container
+    // around the list settles after the list itself, and a section grows when its bands come
+    // back from JavaScript — so a layer that gets the first placement right and the second
+    // wrong is the bug this case is for, not a pass. Sample again after the page has had two
+    // seconds to stop moving.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const late = disagreement();
+    if (late.length > 0) {
+      throw new Error(
+        `question 2: ${late.join('; ')} - the layer followed the section's first layout and ` +
+          `not the one after it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )}; row ${String(rows.storyFirst?.nuiTestRowReport() ?? '<no handle>')})`
+      );
+    }
+    expect(num(story, 'shapes')).toBe(2);
+  });
+
+  /**
+   * Every row sits inside the card its section draws behind it (task X24 round 3).
+   *
+   * `form-android.png` shipped with the rows and their cards disagreeing: one card, drawn
+   * across the boundary between two rows, so the first row had no container at all and the
+   * second was half in and half out. Nothing else sees it: the case above reads
+   * `drawnAccessory` against `frame` — one row, and the accessory's own box — and the
+   * `layerH`/`boxH` pair reads the layer's box, not what it drew inside it. A section can
+   * report two shapes, a layer as tall as the section, an accessory in its row, and still
+   * paint both shapes at one row's y.
+   *
+   * So read the placement itself: `drawnCards`, each row container's box as the layout pass
+   * left it (section-relative dp — the same space the row's own `frame` is in, and rows are
+   * direct children of the section, which is what `shapes=rows` proves), against every row's
+   * box, in React's order, on both axes. `cardBoxes` is what the layer was *handed* and stays
+   * in the failure message beside it, because the two disagree in different ways: a wrong
+   * `cardBoxes` is a row whose frame the layer was never told about, and a wrong `drawnCards`
+   * is a container that was handed the right box and landed somewhere else. The report used to
+   * carry these as `top-height` pairs only, which cannot show a card that is a centimetre wide.
+   * A card may fall short of its row by the segmented gap the layer trims off
+   * (`top = row.top + gap/2`, `height = row.height - gap`) and by nothing else; half a row is
+   * what this case is for.
+   */
+  it('lays every row of a section inside its own card (X24)', async () => {
+    if (IOS) return;
+    await render(<StoryForm />);
+
+    /** Why the cards and the rows disagree, as one line each; empty means they agree. */
+    const disagree = (): string[] => {
+      const report = parse(
+        sections.story?.nuiTestSectionReport() ?? '<no handle>'
+      );
+      const rowsInStory = [rows.storyFirst, rows.storySecond].filter(
+        (row) => row != null
+      );
+      if (rowsInStory.length < 2)
+        return ['the story section has no two rows yet'];
+      const gap = num(report, 'gap');
+      // `drawnCards` is a placement *inside* the layer, and `layerH` is the size Compose gave
+      // that layer's root, so neither of them can see a layer that is the right size and in the
+      // wrong place. `hostBox` is the layer's own frame in the section, read from the View tree
+      // above it: at the section's origin and as tall as the section, or every card below is
+      // being painted somewhere else than where its numbers say.
+      const layer = placedBox(report.hostBox);
+      const layerIssues: string[] = [];
+      if (layer[0] !== 0 || layer[1] !== 0) {
+        layerIssues.push(
+          `the layer that paints the cards sits at x=${layer[0]}, y=${layer[1]} inside its ` +
+            `own section (hostBox=${String(report.hostBox)})`
+        );
+      }
+      if (Math.abs(layer[3] - num(report, 'boxH')) > 1) {
+        layerIssues.push(
+          `the layer is ${layer[3]} dp tall in a section ${num(
+            report,
+            'boxH'
+          )} dp tall (hostBox=${String(report.hostBox)})`
+        );
+      }
+      // ... and the box that box's content is laid out in has to be at the top of it, at the
+      // section's size: every card is drawn at a number relative to *that*, so a box the host's
+      // root placed lower moves the picture with every card still "inside" its own row.
+      const root = placedBox(report.layerBox);
+      if (root[0] !== 0 || root[1] !== 0) {
+        layerIssues.push(
+          `the section's own layer box sits at x=${root[0]}, y=${root[1]} inside the ` +
+            `layer's view (layerBox=${String(report.layerBox)})`
+        );
+      }
+      if (Math.abs(root[3] - num(report, 'boxH')) > 1) {
+        layerIssues.push(
+          `the section's own layer box is ${root[3]} dp tall in a section ` +
+            `${num(report, 'boxH')} dp tall (layerBox=${String(report.layerBox)})`
+        );
+      }
+      if (layerIssues.length > 0) return layerIssues;
+      // `0:l,t,w,h|1:l,t,w,h`, by row index — the index travels so a row that was never placed
+      // is a missing entry rather than a box that belongs to whichever row came first.
+      const drawn = new Map<number, PlacedBox>();
+      for (const entry of (report.drawnCards ?? '').split('|')) {
+        const at = entry.indexOf(':');
+        if (at < 0 || !entry.includes(',')) continue;
+        drawn.set(Number(entry.slice(0, at)), placedBox(entry.slice(at + 1)));
+      }
+      const missing = rowsInStory
+        .map((_, index) => index)
+        .filter((index) => !drawn.has(index));
+      if (missing.length > 0) {
+        return [
+          `the layer placed no container for row(s) ${missing.join(', ')} of ${rowsInStory.length}: drawnCards=${String(
+            report.drawnCards ?? '<absent>'
+          )} (handed cardBoxes=${String(report.cardBoxes ?? '<absent>')})`,
+        ];
+      }
+      const cards = rowsInStory.map(
+        (_, index) => drawn.get(index) as PlacedBox
+      );
+      // Beside it, for the message only: what the layer was handed.
+      const handed = (report.cardBoxes ?? '')
+        .split('|')
+        .filter((entry) => entry.includes(','))
+        .map((entry) => placedBox(entry));
+      const handedTop = (index: number): string =>
+        handed[index] == null ? '?' : String(handed[index][1]);
+      const rowBoxes = rowsInStory.map((row) =>
+        placedBox(parse(row.nuiTestRowReport()).frame)
+      );
+      if (rowBoxes.some((b) => b[3] <= 0)) {
+        return ['a row of the story section has no height yet'];
+      }
+      const out: string[] = [];
+      cards.forEach((card, index) => {
+        const [cardLeft, cardTop, cardWidth, cardHeight] = card;
+        const [rowLeft, rowTop, rowWidth, rowHeight] = rowBoxes[index] ?? [
+          0, 0, 0, 0,
+        ];
+        const slack = gap / 2 + 0.5;
+        // A card with nothing to fill draws nothing, and looks exactly like a card that was
+        // never placed: `form-android.png` shipped one of these two.
+        if (cardWidth <= 0 || cardHeight <= 0) {
+          out.push(
+            `row ${index}: the container drawn for it is ${cardWidth} x ${cardHeight}`
+          );
+          return;
+        }
+        if (cardTop > rowTop + slack) {
+          out.push(
+            `row ${index}: its container is drawn at y=${cardTop} while the row starts at ` +
+              `y=${rowTop} (its box was handed to the layer as y=${handedTop(index)})`
+          );
+        }
+        if (cardTop + cardHeight < rowTop + rowHeight - slack) {
+          out.push(
+            `row ${index}: its card ends at y=${(cardTop + cardHeight).toFixed(1)} while the ` +
+              `row ends at y=${(rowTop + rowHeight).toFixed(1)}`
+          );
+        }
+        if (Math.abs(cardLeft - rowLeft) > 1) {
+          out.push(
+            `row ${index}: its card starts at x=${cardLeft} while the row starts at x=${rowLeft}`
+          );
+        }
+        if (Math.abs(cardWidth - rowWidth) > 1) {
+          out.push(
+            `row ${index}: its card is ${cardWidth} wide while the row is ${rowWidth} wide`
+          );
+        }
+      });
+      return out;
+    };
+    // A report that cannot be read at all ("not yet") is one more reason to disagree, never
+    // an exception that escapes the poll.
+    const issues = (): string[] => {
+      try {
+        return disagree();
+      } catch (error) {
+        return [String(error)];
+      }
+    };
+
+    const settled = await sectionReport(
+      'story',
+      (r) => num(r, 'shapes') > 0 && issues().length === 0
+    ).catch(() => {
+      throw new Error(
+        `X24: ${issues().join('; ')} - a row is drawn outside the container its own section ` +
+          `paints behind it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )}; rows ${String(rows.storyFirst?.nuiTestRowReport())} / ${String(
+            rows.storySecond?.nuiTestRowReport()
+          )})`
+      );
+    });
+    console.log(
+      `FORM CARDS story section ${JSON.stringify(settled)} rows ${String(
+        rows.storyFirst?.nuiTestRowReport()
+      )} / ${String(rows.storySecond?.nuiTestRowReport())}`
+    );
+    // And it has to stay agreed, for the same reason the accessory case waits: the bands come
+    // back from JavaScript and the rows move after their first layout.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const late = issues();
+    if (late.length > 0) {
+      throw new Error(
+        `X24: ${late.join('; ')} - the cards followed the section's first layout and not the ` +
+          `one after it (section ${String(
+            sections.story?.nuiTestSectionReport() ?? '<no handle>'
+          )})`
+      );
+    }
   });
 });

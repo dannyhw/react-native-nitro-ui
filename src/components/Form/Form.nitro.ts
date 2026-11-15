@@ -155,23 +155,20 @@ export interface NitroUiFormMethods extends HybridViewMethods {
   nuiTestScrollTo(y: number): void;
 
   /**
-   * TEMPORARY, test-only, and iOS-only in effect: drive the SwiftUI `Form` the fidelity table
-   * compares this component against. Android has no platform `Form` to compare with, so every
-   * command there is a no-op and its report keeps `kind=prototype`.
+   * TEMPORARY, test-only, and iOS-only in effect: change one of the list's own behaviours from
+   * inside the library, so a harness can watch the fallback a missing callback used to need.
+   * Android has no `UICollectionView` to do any of this to, so every command there is a no-op.
    *
-   * - `show-reference` puts a SwiftUI `Form` with the same three sections into this Form's
-   *   box, over the list;
-   * - `hide-reference` takes it away;
    * - `scroll-no-report` moves the list 60 pt without reporting it, the shape of every settle
    *   callback that used to be missing;
    * - `scroll-animated` moves it 60 pt with `animated: true`, which is the keyboard path's shape
    *   and the one that publishes a frame at a time if nothing guards it;
    * - `self-sizing-off` takes `selfSizingInvalidation` away from the list, which is how iOS 15
-   *   behaves permanently and what lets the `rowResized` fallback be tested on a modern OS;
-   * - while it is up, `nuiTestFormReport()` describes *that* list under the same field names,
-   *   so the two are compared like for like rather than measured twice differently.
+   *   behaves permanently and what lets the `rowResized` fallback be tested on a modern OS.
    *
-   * The geometry fields are `kind`, `listW`, `x`, `w`, `h0..h2`, `radius`, `sep`, `headerX`,
+   * The geometry fields `nuiTestFormReport()` carries alongside the counts are `kind` (iOS
+   * only, and constant since X37 took the comparison away: it names the list that answered,
+   * which is always this Form's own), `listW`, `x`, `w`, `h0..h2`, `radius`, `sep`, `headerX`,
    * `headerY`, `headerH`, `footerH`.
    *
    * @internal Not app API (D14), and a measurement seam rather than a feature.
