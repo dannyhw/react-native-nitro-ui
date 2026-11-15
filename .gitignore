@@ -90,9 +90,9 @@ example/**/__image_snapshots__/*.bak
 # v4 excludes dot-directories unless `include-hidden-files: true`, so this is not a
 # dot-directory; the ignore is for running the step's body locally.
 harness-diag/
-# Machine state a harness run publishes for its own wall-clock gates (D21): a
-# load average a running test may read, never evidence anyone reviews.
-**/harness-timing/
+# Machine state a harness run publishes about itself (today one run premise, the
+# locale opt-out): a file a running test may read, never evidence anyone reviews.
+**/harness-run/
 
 # T02 bench app
 # `bench/ios` and `bench/android` are CNG output: `expo prebuild --clean`

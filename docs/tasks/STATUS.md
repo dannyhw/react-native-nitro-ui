@@ -8,16 +8,18 @@ the task merges. Open follow-ups are in `FOLLOWUPS.md`.
 
 Name · ID · branch · pull request · next action.
 
-- Android real-input on e2e · X35 · `task/X35-real-input-e2e` · none yet · device proof in
-  progress; then review and the merge gates.
-- Harness tests that measure or repeat, and the closed dwell probe, removed · X37 ·
-  `task/X37-harness-trims` · #82 · reviewed; merge gates, with X35.
+- Android real-input on e2e · X35 · `task/X35-real-input-e2e` · none yet · last fix round in
+  progress on a device pair; then review and the merge gates.
 
 ## Recently merged
 
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-15 The package no longer ships a SwiftUI reference Form that only its own tests used;
+  harness tests that measured or repeated another suite, and a closed probe, are removed (X37,
+  #82). A second comment and documentation pass covers the tests, the example and bench apps and
+  the contributor's manual.
 - 11-15 Nothing user-visible: tooling and tests that nothing uses removed (W3, #77); the rest
   of the comment sweep (X40, #78); two unused lease-pool features removed (X38, #79); the bench
   compares against the last release in place of committed baselines (X36, #80); task records

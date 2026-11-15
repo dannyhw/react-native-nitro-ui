@@ -32,7 +32,6 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import { Switch, nitroUiCore } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
-import { expectTimingBudget } from './timingGate';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -657,42 +656,5 @@ describe('Switch · core runtime', () => {
       nitroUiCore.setPerfEnabled(false);
       nitroUiCore.drainPerf();
     }
-  });
-
-  it('mounts many instances at once', async () => {
-    const rows = Array.from({ length: 40 }, (_, index) => index);
-    // 40 hosted controls is the stress case, and it is slower than the harness's
-    // 1000ms default: one `UIHostingController` / Compose composition each has to
-    // be built, laid out and committed. So this render gets its own timeout, and
-    // the measured time is asserted against a budget an order of magnitude above
-    // what the platforms actually take (see docs/tasks/T10-core-switch.report.md).
-    const startedAt = nitroUiCore.now();
-    await render(
-      <View>
-        {rows.map((row) => (
-          <Switch
-            key={row}
-            defaultValue={row % 2 === 0}
-            testID={`many-${row}`}
-          />
-        ))}
-      </View>,
-      { timeout: 20000 }
-    );
-    const mountedIn = nitroUiCore.now() - startedAt;
-    console.log(
-      `Switch stress: 40 hosted controls mounted in ${mountedIn.toFixed(1)}ms`
-    );
-    // A duration, so D21 reports it on every run and judges it only under
-    // `HARNESS_TIMING=1` on a quiet machine. The gate that runs everywhere is
-    // the one below: all 40 boxes reached the tree.
-    await expectTimingBudget({
-      label: 'Switch stress: mount 40 instances',
-      measuredMs: mountedIn,
-      limitMs: 10000,
-      note: 'the bar is headroom for a debug build, not a target',
-    });
-    await waitForTestId('many-39');
-    expect(harnessUi.queryByTestId('many-39')).not.toBeNull();
   });
 });

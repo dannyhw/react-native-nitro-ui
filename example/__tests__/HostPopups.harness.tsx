@@ -33,7 +33,8 @@
  * (D23's outcome), so the popup cases would measure SwiftUI's own menu — which reports
  * nothing (`nuiTestMenuReport` answers `-1` for exactly that reason). The cases that hold
  * on both platforms — the SegmentedControl's props, and the mixed all-seven cases in
- * `HostControls.harness.tsx` and `MountChurn.harness.tsx` — run everywhere.
+ * `HostControls.harness.tsx` — run everywhere; the mixed cycle in
+ * `MountChurn.android.harness.tsx` is a heap gate, and is named for that platform.
  */
 import { useState } from 'react';
 import { PixelRatio, Platform, TurboModuleRegistry, View } from 'react-native';
@@ -924,7 +925,7 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
 // MARK: - Picker's menu, hosted
 
 // Android only, and the guard is the top-level one `Host.harness.tsx` and
-// `MountChurn.harness.tsx` use: on iOS a Host is the documented passthrough (D23), so
+// `MountChurn.android.harness.tsx` use: on iOS a Host is the documented passthrough (D23), so
 // these cases would measure SwiftUI's own menu - which reports nothing, because
 // `nuiTestMenuReport` answers `-1` there - rather than anything this task changed.
 if (Platform.OS === 'android') {
@@ -1901,7 +1902,7 @@ if (Platform.OS === 'android') {
     it('opens a hosted menu inside the seven and still leaves nothing after a churn', async () => {
       // Churn with a window in play: mount all seven, open the Picker's menu, drop the
       // whole Host, and read the process-wide counts on a fresh mount. This is the leak
-      // question `MountChurn.harness.tsx` asks of Switches, asked of the two controls that
+      // question `MountChurn.android.harness.tsx` asks of Switches, asked of the two controls that
       // own windows.
       const witness = newLog();
       for (let cycle = 0; cycle < 4; cycle += 1) {

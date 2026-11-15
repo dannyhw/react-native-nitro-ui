@@ -46,7 +46,6 @@ import {
 } from 'react-native-harness';
 import { screen } from '@react-native-harness/ui';
 import { Progress, nitroUiCore } from 'react-native-nitro-ui';
-import { expectTimingBudget } from './timingGate';
 
 /**
  * Bounds of a rendered view, read straight from the harness native module.
@@ -358,7 +357,7 @@ const CONFIGURATIONS: ReadonlyArray<Configuration> = [
  * what an assertion needs to compare with a Yoga box; the rest stays raw, which is
  * also what makes the fill-density assertions dimensionless.
  *
- * Fetched lazily, the way `MountChurn.harness.tsx` fetches the heap probe: on iOS the
+ * Fetched lazily, the way `MountChurn.android.harness.tsx` fetches the heap probe: on iOS the
  * module does not exist and this file still has to load there.
  */
 type Ink = {
@@ -1100,42 +1099,6 @@ describe('Progress', () => {
     expect(handle.variant).toBe('linear');
     expect(handle.appearance).toBe('flat');
     expect(handle.contained).toBe(false);
-    unmount();
-  });
-
-  it('mounts many instances at once', async () => {
-    const rows = Array.from({ length: 40 }, (_, index) => index);
-    // 40 hosted controls, both variants and both modes mixed - the stress case, and
-    // slower than the harness' 1000ms default: one `UIHostingController` / Compose
-    // composition each has to be built, laid out and committed. Own timeout, and the
-    // time is logged so the bench has a second opinion.
-    const startedAt = nitroUiCore.now();
-    const { unmount } = await render(
-      <View>
-        {rows.map((row) => (
-          <Progress
-            key={row}
-            variant={row % 2 === 0 ? 'linear' : 'circular'}
-            value={row % 3 === 0 ? null : row / 40}
-            testID={`many-${row}`}
-          />
-        ))}
-      </View>,
-      { timeout: 20000 }
-    );
-    for (const row of rows) {
-      await waitForBox(`many-${row}`, 20000);
-    }
-    const elapsed = nitroUiCore.now() - startedAt;
-    // A duration, so D21 reports it on every run and judges it only under
-    // `HARNESS_TIMING=1` on a quiet machine. The gate that runs everywhere is the
-    // loop above plus this: all 40 boxes are in the tree.
-    await expectTimingBudget({
-      label: 'Progress stress: mount 40 instances',
-      measuredMs: elapsed,
-      limitMs: 10000,
-      note: 'an order of magnitude above what the platforms take - enough to catch a regression, too loose to be a bench',
-    });
     unmount();
   });
 

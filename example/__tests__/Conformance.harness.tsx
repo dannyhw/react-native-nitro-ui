@@ -40,9 +40,11 @@
  *   and requires a correction to arrive. `Button.harness.tsx` explains the precedent for
  *   why, at its own poison helper: a declared fallback that is close to the truth makes
  *   every "the box was right" assertion pass even when no correction ever happens.
- * - the leak rule takes its baseline *after* a warm-up mount, so the component's own
- *   registry row cannot be counted as a leak — the mistake that would get the rule exempted
- *   the first time it was green-ish for the wrong reason.
+ * - the leak rule reads a *quiescent* baseline (two equal reads, or it refuses), mounts K
+ *   controls, waits for the last one to be laid out and requires the ledger to have risen
+ *   by exactly K before it asks whether the rise came back down. A baseline that is still
+ *   moving makes "returned to baseline" unfalsifiable — the mistake that would get the rule
+ *   exempted the first time it was green-ish for the wrong reason.
  * - the recycle rule asserts each property against the props of the control's *second*
  *   owner, so a value that stayed behind names itself.
  *
@@ -94,7 +96,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import { deviceLocale, deviceLocaleNote } from './deviceContext';
 import { waitForHandle } from './handles';
-import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
+import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './runState';
 import {
   AlertDialog,
   BottomSheet,
@@ -634,8 +636,10 @@ async function typeIntoField(testId: string, text: string, expected: string) {
  *   be shown the difference. `SegmentedControl`'s picked index and `Menu`'s open popup are
  *   real, and neither has a read-out where the recycle happens. That is a hole in the guard,
  *   so the matrix says **failing** and points at a `docs/tasks/FOLLOWUPS.md` line; the
- *   fixture prints `known failing (…)` the way the a11y sweep prints its own debt, and
- *   `staleDebt` retires the row when a run stops reporting it.
+ *   fixture prints `known failing (…)` the way the a11y sweep prints its own debt. Unlike
+ *   the sweep's debt, this one removes itself with no run: nothing reports a stale
+ *   `CONFORMANCE_EXEMPTIONS` row, so whoever turns a `blindSpot` into a probe deletes the
+ *   row by hand.
  *
  * Putting a control in the wrong kind is not free: `checkRecycleNotes` reads this table and
  * refuses a `blindSpot` with no `CONFORMANCE_EXEMPTIONS` row and a debt row whose fixture
@@ -1106,23 +1110,26 @@ const PLATFORM = Platform.OS === 'ios' ? 'ios' : 'android';
  * unless a suite says otherwise, and the first cold mount of a native view on an emulator can
  * exceed that on its own — the Android run went red on exactly that, at load1 11, on a control
  * that had nothing wrong with it. 20 s is what `Button.harness.tsx` and
- * `MountChurn.harness.tsx` pass; the value is a budget for the *mount*, not for the
+ * `MountChurn.android.harness.tsx` pass; the value is a budget for the *mount*, not for the
  * measurement, and the wall-clock assertions below still have their own tighter gates.
  */
 const RENDER = { timeout: 20000 } as const;
 
 /* ------------------------------ the rule bodies ------------------------------ */
-/* The device-side shape of `fallbackFindings`, `leakFindings` and `recycleFindings` in
- * `scripts/conformance-core.mjs`. Round 1 called these "mirrors" and said a divergence
- * between the halves was caught by `conformance.test.js` (X4 review N4). It is not, and
- * calling them mirrors oversells what is here:
+/* `fallbackFindings`, `leakFindings` and `recycleFindings` are the in-app halves of the
+ * fallback, leak and recycle rules: `scripts/conformance-core.mjs` states those rules in
+ * `CONFORMANCE_RULES` and judges them offline (`checkFallbackTable`, `checkRecycleNotes`,
+ * `checkCoverage`) under its own names, and the branch below each one here is this file's
+ * re-implementation rather than a mirror of a same-named function. Round 1 called these
+ * "mirrors" and said a divergence between the halves was caught by `conformance.test.js`
+ * (X4 review N4). It is not, and calling them mirrors oversells what is here:
  *
  * - The harness cannot import a Node module, so this file re-implements the branches. It
  *   takes its *numbers* from the shared table below, which `checkSharedTableMirror` does
  *   prove equal to `sharedInAppTable()` on every `check` — tolerance, poison sizes,
  *   declared fallbacks and box rules cannot disagree between the halves.
- * - The *wording* is free to drift, and has: three of these strings already differ from the
- *   originals by a clause. `conformance.test.js` drives the originals, not these, so no test
+ * - The *wording* is free to drift, and has: these strings already differ from the
+ *   host-side checks' by a clause. `conformance.test.js` drives the originals, not these, so no test
  *   reads this file's messages at all. What that risks is not a wrong verdict — the branches
  *   are short and the numbers are shared — it is a device failure whose sentence no longer
  *   matches the one in the report, so the two say the same bug in different words.
@@ -1154,8 +1161,10 @@ function fmt(size: Size | null): string {
 }
 
 /**
- * The in-app half of `canonicalLocale` / `localePremiseMiss` in
- * `scripts/conformance-core.mjs` (same re-implementation note as the file header's).
+ * This file's own `localePremiseMiss`, over a `canonicalLocale` that mirrors
+ * `scripts/conformance-core.mjs:canonicalLocale` (same re-implementation note as the file
+ * header's). The core has the canonicaliser, because its offline locale check needs one;
+ * the premise itself is only visible in the app, so nothing offline re-implements it.
  *
  * Only the shape the rule needs: strip a launch identifier to the language(+script)+region
  * prefix the engine itself reports, compare it with the locale the row was measured in, and
@@ -1278,7 +1287,7 @@ function fallbackFindings(input: {
     // pins the launch locale, so the app reporting another one means the pin was lost, was
     // overridden without being said, or the formatter stopped following the locale it was
     // handed. The skip exists only behind the run's own opt-out (see `localeMismatchAllowed`
-    // in `timingGate.ts`), and names the two claims it suspends — the box comparison and the
+    // in `runState.ts`), and names the two claims it suspends — the box comparison and the
     // warm-corrections claim below, which `HybridNitroUiDatePicker.swift`'s `fallbackSize`
     // prices in words. Everything else still runs either way: the poison must still be
     // corrected, and a mount that settles at nothing still fails.
@@ -1341,8 +1350,9 @@ function fallbackFindings(input: {
 /**
  * Rule 2: did the engine's bookkeeping return to baseline after every instance dropped?
  *
- * `baseline` is taken after a warm-up mount, so the component's own registry row is already
- * in it and cannot be mistaken for a leak.
+ * `baseline` is a *settled* read (`settledStats`), taken in a window where nothing is mounted
+ * or dropped, so the component's own registry row is already in it and a drop still in
+ * flight from the previous test cannot be mistaken for a release.
  */
 function leakFindings(input: {
   component: string;
@@ -4682,9 +4692,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
   },
 ];
 
-/** Mounts per control in the leak fixture. */
-const CHURN = 50;
-
 afterEach(() => {
   cleanup();
   handles.clear();
@@ -4901,57 +4908,6 @@ describe('conformance · every control, four rules', () => {
           })
         );
         expectConformance(problems);
-      });
-
-      it('leaves the engine where it started across a churn of drops', async () => {
-        if (fixture.selfSizing === false) {
-          console.log(
-            `    · ${fixture.name} is not self-sizing, so it never enters the engine's ` +
-              'ledger or registry (component.json sizing: null) - its drops are proved ' +
-              'by its own suite, which reads the presentation count'
-          );
-          return;
-        }
-        // The churn, kept because it is a different shape from the one above: instances that
-        // come and go over time, in a process that has already measured this component. The
-        // warm-up is what makes its baseline honest — the component's own registry row is
-        // created by the first measure, not by a drop, so a baseline taken before it would
-        // count one legitimate entry as a leak.
-        const warmUp = await render(fixture.owner(false), RENDER);
-        await settle();
-        warmUp.unmount();
-
-        // A *quiescent* baseline, for the reason the positive-control test above
-        // states: an iOS instance reaches `onDropView` after its unmount, so the
-        // warm-up's own drop can still be in flight when the read happens, and the
-        // run that measures it reads one legitimate release as a leak. CI proved
-        // the shape — run 41230848294 reported `Menu × no-leak-on-drop: 1 ledger
-        // entry(ies) survived 50 drops` at load1 152-380 on 3 cores, and the same
-        // tree passed the same test on the next dispatch. `stats()` after a fixed
-        // `settle` was the fixture asserting about a number still on its way
-        // somewhere; `settledStats` refuses rather than comparing against one.
-        const baseline = await settledStats('the churn baseline');
-        for (let cycle = 0; cycle < CHURN; cycle += 1) {
-          const mounted = await render(fixture.owner(cycle % 2 === 1), RENDER);
-          mounted.unmount();
-        }
-        const after = await settledStats('the churn after-read');
-        console.log(
-          `    · ledger ${String(baseline.ledgerEntries)}→` +
-            `${String(after.ledgerEntries)} registry ${String(
-              baseline.registryEntries
-            )}→${String(after.registryEntries)} cached ${String(
-              baseline.cachedSizes
-            )}→${String(after.cachedSizes)} across ${String(CHURN)} mounts`
-        );
-        expectConformance(
-          leakFindings({
-            component: fixture.name,
-            baseline,
-            after,
-            instances: CHURN,
-          })
-        );
       });
 
       it('shows none of its previous owner under one identity', async () => {

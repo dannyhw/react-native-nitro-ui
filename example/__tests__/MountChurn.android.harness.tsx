@@ -35,9 +35,10 @@
  * "the Switch case is green" is not evidence about a Slider's gesture state.
  *
  * Android only: the leak is in the Compose hosting lifecycle, and iOS hosts SwiftUI
- * views with a different lifetime, so there is nothing to assert there. The iOS
- * branch registers one pending test that says so - see the `else` below, which also
- * records why it cannot register nothing.
+ * views with a different lifetime, so there is nothing to assert there. X37 removed the
+ * `it.skip` that used to stand in for that branch: a sentence as a test title is a
+ * placeholder, not a gate. The scoping is in the *file name* — `.android.harness.tsx` —
+ * for the reason at the bottom of this file: iOS must not collect the file at all.
  */
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
@@ -682,21 +683,23 @@ if (Platform.OS === 'android') {
       expect(growthMib).toBeLessThan(MAX_FLOOR_GROWTH_MIB_PER_CYCLE);
     });
   });
-} else {
-  /**
-   * A gate with nothing to gate still has to register something.
-   *
-   * Jest fails a suite that registers no test at all - "Your test suite must
-   * contain at least one test" - and measured on this repo's runner, a file whose
-   * only `describe` is behind a platform check fails the *other* platform's run
-   * rather than being skipped. So the platform that is not gated says so as a
-   * pending test: visible in the report, and honest about why it did not run.
-   */
-  describe('Mount churn (B1)', () => {
-    it.skip(
-      'is Android-only: the gate measures the Compose hosting lifecycle, ' +
-        'Picker popup included',
-      () => {}
-    );
-  });
 }
+// Why the platform lives in the file name and not in the `if` above.
+//
+// X37 item 1 deleted this file's `it.skip`, which left iOS collecting a file with no
+// tests in it, and that is an error, not an empty pass: `@jest/core`'s TestScheduler
+// fails a file that reports zero tests with "Your test suite must contain at least one
+// test." unconditionally — there is no flag for it, and `--passWithNoTests` covers "no
+// files matched", not "a matched file has no tests". It was shown red as
+// `harness:ios -- MountChurn` on 2026-11-15, before the rename below fixed it.
+//
+// So the file is named for its platform: `react-native-harness` turns the other
+// platforms' ids into a `--testPathIgnorePatterns` argument (its
+// `jest-platform-ignore-pattern.js`, pushed from the CLI's own entry), which means
+// iOS never collects it and Android collects it normally. The runner reads the id from
+// the `applePlatform`/`androidPlatform` factories in `rn-harness.config.mjs`, and
+// `jest.harness.config.mjs` already relies on that argument existing.
+//
+// The `Platform.OS` guard above is therefore redundant, and kept anyway: it is the
+// sentence that says what the suite gates when someone reads the file on the platform
+// that skips it, and it costs nothing.

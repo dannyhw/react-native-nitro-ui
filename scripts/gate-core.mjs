@@ -109,7 +109,7 @@ export const MERGE_GATES = [
  * An explicit allow-list, not `scripts/` wholesale (X2 review, "Rules, docs and
  * tests"). A device run imports a lot of `scripts/`: `example/rn-harness.config.mjs`
  * pulls in `app-stamp*.mjs`, `node-version.mjs` and
- * `harness-timing-gate.js`, `example/metro.config.js` requires the timing gate,
+ * `harness-run-state.js`, `example/metro.config.js` requires that run-state route,
  * and `scripts/real-input/**`, `harness.mjs`, `build-app.mjs`, `pod-install*.mjs`
  * and `patch-nitrogen.mjs` shape the binary or the run. Everything not listed
  * below therefore stays unmapped, which means both platforms - the expensive

@@ -56,11 +56,7 @@ import {
   render,
 } from 'react-native-harness';
 import { screen } from '@react-native-harness/ui';
-import {
-  Stepper,
-  nitroUiCore,
-  type NitroUiSizingStats,
-} from 'react-native-nitro-ui';
+import { Stepper, nitroUiCore } from 'react-native-nitro-ui';
 
 import { waitForHandle } from './handles';
 
@@ -210,16 +206,6 @@ function StepperOwner({
 }
 
 /* --------------------------------- plumbing --------------------------------- */
-
-const stats = (): NitroUiSizingStats => nitroUiCore.sizingStats();
-
-function corrections(before: NitroUiSizingStats, after: NitroUiSizingStats) {
-  return (
-    after.correctionsImmediate -
-    before.correctionsImmediate +
-    (after.correctionsBatched - before.correctionsBatched)
-  );
-}
 
 /** Within what Yoga rounds to. */
 function sameSize(a: Size | null, b: Size | null): boolean {
@@ -574,54 +560,6 @@ describe('Stepper', () => {
       'a disabled stepper still shows its value'
     ).toBe('4');
     view.unmount();
-  });
-
-  it('lays out at the declared fallback and corrects a poisoned cached size', async () => {
-    // The poison is the whole point of this file's size assertions: a declared
-    // fallback close to the truth would make every "the box was right" line above
-    // pass even if the correction stopped arriving (Checkbox's note is the precedent).
-    poison([sizingKey()]);
-    const before = stats();
-    const view = await render(
-      <StepperOwner accessibilityLabel="Poisoned" testId="cold" value={1} />,
-      { timeout: 20000 }
-    );
-    await waitForTestId('cold');
-    const control = await waitForMeasured('cold', 'the cold mount');
-    const after = stats();
-
-    expect(
-      corrections(before, after),
-      `a mount whose cached size was planted at ${describeSize(WRONG_SIZE)} was ` +
-        `corrected ${String(corrections(before, after))} times - the engine never ` +
-        'gave up the wrong number, so every cold stepper would be laid out at it'
-    ).toBeGreaterThanOrEqual(1);
-    expect(
-      sameSize(control, WRONG_SIZE),
-      `"cold" measured ${describeSize(control)} - that is the planted size, so the ` +
-        'control never measured itself'
-    ).toBe(false);
-    expect(
-      sameSize(sizeOf('cold'), control),
-      `"cold" was laid out at ${describeSize(sizeOf('cold'))} while the control ` +
-        `measured ${describeSize(control)} - the correction never reached layout`
-    ).toBe(true);
-    view.unmount();
-
-    // Then warm: the size the correction produced is now the cached answer, and a
-    // second mount must not need another one.
-    const warmBefore = stats();
-    const second = await render(
-      <StepperOwner accessibilityLabel="Warm" testId="warm" value={1} />,
-      { timeout: 20000 }
-    );
-    await waitForTestId('warm');
-    await waitForMeasured('warm', 'the warm mount');
-    expect(
-      corrections(warmBefore, stats()),
-      'a warm mount still needed a correction, so the corrected size was never cached'
-    ).toBe(0);
-    second.unmount();
   });
 
   it('measures one box for every range, step and disabled state', async () => {
