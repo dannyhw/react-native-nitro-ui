@@ -386,15 +386,27 @@ async function rewindToTop(screen: Screen): Promise<void> {
 
 /** One page-relative finger drag, `up` scrolling towards the bottom of the list. */
 async function dragContent(screen: Screen, up: boolean): Promise<void> {
+  await dragContentFraction(screen, up ? CONTENT_STEP : -CONTENT_STEP);
+}
+
+/**
+ * A finger drag of a stated size: a positive fraction scrolls towards the bottom
+ * of the list, a negative one back towards its top.
+ */
+async function dragContentFraction(
+  screen: Screen,
+  fraction: number
+): Promise<void> {
   const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
   if (content == null) {
     throw new Error('real-input: the content view has no box to scroll along.');
   }
   const column = DRAG_COLUMNS[dragColumn] ?? 0.5;
   const x = content.x + content.width * column;
-  const half = CONTENT_STEP / 2;
-  const from = content.y + content.height * (up ? 0.5 + half : 0.5 - half);
-  const to = content.y + content.height * (up ? 0.5 - half : 0.5 + half);
+  const half = Math.abs(fraction) / 2;
+  const centre = content.y + content.height * 0.5;
+  const from = centre + (fraction > 0 ? half : -half) * content.height;
+  const to = centre - (fraction > 0 ? half : -half) * content.height;
   // Slow enough that the list settles under the finger: a fling is still moving
   // when the next tree read happens, and a row can only be stopped inside the
   // band if no single drag can cross the whole band unseen.
@@ -403,6 +415,48 @@ async function dragContent(screen: Screen, up: boolean): Promise<void> {
     to: { x, y: to },
     duration: SWIPE_DURATION + 150,
   });
+}
+
+/** How far one lift nudges, as a fraction of the content view's height. */
+const LIFT_STEP = 0.12;
+
+/**
+ * Bring a control into the band by nudging the page back towards its top.
+ *
+ * This is for the control that is already on screen and parked at the bottom of
+ * the window — where a reveal driven by a hosted node's own box leaves it, because
+ * the box Compose publishes is a fact about the composition, not about the pixel
+ * the finger will land on. A full `CONTENT_STEP` drag would lift the row above it
+ * out of the tree, so the nudges are short, and the rows the test still has to read
+ * are required to stay on screen while they happen.
+ */
+export async function liftIntoBand(
+  screen: Screen,
+  control: Locator,
+  reads: Locator[] = []
+): Promise<Box> {
+  const nudges = 4;
+  for (let nudge = 0; nudge <= nudges; nudge += 1) {
+    const box = await boxOf(control);
+    if (
+      box != null &&
+      (await isShown(control)) &&
+      (await isInBand(screen, box)) &&
+      (await allShown(reads))
+    ) {
+      return box;
+    }
+    if (nudge === nudges) break;
+    await dragContentFraction(screen, -LIFT_STEP);
+    downDrags = Math.max(0, downDrags - 1);
+  }
+  throw new Error(
+    `real-input: ${String(nudges)} short drags towards the top of the page did ` +
+      `not lift the control into the band; its box now reads ` +
+      `${JSON.stringify(await boxOf(control))}, and ${String(
+        await countUnshown(reads)
+      )} of the rows this test reads with it are off screen.`
+  );
 }
 
 /** Scroll towards the bottom of the list. */
@@ -534,36 +588,3 @@ export async function flick(
 }
 
 export { expect };
-
-/**
- * The box of a control that has been revealed, checked against the band.
- *
- * A hosted control's box is published by Compose for a node that is not on
- * screen at all — the composition keeps its children whether the page has
- * reached them or not — so a box read once can describe a control a thousand px
- * below the fold while still landing inside the band. Scrolling once is not
- * enough for that: reading another node (an echo above the control, which every
- * one of these tests does) can pull the page back up again. So the rule is
- * reveal → read → believe the box only if it is where the band says it is, and
- * reveal again when it is not. Three rounds, because a third disagreement is a
- * bug worth an error rather than another drag.
- */
-export async function revealedBoxInBand(
-  screen: Screen,
-  locator: Locator
-): Promise<Box> {
-  for (let round = 0; round < 3; round += 1) {
-    await reveal(screen, locator);
-    const box = await boxOf(locator);
-    if (box != null && (await isInSafeBand(screen, box))) {
-      return box;
-    }
-    // The box moved out from under the reveal: forget what this test scrolled
-    // and let the next round drive from the top again.
-    downDrags = 0;
-  }
-  throw new Error(
-    `real-input: the control's box left the tappable band three times after ` +
-      `being revealed; its box now reads ${JSON.stringify(await boxOf(locator))}.`
-  );
-}

@@ -1,7 +1,7 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
-import { drag, openScreen, reveal, revealedBoxInBand } from './support';
+import { drag, liftIntoBand, openScreen, reveal } from './support';
 import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Hosted slider';
@@ -15,9 +15,11 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
   const track = screen.getByLabel(NAME);
   const value = screen.getByTestId('host-slider-value');
   const gesture = screen.getByTestId('host-slider-gesture');
-  // Both echoes are real React Native rows *above* the composition, so they
-  // are the first thing a scroll to this control pushes out of the tree.
-  await reveal(screen, track, { reads: [value, gesture] });
+  // Both echoes are real React Native rows *above* the composition, and they
+  // are the honest scroll target: their boxes are React Native's own, so a page
+  // that has them on screen has the track below them too, whereas the box Compose
+  // publishes for the track describes the composition, not the pixel on screen.
+  await reveal(screen, value, { reads: [track, gesture] });
 
   // The hosted Slider's track is the <Host>'s own width, which React Native
   // measures and not the child's style, so a drag proves both that the gesture
@@ -27,10 +29,10 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('0.40');
 
-  // The track's own box, re-revealed until the box agrees with the scroll
-  // position: this control sits under two echoes and a section heading, and the
-  // reads above can pull the page back up from the row this drag has to land on.
-  const box = await revealedBoxInBand(screen, track);
+  // The track is on screen by now but parked low, under its echoes: the page is
+  // nudged back up in short drags until the track sits where a tap lands, with
+  // both echoes kept in view so the drag's own echo can still be read.
+  const box = await liftIntoBand(screen, track, [value, gesture]);
   const y = box.y + box.height / 2;
   await drag(
     screen,
