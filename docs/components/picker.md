@@ -134,7 +134,7 @@ on the activity, window or a `ViewTreeObserver` may outlive the view.
   assert. What covers it is the counting kind of check: the `scripts/real-input`
   cycles that compare the window list before and after (opening adds one popup,
   unmounting leaves none, three cycles on each platform), and the Android `MountChurn`
-  Picker case in `example/__tests__/MountChurn.harness.tsx`, which presses one anchor
+  Picker case in `example/__tests__/MountChurn.android.harness.tsx`, which presses one anchor
   of 200 mounted Pickers open, unmounts them and asserts the post-GC heap floor stays
   flat across cycles. The in-app test (`does not treat opening as a choice, and the
   next mount sizes normally after going away mid-menu` in

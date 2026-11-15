@@ -1110,7 +1110,7 @@ const PLATFORM = Platform.OS === 'ios' ? 'ios' : 'android';
  * unless a suite says otherwise, and the first cold mount of a native view on an emulator can
  * exceed that on its own — the Android run went red on exactly that, at load1 11, on a control
  * that had nothing wrong with it. 20 s is what `Button.harness.tsx` and
- * `MountChurn.harness.tsx` pass; the value is a budget for the *mount*, not for the
+ * `MountChurn.android.harness.tsx` pass; the value is a budget for the *mount*, not for the
  * measurement, and the wall-clock assertions below still have their own tighter gates.
  */
 const RENDER = { timeout: 20000 } as const;
