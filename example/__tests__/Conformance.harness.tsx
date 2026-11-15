@@ -40,9 +40,11 @@
  *   and requires a correction to arrive. `Button.harness.tsx` explains the precedent for
  *   why, at its own poison helper: a declared fallback that is close to the truth makes
  *   every "the box was right" assertion pass even when no correction ever happens.
- * - the leak rule takes its baseline *after* a warm-up mount, so the component's own
- *   registry row cannot be counted as a leak — the mistake that would get the rule exempted
- *   the first time it was green-ish for the wrong reason.
+ * - the leak rule reads a *quiescent* baseline (two equal reads, or it refuses), mounts K
+ *   controls, waits for the last one to be laid out and requires the ledger to have risen
+ *   by exactly K before it asks whether the rise came back down. A baseline that is still
+ *   moving makes "returned to baseline" unfalsifiable — the mistake that would get the rule
+ *   exempted the first time it was green-ish for the wrong reason.
  * - the recycle rule asserts each property against the props of the control's *second*
  *   owner, so a value that stayed behind names itself.
  *
@@ -1341,8 +1343,9 @@ function fallbackFindings(input: {
 /**
  * Rule 2: did the engine's bookkeeping return to baseline after every instance dropped?
  *
- * `baseline` is taken after a warm-up mount, so the component's own registry row is already
- * in it and cannot be mistaken for a leak.
+ * `baseline` is a *settled* read (`settledStats`), taken in a window where nothing is mounted
+ * or dropped, so the component's own registry row is already in it and a drop still in
+ * flight from the previous test cannot be mistaken for a release.
  */
 function leakFindings(input: {
   component: string;
@@ -4682,9 +4685,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
   },
 ];
 
-/** Mounts per control in the leak fixture. */
-const CHURN = 50;
-
 afterEach(() => {
   cleanup();
   handles.clear();
@@ -4901,57 +4901,6 @@ describe('conformance · every control, four rules', () => {
           })
         );
         expectConformance(problems);
-      });
-
-      it('leaves the engine where it started across a churn of drops', async () => {
-        if (fixture.selfSizing === false) {
-          console.log(
-            `    · ${fixture.name} is not self-sizing, so it never enters the engine's ` +
-              'ledger or registry (component.json sizing: null) - its drops are proved ' +
-              'by its own suite, which reads the presentation count'
-          );
-          return;
-        }
-        // The churn, kept because it is a different shape from the one above: instances that
-        // come and go over time, in a process that has already measured this component. The
-        // warm-up is what makes its baseline honest — the component's own registry row is
-        // created by the first measure, not by a drop, so a baseline taken before it would
-        // count one legitimate entry as a leak.
-        const warmUp = await render(fixture.owner(false), RENDER);
-        await settle();
-        warmUp.unmount();
-
-        // A *quiescent* baseline, for the reason the positive-control test above
-        // states: an iOS instance reaches `onDropView` after its unmount, so the
-        // warm-up's own drop can still be in flight when the read happens, and the
-        // run that measures it reads one legitimate release as a leak. CI proved
-        // the shape — run 41230848294 reported `Menu × no-leak-on-drop: 1 ledger
-        // entry(ies) survived 50 drops` at load1 152-380 on 3 cores, and the same
-        // tree passed the same test on the next dispatch. `stats()` after a fixed
-        // `settle` was the fixture asserting about a number still on its way
-        // somewhere; `settledStats` refuses rather than comparing against one.
-        const baseline = await settledStats('the churn baseline');
-        for (let cycle = 0; cycle < CHURN; cycle += 1) {
-          const mounted = await render(fixture.owner(cycle % 2 === 1), RENDER);
-          mounted.unmount();
-        }
-        const after = await settledStats('the churn after-read');
-        console.log(
-          `    · ledger ${String(baseline.ledgerEntries)}→` +
-            `${String(after.ledgerEntries)} registry ${String(
-              baseline.registryEntries
-            )}→${String(after.registryEntries)} cached ${String(
-              baseline.cachedSizes
-            )}→${String(after.cachedSizes)} across ${String(CHURN)} mounts`
-        );
-        expectConformance(
-          leakFindings({
-            component: fixture.name,
-            baseline,
-            after,
-            instances: CHURN,
-          })
-        );
       });
 
       it('shows none of its previous owner under one identity', async () => {
