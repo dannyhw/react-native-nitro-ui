@@ -154,5 +154,11 @@
     "mutation": "  if (status) {     process.stdout.write(`${renderStatus(fac ->   if (status) {     process.stdout.write(`${renderStatus(fac",
     "result": "red",
     "firstRedTest": "--status prints every fact and remembers nothing"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "issuesFact counts every open issue, whoever opened it (drop the author filter)",
+    "result": "red",
+    "firstRedTest": "issues: only the repository owner’s issues are work"
   }
 ]
