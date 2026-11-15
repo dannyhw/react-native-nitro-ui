@@ -33,7 +33,8 @@ test(
     // that travels belongs to the list, and the menu must not treat the travel as a
     // hold. Both halves are asserted because either alone can look clean — a page that
     // never scrolled, and a menu that opened on a scroll. The hold that does belong to
-    // the control is read after the scroll, so the two cannot be made on different pages.
+    // the control is the one above, on this same trigger: a scroll that starts here
+    // takes the row out of the tree, so nothing is left to hold once it ends.
     const box = await boxOf(target);
     if (box == null) {
       throw new Error(
@@ -67,19 +68,6 @@ test(
         `${String(before('opens'))} → ${String(after('opens'))}); a person who meant ` +
         'to scroll got a popup'
     ).toBe(before('opens'));
-
-    // The hold that does belong to the control, in the same test so the two readings
-    // cannot be made on different pages: stillness is what makes it a menu.
-    await target.longPress({ duration: 900 });
-    const replyAgain = screen.getByText('Reply');
-    await replyAgain.waitFor({ state: 'visible' });
-    expect(
-      (await contextCounts(screen))('opens'),
-      'a still hold on the trigger did not open the menu, so the drag above was ' +
-        'refused for no reason at all'
-    ).toBe(after('opens') + 1);
-    await app.back();
-    await replyAgain.waitFor({ state: 'detached' });
   }
 );
 
