@@ -94,7 +94,11 @@ macOS, Xcode 27, bun 1.4, Node 24 (`fnm exec --using 24 --`), Java 17, CocoaPods
 - Never block the JS thread on main (`DispatchQueue.main.sync`) or main on JS, and no redundant
   `main.async` hop when already on main.
 - Controlled values use the event-count handshake (core-architecture §4).
-- Components include benchmark numbers in the report.
+- Benchmarks are a release-time measurement, not a per-task gate:
+  `node scripts/gate.mjs bench -- --platform <ios|android> --plan full --compare-release`
+  measures the newest release tag and your tree in one session on one device and names the
+  cells that got slower (`docs/architecture/benchmarks.md`). A component task quotes quick-plan
+  numbers in its report when its brief asks for them; it gates nothing and needs no baseline.
 
 ## Scope and budget
 
