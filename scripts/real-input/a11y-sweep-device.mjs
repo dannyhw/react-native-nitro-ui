@@ -52,6 +52,7 @@ const TAB_SWIPES = 10;
  *   this is what makes the pass possible rather than a longer retry loop
  * @param {ReadonlyArray<{ id: string, label: string }>} device.tabs the example's tabs,
  *   in bar order, read from `example/src/App.tsx`
+ * @param {string} device.appId the example's package, relaunched before the first dump
  * @returns {Promise<{covered: string[], matched: string[], stale: string[]}>}
  */
 export async function runA11ySweepOnDevice(begin, device) {
@@ -61,6 +62,7 @@ export async function runA11ySweepOnDevice(begin, device) {
   } catch {
     // A daemon that is already down is the state this pass needs in any case.
   }
+  await harness.startFromLaunch();
   return await runA11ySweep(begin, {
     goToScreen: (screen, log) => harness.goToScreen(screen, log),
     dump: () => harness.hierarchy(),
@@ -80,13 +82,41 @@ class SweepDevice {
   /**
    * @param {{ adbShell: (command: string) => string, tabs: ReadonlyArray<{ id: string, label: string }> }} device
    */
-  constructor({ adbShell, tabs }) {
+  constructor({ adbShell, tabs, appId }) {
     this.adbShell = adbShell;
     this.tabs = tabs;
+    this.appId = appId;
     this.remoteDump = '/sdcard/nitro-ui-a11y-sweep.xml';
     // The tab bar is the strip at the top of the window: 12% of its height covers the
     // tabs at any density without ever reaching the content below them.
     this.tabBandY = Math.round(this.size().height * 0.12);
+  }
+
+  /**
+   * Bring the app up on its own first screen.
+   *
+   * The suite ends wherever its last test left the window — a sheet's own window, an
+   * open keyboard, a shade a gesture pulled down — and a dump answers with the window
+   * that holds focus, which by then may hold no part of the app at all. Launching is
+   * what makes the first dump of this pass mean the same thing on every run.
+   */
+  async startFromLaunch() {
+    this.adbShell(`am force-stop ${this.appId}`);
+    this.adbShell('cmd statusbar collapse');
+    this.adbShell(
+      `monkey -p ${this.appId} -c android.intent.category.LAUNCHER 1`
+    );
+    const firstTab = () =>
+      this.hierarchy().some((node) => node.resourceId === 'tab-strip');
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      if (firstTab()) return;
+      await sleep(500);
+    }
+    throw new Error(
+      `real-input: launching ${this.appId} left no tab bar in the accessibility ` +
+        'tree, so the a11y sweep has no screen to walk from.'
+    );
   }
 
   /** @returns {{ width: number, height: number }} the window, in device px. */
@@ -147,10 +177,13 @@ class SweepDevice {
           'the a11y sweep cannot reach the screen its case names.'
       );
     }
+    const up = () => this.hierarchy().some((node) => node.resourceId === anchor);
+    // Two cases on one control is the common run, and standing on the screen is then
+    // the answer; the scroll below costs a dump per swipe.
+    if (up()) return;
     // From wherever the last case left the scroll: an anchor scrolled out of sight is
     // simply not in the dump, and this would go looking for a tab while standing on it.
     await this.scrollToTop();
-    const up = () => this.hierarchy().some((node) => node.resourceId === anchor);
     if (up()) return;
     for (let attempt = 1; attempt <= TAB_TAPS; attempt += 1) {
       // Re-looked-up on every attempt: the dump the last target came from is as old as

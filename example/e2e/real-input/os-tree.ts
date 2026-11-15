@@ -179,6 +179,25 @@ export function namedNodes(label: string): TreeNode[] {
 }
 
 /**
+ * Several testIDs looked up in one capture.
+ *
+ * A check that compares two positions may not ask for them one at a time: a sheet that
+ * is still rising answers with a different box in each read, and the comparison then
+ * describes the animation rather than the layout it was meant to grade.
+ */
+export function nodesForTestIds(
+  testIDs: readonly string[]
+): Map<string, TreeNode | null> {
+  const nodes = tree();
+  return new Map(
+    testIDs.map((testID) => [
+      testID,
+      nodes.find((node) => node.resourceId === testID) ?? null,
+    ])
+  );
+}
+
+/**
  * The box that owns a node: the tightest other box that contains it and is roughly its
  * size, and is not the page's own scroller.
  *

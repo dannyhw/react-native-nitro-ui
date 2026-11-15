@@ -219,6 +219,11 @@ function installAndPoint({ adb, apk, metroPort }) {
         `${installed.stdout}\n${installed.stderr}`.trim()
     );
   }
+  // The shade belongs to no app, and a run that is stopped mid-gesture can leave it
+  // down: the next run then finds its own screen covered by SystemUI and reports every
+  // control as unreachable. Collapsing it is the one thing a run has to undo that it
+  // cannot blame on the previous one.
+  adb(['shell', 'cmd', 'statusbar', 'collapse']);
   const prefs = `shared_prefs/${BUNDLE_ID}_preferences.xml`;
   const xml =
     `<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>` +
@@ -518,7 +523,12 @@ async function main() {
     // whole table's a11y state. It stops the daemon it needs down by itself.
     const sweep = await runA11ySweepOnDevice(
       (id, title) => suite.beginAuxiliary(id, title),
-      { adbShell, tabs, stopDaemon: () => stopAgentDeviceDaemon(env, stateDir) }
+      {
+        adbShell,
+        tabs,
+        appId: BUNDLE_ID,
+        stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
+      }
     );
     const allPassed = controlsPassed && sweep.covered.length > 0;
     if (sweep.covered.length === 0) {

@@ -1,6 +1,7 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
+import { nodesForTestIds } from './os-tree';
 import { boxOf, drag, openScreen, reveal } from './support';
 
 test('a real tap opens the sheet, a Pressable inside it counts, and Back closes it', async ({
@@ -45,27 +46,32 @@ test('a real tap on a TextInput inside the sheet is a whole press', async ({
   // first touch-down, so the lift of a tap only reaches JS if the sheet's root keeps
   // intercepting regardless. A field that takes the press in and never gives it out
   // is the defect this taps for, and it is invisible from inside the app.
-  // The field and the list are read from the page rather than from under the
-  // sheet's own node: the sheet hands its content to a window of its own, and the
-  // driver's tree does not hang that content beneath the node the `testID` is on.
-  // The premise below is what keeps the looser locator honest about where the field is.
+  // The field is read from the page rather than from under the sheet's own node: the
+  // sheet hands its content to a window of its own, and the driver's tree does not hang
+  // that content beneath the node the `testID` is on. What keeps the looser locator
+  // honest is the sheet's own title, drawn in that same window: a field that is not the
+  // one the open sheet drew is not beneath it. Both boxes come from one capture, and the
+  // node carrying `sheet-fit-sheet` is the scrim, whose box stops short of the content.
   const input = screen.getByTestId('sheet-input');
-  const drawn = await boxOf(input);
-  const sheetBox = await boxOf(sheet);
-  if (drawn == null || sheetBox == null) {
+  const read = nodesForTestIds(['sheet-fit-title', 'sheet-input']);
+  const chrome = read.get('sheet-fit-title');
+  const field = read.get('sheet-input');
+  if (chrome == null || field == null) {
     throw new Error(
-      `real-input: the open sheet draws no field to press (field ` +
-        `${JSON.stringify(drawn)}, sheet ${JSON.stringify(sheetBox)}).`
+      `real-input: the open sheet draws no field to press (title ` +
+        `${JSON.stringify(chrome?.bounds ?? null)}, field ` +
+        `${JSON.stringify(field?.bounds ?? null)}).`
     );
   }
   expect(
-    drawn.y >= sheetBox.y - 1 &&
-      drawn.y + drawn.height <= sheetBox.y + sheetBox.height + 1,
-    `"Notes" is drawn at ${String(drawn.y)}-${String(
-      drawn.y + drawn.height
-    )}, outside the sheet's own ${String(sheetBox.y)}-${String(
-      sheetBox.y + sheetBox.height
-    )}, so the press would not land inside the sheet at all`
+    field.bounds.y1 >= chrome.bounds.y1 &&
+      field.bounds.x1 >= chrome.bounds.x1 - 1 &&
+      field.bounds.x2 <= chrome.bounds.x2 + 1,
+    `"Notes" is drawn at ${String(field.bounds.y1)}-${String(
+      field.bounds.y2
+    )}, which is not inside the column the open sheet's own title draws at ` +
+      `${String(chrome.bounds.y1)}-${String(chrome.bounds.y2)}, so the field this ` +
+      'press is aimed at is not the one the sheet drew'
   ).toBe(true);
 
   await expect(screen.getByTestId('sheet-input-touches')).toHaveText(
@@ -111,14 +117,19 @@ test('a drag down dismisses an ordinary sheet and moves nothing else', async ({
   await screen.getByTestId('sheet-open-fit').tap();
   const fit = screen.getByTestId('sheet-fit-sheet');
   await fit.waitFor({ state: 'visible' });
-  const at = await boxOf(fit);
-  if (at == null) {
-    throw new Error('real-input: the fit sheet has no box to drag down.');
+  const chrome = await boxOf(screen.getByTestId('sheet-fit-title'));
+  if (chrome == null) {
+    throw new Error(
+      'real-input: the fit sheet draws no title to start a drag on.'
+    );
   }
+  // A drag that starts above the sheet's own chrome is taken by the system as the
+  // gesture that pulls down the notification shade, and the shade takes the screen with
+  // it: every later read of the tree then sees SystemUI instead of the app.
   await drag(
     screen,
-    { x: at.x + at.width / 2, y: at.y + 24 },
-    { x: at.x + at.width / 2, y: at.y + 600 }
+    { x: chrome.x + chrome.width / 2, y: chrome.y + 12 },
+    { x: chrome.x + chrome.width / 2, y: chrome.y + 600 }
   );
   await fit.waitFor({ state: 'detached' });
   await expect(log).toContainText('dismiss');
@@ -156,14 +167,16 @@ test('a drag down dismisses an ordinary sheet and moves nothing else', async ({
   await screen.getByTestId('sheet-open-sticky').tap();
   const sticky = screen.getByTestId('sheet-sticky-sheet');
   await sticky.waitFor({ state: 'visible' });
-  const stickyBox = await boxOf(sticky);
-  if (stickyBox == null) {
-    throw new Error('real-input: the sticky sheet has no box to drag.');
+  const stickyTitle = await boxOf(screen.getByTestId('sheet-sticky-title'));
+  if (stickyTitle == null) {
+    throw new Error(
+      'real-input: the sticky sheet draws no title to drag from.'
+    );
   }
   await drag(
     screen,
-    { x: stickyBox.x + stickyBox.width / 2, y: stickyBox.y + 24 },
-    { x: stickyBox.x + stickyBox.width / 2, y: stickyBox.y + 600 }
+    { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 12 },
+    { x: stickyTitle.x + stickyTitle.width / 2, y: stickyTitle.y + 600 }
   );
   await sticky.getByTestId('sheet-sticky-title').waitFor({ state: 'visible' });
   await sticky.getByTestId('sheet-sticky-close').tap();
