@@ -1,181 +1,228 @@
 /**
- * The Android accessibility tree, as the accessibility service serves it.
+ * The accessibility tree the driver reads, with the state facts still on it.
  *
- * e2e answers questions about nodes — this file answers questions about *flags*.
- * Its snapshot is normalised, so "is the node a reader stops on the node a finger
- * can act on", "does it say `selected`", and "what Android class does a screen
- * reader's role come from" have no answer there. A `uiautomator dump` is the same
- * tree with every flag still on it, which is what `scripts/real-input/a11y.mjs`
- * reads on the iOS-less half of the conformance suite, so the rule applied here is
- * that file's rule rather than a second opinion on it.
+ * e2e answers questions about nodes — this file answers questions about *flags*: the
+ * `checked` a toggle answers with, the `selected` a segment answers with, the Android
+ * class a screen reader takes for the control's role, and whether the node carrying a
+ * control's name is also the node carrying its state. Those are the facts five of this
+ * suite's real defects came in through (G15, G16, G23, G24, G31), and no in-app query
+ * can see them: a hosted Compose control publishes its name on a `SemanticsNode`, not
+ * on a React Native view, so from inside the app the name and the state are simply not
+ * two things that could be compared.
  *
- * Every read is a fresh dump rather than a cached one: the flags are the answer to
- * "what does the tree say *now*", and a check that asked once before a gesture and
- * again after it must not get the same tree twice.
+ * The capture is the driver's own, taken again for every read: the facts answer "what
+ * does the tree say *now*", and a check that looks once before a gesture and once after
+ * it must not be handed the same capture twice.
+ *
+ * What this cannot answer is actionability. The driver's node map carries `hittable`,
+ * which is geometric — a name slid onto a plain `View` is still hittable, which is
+ * exactly the defect the actionable-node rule exists to catch — so that half of the
+ * rule is graded by the a11y sweep against `uiautomator dump`, in
+ * `scripts/real-input/a11y-sweep-device.mjs`, which also says why a dump cannot be read
+ * while a session is open. Reading a geometric flag as though it were the real one would
+ * turn that rule green for every control at once.
  */
+import { execFileSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
-  checkControlA11y,
-  A11Y_CONTROLS,
-  type A11yControl,
-} from '../../../scripts/real-input/a11y.mjs';
-import {
-  findAllByDescription,
   findAllByText,
-  parseHierarchy,
   type UiautomatorNode,
 } from '../../../scripts/real-input/uiautomator.mjs';
-import {
-  nativeChecked,
-  nativeEnabled,
-  tightestFlaggedNode,
-} from '../../../scripts/real-input/android-tree.mjs';
-import { accessibilityDump } from './device-read';
+import { tightestFlaggedNode } from '../../../scripts/real-input/android-tree.mjs';
 
-/** A node of the dump, with its raw `true`/`false` flags. */
+/** A node of the driver's capture, in the shape the shared readers understand. */
 export type TreeNode = UiautomatorNode;
 
-/** The tree right now. */
-export function tree(): TreeNode[] {
-  return parseHierarchy(accessibilityDump());
+/** One node of the driver's snapshot, as its JSON prints it. */
+interface DriverNode {
+  index: number;
+  type?: string;
+  label?: string;
+  value?: string;
+  contentDescription?: string;
+  identifier?: string;
+  enabled?: boolean;
+  selected?: boolean;
+  checked?: boolean;
+  rect?: { x: number; y: number; width: number; height: number };
+  parentIndex?: number;
+  depth?: number;
 }
 
-/** Every node with a box that carries exactly this `content-desc`. */
-export function namedNodes(label: string): TreeNode[] {
-  return tree()
+/** The driver's own binary, from the install this suite runs against. */
+function driverBinary(): string {
+  return resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../node_modules/.bin/agent-device'
+  );
+}
+
+/**
+ * One fresh capture of the accessibility tree, as the flags-only shape the readers
+ * below expect.
+ *
+ * `--force-full` because the driver answers a repeat of the same request with an
+ * "unchanged" acknowledgement, and an acknowledgement has no nodes in it — a check
+ * that read the tree twice around a gesture would be told nothing had changed, which is
+ * the one answer it is not allowed to take on trust.
+ *
+ * The serial is passed rather than inherited: the same lease that scopes every other
+ * device read scopes this one, and another task's emulator is visible to the daemon.
+ */
+export function tree(): TreeNode[] {
+  const serial = process.env.ANDROID_SERIAL;
+  if (serial == null || serial === '') {
+    throw new Error(
+      'real-input: ANDROID_SERIAL is unset, so this read has no device it may ask. ' +
+        'Source the lease before running the suite.'
+    );
+  }
+  let stdout = '';
+  try {
+    stdout = execFileSync(
+      process.execPath,
+      [driverBinary(), 'snapshot', '--json', '--force-full', '--serial', serial],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60_000 }
+    );
+  } catch (error) {
+    throw new Error(
+      `real-input: reading the accessibility tree from the driver failed: ` +
+        String((error as Error)?.message ?? error)
+    );
+  }
+  let nodes: unknown;
+  try {
+    const parsed: unknown = JSON.parse(stdout);
+    nodes = (parsed as { data?: { nodes?: unknown } })?.data?.nodes;
+  } catch (error) {
+    throw new Error(
+      `real-input: the driver answered with ${String(stdout.length)} bytes that are ` +
+        `not a snapshot this suite can read: ${String(
+          (error as Error)?.message ?? error
+        )}`
+    );
+  }
+  if (!Array.isArray(nodes)) {
+    throw new Error(
+      'real-input: the driver answered a snapshot with no nodes, which is not the ' +
+        'same as answering that the screen is empty — the read is refused.'
+    );
+  }
+  return nodes.map((entry) => asTreeNode(entry as DriverNode));
+}
+
+/**
+ * The driver's node, in the shape `uiautomator.mjs`'s readers understand.
+ *
+ * The two trees name the same two things differently, and only one of them keeps them
+ * apart: the driver prints `label` as *whatever a reader is told* — the text if the node
+ * has text, its description otherwise — where a dump keeps `text` and `content-desc`
+ * separate. Keeping them apart is what lets a reader tell a control's own name from the
+ * words drawn inside it, so a node with text contributes text and nothing else, and a
+ * node without it contributes its description.
+ *
+ * `clickable`, `focusable` and `longClickable` have no source here and stay empty;
+ * nothing in this file may read them (see the file comment).
+ */
+function asTreeNode(node: DriverNode): TreeNode {
+  const hasText = node.value !== undefined;
+  const rect = node.rect ?? { x: 0, y: 0, width: 0, height: 0 };
+  return {
+    text: hasText ? (node.value ?? '') : '',
+    resourceId: node.identifier ?? '',
+    className: node.type ?? '',
+    contentDesc: hasText
+      ? (node.contentDescription ?? '')
+      : (node.label ?? ''),
+    enabled: node.enabled === false ? 'false' : 'true',
+    clickable: '',
+    longClickable: '',
+    focusable: '',
+    // The driver prints `checked` only for a node that offers the state, so its
+    // presence is the flag a dump spells `checkable="true"`.
+    checkable: node.checked === undefined ? 'false' : 'true',
+    checked:
+      node.checked === undefined ? '' : node.checked ? 'true' : 'false',
+    selected: node.selected === true ? 'true' : 'false',
+    // No flag, but a class that cannot be anything else: the rule this serves is the
+    // one that refuses a control's name sitting on the page's own scroller.
+    scrollable: /scroll|recycler|listview|gridview|collection/i.test(
+      node.type ?? ''
+    )
+      ? 'true'
+      : 'false',
+    bounds: {
+      x1: rect.x,
+      y1: rect.y,
+      x2: rect.x + rect.width,
+      y2: rect.y + rect.height,
+      cx: rect.x + Math.round(rect.width / 2),
+      cy: rect.y + Math.round(rect.height / 2),
+      width: rect.width,
+      height: rect.height,
+    },
+  };
+}
+
+/** Every node with a box that carries exactly this description. */
+function namedNodesIn(nodes: TreeNode[], label: string): TreeNode[] {
+  return nodes
     .filter((node) => node.contentDesc === label)
     .filter((node) => node.bounds.width > 0 && node.bounds.height > 0);
 }
 
-/** The a11y case for a label, which is what carries the rule's shape. */
-export function caseForLabel(label: string): A11yControl | undefined {
-  return A11Y_CONTROLS.find((control) => control.label === label);
+/** Every node with a box that carries exactly this `content-desc`. */
+export function namedNodes(label: string): TreeNode[] {
+  return namedNodesIn(tree(), label);
 }
 
 /**
- * The rule, on the node a person acts on, right now.
+ * The box that owns a node: the tightest other box that contains it and is roughly its
+ * size, and is not the page's own scroller.
  *
- * Returns the findings that are *new*: a problem matched by a row of
- * `A11Y_EXEMPTIONS` is recorded debt and travels back in `known` instead, which is
- * why a caller may not read an empty return as a clean pass — the exemption has to
- * be reported as an exemption.
+ * This is what a press reaches for a piece of on-screen words, and it is the node whose
+ * `enabled` a screen reader is told. The size guard is what keeps a screen-sized
+ * container from being read as the owner, which is how a name that had slid onto the
+ * page would otherwise pass for the control's own box.
  */
-export function ruleFindings(label: string): {
-  failures: string[];
-  known: string[];
-  control: A11yControl | undefined;
-} {
-  const control = caseForLabel(label);
-  if (control == null) {
-    // Nothing in the table names this label, so the rule runs on the shape every
-    // control has to satisfy anyway: the name has to sit where a person can act.
-    // An exemption can only be granted to a control the table knows.
-    return {
-      failures: namedNodes(label)
-        .filter((node) => !isActable(node) && !hasActableHome(node, tree()))
-        .map(
-          (node) =>
-            `"${label}" is named on a node nothing can act on (${describe(
-              node
-            )}), and no actionable node shares its box`
-        ),
-      known: [],
-      control,
-    };
-  }
-  const result = checkControlA11y(control, tree());
-  return { ...result, control };
-}
-
-/** What the node a reader names says about itself, flags and all. */
-export function nodeStateFacts(label: string): {
-  count: number;
-  className: string;
-  checked: string;
-  selected: string;
-  enabled: string;
-  checkable: string;
-  clickable: string;
-  detail: string;
-} {
-  const nodes = namedNodes(label);
-  const node = nodes[0];
-  return {
-    count: nodes.length,
-    className: node?.className ?? 'missing',
-    checked: node?.checked ?? 'missing',
-    selected: node?.selected ?? 'missing',
-    enabled: node?.enabled ?? 'missing',
-    checkable: node?.checkable ?? 'missing',
-    clickable: node?.clickable ?? 'missing',
-    detail: nodes.map((entry) => describe(entry)).join('; '),
-  };
-}
-
-/** Mirrors `a11y.mjs`'s `isActable`: a state flag is not an action. */
-function isActable(node: TreeNode): boolean {
-  return (
-    node.clickable === 'true' ||
-    node.checkable === 'true' ||
-    node.focusable === 'true'
-  );
-}
-
-/**
- * Mirrors `a11y.mjs`'s `hasActableHome`: an actionable node that contains the
- * named box *and is roughly its size*, so a page-sized focusable container does
- * not qualify as the control's home.
- */
-function hasActableHome(named: TreeNode, nodes: TreeNode[]): boolean {
-  const area = Math.max(1, named.bounds.width * named.bounds.height);
-  return nodes.some((node) => {
-    if (node === named || !isActable(node) || node.scrollable === 'true') {
-      return false;
-    }
+function ownerNode(nodes: TreeNode[], node: TreeNode): TreeNode | null {
+  const area = Math.max(1, node.bounds.width * node.bounds.height);
+  let owner: TreeNode | null = null;
+  for (const candidate of nodes) {
+    if (candidate === node || candidate.scrollable === 'true') continue;
     const covers =
-      node.bounds.x1 <= named.bounds.x1 &&
-      node.bounds.y1 <= named.bounds.y1 &&
-      node.bounds.x2 >= named.bounds.x2 &&
-      node.bounds.y2 >= named.bounds.y2;
-    if (!covers) return false;
-    const nodeArea = node.bounds.width * node.bounds.height;
-    return nodeArea <= area * 4;
-  });
+      candidate.bounds.x1 <= node.bounds.x1 &&
+      candidate.bounds.y1 <= node.bounds.y1 &&
+      candidate.bounds.x2 >= node.bounds.x2 &&
+      candidate.bounds.y2 >= node.bounds.y2;
+    if (!covers) continue;
+    const size = candidate.bounds.width * candidate.bounds.height;
+    if (size > area * 4) continue;
+    if (owner == null || size < owner.bounds.width * owner.bounds.height) {
+      owner = candidate;
+    }
+  }
+  return owner;
 }
 
 function describe(node: TreeNode): string {
   return (
-    `${node.className} clickable=${node.clickable} checkable=${node.checkable} ` +
-    `focusable=${node.focusable} enabled=${node.enabled} checked=${node.checked} ` +
-    `selected=${node.selected} at ${String(node.bounds.x1)},${String(
-      node.bounds.y1
-    )}-${String(node.bounds.x2)},${String(node.bounds.y2)}`
+    `${node.className} enabled=${node.enabled} checked=${node.checked} ` +
+    `checkable=${node.checkable} selected=${node.selected} at ${String(
+      node.bounds.x1
+    )},${String(node.bounds.y1)}-${String(node.bounds.x2)},${String(
+      node.bounds.y2
+    )}`
   );
-}
-
-export { findAllByDescription };
-
-/**
- * The control node behind a name: the tightest node that can carry a state and
- * contains the node the name sits on.
- *
- * Compose publishes a hosted control's label on a child of the node holding its
- * state, so this is the node a screen reader's "checked", "selected" and "disabled"
- * belong to. `flag` picks which state the caller is after, because a Chip's touch
- * target is clickable and a Switch's is checkable, and asking for the wrong one
- * answers with the row around it.
- */
-export function controlNodeFor(
-  label: string,
-  flag: 'checkable' | 'clickable'
-): TreeNode | null {
-  return tightestFlaggedNode(tree(), namedNodes(label)[0] ?? null, flag);
 }
 
 /** What a screen reader is told about a named control, read off the tree. */
 export interface ScreenReaderFacts {
   /** `on`/`off` on the checkable node that *is* the control. */
   checked: 'on' | 'off' | null;
-  /** `true`/`false` on the clickable node that *is* the control. */
+  /** `true`/`false` on the box that owns the control. */
   enabled: 'true' | 'false' | null;
   /** The Android classes inside the control's box — a screen reader's role. */
   roles: string[];
@@ -184,18 +231,21 @@ export interface ScreenReaderFacts {
 }
 
 /**
- * The state facts for a named control, in one read of the tree.
+ * The state facts for a named control, in one capture of the tree.
  *
- * A selection is read as a check: Compose maps a selectable item's selection onto
- * the toggleable state, which the dump spells `checked` on the item's node and
- * which TalkBack says out loud as "selected".
+ * A selection is read as a check: Compose maps a selectable item's selection onto the
+ * toggleable state, which TalkBack says out loud as "selected".
  */
 export function screenReaderFacts(label: string): ScreenReaderFacts {
   const nodes = tree();
-  const labelled = namedNodes(label)[0];
-  const checkedNode = tightestFlaggedNode(nodes, labelled ?? null, 'checkable');
-  const enabledNode = tightestFlaggedNode(nodes, labelled ?? null, 'clickable');
-  const home = checkedNode ?? enabledNode ?? labelled ?? null;
+  const labelled = namedNodesIn(nodes, label)[0];
+  const checkedNode =
+    labelled == null
+      ? null
+      : (tightestFlaggedNode(nodes, labelled, 'checkable') ?? labelled);
+  const enabledNode =
+    labelled == null ? null : (ownerNode(nodes, labelled) ?? labelled);
+  const home = checkedNode ?? enabledNode ?? null;
   const inside = (node: TreeNode): boolean =>
     home == null ||
     (node.bounds.cx >= home.bounds.x1 - 1 &&
@@ -203,12 +253,14 @@ export function screenReaderFacts(label: string): ScreenReaderFacts {
       node.bounds.cy >= home.bounds.y1 - 1 &&
       node.bounds.cy <= home.bounds.y2 + 1);
   return {
-    checked: nativeChecked(nodes, label),
-    enabled: nativeEnabled(nodes, label),
+    checked:
+      checkedNode == null || checkedNode.checkable !== 'true'
+        ? null
+        : stateOf(checkedNode.checked),
+    enabled: triState(enabledNode?.enabled),
     roles: [
       ...new Set(
         nodes
-          .filter((node) => node.className.startsWith('android.widget.'))
           .filter((node) => inside(node) || node === home)
           .map((node) => node.className.split('.').pop() ?? node.className)
       ),
@@ -240,7 +292,7 @@ export interface GroupFacts {
  */
 export function groupFacts(label: string, role: string): GroupFacts {
   const nodes = tree();
-  const group = namedNodes(label)[0];
+  const group = namedNodesIn(nodes, label)[0];
   const inside = (node: TreeNode): boolean =>
     group != null &&
     node !== group &&
@@ -263,26 +315,29 @@ export function groupFacts(label: string, role: string): GroupFacts {
 /**
  * The control node behind a piece of on-screen text.
  *
- * Compose merges a row or an action into a clickable node and leaves the words a
- * `TextView` of their own, so the node carrying the words reports the same state
- * whether the control is disabled or not. The state lives one level out.
+ * `state` names the state the caller is after, because the two live on different
+ * nodes: a row's selection is on the node that offers the toggle, an action's
+ * enabled-ness is on the box that owns the words. The driver reports no clickable
+ * flag, so the second half is resolved by box rather than by flag — the tightest
+ * box around the words, which is the node a press reaches.
  */
 export function nodeForText(
   text: string,
-  flag: 'checkable' | 'clickable'
+  state: 'checkable' | 'clickable'
 ): TreeNode | null {
   const nodes = tree();
-  return tightestFlaggedNode(
-    nodes,
-    findAllByText(nodes, text).find((node) => node.bounds.height > 0) ?? null,
-    flag
-  );
+  const titled =
+    findAllByText(nodes, text).find((node) => node.bounds.height > 0) ?? null;
+  if (titled == null) return null;
+  return state === 'checkable'
+    ? tightestFlaggedNode(nodes, titled, 'checkable')
+    : ownerNode(nodes, titled);
 }
 
 /** What the node behind a piece of text says about itself. */
 export interface TextFacts {
   checked: 'on' | 'off' | null;
-  /** The dump's own `enabled` attribute, kept as the string it wrote. */
+  /** The tree's own `enabled`, kept as the string it wrote. */
   enabled: string | null;
   /** The Android class of the node holding the state — the role a reader gets. */
   role: string | null;
@@ -292,40 +347,55 @@ export interface TextFacts {
 /**
  * The state facts for a control named by its words rather than its label.
  *
- * `flag` names the state the caller is after: an action's enabled flag is on its
- * clickable node, a radio row's selection on its checkable one.
+ * Compose merges a row or an action into one node and leaves the words a node of their
+ * own, and that words-node reports the same thing whether the control is disabled or
+ * not. The state lives one box out.
  */
 export function factsForText(
   text: string,
-  flag: 'checkable' | 'clickable'
+  state: 'checkable' | 'clickable'
 ): TextFacts {
-  const node = nodeForText(text, flag);
+  const nodes = tree();
+  const titled =
+    findAllByText(nodes, text).find((node) => node.bounds.height > 0) ?? null;
+  if (titled == null) {
+    return {
+      checked: null,
+      enabled: null,
+      role: null,
+      detail: `no node with a box carries the words "${text}"`,
+    };
+  }
+  const node =
+    state === 'checkable'
+      ? tightestFlaggedNode(nodes, titled, 'checkable')
+      : ownerNode(nodes, titled);
   if (node == null) {
     return {
       checked: null,
       enabled: null,
       role: null,
-      detail: `no ${flag} node contains the words "${text}"`,
+      detail: `no ${state} node owns the words "${text}" (${describe(titled)})`,
     };
   }
   return {
     checked: node.checkable === 'true' ? stateOf(node.checked) : null,
     enabled: node.enabled,
     role: node.className,
-    detail: describe(node),
+    detail: `${describe(titled)} owned by ${describe(node)}`,
   };
 }
 
 /**
  * The state facts for one item of a group, named by its title.
  *
- * A merged Material row draws each item as the item's own box, a separate title, and
- * a role decoration that carries no state, so the title has to be resolved through
- * the group's box before any flag can be read.
+ * A merged Material row draws each item as the item's own box, a separate title, and a
+ * role decoration that carries no state, so the title has to be resolved through the
+ * group's box before any flag can be read.
  */
 export function factsForItem(groupLabel: string, title: string): TextFacts {
   const nodes = tree();
-  const group = namedNodes(groupLabel)[0];
+  const group = namedNodesIn(nodes, groupLabel)[0];
   if (group == null) {
     return {
       checked: null,
@@ -350,17 +420,29 @@ export function factsForItem(groupLabel: string, title: string): TextFacts {
       detail: `"${groupLabel}" draws no item titled "${title}" inside its own box`,
     };
   }
-  const facts = factsForText(title, 'clickable');
-  const item = tightestFlaggedNode(nodes, titled, 'clickable');
+  const item =
+    tightestFlaggedNode(nodes, titled, 'checkable') ?? ownerNode(nodes, titled);
+  if (item == null) {
+    return {
+      checked: null,
+      enabled: null,
+      role: null,
+      detail: `no box owns the item "${title}" inside "${groupLabel}"`,
+    };
+  }
   return {
-    checked:
-      item == null || item.checkable !== 'true' ? null : stateOf(item.checked),
-    enabled: facts.enabled,
-    role: item?.className ?? null,
-    detail: item == null ? facts.detail : describe(item),
+    checked: item.checkable === 'true' ? stateOf(item.checked) : null,
+    enabled: item.enabled,
+    role: item.className,
+    detail: describe(item),
   };
 }
 
 function stateOf(value: string): 'on' | 'off' {
   return value === 'true' ? 'on' : 'off';
+}
+
+/** The tree's `true`/`false`, or `null` when the node had none to give. */
+function triState(value: string | undefined): 'true' | 'false' | null {
+  return value === 'true' || value === 'false' ? value : null;
 }

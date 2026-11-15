@@ -2,10 +2,10 @@
  * The reads of the device that `agent-device` will not make for this suite.
  *
  * Everything else here is e2e's: the gesture, the tree query, the box, the
- * assertion. These three are raw `adb` because the driver's own route cannot
- * answer them, and mostly for the same reason — the Android *automation helper*
- * that `agent-device` installs owns device automation, and it serialises what it
- * is asked to do:
+ * assertion. These two are raw `adb` because the driver's own route cannot answer
+ * them, and mostly for the same reason — the Android *automation helper* that
+ * `agent-device` installs owns device automation, and it serialises what it is
+ * asked to do:
  *
  * - **The keyboard's edge.** The helper installs a headless IME so text entry is
  *   deterministic, so the app is never given a keyboard to avoid, and the edge a
@@ -20,14 +20,12 @@
  *   10 240 ms after it, and the row in it was already unpressed. Pixels taken
  *   beside the helper, not through it, are the only way to see a held press.
  *   `press-feedback.ts` is that caller.
- * - **The tree as the accessibility service reads it.** e2e answers from its own
- *   normalised snapshot, which has no `clickable`/`checkable`/`selected` flag and
- *   no Android class, so the actionable-node rule and the state facts a screen
- *   reader is given are not questions it can be asked. `uiautomator dump` *is*
- *   that tree, unnormalised: `os-tree.ts` reads it and applies the same rule the
- *   a11y sweep applies from `scripts/real-input/a11y.mjs`.
+ * The accessibility tree is not read from here at all: it is the driver's own capture,
+ * asked for in `os-tree.ts`, and the pass that needs the flags the driver does not
+ * publish (`clickable`, `checkable`, `scrollable`) reads `uiautomator dump` outside the
+ * driver's session, in `scripts/real-input/a11y-sweep-device.mjs`.
  *
- * All three are reads. Nothing in this file drives a device: no `input`, no `am`.
+ * Both are reads. Nothing in this file drives a device: no `input`, no `am`.
  * Every call names the leased serial on the leased adb server, because another
  * task's emulator — and the human's `emulator-5560` — are visible on the default
  * server, and AGENTS.md is explicit about not reaching them.
@@ -115,56 +113,6 @@ export function screenCapture(): DecodedPng {
   }
 }
 
-/**
- * One raw `uiautomator dump`, as the XML text the device wrote.
- *
- * Dumped to a file and read back rather than piped: `uiautomator dump` on a window
- * that is still animating answers `could not get idle state` and nothing on stdout,
- * so the retry has to be able to tell "empty" from "half a document", and a second
- * read of the same file is cheaper than a second dump.
- */
-export function accessibilityDump(
-  remoteFile = '/sdcard/nitro-ui-real-input-tree.xml',
-  attempts = 4
-): string {
-  let last = '';
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const dumped = execFileSync(
-      adbBinary(),
-      [
-        ...serverArgs(),
-        '-s',
-        leasedSerial(),
-        'shell',
-        'uiautomator',
-        'dump',
-        remoteFile,
-      ],
-      { encoding: 'utf8', timeout: 30_000 }
-    );
-    const read = adbShell(['cat', remoteFile]);
-    if (read.includes('<node') || dumped.includes('<node')) {
-      return read;
-    }
-    last = read === '' ? dumped.trim() : read;
-    // Blocking, because the caller is a synchronous read of "what does the tree
-    // say right now" and a refused dump is a moving window, not an error.
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
-  }
-  throw new Error(
-    `real-input: \`uiautomator dump\` answered nothing usable after ` +
-      `${String(attempts)} attempts on ${leasedSerial()}. It said: ` +
-      `${last.slice(0, 300)}`
-  );
-}
-
-/**
- * The density the app lays out at, as a multiple of 160 dpi.
- *
- * A check that judges a dp number the library drew has to compare it against px, and an
- * emulator's profile density is not the number its AVD was created with once
- * `wm density` has been overridden.
- */
 /**
  * The screen's density, so a check can turn the library's dp numbers into the px
  * the device draws. `wm density` is the density the app lays out at, which an

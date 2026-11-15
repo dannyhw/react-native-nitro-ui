@@ -146,9 +146,11 @@ export async function withRealKeyboard<T>(body: () => Promise<T>): Promise<T> {
 /**
  * The keyboard's top edge, in device px, right now.
  *
- * Exported because a placement check has to judge a *second* box against the same
- * edge the field was measured against, and read it once: two reads of the window
- * manager around one gesture can answer with two different keyboards.
+ * Exported because a placement check judges a *second* box against the same edge the
+ * field was measured against. Each box gets its own read — the read that waits for a
+ * keyboard and the read that measures one answer different questions — so every read
+ * here happens after the keyboard is up, which is the only property that makes two of
+ * them comparable.
  */
 export function keyboardTop(): number {
   return requireKeyboardTop('while the popup was being measured,');

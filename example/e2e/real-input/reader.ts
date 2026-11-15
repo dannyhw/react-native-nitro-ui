@@ -14,18 +14,14 @@
  * (audit A.1: G15, G16, G23, G24, G31), every one of them a name on one node and
  * a state on another, or a duplicate of the same control.
  *
- * The actionable flag is part of the rule, and the five controls whose Android
- * node is not marked actionable (the `RangeInfo` and plain-`View` rows of
- * `A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs`) are exempted *by that table*,
- * one row at a time, so every other control keeps the claim and a row that stops
- * matching goes red. The exemption is reported as a printed finding rather than
- * silently dropped: an exempted control passes, and the line says it passes on the
- * debt row, not on the tree.
- *
- * That is the rule the a11y sweep runs, read here at the moment a person is about
- * to act — `ruleFindings` calls into `a11y.mjs` rather than restating it — so a
- * slid or duplicated name is caught before the gesture that would otherwise have
- * looked like the control's problem.
+ * The other half of the rule — is the named node one a person can *act* on — is not
+ * read here, because the driver cannot be asked: its node map has `hittable`, which
+ * says a touch lands, not that the node answers anything, so the name-on-an-inert-`View`
+ * defect this half exists for passes it. `scripts/real-input/a11y-sweep-device.mjs`
+ * grades that half against `uiautomator dump`, for every control in the table, on the
+ * same run and the same device, with `A11Y_EXEMPTIONS` deciding debt one row at a time.
+ * What is read here is the half the driver *can* answer, read at the moment a person is
+ * about to act: the name resolves to one box, and the state a reader is told sits on it.
  */
 import { expect, type Locator, type Screen } from 'e2e';
 
@@ -33,7 +29,6 @@ import {
   factsForItem,
   factsForText,
   groupFacts,
-  ruleFindings,
   screenReaderFacts,
 } from './os-tree';
 
@@ -104,19 +99,6 @@ export async function actsOnOneNamedNode(
         'rule exists for'
     ).toBe(true);
   }
-
-  // The tree's own answer, which the driver's normalised snapshot cannot give: is
-  // the node carrying the name one a person can act on. Recorded debt prints;
-  // anything the exemption table does not name is a failure, which is what keeps
-  // the table from becoming a place findings move to.
-  const findings = ruleFindings(options.name);
-  for (const problem of findings.known) {
-    console.log(`    WARN recorded debt: ${problem}`);
-  }
-  expect(
-    findings.failures,
-    'the accessibility tree does not put this control where a person can act on it'
-  ).toEqual([]);
 }
 
 /**
