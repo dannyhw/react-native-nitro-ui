@@ -1,5 +1,16 @@
 # Follow-ups (not blocking v0.1, see D19)
 
+## Flaky tests
+
+One line per test that went red and then green on the same tree: test name, date, failure excerpt
+path, times seen. Copied from task reports at merge. The rules are in `.claude/skills/flake/SKILL.md`.
+
+## Quarantined tests
+
+Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
+A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
+is raised with the owner once.
+
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
 - **F1 — Determinism.** Done (`F1-determinism.report.md`, merged `2d58ca6`). Its re-review left four low items, listed below; its dwell probe opened F7.

@@ -1,0 +1,164 @@
+[
+  {
+    "file": "scripts/gate.mjs",
+    "mutation": "deviceGateLeaseBlock(resolved, process.env) ??     deviceGat -> deviceGateLeaseBlock(resolved, process.env);",
+    "result": "red",
+    "firstRedTest": "`CI=false` is a shell, not a runner: the floor still applies"
+  },
+  {
+    "file": "scripts/doctor-core.mjs",
+    "mutation": "if (freeGb >= floorGb) return null; -> if (freeGb > floorGb) return null;",
+    "result": "red",
+    "firstRedTest": "the decision: below the floor refuses, at the floor does not"
+  },
+  {
+    "file": "scripts/doctor-core.mjs",
+    "mutation": "return env.CI === 'true' || env.CI === '1'; -> return Boolean(env.CI);",
+    "result": "red",
+    "firstRedTest": "`CI=false` is a shell, not a runner: the floor still applies"
+  },
+  {
+    "file": "scripts/doctor-core.mjs",
+    "mutation": "if (env.JEST_WORKER_ID == null) return measuredGb; -> (removed)",
+    "result": "red",
+    "firstRedTest": "outside a test, reads the measured value and lets nothing raise it"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (task == null) return keep('not a task branch (task/<ID>- -> (removed)",
+    "result": "red",
+    "firstRedTest": "keeps a branch that is not a task"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (busyProcesses > 0) { -> if (busyProcesses > 99) {",
+    "result": "red",
+    "firstRedTest": "keeps a merged, clean, idle worktree while a process is running in it"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (dirtyPaths > 0) { -> if (dirtyPaths > 99) {",
+    "result": "red",
+    "firstRedTest": "keeps every worktree that still holds work or belongs to a live task"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (!merged) return keep('not merged into main'); -> (removed)",
+    "result": "red",
+    "firstRedTest": "keeps a branch that is pushed but not merged"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (!branchMoved) return keep('no commits of its own yet'); -> (removed)",
+    "result": "red",
+    "firstRedTest": "keeps a worktree nothing was committed in"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (idleHours < RECENT_ACTIVITY_HOURS) { -> if (idleHours <= RECENT_ACTIVITY_HOURS) {",
+    "result": "red",
+    "firstRedTest": "draws the idle line at the constant, not near it"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "(leasedTasks ?? []).includes(task) -> (leasedTasks ?? []).some((t) => task.startsWith(t))",
+    "result": "red",
+    "firstRedTest": "a lease for another task does not protect this one"
+  },
+  {
+    "file": "scripts/worktrees-core.mjs",
+    "mutation": "if (leaseIsLive(lease, nowMs)) tasks.push(String(lease.task) -> if (Number(lease.acquiredAt) + Number(lease.ttlMinutes) * 60",
+    "result": "red",
+    "firstRedTest": "reads a lease the way the pool does, so a hand-edited one still protects"
+  },
+  {
+    "file": "scripts/worktrees.mjs",
+    "mutation": "['--no-optional-locks', 'status', '--porcelain', '--untracke -> ['--no-optional-locks', 'status', '--porcelain']",
+    "result": "red",
+    "firstRedTest": "keeps every worktree that still holds work or belongs to a live task"
+  },
+  {
+    "file": "scripts/worktrees.mjs",
+    "mutation": "['--no-optional-locks', 'status', '--porcelain', '--untracke -> ['status', '--porcelain', '--untracked-files=all']",
+    "result": "red",
+    "firstRedTest": "removes a merged task worktree, keeps its branch and its gate records"
+  },
+  {
+    "file": "scripts/worktrees.mjs",
+    "mutation": "  if (!line.has(head)) return true; ->   return true;",
+    "result": "red",
+    "firstRedTest": "keeps every worktree that still holds work or belongs to a live task"
+  },
+  {
+    "file": "scripts/worktrees.mjs",
+    "mutation": "  return log != null && log.split('\\n').filter(Boolean).leng ->   return false;",
+    "result": "red",
+    "firstRedTest": "removes a merge worktree that was fast-forwarded onto main"
+  },
+  {
+    "file": "scripts/worktrees.mjs",
+    "mutation": "  if (directories == null) return null; ->   return 0;",
+    "result": "red",
+    "firstRedTest": "keeps a merged, clean, idle worktree while a process is running in it"
+  },
+  {
+    "file": "scripts/worktrees.mjs",
+    "mutation": "for (const ref of ['refs/heads/main', 'refs/remotes/origin/m -> for (const ref of ['refs/heads/main', 'refs/remotes/origin/m",
+    "result": "red",
+    "firstRedTest": "keeps every worktree that still holds work or belongs to a live task"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": ": old.state !== fact.state || old.level !== fact.level; -> : old.state !== fact.state;",
+    "result": "red",
+    "firstRedTest": "speaks when the level moves and the state string does not"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "? fact.level !== 'ok'         : old.state -> ? true         : old.state",
+    "result": "red",
+    "firstRedTest": "is not woken by an orchestrator that is merely busy or idle"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "fact.level === 'alert' && -> fact.level !== 'ok' &&",
+    "result": "red",
+    "firstRedTest": "does not nag about a warning, only about an alert"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "REMIND_AFTER_HOURS * 3_600_000; -> REMIND_AFTER_HOURS * 3_600_000 * 100;",
+    "result": "red",
+    "firstRedTest": "repeats an alert after the reminder interval, and not before"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "const CI_RED = ['failure', 'timed_out', 'startup_failure', ' -> const CI_RED = ['failure', 'timed_out', 'startup_failure', '",
+    "result": "red",
+    "firstRedTest": "ci: a cancelled or skipped run is not a verdict"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": ".filter((lease) => !leaseIsLive(lease, nowMs)) -> .filter((lease) => Number(lease.acquiredAt ?? 0) + Number(le",
+    "result": "red",
+    "firstRedTest": "leases: reads a hand-edited lease the way the pool does"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "([A-Za-z0-9_.,#-]*) -> ([^:]*)",
+    "result": "red",
+    "firstRedTest": "holds the state to an alphabet that survives a shell and carries no prose"
+  },
+  {
+    "file": "scripts/watchdog.mjs",
+    "mutation": "  if (status) {     process.stdout.write(`${renderStatus(fac ->   if (status) {     process.stdout.write(`${renderStatus(fac",
+    "result": "red",
+    "firstRedTest": "--status prints every fact and remembers nothing"
+  },
+  {
+    "file": "scripts/watchdog-core.mjs",
+    "mutation": "issuesFact counts every open issue, whoever opened it (drop the author filter)",
+    "result": "red",
+    "firstRedTest": "issues: only the repository owner’s issues are work"
+  }
+]
