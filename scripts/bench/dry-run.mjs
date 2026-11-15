@@ -1,25 +1,30 @@
 /**
  * `--dry-run`: what a bench run *would* do, without booting, building or measuring.
  *
- * Minting this machine's baselines (the first step on a new machine) failed twice on
- * things only reading the code revealed: there was no per-machine baseline to write to, and
- * the iOS device key came from the simulator's *name*. Both are answerable in a
- * second by a command that prints what it resolved, so a three-hour plan is not the
- * first thing to tell you.
+ * It exists because a bench run is hours of device time and its failures are cheap to
+ * predict and expensive to discover late: an unassigned simulator, a device key derived
+ * from a simulator's *name* instead of its hardware class, a `--component` that names
+ * nothing in the plan. Each is answerable in a second by a command that prints what it
+ * resolved. For `--compare-release` it also prints the whole two-sided plan
+ * (`scripts/bench/compare.mjs`) - the other thing a long run should not discover about
+ * itself halfway through.
  *
  * Two halves, deliberately:
  *
- *   - `dryRunReport` is pure: the device answer, the load average, the flag list and
- *     whether a file exists all come in as arguments, so the rules are unit tests
- *     rather than a machine (`scripts/__tests__/bench-dry-run.test.js`).
+ *   - `dryRunReport` is pure: the device answer, the load average and the flag list all
+ *     come in as arguments, so the rules are unit tests rather than a machine
+ *     (`scripts/__tests__/bench-dry-run.test.js`).
  *   - `dryRun` is the gatherer: one read-only `simctl list`, one read of the AVD's
  *     own files, `os.loadavg`. It calls nothing that boots, builds or installs -
  *     `resolveIosDevice` boots a stopped simulator and `resolveAndroidDevice`
  *     requires a running emulator, which is exactly what a pre-flight has to survive.
  *
- * The refusals are the runner's own functions called on the runner's own inputs
- * (`machineLabelProblem`, `baselineFileFor`, `loadBlocker`), so a dry run cannot
- * disagree with the run it describes.
+ * The refusals are the runner's own functions called on the runner's own inputs, so a
+ * dry run cannot disagree with the run it describes.
+ *
+ * `--compare-release` brings the two-sided plan along (`prepareComparison`): reading a
+ * ref's plan needs its files and nothing else, so the dry run extracts the ref and asks
+ * it what it measures - no install, no build, no device.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -28,25 +33,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  baselineFileFor,
-  labelPreFlightProblem,
-  machineLabelFromEnv,
-  machineLabelProblem,
-} from './baseline.mjs';
-import {
   deviceClassName,
   iosDeviceClassName,
   iosDeviceKey,
 } from './devices.mjs';
-import {
-  buildSchedule,
-  componentMintProblem,
-  loadBlocker,
-  loadCeiling,
-  narrowingProblem,
-  parseTimeoutFlags,
-  timeoutRuleProblem,
-} from './lib.mjs';
+import { comparisonPlanLines } from './compare.mjs';
+import { buildSchedule, loadOverCeiling, loadCeiling } from './lib.mjs';
 
 /**
  * The iOS device key from a simulator listing alone.
@@ -206,11 +198,11 @@ export function androidDryRunDevice({
 }
 
 /**
- * Everything `--dry-run` prints and decides, from injected inputs.
+ * Everything a plain `--dry-run` prints and decides, from injected inputs.
  *
- * A flag that was not passed is never a reason not to run: an unlabelled machine is
- * information for a plain run and a refusal for `--check`. The distinction is the
- * whole shape of the exit code, so it is asserted on directly.
+ * Nothing here is refused for being merely busy: the load is a line of the answer, not
+ * a veto (X36). What still makes it exit 2 is a run that *cannot* start as asked - no
+ * device to measure on, a filter that matches no cell.
  *
  * @param {{
  *   platform: 'ios' | 'android',
@@ -218,15 +210,12 @@ export function androidDryRunDevice({
  *   launches: number,
  *   component: string | null,
  *   argv: string[],
- *   env?: Record<string, string | undefined>,
  *   deviceKey: string | null,
  *   deviceDetail: string | null,
  *   deviceProblem: string | null,
  *   cpuCount: number,
  *   loadavg1: number | null,
- *   baselinesDir: string,
- *   existsSync?: (file: string) => boolean,
- *   relative?: (file: string) => string,
+ *   comparison?: object | null,
  * }} input
  * @returns {{lines: string[], problems: string[], exitCode: number}}
  */
@@ -237,20 +226,14 @@ export function dryRunReport(input) {
     launches,
     component,
     argv,
-    env = process.env,
     deviceKey,
     deviceDetail,
     deviceProblem,
     cpuCount,
     loadavg1,
-    baselinesDir,
-    existsSync = (file) => fs.existsSync(file),
-    relative = (file) => path.relative(process.cwd(), file),
+    comparison = null,
   } = input;
 
-  const minting = argv.includes('--update-baseline');
-  const checking = argv.includes('--check');
-  const forced = argv.includes('--force');
   // The run's own schedule builder, so the launch count and the `--component` /
   // `--only` / `--scenario` refusals are the real ones rather than a re-derivation that
   // could drift. It throws for exactly the cases worth naming, so the message is kept.
@@ -278,9 +261,8 @@ export function dryRunReport(input) {
     scheduleProblem = String(error.message ?? error);
   }
   const dimension = (pick) => new Set(schedule.map(pick)).size;
-  const label = machineLabelFromEnv(env);
   const ceiling = loadCeiling(cpuCount);
-  const blocker = loadBlocker({ loadavg1, cpuCount });
+  const blocker = loadOverCeiling({ loadavg1, cpuCount });
   const problems = [];
 
   const lines = [
@@ -295,128 +277,23 @@ export function dryRunReport(input) {
         : ' (no schedule)'
     }`,
     `Device:    ${deviceKey ?? 'UNKNOWN'}${deviceDetail == null ? '' : ` - ${deviceDetail}`}`,
-    `Machine:   ${label}`,
-    `Load:      ${loadavg1 == null ? 'unknown' : loadavg1.toFixed(2)} now, ceiling ${
-      ceiling == null ? 'unknown' : ceiling.toFixed(1)
-    } for ${String(cpuCount)} cores`,
+    `Host:      ${String(cpuCount)} cores, load ${loadavg1 == null ? 'unknown' : loadavg1.toFixed(2)} now${
+      ceiling == null ? '' : ` (quiet under ${ceiling.toFixed(1)})`
+    }${blocker == null ? '' : `\n           note:    ${blocker}`}`,
   ];
   if (scheduleProblem != null) problems.push(scheduleProblem);
   if (deviceProblem != null) problems.push(deviceProblem);
-  if (blocker != null) lines.push(`           busy: ${blocker}`);
-
-  // The baseline path, through the same resolver the runner uses: it is the one
-  // place that refuses a bad label by throwing, and a dry run that rebuilt the path
-  // itself would print a file the run would never open. Because that resolver
-  // *throws*, the two reasons it would refuse are asked first: X8's own pre-flight
-  // (N7 - `run.mjs` refuses with this same function, so a dry run cannot print a
-  // refusal the run would not produce, nor prefix a flag twice) for a run that
-  // gates a baseline, and X8's predicate for one that does not. The second is what
-  // an unlabelled *plain* run needs: it asks for no baseline, so the pre-flight
-  // says nothing, and calling the resolver anyway threw out of `--dry-run`.
-  let baselinePath = null;
-  const labelProblem = labelPreFlightProblem(argv, env);
-  const labelIsUsable = machineLabelProblem(label, { flag: 'dry-run' }) == null;
-  if (labelProblem == null && labelIsUsable && deviceKey != null) {
-    baselinePath = baselineFileFor({
-      baselinesDir,
-      deviceKey,
-      machineLabel: label,
-    });
-  }
-  const exists = baselinePath == null ? null : existsSync(baselinePath);
-  lines.push(
-    `Baseline:  ${
-      baselinePath == null
-        ? 'unknown - needs a machine label and a resolved device key'
-        : `${relative(baselinePath)} ${exists ? 'exists' : 'does not exist'}`
-    }`
-  );
-
-  if (minting || checking) {
-    const flag = minting ? '--update-baseline' : '--check';
-    // The waiting rule is knowable from the flags, so the dry run answers the same
-    // question the runner asks at startup (review N1): a mint under a non-default
-    // wait is a diagnostic, and "would start" here would be wrong.
-    const timeouts = parseTimeoutFlags(
-      argv,
-      (name) => {
-        const at = argv.indexOf(name);
-        return at === -1 ? null : (argv[at + 1] ?? null);
-      },
-      platform
-    );
-    if (labelProblem != null) {
-      // Pushed whole, and un-prefixed: X8's function already names the flag, and its
-      // second line is the fix (`export NITRO_UI_MACHINE_LABEL=…`), already indented
-      // to line up under this column. Truncating to the first line, and prefixing it
-      // again, printed `--check: --check:` and dropped the thing to do about it.
-      problems.push(labelProblem);
+  if (comparison != null) {
+    for (const line of comparisonPlanLines({ plan: comparison, deviceKey })) {
+      lines.push(line);
     }
-    if (deviceKey == null) {
-      problems.push(
-        `${flag}: the device key is unknown, so there is no baseline file to ${minting ? 'write' : 'gate against'}`
-      );
-    }
-    if (minting && blocker != null && !forced) {
-      problems.push(`--update-baseline: ${blocker} (pass --force to override)`);
-    }
-    // The same narrowing guard `run.mjs` applies before it boots anything, so a dry
-    // run cannot print "would start" for a mint the run would refuse.
-    if (minting && !forced) {
-      const waiting = timeoutRuleProblem({
-        platform,
-        mountTimeoutMs: timeouts.mountTimeoutMs,
-        presentedTimeoutMs: timeouts.presentedTimeoutMs,
-      });
-      if (waiting != null) {
-        problems.push(`--update-baseline: ${waiting}`);
-      }
-    }
-    // The runner's own refusal, which `--force` does not override.
-    const componentProblem = minting ? componentMintProblem(component) : null;
-    if (componentProblem != null) {
-      problems.push(componentProblem);
-    }
-    if (minting && !forced && component == null) {
-      const narrowed = narrowingProblem({
-        scheduled: schedule.length,
-        wholePlan: buildSchedule({
-          plan,
-          launches,
-          platform,
-          perfMarks: argv.includes('--perf-marks'),
-        }).length,
-        filters,
-      });
-      if (narrowed != null) {
-        problems.push(
-          `--update-baseline: ${narrowed} (pass --force to override)`
-        );
-      }
-    }
-    if (checking && exists === false) {
-      problems.push(
-        `--check: no baseline at ${relative(String(baselinePath))} - create it with --update-baseline`
-      );
-    }
-    lines.push(
-      `${(minting ? 'Mint:' : 'Check:').padEnd(11)}${
-        problems.length === 0 ? 'would start' : 'would refuse'
-      }`
-    );
-  } else if (machineLabelProblem(label, { flag: '--dry-run' }) != null) {
-    // The note for a run that gates nothing: `labelPreFlightProblem` returns null
-    // here by design (no flag to refuse), so this asks X8's predicate directly
-    // rather than re-deriving which flag would have asked.
-    lines.push(
-      'Note:      no machine label - fine for a plain run, needed by --check and --update-baseline'
-    );
+    if (comparison.problem != null) problems.push(comparison.problem);
   }
 
   for (const reason of problems) lines.push(`Reason:    ${reason}`);
   lines.push(
     problems.length === 0
-      ? `Dry run:   OK - ${minting ? 'a mint' : checking ? 'a check' : 'a run'} could start`
+      ? 'Dry run:   OK - a run could start'
       : `Dry run:   ${String(problems.length)} reason(s) not to start it as asked`
   );
   return { lines, problems, exitCode: problems.length === 0 ? 0 : 2 };
@@ -477,8 +354,8 @@ export function attachedEmulatorSerials(env = process.env) {
  *   plan: string,
  *   launches: number,
  *   component: string | null,
- *   baselinesDir: string,
  *   env?: NodeJS.ProcessEnv,
+ *   prepareComparison?: (() => object) | null,
  *   write?: (line: string) => void,
  * }} options
  * @returns {number} 0 when the run as asked could start, 2 with reasons when not
@@ -489,8 +366,8 @@ export function dryRun({
   plan,
   launches,
   component,
-  baselinesDir,
   env = process.env,
+  prepareComparison = null,
   write = (line) => process.stdout.write(`${line}\n`),
 }) {
   let device;
@@ -522,19 +399,22 @@ export function dryRun({
     });
   }
 
+  // Only after the device question is answered: the comparison plan prints the device
+  // both sides will share, and preparing it must not be the thing that fails first.
+  const comparison = prepareComparison == null ? null : prepareComparison();
+
   const report = dryRunReport({
     platform,
     plan,
     launches,
     component,
     argv,
-    env,
+    comparison,
     deviceKey: device.deviceKey,
     deviceDetail: device.detail,
     deviceProblem: device.problem,
     cpuCount: os.cpus().length,
     loadavg1: os.loadavg()[0] ?? null,
-    baselinesDir,
   });
   for (const line of report.lines) write(line);
   return report.exitCode;

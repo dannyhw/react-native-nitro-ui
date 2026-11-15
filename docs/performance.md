@@ -2,12 +2,12 @@
 
 The full record behind the README's [Performance](../README.md#performance) summary: every
 cell, the run and the machine it came from, how the two machines' readings compare, and how
-the committed baselines gate a change. How to run the benchmark, what each metric is and how
+a release comparison gates a change. How to run the benchmark, what each metric is and how
 the numbers are read is [architecture/benchmarks.md](architecture/benchmarks.md).
 
-`maintainer-mac-1` and `maintainer-mac-2` below are the labels of the two machines that have
-committed baselines (`bench/baselines/<machine-label>/`). Both ran the same two devices: an
-iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator.
+`maintainer-mac-1` and `maintainer-mac-2` below are the labels of the two machines these
+runs were measured on. Both ran the same two devices: an iPhone 17 simulator on iOS 27 and
+an API 35 Pixel 9 emulator.
 
 ## What is compared
 
@@ -22,10 +22,10 @@ three arms in the same run, on the same device, in Release builds:
   for all of them. This is the arm worth being measured against, and the target
   is ≤ 1.0× on mount latency, UI CPU and memory.
 
-## `maintainer-mac-1`'s baseline runs
+## `maintainer-mac-1`'s full-plan runs
 
-The numbers below are from the runs that produced `maintainer-mac-1`'s committed
-baselines in `bench/baselines/`: one `--plan full --launches 8` run per platform, on a
+The numbers below are from `maintainer-mac-1`'s full-plan runs: one `--plan full
+--launches 8` run per platform, on a
 clean tree and an idle machine — an iPhone 17 simulator (iOS 27) at `c9548f6` and an
 API 35 Pixel 9 emulator with ART primed to `speed-profile` at `3533d64`. Each
 cell is the launch-paired median ratio of nitro-ui to `expo-ui-shared-host`;
@@ -45,17 +45,16 @@ gives it no verdict, and no mark means the run is at parity within rounding.
 Two things are missing from that table. `maintainer-mac-1` measured no `Picker`
 at all, and the Android `DatePicker` has no `@expo/ui` arm to divide by on any
 machine (`ARMS_WITHOUT_COMPONENT` in `scripts/bench/lib.mjs`), so that ratio
-cannot exist. `maintainer-mac-2`'s baselines do carry `Picker` on both platforms,
-and its quiet re-run of both platforms on 2026-10-30 — one `--plan full
+cannot exist. `maintainer-mac-2` does carry `Picker` on both platforms,
+and its quiet run of both platforms on 2026-10-30 — one `--plan full
 --launches 8` each, at `abe68a1`, `problems: []` — carries `Picker` and `Menu` on
 both platforms; its per-cell tables are in
 [`A5-quiet-bench-mac2.report.md`](tasks/A5-quiet-bench-mac2.report.md).
 That machine is an Apple M1 Max with 10 cores and a load ceiling of 5.0, where
 `maintainer-mac-1` is an M4 Pro with 14 cores and a ceiling of 7.0, so a cell from
 one is not a repeat of the other — read the two together for the shape, and a
-cell against its own machine's baseline for a verdict. `Menu` has no committed
-cell on either machine yet, because a mint replaces a whole baseline file and
-G7b's run covered only Menu; its
+verdict only against a run made on the same machine. `Menu` has no cell in those
+tables, because G7b's run measured Menu alone rather than a whole plan; its
 numbers are in [`G7b-menu-finish.report.md`](tasks/G7b-menu-finish.report.md)
 and in A5's tables, quoted under [the Host](#host-on-android) below.
 
@@ -231,7 +230,7 @@ indicative run published 0.92×:
 
 No Android `@expo/ui` arm has `DatePicker` cells, so that column is hosted-vs-unhosted
 only. Every cell above carries a verdict except the unmount ones and `Progress`
-memory: read against this machine's own baseline, `--check` on the same run **fails
+memory: read against that machine's own full-plan run, the gate **failed
 nothing** — 159 rows within tolerance, 33 noisy, and the only over-threshold row that
 is not noisy is `update:nitro-ui:1` UI CPU at 1.26× with a 95 % CI of 0.98–1.38× that
 covers 1.05, so it is reported and not conclusive. And **no number here is about an
@@ -250,21 +249,27 @@ UI CPU 1.28×. No run composed a popup — the arm never opens a menu.
 [G7b's tables](tasks/G7b-menu-finish.report.md) and
 [A5's](tasks/A5-quiet-bench-mac2.report.md) have the whole set.
 
-## Baselines and gating
+## How a change gets gated
 
-Baselines are committed per machine as well as per device —
-`bench/baselines/<machine-label>/<deviceKey>.json` — because a ratio to `rn-core`
-only cancels drift inside the machine that measured it. Both machines that have
-minted one have both canonical devices
-(`bench/baselines/maintainer-mac-1/`, `bench/baselines/maintainer-mac-2/`), so
-`bun bench --check` gates on both platforms there; a machine without its own
-directory refuses rather than reading another's. Each baseline stores ratios to
-`rn-core`, not absolute times; see
-`bench/baselines/README.md` for the rules a baseline run has to meet. Measurement
-details — absolutes, per-launch spreads, noise flags and the update cells — are in the
+Nothing here gates anything by itself: a number measured on one host on one afternoon is
+not comparable with a number from another host on another. What gates a release is a
+*pair* — `bun bench --platform <p> --compare-release [ref]` builds the release's own bench
+app and the candidate's, installs one at a time on one device, and alternates them launch
+round by launch round, so the host drift of that session falls on both library versions.
+The verdict is per cell and unchanged from D9: a `head(x/rn-core) / base(x/rn-core)` ratio
+over 1.20, whose bootstrap 95 % interval excludes 1.05, in a cell that was quiet inside
+its own run. The tables above stay what they always were — readings, taken on the machine
+named beside them — and a run's own ratios to `rn-core` are what travel between machines,
+never absolute milliseconds.
+
+The only committed performance number in the repository is
+[`bench/baselines/renders.json`](../bench/baselines/renders.json): JS render counts, which
+are machine-independent and gated by exact equality in `bun run check`.
+
+Measurement details — absolutes, per-launch spreads, noise flags and the update cells — are in the
 reports for the
-[iOS baseline](tasks/A1c-baselines.report.md),
-[Android baseline](tasks/A1b-baselines.report.md) and
+[iOS run](tasks/A1c-baselines.report.md),
+[Android run](tasks/A1b-baselines.report.md) and
 [`<Host>`](tasks/H1-android-host.report.md) runs and its
 [H2a](tasks/H2a-host-more-controls.report.md) and
 [H2b](tasks/H2b-host-popups.report.md) follow-ups.

@@ -503,7 +503,7 @@ Six rules are enforced rather than written down:
   the queue: it takes a pair now if nothing older is waiting, and is refused if
   something is. `list` shows the queue (task, waiting since, position), and a
   refusal names who is in front of you;
-- `--exclusive` - for a bench run or a baseline mint, which needs a quiet
+- `--exclusive` - for a bench session, which needs a quiet
   machine - **waits until every other lease has ended**, then holds every pair;
   a waiting exclusive request keeps its place in the queue while it does, and it
   holds _new_ leases back until the machine goes quiet, so it is the one request the
@@ -554,7 +554,7 @@ these rules apply to it specifically:
   may not stop - a server on a port it was never given - is no reason to linger:
   once the ledger line is written the gate drops its read ends on the run's output
   and exits with its code, so `wait` never reports a finished gate as running.
-- an **`--exclusive`** acquire (a bench, a baseline mint) does **not** wait on
+- an **`--exclusive`** acquire (a bench session, including a release comparison) does **not** wait on
   Metro ports, and says why, naming the process. A bench builds a Release app with
   the bundle inside it, so it never uses the port; waiting an hour for one would
   also block every other task behind the pending-exclusive marker. The device reap
@@ -694,8 +694,8 @@ What that means in practice:
   `--boot` is what brings up the pair the lease hands you, and an exclusive
   `--boot` has to name the half it warms (`--platform android|ios|both`) or it is
   refused: `--platform` defaults to `both`, so a line that never said which half
-  would cold-boot a simulator under an Android baseline - minutes of load, and a
-  simulator idling through the rest of the mint (X16 item 2).
+  would cold-boot a simulator under an Android run - minutes of load, and a
+  simulator idling through the rest of it (X16 item 2).
   `NITRO_UI_LEASE_BOOT=1` does not boot an exclusive lease either: only a typed
   `--boot` does, because a bench host is exactly the host that keeps that
   variable in its profile. One exception is made to the power-off, and only when
@@ -704,7 +704,7 @@ What that means in practice:
   killing it costs the bench a cold boot of the device it is about to measure on
   (X16 item 3). Ask for no boot and the promise stays whole: the machine is
   powered down however warm it was. An exclusive acquire used to skip the
-  hand-off altogether, so the documented baseline-mint line below left both of
+  hand-off altogether, so the bench line then current left both of
   its simulators off and the bench host booted its leased device by hand
   (X16 item 2).
 - **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
@@ -1264,27 +1264,34 @@ and these scripts are run by hand today.
 
 `bench/` is a release-build app that measures a component against RN core on a
 real simulator or emulator. The full story — metrics, protocol, what the numbers
-mean, baselines, per-component checklist — is
+mean, the release comparison, per-component checklist — is
 `docs/architecture/benchmarks.md`. The commands:
 
 ```sh
 IOS_SIM_UDID=<udid>   bun bench --platform ios     --plan quick
 ANDROID_AVD=<avd>     bun bench --platform android --plan quick
+IOS_SIM_UDID=<udid>   bun bench --platform ios     --plan full --compare-release
 ```
 
-A change to a component runs the `quick` plan on **both** platforms and puts both
-tables (absolute and ratio-to-`rn-core`) in its pull request. It takes a few
-minutes per platform. `--shutdown` powers off a simulator or emulator the runner
-booted itself.
+The third line is the release check: `--compare-release [ref]` measures `ref` (by default
+the newest release tag) **and** this tree in one session on one device — two bench apps, one
+installed at a time, alternating launch rounds — and exits non-zero naming the cells that got
+slower. Benchmarks are a release-time measurement: a component task runs the `quick` plan
+when it wants numbers for its report, and the verdict against the previous release is made
+once, before the release, on a machine nobody else is using.
 
-| Variable                 | Default      | Meaning                                                              |
-| ------------------------ | ------------ | -------------------------------------------------------------------- |
-| `IOS_SIM_UDID`           | unset        | Simulator UDID to boot and measure on                                |
-| `ANDROID_AVD`            | unset        | AVD name — the runner finds its serial among attached ones           |
-| `ANDROID_SERIAL`         | unset        | Used only when there is no AVD name (physical device)                |
-| `NITRO_UI_MACHINE_LABEL` | `unlabelled` | This machine's label — required by `--check` and `--update-baseline` |
-| `BENCH_ABIS`             | `arm64-v8a`  | Android ABIs to build (`x86_64` on an Intel host)                    |
-| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300`  | Per-launch wall-clock budget (s); raise it on a loaded machine       |
+A quick plan is hours, not minutes: it is 31 cells x 4-5 arms x 4 launches, and the reports
+show 6-10 s per launch, so budget roughly one to two hours per platform. That is an estimate
+from the per-launch times on record, not a measured plan duration. `--shutdown` powers off a
+simulator or emulator the runner booted itself.
+
+| Variable                 | Default     | Meaning                                                        |
+| ------------------------ | ----------- | -------------------------------------------------------------- |
+| `IOS_SIM_UDID`           | unset       | Simulator UDID to boot and measure on                          |
+| `ANDROID_AVD`            | unset       | AVD name — the runner finds its serial among attached ones     |
+| `ANDROID_SERIAL`         | unset       | Used only when there is no AVD name (physical device)          |
+| `BENCH_ABIS`             | `arm64-v8a` | Android ABIs to build (`x86_64` on an Intel host)              |
+| `BENCH_LAUNCH_TIMEOUT_S` | `180`/`300` | Per-launch wall-clock budget (s); raise it on a loaded machine |
 
 Prefer `ANDROID_AVD` over `ANDROID_SERIAL`: console ports are allocated by
 availability, so a serial goes stale the moment another emulator boots or dies,
@@ -1296,16 +1303,13 @@ Metro — `METRO_PORT` is irrelevant to it. Native projects under `bench/ios` an
 when configuration changes.
 
 Gates: on-device numbers **inform review** and block only on a clear regression.
-Both `--compare <ref>` and `--check` gate the `nitro-ui` arms on launch-paired
+`--compare-release` and `--compare <ref|file>` both gate the `nitro-ui` arms on launch-paired
 ratios to `rn-core`, and a verdict needs the ratio over 1.20 with a 95 % CI that
 excludes 1.05 on a cell that was quiet inside its own run; the `rn-core` control
-and the `expo-ui-*` reference arms can never fail your pull request. `--check`
-compares against the committed baselines, which live per machine —
-`bench/baselines/<NITRO_UI_MACHINE_LABEL>/<deviceKey>.json` — so a machine gates only
-against baselines it measured itself. Both labelled machines have both canonical
-devices (an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a
-machine without its own directory, or any other device, uses `--compare <ref>`
-instead. The
+and the `expo-ui-*` reference arms can never fail your pull request. Nothing is committed to
+gate against: the base side of a verdict is a run — the release measured beside the candidate,
+or a results file you already have — because a ratio only cancels drift inside the machine
+that measured it. The
 gate that always blocks is the Reassure render count, below, because it is
 deterministic.
 

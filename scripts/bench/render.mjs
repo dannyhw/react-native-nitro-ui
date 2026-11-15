@@ -34,6 +34,7 @@ import {
   RATIO_FAIL_THRESHOLD,
   ratioTable,
   scenarioActionOf,
+  uncomparedCells,
 } from './lib.mjs';
 
 const METRIC_LABELS = {
@@ -357,7 +358,7 @@ export function detailSections(run) {
               formatNs(cell.marks.drawLatencyNs),
             ],
           ]
-        )}\n\n> Instrumented: recording a mark is a UI-thread mutex write and the drain is JS\n> work, so this explains the numbers above instead of measuring them again. A\n> \`--perf-marks\` run can never mint a baseline.\n`
+        )}\n\n> Instrumented: recording a mark is a UI-thread mutex write and the drain is JS\n> work, so this explains the numbers above instead of measuring them again. A\n> \`--perf-marks\` run is a diagnostic, and \`--compare-release\` refuses it.\n`
       );
     }
     if (cell.memory?.heapCollected === false) {
@@ -422,7 +423,7 @@ export function runHeader(run) {
   if (machine.cpuCount != null) {
     const cpu = machine.cpuModel != null ? ` (${machine.cpuModel})` : '';
     lines.push(
-      `- machine: \`${machine.hostname}\`, ${String(machine.cpuCount)} cores${cpu}, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${loadSamplesNote(machine.loadSamples)}${machine.quiet === false ? ' **(busy)**' : ''}`
+      `- host: ${String(machine.cpuCount)} cores${cpu}, ${String((machine.totalMemoryGb ?? 0).toFixed(1))} GB, load average ${machine.loadavg1?.toFixed(2)} / ${machine.loadavg5?.toFixed(2)}${loadSamplesNote(machine.loadSamples)}${machine.quiet === false ? ' **(busy)**' : ''}`
     );
   }
   if (machine.osVersion != null) {
@@ -436,16 +437,18 @@ export function runHeader(run) {
 
 /**
  * One comparison -> markdown + exit code, shared by `run.mjs` and the standalone
- * reporter (`mode` only changes the wording and whether absolute control
- * movement is worth printing).
+ * reporter. There is one shape: `head` is the run under review and `base` is another
+ * run of the same plan - the release side of a `--compare-release` session, or any
+ * results file `--compare` names. The gate never sees a committed number, so the
+ * control movement between the two runs is always worth printing.
  */
 export function comparisonSections({
   run,
   base,
-  mode,
   label,
   baseTable = null,
   baseNoise = null,
+  expected = null,
 }) {
   const headTable = ratioTable(run);
   const headNoise = noiseTable(headTable);
@@ -459,20 +462,31 @@ export function comparisonSections({
     headNoise,
     baseNoise: resolvedBaseNoise,
   });
-  const movement =
-    mode === 'compare' ? controlMovement(cellsFrom(base), cellsFrom(run)) : [];
+  const movement = controlMovement(cellsFrom(base), cellsFrom(run));
+  const uncompared =
+    expected == null
+      ? []
+      : uncomparedCells({ expected, head: run, base, rows: result.rows });
 
   const sections = [
-    `## ${mode === 'check' ? 'Check against' : 'head/base vs'} ${label}`,
+    `## head/base vs ${label}`,
     '',
-    mode === 'check'
-      ? 'Both columns are launch-paired ratios to `rn-core`, so an OS or machine change cannot move the verdict.'
-      : 'Gated on `head(x/rn-core) / base(x/rn-core)`, so machine drift cancels.',
+    'Gated on `head(x/rn-core) / base(x/rn-core)`, so machine drift cancels.',
     '',
-    gateTable(result, mode),
+    gateTable(result),
     '',
-    gateSummary(result, mode),
+    gateSummary(result),
   ];
+  if (uncompared.length > 0) {
+    sections.push(
+      '',
+      `**Not compared** - ${String(uncompared.length)} cell(s) the plan measures on both sides have no verdict. That is a failed measurement, not a pass and not a slower cell:`,
+      '',
+      ...uncompared.map(
+        (cell) => `- \`${cell.key}\`: ${cell.reasons.join('; ')}`
+      )
+    );
+  }
   if (movement.length > 0) {
     sections.push(
       '',
@@ -489,11 +503,12 @@ export function comparisonSections({
   return {
     markdown: `${sections.join('\n')}\n`,
     result,
-    exitCode: result.conclusiveFailure ? 1 : 0,
+    uncompared,
+    exitCode: result.conclusiveFailure || uncompared.length > 0 ? 1 : 0,
   };
 }
 
-function gateTable(result, mode) {
+function gateTable(result) {
   const rows = [];
   for (const row of result.rows) {
     if (row.status === 'missing-base') {
@@ -517,7 +532,7 @@ function gateTable(result, mode) {
         '-',
         '-',
         '-',
-        `new arm - ${ratios.slice(0, 2).join(', ')} versus rn-core, nothing to regress against until the baseline is refreshed`,
+        `new arm - ${ratios.slice(0, 2).join(', ')} versus rn-core, no base ratio to regress against`,
       ]);
       continue;
     }
@@ -542,8 +557,7 @@ function gateTable(result, mode) {
         formatRatio(value.base),
         formatRatio(value.head),
         formatRatio(value.ratio),
-        notes.join(', ') ||
-          (mode === 'check' ? 'within tolerance' : 'within tolerance'),
+        notes.join(', ') || 'within tolerance',
       ]);
     }
   }
@@ -560,7 +574,7 @@ function gateTable(result, mode) {
   );
 }
 
-function gateSummary(result, mode) {
+function gateSummary(result) {
   const lines = [];
   const noisyCount = Object.values(result.headNoise).reduce(
     (total, cell) =>
@@ -579,9 +593,7 @@ function gateSummary(result, mode) {
   if (result.failures.length === 0) {
     lines.push(
       ``,
-      `No gated metric exceeded the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold${
-        mode === 'check' ? ' against the baseline' : ' versus base'
-      }.`
+      `No gated metric exceeded the ${formatRatio(RATIO_FAIL_THRESHOLD)} threshold versus base.`
     );
     return lines.join('\n');
   }

@@ -1,25 +1,25 @@
 /**
- * A missing sample has to say why, and a comparison arm's gap must not veto a machine.
+ * A missing sample has to say why, and a comparison arm's gap must not veto the run.
  *
- * Two related things went wrong in A3's iOS mint, and both are fixed here:
+ * Two related things went wrong in A3's iOS run, and both are fixed here:
  *
  * 1. **A null carried no evidence.** `missingPresented: 105` said how many presenting
- *    frames never arrived and nothing about why, so the refusal ("55 of 160 samples")
- *    could not be told apart from a probe that had stopped answering at all, and the
- *    investigation had to be re-instrumented from scratch. Every missing signal now
- *    rides a per-iteration reason (`probe-timeout` / `not-awaited` / `probe-error`,
- *    with the wait and the timeout in force), it is tallied per cell, it is printed in
- *    the report, and the mint's refusal quotes it.
- * 2. **A reference arm's gap refused a whole baseline.** `mount.date-picker` N=200 on
- *    the two `@expo/ui` arms was incomplete, and `baselineBlockers()` refused the
- *    entire table - including 150-odd nitro-ui rows that were perfectly measured. D9's
- *    A4 amendment leaves such a cell out and records it; `nitro-ui` (gated) and
- *    `rn-core` (every ratio's denominator) still refuse the mint.
+ *    frames never arrived and nothing about why, so "55 of 160 samples" could not be
+ *    told apart from a probe that had stopped answering at all, and the investigation
+ *    had to be re-instrumented from scratch. Every missing signal now rides a
+ *    per-iteration reason (`probe-timeout` / `not-awaited` / `probe-error`, with the
+ *    wait and the timeout in force), it is tallied per cell, and it is printed in the
+ *    report.
+ * 2. **A reference arm's gap vetoed a whole run.** `mount.date-picker` N=200 on the two
+ *    `@expo/ui` arms was incomplete, and that used to throw away the entire table -
+ *    including 150-odd nitro-ui rows that were perfectly measured. D9's A4 amendment
+ *    leaves such a cell out and records it; `nitro-ui` (gated) and `rn-core` (every
+ *    ratio's denominator) are still reported as the defects they are.
  *
  * `bench/src/plan.ts` owns the timeouts the app waits with, and `scripts/bench/lib.mjs`
- * owns the rule a baseline is minted under. They cannot import each other, so the last
- * suite pins the numbers together - a drift there means a mint is refused for a wait
- * nobody asked for, or accepted for a rule it was not recorded under.
+ * owns the default rule they are restated under. They cannot import each other, so the
+ * last suite pins the numbers together - drift there means a report describes a wait
+ * nobody asked for.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -27,27 +27,21 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-  BASELINE_TIMEOUTS_MS,
-  COMPARISON_IMPLEMENTATIONS,
+  DEFAULT_TIMEOUTS_MS,
   DEFAULT_SCENARIO_BUDGETS,
   MEASURED_ITERATIONS,
   WARMUP_ITERATIONS,
   MAX_MISSING_SAMPLE_RATIO,
   maxRequestedTimeoutMsFor,
   aggregateRecords,
-  baselineBlockers,
-  buildBaseline,
   buildSchedule,
   cellKey,
   describeMissing,
   incompleteMetrics,
   launchBudgetMs,
-  narrowingProblem,
   launchPlanString,
   parseTimeoutFlags,
   requestedTimeouts,
-  timeoutRuleProblem,
-  skippedCellNotes,
   summarizeMissingReasons,
 } from '../bench/lib.mjs';
 // The bench app's plan parser is pure TypeScript over types only (no native imports),
@@ -61,12 +55,12 @@ const ITERATIONS = 20;
 const QUIET = [1, 1.01, 0.995, 1.005];
 
 /**
- * The waiting rule a baseline is minted under, per platform (A4/M1). Most fixtures in
- * this file are iOS-shaped because that is the run A4 minted; the ones that are not say
+ * The waiting rule each platform measures under, per platform (A4/M1). Most fixtures
+ * in this file are iOS-shaped because that is the run A4 measured; the ones that are not say
  * so by naming `ANDROID_RULE`.
  */
-const IOS_RULE = BASELINE_TIMEOUTS_MS.ios;
-const ANDROID_RULE = BASELINE_TIMEOUTS_MS.android;
+const IOS_RULE = DEFAULT_TIMEOUTS_MS.ios;
+const ANDROID_RULE = DEFAULT_TIMEOUTS_MS.android;
 
 /**
  * Records for one cell, with `missingPresented`/`missingMount` iterations whose null
@@ -174,7 +168,7 @@ function cellRecords({
   return records;
 }
 
-/** One memory cell per arm, so a mint has a `memory` row and the ratios have denominators. */
+/** One memory cell per arm, so a run has a `memory` row and the ratios have denominators. */
 function memoryRecords({ implementation, n = 200, perInstance = 40_000 }) {
   const empty = 120_000_000;
   const records = [
@@ -230,13 +224,13 @@ const ARMS = {
 const HOST_ARM = { mounted: 115_000 };
 
 /**
- * A whole mintable run, with one arm's `mount` cell optionally gutted.
+ * A whole complete run, with one arm's `mount` cell optionally gutted.
  *
  * The gap defaults to the A3 shape: 3 of 20 measured iterations per launch (12 of 80),
  * which is over the 10 % budget (`MAX_MISSING_SAMPLE_RATIO`) and therefore incomplete.
  * The arm is a parameter because which arm it is decides everything.
  */
-function mintableRun({
+function runWithGap({
   gapOn = null,
   reason = 'probe-timeout',
   withHost = false,
@@ -265,8 +259,8 @@ function mintableRun({
     plan: 'full',
     launches: 8,
     perfMarks: false,
-    // Android mints are only mintable at the compiled regime (D9); iOS has no ART and
-    // reports null, which the guard below already exempts.
+    // Android is only comparable at the compiled regime (D9); iOS has no ART and
+    // reports null.
     art:
       platform === 'android' ? { status: 'speed-profile', primed: true } : null,
     createdAt: '2026-10-28T00:00:00.000Z',
@@ -278,7 +272,7 @@ function mintableRun({
 
 describe('why a sample is missing is recorded, per iteration', () => {
   it('tallies the reasons a cell lost its signals for, with the waits', () => {
-    const run = mintableRun({ gapOn: 'expo-ui-shared-host' });
+    const run = runWithGap({ gapOn: 'expo-ui-shared-host' });
     const cell = run.cells['mount:expo-ui-shared-host:50'];
     expect(incompleteMetrics(cell)).toEqual([
       { metric: 'presentedNs', samples: 68, expected: 80 },
@@ -302,7 +296,7 @@ describe('why a sample is missing is recorded, per iteration', () => {
   });
 
   it('keeps a probe error apart from a timeout, and keeps its message', () => {
-    const run = mintableRun({ gapOn: 'nitro-ui', reason: 'probe-error' });
+    const run = runWithGap({ gapOn: 'nitro-ui', reason: 'probe-error' });
     const cell = run.cells['mount:nitro-ui:50'];
     expect(cell.missing.presentedNs.byReason['probe-error']).toMatchObject({
       count: 12,
@@ -438,7 +432,7 @@ describe('why a sample is missing is recorded, per iteration', () => {
   });
 
   it('prints the reasons in the cell detail, per signal', () => {
-    const run = mintableRun({ gapOn: 'expo-ui-shared-host' });
+    const run = runWithGap({ gapOn: 'expo-ui-shared-host' });
     const detail = detailSections(run);
     expect(detail).toContain('Missing samples:');
     expect(detail).toContain(
@@ -470,244 +464,6 @@ describe('why a sample is missing is recorded, per iteration', () => {
     expect(requestedTimeouts({ cells })).toEqual({
       mountTimeoutMs: 1500,
       presentedTimeoutMs: 40_000,
-    });
-  });
-});
-
-describe("the comparison-cell rule (D9's A4 amendment)", () => {
-  it('leaves a comparison arm with an incomplete metric out of the baseline', () => {
-    const run = mintableRun({ gapOn: 'expo-ui-shared-host' });
-    expect(baselineBlockers(run)).toEqual([]);
-
-    const baseline = buildBaseline(run);
-    expect(Object.keys(baseline.cells)).not.toContain(
-      'mount:expo-ui-shared-host:50'
-    );
-    const skipped = baseline.skippedCells['mount:expo-ui-shared-host:50'];
-    expect(skipped).toMatchObject({
-      scenario: 'mount',
-      implementation: 'expo-ui-shared-host',
-      n: 50,
-      skipReason: 'presentedNs incomplete',
-    });
-    // Names the metric, its sample counts, and the reasons that were recorded.
-    expect(skipped.skipReasons).toEqual([
-      `presentedNs: 68 of 80 samples arrived - presentedNs: 12 probe-timeout (asked ${String(
-        IOS_RULE.presentedTimeoutMs
-      )} ms, waited up to ${String(IOS_RULE.presentedTimeoutMs + 0.4)} ms)`,
-    ]);
-    // Every other cell of that arm is still there, and so is every nitro-ui row.
-    expect(Object.keys(baseline.cells)).toContain(
-      'memory:expo-ui-shared-host:200'
-    );
-    expect(Object.keys(baseline.cells)).toContain('mount:nitro-ui:50');
-    // A left-out cell carries no ratios at all, not a survivor-biased one.
-    expect(JSON.stringify(baseline.skippedCells)).not.toContain('launchRatios');
-  });
-
-  it('refuses a nitro-ui gap, because that is the gated arm', () => {
-    const reasons = baselineBlockers(mintableRun({ gapOn: 'nitro-ui' }));
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('gated metric(s) are n/a because too few');
-    expect(reasons[0]).toContain('mount:nitro-ui:50 presentedNs (68 of 80');
-  });
-
-  it('refuses an rn-core gap, because it is every ratio denominator', () => {
-    const reasons = baselineBlockers(mintableRun({ gapOn: 'rn-core' }));
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('mount:rn-core:50 presentedNs');
-  });
-
-  it('points the refusal at where the per-iteration detail lives', () => {
-    const reasons = baselineBlockers(mintableRun({ gapOn: 'nitro-ui' }));
-    expect(reasons[0]).toContain('probe-timeout');
-    expect(reasons[0]).toContain(
-      `asked ${String(IOS_RULE.presentedTimeoutMs)} ms`
-    );
-    expect(reasons[0]).toContain('results file');
-    expect(reasons[0]).toContain('.ndjson');
-  });
-
-  it('leaves only the third-party reference arms out, and treats the rest as ours', () => {
-    expect(COMPARISON_IMPLEMENTATIONS).toEqual([
-      'expo-ui-host-per-control',
-      'expo-ui-shared-host',
-    ]);
-  });
-
-  it('refuses a nitro-ui-host gap, because that is our own runtime', () => {
-    // The brief is explicit that `nitro-ui-host` belongs with the gated arm even though
-    // it is never gated: a lost signal there is a fact about nitro-ui, and a machine
-    // should not mint a table in which one of our arms could not be measured.
-    const run = mintableRun({ withHost: true, gapOn: 'nitro-ui-host' });
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('mount:nitro-ui-host:50 presentedNs');
-  });
-
-  it('mints with nothing left out when every signal arrived', () => {
-    const baseline = buildBaseline(mintableRun());
-    expect(baseline.skippedCells).toEqual({});
-    expect(Object.keys(baseline.cells)).toHaveLength(8);
-    // So a clean mint prints nothing about left-out cells, and its output does not grow
-    // a section nobody asked for.
-    expect(
-      skippedCellNotes(baseline, { display: 'bench/baselines/x/y.json' })
-    ).toEqual([]);
-  });
-
-  it('prints the left-out cells, and says where the details live', () => {
-    const lines = skippedCellNotes(
-      buildBaseline(mintableRun({ gapOn: 'expo-ui-shared-host' })),
-      {
-        display: 'bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json',
-      }
-    );
-    expect(lines[0]).toContain(
-      'Left out of the baseline: 1 comparison-arm cell(s)'
-    );
-    expect(lines[1]).toContain(
-      'mount:expo-ui-shared-host:50: presentedNs: 68 of 80 samples arrived'
-    );
-    expect(lines[1]).toContain(
-      `12 probe-timeout (asked ${String(IOS_RULE.presentedTimeoutMs)} ms`
-    );
-    expect(lines.at(-1)).toContain(
-      '`bench/baselines/maintainer-mac-2/ios27-sim-iphone17.json` -> `skippedCells`'
-    );
-    expect(lines.at(-1)).toContain('cells -> `missing`');
-  });
-
-  it('refuses a run that did not wait by the rule the baseline records', () => {
-    const runWith = (presentedTimeoutMs) => {
-      const run = mintableRun();
-      for (const cell of Object.values(run.cells)) {
-        cell.timeouts = {
-          mountTimeoutMs: IOS_RULE.mountTimeoutMs,
-          presentedTimeoutMs,
-        };
-      }
-      return run;
-    };
-    // One millisecond over the rule already changes which samples arrive, so the
-    // boundary is the rule itself - a guard weakened by a factor of ten would pass a
-    // wait well past it and mint a table whose `presented` column means something else.
-    const justOver = IOS_RULE.presentedTimeoutMs + 1;
-    const reasons = baselineBlockers(runWith(justOver));
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('waited longer for a signal than a baseline');
-    expect(reasons[0]).toContain(`${String(justOver)} ms presented`);
-    expect(baselineBlockers(runWith(IOS_RULE.presentedTimeoutMs))).toEqual([]);
-    // And the same *under* the rule (review N1). A 1 000 ms wait drops samples a
-    // baseline keeps, so it is exactly as non-comparable as a 40 s one - and `run.mjs`
-    // tells the operator any `--timeout-*` run is diagnostic, so minting here would
-    // contradict the runner's own message. A guard that only looked upward let this
-    // through, turning the DatePicker comparison cells into `skippedCells` silently.
-    const justUnder = IOS_RULE.presentedTimeoutMs - 1;
-    const short = baselineBlockers(runWith(justUnder));
-    expect(short).toHaveLength(1);
-    expect(short[0]).toContain('waited less time for a signal than a baseline');
-    expect(short[0]).toContain(`${String(justUnder)} ms presented`);
-    expect(baselineBlockers(runWith(1_000))[0]).toContain('1000 ms presented');
-    // Same on the mount side, and the diagnostic flag is what reaches here.
-    const mounted = mintableRun();
-    for (const cell of Object.values(mounted.cells)) {
-      cell.timeouts = {
-        mountTimeoutMs: IOS_RULE.mountTimeoutMs + 1,
-        presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
-      };
-    }
-    expect(baselineBlockers(mounted)[0]).toContain(
-      `${String(IOS_RULE.mountTimeoutMs + 1)} ms mount`
-    );
-  });
-
-  it('refuses a run that recorded no waiting rule at all', () => {
-    // A results file from an app built before the launch flag records nothing, and the
-    // pre-A4 app waited 2 000 ms. Stamping the current default onto that file would be a
-    // claim about a wait nobody made (review N1), so refuse rather than guess: the same
-    // survivorship question, only unverifiable.
-    const before = mintableRun();
-    for (const cell of Object.values(before.cells)) {
-      delete cell.timeouts;
-    }
-    const reasons = baselineBlockers(before);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('no launch recorded the waiting rule');
-    // A file that half-reported (a mount rule and no presented one) is the same problem.
-    const half = mintableRun();
-    for (const cell of Object.values(half.cells)) {
-      cell.timeouts = { mountTimeoutMs: IOS_RULE.mountTimeoutMs };
-    }
-    expect(baselineBlockers(half)[0]).toContain(
-      'no launch recorded the waiting rule'
-    );
-  });
-
-  it("mints Android under Android's rule, not iOS's", () => {
-    // The whole point of per-platform defaults (M1): a 2 000 ms Android run is *at* its
-    // rule and must mint, while the same 2 000 ms on iOS is a short diagnostic. Reading
-    // one platform's rule for the other would refuse every Android mint the moment iOS
-    // moved, and accept an Android run recorded at iOS's 8 s.
-    const android = mintableRun({ platform: 'android' });
-    for (const cell of Object.values(android.cells)) {
-      cell.timeouts = {
-        mountTimeoutMs: ANDROID_RULE.mountTimeoutMs,
-        presentedTimeoutMs: ANDROID_RULE.presentedTimeoutMs,
-      };
-    }
-    expect(baselineBlockers(android)).toEqual([]);
-    expect(buildBaseline(android).timeouts).toEqual({
-      mountTimeoutMs: 1_500,
-      presentedTimeoutMs: 2_000,
-    });
-    // The rule Android is recorded under is the one from before A4, unchanged.
-    expect(ANDROID_RULE.presentedTimeoutMs).toBe(2_000);
-    expect(ANDROID_RULE.mountTimeoutMs).toBe(1_500);
-    // And iOS's 8 s would not be a valid Android rule: `baselineBlockers` reads the
-    // file's own platform, so an 8 s Android run is refused as a diagnostic.
-    for (const cell of Object.values(android.cells)) {
-      cell.timeouts = {
-        mountTimeoutMs: 1_500,
-        presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
-      };
-    }
-    expect(baselineBlockers(android)[0]).toContain('on android');
-  });
-
-  it('records the rule it was minted under in the file', () => {
-    // Minting at the rule records the rule.
-    const atRule = mintableRun();
-    for (const cell of Object.values(atRule.cells)) {
-      cell.timeouts = {
-        mountTimeoutMs: IOS_RULE.mountTimeoutMs,
-        presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
-      };
-    }
-    expect(buildBaseline(atRule).timeouts).toEqual({
-      mountTimeoutMs: IOS_RULE.mountTimeoutMs,
-      presentedTimeoutMs: IOS_RULE.presentedTimeoutMs,
-    });
-    // A run that asked for something else is refused (above), so the only rule a forced
-    // file can carry is the one the app *reported* - reported, never filled in.
-    const forced = mintableRun();
-    for (const cell of Object.values(forced.cells)) {
-      cell.timeouts = { mountTimeoutMs: 1_500, presentedTimeoutMs: 1_000 };
-    }
-    expect(buildBaseline(forced).timeouts).toEqual({
-      mountTimeoutMs: 1_500,
-      presentedTimeoutMs: 1_000,
-    });
-    // A results file from before the flag recorded nothing, and says so rather than
-    // borrowing today's default (review N1: that app waited 2 000 ms, and stamping 8 000
-    // onto the table is the false claim this field exists to prevent).
-    const before = mintableRun();
-    for (const cell of Object.values(before.cells)) {
-      delete cell.timeouts;
-    }
-    expect(buildBaseline(before).timeouts).toEqual({
-      mountTimeoutMs: null,
-      presentedTimeoutMs: null,
     });
   });
 });
@@ -749,12 +505,12 @@ describe('the per-launch budget follows the requested waits', () => {
     // The reason the table is what it is. A launch where no frame ever arrives waits the
     // full default on every iteration: 25 x (2 mount + 1 presented). A budget below that
     // kills the launch as "stalled" for a reason the runner chose, and a killed launch
-    // loses 20 iterations of data and becomes a `problem` - a mint refusal - instead of
+    // loses 20 iterations of data and becomes a `problem` in the run's own list - instead of
     // 20 recorded `probe-timeout` reasons. A4's raise from 2 000 to 8 000 ms is what
     // pushed iOS past the old 180 s table value; Android's 125 s is what keeps its own
     // row honest if anyone shrinks it again.
     for (const platform of ['ios', 'android']) {
-      const rule = BASELINE_TIMEOUTS_MS[platform];
+      const rule = DEFAULT_TIMEOUTS_MS[platform];
       const worst =
         (WARMUP_ITERATIONS + MEASURED_ITERATIONS) *
         (2 * rule.mountTimeoutMs + rule.presentedTimeoutMs);
@@ -778,7 +534,7 @@ describe('the per-launch budget follows the requested waits', () => {
     // a 4x over-allowance in the other. Falling back to a default platform is how that
     // would happen quietly.
     expect(() => launchBudgetMs(entry({}))).toThrow(
-      /no baseline waiting rule for platform/
+      /no default waiting rule for platform/
     );
     expect(() =>
       launchBudgetMs(entry({}), {
@@ -791,7 +547,7 @@ describe('the per-launch budget follows the requested waits', () => {
   it('grows by the extra wait for every iteration of the launch', () => {
     // 25 iterations x (40 000 - 8 000) extra = 800 000 ms on top of the table value.
     // Without this a diagnostic run is killed as "stalled" for waiting on purpose, and a
-    // killed launch becomes a `problem` - which is also a mint refusal.
+    // killed launch becomes a `problem` - which the comparison also reports.
     expect(
       launchBudgetMs(entry({ presentedTimeoutMs: 40_000 }), {
         platform: 'ios',
@@ -1078,46 +834,6 @@ describe('the app really records the reasons the aggregator reads', () => {
   });
 });
 
-describe('an --update-baseline run refuses a waiting rule it did not ask for', () => {
-  /**
-   * The startup half of review N1. `run.mjs` calls every `--timeout-*` run DIAGNOSTIC, so
-   * a mint that asked for a non-default wait had to be refused, and the minting guard
-   * below is the last chance to notice - after the run. This is the same question answered
-   * in the second the command starts, the way the load and narrowing guards work.
-   */
-  it('says nothing when the flags are absent or ask for the default', () => {
-    expect(timeoutRuleProblem({ platform: 'ios' })).toBeNull();
-    expect(
-      timeoutRuleProblem({ platform: 'ios', presentedTimeoutMs: 8_000 })
-    ).toBeNull();
-    expect(
-      timeoutRuleProblem({
-        platform: 'android',
-        mountTimeoutMs: 1_500,
-        presentedTimeoutMs: 2_000,
-      })
-    ).toBeNull();
-  });
-
-  it('refuses a shorter or longer wait, per platform', () => {
-    const short = timeoutRuleProblem({
-      platform: 'ios',
-      presentedTimeoutMs: 1_000,
-    });
-    expect(short).toContain('1000 ms for a presenting frame');
-    expect(short).toContain('ios baselines are recorded at 1500/8000');
-    expect(short).toContain('Drop the `--timeout-*` flags to mint');
-    expect(
-      timeoutRuleProblem({ platform: 'ios', presentedTimeoutMs: 40_000 })
-    ).toContain('40000 ms for a presenting frame');
-    // 8 000 ms is iOS's rule and an Android diagnostic, which is the M1 asymmetry
-    // expressed as a refusal: one shared number would get both wrong.
-    expect(
-      timeoutRuleProblem({ platform: 'android', presentedTimeoutMs: 8_000 })
-    ).toContain('android baselines are recorded at 1500/2000');
-  });
-});
-
 describe('the two ends of the timeout rule agree', () => {
   const ios = () =>
     readFileSync(
@@ -1136,19 +852,19 @@ describe('the two ends of the timeout rule agree', () => {
       'utf8'
     );
 
-  it('waits by the same defaults the baseline is minted under, on both platforms', () => {
-    // The drift this pins is the expensive kind: a mint refused for a wait nobody asked
+  it('waits by the same platform defaults on both platforms', () => {
+    // The drift this pins is the expensive kind: a run measured under a wait nobody asked
     // for, or accepted under a rule it was not recorded with. Per platform, because the
     // two no longer share a number (M1).
     for (const platform of ['ios', 'android']) {
       expect(BENCH_DEFAULT_TIMEOUTS[platform]).toEqual(
-        BASELINE_TIMEOUTS_MS[platform]
+        DEFAULT_TIMEOUTS_MS[platform]
       );
     }
     // Android's own numbers, stated plainly: nothing about the Android wait moved.
-    expect(BASELINE_TIMEOUTS_MS.android.mountTimeoutMs).toBe(1_500);
-    expect(BASELINE_TIMEOUTS_MS.android.presentedTimeoutMs).toBe(2_000);
-    expect(BASELINE_TIMEOUTS_MS.ios.presentedTimeoutMs).toBe(8_000);
+    expect(DEFAULT_TIMEOUTS_MS.android.mountTimeoutMs).toBe(1_500);
+    expect(DEFAULT_TIMEOUTS_MS.android.presentedTimeoutMs).toBe(2_000);
+    expect(DEFAULT_TIMEOUTS_MS.ios.presentedTimeoutMs).toBe(8_000);
   });
 
   it("caps a requested wait below that platform's native backstop", () => {
@@ -1164,7 +880,7 @@ describe('the two ends of the timeout rule agree', () => {
       ['ios', iosCeiling * 1000],
       ['android', androidCeiling],
     ]) {
-      expect(BASELINE_TIMEOUTS_MS[platform].presentationCeilingMs).toBe(
+      expect(DEFAULT_TIMEOUTS_MS[platform].presentationCeilingMs).toBe(
         ceilingMs
       );
       expect(maxRequestedTimeoutMsFor(platform)).toBeLessThan(ceilingMs);
@@ -1173,9 +889,9 @@ describe('the two ends of the timeout rule agree', () => {
       );
       // The cap has to reach at least as far as the platform's own default, or the
       // default rule could not be asked for explicitly.
-      if (ceilingMs > BASELINE_TIMEOUTS_MS[platform].presentedTimeoutMs) {
+      if (ceilingMs > DEFAULT_TIMEOUTS_MS[platform].presentedTimeoutMs) {
         expect(maxRequestedTimeoutMsFor(platform)).toBeGreaterThanOrEqual(
-          BASELINE_TIMEOUTS_MS[platform].presentedTimeoutMs
+          DEFAULT_TIMEOUTS_MS[platform].presentedTimeoutMs
         );
       }
     }
@@ -1315,83 +1031,13 @@ describe('a scheduled launch carries its timeouts', () => {
   });
 });
 
-describe('a narrowed run cannot mint the whole table', () => {
-  const filtersFor = (extra) => ({
-    only: null,
-    component: null,
-    scenario: null,
-    n: null,
-    ...extra,
-  });
-  const sizes = (extra, platform = 'ios') => {
-    const filters = filtersFor(extra);
-    return {
-      scheduled: buildSchedule({
-        plan: 'full',
-        launches: 8,
-        platform,
-        ...filters,
-      }).length,
-      wholePlan: buildSchedule({ plan: 'full', launches: 8, platform }).length,
-      filters,
-    };
-  };
-
-  it('says nothing about a run that measured the whole plan', () => {
-    expect(narrowingProblem(sizes({}))).toBeNull();
-    // `--only` naming every arm is not a narrowing, and the plan/launches guards in
-    // `baselineBlockers` are not confused by an arm list either.
-    expect(
-      narrowingProblem(
-        sizes({
-          only: 'rn-core,nitro-ui,expo-ui-shared-host,expo-ui-host-per-control',
-        })
-      )
-    ).toBeNull();
-  });
-
-  it('refuses the mint for each filter, and names it', () => {
-    for (const [extra, expected] of [
-      [{ scenario: 'mount.date-picker' }, '--scenario mount.date-picker'],
-      [{ n: 200 }, '--n 200'],
-      [{ component: 'slider' }, '--component slider'],
-      [{ only: 'nitro-ui,rn-core' }, '--only nitro-ui,rn-core'],
-    ]) {
-      const problem = narrowingProblem(sizes(extra));
-      expect(problem).toContain('narrowed to');
-      expect(problem).toContain(expected);
-      expect(problem).toContain('not measured in base');
-    }
-  });
-
-  it('catches the diagnostic run shape the docs recommend', () => {
-    // The exact command in docs/architecture/benchmarks.md: one cell of the plan.
-    const diagnostic = sizes({
-      component: 'date-picker',
-      scenario: 'mount.date-picker',
-      n: 200,
-    });
-    expect(diagnostic.scheduled).toBeLessThan(diagnostic.wholePlan);
-    expect(narrowingProblem(diagnostic)).not.toBeNull();
-    expect(sizes({}).scheduled).toBe(sizes({}).wholePlan);
-  });
-
-  it('does not mistake a platform with fewer arms for a filtered run', () => {
-    // Android has an extra scoped arm, so its whole plan differs from iOS's. Each
-    // platform is compared with itself, which is what makes the comparison meaningful.
-    const android = sizes({}, 'android');
-    expect(narrowingProblem(android)).toBeNull();
-    expect(android.wholePlan).not.toBe(sizes({}, 'ios').wholePlan);
-  });
-});
-
 describe('raising the waiting rule is value-neutral for a cell that was complete', () => {
   /**
    * The claim part 3 rests on, checked rather than argued: a longer wait changes *which*
    * samples arrive and never *what* an arriving sample says. So a cell that already
    * measured every iteration inside the old wait has identical numbers under the new one,
-   * and a committed baseline - every cell of which is complete by the mint rule - stays
-   * comparable across the change. The only cells that move are the ones that were losing
+   * a run whose cells are complete by that rule - which is what a comparison side looks
+   * like when it is worth gating - stays comparable across the change. The only cells that move are the ones that were losing
    * samples, and they move towards the truth: the iterations a short wait dropped are
    * exactly the slow ones, which is why their survivor-biased median reads fast.
    *
@@ -1512,9 +1158,9 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
       maxRequestedTimeoutMsFor('ios')
     );
     expect(maxRequestedTimeoutMsFor('ios')).toBeLessThan(90_000);
-    // And the two ends have to agree, because the number that gates a mint is the
+    // And the two ends have to agree, because the number that decides a verdict is the
     // runner's and the number a launch actually waits by is the app's. `waits by the
-    // same defaults the baseline is minted under` asserts the equality; this one is the
+    // same platform defaults on both platforms` asserts the equality; this one is the
     // proof that a revert cannot slip through as a pair - both constants would have to
     // move together, and one of them is read from the app's own module.
     expect(BENCH_DEFAULT_TIMEOUTS.ios.presentedTimeoutMs).toBe(
@@ -1532,7 +1178,7 @@ describe('raising the waiting rule is value-neutral for a cell that was complete
   });
 });
 
-describe('Android keeps the waiting rule it was minted with (review M1)', () => {
+describe('Android keeps the waiting rule it measures with (review M1)', () => {
   /**
    * One place that reads Android's *effective* waits end to end: the string the runner
    * puts on a default launch, the number the app parses off it, the native timer that
@@ -1541,7 +1187,7 @@ describe('Android keeps the waiting rule it was minted with (review M1)', () => 
    * a different file, so a fix in one would otherwise look complete.
    *
    * Proven red by moving each in turn: the app default to 8 000 (both the parse and the
-   * mint-rule equality go red), the ceiling constant or its `postDelayed` call site to
+   * rule-equality tests go red), the ceiling constant or its `postDelayed` call site to
    * 90 s (the backstop and call-site tests), the budget table to iOS's (the table pin),
    * and the platform's rule to iOS's (the mint test above).
    */
@@ -1608,7 +1254,7 @@ describe('Android keeps the waiting rule it was minted with (review M1)', () => 
     expect(extraSeconds).toBe(9_600); // ~2.7 h per Android full run
     // ...and at iOS's 8 s the same cells would run past the budget Android's launches get,
     // which is the other half of why the raise was not simply taken at face value: a
-    // launch killed as "stalled" is a `problem`, and a `problem` refuses the whole mint.
+    // launch killed as "stalled" is a `problem`, and a `problem` fails the whole run.
     expect((iterations * (2 * 1_500 + 8_000)) / 180_000).toBeGreaterThan(1);
     expect((iterations * (2 * 1_500 + 2_000)) / 180_000).toBeLessThan(1);
   });

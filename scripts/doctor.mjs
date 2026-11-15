@@ -185,17 +185,7 @@ function checkMachine() {
     fix:
       load <= cores * 0.5
         ? undefined
-        : 'benches refuse a machine above 0.5 x cores (R4)',
-  });
-  const label = process.env.NITRO_UI_MACHINE_LABEL;
-  results.push({
-    area: 'machine',
-    name: 'NITRO_UI_MACHINE_LABEL',
-    status: label ? 'ok' : 'warn',
-    detail: label ?? 'unset (bench results say "unlabelled")',
-    fix: label
-      ? undefined
-      : 'export NITRO_UI_MACHINE_LABEL=maintainer-mac-<n> in your shell profile',
+        : 'above 0.5 x cores the bench prints the machine as busy: its cells are still measured, only the noisy ones lose their verdict',
   });
   return results;
 }

@@ -11,8 +11,8 @@
  * *not* evidence - control drift, a slow reference arm, a noisy cell - must not
  * suppress or manufacture one.
  *
- * The same `gate()` is used by `run.mjs --check/--compare` and by
- * `report.mjs --compare/--check` (review S11), so covering it covers both.
+ * The same `gate()` is used by `run.mjs --compare-release`, by `run.mjs
+ * --compare` and by `report.mjs --compare` (review S11), so covering it covers all three.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -24,11 +24,7 @@ import { join, resolve } from 'node:path';
 import {
   SCHEMA_VERSION,
   aggregateRecords,
-  baselineBlockers,
-  baselineNoise,
-  baselineTable,
   buildSchedule,
-  buildBaseline,
   cellKey,
   ARM_SCOPES,
   armScopeCovers,
@@ -40,7 +36,7 @@ import {
   IMPLEMENTATIONS,
   incompleteMetrics,
   launchPlanString,
-  loadBlocker,
+  loadOverCeiling,
   loadCeiling,
   scenarioActionOf,
   summarizeLoadSamples,
@@ -138,9 +134,9 @@ function cellRecords({
       measured: ITERATIONS,
       platform: 'ios 27.0',
       probeClock: 'CLOCK_UPTIME_RAW',
-      // The waiting rule this fixture's app would have reported (iOS's defaults). A run
-      // that records none is refused by `baselineBlockers`, so every mintable fixture
-      // has to carry one.
+      // The waiting rule this fixture's app reports (iOS's defaults). A run whose app
+      // records none is called out in its own problems list rather than stamped with
+      // today's defaults, so a fixture has to carry one.
       mountTimeoutMs: 1_500,
       presentedTimeoutMs: 8_000,
     },
@@ -304,11 +300,10 @@ function leakRun({ rnCore, nitroUi }) {
 }
 
 /**
- * `makeRun` plus the metadata `--check` and `--update-baseline` read: a whole
- * run object that is allowed to mint a baseline (clean tree, `full` plan, 8
- * launches, quiet machine).
+ * `makeRun` plus the metadata a results file carries: the whole run object a
+ * release comparison writes (clean tree, `full` plan, 8 launches, quiet machine).
  */
-function baselineRun(overrides = {}) {
+function measuredRun(overrides = {}) {
   return {
     ...makeRun(overrides),
     platform: 'ios',
@@ -521,7 +516,6 @@ describe('benchmark gate', () => {
     const noisy = comparisonSections({
       run: noisyHead,
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(noisy.exitCode).toBe(0);
@@ -530,117 +524,10 @@ describe('benchmark gate', () => {
     const clear = comparisonSections({
       run: makeRun({ 'nitro-ui': { mounted: 220_000, presented: 260_000 } }),
       base: makeRun(),
-      mode: 'compare',
       label: 'base',
     });
     expect(clear.exitCode).toBe(1);
     expect(clear.markdown).toContain('nitro-ui');
-  });
-
-  it('refuses to mint a baseline from a dirty, broken or busy machine', () => {
-    const clean = {
-      ...makeRun(),
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-    };
-    expect(baselineBlockers(clean)).toEqual([]);
-    expect(
-      baselineBlockers({ ...clean, dirty: true }).some((reason) =>
-        reason.includes('dirty')
-      )
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, problems: ['launch 2 ended early'] }).length
-    ).toBeGreaterThan(0);
-    expect(
-      baselineBlockers({
-        ...clean,
-        machine: { cpuCount: 14, loadavg1: 12, quiet: false },
-      }).some((reason) => reason.includes('load average'))
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, machine: { cpuCount: 14 } }).length
-    ).toBeGreaterThan(0);
-    // A `quick` run at 4 launches is local feedback, not baseline material
-    // (docs/DESIGN.md D9). `report.mjs --update-baseline` reads files from
-    // disk, so the guard belongs in the shared blocker list rather than in the
-    // runner's flags.
-    expect(
-      baselineBlockers({ ...clean, plan: 'quick' }).some((reason) =>
-        reason.includes('full')
-      )
-    ).toBe(true);
-    expect(
-      baselineBlockers({ ...clean, launches: 4 }).some((reason) =>
-        reason.includes('launches')
-      )
-    ).toBe(true);
-  });
-
-  /**
-   * The ART regime guard (T12 round 2). `speed-profile` and `verify` are two
-   * comparability regimes - T12 measured the same code's ratio to the shared host
-   * move 1.22x -> 0.99x on mount `presented` across that line - so a baseline may
-   * not be minted from an app that is still interpreting. iOS has no ART, so the
-   * guard is keyed on the platform, and a pre-T12 results file that recorded no
-   * `art` at all is refused rather than assumed compiled.
-   */
-  it('refuses to mint an Android baseline from an uncompiled app', () => {
-    // Rebuilt under Android's waiting rule, because that is what an Android run has to
-    // report to mint at all (A4/M1: the rule is per platform, and `makeRun`'s cells carry
-    // iOS's).
-    const androidCells = makeRun().cells;
-    for (const cell of Object.values(androidCells)) {
-      cell.timeouts = { mountTimeoutMs: 1_500, presentedTimeoutMs: 2_000 };
-    }
-    const cleanAndroid = {
-      ...makeRun(),
-      cells: androidCells,
-      platform: 'android',
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-      art: {
-        packageName: 'com.nitroui.bench',
-        status: 'speed-profile',
-        primed: true,
-        attempts: 1,
-      },
-    };
-    expect(baselineBlockers(cleanAndroid)).toEqual([]);
-    expect(
-      baselineBlockers({
-        ...cleanAndroid,
-        art: { ...cleanAndroid.art, status: 'verify', primed: false },
-      }).some((reason) => reason.includes('verify'))
-    ).toBe(true);
-    expect(
-      baselineBlockers({
-        ...cleanAndroid,
-        art: { ...cleanAndroid.art, status: 'interpret-only' },
-      }).some((reason) => reason.includes('interpreter'))
-    ).toBe(true);
-    // A run from before the state was recorded: unknown regime, no baseline.
-    expect(
-      baselineBlockers({ ...cleanAndroid, art: null }).some((reason) =>
-        reason.includes('did not record an ART compile state')
-      )
-    ).toBe(true);
-    // iOS is exempt: it has no ART, and must keep minting baselines as before.
-    const cleanIos = {
-      ...makeRun(),
-      dirty: false,
-      problems: [],
-      plan: 'full',
-      launches: 8,
-      machine: { cpuCount: 14, loadavg1: 2.5, quiet: true },
-    };
-    expect(baselineBlockers(cleanIos)).toEqual([]);
   });
 });
 
@@ -682,22 +569,22 @@ describe('the idle-machine rule samples the run (R4)', () => {
       loadavg5: 4.06,
       loadSamples,
     };
-    machine.quiet = loadBlocker(machine) === null;
-    return { ...baselineRun(), machine };
+    machine.quiet = loadOverCeiling(machine) === null;
+    return { ...measuredRun(), machine };
   }
 
-  it('accepts a run that was quiet from start to finish', () => {
+  it('calls a run that was quiet from start to finish quiet', () => {
     const run = sampledRun({ samples: quiet(180), loadavg1: 2.4 });
     expect(run.machine.loadSamples).toMatchObject({ count: 180, over: 0 });
     expect(run.machine.quiet).toBe(true);
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
   });
 
   /**
    * The bug: one sample at the end of a 154-minute run. The spike is still
    * recorded and still visible in `max`, it just cannot condemn the run.
    */
-  it('accepts the shape that refused A1b - quiet for hours, a spike at the end', () => {
+  it('calls the shape that condemned A1b quiet - hours of quiet, a spike at the end', () => {
     const run = sampledRun({
       samples: [...quiet(300), A1B_SPIKE, A1B_SPIKE],
       loadavg1: A1B_SPIKE,
@@ -707,23 +594,22 @@ describe('the idle-machine rule samples the run (R4)', () => {
       over: 2,
       max: A1B_SPIKE,
     });
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
     expect(run.machine.quiet).toBe(true);
-    // The same instant, read the way the guard used to read it, is a refusal.
-    expect(loadBlocker({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })).toContain(
-      'load average 7.60'
-    );
+    // The same instant, read on its own, is still what it looks like.
+    expect(
+      loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
+    ).toContain('load average 7.60');
   });
 
-  it('refuses a run that was busy for more than half of it', () => {
+  it('calls a run busy that was busy for more than half of it', () => {
     const run = sampledRun({
       samples: [...quiet(45), ...busy(55)],
       loadavg1: 3.0, // the last minute was fine; the run was not
     });
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('busy for half the run');
-    expect(reasons[0]).toContain('median load average');
+    const reason = loadOverCeiling(run.machine);
+    expect(reason).toContain('busy for half the run');
+    expect(reason).toContain('median load average');
     expect(run.machine.quiet).toBe(false);
   });
 
@@ -732,35 +618,35 @@ describe('the idle-machine rule samples the run (R4)', () => {
    * the end-of-run load average is quiet, but a seventh of the run was spent over
    * the ceiling. This is the test the old rule fails on its own terms.
    */
-  it('refuses a run with more than 10 % of its samples over the ceiling', () => {
+  it('calls a run busy with more than 10 % of its samples over the ceiling', () => {
     const run = sampledRun({
       samples: [...quiet(88), ...busy(12)],
       loadavg1: 2.9,
     });
     expect(run.machine.loadSamples.overFraction).toBeCloseTo(0.12, 10);
     expect(CEILING).toBeCloseTo(7, 10);
-    const reasons = baselineBlockers(run);
-    expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('12 of 100 load samples');
-    expect(reasons[0]).toContain('12% of the run');
+    const reason = loadOverCeiling(run.machine);
+    expect(reason).toContain('12 of 100 load samples');
+    expect(reason).toContain('12% of the run');
     expect(run.machine.quiet).toBe(false);
   });
 
   /**
-   * Boundary: the allowance is *more than* 10 %, so exactly a tenth stays mintable
-   * and the sample after it does not.
+   * Boundary: the allowance is *more than* 10 %, so exactly a tenth is still quiet
+   * and the sample after it is not.
    */
   it('allows exactly 10 % of the samples over the ceiling and refuses the next one', () => {
     expect(LOAD_OVER_CEILING_FRACTION).toBeCloseTo(0.1, 10);
-    const exactlyTen = baselineBlockers(
+    const exactlyTen = loadOverCeiling(
       sampledRun({ samples: [...quiet(90), ...busy(10)], loadavg1: 2.9 })
+        .machine
     );
-    expect(exactlyTen).toEqual([]);
-    const eleven = baselineBlockers(
+    expect(exactlyTen).toBeNull();
+    const eleven = loadOverCeiling(
       sampledRun({ samples: [...quiet(89), ...busy(11)], loadavg1: 2.9 })
+        .machine
     );
-    expect(eleven).toHaveLength(1);
-    expect(eleven[0]).toContain('of the run');
+    expect(eleven).toContain('of the run');
   });
 
   /**
@@ -773,40 +659,28 @@ describe('the idle-machine rule samples the run (R4)', () => {
       loadavg1: CEILING,
     });
     expect(run.machine.loadSamples).toMatchObject({ over: 0, median: CEILING });
-    expect(baselineBlockers(run)).toEqual([]);
+    expect(loadOverCeiling(run.machine)).toBeNull();
   });
 
   it('keeps the single-sample rule for files recorded before the sampler', () => {
     // The two real A1b numbers, read from a file that has no samples at all.
     expect(
-      baselineBlockers({
-        ...baselineRun(),
-        machine: { cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE },
-      })
-    ).toEqual([
-      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
-    ]);
+      loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: A1B_SPIKE })
+    ).toContain(
+      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)'
+    );
+    expect(loadOverCeiling({ cpuCount: CPU_COUNT, loadavg1: 2.39 })).toBeNull();
+    // A file with no load recorded at all still says so, samples or not.
+    expect(loadOverCeiling({ cpuCount: CPU_COUNT })).toContain(
+      'the run did not record a load average'
+    );
     expect(
-      baselineBlockers({
-        ...baselineRun(),
-        machine: { cpuCount: CPU_COUNT, loadavg1: 2.39 },
-      })
-    ).toEqual([]);
-    // A file with no load recorded at all is still refused, samples or not.
-    expect(
-      baselineBlockers({ ...baselineRun(), machine: { cpuCount: CPU_COUNT } })
-    ).toContain('the run did not record a load average');
-    const withEmptySamples = {
-      ...baselineRun(),
-      machine: {
+      loadOverCeiling({
         cpuCount: CPU_COUNT,
         loadavg1: A1B_SPIKE,
         loadSamples: null,
-      },
-    };
-    expect(baselineBlockers(withEmptySamples)).toEqual([
-      'the machine was busy: load average 7.60 over 14 cores (ceiling 7.0)',
-    ]);
+      })
+    ).toContain('load average 7.60');
   });
 
   it('samples the load every 30 s', () => {
@@ -949,10 +823,10 @@ describe('memory aggregation', () => {
   });
 });
 
-describe('a gated arm with no baseline value', () => {
+describe('a gated arm with no base value', () => {
   /**
    * The first run after a component lands has ratios to `rn-core` but no ratio to
-   * regress against, because the baseline cell was skipped. Silently reporting
+   * regress against, because the base run's cell was skipped. Silently reporting
    * that as `ok` reads like a pass, so the gate labels it and prints how the arm
    * compares to the control.
    */
@@ -973,8 +847,7 @@ describe('a gated arm with no baseline value', () => {
     const markdown = comparisonSections({
       run: { platform: 'ios', cells: makeRun().cells },
       base: { platform: 'ios', cells: base.cells },
-      mode: 'check',
-      label: 'baseline',
+      label: 'v0.9.0',
     }).markdown;
     expect(markdown).toContain('new arm');
     expect(markdown).toContain('rn-core');
@@ -1048,19 +921,6 @@ describe('native perf marks (--perf-marks)', () => {
     expect(detailSections({ platform: 'ios', cells })).toContain(
       'Native perf marks'
     );
-  });
-
-  it('never gates, so a marks run cannot mint a baseline', () => {
-    const reasons = baselineBlockers({
-      ...makeRun(),
-      dirty: false,
-      plan: 'full',
-      launches: 8,
-      problems: [],
-      machine: { loadavg1: 1, cpuCount: 14 },
-      perfMarks: true,
-    });
-    expect(reasons.some((reason) => reason.includes('perf marks'))).toBe(true);
   });
 
   it('narrows the schedule to the arm that has marks, and keeps :marks out of the cell key', () => {
@@ -1142,83 +1002,6 @@ describe('sample completeness (round 4)', () => {
     // never scrolls to the detail cells still cannot mistake it for a number.
     expect(summaryTable(run)).toContain('n/a');
     expect(MAX_MISSING_SAMPLE_RATIO).toBe(0.1);
-  });
-
-  it('never mints a baseline from a cell with an unreportable metric', () => {
-    const blockers = baselineBlockers(
-      baselineRun({ 'nitro-ui': { missingPresented: 12 } })
-    );
-    expect(
-      blockers.some((reason) => reason.includes('n/a because too few'))
-    ).toBe(true);
-  });
-});
-
-describe('--check against a committed baseline', () => {
-  // `--check` reads `bench/baselines/<machine-label>/<deviceKey>.json` through
-  // `baselineTable()`/`baselineNoise()` rather than a run, and until round 4 no
-  // test went down that path - the reviewer had to script it by hand to prove
-  // the gate fires there at all.
-
-  it('mints a ratio-only baseline from a clean full-plan run', () => {
-    const baseline = buildBaseline(baselineRun());
-    expect(baseline.platform).toBe('ios');
-    expect(baseline.deviceKey).toBe('ios27-sim-testdevice');
-    const cell = baseline.cells['mount:nitro-ui:50'];
-    expect(cell.metrics.mountedNs.ratio).toBeCloseTo(1.1, 1);
-    // Ratio-only (D9): a baseline stores no absolute nanoseconds at all.
-    expect(JSON.stringify(baseline)).not.toContain('launchMedians');
-    expect(baselineBlockers(baselineRun())).toEqual([]);
-  });
-
-  /**
-   * The per-component entry carries the plan and the launch count of the run it
-   * describes. A row that said `full` because the code wanted `full` would tell a
-   * reader a row is gateable when it was measured on the quick plan.
-   */
-  it('records, per component, the plan and launch count of the run that measured it', () => {
-    const baseline = buildBaseline({
-      ...baselineRun(),
-      plan: 'quick',
-      launches: 4,
-    });
-    const entry = baseline.components.switch;
-    expect([entry.plan, entry.launches]).toEqual(['quick', 4]);
-    expect(entry.component).toBe('switch');
-    expect(entry.sha).toBe('abc1234');
-    expect(entry.cellKeys).toEqual(Object.keys(baseline.cells).sort());
-    expect(entry.cellKeys.length).toBeGreaterThan(0);
-  });
-
-  it('fails a 2x nitro-ui regression against that baseline', () => {
-    const baseTable = baselineTable(buildBaseline(baselineRun()));
-    const baseNoise = baselineNoise(buildBaseline(baselineRun()));
-    const result = gate({
-      head: baselineRun({
-        'nitro-ui': { mounted: 220_000, presented: 260_000 },
-      }),
-      base: { cells: {} },
-      baseTable,
-      baseNoise,
-    });
-    expect(result.conclusiveFailure).toBe(true);
-    const failure = result.conclusiveFailures.find(
-      (entry) => entry.metric === 'mountedNs'
-    );
-    expect(failure.implementation).toBe('nitro-ui');
-    expect(failure.ratio).toBeCloseTo(2, 1);
-  });
-
-  it('passes the same baseline when nothing moved', () => {
-    const baseline = buildBaseline(baselineRun());
-    const result = gate({
-      head: baselineRun(),
-      base: { cells: {} },
-      baseTable: baselineTable(baseline),
-      baseNoise: baselineNoise(baseline),
-    });
-    expect(result.conclusiveFailures).toEqual([]);
-    expect(result.failures).toEqual([]);
   });
 });
 
@@ -1318,7 +1101,7 @@ describe('the Button cells (--component button)', () => {
      * `n` is rows inside one container and it is priced at two row counts (20 and
      * 50, S6's question 6) where every other component is priced at one.
      * Since H2b every bench control is hostable, so no component's schedule is naturally
-     * free of the Host arm any more: the baseline is that same schedule with the scoped
+     * free of the Host arm any more: the base is that same schedule with the scoped
      * arms taken out, which measures the quantity instead of assuming a probe. The half
      * that rode on the probe is asserted in its own right below — the Host arm is scoped
      * to Android, so an iOS schedule must not carry one.
