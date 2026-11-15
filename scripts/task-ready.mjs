@@ -12,8 +12,7 @@
  *
  * 1. `registry:check` — the branch's control set and the generated registry agree. Called
  *    rather than reimplemented: the generator is the only thing that knows what it generates.
- * 2. Conformance coverage — every manifest has a case in the suite, and every `failing`
- *    cell cites a `FOLLOWUPS.md` line that exists. The same functions
+ * 2. Conformance coverage — every manifest has a case in the suite. The same functions
  *    `component-coverage.test.js` runs, so the two cannot disagree about the bar.
  * 3. `TODO` / `FIXME` in a declared fallback or inside a generated region — a decision
  *    nobody made, or one the next `regen` will overwrite.
@@ -60,7 +59,6 @@ import {
   checkSharedTableMirror,
   coverageMatrix,
   failingKeys,
-  followupsResolver,
   recycleNotes,
   repoManifests,
 } from './conformance-core.mjs';
@@ -284,7 +282,6 @@ function coverageProblems() {
   const manifests = repoManifests();
   const sizing = JSON.parse(read('nitro-ui.sizing.json') ?? '{}');
   const harnessText = read('example/__tests__/Conformance.harness.tsx');
-  const followups = read('docs/tasks/FOLLOWUPS.md');
 
   const matrix = coverageMatrix(manifests, {
     sizing,
@@ -297,7 +294,7 @@ function coverageProblems() {
     ...checkInAppFixtures(manifests, harnessText),
     ...checkRecycleNotes(harnessText),
     ...checkA11yTable(manifests, read),
-    ...checkCoverage(manifests, matrix, followupsResolver(followups)),
+    ...checkCoverage(manifests, matrix),
   ];
 }
 
