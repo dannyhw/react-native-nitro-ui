@@ -421,14 +421,17 @@ async function dragContentFraction(
 const LIFT_STEP = 0.12;
 
 /**
- * Bring a control into the band by nudging the page back towards its top.
+ * Bring a control into the band by short drags towards the bottom of the list.
  *
- * This is for the control that is already on screen and parked at the bottom of
- * the window — where a reveal driven by a hosted node's own box leaves it, because
- * the box Compose publishes is a fact about the composition, not about the pixel
- * the finger will land on. A full `CONTENT_STEP` drag would lift the row above it
- * out of the tree, so the nudges are short, and the rows the test still has to read
- * are required to stay on screen while they happen.
+ * This is for the control that is on screen but parked low — at the bottom of the
+ * window, below where a tap lands — because the reveal that got it there was
+ * following a *different* node: a hosted control's own box is a fact about the
+ * Compose composition rather than about the pixel the finger will hit, so a test
+ * reveals the React Native echo above it and is left with the echo in the band and
+ * the control under it. Nudging towards the bottom of the list raises the control;
+ * a full `CONTENT_STEP` drag is too coarse for that last stretch because it lifts
+ * the rows above it out of the tree, so the drags are short, and the rows the test
+ * still has to read are required to stay on screen while they happen.
  */
 export async function liftIntoBand(
   screen: Screen,
@@ -447,11 +450,11 @@ export async function liftIntoBand(
       return box;
     }
     if (nudge === nudges) break;
-    await dragContentFraction(screen, -LIFT_STEP);
-    downDrags = Math.max(0, downDrags - 1);
+    await dragContentFraction(screen, LIFT_STEP);
+    downDrags += 1;
   }
   throw new Error(
-    `real-input: ${String(nudges)} short drags towards the top of the page did ` +
+    `real-input: ${String(nudges)} short drags towards the bottom of the page did ` +
       `not lift the control into the band; its box now reads ` +
       `${JSON.stringify(await boxOf(control))}, and ${String(
         await countUnshown(reads)
