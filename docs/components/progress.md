@@ -1,358 +1,236 @@
 # Progress
 
-The platform progress indicator: SwiftUI `ProgressView` (`.linear` / `.circular`)
-on iOS, Material 3 `LinearProgressIndicator` / `CircularProgressIndicator` plus
-the Expressive `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator` and
-`LoadingIndicator` on Android, all hosted by the core runtime
-(`docs/architecture/core.md`) — so the drawing, the indeterminate animation, the
-a11y behaviour and the dynamic-type and RTL handling are the platform's.
+The platform progress indicator: SwiftUI `ProgressView` (`.linear` / `.circular`) on iOS, Material
+3 `LinearProgressIndicator` / `CircularProgressIndicator` plus the Expressive
+`LinearWavyProgressIndicator` / `CircularWavyProgressIndicator` and `LoadingIndicator` on Android.
+The drawing, the indeterminate animation, the accessibility behaviour and the dynamic-type and
+RTL handling are the platform's.
 
 ```tsx
 import { Progress } from 'react-native-nitro-ui';
 
-<Progress value={uploaded / total} />;          // a bar that fills
-<Progress variant="circular" />;                // a ring that spins
+<Progress value={uploaded / total} />; // a bar that fills
+<Progress variant="circular" />; // a ring that spins
 <Progress variant="circular" appearance="wavy" />; // Material's wavy ring
-<Progress variant="loading" contained />;       // Material's morphing shape
+<Progress variant="loading" contained />; // Material's morphing shape
 ```
 
-The last two are Material 3 Expressive shapes. Android draws them; iOS has
-neither a wavy indicator nor a morphing one, so it draws the closest
-`ProgressView` it has and says so in **Platform mapping** and **Limits** rather
-than faking a wave.
+The last two are Material 3 Expressive shapes. Android draws them; iOS has neither a wavy
+indicator nor a morphing one, so it draws the closest `ProgressView` (see Platform mapping and
+Limits).
 
-It is the library's first **non-interactive** component: nothing on a Progress
-can be changed by the user, so there are no callbacks, no `onValueChange`, and no
-event-count handshake (DESIGN.md D7b, `docs/architecture/core.md` §12). React
-always owns `value`, which is what makes writing it at 60 Hz cheap — one `number`
-prop and one commit per frame, with no round trip to wait for.
+A Progress is not interactive: there are no callbacks and no event count. React always owns
+`value`, so writing it at 60 Hz is one `number` prop and one commit per frame.
 
-For the `ActivityIndicator` look (`variant="circular"`, indeterminate) there is no
-second component to add:
+For the `ActivityIndicator` look, use an indeterminate ring:
 
 ```tsx
-<Progress variant="circular" />             // no `value` = indeterminate
+<Progress variant="circular" /> // no `value` = indeterminate
 ```
 
 ## API
 
-| Prop                 | Type                          | Default  | Maps to                                                        |
-| -------------------- | ----------------------------- | -------- | -------------------------------------------------------------- |
-| `variant`            | `'linear' \| 'circular' \| 'loading'` | `'linear'` | SwiftUI `.progressViewStyle()` / which M3 composable is built.  |
-| `appearance`         | `'flat' \| 'wavy'`            | `'flat'` | M3 `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator`. **Android only** — iOS draws flat. |
-| `contained`          | `boolean`                     | `false`  | `ContainedLoadingIndicator` instead of `LoadingIndicator`. **Android only**, and only with `variant="loading"`. |
-| `value`              | `number \| null \| undefined` | `null`   | The fraction shown, `0…1`. `null`/`undefined` = **indeterminate**. On iOS a **circular** indicator does not draw it — see Limits. |
-| `tintColor`          | `ColorValue \| undefined`     | platform | SwiftUI `.tint()` / M3 `color`.                                 |
-| `trackColor`         | `ColorValue \| undefined`     | platform | M3 `trackColor`. **Android only today** — see Limits.            |
-| `style`              | `ViewStyle`                   | —        | Overrides the default box (see Sizing).                          |
-| `testID`             | `string \| undefined`         | —        | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.     |
-| `accessibilityLabel` | `string \| undefined`         | —        | Label of the indicator itself.                                   |
-| `hybridRef`          | `(view: handle) => void`      | —        | **Internal.** Read-only handle for this repo's harness and benchmarks. |
-| `nuiPerfId`          | `number \| null \| undefined` | `null`   | **Internal.** Instance id for perf marks; `null` disables marks.   |
+| Prop                 | Type                                  | Default    | Maps to                                                                                                                  |
+| -------------------- | ------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `variant`            | `'linear' \| 'circular' \| 'loading'` | `'linear'` | SwiftUI `.progressViewStyle()` / which Material 3 composable is built.                                                   |
+| `appearance`         | `'flat' \| 'wavy'`                    | `'flat'`   | Material 3 `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator`. Android only; iOS draws flat.                |
+| `contained`          | `boolean`                             | `false`    | `ContainedLoadingIndicator` instead of `LoadingIndicator`. Android only, and only with `variant="loading"`.              |
+| `value`              | `number \| null \| undefined`         | `null`     | The fraction shown, `0…1`. `null`/`undefined` = indeterminate. On iOS a circular indicator does not draw it; see Limits. |
+| `tintColor`          | `ColorValue \| undefined`             | platform   | SwiftUI `.tint()` / Material 3 `color`.                                                                                  |
+| `trackColor`         | `ColorValue \| undefined`             | platform   | Material 3 `trackColor`. Android only; see Limits.                                                                       |
+| `style`              | `ViewStyle`                           | —          | Overrides the default box (see Sizing).                                                                                  |
+| `testID`             | `string \| undefined`                 | —          | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.                                                            |
+| `accessibilityLabel` | `string \| undefined`                 | —          | Label of the indicator itself.                                                                                           |
+| `hybridRef`          | `(view: handle) => void`              | —          | Internal. Read-only handle for this repo's harness and benchmarks.                                                       |
+| `nuiPerfId`          | `number \| null \| undefined`         | `null`     | Internal. Instance id for perf marks; `null` disables marks.                                                             |
 
 `Progress` is a `View`, so any other `ViewProps` work as usual.
 
-`hybridRef` and `nuiPerfId` are not app API (DESIGN.md D14): the package publishes no
-Hybrid View types and no way to write a prop from outside React. The handle is
-read-only (plus `measureContent()`, and the test-only `nuiTestDisplayedValue` /
-`nuiTestIsAnimating`), it is invoked once when the view mounts, and a new function
-does not re-run it — so after a `variant` change (which remounts, see Sizing) the
-handle you kept belongs to a dropped view.
+`hybridRef` and `nuiPerfId` are not app API. The handle is read-only (plus `measureContent()`,
+and the test-only `nuiTestDisplayedValue` / `nuiTestIsAnimating`). It is invoked once when the
+view mounts, so after a `variant` change, which remounts (see Sizing), a handle you kept belongs
+to a dropped view.
 
-There is no `animated` prop. Interpolating between two fractions is the
-toolkits' decision and we do not override it in either direction (Behaviour
-notes), so a flag would have nothing to switch.
+There is no `animated` prop: the library neither adds nor suppresses an animation between two
+fractions (see Behaviour notes).
 
 ## Platform mapping
 
-| Concept           | iOS                                                            | Android                                                          |
-| ----------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Control           | `ProgressView(value:)` + `.progressViewStyle(.linear/.circular)` | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)      |
-| Host              | `UIHostingController` inside `NitroSwiftUIHost`                 | `NitroComposeHost<M>: AbstractComposeView`                        |
-| Indeterminate     | `ProgressView()` with no value — a **bar** stays an empty track (Limits) | the overload without `progress`                                   |
-| Determinate value | the `Double`, clamped at the draw site — **drawn by the bar only**; a ring keeps spinning (Limits) | `progress = { Float }` lambda, read by M3's own composition        |
-| Indicator colour  | `.tint(_:)`                                                     | `color:` (`ProgressIndicatorDefaults.*Color` when untinted)        |
-| Track colour      | **nothing addresses the track**                                 | `trackColor:` (`…linearTrackColor` / `…circular*TrackColor`)       |
-| `appearance="wavy"` | **no such control** — the flat bar/ring is drawn (Limits)       | `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator`, determinate and indeterminate, at Material's own amplitude, wavelength and speed |
-| `variant="loading"` | a **circular `ProgressView`** — the closest native control (Limits) | `LoadingIndicator` / `ContainedLoadingIndicator`, determinate with a `value`, indeterminate without |
-| `contained`       | **nothing to contain** — stored and painted nothing             | the tonal container behind the morphing shape (`containerColor`)   |
-| Value animation   | the toolkit's; ours is "draw what arrived"                      | M3 draws the lambda's value; it does not interpolate               |
-| Indeterminate     | the toolkit's own animation                                     | the toolkit's own animation (Compose-driven)                       |
-| Test id           | RN's `testID` → `accessibilityIdentifier`                       | `host.tag` (Compose has no test id)                                |
-| Label             | `.accessibilityLabel(_:)`                                       | `Modifier.semantics { contentDescription }`                        |
-| Recycle           | hosting controller reused                                       | objects reused; composition rebuilt (`core.md` §6)                 |
+| Concept             | iOS                                                                                           | Android                                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Control             | `ProgressView(value:)` + `.progressViewStyle(.linear/.circular)`                              | `LinearProgressIndicator` / `CircularProgressIndicator` (Material 3)                                                                              |
+| Host                | `UIHostingController` inside `NitroSwiftUIHost`                                               | `NitroComposeHost<M>: AbstractComposeView`                                                                                                        |
+| Indeterminate       | `ProgressView()` with no value; a bar stays an empty track (Limits)                           | the overload without `progress`                                                                                                                   |
+| Determinate value   | the `Double`, clamped at the draw site; drawn by the bar only, a ring keeps spinning (Limits) | `progress = { Float }` lambda, read by Material 3's own composition                                                                               |
+| Indicator colour    | `.tint(_:)`                                                                                   | `color:` (`ProgressIndicatorDefaults.*Color` when untinted)                                                                                       |
+| Track colour        | nothing addresses the track                                                                   | `trackColor:` (`…linearTrackColor` / `…circular*TrackColor`)                                                                                      |
+| `appearance="wavy"` | no such control; the flat bar/ring is drawn (Limits)                                          | `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator`, determinate and indeterminate, at Material's own amplitude, wavelength and speed |
+| `variant="loading"` | a circular `ProgressView`, the closest native control (Limits)                                | `LoadingIndicator` / `ContainedLoadingIndicator`, determinate with a `value`, indeterminate without                                               |
+| `contained`         | nothing to contain; stored, and paints nothing                                                | the tonal container behind the morphing shape (`containerColor`)                                                                                  |
+| Value animation     | the toolkit's; each value is drawn as it arrives                                              | Material 3 draws the lambda's value; it does not interpolate                                                                                      |
+| Indeterminate       | the toolkit's own animation                                                                   | the toolkit's own animation (Compose-driven)                                                                                                      |
+| Test id             | RN's `testID` → `accessibilityIdentifier`                                                     | `host.tag` (Compose has no test id)                                                                                                               |
+| Label               | `.accessibilityLabel(_:)`                                                                     | `Modifier.semantics { contentDescription }`                                                                                                       |
+| Recycle             | hosting controller reused                                                                     | objects reused; composition rebuilt                                                                                                               |
 
 ## Sizing
 
-Opted in per `docs/architecture/sizing.md` §5, and the two variants use the two
-different policies — the only component so far to need both:
+The variants use two sizing policies ([DESIGN.md](../DESIGN.md), section 3.6):
 
-- **`linear` is `fillWidth`.** Its height is its own; its width *is* the box. The
-  wrapper adds `alignSelf: 'stretch'` (sizing.md §6) so a parent's cross-axis
-  alignment cannot shrink the box out from under it.
-- **`circular` is `intrinsic`** (`docs/architecture/sizing.md` §5): it
-  measures its own square, and the wrapper adds `alignSelf: 'flex-start'` so a
-  `stretch`ing parent cannot widen the ring into an ellipse.
+- `linear` is `fillWidth`. Its height is its own; its width is the box. The wrapper adds
+  `alignSelf: 'stretch'` so a parent's cross-axis alignment cannot shrink the box.
+- `circular` and `loading` are `intrinsic`: each measures its own square, and the wrapper adds
+  `alignSelf: 'flex-start'` so a stretching parent cannot widen the ring into an ellipse.
 
-`nuiSizingKey` names the **configuration**, which is what decides the box: the
-shape, and on Android the two props that change a shape's size.
+`nuiSizingKey` names the configuration: the shape, and the two props that change a shape's size
+on Android.
 
-| Props sent                                   | Key                    |
-| -------------------------------------------- | ---------------------- |
-| `linear`                                     | `''`                   |
-| `linear appearance="wavy"`                    | `'wavy'`               |
-| `circular`                                    | `'circular'`           |
-| `circular appearance="wavy"`                  | `'circular\|wavy'`     |
-| `loading`                                     | `'loading'`            |
-| `loading contained`                           | `'loading\|contained'` |
+| Props sent                   | Key                    |
+| ---------------------------- | ---------------------- |
+| `linear`                     | `''`                   |
+| `linear appearance="wavy"`   | `'wavy'`               |
+| `circular`                   | `'circular'`           |
+| `circular appearance="wavy"` | `'circular\|wavy'`     |
+| `loading`                    | `'loading'`            |
+| `loading contained`          | `'loading\|contained'` |
 
-`''` is the configuration `prewarm(['NitroUiProgress'])` seeds. The two props are
-normalised before they reach the key: `appearance` means nothing for `'loading'`
-(no wavy form exists on either platform) and `contained` means nothing for a bar
-or a ring (no container exists), so a prop that cannot change the drawing never
-mints a cache entry for a configuration that does not exist.
-
-Dropping any of the three from the key is the R3 bug class — every later mount of
-the other configuration inherits the first one's size, and reads as a correct
-measurement rather than a bug. `src/__tests__/progressSizingKey.test.tsx` guards
-the function and `lays every configuration out at the size it measures` guards
-what the wrapper builds from it.
+`''` is the configuration `prewarm(['NitroUiProgress'])` seeds. The two props are normalised
+before they reach the key: `appearance` means nothing for `'loading'` and `contained` means
+nothing for a bar or a ring, so a prop that cannot change the drawing never creates a cache
+entry.
 
 ### Measured sizes
 
-Every number below is what `measureContent()` and the Yoga box reported in the
-same harness run on two devices (an iPhone Air simulator on iOS 27, and the
-`nitroui_b` API 35 emulator at 420 dpi), and they are the same fixture the harness
-asserts (`example/__tests__/Progress.harness.tsx`).
+Measured on an iPhone Air simulator on iOS 27 and an API 35 emulator at 420 dpi:
 
-| Configuration                       | iOS                                  | Android                                            |
-| ----------------------------------- | ------------------------------------ | -------------------------------------------------- |
-| `linear`                             | **4 pt** tall; width = the box        | **4.19 dp** tall (M3's 4 dp track = 11 whole px at 420 dpi); width = the box |
-| `linear appearance="wavy"`            | **4 pt** — the flat bar               | **9.90 dp** tall (Material's 10 dp wave = 26 whole px; the px round-down is why this reads 9.90, like the flat bar's 4.19) |
-| `circular`                            | **20 × 20 pt**                        | **40 × 40 dp**                                     |
-| `circular appearance="wavy"`          | **20 × 20 pt** — the flat ring        | **48 × 48 dp** (Material's `WaveSize`)              |
-| `loading`                             | **20 × 20 pt** — a circular `ProgressView` | **48 × 48 dp**, the morphing shape 38 dp inside it |
-| `loading contained`                   | **20 × 20 pt** — the same             | **48 × 48 dp** — the container *is* the box         |
+| Configuration                | iOS                                   | Android                                                                              |
+| ---------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `linear`                     | 4 pt tall; width = the box            | 4.19 dp tall (Material 3's 4 dp track = 11 whole px at 420 dpi); width = the box     |
+| `linear appearance="wavy"`   | 4 pt, the flat bar                    | 9.90 dp tall (Material's 10 dp wave = 26 whole px, rounded down like the flat bar's) |
+| `circular`                   | 20 × 20 pt                            | 40 × 40 dp                                                                           |
+| `circular appearance="wavy"` | 20 × 20 pt, the flat ring             | 48 × 48 dp (Material's `WaveSize`)                                                   |
+| `loading`                    | 20 × 20 pt, a circular `ProgressView` | 48 × 48 dp, the morphing shape 38 dp inside it                                       |
+| `loading contained`          | 20 × 20 pt, the same                  | 48 × 48 dp; the container is the box                                                 |
 
-So `contained` changes nothing that a box can see on either platform — it is in
-the key because the two must not share a cache entry, and
-`gives a contained loading indicator its own cache entry` is the row that proves
-it, by poisoning one entry and watching the other still be corrected.
+`contained` does not change the box on either platform. It is in the key so the two
+configurations do not share a cache entry.
 
-The component declares `320 × 4` with the `fillWidth` policy as its fallback on
-both platforms (`NitroUiDeclaredFallbacks`, registered at startup — a Fabric measure can happen
-before any view exists). Two things follow:
+The declared fallback is `320 × 4` with the `fillWidth` policy on both platforms, registered at
+startup through `NitroUiDeclaredFallbacks`:
 
-- The declared height is the *linear* one, which is also the default variant, so
-  a cold bar is laid out at the right thickness on the first frame. Under a finite
-  parent the declared **height** is the half that shows, because the box owns the
-  width (sizing.md §5). Under a parent that gives no finite width — a bar inside a
-  horizontal `ScrollView` — the declared **width** is what draws, on the first frame
-  and on every frame after it: there is no box width to substitute and a linear bar
-  has no intrinsic width of its own, so 320 is not a placeholder there, it is the
-  length of the bar the user sees. An app can't change the declared number; give
-  the bar an explicit `width` style if 320 is wrong for the layout. (The device test
-  for this case is the Slider's, `hands an unbounded parent its declared width…`;
-  Progress uses the same sizing engine path but has no unbounded-parent test of its
-  own.)
-- The fallback map is keyed by **component**, not by configuration, so a cold
-  mount of the *ring* starts from the bar's box and is corrected to 20 pt / 40 dp
-  one frame later (measured). That is D17's one-frame budget, documented here and named by
-  the harness's poison test, which seeds the cache with `137 × 23` for both keys
-  and then waits for the box to become what the control measured. Fixtures that
-  equalled the declared fallback could not tell a correction from a control that
-  never corrected.
+- The declared height is the linear one, which is the default variant, so a cold bar is laid out
+  at the right thickness on the first frame. Under a finite parent only the declared height
+  shows, because the box owns the width. Under a parent that gives no finite width, such as a
+  horizontal `ScrollView`, the declared width is what draws on every frame: a linear bar has no
+  intrinsic width, so the bar is 320 long. Give the bar an explicit `width` style if 320 is wrong
+  for the layout.
+- The fallback is per component, not per configuration, so a cold mount of the ring starts from
+  the bar's box and is corrected to 20 pt / 40 dp one frame later.
 
-A `variant` change **remounts** the native view (the wrapper keys it on the shape
-alone): the shapes are different controls, and Android asks its toolkit a
-different sizing question per shape at the moment the composition is built and
-never re-asks it. Nothing is lost — a Progress has no native state to carry over.
+A `variant` change remounts the native view (the wrapper keys it on the shape): the shapes are
+different controls, and the Android host decides which sizing question to ask when the
+composition is built. A Progress has no native state to lose.
 
-An `appearance` or `contained` change deliberately does **not** remount: neither
-changes the sizing *policy*, so both re-measure in place the way a `variant`
-change does, through `nuiSizingKey` (`re-measures an appearance change on the same
-view`, `gives a contained loading indicator its own cache entry`). Keeping the
-remount keyed on the shape alone is what makes a mid-download switch to
-`appearance="wavy"` cheap; widening the key would pass the same tests for the
-wrong reason.
-
-The reset clears `appearance` and `contained` with the rest of the model, which
-is the belt behind the fact that the wrapper re-sends every prop on every mount.
+An `appearance` or `contained` change does not remount: neither changes the sizing policy, so
+both re-measure in place through `nuiSizingKey`.
 
 ## Behaviour notes
 
 ### Values that are not in range
 
-`value` is clamped natively (`0…1`), and `NaN` counts as out of range and becomes
-0. Progress that arrives from a download callback overshoots; an indicator that
-vanished because of it is worse than one that looked full for a frame. The prop
-getter still answers what React sent, unclamped — the clamp lives at the draw
-site, so `handle.value` round-trips a write of `1.5` as `1.5` while the bar is
-full.
+`value` is clamped natively to `0…1`, and `NaN` becomes 0. The prop getter still returns what
+React sent, unclamped: the clamp is at the draw site, so `handle.value` reads `1.5` after a write
+of `1.5` while the bar is full.
 
 ### Determinate ↔ indeterminate
 
-`value = null` is indeterminate, not empty. Both platforms switch control
-*shape* (M3 has separate overloads and separate track defaults for the two
-states) and both report the change to a screen reader.
+`value = null` is indeterminate, not empty. Both platforms switch the control's shape (Material 3
+has separate overloads and separate track defaults for the two states) and both report the change
+to a screen reader.
 
 ### The indeterminate animation stops when nobody can see it
 
-An indeterminate indicator is the only thing in this library that draws itself
-forever, so both platforms gate it on window membership:
+Both platforms gate the indeterminate animation on window membership:
 
-- iOS: a zero-size sibling observer (`NitroUiProgressWindowObserver`) reports
-  `didMoveToWindow`; off-window the model draws an **empty determinate**
-  indicator in the same style — same style so the measured size does not move,
-  empty because that is the one determinate state that needs no motion. That
-  swap is only *visible* on a **linear** bar: the circular style looks the same
-  with a value and without one (Limits), so for a ring the gate stops work
-  without changing a pixel.
-- Android: the same rule on the same flag, driven by the host's attach/detach
-  callbacks, plus the recycle path.
+- iOS: a zero-size sibling observer (`NitroUiProgressWindowObserver`) reports `didMoveToWindow`.
+  Off-window the model draws an empty determinate indicator in the same style, so the measured
+  size does not move and nothing animates. The swap is only visible on a linear bar; a circular
+  style looks the same with a value and without one (Limits).
+- Android: the same rule on the same flag, driven by the host's attach/detach callbacks and the
+  recycle path. An off-window control is composed as determinate, so Material 3's
+  `rememberInfiniteTransition` leaves the composition.
 
-`nuiTestIsAnimating()` is the shared invariant the harness asserts: *indeterminate
-and on screen*. What the test
-(`animates while it is on screen and stops when it is gone`) measures is that the
-flag closes: it is `false` for a control whose view has been dropped, and false
-again after a recycle. Whether a screen full of hidden indicators then costs fewer
-frames is a CPU claim nobody has measured on this repo, so this page does not make
-it — the mechanism (an off-window control is composed as determinate, so M3's
-`rememberInfiniteTransition` leaves the composition) is the argument, and the
-measurement is a follow-up.
+`nuiTestIsAnimating()` reports "indeterminate and on screen". It is what the view was asked to
+do. On Android that is what the pixels do. On iOS a determinate ring reports `false` and spins
+anyway, and an indeterminate bar reports `true` and does not move (see Limits). The CPU saved by
+the gate is not measured.
 
-The flag is *what the view was asked to do*, which on Android is what the pixels
-do and on iOS is not always: SwiftUI ignores it in both directions, once for each
-kind of circular/linear limit above. A determinate ring reports `false` and spins
-anyway; an indeterminate bar reports `true` and does not move (see Limits). The
-harness asserts the flag, never the motion, and no test here watches pixels move.
+### No interpolation
 
-### What we do not do
-
-We never interpolate a value. Each fraction is drawn as it arrives, so a 60 Hz
-source looks smooth and a coarse one looks like steps; an app that wants a tween
-owns it (Reanimated on the JS side, or a Compose `animateFloatAsState` inside its
-own host). Whether the toolkit wraps a write in its own animation is the
-toolkit's; we neither add one nor suppress one, and this page does not claim a
-measurement of it.
+The library never interpolates a value. Each fraction is drawn as it arrives, so a 60 Hz source
+looks smooth and a coarse one looks like steps. An app that wants a tween owns it (Reanimated on
+the JS side, for example). Whether the toolkit wraps a write in its own animation is the
+toolkit's.
 
 ### One commit per update
 
-`afterUpdate()` is `host.commit()` and nothing else — no handshake, no
-`mostRecentEventCount`, no callback identity to keep alive. The harness measures
-it (`commits once per update at 60 Hz`): 20 awaited writes cost 20 `propsApplied`
+`afterUpdate()` is `host.commit()` and nothing else. 20 awaited writes cost 20 `propsApplied`
 marks and exactly one `firstFrame`, and a dropped view marks nothing.
 
 ## Accessibility
 
-Determinate is a **progress bar with a value**; indeterminate is a progress bar
-that says so.
+Determinate is a progress bar with a value; indeterminate is a progress bar that says so.
 
-- iOS: SwiftUI's `ProgressView` is already the right element; we add
-  `.accessibilityLabel(_:)` only when a label was given and
-  `.accessibilityValue("<n>%")` when there is a value (adding a label where there
-  was none would silence the element the toolkit set up).
-- Android: one `clearAndSetSemantics` node — `contentDescription` when labelled,
-  and `progressBarRangeInfo` = `ProgressBarRangeInfo(value, 0f..1f, 0)` or
-  `ProgressBarRangeInfo.Indeterminate`. `clearAndSetSemantics` because the subtree
-  is then exactly this node, so a screen reader hears one rule from one place
-  (the Slider's reasoning).
+- iOS: SwiftUI's `ProgressView` is the element. `.accessibilityLabel(_:)` is added only when a
+  label is given, and `.accessibilityValue("<n>%")` when there is a value.
+- Android: one `clearAndSetSemantics` node with `contentDescription` when labelled, and
+  `progressBarRangeInfo` = `ProgressBarRangeInfo(value, 0f..1f, 0)` or
+  `ProgressBarRangeInfo.Indeterminate`.
 
-The four new configurations read the same way, because the node is built once,
-above the `when` that picks the composable: TalkBack says **In progress** plus the
-label, and the percentage too when there is a value, for a wavy bar, a wavy ring,
-a loading indicator and a contained one alike. It has to be that way on purpose:
-the wavy indicators call `progressSemantics()` and `LoadingIndicator` publishes a
-`ProgressBarRangeInfo` of its own, and `clearAndSetSemantics` clears both in favour
-of the one this file publishes — with the value React sent rather than the one the
-composable guessed. On iOS `loading` is a circular `ProgressView` and `wavy` is
-the flat control, so VoiceOver reads exactly what the matching `variant` reads: a
-labelled progress bar, with `accessibilityValue("42%")` when there is a value and
-without one when indeterminate. There is no new a11y surface to describe, which is
-the point of drawing the platform's own control rather than a copy.
+Every configuration reads the same way on Android, because the node is built once, above the
+`when` that picks the composable: TalkBack says "In progress" plus the label, and the percentage
+when there is a value. `clearAndSetSemantics` replaces the semantics the wavy indicators and
+`LoadingIndicator` publish themselves, so the value announced is the one React sent. On iOS
+`loading` is a circular `ProgressView` and `wavy` is the flat control, so VoiceOver reads what
+the matching `variant` reads.
 
 ## Limits
 
-- **`trackColor` is Android-only today** (with one exception: on a *contained*
-  loading indicator it paints the container — see the `contained` bullet). Material 3 gives every indicator a
-  `trackColor`; SwiftUI's `ProgressView` has no API that addresses its track, so
-  on iOS the prop is accepted, stored, round-trips through the handle and paints
-  nothing. It is a prop on both platforms anyway so the JS API means one thing
-  rather than two.
-- **A determinate `circular` indicator does not show its value on iOS.** SwiftUI's
-  `.circular` `ProgressView` keeps spinning whatever fraction it is handed, so on
-  iOS `variant="circular"` with a `value` looks exactly like the indeterminate
-  ring: the number reaches VoiceOver (`accessibilityValue`) and the handle, not the
-  pixels. Android does draw it — Material 3 has a determinate
-  `CircularProgressIndicator`. This is a SwiftUI surface limit, not a plumbing bug:
-  `value` arrives, is clamped, and is handed to the view.
-  - `Gauge(value:in:)` with `.gaugeStyle(.accessoryCircularCapacity)` (the platform's
-    own determinate ring) was built and measured here, and rejected on the numbers:
-    it lays out a **58 pt** circle where this control's rings are 20 pt on iOS and
-    40 dp on Android, so a ring would resize the moment a value arrived — the exact
-    box-moving behaviour `docs/architecture/sizing.md` §5 and DESIGN.md D20 exist to
-    prevent — and it needs iOS 16 while this library builds for 15.1. Forcing it back
-    to 20 pt costs the `frame()`/`controlSize` tricks the "No size or thickness
-    control" bullet below rules out.
-  - What is left is our own drawing: a `ProgressViewStyle` or an arc we render. That
-    buys a real determinate ring at the price of "the drawing is the platform's", so
-    it is a design decision rather than a bug fix, and it has not been made.
-- **On iOS an indeterminate `linear` bar shows an empty track and does not
-  visibly animate.** It is pixel-identical to the same bar at `value={0}`: rows
-  `1024`–`1046` of three simulator screenshots taken 600 ms apart are
-  byte-identical, while the rows of the ring below them differ — so this is
-  measured, not inferred. Nothing is being clipped or hidden by our sizing
-  either: UIKit's `UIProgressView` has no indeterminate mode to draw (its
-  `isIndeterminate` is read-only and never true), so a value-less linear
-  `ProgressView` on iOS has no animation to show and paints the track it would
-  have filled. Use a ring (or a `linear` bar on Android) where indeterminate
-  motion carries meaning.
-- **`appearance="wavy"` is Android-only.** SwiftUI has no wavy progress
-  indicator, so iOS stores the prop, answers it back through the handle, and draws
-  the flat bar or ring — the same treatment `trackColor` gets, for the same reason.
-  Faking a wave would mean drawing our own control, which is the one thing this
-  component's existence argues against.
-- **`variant="loading"` is a circular `ProgressView` on iOS.** Material's
-  morphing polygon shape has no iOS counterpart; the spinner-shaped ring is the
-  closest control the platform has, and iOS answers it at the ring's 20 pt, which
-  is also why `loading` is `intrinsic` there rather than a third size.
-- **`appearance` does not apply to `variant="loading"`, on either platform.**
-  Material has no wavy form of the loading indicator, so the wrapper resolves
-  `wavy` + `loading` to `flat` before it reaches native — the combination paints
-  the plain loading indicator and its sizing key says `'loading'`, not
-  `'loading|wavy'`. Same for `contained` on a bar or a ring: it is resolved to
-  `false`, because there is no container to draw.
-- **`contained` is Android-only, and it is where `trackColor` paints.**
-  `ContainedLoadingIndicator`'s tonal container is the thing behind the shape, so
-  on that one configuration `trackColor` addresses the container rather than a
-  track. Everywhere else `trackColor` is the indicator's own track (or, on iOS,
-  painted nothing).
-- **The Material 3 Expressive call sites are `@OptIn`.** `LoadingIndicator` and
-  `ContainedLoadingIndicator` are `@ExperimentalMaterial3ExpressiveApi` in material3
-  1.5.0-beta02, so `HybridNitroUiProgress.kt` opts in at one private composable —
-  the only `ExperimentalMaterial3ExpressiveApi` opt-in in the library. (It is not
-  the only `@OptIn`: Dialog, BottomSheet, DatePicker, SearchField and Tooltip all
-  opt into `ExperimentalMaterial3Api`.) The risk is the one the annotation is for:
-  an experimental member can change shape or vanish at a *minor* version without a
-  deprecation cycle, and this library pins material3. When that happens it will
-  compile red in that one file, with the four call sites, rather than misbehave at
-  runtime. The two wavy indicators are **not** experimental: they carry no opt-in
-  marker anywhere in the 1.5.0-beta02 artifact, which is why only the loading shape
-  needs the annotation.
-- **A wavy ring keeps its track while indeterminate; a flat ring does not.**
-  Material's wavy indicators take one track default for both states
-  (`ProgressIndicatorTokens.TrackColor`, visible), while the flat
-  `CircularProgressIndicator` has separate defaults per state and its
-  indeterminate one is transparent. It is Material's decision, passed through
-  rather than evened out.
-- **No size or thickness control.** Neither toolkit lets us set a
-  `ProgressView`'s thickness or ring diameter through an API we consider stable
-  (`controlSize` and `frame()` fight the control's own measurement here), so the
-  two sizes above are what you get, and `style` overrides the *box* — a bar in a
-  60 pt-tall box still draws 4 pt of bar inside it, centred.
-- **No label / formatted value.** SwiftUI's `ProgressView` label and M3's
-  semantics for a text value have no equivalent on the other platform, so
-  labelling is the plain `accessibilityLabel` route on both.
-- **`variant` changes remount; `appearance` and `contained` changes do not**
-  (Sizing). Cheap here, but a shape change is a remount, and it drops the
-  `hybridRef` handle the way any remount does.
+- `trackColor` is Android-only, and on a contained loading indicator it paints the container
+  (see the `contained` item). SwiftUI's `ProgressView` has no API that addresses its track, so on
+  iOS the prop is accepted, stored and paints nothing.
+- A determinate `circular` indicator does not show its value on iOS. SwiftUI's `.circular`
+  `ProgressView` keeps spinning whatever fraction it is handed, so `variant="circular"` with a
+  `value` looks like the indeterminate ring: the number reaches VoiceOver (`accessibilityValue`)
+  and the handle, not the pixels. Android draws it. SwiftUI's `Gauge` with
+  `.gaugeStyle(.accessoryCircularCapacity)` is not a substitute: it lays out a 58 pt circle where
+  this control's rings are 20 pt on iOS and 40 dp on Android, so a ring would resize when a value
+  arrived.
+- On iOS an indeterminate `linear` bar shows an empty track and does not animate. It is
+  pixel-identical to the same bar at `value={0}`. UIKit's `UIProgressView` has no indeterminate
+  mode (its `isIndeterminate` is read-only and never true). Use a ring where indeterminate motion
+  carries meaning.
+- `appearance="wavy"` is Android-only. SwiftUI has no wavy progress indicator, so iOS stores the
+  prop and draws the flat bar or ring.
+- `variant="loading"` is a circular `ProgressView` on iOS, at the ring's 20 pt. Material's
+  morphing shape has no iOS counterpart.
+- `appearance` does not apply to `variant="loading"`, on either platform. The wrapper resolves
+  `wavy` + `loading` to `flat` before it reaches native, and its sizing key is `'loading'`. In
+  the same way `contained` on a bar or a ring is resolved to `false`.
+- `contained` is Android-only, and it is where `trackColor` paints: on a
+  `ContainedLoadingIndicator`, `trackColor` colours the tonal container behind the shape.
+- `LoadingIndicator` and `ContainedLoadingIndicator` are `@ExperimentalMaterial3ExpressiveApi` in
+  material3 1.5.0-beta02, so `HybridNitroUiProgress.kt` opts in at one private composable. An
+  experimental member can change or disappear at a minor version; the library pins material3, so
+  such a change fails the build in that file. The two wavy indicators are not experimental.
+- A wavy ring keeps its track while indeterminate; a flat ring does not. Material's wavy
+  indicators use one visible track default for both states
+  (`ProgressIndicatorTokens.TrackColor`), while the flat `CircularProgressIndicator`'s
+  indeterminate track is transparent.
+- No size or thickness control. `controlSize` and `frame()` conflict with the control's own
+  measurement, so the sizes above are fixed, and `style` overrides the box: a bar in a 60 pt-tall
+  box still draws 4 pt of bar inside it, centred.
+- No label or formatted value inside the control. Labelling is `accessibilityLabel` on both
+  platforms.
+- `variant` changes remount; `appearance` and `contained` changes do not (see Sizing). A remount
+  drops the `hybridRef` handle.

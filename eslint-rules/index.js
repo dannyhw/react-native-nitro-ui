@@ -1,6 +1,5 @@
 // Local ESLint plugin: perf/API guardrails for react-native-nitro-ui.
 // CommonJS on purpose so both `eslint.config.mjs` and Jest can load it.
-// See docs/research/setup-decisions.md §6 "Static guardrails".
 
 /** Names that memoize a callback - a `callback(...)` inside them is stable. */
 const STABLE_HOOK = /^use[A-Z_]/;

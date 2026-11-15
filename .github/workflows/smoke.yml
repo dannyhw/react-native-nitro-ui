@@ -1,7 +1,7 @@
 # Consumer smoke tests: npm-pack the library, install it with npm into a fresh
 # Expo app and a fresh React Native CLI app, build Release, launch on a device
 # and wait for the NITRO_UI_SMOKE_READY log line (Android logcat / iOS os_log).
-# The only true check of "trivial install" (docs/research/setup-decisions.md §4).
+# The only check that a fresh app can install and build the published package.
 #
 # The pack job's tarball (+ its `.gitsha`) is a workflow artifact; the run jobs
 # download it and export SMOKE_TARBALL, which also skips re-packing and fails if
