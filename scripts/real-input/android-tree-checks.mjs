@@ -1996,8 +1996,12 @@ async function contextMenuChecks(t) {
 
 /** The two wheels of a `variant="wheel"` time picker, and the inline calendars. */
 async function datePickerChecks(t) {
-  await checkTimeDrums(t);
+  // The grids first, and not for the sake of the grids: the drum sits below them on a
+  // page so long that `positionWheel`'s own swipes cannot travel it from the top — at
+  // that point the right-hand strip it aims at is calendar, not page. The grid search
+  // arrives there, and the wheel check goes on from where it left the page.
   await checkInlineCalendarGrids(t);
+  await checkTimeDrums(t);
 }
 
 /** The hosted dialog's two dismissals: Back and Cancel. */
