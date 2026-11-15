@@ -75,7 +75,6 @@ import {
   gateLogStoreDir,
   isDeviceGate,
   isUsageProbe,
-  lookLeaseRefusal,
   lastLogLine,
   ledgerFileName,
   ledgerLineFromRun,
@@ -1502,13 +1501,6 @@ function changedCodePaths({ base }) {
  */
 async function runGate(name, resolved, options = {}) {
   let claim = null;
-  // Before anything else, and before a ledger line: a look-check simulator's lease never runs a
-  // device gate (X20 item 3), and a refused run is no evidence of anything, so none is recorded.
-  const lookRefusal = lookLeaseRefusal(process.env, resolved);
-  if (lookRefusal != null) {
-    process.stderr.write(`gate: refused before the run - ${lookRefusal}\n`);
-    return 1;
-  }
   if (resolved.platform != null) {
     const preflight = metroPreflight();
     // A number, not `{ status }`: reading `.status` off it is `undefined`, which is
@@ -3039,13 +3031,9 @@ async function main(argv) {
   // X28: the lease is checked here rather than inside `runGate` so a backgrounded
   // gate is refused in the shell that asked for it, instead of leaving a record and
   // a log for a run that never touched a device.
-  // The look-check refusal first: it is the more specific answer (this lease may
-  // never run a device gate, whatever else is right about it), and the store check
-  // would otherwise report a lease that *is* live as merely unverifiable.
   // The disk is asked last: a run with no lease is the more useful thing to be told,
   // and a full disk is true for every task on the machine rather than this one.
   const leaseBlock =
-    lookLeaseRefusal(process.env, resolved) ??
     deviceGateLeaseBlock(resolved, process.env) ??
     deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {

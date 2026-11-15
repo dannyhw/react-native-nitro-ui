@@ -552,7 +552,8 @@ SplitButton and Chip). The owner decided C and D.
 
 1. **iOS versions (question A):** the device pool gets simulators on the other installed runtimes (26.5 and 27.1)
    for look checks (X20), and G20 re-runs the ControlGroup probe on them before building. The docs say which
-   versions were checked.
+   versions were checked. *(The pool half is withdrawn by X38: the runtime simulators had no recorded use, and a
+   hand-booted simulator plus `IOS_SIM_UDID` do the same check.)*
 2. **Toggles in a connected iOS group (question B):** fall back to a row of bordered toggles, documented.
 3. **Config plugins (owner, question C; clarifies PLAN principle 3):** an Expo config plugin is fine and expected
    where it makes the library better. What the owner rules out is a lot of manual setup: installing stays `npm i` +
