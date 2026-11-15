@@ -4,7 +4,6 @@
  *
  *   node scripts/lease.mjs acquire --task G6                        # env file on stdout
  *   node scripts/lease.mjs acquire --task B1 --exclusive --out /tmp/b1.env
- *   node scripts/lease.mjs acquire --task G20 --ios-runtime 26.5 --boot  # an older iOS, for a look
  *   node scripts/lease.mjs list
  *   node scripts/lease.mjs release G6                               # by task or id
  *
@@ -22,11 +21,6 @@
  * (default 2) device tasks at a time; `--exclusive` (a bench or baseline mint,
  * which needs a quiet machine) waits until every other lease has ended; and
  * `emulator-5560` can never be leased, whoever is asking.
- *
- * `--ios-runtime <v>` (X20 item 3) leases one simulator from `devices.json` `iosRuntimes`, on an
- * iOS runtime the pairs do not run, for a screenshot or a probe: iOS only, never exclusive, never
- * handed to an ordinary acquire, and refused by every device gate (`gate.mjs`). It is otherwise a
- * device lease like any other - the limit, the boot, the reset, and `reap` as the only power-off.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -44,7 +38,6 @@ import {
   portListeners,
   pruneExpired,
   decideAcquire,
-  iosRuntimeKey,
   newLeaseId,
   normalizeDevices,
   readJson,
@@ -64,9 +57,6 @@ const USAGE =
   '                                          [--exclusive] [--wait-minutes N]\n' +
   '                                          [--ttl-minutes N] [--out <file>] [--config <file>]\n' +
   '                                          [--boot] [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
-  '                                          [--ios-runtime <major.minor>]\n' +
-  '         (--ios-runtime hands out one simulator on that older iOS runtime, for a look check:\n' +
-  '          iOS only, never --exclusive, and gate.mjs refuses a device gate on it)\n' +
   '         (--exclusive --boot needs --platform ios|android|both: an exclusive lease boots only\n' +
   '          the half it names, and never for NITRO_UI_LEASE_BOOT alone)\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
@@ -141,9 +131,6 @@ function parseArgs(argv) {
     bootTimeoutMinutes: null,
     reset: true,
     idleMinutes: null,
-    // `--ios-runtime 26.5`: one simulator on that runtime from `devices.json` `iosRuntimes`, for a
-    // look check (X20 item 3). Normalized to `major.minor`; null is a default pair.
-    iosRuntime: null,
   };
   const take = (name, value) => {
     if (value == null) throw new Error(`${name} needs a value\n${USAGE}`);
@@ -200,16 +187,6 @@ function parseArgs(argv) {
       case '--json':
         options.json = true;
         break;
-      case '--ios-runtime': {
-        const value = take('--ios-runtime', argv[++index]);
-        options.iosRuntime = iosRuntimeKey(value);
-        if (options.iosRuntime == null) {
-          throw new Error(
-            `--ios-runtime needs an iOS version such as 26.5 (got ${value})\n${USAGE}`
-          );
-        }
-        break;
-      }
       default: {
         if (argument.startsWith('-')) {
           throw new Error(`unknown flag ${argument}\n${USAGE}`);
@@ -224,22 +201,6 @@ function parseArgs(argv) {
   }
   if (!['ios', 'android', 'both'].includes(options.platform)) {
     throw new Error(`--platform must be ios, android or both\n${USAGE}`);
-  }
-  if (options.iosRuntime != null) {
-    // A look-check simulator is one iOS device: there is no Android half to lease with it, and a
-    // bench or baseline never measures on an older runtime, so neither flag means anything here.
-    if (options.platformGiven && options.platform !== 'ios') {
-      throw new Error(
-        `--ios-runtime leases an iOS simulator only; drop --platform ${options.platform}\n${USAGE}`
-      );
-    }
-    if (options.exclusive) {
-      throw new Error(
-        '--ios-runtime is for a short look check, and --exclusive is for a bench on the default ' +
-          `pairs: the two do not go together\n${USAGE}`
-      );
-    }
-    options.platform = 'ios';
   }
   if (Number.isNaN(options.waitMinutes) || Number.isNaN(options.ttlMinutes)) {
     throw new Error(`--wait-minutes and --ttl-minutes need numbers\n${USAGE}`);
@@ -383,27 +344,6 @@ function acquire({ devices, paths, options, log }) {
           const sameTask = state.leases.find(
             (lease) => lease.task === options.task
           );
-          if (
-            sameTask != null &&
-            (sameTask.iosRuntime ?? null) !== options.iosRuntime
-          ) {
-            // Idempotent only for the same request. A task that holds a default pair and asks for
-            // an iOS 26.5 simulator (or the other way round) would otherwise be handed back the
-            // device it already has, under an env file that answers a question it did not ask.
-            const held =
-              sameTask.iosRuntime == null
-                ? `a default pair (${sameTask.holds.join(', ')})`
-                : `an iOS ${sameTask.iosRuntime} simulator (${sameTask.holds.join(', ')})`;
-            dropMyTicket();
-            return {
-              kind: 'refuse',
-              reason:
-                `${options.task} already holds ${held} under ${sameTask.id}. Release it first ` +
-                `(node scripts/lease.mjs release ${sameTask.id}), or lease the ` +
-                `${options.iosRuntime == null ? 'pair' : `iOS ${options.iosRuntime} simulator`} ` +
-                `under another --task name, e.g. --task ${options.task}-${options.iosRuntime ?? 'pair'}`,
-            };
-          }
           if (sameTask != null) {
             // Idempotent: a task that asks twice keeps what it already has, so a
             // retried command cannot consume a second pair. No Metro check either:
@@ -426,7 +366,6 @@ function acquire({ devices, paths, options, log }) {
             task: options.task,
             pending: others,
             portBlocked,
-            iosRuntime: options.iosRuntime,
             waiters: waitQueue(state, now).filter(
               (waiter) => waiter.task !== options.task
             ),
@@ -470,9 +409,6 @@ function acquire({ devices, paths, options, log }) {
                   id: leaseId,
                   platform: options.platform,
                   exclusive: false,
-                  ...(options.iosRuntime == null
-                    ? {}
-                    : { iosRuntime: options.iosRuntime }),
                   requestedAt: waitedSince,
                   refreshedAt: now,
                 },
@@ -501,11 +437,6 @@ function acquire({ devices, paths, options, log }) {
             task: options.task,
             platform: options.platform,
             exclusive: options.exclusive,
-            // Only on a look-check lease, so every lease file written before X20 still reads as
-            // what it was: a default pair.
-            ...(options.iosRuntime == null
-              ? {}
-              : { iosRuntime: options.iosRuntime }),
             // An exclusive lease holds every pair: it needs a quiet machine, not a
             // free simulator.
             holds: options.exclusive
@@ -614,10 +545,7 @@ function main(argv) {
       const row = [
         lease.id.padEnd(24),
         lease.task.padEnd(12),
-        (lease.iosRuntime == null
-          ? lease.platform
-          : `ios ${lease.iosRuntime}`
-        ).padEnd(8),
+        String(lease.platform).padEnd(8),
         (lease.exclusive ? 'exclusive' : '').padEnd(10),
         lease.holds.join(',').padEnd(24),
         formatAge(lease, Date.now()),
@@ -628,13 +556,9 @@ function main(argv) {
     // the reason a new acquire is being held back and used to be the only kind shown.
     for (const waiter of queue) {
       const since = waiterRequestedAtMs(waiter);
-      const platform =
-        waiter.iosRuntime == null
-          ? String(waiter.platform ?? 'both')
-          : `ios ${waiter.iosRuntime}`;
       process.stdout.write(
         `queue${String(waiter.position).padStart(4)}. ${String(waiter.task).padEnd(12)}` +
-          `${platform.padEnd(10)}` +
+          `${String(waiter.platform ?? 'both').padEnd(10)}` +
           `${(waiter.exclusive ? 'exclusive' : 'waiting').padEnd(10)}` +
           `${String(waiter.id ?? '').padEnd(18)}` +
           `${waiter.exclusive ? 'wants an exclusive lease' : 'waiting for a pair'}, ` +

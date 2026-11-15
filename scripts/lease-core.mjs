@@ -340,56 +340,6 @@ export function normalizeDevices(config) {
     });
   }
 
-  // Simulators on the machine's *other* iOS runtimes (X20 item 3, D42 item 1): one simulator each,
-  // for a short iOS-only look check - a screenshot, a probe - on an iOS the default pairs do not
-  // run. They join `pairs` here, as iOS-only entries carrying `iosRuntime`, so everything that
-  // already walks the pool (the reaper, an exclusive lease's power-off and its holds, `list`, the
-  // Metro and unowned-device checks) covers them without a second list to forget. What keeps them
-  // out of an ordinary acquire is `decideAcquire`: a pair with `iosRuntime` is handed out only to
-  // `--ios-runtime`, and only a pair with it is. `doctor.mjs --setup` creates them.
-  const runtimeSims = config?.iosRuntimes;
-  if (runtimeSims != null && !Array.isArray(runtimeSims)) {
-    problems.push('iosRuntimes must be a list of { id, ios, metroPort }');
-  }
-  for (const [index, entry] of (Array.isArray(runtimeSims)
-    ? runtimeSims
-    : []
-  ).entries()) {
-    const id =
-      typeof entry?.id === 'string' && entry.id !== '' ? entry.id : null;
-    if (id == null) {
-      problems.push(`iosRuntimes[${index}] needs a string id`);
-      continue;
-    }
-    if (seen.has(id)) problems.push(`pairs/iosRuntimes have "${id}" twice`);
-    seen.add(id);
-    const ios = entry.ios;
-    if (ios == null || typeof ios.udid !== 'string' || ios.udid === '') {
-      problems.push(`iosRuntimes ${id}: ios needs a udid`);
-    }
-    const system = iosRuntimeKey(ios?.system);
-    if (system == null) {
-      problems.push(
-        `iosRuntimes ${id}: ios.system must be the runtime's version, e.g. "26.5"`
-      );
-    }
-    if (entry.android != null) {
-      problems.push(
-        `iosRuntimes ${id}: an iOS-runtime simulator has no android half (it is for iOS look checks only)`
-      );
-    }
-    if (!Number.isInteger(entry.metroPort)) {
-      problems.push(`iosRuntimes ${id}: needs an integer metroPort`);
-    }
-    cleanPairs.push({
-      id,
-      ios: ios ?? null,
-      android: null,
-      metroPort: entry.metroPort,
-      iosRuntime: system,
-    });
-  }
-
   const reservedEmulatorPorts = [
     ...RESERVED_EMULATOR_PORTS,
     ...(Array.isArray(config?.reservedEmulatorPorts)
@@ -436,21 +386,6 @@ export function normalizeDevices(config) {
       ? config.reservedIdentifiers
       : [],
   };
-}
-
-/**
- * An iOS version as the pool compares it: `major.minor`, so `26.5`, `26.5.1` and `"26.5"` are one
- * runtime and `26` is `26.0`. `null` for anything that is not a version.
- *
- * @param {unknown} version
- * @returns {string | null}
- */
-export function iosRuntimeKey(version) {
-  const match = /^(\d+)(?:\.(\d+))?(?:\.\d+)?$/.exec(
-    String(version ?? '').trim()
-  );
-  if (match == null) return null;
-  return `${Number(match[1])}.${Number(match[2] ?? 0)}`;
 }
 
 /** @param {number} port */
@@ -1110,8 +1045,8 @@ export function waitQueue(state, now) {
 /**
  * Would this pair satisfy this waiting request? The mirror of the filter
  * `decideAcquire` applies to the pairs it may offer, so "the pair the waiter would
- * have taken" is not a guess: same platform halves, same iOS-runtime rule, and an
- * exclusive waiter reserves every pair because that is what it takes.
+ * have taken" is not a guess: same platform halves, and an exclusive waiter
+ * reserves every pair because that is what it takes.
  *
  * This is the whole platform half of the X26 rule: a waiter holds a claim on the pairs
  * that would satisfy *it*, and on no others. An iOS-only waiter therefore does not idle
@@ -1121,9 +1056,6 @@ export function waitQueue(state, now) {
 export function pairSatisfiesWaiter(pair, waiter) {
   if (pair == null || waiter == null) return false;
   if (waiter.exclusive) return true;
-  const runtime =
-    waiter.iosRuntime == null ? null : iosRuntimeKey(waiter.iosRuntime);
-  if ((pair.iosRuntime ?? null) !== runtime) return false;
   if (waiter.platform === 'ios' && pair.ios == null) return false;
   if (waiter.platform === 'android' && pair.android == null) return false;
   return pair.ios != null || pair.android != null;
@@ -1206,9 +1138,6 @@ export function pruneExpired(state, now) {
  *   acquire is the exception: a bench bundles its JS into a Release build and never uses
  *   a Metro (X15 review), so it proceeds over a busy port with a `note` naming it rather
  *   than waiting an hour for a port it will not touch.
- * @param {string | null} [options.iosRuntime] `--ios-runtime`: hand out only a simulator on this
- *   iOS runtime (an `iosRuntimes` entry), and never a default pair. Without it, those simulators
- *   are never handed out (X20 item 3), so a default acquire cannot land a merge gate on them.
  * @param {object[]} [options.waiters] the live queue, as `waitQueue` returns it - other tasks'
  *   tickets included, this task's own ignored (X26). A pair is granted only when no *older* ticket
  *   can use it, so a freed pair goes to whoever has waited longest rather than to whoever polls
@@ -1229,12 +1158,10 @@ export function decideAcquire({
   task,
   pending = [],
   portBlocked = [],
-  iosRuntime = null,
   waiters = [],
   waitedSince = null,
   now = Date.now(),
 }) {
-  const runtime = iosRuntime == null ? null : iosRuntimeKey(iosRuntime);
   const held = active.filter((lease) => lease.task !== task);
   const waiting = held.map((lease) => `${lease.task} (${lease.id})`);
 
@@ -1308,7 +1235,6 @@ export function decideAcquire({
   // acquire takes the machine over a stranger's Metro and says so.
   const usable = free
     .filter((pair) => exclusive || !blocked.has(pair.id))
-    .filter((pair) => (pair.iosRuntime ?? null) === runtime)
     .filter((pair) => {
       if (platform === 'ios' && pair.ios == null) return false;
       if (platform === 'android' && pair.android == null) return false;
@@ -1317,27 +1243,6 @@ export function decideAcquire({
   if (usable.length === 0) {
     if (portWait.length > 0) {
       return { ok: false, reason: portWait.join('; '), waiting };
-    }
-    if (runtime != null) {
-      // Two different answers, because one is "wait" and the other is "go and run --setup".
-      const configured = pairs.filter((pair) => pair.iosRuntime === runtime);
-      return {
-        ok: false,
-        reason:
-          configured.length === 0
-            ? `no simulator on iOS ${runtime} is configured (devices.json iosRuntimes ` +
-              `has ${
-                [
-                  ...new Set(
-                    pairs.map((pair) => pair.iosRuntime).filter(Boolean)
-                  ),
-                ].join(', ') || 'none'
-              }; node scripts/doctor.mjs --setup creates one per installed runtime)`
-            : `every iOS ${runtime} simulator is already leased (${configured
-                .map((pair) => pair.id)
-                .join(', ')})`,
-        waiting,
-      };
     }
     return {
       ok: false,
@@ -1503,11 +1408,6 @@ export function renderEnvFile(lease, pair, platform = lease.platform) {
     exportLine('NITRO_UI_LEASE_TASK', lease.task),
     exportLine('NITRO_UI_LEASE_PLATFORM', platform),
   ];
-  if (lease.iosRuntime != null) {
-    // What `gate.mjs` reads to refuse a device gate on this lease (X20 item 3): these simulators
-    // are for look checks, and the merge gates run on the default pairs.
-    lines.push(exportLine('NITRO_UI_LEASE_IOS_RUNTIME', lease.iosRuntime));
-  }
   if (platform !== 'android' && pair?.ios != null) {
     lines.push(exportLine('IOS_SIM_UDID', pair.ios.udid));
     if (pair.ios.name != null) lines.push(exportLine('IOS_SIM', pair.ios.name));
