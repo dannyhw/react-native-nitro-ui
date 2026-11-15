@@ -50,12 +50,12 @@ One `<control-id>.e2e.ts` per row of `scripts/real-input/controls.mjs` — the
 runner refuses a control with no file and a file with no control, so a control
 cannot leave the suite unnoticed. Shared parts:
 
-| File | What it is |
-| --- | --- |
-| `support.ts` | tab navigation, the tappable band, echo readers |
-| `reader.ts` | the screen-reader rule and its known-debt rows |
-| `keyboard.ts` | keyboard geometry, measured from the resized content view |
-| `press-feedback.ts` | pixels of a held press, through the driver's own capture |
+| File                | What it is                                                |
+| ------------------- | --------------------------------------------------------- |
+| `support.ts`        | tab navigation, the tappable band, echo readers           |
+| `reader.ts`         | the screen-reader rule and its known-debt rows            |
+| `keyboard.ts`       | keyboard geometry, measured from the resized content view |
+| `press-feedback.ts` | pixels of a held press, through the driver's own capture  |
 
 ## Reading a failure
 

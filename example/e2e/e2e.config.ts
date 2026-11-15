@@ -12,7 +12,7 @@ import { mobile } from '@e2e-dev/mobile';
 const serial = process.env.ANDROID_SERIAL;
 if (serial == null || serial === '') {
   throw new Error(
-    'e2e: ANDROID_SERIAL is required — source the lease before running this suite.',
+    'e2e: ANDROID_SERIAL is required — source the lease before running this suite.'
   );
 }
 

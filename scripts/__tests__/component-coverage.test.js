@@ -258,7 +258,7 @@ describe('every real-input control has a check on both platforms', () => {
         existsSync(join(repoRoot, file))
           ? 'present'
           : `${file} is missing, so no real touch is delivered to ` +
-            `"${control.id}" and nothing would notice`
+              `"${control.id}" and nothing would notice`
       ).toBe('present');
       // The Swift check is named for the row id, camel-cased: `segmented-control` ->
       // `testRealInputSegmentedControl`, `hosted-slider` -> `testRealInputHostedSlider`.
@@ -280,13 +280,14 @@ describe('every real-input control has a check on both platforms', () => {
       // and its tab both existed, the navigation table the runner used did not know
       // the screen, and the run died 15 device-minutes in — after every other control
       // had passed. A device gate is the wrong place to discover that.
-      const text = readRepo(`example/e2e/real-input/${control.id}.e2e.ts`) ?? '';
+      const text =
+        readRepo(`example/e2e/real-input/${control.id}.e2e.ts`) ?? '';
       expect(
         text.includes(`openScreen(screen, '${control.screen}')`)
           ? 'opens it'
           : `example/e2e/real-input/${control.id}.e2e.ts never opens the ` +
-            `screen "${control.screen}" that scripts/real-input/controls.mjs ` +
-            'names for it'
+              `screen "${control.screen}" that scripts/real-input/controls.mjs ` +
+              'names for it'
       ).toBe('opens it');
     });
   }
