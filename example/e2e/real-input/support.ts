@@ -340,7 +340,7 @@ async function isInUpperHalf(screen: Screen, box: Box): Promise<boolean> {
 const BAND_MARGIN = 0.12;
 
 /**
- * Wait until the row has stopped moving, and is still in the band.
+ * The row's box once it has stopped moving, or `null` for "not parked in the band".
  *
  * A drag leaves a list coasting: the box read a moment later is the row's box
  * *now*, and the finger that follows it lands where the row was about to be. That
@@ -353,7 +353,7 @@ const BAND_MARGIN = 0.12;
 async function settleIntoBand(
   screen: Screen,
   locator: Locator
-): Promise<boolean> {
+): Promise<Box | null> {
   const deadline = Date.now() + 2_000;
   let last = await boxOf(locator);
   while (Date.now() < deadline) {
@@ -361,11 +361,13 @@ async function settleIntoBand(
     const now = await boxOf(locator);
     // Out of the tree again means the list is still travelling past it, and a box
     // that will not hold still is a box nothing may be aimed at.
-    if (now == null || last == null) return false;
-    if (Math.abs(now.y - last.y) <= 2) return isInSafeBand(screen, now);
+    if (now == null || last == null) return null;
+    if (Math.abs(now.y - last.y) <= 2) {
+      return (await isInSafeBand(screen, now)) ? now : null;
+    }
     last = now;
   }
-  return false;
+  return null;
 }
 
 /**
@@ -431,7 +433,11 @@ const LIFT_STEP = 0.12;
  * the control under it. Nudging towards the bottom of the list raises the control;
  * a full `CONTENT_STEP` drag is too coarse for that last stretch because it lifts
  * the rows above it out of the tree, so the drags are short, and the rows the test
- * still has to read are required to stay on screen while they happen.
+ * still has to read are required to stay on screen while they happen. The lift
+ * aims at the safe band and not the bare one: at the very bottom of the window a
+ * hosted control sits behind whatever chrome docks there — a dev build's LogBox
+ * banner is a real view that takes the touch first — so a box just inside the band
+ * is a box a drag never reaches.
  */
 export async function liftIntoBand(
   screen: Screen,
@@ -441,17 +447,21 @@ export async function liftIntoBand(
   const nudges = 4;
   for (let nudge = 0; nudge <= nudges; nudge += 1) {
     const box = await boxOf(control);
-    if (
+    const parked =
       box != null &&
       (await isShown(control)) &&
-      (await isInBand(screen, box)) &&
-      (await allShown(reads))
-    ) {
-      return box;
+      (await isInSafeBand(screen, box)) &&
+      (await allShown(reads));
+    if (parked) {
+      // The box a coasting list reports is where the control was, not where the
+      // finger will land, so the lift returns the box from after the last drag.
+      const settled = await settleIntoBand(screen, control);
+      if (settled != null) return settled;
     }
     if (nudge === nudges) break;
-    await dragContentFraction(screen, LIFT_STEP);
-    downDrags += 1;
+    const tooHigh = box != null && (await isAboveSafeBand(screen, box));
+    await dragContentFraction(screen, tooHigh ? -LIFT_STEP : LIFT_STEP);
+    downDrags = tooHigh ? Math.max(0, downDrags - 1) : downDrags + 1;
   }
   throw new Error(
     `real-input: ${String(nudges)} short drags towards the bottom of the page did ` +
@@ -481,6 +491,18 @@ async function dragContentDown(screen: Screen): Promise<void> {
 async function isInSafeBand(screen: Screen, box: Box): Promise<boolean> {
   const { top, bottom } = await tapBand(screen);
   return isInBand(screen, box, (bottom - top) * BAND_MARGIN);
+}
+
+/**
+ * Is a box's centre in the strip above the safe band, where no reveal parks
+ * anything?
+ *
+ * Only a lift that overshoots gets a control there, and the answer sends its next
+ * nudge the other way instead of taking the control further out of reach.
+ */
+async function isAboveSafeBand(screen: Screen, box: Box): Promise<boolean> {
+  const { top, bottom } = await tapBand(screen);
+  return box.y + box.height / 2 < top + (bottom - top) * BAND_MARGIN;
 }
 
 /** Does a tap on this box's centre land on the control rather than on chrome? */
