@@ -3,14 +3,14 @@
 Everything in this file is a contract: these are the exact commands the
 project's gates run. If you change one, change it here too.
 
-**Four of the six workflows are on; the two that need a device are off.** `gh
+**Four of the five workflows are on; the one that needs a device is off.** `gh
 workflow list --all` says `CI`, `Changeset status`, `Release` and `Release tag` are
 active: the first runs `bun run check`, the host native tests and an Android debug
 build on every push to `main` and every pull request, the second adds a warning (never a
 red check) to a pull request that changes library code without a changeset, and the
 third and fourth run
-the release path (see "Releasing"). `Bench` and `Smoke` are disabled, and their
-triggers are `workflow_dispatch` only anyway — hosted runners make device jobs slow
+the release path (see "Releasing"). `Smoke` is disabled, and its
+trigger is `workflow_dispatch` only anyway — hosted runners make device jobs slow
 and noisy, and the device gates that decide a task run locally (D22, D25).
 So the harness, real-input, smoke and bench suites a change cites are ones someone
 ran locally, and `bun run check` on your machine is still the first gate a change
@@ -42,8 +42,8 @@ install (hoisted layout, see `bunfig.toml`):
 bun install
 ```
 
-To check a machine against all of the above (plus `gh` push access, the agent
-CLIs, disk and load), run the doctor. `--setup` also creates two simulator/AVD
+To check a machine against all of the above (plus `gh` push access, disk and
+load), run the doctor. `--setup` also creates two simulator/AVD
 pairs (`nitro-ui A`/`B`, `nitroui_a`/`b`) and writes the `~/.nitro-ui/devices.json`
 the lease script reads (see "Leasing a device or port"). It also creates one
 simulator per _other_ installed iOS runtime (`nitro-ui iOS 26.5`, …) for look
@@ -102,7 +102,6 @@ Run from the repo root.
 | Command                       | What it does                                                                   |
 | ----------------------------- | ------------------------------------------------------------------------------ |
 | `bun run check`               | **All static gates.** Run this before pushing.                                 |
-| `bun run check:serial`        | The same steps as one `&&` chain, for timing the runner against it             |
 | `bun run typecheck`           | `tsc` over the library and example                                             |
 | `bun run bench:typecheck`     | `tsc` over `bench/` for each platform                                          |
 | `bun run lint`                | ESLint, including the local perf-contract rules                                |
@@ -154,10 +153,7 @@ autolinking:check, prepare, api-extractor:check, publint, manifest:check,
 readme:check — run through a small scheduler (`scripts/check.mjs` + the step graph in
 `scripts/check-steps.mjs`), so independent ones overlap: up to half the machine's
 cores at once, capped at 4 (`--jobs N` to override — the heavy steps already fan out
-internally, so more slots cost context-switching, not time). The _steps_ and their
-order are unchanged, and
-`scripts/__tests__/check-runner.test.js` fails if the graph and `check:serial` ever
-disagree. `bun run check:serial` is the plain `&&` chain, for comparing the two.
+internally, so more slots cost context-switching, not time).
 `perf:renders` is part of `check` on purpose: render counts are deterministic, so they
 can block, unlike anything measured on a device.
 
@@ -259,12 +255,11 @@ to the measured size, and a recycle that fully resets — are driven from
 - `real-input:android` sweeps the a11y rule over the screen your tab names, and
   `checkA11yTable` fails `check` when a manifest has no case, or its case points at a
   tab or a label that no longer exists;
-- `coverageMatrix` prints the rule × control table for your report, and
-  `checkCoverage` refuses a cell that is neither covered nor marked `failing` with a
-  line that exists in `docs/tasks/FOLLOWUPS.md`.
+- `coverageMatrix` builds the rule × control table, and `checkCoverage` refuses a
+  control with no row or a cell with no verdict.
 
 So the new control is _in_ the suite automatically; what it does with that depends on
-the control. If a rule fails on it, add a `FOLLOWUPS.md` line and a row to the matching
+the control. If a rule fails on it, add a row to the matching
 exemption list (`A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs`, or
 `CONFORMANCE_EXEMPTIONS` in `scripts/conformance-core.mjs`) rather than fixing the
 control in an unrelated round — the suite then reports it as known debt instead of
@@ -705,7 +700,7 @@ What that means in practice:
   `--exclusive` acquire promises its bench a quiet machine. There is no daemon,
   and no lease command kills on your behalf, because `list` is the command every
   task runs most often and a `list` that reaps is a reaper in every shell.
-  `--no-reap` opts out of even the explicit reap, and `NITRO_UI_LEASE_BOOT=0`
+  `NITRO_UI_LEASE_BOOT=0`
   takes the whole device lifecycle offline for a machine that manages its own
   devices. `reap --idle-minutes N` overrides the configured limit for that one
   call - `0` is "off now", which is what you want when the machine is yours again
@@ -881,15 +876,12 @@ platforms, and so does any code path the mapping does not claim: unknown is
 expensive, never free. `table --full` adds the log path to every
 row and, under it, the per-step durations of the `check` run — `check` is the one
 gate long enough that its total is not an actionable number, so the ledger keeps
-what each of the steps cost. At merge, `need` may accept a `check` from
-another branch's ledger when it passed on this exact code tree and its commit is
-merged here (see `docs/agents/gates.md`, "Reusing a `check` at merge"); `--no-reuse`
-asks the strict question. A task report starts from
+what each of the steps cost. A task report starts from
 `docs/tasks/REPORT-TEMPLATE.md`, and `gate.mjs export --task <id>` commits the
 ledger beside it — **merging**, not rewriting (X30): lines already in
 `docs/tasks/<id>/gates.jsonl` are kept byte-for-byte and this branch's lines are
-appended, a line already there is not written twice (identity: ts + gate + code
-tree), and a failure excerpt that is already committed is left alone. A fix round
+appended, and a line already there is not written twice (identity: ts + gate + code
+tree). A fix round
 therefore adds its runs instead of erasing round 1's. The rules are in the header of `scripts/gate.mjs` and in
 `scripts/gate-core.mjs`.
 
@@ -899,21 +891,11 @@ worktree of the clone shares and `git worktree remove` leaves alone, so removing
 merged worktree cannot lose the evidence (`gate.mjs logs [--branch b] [--failed]
 [--all]` lists it; 35 days, then 64 MiB, oldest first). Each run's record also names
 the worktree that started it, so `wait` and `status` follow _your_ background gate
-when several worktrees are running one at the same time. `export --task <id>` also
-writes a scrubbed excerpt of every **failed** run into
-`docs/tasks/<ID>/failures/<run>-<n>.log` — the failing test names, the assertion
-messages, the last 150 lines, the load at both ends and, for a failed device gate,
-the booted simulators, the leased emulator's `adb get-state`, the lease list, load1
-and the app's last `logcat` lines. Any device identifier in that block that is not
-this run's own lease becomes `<other device>`, so another task's simulator or the
-maintainer's emulator is never committed. It names that file in the ledger line's
-`failureLogPath`. Passing runs get no file. A committed excerpt holds no credential
-and no machine identity: tokens, `Authorization:`/`Cookie:` headers (whole, any
-scheme), `.npmrc` `_auth=` lines, `curl -u user:pass`, `user:pass@host`, a config
-file's whole `password: some phrase`, email addresses and Stripe/Anthropic/GitLab
-token shapes are replaced, and your home, scratch directory, username, hostname,
-repo and store paths — and anyone else's `/Users/<name>` or `/var/folders/<hash>`
-— are written as `~`, `<tmp>`, `<user>`, `<host>`, `<repo>` and `<store>`.
+when several worktrees are running one at the same time. Logs are not committed:
+`export --task <id>` writes the ledger only. A failed device gate appends to its
+log the booted simulators, the leased emulator's `adb get-state`, the lease list,
+load1 and the app's last `logcat` lines. Any device identifier in that block that is
+not this run's own lease becomes `<other device>`.
 
 ### Build speed
 
@@ -1013,7 +995,8 @@ runs its cleanup, which is how `xcodebuild` and Gradle children get orphaned mid
 
 ```sh
 cat ~/.nitro-ui/builds.json                  # who is building now
-node scripts/lease.mjs list                  # held device leases, and devices nobody owns
+node scripts/lease.mjs list                  # held device leases
+node scripts/doctor.mjs                      # booted devices nobody owns
 ```
 
 ### Devices and ports
@@ -1376,83 +1359,9 @@ compares against the committed baselines, which live per machine —
 against baselines it measured itself. Both labelled machines have both canonical
 devices (an iPhone 17 simulator on iOS 27 and an API 35 Pixel 9 emulator); a
 machine without its own directory, or any other device, uses `--compare <ref>`
-instead. `.github/workflows/bench.yml` would post these tables on a pull request;
-its label and comment triggers are off, so it is `workflow_dispatch` only. The
+instead. The
 gate that always blocks is the Reassure render count, below, because it is
 deterministic.
-
-### Adding a component to a committed baseline
-
-A baseline that is missing a component gates nothing for it, and the only way to add
-one used to be a full mint — A3's on this machine was 4 h 24 min on iOS and 5 h 13 min
-on Android, so components went missing rather than being added. One component's cells
-can now join an existing file, which is one component's launches instead of the whole
-matrix: Menu on Android is 7 cells x 5 arms x 8 launches = 280 launches, and the run
-that did it took 35 min:
-
-```sh
-export NITRO_UI_MACHINE_LABEL=maintainer-mac-2
-node scripts/lease.mjs acquire --task <ID> --exclusive --boot --platform android
-node scripts/bench/run.mjs --platform android --plan full --launches 8 \
-  --component menu --update-baseline   # add --dry-run first: it answers the same
-                                       # startup questions without booting anything
-```
-
-Everything in the file that is not that component survives byte-for-byte. What the diff
-adds depends on whether the file already had X14's bookkeeping. A **current** file gains
-exactly two things: the component's cells and its one `components` entry. The **first**
-merge into a pre-X14 file gains that plus the bookkeeping it never had, all of it written
-so the next merge can check versions without going back to git:
-
-- the file's `components` block, seeded with one entry per component it already holds
-  (marked `seededFromFoundingRun: true`, so a reader can tell a founding run's numbers
-  from a merge's);
-- a top-level `dependencies` block, recovered from `bun.lock` at the commit the file's
-  own `sha` names, whose `source` field says so;
-- `skippedCells`, which the old files never wrote (empty in practice: an incomplete cell
-  on a gated arm was always a refusal);
-- the `schemaVersion` bump from 2 to 3.
-
-None of those is a measured number — that is the promise: the removed lines are the old
-`"schemaVersion": 2,` and one closing brace. Then read it back:
-
-```sh
-node scripts/bench/run.mjs --platform android --plan full --launches 8 \
-  --component menu --check            # or report.mjs <results.json> --check
-```
-
-What it refuses, and why each refusal matters:
-
-- **A component the file already holds**, and any other filter (`--scenario`, `--n`,
-  `--only`): a merge writes that component's whole block, and a partial one reads to
-  `--check` as "not measured in base". Refreshing existing numbers means a full re-mint.
-- **A results file that is not one component's whole run.** `report.mjs` will re-report any
-  results file with any flags, so `--component menu` over a full run, or over a `slider`
-  run, or over a `--scenario`-narrowed one, used to write those cells under `menu`. Every
-  refusal here is absolute, `--force` included: a record that holds another component's
-  cells; one measured on a plan the file does not hold; one that is missing any cell **the
-  file's plan** measures for the named component — so `--plan quick --component menu --force`
-  cannot write 12 of menu's 28 rows into a `full`-plan table, because rows left out could
-  never be added afterwards; one whose cells' `scenario` fields disagree with the keys that
-  store them (the key is what `--check` gates and what the merge writes, so the record
-  cannot be trusted to know which component it measured); or one that holds no cells at all,
-  which would write a provenance entry claiming a component was measured with no numbers
-  anywhere to contradict it.
-- **An environment that is not the same measurement** — CPU model and core count,
-  simulator runtime and Xcode, Android API level and system image, ART compile state,
-  the waiting rule, and the `react-native` and `@expo/ui` versions. Each refusal names
-  the field and both values. `--force` does not get you past this one: it is a human
-  overruling judgements about their own measurement, and "this is a different
-  simulator" is not one.
-- **A field the file predates that it cannot answer for.** `bun.lock` at the commit the
-  file's own `sha` names recovers the two app versions, and the platform's default
-  waiting rule stands in for a `timeouts` block a v2 file never wrote; a runtime,
-  image or ART state cannot be recovered from anything, so those refuse. What was
-  matched that way is recorded in the merged entry's `comparabilityNotes`, and the
-  versions land in the file so the next merge does not have to ask git again.
-
-The details, including the provenance a merged file keeps per component, are
-`bench/baselines/README.md` ("Adding one component").
 
 ## Perf contract
 

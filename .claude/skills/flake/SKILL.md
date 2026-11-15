@@ -12,14 +12,13 @@ spending ten to sixteen hours of device time proving a race could be made to hap
 
 ## When a gate goes red
 
-1. **Read the failure before anything else**: the excerpt under
-   `docs/tasks/<ID>/failures/` or `node scripts/gate.mjs logs --failed`. Note the test
-   name and the assertion.
+1. **Read the failure before anything else**: `node scripts/gate.mjs logs --failed`
+   lists the failed runs' logs. Note the test name and the assertion.
 2. **One rerun.** Not two.
 3. **Red again with the same failure: it is a bug.** Stop calling it a flake. It is
    deterministic on this tree, so debug it like one.
 4. **Green on rerun: it is a flake, and it is now recorded.** A worker puts one line
-   under "Follow-ups" in its report: `Flaky: <test name>, <date>, <excerpt path>`. The
+   under "Follow-ups" in its report: `Flaky: <test name>, <date>, <log path>`. The
    orchestrator copies it to "Flaky tests" in `docs/tasks/FOLLOWUPS.md` at merge and
    counts the sightings. Carry on.
 
@@ -30,7 +29,7 @@ failure. A quarantine, below, does the opposite: the test is visibly off and lis
 
 The orchestrator decides, not the worker that hit it:
 
-- If the excerpt shows the test or the driver was at fault (a tap sent before the view
+- If the log shows the test or the driver was at fault (a tap sent before the view
   settled, a read that raced a write, a device that was not ready), **quarantine** it.
   The orchestrator tells the worker of the task that hit it to skip the test on that
   task's branch, with a `QUARANTINED <date>` comment naming the FOLLOWUPS line. A skip

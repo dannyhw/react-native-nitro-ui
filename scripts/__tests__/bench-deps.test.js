@@ -3,8 +3,8 @@
  *
  * A baseline's ratios divide by `rn-core`, so an `@expo/ui` bump moves the two
  * reference arms and a React Native bump moves every row in the file: both are
- * comparability regimes, and a merged cell can only be checked against a file if
- * the file says which versions its cells were measured with (X14). Three places
+ * comparability regimes, so a run records which versions its cells were measured
+ * with (X14). Three places
  * can answer - `bun.lock`, the workspace manifest's requested range, and the
  * installed package - and this module reads all three without inventing a fourth.
  *
@@ -14,11 +14,9 @@
  */
 
 import { describe, expect, it } from '@jest/globals';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import {
-  dependenciesSourceAt,
   installedDependenciesProblem,
   installedVersion,
   lockedVersion,
@@ -32,7 +30,7 @@ import {
  * closer and `//` comments. Hand-writing this as strict JSON is the mistake this
  * fixture exists to prevent — the first version of these tests did exactly that,
  * the reader passed every one of them, and it resolved nothing on the real
- * `bun.lock`, which made every merge refuse. `bench-deps.test.js` also reads the
+ * `bun.lock`. `bench-deps.test.js` also reads the
  * repo's own lock below, so the two can never drift apart again.
  */
 const LOCK = [
@@ -105,10 +103,9 @@ describe('the lock file parser', () => {
     expect(out.error).toContain('JSON');
   });
 
-  it('reads this repo’s own bun.lock, at HEAD and at another commit', () => {
+  it('reads this repo’s own bun.lock', () => {
     // The fixture can be wrong about what bun writes; the shipped file cannot. A
-    // reader that fails here resolves nothing, and every merge in the world
-    // refuses with "could not be read to recover it".
+    // reader that fails here resolves nothing.
     const text = readFileSync('bun.lock', 'utf8');
     const atHead = resolvedDependencies({
       lockText: text,
@@ -120,30 +117,6 @@ describe('the lock file parser', () => {
       expect.stringMatching(/^\d/),
       expect.stringMatching(/^\d/),
     ]);
-
-    // And the same read at the founding commit of a committed baseline, which is
-    // the path a pre-X14 merge takes.
-    const sha = execFileSync('git', ['rev-parse', 'HEAD~5'], {
-      encoding: 'utf8',
-    }).trim();
-    const at = dependenciesSourceAt({
-      git: (args) => {
-        try {
-          return execFileSync('git', args, { encoding: 'utf8' });
-        } catch {
-          return null;
-        }
-      },
-      rev: sha,
-    });
-    const older = resolvedDependencies({
-      lockText: at.lockText,
-      manifestText: at.manifestText,
-      source: `bun.lock at ${sha}`,
-    });
-    expect(older.problems).toEqual([]);
-    expect(older.reactNative).toEqual(expect.stringMatching(/^\d/));
-    expect(older.expoUi).toEqual(expect.stringMatching(/^\d/));
   });
 });
 
@@ -245,47 +218,6 @@ describe('resolvedDependencies', () => {
     expect(out.reactNative).toBe('0.80.0');
     expect(out.requestedExpoUi).toBeNull();
     expect(out.problems).toEqual([]);
-  });
-});
-
-describe('reading a lock at another revision', () => {
-  it('asks for the two files at that revision, and nothing else', () => {
-    const calls = [];
-    const git = (args) => {
-      calls.push(args.join(' '));
-      // The path is the part after `rev:`, so the reader has to split on the
-      // colon rather than compare the whole argument to a bare file name.
-      return args[1]?.endsWith('bun.lock') ? LOCK : MANIFEST;
-    };
-    const at = dependenciesSourceAt({ git, rev: '9cf95f3' });
-    expect(calls).toEqual([
-      'show 9cf95f3:bun.lock',
-      'show 9cf95f3:bench/package.json',
-    ]);
-    const resolved = resolvedDependencies({
-      lockText: at.lockText,
-      manifestText: at.manifestText,
-      source: 'bun.lock at 9cf95f3',
-    });
-    expect(resolved.reactNative).toBe('0.80.0');
-    expect(resolved.expoUi).toBe('54.1.2');
-  });
-
-  it('comes back null when the revision cannot be read, rather than using the working tree', () => {
-    // The tempting shortcut - fall back to the lock in front of us - would put
-    // today's versions on a file that never measured them, which is the exact
-    // false claim the `source` field exists to make impossible.
-    const git = () => {
-      throw new Error('bad revision');
-    };
-    expect(dependenciesSourceAt({ git, rev: 'nope' })).toEqual({
-      lockText: null,
-      manifestText: null,
-    });
-    expect(dependenciesSourceAt({ git: null, rev: '9cf95f3' })).toEqual({
-      lockText: null,
-      manifestText: null,
-    });
   });
 });
 
