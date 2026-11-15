@@ -2059,6 +2059,21 @@ enum NitroUiFormItem: Hashable {
   }
 }
 
+/// The largest corner radius anywhere in a cell's layers, which is the radius a grouped
+/// list actually draws with: the cell layer itself is square and the rounding lives on the
+/// background view UIKit puts behind its content.
+///
+/// X37 moved this out of `NitroUiFormReference.swift`, the harness's SwiftUI comparison,
+/// which it outlived; the Form's own `radius` report is what reads it now.
+private func nitroUiMaxCornerRadius(_ layer: CALayer, depth: Int = 0) -> CGFloat {
+  guard depth < 4 else { return layer.cornerRadius }
+  var best = layer.cornerRadius
+  for sublayer in layer.sublayers ?? [] {
+    best = max(best, nitroUiMaxCornerRadius(sublayer, depth: depth + 1))
+  }
+  return best
+}
+
 private extension UIView {
   func findFirstResponder() -> UIView? {
     if isFirstResponder { return self }
