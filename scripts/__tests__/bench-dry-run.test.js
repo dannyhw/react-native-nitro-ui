@@ -391,6 +391,31 @@ describe('the dry-run report and its exit code', () => {
     expect(plain.exitCode).toBe(0);
   });
 
+  it('refuses a --component mint, forced or not', () => {
+    for (const extra of [[], ['--force']]) {
+      const out = dryRunReport({
+        ...base,
+        plan: 'full',
+        launches: 8,
+        component: 'switch',
+        argv: ['--update-baseline', '--component', 'switch', ...extra],
+      });
+      expect([extra, out.exitCode]).toEqual([extra, 2]);
+      expect(out.problems.join('\n')).toContain(
+        'a narrowed run cannot write a baseline'
+      );
+      expect(out.lines.join('\n')).toContain('Mint:      would refuse');
+    }
+    // The same filter without the mint flag is a diagnostic run, and starts.
+    expect(
+      dryRunReport({
+        ...base,
+        component: 'switch',
+        argv: ['--component', 'switch'],
+      }).exitCode
+    ).toBe(0);
+  });
+
   it('lists no reasons when everything resolves', () => {
     expect(dryRunReport(base).problems).toEqual([]);
   });
@@ -544,6 +569,40 @@ describe('bench --dry-run (the CLI)', () => {
       '--dry-run',
     ]);
     expect(atRule.all).not.toContain('for a presenting frame');
+  });
+
+  /**
+   * `--component X --update-baseline` used to merge one component into the file. A
+   * mint replaces the whole file, so the same spelling would now delete every other
+   * component's rows - and `--force` skips the narrowing pre-flight, so that guard
+   * cannot be what stops it. The refusal is checked on the real runner, not the dry
+   * run: with every device variable blank, a run that got past it dies resolving a
+   * device instead of exiting 2 with the reason.
+   */
+  it('run.mjs refuses a --component mint before the device, under --force too', () => {
+    const root = workspace();
+    for (const extra of [[], ['--force']]) {
+      for (const platform of ['ios', 'android']) {
+        const out = cli(root, [
+          '--platform',
+          platform,
+          '--plan',
+          'full',
+          '--launches',
+          '8',
+          '--component',
+          'menu',
+          '--update-baseline',
+          ...extra,
+        ]);
+        expect([extra, platform, out.status]).toEqual([extra, platform, 2]);
+        expect(out.all).toContain('a narrowed run cannot write a baseline');
+        expect(out.all).toContain('--force does not override this');
+        expect(out.all).not.toContain('No iOS simulator');
+        expect(out.all).not.toContain('No Android device');
+        expect(out.all).not.toContain('is not attached');
+      }
+    }
   });
 
   it('still refuses a bad flag before printing anything, and keeps the usage line', () => {

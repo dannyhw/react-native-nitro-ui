@@ -163,7 +163,7 @@ normal run - they are simply not mintable. `--update-baseline` refuses a narrowe
 before booting anything: a baseline file *is* the whole table `--check` gates against, and
 minting one from one cell would leave the other 41 reading `not measured in base` - which
 looks like a passing gate. `--force` overrides that narrowing refusal, for a local
-experiment.
+experiment, except for `--component`: with `--update-baseline` it is refused outright.
 
 `--check` and `--update-baseline` need `NITRO_UI_MACHINE_LABEL`: baselines are keyed
 by machine as well as device, so without a usable label both refuse before the run

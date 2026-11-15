@@ -40,6 +40,7 @@ import {
 } from './devices.mjs';
 import {
   buildSchedule,
+  componentMintProblem,
   loadBlocker,
   loadCeiling,
   narrowingProblem,
@@ -371,7 +372,12 @@ export function dryRunReport(input) {
         problems.push(`--update-baseline: ${waiting}`);
       }
     }
-    if (minting && !forced) {
+    // The runner's own refusal, which `--force` does not override.
+    const componentProblem = minting ? componentMintProblem(component) : null;
+    if (componentProblem != null) {
+      problems.push(componentProblem);
+    }
+    if (minting && !forced && component == null) {
       const narrowed = narrowingProblem({
         scheduled: schedule.length,
         wholePlan: buildSchedule({

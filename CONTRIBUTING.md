@@ -1399,7 +1399,7 @@ lefthook is therefore not in bun's `trustedDependencies` allowlist. Enable them
 in a checkout whose dependencies are installed:
 
 ```sh
-bun run hooks:install      # commit-msg runs commitlint; pre-commit runs ESLint + tsc
+bun run hooks:install      # commit-msg runs commitlint; pre-commit runs ESLint, Prettier + tsc
 bun run hooks:uninstall    # remove them again
 ```
 

@@ -57,6 +57,7 @@ import {
   baselineTable,
   baselineTimeoutsFor,
   buildSchedule,
+  componentMintProblem,
   createLoadSampler,
   isCompatibleBaseline,
   LAUNCHES_PER_CELL,
@@ -642,6 +643,15 @@ export async function main(argv) {
       component: flag(argv, '--component'),
       baselinesDir: BASELINES_DIR,
     });
+    return;
+  }
+
+  // One component's run cannot write a baseline, forced or not: the mint below
+  // replaces the whole file. Refused here, before the label, the load and the device.
+  const componentProblem = minting ? componentMintProblem(component) : null;
+  if (componentProblem != null) {
+    log(`\n${componentProblem}`);
+    process.exitCode = 2;
     return;
   }
 

@@ -131,6 +131,31 @@ function changelogProblems(changelog) {
   return problems;
 }
 
+describe('publishing', () => {
+  it('has no way to publish from the repo', () => {
+    // Publishing is not a thing a checkout can do: CI stages, and a person
+    // approves on npmjs.com. `changeset publish` would try `npm publish`, which
+    // the trusted publisher rejects, and `npm stage publish` needs an
+    // identity a contributor's laptop must not carry.
+    expect(pkg.scripts['release:publish']).toBeUndefined();
+    const forbidden = /\bchangeset (publish|tag|release)\b/;
+    for (const [name, script] of Object.entries(pkg.scripts)) {
+      expect([name, script]).toEqual([
+        name,
+        expect.not.stringMatching(forbidden),
+      ]);
+    }
+    for (const [name, source] of Object.entries(SOURCES)) {
+      for (const body of runBodies(source)) {
+        expect([name, body]).toEqual([
+          name,
+          expect.not.stringMatching(forbidden),
+        ]);
+      }
+    }
+  });
+});
+
 describe('changesets configuration', () => {
   it('versions from main and publishes publicly', () => {
     expect(config.baseBranch).toBe('main');

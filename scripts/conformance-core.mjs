@@ -46,9 +46,11 @@
  *
  * The brief is explicit that a control which fails a rule is not fixed here. Such a
  * rule is declared in {@link CONFORMANCE_EXEMPTIONS} or `A11Y_EXEMPTIONS` with a
- * note of what owns the fix, and the runner *requires* each row to still match
- * something real — so debt stays visible in the report and removes itself with a red
- * run when the control is fixed, rather than by a reviewer noticing.
+ * note of what owns the fix. The a11y sweep *requires* each `A11Y_EXEMPTIONS` row to
+ * still match a finding of its run (`staleExemptions`), so that debt removes itself
+ * with a red run when the control is fixed. No run checks a `CONFORMANCE_EXEMPTIONS`
+ * row: {@link checkRecycleNotes} only compares it with its fixture's recycle note, so
+ * a row is retired by hand, when that note stops being a `blindSpot`.
  *
  * ## Why nothing here is imported by the app
  *
