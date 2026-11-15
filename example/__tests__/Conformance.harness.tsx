@@ -636,8 +636,10 @@ async function typeIntoField(testId: string, text: string, expected: string) {
  *   be shown the difference. `SegmentedControl`'s picked index and `Menu`'s open popup are
  *   real, and neither has a read-out where the recycle happens. That is a hole in the guard,
  *   so the matrix says **failing** and points at a `docs/tasks/FOLLOWUPS.md` line; the
- *   fixture prints `known failing (…)` the way the a11y sweep prints its own debt, and
- *   `staleDebt` retires the row when a run stops reporting it.
+ *   fixture prints `known failing (…)` the way the a11y sweep prints its own debt. Unlike
+ *   the sweep's debt, this one removes itself with no run: nothing reports a stale
+ *   `CONFORMANCE_EXEMPTIONS` row, so whoever turns a `blindSpot` into a probe deletes the
+ *   row by hand.
  *
  * Putting a control in the wrong kind is not free: `checkRecycleNotes` reads this table and
  * refuses a `blindSpot` with no `CONFORMANCE_EXEMPTIONS` row and a debt row whose fixture
@@ -1114,17 +1116,20 @@ const PLATFORM = Platform.OS === 'ios' ? 'ios' : 'android';
 const RENDER = { timeout: 20000 } as const;
 
 /* ------------------------------ the rule bodies ------------------------------ */
-/* The device-side shape of `fallbackFindings`, `leakFindings` and `recycleFindings` in
- * `scripts/conformance-core.mjs`. Round 1 called these "mirrors" and said a divergence
- * between the halves was caught by `conformance.test.js` (X4 review N4). It is not, and
- * calling them mirrors oversells what is here:
+/* `fallbackFindings`, `leakFindings` and `recycleFindings` are the in-app halves of the
+ * fallback, leak and recycle rules: `scripts/conformance-core.mjs` states those rules in
+ * `CONFORMANCE_RULES` and judges them offline (`checkFallbackTable`, `checkRecycleNotes`,
+ * `checkCoverage`) under its own names, and the branch below each one here is this file's
+ * re-implementation rather than a mirror of a same-named function. Round 1 called these
+ * "mirrors" and said a divergence between the halves was caught by `conformance.test.js`
+ * (X4 review N4). It is not, and calling them mirrors oversells what is here:
  *
  * - The harness cannot import a Node module, so this file re-implements the branches. It
  *   takes its *numbers* from the shared table below, which `checkSharedTableMirror` does
  *   prove equal to `sharedInAppTable()` on every `check` — tolerance, poison sizes,
  *   declared fallbacks and box rules cannot disagree between the halves.
- * - The *wording* is free to drift, and has: three of these strings already differ from the
- *   originals by a clause. `conformance.test.js` drives the originals, not these, so no test
+ * - The *wording* is free to drift, and has: these strings already differ from the
+ *   host-side checks' by a clause. `conformance.test.js` drives the originals, not these, so no test
  *   reads this file's messages at all. What that risks is not a wrong verdict — the branches
  *   are short and the numbers are shared — it is a device failure whose sentence no longer
  *   matches the one in the report, so the two say the same bug in different words.
@@ -1156,8 +1161,10 @@ function fmt(size: Size | null): string {
 }
 
 /**
- * The in-app half of `canonicalLocale` / `localePremiseMiss` in
- * `scripts/conformance-core.mjs` (same re-implementation note as the file header's).
+ * This file's own `localePremiseMiss`, over a `canonicalLocale` that mirrors
+ * `scripts/conformance-core.mjs:canonicalLocale` (same re-implementation note as the file
+ * header's). The core has the canonicaliser, because its offline locale check needs one;
+ * the premise itself is only visible in the app, so nothing offline re-implements it.
  *
  * Only the shape the rule needs: strip a launch identifier to the language(+script)+region
  * prefix the engine itself reports, compare it with the locale the row was measured in, and
