@@ -229,6 +229,10 @@ internal class SliderModel(
    * further along one walk). The destination stays native's; the direction belongs to
    * whoever pressed, and they were shown [publishedProgress].
    *
+   * The comparison is made in the space the reader was shown: [publishedProgress] goes
+   * through the `Float` the semantics node carries the progress in, because that is the
+   * number the target was computed from. See [asPublishedProgress].
+   *
    * Only the *direction* comes from the platform. The destination is [stepped],
    * and that is the fix: M3's own action moves by a twentieth of the range, which
    * on a range that does not end on a step - `0..10 step 3`, the docs' own
@@ -253,10 +257,11 @@ internal class SliderModel(
       return false
     }
     val from = displayed
+    val shown = asPublishedProgress(publishedProgress)
     val up =
       when {
-        target > publishedProgress -> true
-        target < publishedProgress -> false
+        target > shown -> true
+        target < shown -> false
         else -> return false
       }
     val to = stepped(from, up)
@@ -280,6 +285,33 @@ internal class SliderModel(
     endDrag()
     return true
   }
+
+  /**
+   * [displayed] as a reader is given it: through the `Float` the semantics node carries
+   * the progress in (`SliderTrack` publishes `ProgressBarRangeInfo(displayed.toFloat(), …)`).
+   *
+   * Not a curiosity, and not new here — it is the half of X21's rule that the round-trip
+   * was left out of. A `setProgress` target arrives as a `Float` computed from the
+   * progress this node published, so comparing it with the `Double` the model holds
+   * compares two different numbers on any grid whose stops are not exact in binary:
+   * 0.3 through a `Float` and back is 0.30000001192092896, which read against 0.3 is
+   * "higher than where you are", and 0.7 comes back as 0.699999988079071, which is
+   * *lower* — so a reader asking for the value it can already read is a step, up or
+   * down depending on how the rounding fell. A narrow window over a large offset (an
+   * epoch-milliseconds Slider is the everyday shape) makes that every press rather than
+   * an edge case: a Float at 1e9 is 64 apart, the reader's stride is smaller than that,
+   * and its destination lands back on the published float — up asked, previous value
+   * answered, on the platform path, every time (X33; X32's
+   * `StepperModel.publishedProgress` is the same one round-trip for the same reason).
+   *
+   * The round-trip can only ever change the *equality* branch, which is what makes it
+   * safe: a target a float can stride differs from the published float by at least one
+   * `stride`, and a real reader's stride is never below the float's own spacing except
+   * by landing on it exactly — which is the case this exists to refuse.
+   */
+  private fun asPublishedProgress(
+    displayed: Double,
+  ): Double = displayed.toFloat().toDouble()
 
   /** Whether the frame pump is alive. Readable from any thread. */
   val isFramePumpArmed: Boolean
@@ -626,9 +658,10 @@ private fun SliderTrack(
           }
           progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
           // The direction is decided against the progress *this* node publishes - the
-          // number the accessibility delegate built its target from - because a press can
-          // reach the model before Compose has republished it. See
-          // [SliderModel.accessibilityStepToward].
+          // number the accessibility delegate built its target from, in the Float it
+          // publishes it in - because a press can reach the model before Compose has
+          // republished it. See [SliderModel.accessibilityStepToward] and
+          // [SliderModel.asPublishedProgress].
           setProgress { target ->
             model.accessibilityStepToward(target.toDouble(), publishedProgress = displayed)
           }

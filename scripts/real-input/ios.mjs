@@ -50,6 +50,7 @@ import {
   checkTabTargets,
   exampleTabs,
   parseIosTabTargets,
+  unreadTabTargetLines,
 } from './tab-targets.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
@@ -655,6 +656,7 @@ function reportTabTargets({ log, suite, status, testLog }) {
     platform: 'ios',
     tabs,
     measured: parseIosTabTargets(log),
+    strays: unreadTabTargetLines(log),
     pixel: 1 / 3,
   })) {
     check.check(verdict.line, verdict.ok);

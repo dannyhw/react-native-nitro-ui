@@ -175,6 +175,12 @@ export const TOOLING_PREFIXES = [
 export const TOOLING_FILES = [
   'scripts/gate.mjs',
   'scripts/gate-core.mjs',
+  // X34. The supervisor `gate.mjs` runs each gate's command under. The same argument as its
+  // parent's, one level down: nothing ships, nothing compiles, and a broken version is a gate
+  // that cannot start (`gate: could not start`, an exit in the shell) rather than a different
+  // binary. Its own tests are `scripts/__tests__/gate-runner.test.js`, and `gate.mjs` imports it,
+  // which is also tooling. Proven by search below, the same way `task-ready` is.
+  'scripts/gate-runner.mjs',
   'scripts/nitrogen-check.mjs',
   'scripts/readme-examples-check.mjs',
   'scripts/package-files.mjs',
@@ -4006,6 +4012,76 @@ export function ownMetroPids({ listeners, leaderPid, groupOf }) {
     if (group != null && group === leaderPid) owned.push(pid);
   }
   return owned;
+}
+
+/**
+ * Does a process holding the leased port belong to a gate that died mid-run? (X34 item 2)
+ *
+ * The failure this answers: a `gate.mjs` is killed hard enough to run no handlers, its run's
+ * bundle server keeps serving the lease's Metro port, and the *next* gate on that lease reads
+ * "Metro port is served by node …" — a fact about a port, when the fact it needs is *which run*
+ * left it and whether that run ever reported itself. That difference is the difference between
+ * "wait for the other run" and "your predecessor died; here is its log".
+ *
+ * `records` are the runner sidecars (`<log>.runner.json`), written by each run's supervisor at the
+ * moment the run starts and naming the process group that run leads. Attribution is therefore a
+ * group question — the same kernel fact `ownMetroPids` uses — and not a guess from a command line
+ * or a `ps eww` environment, which is truncated at a width nobody controls.
+ *
+ * A match needs all three, because each one alone is a different (innocent) story:
+ *   - the listener's group is a run's group — otherwise the server is somebody else's, which is
+ *     the pre-flight's ordinary refusal and none of this function's business;
+ *   - that run's gate is gone — a live gate means the run is *happening*, and the right answer is
+ *     to wait for it;
+ *   - that run left no ledger line — a run that recorded its result is a run that finished and
+ *     simply left a server up (which `stopOwnMetro` was meant to take down, but it is a *finished*
+ *     run, not a death, and saying "died" about it would be a false claim in the evidence.
+ *
+ * @param {object} options
+ * @param {Array<{group?: number, pid?: number, gatePid?: number, logPath?: string, gate?: string, startedAt?: number}>} records
+ *   runner sidecars for runs this branch started
+ * @param {Array<{pid: number, command?: string}>} listeners the processes serving the port
+ * @param {(pid: number) => boolean} [pidAlive]
+ * @param {(pid: number) => number | null} [groupOf] the process group a listener leads, or belongs to
+ * @param {Set<string> | string[]} [ledgerLogPaths] log paths with a ledger line
+ * @returns {{record: object, listener: {pid: number, command?: string}, group: number} | null}
+ */
+export function deadGateBehindPort({
+  records,
+  listeners,
+  pidAlive = pidMayBeRunning,
+  groupOf = () => null,
+  ledgerLogPaths = [],
+}) {
+  const recorded = (records ?? []).filter(
+    (record) =>
+      Number.isInteger(Number(record?.group)) && Number(record.group) > 0
+  );
+  if (recorded.length === 0) return null;
+  const written = new Set(
+    Array.isArray(ledgerLogPaths) ? ledgerLogPaths : [...(ledgerLogPaths ?? [])]
+  );
+  for (const listener of listeners ?? []) {
+    const listenerPid = Number(listener?.pid);
+    if (!Number.isInteger(listenerPid) || listenerPid <= 0) continue;
+    let group = null;
+    try {
+      group = groupOf(listenerPid);
+    } catch {
+      group = null;
+    }
+    if (!Number.isInteger(group) || group <= 0) continue;
+    const record = recorded.find(
+      (candidate) => Number(candidate.group) === group
+    );
+    if (record == null) continue;
+    const gatePid = Number(record.gatePid ?? record.pid);
+    if (!Number.isInteger(gatePid) || gatePid <= 0) continue;
+    if (pidAlive(gatePid)) continue;
+    if (record.logPath != null && written.has(String(record.logPath))) continue;
+    return { record, listener, group };
+  }
+  return null;
 }
 
 /**
