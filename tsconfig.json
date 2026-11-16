@@ -4,7 +4,13 @@
   // library, which is why the `paths` mapping above exists.
   // `scripts/smoke` is the consumer-facing API contract (App.tsx renders every
   // export once), so a rename must break `bun run check`, not a smoke run.
-  "include": ["src", "example/src", "example/__tests__", "scripts/smoke"],
+  "include": [
+    "src",
+    "example/src",
+    "example/__tests__",
+    "example/e2e",
+    "scripts/smoke"
+  ],
   "exclude": ["node_modules", "**/node_modules", "lib", "bench", "docs"],
   "compilerOptions": {
     "rootDir": ".",

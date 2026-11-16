@@ -8,14 +8,17 @@ the task merges. Open follow-ups are in `FOLLOWUPS.md`.
 
 Name · ID · branch · pull request · next action.
 
-- Android real-input on e2e · X35 · `task/X35-real-input-e2e` · none yet · last fix round in
-  progress on a device pair; then review and the merge gates.
+Nothing.
 
 ## Recently merged
 
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-16 Nothing user-visible: the Android real-input gate runs an e2e suite and then the
+  `uiautomator` checks e2e cannot express, in 54 minutes in place of 72 (X35, X44, #84). The
+  watchdog brings its own checkout up to date before it looks.
+- 11-15 0.9.1 released (#74).
 - 11-15 The package no longer ships a SwiftUI reference Form that only its own tests used;
   harness tests that measured or repeated another suite, and a closed probe, are removed (X37,
   #82). A second comment and documentation pass covers the tests, the example and bench apps and
@@ -78,16 +81,12 @@ pull request number is left out where the records do not carry one.
 - 11-02 Android Menu dropdown sizes to its items; the inline DatePicker fits 320 dp (G8, #18).
 - 11-02 Slider, Button, Progress and SegmentedControl follow-up fixes (G10, #23). Tooling
   sweeps (X16, #20; X17, #22).
-- 11-01 0.4.2 released (#14). iOS Menu draws an untitled section's rows (G9, #17).
-- 11-01 DatePicker's iOS fallback is measured at `en_US`; two sizing-engine leaks fixed (F8,
-  F8b, #12).
 - Research and spikes in the window, nothing user-visible: Q5 to Q9, S2, S3, S5, S6, S6b, T19.
 
 ## Blocked or waiting
 
-- Release: two patch changesets are on `main` since 0.9.0 (`x32-review-debt`,
-  `slider-reader-steps-float`). Next is the Version Packages pull request, then the npm approval
-  (D28). Check `npm view` before saying anything about it.
+- Release: one patch changeset is on `main` since 0.9.1 (`x37-harness-trims-form-reference`), and
+  the Version Packages pull request is #83. Check `npm view` before saying anything about it.
 - Records: `node scripts/task-records.mjs` keeps G12, S2, S3, S5, S6, S6b and T19 while their
   unmerged prototype branches are live, and FIX3 and T18 because each has a brief and no report.
   Deleting a branch, or the brief, lets the records be archived.

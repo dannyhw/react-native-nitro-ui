@@ -111,16 +111,6 @@ macOS, Xcode 27, bun 1.4, Node 24 (`fnm exec --using 24 --`), Java 17, CocoaPods
 - Doc comments on exported components and props are for the app developer: what it does, the
   default, accepted values, visible platform differences. Nothing internal.
 
-## Comments
-
-- Write code that needs no comment. Add one only for what the code cannot show: a platform or
-  upstream quirk, a constraint on ordering, threading, units or lifetime, or why the obvious
-  approach is wrong. One to three lines, understandable on its own.
-- A comment never cites a task, a review, a decision number or a project document, and never
-  tells history. An upstream bug keeps its public identifier (`nitro#1184`).
-- Doc comments on exported components and props are for the app developer: what it does, the
-  default, accepted values, visible platform differences. Nothing internal.
-
 ## Scope and budget
 
 - Stay inside your brief. Anything else you find that is not a correctness bug in scope, a failing

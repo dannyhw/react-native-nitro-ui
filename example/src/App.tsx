@@ -157,6 +157,7 @@ export default function App() {
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.tabRow}
+          testID="example-tabs"
         >
           {TABS.map((tab) => (
             <Pressable

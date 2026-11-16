@@ -325,10 +325,37 @@ export default function FormScreen() {
             </View>
           </Form.Row>
         </Form.Section>
+
+        {/* Android only: a dev build docks LogBox at the bottom of the window, so the note
+            field needs rows below it to scroll clear. iOS reads that field at the list's end. */}
+        {Platform.OS === 'android' ? (
+          <Form.Section title="Diagnostics">
+            {TAIL.map((row) => (
+              <Form.Row key={row}>
+                <View style={styles.rowContent}>
+                  <Text style={styles.label}>{row}</Text>
+                </View>
+              </Form.Row>
+            ))}
+          </Form.Section>
+        ) : null}
       </Form>
     </View>
   );
 }
+
+/**
+ * Rows below the note field, so the list has room left to scroll a field clear of
+ * the bottom of the window (`Form.Section` above, where they are inserted).
+ */
+const TAIL = [
+  'Build',
+  'Bundle',
+  'Renderer',
+  'Session',
+  'Cache',
+  'Diagnostics log',
+];
 
 /** Enough rows that the note field starts below the fold: question 5 needs a scroll. */
 const FILLER = [

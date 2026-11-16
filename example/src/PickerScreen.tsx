@@ -174,6 +174,7 @@ export default function PickerScreen() {
   // row it rolled past would move this by four on a fling across four rows.
   const [wheelIndex, setWheelIndex] = useState('-');
   const [wheelEvents, setWheelEvents] = useState(0);
+  const [scrollerIndex, setScrollerIndex] = useState('-');
   // Pinned: the parent never moves it, so choosing in the popup has to snap back
   // natively. `rejectEvents` is what proves the choice was reported at all.
   const [rejectIndex] = useState(0);
@@ -225,6 +226,9 @@ export default function PickerScreen() {
     setWheelIndex(`${event.index}`);
     setWheelEvents((current) => current + 1);
   }, []);
+  const countScrollerChange = useCallback((event: { index: number }) => {
+    setScrollerIndex(`${event.index}`);
+  }, []);
   const countRadioChange = useCallback((event: { index: number }) => {
     setRadioEvents((current) => current + 1);
     setRadioIndex(String(event.index));
@@ -267,6 +271,62 @@ export default function PickerScreen() {
         <Text style={[styles.section, { color: ink.muted }]}>
           Real input (scripts/real-input reads these)
         </Text>
+
+        {/* G29: the same drum inside a *horizontal* scroller, which is the only shape
+            that can show what `nuiOwnVerticalDrags` gives back. The drum disallows its
+            ancestors' interception on the down (a page would otherwise eat the roll), and
+            the fix round's rule is that a drag whose first move past touch slop is
+            sideways hands that disallow back — so a swipe across this drum must move the
+            *scroller*, not the drum, and `example/e2e/real-input/picker.e2e.ts` reads this
+            row's bounds either side of such a swipe.
+
+            It sits first under the heading, not last on the page, because a drum answers
+            the very drag that would scroll it into view: a control that has to be
+            scrolled to is a control this check cannot aim at.
+
+            Android-only, and deliberately: the drum is Android's, the check is Android's,
+            and the iOS screen keeps the exact tree its geometry assertions were written
+            against. The drum's width is stated rather than stretched because a horizontal
+            scroller offers its children unbounded width — that is the whole point — and a
+            `fillWidth` question there has no answer to take. */}
+        {Platform.OS === 'android' ? (
+          <View style={styles.row}>
+            <Text style={[styles.label, { color: ink.ink }]}>
+              Wheel in a side-scroller — swipe it sideways (Android)
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              testID="real-input-wheel-scroller-row"
+            >
+              <View style={styles.sideScroller}>
+                <Picker
+                  options={WHEEL_OPTIONS}
+                  variant="wheel"
+                  defaultSelectedIndex={0}
+                  onChange={countScrollerChange}
+                  accessibilityLabel="Real-input wheel in a scroller"
+                  testID="real-input-wheel-scroller"
+                  style={{ width: 280 }}
+                />
+                <View
+                  style={styles.scrollerSpacer}
+                  testID="real-input-wheel-scroller-tail"
+                />
+              </View>
+            </ScrollView>
+            <Text style={[styles.readout, { color: ink.muted }]}>
+              last index this drum reported
+            </Text>
+            <Text
+              testID="real-input-scroller-index"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {scrollerIndex}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.row}>
           <Text style={[styles.label, { color: ink.ink }]}>Controlled</Text>
           <Picker
@@ -554,41 +614,6 @@ export default function PickerScreen() {
             {wheelEvents}
           </Text>
         </View>
-
-        {/* G29: the same drum inside a *horizontal* scroller, which is the only shape
-            that can show what `nuiOwnVerticalDrags` gives back. The drum disallows its
-            ancestors' interception on the down (a page would otherwise eat the roll), and
-            the fix round's rule is that a drag whose first move past touch slop is
-            sideways hands that disallow back — so a swipe across this drum must move the
-            *scroller*, not the drum. `scripts/real-input/android.mjs` reads this row's
-            bounds either side of such a swipe.
-
-            Android-only, and deliberately: the drum is Android's, the check is Android's,
-            and the iOS screen keeps the exact tree its geometry assertions were written
-            against. The drum's width is stated rather than stretched because a horizontal
-            scroller offers its children unbounded width — that is the whole point — and a
-            `fillWidth` question there has no answer to take. */}
-        {Platform.OS === 'android' ? (
-          <View style={styles.row}>
-            <Text style={[styles.label, { color: ink.ink }]}>
-              Wheel in a side-scroller — swipe it sideways (Android)
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.sideScroller}>
-                <Picker
-                  options={WHEEL_OPTIONS}
-                  variant="wheel"
-                  defaultSelectedIndex={0}
-                  onChange={countWheelChange}
-                  accessibilityLabel="Real-input wheel in a scroller"
-                  testID="real-input-wheel-scroller"
-                  style={{ width: 280 }}
-                />
-                <View style={styles.scrollerSpacer} />
-              </View>
-            </ScrollView>
-          </View>
-        ) : null}
 
         <Text style={[styles.section, { color: ink.muted }]}>
           Too wide for its box (fits it, C1)

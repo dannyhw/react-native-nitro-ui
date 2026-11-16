@@ -227,11 +227,17 @@ describe('every real-input control has a check on both platforms', () => {
   // failing on whichever one sorts first.
   for (const control of controls()) {
     it(`${control.id} has a check on both platforms`, () => {
+      // Android is a suite of files, one per control: e2e collects each file on its
+      // own, so a control whose file was deleted does not fail — it runs nothing.
+      // The same silent gap the old driver's `CHECKS` comparison guarded.
+      const file = `example/e2e/real-input/${control.id}.e2e.ts`;
+      // Named in the value rather than in a message argument, which jest ignores.
       expect(
-        new RegExp(`^ {2}'${control.id}': async \\(t\\)`, 'm').test(
-          readRepo('scripts/real-input/android.mjs') ?? ''
-        )
-      ).toBe(true);
+        existsSync(join(repoRoot, file))
+          ? 'present'
+          : `${file} is missing, so no real touch is delivered to ` +
+              `"${control.id}" and nothing would notice`
+      ).toBe('present');
       // The Swift check is named for the row id, camel-cased: `segmented-control` ->
       // `testRealInputSegmentedControl`, `hosted-slider` -> `testRealInputHostedSlider`.
       const pascal = `${control.id[0].toUpperCase()}${control.id
@@ -246,10 +252,10 @@ describe('every real-input control has a check on both platforms', () => {
     });
 
     it(`${control.id}'s screen can be reached on Android`, () => {
-      // iOS taps the tab by its `testID`. Android's accessibility tree carries no
-      // testID (React Native stores it as a view tag), so the runner finds the tab
-      // by id in the app's `TABS` array and then polls an echo testID to learn
-      // the screen came up.
+      // The post-suite reads reach a screen by the tab row in
+      // `scripts/real-input/screens.mjs` and then poll an echo testID to learn
+      // the screen came up, so a screen missing from that table is a run that
+      // dies mid-way on a device instead of a failing `check`.
       const { id } = appTabs().find((tab) => tab.id === control.screen) ?? {};
       // Named in the value rather than in a message argument, which jest ignores.
       expect(String(id)).not.toBe('undefined');
@@ -259,9 +265,23 @@ describe('every real-input control has a check on both platforms', () => {
       const drawn = new RegExp(`["'\`]${tab.anchor}["'\`]`).test(
         exampleSourceText()
       );
+      expect(drawn).toBe(true);
+    });
+
+    it(`${control.id}'s Android check opens the screen its row names`, () => {
+      // The e2e suite reaches a screen by tapping the tab whose testID is
+      // `tab-<screen>`, so the pair that has to agree is the row's `screen` and
+      // the `openScreen` call in the control's own file. A device gate is the
+      // wrong place to discover that the two disagree.
+      const text =
+        readRepo(`example/e2e/real-input/${control.id}.e2e.ts`) ?? '';
       expect(
-        drawn ? 'drawn' : `nothing in example/src draws "${tab.anchor}"`
-      ).toBe('drawn');
+        text.includes(`openScreen(screen, '${control.screen}')`)
+          ? 'opens it'
+          : `example/e2e/real-input/${control.id}.e2e.ts never opens the ` +
+              `screen "${control.screen}" that scripts/real-input/controls.mjs ` +
+              'names for it'
+      ).toBe('opens it');
     });
   }
 });

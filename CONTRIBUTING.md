@@ -170,7 +170,7 @@ src/index.ts                            the export list
 bench/src/implementations/*.tsx         one branch per arm
 bench/src/implementations/shared.ts     its ROW_HEIGHTS entry (benched controls)
 example/.../RealInputTests.swift        func testRealInput<Name>
-scripts/real-input/android.mjs          one CHECKS entry
+example/e2e/real-input/<id>.e2e.ts      one test file per control (Android)
 docs/components/<name>.md               the component page
 bun run changeset
 ```
@@ -330,8 +330,8 @@ and takes either side as well. `nitrogen/generated/**` needs no hand resolution:
 These files are inputs, not outputs, and need both sides' lines kept: `src/index.ts` (one
 export per component), the bench arm's import and branch, `ROW_HEIGHTS` in
 `bench/src/implementations/shared.ts` for benched controls (`bench:typecheck` fails if one is
-lost), `func testRealInput<Name>` in `RealInputTests.swift`, the `CHECKS` entry in
-`scripts/real-input/android.mjs`, and the docs.
+lost), `func testRealInput<Name>` in `RealInputTests.swift`, the Android e2e test
+`example/e2e/real-input/<id>.e2e.ts`, and the docs.
 
 `bun run registry` refuses to write when a control has no `example/src/<Name>Screen.tsx`: the
 check says so, so no `App.tsx` that does not compile is generated.
@@ -768,8 +768,14 @@ serving code for both config files.
 The harness drives controls through the library's own test hooks. The real-input suite proves
 what that cannot: that a touch delivered by the operating system reaches a hosted SwiftUI or
 Compose control inside a React Native app. It synthesises taps and drags outside the app
-(`XCUIDevice`'s event path on iOS, `adb shell input` on Android) and asserts only on `Text` the
-app renders on screen. It uses no test hook, no Nitro callback and no in-app tracer.
+(`XCUIDevice`'s event path on iOS, `agent-device`'s on Android) and asserts only on `Text` the
+app renders on screen. It uses no test hook, no Nitro callback and no in-app tracer. Android is
+two phases on one device session: an e2e suite in `example/e2e/`, one file per control, then —
+with the driver's daemon stopped, because `uiautomator dump` will not answer while it is attached
+— the accessibility sweep and the `adb input` + `uiautomator` checks in
+`scripts/real-input/a11y-sweep-device.mjs` and `scripts/real-input/android-tree-checks.mjs`. Both
+phases decide one exit code and one ledger line, and `--control` narrows both.
+`example/e2e/README.md` says what each phase asserts.
 
 ```sh
 # iOS - the simulator must already be booted (the suite boots nothing)
@@ -787,10 +793,11 @@ iOS builds first (`pod install` and the workspace's `NitroUiExampleUITests` sche
 refreshes `app.stamp` with what it built. Android installs the debug APK that
 `node scripts/build-app.mjs --platform android` left, and refuses when that stamp does not
 match the tree. Both install, point the debug build at your `METRO_PORT`, and read the screen
-afterwards: `accessibilityIdentifier` on iOS, `uiautomator dump` on Android. Neither script
-boots or shuts down a device, and neither accepts a device it was not told about: a simulator
-UDID (`IOS_UDID`, or the `IOS_SIM_UDID` a lease exports) and `ANDROID_AVD`/`ANDROID_SERIAL` are
-required, and an emulator running another AVD is refused.
+afterwards: `accessibilityIdentifier` on iOS, the accessibility tree on Android, which is what
+a person and a screen reader have. Neither script boots or shuts down a device, and neither
+accepts a device it was not told about: a simulator UDID (`IOS_UDID`, or the `IOS_SIM_UDID` a
+lease exports) and `ANDROID_AVD`/`ANDROID_SERIAL` are required, and an emulator running another
+AVD is refused.
 
 They are not part of `bun run check`: they need a booted device, a simulator build and several
 minutes. Run them when you change how a control receives touch.
@@ -798,21 +805,25 @@ minutes. Run them when you change how a control receives touch.
 Both run on the Node version `.nvmrc` pins: started on another version, they restart
 themselves under it with `fnm exec`.
 
-Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the full `xcodebuild`
-and `adb` logs, the accessibility hierarchy printed by a failing case, the `.xcresult` bundle,
-and Metro's log. Read that directory when a check fails.
+Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the `xcodebuild` log and
+the `.xcresult` bundle on iOS, Metro's log and the driver's state directory on Android. Android
+also keeps e2e's own `report.json` in `example/e2e/.e2e/android/`, with a trace, the screen as
+the driver read it, and a screenshot for every attempt. A phase-2 check writes no file: the dump
+a refused press was refused against, and the readings that decided a failed check, are printed
+into the run's log, which `node scripts/gate.mjs` keeps beside the ledger line. Read those when a
+check fails.
 
 ### Adding a control to the suite
 
 Add one row in `scripts/real-input/controls.mjs`. For a library component, a manifest with
 `realInput: true` and a `realInputTitle` generates the row (`bun run registry`); do not edit it
 by hand. Then add one check per platform: `func testRealInput<Id>` in
-`example/ios/NitroUiExampleUITests/RealInputTests.swift`, and one key in `CHECKS` in
-`scripts/real-input/android.mjs`. Both runners compare their checks against the shared table
-and fail, never skip, if a control has no check or a check has no control. The `hosted-*` rows
-are hand-written: they prove things about `<Host>`, which is a container, and their ids are
-scenario names this suite owns. `scripts/__tests__/component-coverage.test.js` checks the same
-coverage on a machine with no device, one test per row.
+`example/ios/NitroUiExampleUITests/RealInputTests.swift`, and one
+`example/e2e/real-input/<id>.e2e.ts` on Android. Both runners compare their checks against the
+shared table and fail, never skip, if a control has no check or a check has no control. The
+`hosted-*` rows are hand-written: they prove things about `<Host>`, which is a container, and
+their ids are scenario names this suite owns. `scripts/__tests__/component-coverage.test.js`
+checks the same coverage on a machine with no device, one test per row.
 
 ## Consumer smoke tests
 

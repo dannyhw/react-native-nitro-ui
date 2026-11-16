@@ -6,6 +6,11 @@ One line per test that went red and then green on the same tree: test name, date
 run time of the failed run, times seen. Copied from task reports at merge. The rules are in
 `.claude/skills/flake/SKILL.md`.
 
+- `Menu · Split trigger › is two halves, and each one does only its own job`, 2026-11-15,
+  `harness:ios` started 12:26 UTC, seen once.
+- App crash in the worklets runtime (SIGSEGV) during the BottomSheet and Popover suites,
+  2026-11-15, `harness:ios` on a merge run, seen once.
+
 ## Quarantined tests
 
 Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
@@ -279,3 +284,15 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - `real-input:ios` `testRealInputForm`: "tap 1 of 10 on the Switch inside a form row should make "form-switch-changes" read 1; it reads "0" after 8s" in the X33+X34 merge run (2026-11-15), green on the re-run of the same tree; the same Form code passed twice in X32's runs. The HID first-tap drop of FOLLOWUPS:50, now seen on a Switch inside a Form row.
 - `scripts/__tests__/lease-queue.test.js` "hands a freed pair to the older ticket and shows the queue in `list`" still flakes after X34's fix: the Release run on the 0.9.1 commit (2026-11-15) read leases `["X24","X25"]` where `["X24"]` was expected (line 538), green on the re-run. CI on 8e5155c4 and 6d1ceac7 passed it.
 - `scripts/__tests__/gate-runner.test.js` killed-gate sweep: the test read the log before the supervisor's last line on the Linux CI runner (2026-11-15, twice in a row on 6d1ceac7). Done in 123ba438: it now waits for the sweep's outcome line.
+- Android real-input gate, open after the move to the e2e suite:
+  - Not asserted by any gate: the ButtonGroup overflow menu, its action against its toggle and a refused group's neighbour; the Menu checked-row pick; the order of presses inside a Popover; SearchField keystrokes after a keyboard change; the SegmentedControl connected-gap pixel read and its first-segment index; a drag that starts on a ListItem not pressing it.
+  - Not asserted by any gate: a Picker menu outliving the view that opened it. No `uiautomator` dump names the drop-picker rows of `PickerScreen`, so its fixtures are unused; a harness test that counts windows is the instrument.
+  - Moved checks in `scripts/real-input/android-tree-checks.mjs` not yet shown red on this gate: 28, across ContextMenu, Picker, hosted Picker, Menu, IconButton, SegmentedControl, Tooltip, Dialog and Popover. A control's checks stop at its first abort, so one mutation per run and per control is the way to prove them.
+  - The gate takes 54 minutes. Nearly all of phase 2 is `uiautomator dump` latency, about 2 s a read; sharing a dump between two inputs saves a few minutes, and more needs the check bodies restructured.
+  - `check` does not parse `scripts/**/*.mjs`: a duplicate `const` stays green until a device runs the file.
+  - `gate.mjs` builds its log name from the arguments, so about ten `--control` flags end in `ENAMETOOLONG`.
+  - A navigation failure inside a tree check ends the run before the summary, and one tree check for a control satisfies the "a check ran" guard for all of that control's ids.
+  - `date-picker.e2e.ts` picks its day from the host's clock while the dialog opens on the device's.
+  - Limits of the e2e driver to raise with its project: no clickable, checkable or scrollable in the node map; a swipe that leaves its starting view is refused; a node covered by its interactive descendants refuses a tap.
+  - iOS real-input still runs the hand-written driver.
+- Comments that cite a task or decision id remain in about 30 files outside this gate (`example/src`, `scripts/real-input/a11y.mjs`, `screens.mjs`, `report.mjs`, a few script tests).
