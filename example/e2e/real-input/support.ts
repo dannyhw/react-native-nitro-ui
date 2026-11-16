@@ -229,16 +229,25 @@ export async function reveal(
     // missing, it is the *other* end of the window that has to come into view. A
     // control parked in the top half of the band has the missing node above it —
     // below it there is a whole window of room the node could have occupied and
-    // does not — so the page is nudged back down until the read returns. Otherwise a
-    // box above the band means the control lies towards the top, unless the page is
-    // already there.
-    const towardsTop =
+    // does not — so the page is nudged back down until the read returns.
+    const readsAbove =
       box != null &&
-      (shown && inBand && !readsShown
-        ? await isInUpperHalf(screen, box)
-        : !atTop && (await isAboveSafeBand(screen, box)));
-    if (towardsTop) {
+      shown &&
+      inBand &&
+      !readsShown &&
+      (await isInUpperHalf(screen, box));
+    // A box above the band means the control lies towards the top, unless the page
+    // is already there.
+    const passed =
+      box != null &&
+      !(shown && inBand && !readsShown) &&
+      !atTop &&
+      (await isAboveSafeBand(screen, box));
+    if (readsAbove) {
       await dragContentDown(screen);
+      downDrags = Math.max(0, downDrags - 1);
+    } else if (passed) {
+      await dragContentFraction(screen, -(await stepBackTo(screen, box)));
       downDrags = Math.max(0, downDrags - 1);
     } else {
       await dragContentUp(screen);
@@ -405,6 +414,23 @@ async function dragContentFraction(
 
 /** How far one lift nudges, as a fraction of the content view's height. */
 const LIFT_STEP = 0.12;
+
+/**
+ * How far to drag back towards the top for a control above the band, as a fraction
+ * of the content view: the distance to the band's middle, no more than one stride.
+ *
+ * A full stride for a control just above the band flings it past the band, and its
+ * finger starts high on the page, where it lands on whatever control sits there.
+ */
+async function stepBackTo(screen: Screen, box: Box): Promise<number> {
+  const { top, bottom } = await tapBand(screen);
+  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
+  if (content == null) {
+    throw new Error('real-input: the content view has no box to scroll along.');
+  }
+  const distance = (top + bottom) / 2 - (box.y + box.height / 2);
+  return Math.min(CONTENT_STEP, Math.max(LIFT_STEP, distance / content.height));
+}
 
 /**
  * Bring a control into the band by short drags towards the bottom of the list.

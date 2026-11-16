@@ -20,7 +20,7 @@ const PAGE_HEIGHT = 8000;
 const ROW_HEIGHT = 120;
 
 function fakePage() {
-  const page = { scroll: 0, drags: [], waits: 0 };
+  const page = { scroll: 0, drags: [], travels: [], waits: 0 };
 
   const fixed = (box) => ({
     count: async () => 1,
@@ -66,6 +66,7 @@ function fakePage() {
     swipe: async ({ from, to }) => {
       const travel = from.y - to.y;
       page.drags.push(travel > 0 ? 'towards-bottom' : 'towards-top');
+      page.travels.push(travel);
       page.scroll = Math.min(
         PAGE_HEIGHT - (VIEW_BOTTOM - VIEW_TOP),
         Math.max(0, page.scroll + travel)
@@ -100,6 +101,18 @@ describe('reveal', () => {
     const drags = page.dragsSince(mark);
     expect(drags.length).toBeGreaterThan(0);
     expect(drags.every((drag) => drag === 'towards-top')).toBe(true);
+  });
+
+  it('brings a control just above the band back by its distance, not a full stride', async () => {
+    await reveal(page.screen, page.row(3000));
+    const mark = page.travels.length;
+
+    await reveal(page.screen, page.row(2550));
+
+    const travels = page.travels.slice(mark);
+    expect(travels).toHaveLength(1);
+    // The row sat 900 px above the band's middle; a full stride is 1296 px.
+    expect(Math.abs(travels[0])).toBeLessThan(1000);
   });
 
   it('costs no drag for a control already in the band', async () => {
