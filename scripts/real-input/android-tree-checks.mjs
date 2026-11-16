@@ -2851,6 +2851,9 @@ const TREE_CHECKS = [
   { id: 'list-item', run: listItemChecks },
 ];
 
+/** The controls these checks cover, so a caller can tell an empty run from a covered one. */
+export const TREE_CHECK_IDS = TREE_CHECKS.map((entry) => entry.id);
+
 /**
  * @param {string} id a control id from `controls.mjs`
  */

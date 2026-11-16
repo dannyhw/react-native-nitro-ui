@@ -44,7 +44,10 @@ import {
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { exampleTabs } from './tab-targets.mjs';
 import { runA11ySweepOnDevice } from './a11y-sweep-device.mjs';
-import { runTreeChecksOnDevice } from './android-tree-checks.mjs';
+import {
+  runTreeChecksOnDevice,
+  TREE_CHECK_IDS,
+} from './android-tree-checks.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
 import { isReservedSerial, requireLeaseDevice } from '../lease-core.mjs';
@@ -544,26 +547,39 @@ async function main() {
         stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
       }
     );
-    const allPassed =
-      controlsPassed && sweep.covered.length > 0 && tree.covered.length > 0;
+    // Every way this run can fail has to reach the exit code. `--control` narrows
+    // which checks exist; it does not narrow what counts as a pass, so a filtered
+    // run is judged by the same list as a full one.
+    const problems = [];
+    if (status !== 0) {
+      // A run error — a worker, a cleanup, a launch, the deadline — is a red gate
+      // even when every test the report knows about passed.
+      problems.push(`e2e exited ${String(status)}`);
+    }
+    if (!controlsPassed) {
+      problems.push(
+        'the e2e report does not prove every selected control passed'
+      );
+    }
     if (sweep.covered.length === 0) {
-      console.log(
-        'real-input: the a11y sweep reported no cases, which is not a pass.'
-      );
+      problems.push('the a11y sweep reported no cases');
     }
-    if (!allPassed && status === 0) {
-      console.log(
-        'real-input: e2e exited 0 but a control did not pass — trusting the report.'
+    const unchecked = wanted
+      .map((control) => control.id)
+      .filter(
+        (id) => TREE_CHECK_IDS.includes(id) && !tree.covered.includes(id)
       );
+    if (unchecked.length > 0) {
+      problems.push(`no uiautomator check ran for ${unchecked.join(', ')}`);
     }
-    if (allPassed && status !== 0) {
-      console.log(
-        `real-input: every control passed but e2e exited ${String(status)} — ` +
-          'a run error (a worker, a cleanup, a launch) is a red gate.'
-      );
-      return status;
+    const summary = suite.finish();
+    if (summary !== 0) {
+      problems.push('a check failed');
     }
-    return status === 0 ? suite.finish() : suite.finish();
+    for (const problem of problems) {
+      console.log(`real-input: the run is red — ${problem}.`);
+    }
+    return problems.length === 0 ? 0 : 1;
   } finally {
     adbRun(['reverse', '--remove', `tcp:${String(metroPort)}`]);
     stopAgentDeviceDaemon(env, stateDir);
