@@ -3002,6 +3002,34 @@ async function buttonGroupChecks(t) {
 }
 
 /** `checked` and `enabled` on a radio row's own node, not its label's. */
+/**
+ * The drop picker's row: mounted, and inside the window.
+ *
+ * A cycle of the leak check ends by leaving this `Picker` unmounted on purpose, with only its
+ * remount button left on the row, so reaching the row has to press that button. The node is
+ * found by testID because it is the box the tap has to land on, whatever the tree calls it.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function reachDropPicker(t) {
+  for (const direction of [1, -1]) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const picker = t.nodeByTestId('real-input-drop-picker');
+      if (picker != null && picker.bounds.height > 0) return picker;
+      const remount = t.nodeByTestId('real-input-drop-remount');
+      if (remount != null) {
+        await t.tapNode(remount);
+        continue;
+      }
+      await t.scrollPage(direction * 700);
+    }
+  }
+  t.log.abort(
+    'the drop picker row never came on screen - neither the Picker nor its ' +
+      'remount button was named, down and back up the page'
+  );
+}
+
 async function pickerChecks(t) {
   const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
   const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
@@ -3179,7 +3207,7 @@ async function pickerChecks(t) {
   // The row's unmount is on a timer inside the app, so the menu is open when the view
   // goes away; a second tap would have dismissed the menu instead of proving anything.
   for (let cycle = 1; cycle <= 3; cycle += 1) {
-    await t.requireControlOnScreen('Real-input drop picker');
+    await reachDropPicker(t);
     // The arm button has its own echo, so the press that schedules the unmount is
     // confirmed rather than assumed: a dropped press leaves nothing scheduled, and the
     // count then goes to zero for the wrong reason.
@@ -3206,7 +3234,7 @@ async function pickerChecks(t) {
       raised: (current) => current === '1',
     });
     await t.tapUntilUp(
-      () => t.requireControl('Real-input drop picker'),
+      () => reachDropPicker(t),
       `cycle ${String(cycle)}: a real tap to open the drop picker's menu`,
       () => t.popupWindowCount(),
       { attempts: 2, windowMs: 4000 }
@@ -3250,7 +3278,13 @@ async function pickerChecks(t) {
           );
         },
         reading: () =>
-          t.dump().some((node) => node.contentDesc === 'Real-input drop picker')
+          t
+            .dump()
+            .some(
+              (node) =>
+                node.contentDesc === 'Real-input drop picker' ||
+                node.resourceId === 'real-input-drop-picker'
+            )
             ? '1'
             : '0',
         raised: (value) => value === '1',
