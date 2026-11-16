@@ -12,6 +12,7 @@ import { screenTab } from './screens.mjs';
 import { imeServiceShown } from './ime-frame.mjs';
 import { findByTestId, parseHierarchy } from './uiautomator.mjs';
 import { runA11ySweep } from './a11y-sweep.mjs';
+import { countAppPopupWindows } from './popup-windows.mjs';
 
 /** Taps one tab gets before its screen is called unreachable. */
 const TAB_TAPS = 3;
@@ -394,35 +395,12 @@ export class SweepDevice {
     return dpi / 160;
   }
 
-  /**
-   * The app's own popup windows right now: the oracle for "the window came down with the
-   * control that owned it". `dumpsys window` prints the window's class on its header line
-   * and the owning package a few lines later, so a window counts once both are seen.
-   */
+  /** The app's own popup windows right now (see `countAppPopupWindows`). */
   popupWindowCount() {
-    const dump = this.adbShell('dumpsys window windows');
-    let count = 0;
-    let isPopup = false;
-    let namesApp = false;
-    const flush = () => {
-      if (isPopup && namesApp) {
-        count += 1;
-      }
-    };
-    for (const line of dump.split('\n')) {
-      const header = line.match(/^\s*Window #\d+ Window\{([^}]*)\}/);
-      if (header != null) {
-        flush();
-        isPopup = header[1].includes('Pop-Up');
-        namesApp = header[1].includes(this.appId);
-        continue;
-      }
-      if (isPopup && !namesApp && line.includes(this.appId)) {
-        namesApp = true;
-      }
-    }
-    flush();
-    return count;
+    return countAppPopupWindows(
+      this.adbShell('dumpsys window windows'),
+      this.appId
+    );
   }
 
   /**

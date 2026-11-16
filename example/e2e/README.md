@@ -85,11 +85,13 @@ instead of a screenshot.
 
 ## Device reads the driver will not make
 
-Four go straight to the device, each because the driver's own route cannot answer it:
-the window manager's `ime` inset and one frame of the screen taken while a finger is
-down (`device-read.ts`, whose `adbShell` names the leased serial on the leased adb
-server), the accessibility tree as `uiautomator dump` serves it (`os-tree.ts`), and
-the density a dp number has to be judged against (`device-read.ts`).
+Five go straight to the device, each because the driver's own route cannot answer it:
+the window manager's `ime` inset, the app's popup windows, and one frame of the screen
+taken while a finger is down (`device-read.ts`, whose `adbShell` names the leased serial
+on the leased adb server), the accessibility tree with its state flags on
+(`os-tree.ts`, which can also ask for the tree before the driver folds a role-only
+child into its parent), and the density a dp number has to be judged against
+(`device-read.ts`).
 
 `keyboard.ts` also _writes_ two device settings — it swaps in the emulator's real
 IME and lifts `show_ime_with_hard_keyboard`, because agent-device's own IME never

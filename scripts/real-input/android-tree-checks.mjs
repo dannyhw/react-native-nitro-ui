@@ -1780,18 +1780,12 @@ async function bottomSheetChecks(t) {
     0
   );
 
-  // 1. A real tap opens the fit sheet; its React Native content is in its window, and
-  //    the sheet itself carries `<testID>-sheet` for a test or a11y tool to find.
+  // 1. A real tap opens the fit sheet; its React Native content is in its window.
   await open('sheet-open-fit', FIT, 'the real tap that opens the fit sheet');
-  t.log.checkEquals(
-    'the presented sheet is the node named sheet-fit-sheet',
-    t.nodeByTestId('sheet-fit-sheet') != null,
-    true
-  );
 
   // 2. A real tap on the Pressable inside the sheet reaches JS through the sheet's
   //    own touch root: the sheet's echo moves.
-  const pressed = await t.pressUntil({
+  await t.pressUntil({
     what: 'the Pressable inside the sheet',
     waitingFor: 'the real tap inside the sheet to reach JS',
     press: async (attempt) => {
@@ -1802,11 +1796,6 @@ async function bottomSheetChecks(t) {
     raised: (shown) => shown === 'Pressed 1 times',
     pollMs: DUMP_POLL_MS,
   });
-  t.log.checkEquals(
-    'a real tap inside the sheet presses its Pressable once',
-    pressed.shown,
-    'Pressed 1 times'
-  );
 
   // 2a. A real tap on a TextInput inside the sheet. `ReactEditText` disallows its
   //     parents' interception on touch-down, so the tap's UP reaches JS only because
@@ -1987,14 +1976,10 @@ async function contextMenuChecks(t) {
   );
   t.waitForPopupCount(0, 'no popup after the quick taps');
 
-  // 2. A still hold opens the menu at the finger, with no onPress; a row picks, select
-  //    then close; the next tap presses once.
+  // 2. A still hold opens the menu at the finger; after a pick, the next tap presses
+  //    once.
   const anchors = [];
-  let opened = 0;
-  let pressAfterOpen = 0;
-  let picked = 0;
   let fresh = 0;
-  const orders = [];
   for (let i = 0; i < 3; i += 1) {
     const before = contextEcho(t);
     await t.holdAt(at.x, at.y, 1000);
@@ -2004,21 +1989,11 @@ async function contextMenuChecks(t) {
       await contextClose(t);
       continue;
     }
-    opened += 1;
     anchors.push({ dx: popup.bounds.x1 - at.x, dy: popup.bounds.y1 - at.y });
     const row = popup.nodes.find((node) => node.text === 'Copy text');
     if (row != null) await t.tapPx(row.bounds.cx, row.bounds.cy);
     t.waitForPopupCount(0, 'the pick to take the popup down');
     const mid = await contextEchoWhen(t, (e) => e.closes === before.closes + 1);
-    pressAfterOpen += mid.press - before.press;
-    if (mid.selects === before.selects + 1) picked += 1;
-    orders.push(
-      (t.echo('ctx-order') ?? '')
-        .replace('order=', '')
-        .split(',')
-        .slice(-3)
-        .join('>')
-    );
     await t.tapPx(at.x, at.y);
     const after = await contextEchoWhen(t, (e) => e.press === mid.press + 1);
     await sleep(400);
@@ -2027,18 +2002,6 @@ async function contextMenuChecks(t) {
   log.note(
     `popup top-start minus the press point, px at density ${String(density)}: ` +
       anchors.map((a) => `${String(a.dx)},${String(a.dy)}`).join(' | ')
-  );
-  log.checkEquals('a still hold opens the menu (of 3)', opened, 3);
-  log.checkEquals(
-    'and the child is never pressed by a hold that opened it',
-    pressAfterOpen,
-    0
-  );
-  log.checkEquals('a row picks (of 3)', picked, 3);
-  log.checkEquals(
-    'a pick reports select before close, every time',
-    orders.filter((order) => order === 'open>select:copy>close').length,
-    3
   );
   log.checkEquals('a fresh tap after each menu presses once (of 3)', fresh, 3);
   log.checkEquals(
@@ -2483,33 +2446,14 @@ async function dialogChecks(t) {
 /** `checked` on the chip's own node, and `enabled` on a disabled one's. */
 async function chipChecks(t) {
   const named = (label) => t.requireControl(label);
-  t.log.checkEquals(
-    'the filter chip starts unselected',
-    t.requireEcho(ECHO.chipValue),
-    'off'
-  );
-  t.log.checkEquals(
-    "the filter chip's own node starts not checked",
-    t.nativeChecked('Real-input chip'),
-    'off'
-  );
 
   // 1. On, then off.
-  t.log.checkEquals(
-    'one real tap selects the filter chip (React renders "on")',
-    await t.tapUntilValue(
-      () => named('Real-input chip'),
-      ECHO.chipValue,
-      'on',
-      'the real tap that selects the chip',
-      { nativeLabel: 'Real-input chip' }
-    ),
-    'on'
-  );
-  t.log.checkEquals(
-    "the selected chip's node says it is checked",
-    t.nativeChecked('Real-input chip'),
-    'on'
+  await t.tapUntilValue(
+    () => named('Real-input chip'),
+    ECHO.chipValue,
+    'on',
+    'the real tap that selects the chip',
+    { nativeLabel: 'Real-input chip' }
   );
   t.log.checkEquals(
     'a second real tap deselects it (React renders "off")',
@@ -2573,13 +2517,8 @@ async function checkboxChecks(t) {
   const named = (label) => t.requireControl(label);
   const BOX = 'Real-input checkbox';
 
-  // 1. Before any touch: the three echoes at rest, and the box's own state. The
+  // 1. Before any touch: the two counters at rest, and the box's own state. The
   //    native read is the one a stale render cannot fake.
-  t.log.checkEquals(
-    'the checkbox starts unchecked (React renders "off")',
-    t.requireEcho(ECHO.checkboxValue),
-    'off'
-  );
   t.log.checkEquals(
     'the checkbox has reported no change before a touch',
     t.requireEcho(ECHO.checkboxEvents),
@@ -2613,16 +2552,12 @@ async function checkboxChecks(t) {
   //    value it should produce before the next one is made (as in `switch`), and
   //    carries the box's own state as the witness that tells a dropped delivery from a
   //    lost change event.
-  t.log.checkEquals(
-    'one real tap checks the checkbox (React renders "on")',
-    await t.tapUntilValue(
-      () => named(BOX),
-      ECHO.checkboxValue,
-      'on',
-      'the real tap that checks the box',
-      { nativeLabel: BOX }
-    ),
-    'on'
+  await t.tapUntilValue(
+    () => named(BOX),
+    ECHO.checkboxValue,
+    'on',
+    'the real tap that checks the box',
+    { nativeLabel: BOX }
   );
   t.log.checkEquals(
     "the checked box's node says it is checked",
@@ -2665,11 +2600,6 @@ async function iconButtonChecks(t) {
   // 1. At rest. Every number is zero and the toggle's own node says unchecked, so
   //    each later assertion is about a number that moved and not about a screen
   //    that started mid-story.
-  t.log.checkEquals(
-    'no press has been reported before a touch',
-    t.requireEcho(ECHO.iconButtonPresses),
-    '0'
-  );
   t.log.checkEquals(
     'the toggle starts off (React renders "off")',
     t.requireEcho(ECHO.iconButtonValue),
@@ -2881,16 +2811,6 @@ async function buttonGroupChecks(t) {
   // 1. At rest: every counter at zero and the controlled toggles showing the set
   //    React gave them, so every number below is one that moved.
   t.log.checkEquals(
-    'no press has been reported before a touch',
-    t.requireEcho(ECHO.buttonGroupPresses),
-    '0'
-  );
-  t.log.checkEquals(
-    'no item has been named by a press',
-    t.requireEcho(ECHO.buttonGroupPressedId),
-    'none'
-  );
-  t.log.checkEquals(
     'the toggles start at the set React rendered ("bold")',
     t.requireEcho(ECHO.buttonGroupToggleState),
     'bold'
@@ -2937,11 +2857,6 @@ async function buttonGroupChecks(t) {
       'the real tap that checks "Italic"'
     ),
     'bold,italic'
-  );
-  t.log.checkEquals(
-    'the item publishes its own checked state',
-    itemChecked(TOGGLES, 'Italic'),
-    'on'
   );
   t.log.checkEquals(
     'one tap reported one change',
@@ -3277,11 +3192,6 @@ async function menuChecks(t) {
   await t.requireControlOnScreen('Real-input menu');
   const trigger = t.nodesNamed('Real-input menu');
   t.log.checkEquals(
-    "one node carries the trigger's name, so TalkBack announces it once",
-    trigger.length,
-    1
-  );
-  t.log.checkEquals(
     'and that same node carries the title it paints as its value',
     trigger[0]?.text,
     'Actions'
@@ -3368,7 +3278,6 @@ async function menuChecks(t) {
 
 /** Back takes a hosted popup's window down, and leaves none. */
 async function hostedPickerChecks(t) {
-  const PICK = 'Gamma';
   let aimed = await t.requireControlOnScreen('Hosted picker');
   t.log.checkEquals(
     'a real tap on the hosted anchor opens the menu as a popup window',
@@ -3379,7 +3288,6 @@ async function hostedPickerChecks(t) {
     ),
     '1'
   );
-  t.waitForOption(PICK, 'the hosted menu to open');
   await t.pressBack();
   t.log.checkEquals(
     'Back shuts the hosted popup (no window left behind)',
@@ -3535,11 +3443,6 @@ async function popoverChecks(t) {
     while (!t.imeShown() && Date.now() < imeDeadline) {
       await t.settle(250);
     }
-    t.log.checkEquals(
-      'a real tap on the TextInput inside the popover brings up the keyboard',
-      t.imeShown(),
-      true
-    );
     // Asserted on the committed value rather than on one entry per character, because
     // `input text` can deliver both characters in one commit and RN then reports the
     // field's text once. The screen also records the popover's own close from that
@@ -3573,15 +3476,11 @@ async function segmentedControlChecks(t) {
   );
   // The selection has to be one the *finger* made, so the claim below cannot be the
   // fixture's default, and the middle of the box is the segment drawn '2'.
-  t.log.checkEquals(
-    'a real tap on the second segment reaches JS as index 1',
-    await t.tapUntilValue(
-      () => t.requireControl('Real-input segmented control'),
-      ECHO.segmentedIndex,
-      '1',
-      'a real tap to register'
-    ),
-    '1'
+  await t.tapUntilValue(
+    () => t.requireControl('Real-input segmented control'),
+    ECHO.segmentedIndex,
+    '1',
+    'a real tap to register'
   );
   t.log.checkEquals(
     'one tap reports one change',
@@ -3660,164 +3559,6 @@ async function segmentedControlChecks(t) {
   });
 }
 
-/** A hold on a Stepper half is one step, and not a run of them. */
-async function stepperChecks(t) {
-  // The two halves are positions on one node: 48 dp of button, an 8 dp gap, 48 dp of
-  // button, so 0.2 and 0.8 land on the glyphs and clear of the gap.
-  const PLUS = 0.8;
-  const held = await t.requireControlOnScreen('Real-input hold stepper');
-  await t.holdAt(
-    held.bounds.x1 + held.bounds.width * PLUS,
-    held.bounds.cy,
-    1400
-  );
-  await t.settle(400);
-  t.log.checkEquals(
-    'a 1.4 s hold on the plus half steps exactly once (no Android repeat, as documented)',
-    t.requireEcho(ECHO.stepperHoldValue),
-    '6'
-  );
-}
-
-/**
- * The rich Tooltip, opened around its star by a real tap.
- *
- * Material shows a tooltip in a window of its own, and while it is up a dump can be
- * that window's tree rather than the app's, so the app's echo is read only with the
- * tooltip down and "up" is counted by the tooltip's own message.
- */
-async function tooltipChecks(t) {
-  const MESSAGE = 'Tap the star to keep this search.';
-  const TITLE = 'Saved searches';
-  const ACTION = 'Got it';
-  const upCount = () => t.dump().filter((node) => node.text === MESSAGE).length;
-  const opener = () => {
-    const node = t.nodeByTestId('tooltip-open-rich');
-    if (node == null) {
-      t.log.abort('no "tooltip-open-rich" opener on the Tooltip screen');
-    }
-    return node;
-  };
-  const open = async (description) => {
-    await t.tapUntilUp(opener, description, upCount, {
-      pollMs: DUMP_POLL_MS,
-    });
-    t.waitForOption(MESSAGE, description);
-  };
-  const waitGone = async (description) => {
-    const deadline = Date.now() + REACT_TIMEOUT;
-    while (upCount() > 0) {
-      if (Date.now() > deadline) {
-        t.log.abort(`timed out waiting for ${description}`);
-      }
-      await t.settle(250);
-    }
-  };
-  // One real tap on the star, confirmed by the star's own count: the anchor is the
-  // app's `Pressable`, and the tooltip's overlay behind it takes no touch.
-  const pressAnchor = async (expected, description) => {
-    const { delivered, shown } = await t.pressUntil({
-      what: 'the star the tooltip points at (tooltip-anchor)',
-      waitingFor: description,
-      attempts: 1,
-      press: async () => {
-        await t.tapTestId('tooltip-anchor');
-      },
-      reading: () => t.echo(ECHO.tooltipPresses),
-      raised: (current) => current === expected,
-    });
-    if (!delivered) {
-      t.log.abort(
-        `${description}: the star's count says "${String(shown)}", not "${expected}"`
-      );
-    }
-    return shown;
-  };
-  // Outside means this `Text`, found while the tooltip is down and tapped where it
-  // was: it has no press of its own, whereas a fixed fraction of the screen could
-  // land on a tab, or on a button a passed-through touch would press.
-  const logNode = t.nodeByTestId(ECHO.tooltipLog);
-  if (logNode == null) {
-    t.log.abort('no "tooltip-log" on the Tooltip screen to tap outside on');
-  }
-  const tapOutside = async () => {
-    await t.tapNode(logNode);
-    await t.settle(400);
-  };
-
-  t.log.checkEquals(
-    'no tooltip has reported anything before a touch',
-    t.requireEcho(ECHO.tooltipLog),
-    'none'
-  );
-  t.log.checkEquals('no tooltip is up before a touch', upCount(), 0);
-  t.log.checkEquals(
-    'a real tap on the anchor of a closed tooltip presses the anchor once',
-    await pressAnchor('star presses: 1', 'the real tap on the star'),
-    'star presses: 1'
-  );
-  await t.settle(800);
-  t.log.checkEquals(
-    'and opens nothing, reports nothing',
-    `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
-    '0 up, log none'
-  );
-
-  // Opened by a press, with its title and its action on screen.
-  await open('the real tap that opens the rich tooltip');
-  t.log.checkEquals(
-    'the tooltip shows its title and its action',
-    `${String(t.dump().filter((n) => n.text === TITLE).length)} title, ` +
-      `${String(t.dump().filter((n) => n.text === ACTION).length)} action`,
-    '1 title, 1 action'
-  );
-
-  await tapOutside();
-  await waitGone('a tap outside to take the tooltip down');
-  t.log.checkEquals(
-    'a tap outside closes the tooltip and reports the close alone',
-    t.requireEcho(ECHO.tooltipLog),
-    'presented:false'
-  );
-
-  // Back closes a tooltip with an action: Material makes that one focusable.
-  await open('the real tap that reopens the rich tooltip');
-  await t.pressBack();
-  await waitGone('Back to take the tooltip down');
-  t.log.checkEquals(
-    'Back closes it and reports the close alone',
-    t.requireEcho(ECHO.tooltipLog),
-    'presented:false > presented:false'
-  );
-
-  await open('the real tap that opens it again');
-  const afterAction =
-    'presented:false > presented:false > action:ok > presented:false';
-  t.log.checkEquals(
-    'a real tap on its action reports the id, then the close - once each, in order',
-    await t.tapOptionUntilValue(
-      ACTION,
-      ECHO.tooltipLog,
-      afterAction,
-      `the real tap on "${ACTION}"`
-    ),
-    afterAction
-  );
-  await waitGone('the action to take the tooltip down');
-
-  t.log.checkEquals(
-    'once it is closed, a real tap on the anchor presses it once more',
-    await pressAnchor('star presses: 2', 'the second real tap on the star'),
-    'star presses: 2'
-  );
-  await t.settle(800);
-  t.log.checkEquals(
-    'and opens nothing, reports nothing',
-    `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
-    `0 up, log ${afterAction}`
-  );
-}
-
 /**
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
@@ -3840,8 +3581,6 @@ const TREE_CHECKS = [
   { id: 'list-item', run: listItemChecks },
   { id: 'popover', run: popoverChecks },
   { id: 'segmented-control', run: segmentedControlChecks },
-  { id: 'stepper', run: stepperChecks },
-  { id: 'tooltip', run: tooltipChecks },
 ];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */

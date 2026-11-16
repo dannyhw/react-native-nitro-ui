@@ -1,7 +1,8 @@
 /**
- * The two reads of the device that `agent-device` will not make: the window manager’s
- * keyboard inset, and a frame taken while a finger is down. Both exist only beside it,
- * because it is serialised and installs a headless IME. Nothing here drives a device.
+ * The reads of the device that `agent-device` will not make: the window manager’s
+ * keyboard inset and popup windows, a frame taken while a finger is down, and the
+ * density. They exist only beside it, because it is serialised and installs a headless
+ * IME. Nothing here drives a device.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -10,6 +11,10 @@ import {
   decodePng,
   type DecodedPng,
 } from '../../../scripts/real-input/png-pixel.mjs';
+import { countAppPopupWindows } from '../../../scripts/real-input/popup-windows.mjs';
+
+/** The example app's package: a popup it owns is one a control of it put up. */
+const APP_ID = 'nitroui.example';
 
 /** The leased device, or nothing: an unleased shell must fail here, loudly. */
 function leasedSerial(): string {
@@ -51,6 +56,18 @@ export function adbShell(args: readonly string[]): string {
         String((error as Error)?.message ?? error)
     );
   }
+}
+
+/**
+ * How many popup windows the app has up right now. A menu, a tooltip or a picker's list
+ * is a window of its own, so this answers "did the control's window come down" without
+ * reading the tree, which shows only the topmost window while one is up.
+ */
+export function popupWindowCount(): number {
+  return countAppPopupWindows(
+    adbShell(['dumpsys', 'window', 'windows']),
+    APP_ID
+  );
 }
 
 /**
