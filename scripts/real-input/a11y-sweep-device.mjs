@@ -152,12 +152,15 @@ export class SweepDevice {
     let last = '';
     for (let attempt = 1; attempt <= 4 && xml === ''; attempt += 1) {
       const dumped = this.tryShell(`uiautomator dump ${this.remoteDump}`);
-      const read = this.tryShell(`cat ${this.remoteDump}`);
-      if (read.stdout.includes('<node')) {
+      // A refused dump leaves the file from the last one where it is, so the tree is
+      // only read after the dump says it wrote a new one.
+      const read =
+        dumped.status === 0 ? this.tryShell(`cat ${this.remoteDump}`) : null;
+      if (read?.stdout.includes('<node') === true) {
         xml = read.stdout;
         break;
       }
-      last = dumped.status === 0 ? read.text : dumped.text;
+      last = read?.text ?? dumped.text;
       if (attempt < 4) blockMs(500);
     }
     if (xml === '') {
