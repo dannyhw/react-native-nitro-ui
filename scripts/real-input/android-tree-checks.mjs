@@ -3007,13 +3007,18 @@ async function buttonGroupChecks(t) {
  *
  * A cycle of the leak check ends by leaving this `Picker` unmounted on purpose, with only its
  * remount button left on the row, so reaching the row has to press that button. The node is
- * found by testID because it is the box the tap has to land on, whatever the tree calls it.
+ * found by testID because it is the box the tap has to land on, whatever the tree calls it. The
+ * drags are slow and short: a fling carries a row this small clean past the window between two
+ * dumps, and a row that was never in a dump was never on screen.
  *
  * @param {ReturnType<typeof makeContext>} t
  */
 async function reachDropPicker(t) {
+  const { width, height } = t.screenSize();
+  const edge = width - 8;
+  const middle = Math.round(height / 2);
   for (const direction of [1, -1]) {
-    for (let attempt = 0; attempt < 6; attempt += 1) {
+    for (let attempt = 0; attempt < 26; attempt += 1) {
       const picker = t.nodeByTestId('real-input-drop-picker');
       if (picker != null && picker.bounds.height > 0) return picker;
       const remount = t.nodeByTestId('real-input-drop-remount');
@@ -3021,7 +3026,7 @@ async function reachDropPicker(t) {
         await t.tapNode(remount);
         continue;
       }
-      await t.scrollPage(direction * 700);
+      await t.swipePx(edge, middle, edge, middle - direction * 400, 900);
     }
   }
   t.log.abort(
