@@ -13,11 +13,11 @@ import {
   ledgerLineFromRun,
   planRerunFailed,
   realInputUnitsFromResults,
+  RELAXING_SWITCHES,
   renderGateTable,
 } from '../gate-core.mjs';
 import { Suite } from '../real-input/report.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
-import { FREE_LSOF } from './helpers/free-lsof-stub.js';
 import {
   DEFAULT_PAIR,
   leaseRecord,
@@ -506,6 +506,8 @@ function gitEnv(dir) {
     'GIT_INDEX_FILE',
     'GIT_COMMON_DIR',
     'GIT_OBJECT_DIRECTORY',
+    // A switch inherited from the shell, `CI` on a CI runner, would mark every run relaxed.
+    ...RELAXING_SWITCHES,
   ]) {
     delete env[name];
   }
@@ -568,6 +570,9 @@ function makeRepo() {
       'exit ${FAKE_EXIT:-0}\n'
   );
   fs.chmodSync(path.join(bin, 'node'), 0o755);
+  // On PATH rather than through `NITRO_UI_LSOF_BIN`, which marks a run relaxed.
+  fs.writeFileSync(path.join(bin, 'lsof'), '#!/bin/sh\nexit 1\n');
+  fs.chmodSync(path.join(bin, 'lsof'), 0o755);
   return { dir, bin };
 }
 
@@ -584,7 +589,6 @@ function runCli({ dir, bin }, args, env = {}) {
       ...gitEnv(dir),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: LEASE }),
-      ...FREE_LSOF,
       FAKE_ARGS_LOG: path.join(dir, 'state', 'args.log'),
       ...env,
     },

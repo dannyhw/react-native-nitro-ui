@@ -16,8 +16,12 @@
  * and does not satisfy the full gate. A device gate reads its device from a
  * sourced `node scripts/lease.mjs acquire`.
  *
- * Each run appends one JSON line to `.gates/<branch>.jsonl` and writes its log
- * to `<git-common-dir>/nitro-ui-gates/<branch>/`, which outlives the worktree.
+ * Each run appends one JSON line to `.gates/<branch>.jsonl`, copies it to
+ * `<git-common-dir>/nitro-ui-gate-evidence/<branch>.jsonl` and writes its log to
+ * `<git-common-dir>/nitro-ui-gates/<branch>/`; both outlive the worktree.
+ * When this branch has no line of its own that decides a gate on the current
+ * digest, `status`, `need` and `table` take the newest full run on that digest
+ * from the clone-wide record, green or red.
  *
  * Exit codes: a gate run and `wait` exit with the gate's own code; 1 for a gate
  * refused before the run or an unmet `need`; 2 for a usage error; 13 from
@@ -48,6 +52,8 @@ import {
   DEVICE_CONTEXT_START,
   explainNeedRow,
   formatCompletion,
+  formatFrom,
+  gateEvidenceStoreDir,
   gateLogStoreDir,
   gateTreesFromEntries,
   gatesTouchedByPaths,
@@ -59,7 +65,10 @@ import {
   isUsageProbe,
   lastLogLine,
   ledgerFileName,
+  judgeDigest,
   ledgerLineFromRun,
+  relaxedSwitches,
+  formatRelaxed,
   ledgerLogCandidates,
   ledgerRelativePath,
   logNameFor,
@@ -451,7 +460,47 @@ function appendLedgerLine(branch, line) {
   const file = ledgerFile(branch);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
+  appendEvidenceLine(branch, line);
   return file;
+}
+
+/** The clone-wide record's directory, or `null` when git has no common dir to give. */
+function evidenceDir() {
+  const { commonDir } = store();
+  return commonDir == null ? null : gateEvidenceStoreDir(commonDir);
+}
+
+/**
+ * Copies a ledger line into the clone-wide record. A failure costs only the
+ * evidence other branches could have used, so it is reported and the run stands.
+ */
+function appendEvidenceLine(branch, line) {
+  const dir = evidenceDir();
+  if (dir == null) return;
+  const file = path.join(dir, ledgerFileName(branch));
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
+  } catch (error) {
+    process.stderr.write(
+      `ledger: could not copy this run to ${file} (${String(error?.message ?? error)}): other branches will not see it\n`
+    );
+  }
+}
+
+/**
+ * Every line in the clone-wide record, from every branch including this one.
+ * A line's `branch` is taken from the file it is in, which is where it was
+ * recorded. Only lines `foreignVerdict` accepts ever decide anything.
+ */
+function readEvidence() {
+  const dir = evidenceDir();
+  if (dir == null) return [];
+  return ledgersUnder(dir).flatMap(({ branch, entries }) =>
+    entries
+      .filter((entry) => !entry.corrupt)
+      .map((entry) => ({ ...entry, branch }))
+  );
 }
 
 /**
@@ -1146,6 +1195,13 @@ function readTrees() {
     ...full,
     trees: platformTreesFromEntries(entries),
     gateTrees: gateTreesFromEntries(entries),
+    judge: judgeDigest((file) => {
+      try {
+        return fs.readFileSync(path.join(repoRoot, file));
+      } catch {
+        return null;
+      }
+    }),
   };
 }
 
@@ -1795,6 +1851,8 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     signal: exit.signal,
     units,
     completion: completionRecord,
+    relaxed: relaxedSwitches(process.env),
+    judge: before.judge,
   });
   const file = appendLedgerLine(branch, line);
   // The store's record of this run. For a backgrounded run it is the "done"
@@ -1916,18 +1974,26 @@ function commandStatus({ stage }) {
   }
   const rows = summarizeGates({
     entries,
+    foreign: readEvidence(),
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
     stage,
   });
   for (const row of rows) {
     const entry = row.entry;
-    const completion = formatCompletion(entry);
+    const completion = [
+      formatCompletion(entry),
+      formatFrom(row),
+      formatRelaxed(entry),
+    ]
+      .filter((part) => part != null)
+      .join(' ');
     const detail =
       entry == null
         ? ''
-        : ` [${String(entry.tree).slice(0, 12)}${row.matched == null ? ' not this tree' : row.matched === 'full' ? '' : row.matched.includes(':') ? ' own digest' : ` ${row.matched} tree`}${formatMaybe(entry.durationMs)}${entry.lease != null ? ` lease ${entry.lease}` : ''}${row.why === 'moved' ? ' tree moved mid-run' : ''}${completion == null ? '' : ` ${completion}`}]`;
+        : ` [${String(entry.tree).slice(0, 12)}${row.matched == null ? ' not this tree' : row.matched === 'full' ? '' : row.matched.includes(':') ? ' own digest' : ` ${row.matched} tree`}${formatMaybe(entry.durationMs)}${entry.lease != null ? ` lease ${entry.lease}` : ''}${row.why === 'moved' ? ' tree moved mid-run' : ''}${completion === '' ? '' : ` ${completion}`}]`;
     process.stdout.write(`${row.state.padEnd(7)} ${row.gate}${detail}\n`);
   }
   const green = rows.filter((row) => row.state === 'green').length;
@@ -1954,27 +2020,25 @@ function formatMaybe(ms) {
 }
 
 /**
- * Every branch ledger in `.gates/` except `exceptBranch`. Branch names nest, so
- * this walks the directory and recovers each branch from its path.
+ * Every `<branch>.jsonl` under `dir`. Branch names nest, so this walks the
+ * directory and recovers each branch from its path.
  */
-function otherBranchLedgers(exceptBranch) {
+function ledgersUnder(dir) {
   const found = [];
-  const walk = (dir, prefix) => {
+  const walk = (current, prefix) => {
     let names;
     try {
-      names = fs.readdirSync(dir, { withFileTypes: true });
+      names = fs.readdirSync(current, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of names) {
-      const absolute = path.join(dir, entry.name);
+      const absolute = path.join(current, entry.name);
       if (entry.isDirectory()) {
         walk(absolute, `${prefix}${entry.name}/`);
         continue;
       }
       if (!entry.name.endsWith('.jsonl')) continue;
-      const branch = `${prefix}${entry.name.slice(0, -'.jsonl'.length)}`;
-      if (branch === exceptBranch) continue;
       let text;
       try {
         text = fs.readFileSync(absolute, 'utf8');
@@ -1982,14 +2046,24 @@ function otherBranchLedgers(exceptBranch) {
         continue;
       }
       found.push({
-        branch,
-        source: path.relative(repoRoot, absolute),
+        branch: `${prefix}${entry.name.slice(0, -'.jsonl'.length)}`,
+        source: absolute,
         entries: parseLedger(text),
       });
     }
   };
-  walk(path.join(repoRoot, LEDGER_DIR), '');
+  walk(dir, '');
   return found;
+}
+
+/** Every branch ledger in this worktree's `.gates/` except `exceptBranch`. */
+function otherBranchLedgers(exceptBranch) {
+  return ledgersUnder(path.join(repoRoot, LEDGER_DIR))
+    .filter(({ branch }) => branch !== exceptBranch)
+    .map((ledger) => ({
+      ...ledger,
+      source: path.relative(repoRoot, ledger.source),
+    }));
 }
 
 function commandNeed({ stage, base }) {
@@ -2005,9 +2079,11 @@ function commandNeed({ stage, base }) {
 
   const decision = decideNeed({
     entries,
+    foreign: readEvidence(),
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
     stage,
     touchedPlatforms: touched.platforms,
     touchedGates,
@@ -2044,16 +2120,19 @@ function commandTable({ stage, full }) {
   const branch = currentBranch();
   const read = readTrees();
   const { entries, exists } = readLedger(branch);
+  const foreign = readEvidence();
   printCodeTree(read);
-  if (!exists) {
+  if (!exists && foreign.length === 0) {
     process.stderr.write('table: nothing recorded yet - run a gate first.\n');
     return 1;
   }
   const table = renderGateTable({
     entries,
+    foreign,
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
     stage,
     required: MERGE_GATES,
     evidence:
@@ -2069,9 +2148,11 @@ function commandTable({ stage, full }) {
     // print one table per recorded run.
     const rows = summarizeGates({
       entries,
+      foreign,
       tree: read.tree,
       trees: read.trees,
       gateTrees: read.gateTrees,
+      judge: read.judge,
       stage,
       required: MERGE_GATES,
     });
@@ -2448,6 +2529,7 @@ async function rerunFailedGate({ command, extraArgs, background }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
   });
   if (plan.refusal != null) {
     process.stderr.write(`gate: refused before the run - ${plan.refusal}\n`);

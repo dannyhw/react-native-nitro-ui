@@ -13,12 +13,115 @@ export const LEDGER_DIR = '.gates';
 export const LOG_STORE_BASENAME = 'nitro-ui-gates';
 
 /**
+ * The name of the clone-wide copy of every ledger, beside the log store: one
+ * `<branch>.jsonl` per branch, read by every worktree of the clone and left in
+ * place when a worktree is removed.
+ */
+export const EVIDENCE_STORE_BASENAME = 'nitro-ui-gate-evidence';
+
+/**
  * The shape of the JSON lines this version writes (see `ledgerLineFromRun`).
  * Older lines are still read: with no `gateTrees` a device gate compares on its
  * platform half, with no `trees` on the full digest, and with no `treeAfter` they
- * are taken at their word.
+ * are taken at their word. On another branch only a green line of this version
+ * counts: an older one lacks `relaxed` and `judge`, and a newer one may carry a
+ * field this version does not know to refuse.
  */
-export const LEDGER_VERSION = 7;
+export const LEDGER_VERSION = 8;
+
+/**
+ * Environment switches that loosen what a run checks: a run with any of them set
+ * is recorded as relaxed and is never evidence on another branch.
+ *
+ * - `NITRO_UI_ALLOW_UNSTAMPED`: tests whatever app the device has, unchecked.
+ * - `NITRO_UI_ALLOW_LOCALE_MISMATCH`: locale-dependent rows stop comparing.
+ * - `NITRO_UI_GATE_METRO_FORCE`, `NITRO_UI_GATE_DEVICE_FORCE`: start on a Metro
+ *   port, or a device, another run holds.
+ * - `NITRO_UI_LSOF_BIN`, `NITRO_UI_ADB_BIN`, `NITRO_UI_SIMCTL_BIN`: another
+ *   program answers for the port check or drives the device.
+ * - `HARNESS_TEST_TIMEOUT`, `REAL_INPUT_TIMEOUT`, `CI`: longer timeouts.
+ */
+export const RELAXING_SWITCHES = [
+  'NITRO_UI_ALLOW_UNSTAMPED',
+  'NITRO_UI_ALLOW_LOCALE_MISMATCH',
+  'NITRO_UI_GATE_METRO_FORCE',
+  'NITRO_UI_GATE_DEVICE_FORCE',
+  'NITRO_UI_LSOF_BIN',
+  'NITRO_UI_ADB_BIN',
+  'NITRO_UI_SIMCTL_BIN',
+  'HARNESS_TEST_TIMEOUT',
+  'REAL_INPUT_TIMEOUT',
+  'CI',
+];
+
+/**
+ * The relaxing switches set in `env`, as `{NAME: value}`; `{}` when none is.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {Record<string, string>}
+ */
+export function relaxedSwitches(env) {
+  return Object.fromEntries(
+    RELAXING_SWITCHES.filter(
+      (name) => env?.[name] != null && env[name] !== ''
+    ).map((name) => [name, String(env[name])])
+  );
+}
+
+/** Whether a line says no relaxing switch was set; a line that does not say is not. */
+export function isUnrelaxed(entry) {
+  const relaxed = entry?.relaxed;
+  return (
+    relaxed != null &&
+    typeof relaxed === 'object' &&
+    !Array.isArray(relaxed) &&
+    Object.keys(relaxed).length === 0
+  );
+}
+
+/**
+ * `relaxed: NAME, ...` for a line run with relaxing switches, else `null`. The
+ * values stay on the line: one can be a local path.
+ */
+export function formatRelaxed(entry) {
+  const relaxed = entry?.relaxed;
+  if (relaxed == null || typeof relaxed !== 'object') return null;
+  const names = Object.keys(relaxed);
+  if (names.length === 0) return null;
+  return `relaxed: ${names.join(', ')}`;
+}
+
+/**
+ * The check-only files a device run executes or that decide its result: the gate
+ * and its supervisor, the lease that hands out the device, and the modules they
+ * import that no device digest holds. A green run counts on another branch only
+ * when these are the same there.
+ */
+export const JUDGE_FILES = [
+  'scripts/gate.mjs',
+  'scripts/gate-core.mjs',
+  'scripts/gate-runner.mjs',
+  'scripts/lease.mjs',
+  'scripts/lease-core.mjs',
+  'scripts/doctor-core.mjs',
+  'scripts/build-slot-core.mjs',
+];
+
+/**
+ * One digest over `JUDGE_FILES`, hashed the way the code tree hashes a file.
+ *
+ * @param {(file: string) => string | Buffer | null} read a file's content, or
+ *   `null` when it is missing
+ * @returns {string}
+ */
+export function judgeDigest(read) {
+  const entries = {};
+  for (const file of JUDGE_FILES) {
+    const content = read(file);
+    if (content != null) entries[file] = contentHash(content);
+  }
+  return codeTreeDigest(entries);
+}
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -452,7 +555,9 @@ export function changedPathsGitArgs(mergeBase) {
  * It excludes docs, so a docs commit does not invalidate a device run; `head` is
  * recorded beside it and never gates anything. `stepTimings` (the steps of
  * `check`) and `suiteTimings` (the suites of a harness run) are records only: no
- * decision in this file reads them.
+ * decision in this file reads them. `relaxed` is `relaxedSwitches` of the run's
+ * environment; `null` means it was not read, and such a line is never evidence on
+ * another branch. `judge` is `judgeDigest` before the run.
  *
  * @returns {object} a JSON-ready line
  */
@@ -482,6 +587,8 @@ export function ledgerLineFromRun({
   signal = null,
   units = null,
   completion = null,
+  relaxed = null,
+  judge = null,
 }) {
   return {
     v: LEDGER_VERSION,
@@ -510,6 +617,8 @@ export function ledgerLineFromRun({
     signal,
     units,
     completion,
+    relaxed,
+    judge,
   };
 }
 
@@ -761,6 +870,63 @@ export function gateStateFor({
 }
 
 /**
+ * What a line recorded on another branch, or by another worktree, says about
+ * `gate` for the tree being asked about. Stricter than a line of this branch:
+ *
+ *   - a full run of a device gate, or a completion of one. Never `check`: it reads
+ *     docs, `bench/` and READMEs, which the code tree leaves out;
+ *   - compared on the gate's own digest only, never on a fallback, so a line
+ *     written before per-gate digests never counts;
+ *   - the tree, and the gate's digest, were read again after the run and had not
+ *     moved; a line without that second reading never counts;
+ *   - not filtered: the command is the gate's own unfiltered command;
+ *   - for a green, written by this ledger version, not relaxed: the line says no relaxing switch was set, and
+ *     judged by the same gate code: its `judge` digest equals `judge`. A red
+ *     still decides either way, since it can only ask for a run.
+ *
+ * @returns {{state: 'green'|'red', key: string} | null} the verdict and the
+ *   digest key it matched on, or `null` when the line decides nothing here
+ */
+export function foreignVerdict({ gate, entry, gateTrees, judge }) {
+  if (entry == null || entry.corrupt || entry.gate !== gate) return null;
+  const own = deviceGateOf(gate);
+  if (own == null || !MERGE_GATES.includes(gate)) return null;
+  if (entry.result !== 'pass' && entry.result !== 'fail') return null;
+  if (entry.tree == null || entry.treeAfter !== entry.tree) return null;
+  if (entry.completion == null) {
+    let command;
+    try {
+      command = resolveGate(gate).argv.join(' ');
+    } catch {
+      return null;
+    }
+    if (entry.command !== command) return null;
+  } else if (
+    entry.completion.of == null ||
+    !String(entry.completion.filtered ?? '').startsWith(`${gate}:`)
+  ) {
+    return null;
+  }
+  const want = gateTrees?.[own] ?? null;
+  const got = entry.gateTrees?.[own] ?? null;
+  if (want == null || got !== want) return null;
+  if (entry.gateTreesAfter?.[own] !== got) return null;
+  if (entry.result === 'fail') return { state: 'red', key: own };
+  if (entry.v !== LEDGER_VERSION || !isUnrelaxed(entry)) return null;
+  if (judge == null || entry.judge !== judge) return null;
+  return { state: 'green', key: own };
+}
+
+/**
+ * The digest key a line from elsewhere proves `gate` on, or `null` when it proves
+ * nothing here (see `foreignVerdict`).
+ */
+export function foreignProofKey(options) {
+  const verdict = foreignVerdict(options);
+  return verdict?.state === 'green' ? verdict.key : null;
+}
+
+/**
  * The row for one gate, given every line it has.
  *
  * The latest line whose digest matches the tree being asked about wins: a pass on
@@ -769,21 +935,30 @@ export function gateStateFor({
  * is returned as `stale`, so `status` can still name the tree it came from. A line
  * whose tree moved mid-run is never decisive.
  *
+ * `foreign` are the lines of this gate in the clone-wide record, from every
+ * branch including this one. They are read only when no line of this branch
+ * decides. Then the newest line `foreignVerdict` accepts decides, green or red, so
+ * a branch whose newest run on these files is red makes this row red too. Such a
+ * row carries `from`, the branch the run was recorded on.
+ *
  * @param {object} options
  * @param {string} options.gate
  * @param {object[]} [options.list] that gate's lines, in append order
+ * @param {object[]} [options.foreign] that gate's lines from the clone-wide record
  * @param {'review'|'merge'} [options.stage]
  * @param {string | null} [options.tree]
  * @param {Record<string, string> | null} [options.trees]
- * @returns {object} a row: `{gate, state, entry, matched, key, why, want, got}`
+ * @returns {object} a row: `{gate, state, entry, matched, key, why, want, got, from}`
  */
 export function gateRowFor({
   gate,
   list = [],
+  foreign = [],
   stage = 'merge',
   tree = null,
   trees = null,
   gateTrees = null,
+  judge = null,
 }) {
   const args = { gate, stage, tree, trees, gateTrees };
   let decisive = null;
@@ -793,8 +968,29 @@ export function gateRowFor({
     if (row.state === 'green' || row.state === 'red') decisive = row;
     latest = row;
   }
-  if (decisive != null) return { gate, ...decisive };
-  if (latest != null) return { gate, ...latest };
+  if (decisive != null) return { gate, from: null, ...decisive };
+  let proof = null;
+  for (const entry of foreign) {
+    const verdict = foreignVerdict({ gate, entry, gateTrees, judge });
+    if (verdict == null) continue;
+    if (proof == null || !(Date.parse(entry.ts) < Date.parse(proof.entry.ts)))
+      proof = { entry, ...verdict };
+  }
+  if (proof != null) {
+    const digest = gateTrees?.[proof.key] ?? null;
+    return {
+      gate,
+      state: proof.state,
+      entry: proof.entry,
+      matched: proof.key,
+      key: proof.key,
+      why: null,
+      want: digest,
+      got: digest,
+      from: String(proof.entry.branch ?? 'another branch'),
+    };
+  }
+  if (latest != null) return { gate, from: null, ...latest };
   return {
     gate,
     state: 'missing',
@@ -804,6 +1000,7 @@ export function gateRowFor({
     why: null,
     want: tree,
     got: null,
+    from: null,
   };
 }
 
@@ -833,6 +1030,7 @@ export function gatesSeen(entries, required = MERGE_GATES) {
  *
  * @param {object} options
  * @param {object[]} options.entries
+ * @param {object[]} [options.foreign] lines recorded elsewhere in the clone
  * @param {string | null} [options.tree] the full code tree
  * @param {Record<string, string> | null} [options.trees] the per-platform trees
  * @param {'review'|'merge'} [options.stage] how strict a match counts
@@ -841,15 +1039,27 @@ export function gatesSeen(entries, required = MERGE_GATES) {
  */
 export function summarizeGates({
   entries,
+  foreign = [],
   tree = null,
   trees = null,
   gateTrees = null,
+  judge = null,
   stage = 'review',
   required = MERGE_GATES,
 }) {
   const lists = listByGate(entries);
+  const elsewhere = listByGate(foreign);
   return gatesSeen(entries, required).map((gate) =>
-    gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees, gateTrees })
+    gateRowFor({
+      gate,
+      list: lists[gate] ?? [],
+      foreign: elsewhere[gate] ?? [],
+      stage,
+      tree,
+      trees,
+      gateTrees,
+      judge,
+    })
   );
 }
 
@@ -858,6 +1068,7 @@ export function summarizeGates({
  *
  * @param {object} options
  * @param {object[]} options.entries ledger lines
+ * @param {object[]} [options.foreign] lines recorded elsewhere in the clone
  * @param {string | null} options.tree the full code tree being asked about
  * @param {Record<string, string> | null} [options.trees] the per-platform trees
  * @param {'review'|'merge'} options.stage
@@ -870,9 +1081,11 @@ export function summarizeGates({
  */
 export function decideNeed({
   entries,
+  foreign = [],
   tree,
   trees = null,
   gateTrees = null,
+  judge = null,
   stage,
   touchedPlatforms = [],
   touchedGates = null,
@@ -886,8 +1099,18 @@ export function decideNeed({
     touchedGates,
   });
   const lists = listByGate(entries);
+  const elsewhere = listByGate(foreign);
   const required = requiredGates.map((gate) =>
-    gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees, gateTrees })
+    gateRowFor({
+      gate,
+      list: lists[gate] ?? [],
+      foreign: elsewhere[gate] ?? [],
+      stage,
+      tree,
+      trees,
+      gateTrees,
+      judge,
+    })
   );
 
   const missing = required
@@ -1078,6 +1301,7 @@ function formatTreeCell(row) {
  *
  * @param {object} options
  * @param {object[]} options.entries
+ * @param {object[]} [options.foreign] lines recorded elsewhere in the clone
  * @param {string | null} [options.tree]
  * @param {Record<string, string> | null} [options.trees]
  * @param {'review'|'merge'} [options.stage]
@@ -1087,18 +1311,22 @@ function formatTreeCell(row) {
  */
 export function renderGateTable({
   entries,
+  foreign = [],
   tree = null,
   trees = null,
   gateTrees = null,
+  judge = null,
   stage = 'review',
   required = MERGE_GATES,
   evidence = null,
 }) {
   const rows = summarizeGates({
     entries,
+    foreign,
     tree,
     trees,
     gateTrees,
+    judge,
     stage,
     required,
   });
@@ -1112,9 +1340,12 @@ export function renderGateTable({
     // A completed run is never shown as a clean one: the result says how it was
     // reached, and the duration names the full run it finished.
     const completion = formatCompletion(entry);
+    const how = [completion, formatFrom(row), formatRelaxed(entry)].filter(
+      (part) => part != null
+    );
     const result =
       `${STATE_LABELS[row.state] ?? row.state}` +
-      (completion == null ? '' : ` (${completion})`);
+      (how.length === 0 ? '' : ` (${how.join('; ')})`);
     const of = entry?.completion?.of;
     const duration =
       entry == null
@@ -1262,6 +1493,17 @@ export function ledgerRelativePath(branch) {
  */
 export function gateLogStoreDir(commonDir) {
   return `${String(commonDir).replace(/\/+$/, '')}/${LOG_STORE_BASENAME}`;
+}
+
+/**
+ * The clone-wide record of every ledger line, beside the log store, so a run is
+ * still evidence for another branch after its worktree is removed.
+ *
+ * @param {string} commonDir the output of `git rev-parse --git-common-dir`
+ * @returns {string}
+ */
+export function gateEvidenceStoreDir(commonDir) {
+  return `${String(commonDir).replace(/\/+$/, '')}/${EVIDENCE_STORE_BASENAME}`;
 }
 
 /**
@@ -2249,6 +2491,11 @@ export function completeRerun({
   return { result: why.length === 0 ? 'pass' : 'fail', units: merged, why };
 }
 
+/** `from task/x` for a row proved by a run recorded on another branch, else `null`. */
+export function formatFrom(row) {
+  return row?.from == null ? null : `from \`${row.from}\``;
+}
+
 /** `completed: 1 of 28 units re-run, attempt 1` - what a completed row says. */
 export function formatCompletion(entry) {
   const completion = entry?.completion;
@@ -2264,8 +2511,12 @@ export function formatCompletion(entry) {
 /** The line `need` prints for one row, with the reason when it is not satisfied. */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
-    const completion = formatCompletion(row.entry);
-    const how = completion == null ? '' : ` (${completion})`;
+    const parts = [
+      formatCompletion(row.entry),
+      formatFrom(row),
+      formatRelaxed(row.entry),
+    ].filter((part) => part != null);
+    const how = parts.length === 0 ? '' : ` (${parts.join('; ')})`;
     if (row.matched != null && DEVICE_GATES.includes(row.matched))
       return `${row.gate} — green on its own digest${how}`;
     return row.matched != null && row.matched !== 'full'
@@ -2273,7 +2524,8 @@ export function explainNeedRow(row, codeTree) {
       : `${row.gate} — green${how}`;
   }
   if (row.state === 'red') {
-    return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${row.entry?.logPath ?? 'no log'})`;
+    const from = formatFrom(row);
+    return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${row.entry?.logPath ?? 'no log'}${from == null ? '' : `, ${from}`})`;
   }
   if (row.state === 'stale') {
     const ran = String(row.got ?? row.entry?.tree ?? '?').slice(0, 12);
