@@ -70,8 +70,8 @@ export async function actsOnOneNamedNode(
     expect(
       await readState(named, options.state),
       `"${options.name}" does not report "${options.state}" on the node a person ` +
-        'acts on — a name on one node and a state on another is the defect this ' +
-        'rule exists for'
+        'acts on. A name on one node and a state on another is what this rule exists ' +
+        'to catch'
     ).toBe(true);
   }
 }

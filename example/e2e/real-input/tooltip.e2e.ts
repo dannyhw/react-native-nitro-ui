@@ -13,9 +13,9 @@ test('a real tap opens the tooltip, its action is reported, and the tip goes awa
   const log = screen.getByTestId('tooltip-log');
   await reveal(screen, opener);
 
-  // Eight failures in the evidence were all mutation catches: the tooltip check
-  // itself has never hidden a defect. What is kept is the delivery proof through a
-  // window of its own (`tooltip-rich-tooltip`) and the action inside it.
+  // The tooltip is presented in a window of its own (`tooltip-rich-tooltip`), so the
+  // action is tapped inside it: a tap that reached the page behind would count for
+  // nothing here, and the log line is JS's own record of what the press did.
   await expect(log).toHaveText('none');
   await opener.tap();
   const tip = screen.getByTestId('tooltip-rich-tooltip');

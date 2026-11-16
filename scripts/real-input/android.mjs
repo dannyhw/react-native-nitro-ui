@@ -124,7 +124,7 @@ function resolveDevice(env) {
   }
   if (isReservedSerial(device.serial)) {
     throw new Error(
-      `real-input: ${device.serial} is the serial no task may use. ` +
+      `real-input: ${device.serial} is the serial no lease may use. ` +
         'Refusing to touch it.'
     );
   }
