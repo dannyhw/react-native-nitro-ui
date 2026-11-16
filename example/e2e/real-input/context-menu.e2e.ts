@@ -42,6 +42,7 @@ const COUNTERS = [
   'press',
   'opens',
   'closes',
+  'selects',
   'below',
   'inner',
   'outer',
@@ -187,7 +188,7 @@ async function scrollToTop(screen: Screen): Promise<void> {
   );
 }
 
-test('quick taps belong to the child, and a still hold opens the menu at the finger every time', async ({
+test('quick taps belong to the child, and each of three still holds opens the menu at the finger, leaves the child alone and reports the pick before the close', async ({
   app,
   screen,
 }) => {
@@ -224,7 +225,23 @@ test('quick taps belong to the child, and a still hold opens the menu at the fin
     ).toBe(true);
     await screen.getByText('Copy text').tap();
     await popupsReach(0);
-    await countReaches(screen, 'closes', before.closes + 1);
+    const picked = await countReaches(screen, 'closes', before.closes + 1);
+    // Every cycle, not only the first: a menu can open, pick or order its events
+    // correctly once and differently the next time it is shown.
+    expect(picked.press, `hold ${String(hold)} pressed the child`).toBe(
+      before.press
+    );
+    expect(picked.selects, `hold ${String(hold)}'s pick was not reported`).toBe(
+      before.selects + 1
+    );
+    const order = ((await screen.getByTestId('ctx-order').textContent()) ?? '')
+      .replace('order=', '')
+      .split(',')
+      .slice(-3)
+      .join(',');
+    expect(order, `hold ${String(hold)}'s events are out of order`).toBe(
+      'open,select:copy,close'
+    );
 
     // After a menu, the next tap is an ordinary press again, and only one.
     await screen.tapAt(at);
