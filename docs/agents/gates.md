@@ -34,12 +34,14 @@ any unit that never ran. The outcome is recorded under the full gate's name.
 
 ## Running two gates at once
 
-An iOS gate and an Android gate can run at the same time from one worktree, each under its own
-lease (`--platform ios` for one shell, `--platform android` for the other), and both record
-correctly. One lease is not enough: it exports one Metro port, a harness run starts its own
-Metro that serves the harness's entry instead of the app's, and the gate refuses a port that is
-already served. Two harness runs at once share `example/harness-run/state.json`, so run the
-harness gates one after the other.
+One lease cannot run an iOS gate and an Android gate at once: it exports one Metro port, a
+harness run starts its own Metro that serves the harness's entry instead of the app's, and the
+second gate is refused because the port is already served. Side by side takes two leases, one
+per platform (`--platform ios` in one shell, `--platform android` in the other), so each run
+has its own Metro port and device claim. Nothing else the two runs write is shared: the ledger
+takes one appended line per run, and each platform has its own `.real-input/<platform>/` and
+build stamp. Two harness runs at once would share `example/harness-run/state.json`, so the
+harness gates run one after the other.
 
 ## Waiting for a gate
 

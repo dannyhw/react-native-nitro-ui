@@ -605,8 +605,8 @@ Each device gate is keyed to the files its own run reads: an edit under `example
 no real-input gate. A red full `harness:<p>` or `real-input:<p>` run can be completed with
 `--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
 outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
-and an Android gate run side by side from one worktree under two leases, one per platform,
-because each needs a Metro port of its own.
+and an Android gate run side by side from one worktree only under two leases, one per platform:
+each needs a Metro port of its own, and one lease has one.
 
 What review and merge need, how a run is matched to the tree, completing a red run, waiting for
 a background gate, and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
