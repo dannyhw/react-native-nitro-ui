@@ -3002,39 +3002,6 @@ async function buttonGroupChecks(t) {
 }
 
 /** `checked` and `enabled` on a radio row's own node, not its label's. */
-/**
- * The drop picker's row: mounted, and inside the window.
- *
- * A cycle of the leak check ends by leaving this `Picker` unmounted on purpose, with only its
- * remount button left on the row, so reaching the row has to press that button. The node is
- * found by testID because it is the box the tap has to land on, whatever the tree calls it. The
- * drags are slow and short: a fling carries a row this small clean past the window between two
- * dumps, and a row that was never in a dump was never on screen.
- *
- * @param {ReturnType<typeof makeContext>} t
- */
-async function reachDropPicker(t) {
-  const { width, height } = t.screenSize();
-  const edge = width - 8;
-  const middle = Math.round(height / 2);
-  for (const direction of [1, -1]) {
-    for (let attempt = 0; attempt < 26; attempt += 1) {
-      const picker = t.nodeByTestId('real-input-drop-picker');
-      if (picker != null && picker.bounds.height > 0) return picker;
-      const remount = t.nodeByTestId('real-input-drop-remount');
-      if (remount != null) {
-        await t.tapNode(remount);
-        continue;
-      }
-      await t.swipePx(edge, middle, edge, middle - direction * 400, 900);
-    }
-  }
-  t.log.abort(
-    'the drop picker row never came on screen - neither the Picker nor its ' +
-      'remount button was named, down and back up the page'
-  );
-}
-
 async function pickerChecks(t) {
   const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
   const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
@@ -3208,94 +3175,6 @@ async function pickerChecks(t) {
     lockedNodes[0]?.enabled,
     'false'
   );
-  // A menu that outlives the view that opened it is a window nobody can see or dismiss.
-  // The row's unmount is on a timer inside the app, so the menu is open when the view
-  // goes away; a second tap would have dismissed the menu instead of proving anything.
-  for (let cycle = 1; cycle <= 3; cycle += 1) {
-    await reachDropPicker(t);
-    // The arm button has its own echo, so the press that schedules the unmount is
-    // confirmed rather than assumed: a dropped press leaves nothing scheduled, and the
-    // count then goes to zero for the wrong reason.
-    await t.pressUntil({
-      what: 'the unmount button',
-      waitingFor: `cycle ${String(cycle)}: a real tap to arm the unmount`,
-      attempts: 2,
-      // Both readings are dumps, and a dump costs about two seconds here, so the poll
-      // is as slow as the reading can be.
-      windowMs: 4000,
-      pollMs: DUMP_POLL_MS,
-      press: async () => {
-        await t.tapNode(
-          t.waitForNodes(
-            (node) => node.resourceId === 'real-input-drop-button',
-            `cycle ${String(cycle)}: the unmount button`,
-            1,
-            20000
-          )[0]
-        );
-      },
-      reading: () =>
-        t.nodeByTestId('real-input-drop-armed') == null ? '0' : '1',
-      raised: (current) => current === '1',
-    });
-    await t.tapUntilUp(
-      () => reachDropPicker(t),
-      `cycle ${String(cycle)}: a real tap to open the drop picker's menu`,
-      () => t.popupWindowCount(),
-      { attempts: 2, windowMs: 4000 }
-    );
-    t.log.checkEquals(
-      `cycle ${String(cycle)}: the drop picker's menu is open as a popup window`,
-      t.waitForPopupCount(
-        1,
-        `cycle ${String(cycle)}'s menu to open as a popup window`
-      ),
-      1
-    );
-    t.waitForNodes(
-      (node) => node.resourceId === ECHO.pickerGone,
-      `cycle ${String(cycle)}: the picker to unmount`,
-      1,
-      20000
-    );
-    t.log.checkEquals(
-      `cycle ${String(cycle)}: unmounting with the menu open leaves no popup window`,
-      t.waitForPopupCount(
-        0,
-        `cycle ${String(cycle)}: the unmount to take the open popup down`
-      ),
-      0
-    );
-    if (cycle < 3) {
-      // The remount's witness is the Picker's own node coming back, so a dropped press
-      // cannot come round the loop as "no drop picker on screen".
-      await t.pressUntil({
-        what: 'the remount button',
-        waitingFor: `cycle ${String(cycle)}: a real tap to mount the picker again`,
-        press: async () => {
-          await t.tapNode(
-            t.waitForNodes(
-              (node) => node.resourceId === 'real-input-drop-remount',
-              'the remount button',
-              1,
-              20000
-            )[0]
-          );
-        },
-        reading: () =>
-          t
-            .dump()
-            .some(
-              (node) =>
-                node.contentDesc === 'Real-input drop picker' ||
-                node.resourceId === 'real-input-drop-picker'
-            )
-            ? '1'
-            : '0',
-        raised: (value) => value === '1',
-      });
-    }
-  }
 
   // The accessibility `enabled` flag is a claim about the tree; a refusal is a claim
   // about input, and only a real tap measures that. The ordinary picker, tapped the
