@@ -86,11 +86,11 @@ instead of a screenshot.
 
 ## Device reads the driver will not make
 
-Four go straight to the device, each because the driver's own route cannot answer
-it, each named and explained in `example/e2e/real-input/device-read.ts`: the window
-manager's `ime` inset, one frame of the screen taken while a finger is down, the
-accessibility tree as `uiautomator dump` serves it, and the density a dp number has
-to be judged against.
+Four go straight to the device, each because the driver's own route cannot answer it:
+the window manager's `ime` inset and one frame of the screen taken while a finger is
+down (`device-read.ts`, whose `adbShell` names the leased serial on the leased adb
+server), the accessibility tree as `uiautomator dump` serves it (`os-tree.ts`), and
+the density a dp number has to be judged against (`device-read.ts`).
 
 `keyboard.ts` also _writes_ two device settings — it swaps in the emulator's real
 IME and lifts `show_ime_with_hard_keyboard`, because agent-device's own IME never
