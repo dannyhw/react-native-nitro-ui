@@ -143,20 +143,39 @@ export async function withRealKeyboard<T>(body: () => Promise<T>): Promise<T> {
   }
 }
 
-/**
- * The keyboard's top edge, in device px, right now.
- *
- * Exported because a placement check judges a *second* box against the same edge the
- * field was measured against. Each box gets its own read — the read that waits for a
- * keyboard and the read that measures one answer different questions — so every read
- * here happens after the keyboard is up, which is the only property that makes two of
- * them comparable.
- */
-export function keyboardTop(): number {
-  return requireKeyboardTop('while the popup was being measured,');
+/** A box, in the two numbers a keyboard-avoidance check compares. */
+export type FieldBox = { y: number; height: number };
+
+/** The poll the two rest conditions are read on. */
+const REST_POLL_MS = 250;
+
+/** Two readings of one box that a rounding difference cannot tell apart. */
+function sameBox(left: FieldBox | null, right: FieldBox | null): boolean {
+  if (left == null || right == null) return false;
+  return (
+    Math.round(left.y) === Math.round(right.y) &&
+    Math.round(left.height) === Math.round(right.height)
+  );
 }
 
-/** The keyboard's top edge, failing with the dump's own IME lines. */
+/**
+ * The keyboard's top edge, or `null` when the dump carries no visible one.
+ *
+ * `ime-frame.mjs` answers `null` for "this dump never mentioned a visible keyboard"
+ * and never for "the keyboard is at the top", so a `null` here is the window manager
+ * saying the keyboard is not up rather than a keyboard sitting at y = 0.
+ */
+function rawKeyboardTop(): { top: number | null; sample: string } {
+  const dump = adb(['dumpsys', 'activity', 'top']);
+  return { top: imeInsetTop(dump), sample: imeInsetSample(dump) };
+}
+
+/**
+ * The keyboard's top edge, failing with the dump's own IME lines.
+ *
+ * The words are for the case the settle ended with no keyboard at all: a measurement
+ * of nothing would otherwise read as a field that avoided it.
+ */
 function requireKeyboardTop(when: string): number {
   const dump = adb(['dumpsys', 'activity', 'top']);
   const top = imeInsetTop(dump);
@@ -224,15 +243,84 @@ export async function focusAndExpectKeyboard(
 }
 
 /**
+ * The keyboard's edge and the field's box, once both have come to rest.
+ *
+ * The inset animates in and a popup moves with it, so one read of each measures a
+ * keyboard still on its way up and a popup that has not started to move — the
+ * recorded failure was a field 431 px below an edge that had not finished arriving.
+ * The conditions, in order and inside the deadline {@link expectKeyboard} already
+ * allows: the edge equal on two reads, then the field's box different from the box it
+ * had before the field was focused (only when a caller names one — a popup has to move
+ * clear, a field that was already clear does not), then that box equal on two reads.
+ *
+ * The placement itself is never polled: a popup passing through a valid spot would
+ * settle green. At the deadline the last readings are handed back, so the assertions
+ * below still print the same numbers for a layout that never settles.
+ */
+export async function measureAtRest(
+  field: Locator,
+  movedFrom: FieldBox | null = null
+): Promise<{ keyboardTop: number; fieldBox: FieldBox | null }> {
+  const deadline = Date.now() + KEYBOARD_TIMEOUT_MS;
+  let edgeAgreements = 0;
+  let lastEdge: number | null = null;
+  let boxAgreements = 0;
+  let lastBox: FieldBox | null = null;
+  let hasMoved = movedFrom == null;
+  while (Date.now() < deadline) {
+    const edge = rawKeyboardTop();
+    if (edge.top == null) {
+      edgeAgreements = 0;
+      lastEdge = null;
+      await new Promise((resolve) => setTimeout(resolve, REST_POLL_MS));
+      continue;
+    }
+    edgeAgreements = edge.top === lastEdge ? edgeAgreements + 1 : 0;
+    lastEdge = edge.top;
+    if (edgeAgreements < 1) {
+      await new Promise((resolve) => setTimeout(resolve, REST_POLL_MS));
+      continue;
+    }
+    const read: FieldBox | null = await field.boundingBox();
+    if (!hasMoved && movedFrom != null) {
+      hasMoved = !sameBox(read, movedFrom);
+      if (!hasMoved) {
+        lastBox = read;
+        boxAgreements = 0;
+        await new Promise((resolve) => setTimeout(resolve, REST_POLL_MS));
+        continue;
+      }
+    }
+    boxAgreements = sameBox(read, lastBox) ? boxAgreements + 1 : 0;
+    lastBox = read;
+    if (boxAgreements >= 1 && hasMoved) {
+      return { keyboardTop: edge.top, fieldBox: read };
+    }
+    await new Promise((resolve) => setTimeout(resolve, REST_POLL_MS));
+  }
+  return {
+    keyboardTop:
+      lastEdge ??
+      requireKeyboardTop('while the focused field was being measured,'),
+    fieldBox: lastBox,
+  };
+}
+
+/**
  * The field stays above the keyboard.
  *
  * What a person gets: the caret and what they have typed are visible. What the
- * defect gave (G24): a field laid out behind the IME, so the app was still
+ * defect gave: a field laid out behind the IME, so the app was still
  * taking keystrokes nobody could see.
  */
-export async function fieldAboveKeyboard(field: Locator): Promise<void> {
-  const top = requireKeyboardTop('while the focused field was being measured,');
-  const box = await field.boundingBox();
+export async function fieldAboveKeyboard(
+  field: Locator,
+  movedFrom: FieldBox | null = null
+): Promise<void> {
+  const { keyboardTop: top, fieldBox: box } = await measureAtRest(
+    field,
+    movedFrom
+  );
   expect(
     box,
     'the focused field has no box to measure against the keyboard'

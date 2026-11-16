@@ -1,7 +1,7 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
-import { openScreen, reveal } from './support';
+import { centreOf, openScreen, reveal } from './support';
 import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input date picker';
@@ -48,7 +48,10 @@ test('a real tap opens the date dialog, a day cell reaches JS, OK closes it', as
   await field.tap();
   const day = screen.getByLabel(target.label);
   await day.waitFor({ state: 'visible' });
-  await day.tap();
+  // The cell's own box rather than the driver's tap: the day is one node whose
+  // clickable part belongs to another, and a named node like this gets no touch
+  // point of its own to press.
+  await screen.tapAt(await centreOf(day));
   await screen.getByText(/^OK$/).tap();
   await expect(value).toHaveText(target.iso);
 });

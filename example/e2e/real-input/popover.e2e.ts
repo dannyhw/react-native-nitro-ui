@@ -10,7 +10,7 @@ import { openScreen, reveal } from './support';
 import {
   fieldAboveKeyboard,
   focusAndExpectKeyboard,
-  keyboardTop,
+  measureAtRest,
   withRealKeyboard,
 } from './keyboard';
 
@@ -61,8 +61,9 @@ test('a TextInput inside a popover stays above the keyboard (G22)', async ({
   await popover.waitFor({ state: 'visible' });
   const field = popover.getByTestId('popover-inner-field');
   await withRealKeyboard(async () => {
+    const beforeFocus = await field.boundingBox();
     await focusAndExpectKeyboard(field);
-    await fieldAboveKeyboard(field);
+    await fieldAboveKeyboard(field, beforeFocus);
   });
 });
 
@@ -90,9 +91,12 @@ test('the keyboard pushes the popover itself, not only the field inside it (G22)
   await popover.waitFor({ state: 'visible' });
   const field = popover.getByTestId('popover-inner-field');
   await withRealKeyboard(async () => {
+    const beforeFocus = await field.boundingBox();
     await focusAndExpectKeyboard(field);
+    // The popup's box is read once the keyboard's edge and the field's box have come to
+    // rest, and judged against that same edge — the edge the popup was placed against.
+    const { keyboardTop: top } = await measureAtRest(field, beforeFocus);
     const density = displayDensity();
-    const top = keyboardTop();
     const popupBox = await popover.boundingBox();
     // `fieldAboveKeyboard` alone is half-blind here, and G22 stayed hidden because
     // of it: a popup pinned to the top of the screen keeps the field above the
@@ -116,6 +120,6 @@ test('the keyboard pushes the popover itself, not only the field inside it (G22)
         'ignores the keyboard parks wherever it likes, and the field inside it is ' +
         'only visible by accident'
     ).toBe(true);
-    await fieldAboveKeyboard(field);
+    await fieldAboveKeyboard(field, beforeFocus);
   });
 });

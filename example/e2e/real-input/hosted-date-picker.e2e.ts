@@ -1,7 +1,7 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
-import { openScreen, reveal } from './support';
+import { centreOf, openScreen, reveal } from './support';
 import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Hosted date picker';
@@ -30,7 +30,10 @@ test('a hosted DatePicker opens its dialog, and a day cell reaches JS', async ({
   // button's own drawn text.
   const day = screen.getByLabel('Friday, May 22, 2026');
   await day.waitFor({ state: 'visible' });
-  await day.tap();
+  // The cell's own box rather than the driver's tap: the day is one node whose
+  // clickable part belongs to another, and a named node like this gets no touch
+  // point of its own to press.
+  await screen.tapAt(await centreOf(day));
   await screen.getByText(/^OK$/).tap();
   await expect(value).toHaveText('2026-05-22');
 });
