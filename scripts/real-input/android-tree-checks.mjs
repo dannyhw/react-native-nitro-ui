@@ -2998,6 +2998,29 @@ async function pickerChecks(t) {
     t.waitForPopupCount(0, 'the back gesture to take the popup down'),
     0
   );
+  // The way out that changes nothing: the row already on show. It closes the menu and
+  // reports no choice. The row tap stays blind because its correct outcome is that
+  // nothing is reported, so there is no witness to wait for and a retry would press a
+  // closing menu a second time.
+  await t.tapUntilUp(
+    () => t.requireControlAt('Real-input picker', anchor),
+    'a real tap that reopens the menu',
+    () => t.popupWindowCount()
+  );
+  await t.tapNode(t.waitForOption('Onyx', 'the menu to show the current choice'));
+  t.log.checkEquals(
+    'tapping the row that is already chosen closes the menu',
+    t.waitForPopupCount(
+      0,
+      'a pick of the row already chosen to take the menu down'
+    ),
+    0
+  );
+  t.log.checkEquals(
+    'and a choice that changed nothing reports nothing',
+    t.requireEcho(ECHO.pickerEvents),
+    '0'
+  );
 
   await t.requireControlOnScreen('Real-input radio picker');
   t.log.checkEquals(
