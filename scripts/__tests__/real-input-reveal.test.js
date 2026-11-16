@@ -20,7 +20,13 @@ const PAGE_HEIGHT = 8000;
 const ROW_HEIGHT = 120;
 
 function fakePage() {
-  const page = { scroll: 0, drags: [], travels: [], waits: 0 };
+  const page = {
+    scroll: 0,
+    drags: [],
+    travels: [],
+    waits: 0,
+    mounted: true,
+  };
 
   const fixed = (box) => ({
     count: async () => 1,
@@ -39,10 +45,13 @@ function fakePage() {
       const { y } = box();
       return y + ROW_HEIGHT > VIEW_TOP && y < VIEW_BOTTOM;
     };
-    const inTree = () => hosted || onScreen();
+    const inTree = () => page.mounted && (hosted || onScreen());
     return {
       count: async () => (inTree() ? 1 : 0),
       boundingBox: async () => {
+        // The engine keeps polling for the node, and a screen still mounting
+        // finishes within that wait.
+        page.mounted = true;
         if (!inTree()) {
           // The engine waits the whole action timeout for the node before refusing.
           page.waits += 1;
@@ -133,9 +142,15 @@ describe('reveal', () => {
     expect(page.scroll).toBe(0);
   });
 
-  it('never waits on a read of a control that is off screen', async () => {
+  it('waits on an off-screen control only at the first read of a screen', async () => {
     await reveal(page.screen, page.row(3000));
     await reveal(page.screen, page.row(200));
-    expect(page.waits).toBe(0);
+    expect(page.waits).toBe(1);
+  });
+
+  it('lets a screen still mounting show the control before it drags', async () => {
+    page.mounted = false;
+    await reveal(page.screen, page.row(1000));
+    expect(page.drags).toEqual([]);
   });
 });

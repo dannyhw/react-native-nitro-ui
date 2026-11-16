@@ -142,10 +142,14 @@ let downDrags = 0;
 /** Whether the page is known to be at its top: a fresh screen, or one just rewound. */
 let atTop = true;
 
+/** Whether nothing on this screen has been read yet. */
+let freshScreen = true;
+
 /** Forget any scrolling this test has done (the next screen starts at the top). */
 export function resetScrollCount(): void {
   downDrags = 0;
   atTop = true;
+  freshScreen = true;
   dragColumn = 0;
 }
 
@@ -200,7 +204,11 @@ export async function reveal(
   /** Drags that moved the control not at all: two of those is the page's end. */
   let stuck = 0;
   for (let attempt = 0; attempt <= swipes; attempt += 1) {
-    const box = await boxNow(locator);
+    // A screen whose tab was just tapped may still be mounting, and an absent read
+    // then sends a drag down a page that is about to show the control. The first
+    // read waits for the control as long as the engine waits for any node.
+    const box = freshScreen ? await boxOf(locator) : await boxNow(locator);
+    freshScreen = false;
     const shown = box != null && (await isShown(locator));
     const inBand = box != null && (await isInBand(screen, box));
     const inSafeBand = box != null && (await isInSafeBand(screen, box));
