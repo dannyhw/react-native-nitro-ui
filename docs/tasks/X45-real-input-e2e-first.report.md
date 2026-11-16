@@ -5,7 +5,41 @@
 
 ## Summary
 
-In progress. The device answers to the ten questions are below; the code items follow.
+All five behaviour items are done. The ten device answers are in the table below; three of
+them correct the context file.
+
+- **Item 2.** `device-read.ts` gains `popupWindowCount()` beside `adbShell`. The
+  `dumpsys window` parse moved out of `SweepDevice` into `scripts/real-input/popup-windows.mjs`,
+  which both now call. `os-tree.ts`'s `tree({ unmerged: true })` passes `--raw`. Q1, Q5 and Q7
+  show that this is the read that matches a dump node for node. A Material tooltip is a
+  `Pop-Up Window` the app owns, so the count is a valid oracle for it (checked on device).
+- **Item 3.** Of the 49 "Already in phase 1" lines, 30 are gone: 25 by deletion and 5 with the
+  tooltip block. 19 stay:
+  - **2 differ.** BG6 asserts the exact toggle set `bold,italic`, while phase 1 only checks
+    `toContainText('italic')`.
+  - **17 are the press that a later check needs.** B3, B7's press, D1, D3, G1, PO3a and PO3b
+    open the window that the next stay-check reads. CH4, CB5 and S3 lost their outer
+    `checkEquals` but keep the `tapUntilValue`, because CH6, CB6–CB8, S4 and S8 read the state
+    it leaves.
+
+  Before deleting, I read both sides of each line. For BG7, phase 2's tightest-clickable node
+  and phase 1's tightest-checkable node were compared on a dump: they are the same node.
+- **Item 4.** `stepper` and `tooltip` are e2e only; their blocks and entries are gone. Every
+  row moved. ST1–ST2 are one new test (a 2 px, 1.4 s `screen.swipe`, Q3, then one re-read
+  400 ms after the lift); TT1–TT13 are two tests, with "nothing opened" read from the popup
+  count.
+- **Item 5.** No context helper or module export lost its last caller. `ECHO` keeps
+  `stepperHoldValue`, `tooltipPresses` and `buttonGroupPressedId`: it is a catalogue that
+  mirrors the iOS `Echo` enum, and 50 of its keys already have no JS reader.
+- **Cost of the two moves.** About 35 minutes of work, from reading the blocks to the last red
+  proof. The device time was:
+  - one run of the four tests: 68 s;
+  - the three red-proof runs: about 2.5 min;
+  - two incremental Kotlin rebuilds, in and out of the mutation (11 s for the first);
+  - a `--control stepper --control tooltip` gate run: 11 min, almost all of it the whole-table
+    a11y sweep, which runs on every gate run.
+
+  The moved tests add 49 s to phase 1.
 
 ## Device answers
 
@@ -30,3 +64,53 @@ Where the device corrects the context file: Q1's route needs `--raw`, which the 
 say; in default mode a folded segment item is reported as a `RadioButton` with the item's box,
 so S6a's count still reads three but not on the dump's nodes; and Q8's caveat is a real
 difference, not a possible one.
+
+## Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1987 tests / 88 suites | `4cdd00fad042` | 1 m 30 s | start 17.7 / med 13.3 / max 18.9 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `4cdd00fad042` (android tree) | 18 m 07 s | start 7.0 / med 4.6 / max 16.3 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `4cdd00fad042` (android tree) | 51 m 50 s | start 6.3 / med 4.0 / max 16.8 |
+| `real-input:android:--control:stepper:--control:tooltip` | **PASS** | — | `4cdd00fad042` (android tree) | 10 m 41 s | start 6.4 / med 4.0 / max 7.1 |
+
+`need --for review`: `harness:ios` only, which runs at merge. `real-input:android` took 51 m 50 s
+on the final tree, against 54 minutes before; its phase 1 (28 files, 42 tests) took 17 m 42 s.
+
+## Red proofs
+
+- `stepper.e2e.ts` "a 1.4 s hold on the Stepper's plus half steps once, with no repeat" ->
+  Android `StepperHalf` calls `onClick` every 150 ms once held for 500 ms ->
+  `stepper.e2e.ts:74` `expect(value).toHaveText('6')`, observed `10`.
+- `tooltip.e2e.ts` "a tap on the anchor of a closed tooltip opens nothing, and a tap outside or
+  Back closes it once" -> `Tooltip.tsx` passes every close to `onIsPresentedChange` twice ->
+  `tooltip.e2e.ts:99` `expect(log).toHaveText('presented:false')`.
+- `tooltip.e2e.ts` "a real tap opens the tooltip, its action is reported before the close, and
+  the anchor stays its own" -> `Tooltip.tsx` delivers `onAction` 300 ms late ->
+  `tooltip.e2e.ts:65` `expect(log).toHaveText('action:ok > presented:false')`. The double-close
+  mutation also turned this line red (`action:ok > presented:false > presented:false`).
+
+## Files changed
+
+- `scripts/real-input/android-tree-checks.mjs`: the item-3 deletions; the `stepper` and
+  `tooltip` blocks and entries removed.
+- `scripts/real-input/popup-windows.mjs`, `popup-windows.d.mts`: the popup-window parse;
+  `a11y-sweep-device.mjs` calls it.
+- `example/e2e/real-input/device-read.ts`: `popupWindowCount()`. `os-tree.ts`: `tree({ unmerged })`.
+- `example/e2e/real-input/stepper.e2e.ts`, `tooltip.e2e.ts`: the moved rows.
+- `example/e2e/README.md`: the device reads paragraph.
+
+## Follow-ups
+
+- `os-tree.ts` `ownerNode` picks the outer `FrameLayout` for a disabled chip and list item and
+  reads `enabled=true` (Q8); CH10a–c and L2 need tightest-`hittable` over the unmerged tree.
+- Phase-1 `treeAnnounces`/`itemAnnounces` read the default (folded) tree; with `--raw` they
+  would read exactly the dump's nodes (Q1, Q5, Q7).
+- Q2's switch would let the remaining `uiautomator` reads run inside e2e tests, at about 60 %
+  more time per test.
+- `android-tree-checks.mjs:1-6`, `a11y-sweep-device.mjs:1-6`, `reader.ts:83-84` and the e2e
+  README still say the driver carries no `selected`/role and refuses a swipe that leaves its view.
+- One `check` run died on a jest worker SIGSEGV in `scripts/__tests__/patch-nitrogen.test.js`
+  (all 1 954 tests passed); the rerun did not repeat it.
