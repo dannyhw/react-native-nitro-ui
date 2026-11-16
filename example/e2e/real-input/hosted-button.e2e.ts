@@ -24,4 +24,9 @@ test('a real tap on a hosted Button reaches Compose and JS counts it', async ({
 
   await press.tap();
   await expect(presses).toHaveText('1');
+
+  // A composition that delivered the first press can still swallow the next: a person
+  // pressing a button twice expects two presses, not one.
+  await press.tap();
+  await expect(presses).toHaveText('2');
 });

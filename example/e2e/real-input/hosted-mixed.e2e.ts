@@ -24,4 +24,9 @@ test('one Host of mixed controls still gives each its own node and its own tap',
 
   await flipper.tap();
   await expect(state).toHaveText('on 0.50 0');
+
+  // The line all four write carries which of them answered: the Button's own press has
+  // to arrive, and the switch and slider have to stay where the last touch left them.
+  await screen.getByLabel('Mixed button').tap();
+  await expect(state).toHaveText('on 0.50 1');
 });

@@ -40,4 +40,18 @@ test('a real drag moves the Slider and the value JS echoes follows it', async ({
     `the dragged Slider echoed "${moved}" — a drag from 25% to 80% of the track ` +
       'has to raise a value that started at 0.250'
   ).toBeGreaterThan(0.5);
+
+  // The same finger going back has to move the value back: a drag that only ever
+  // raises leaves a person unable to undo the gesture they just made.
+  await drag(
+    screen,
+    { x: box.x + box.width * 0.8, y },
+    { x: box.x + box.width * 0.2, y }
+  );
+  const back = await value.textContent();
+  expect(
+    Number(back),
+    `the drag back echoed "${back}" after the first drag left "${moved}" — the same ` +
+      'finger travelling the other way has to lower the value it raised'
+  ).toBeLessThan(Number(moved));
 });

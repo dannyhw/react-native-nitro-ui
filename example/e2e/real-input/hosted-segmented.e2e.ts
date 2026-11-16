@@ -30,4 +30,9 @@ test('a real tap on a hosted SegmentedControl picks the segment under the finger
   }
   await screen.tapAt({ x: box.x + box.width * 0.5, y: box.y + box.height / 2 });
   await expect(index).toHaveText('1');
+
+  // The middle alone would pass for a control that answers at one point only: the last
+  // segment is a different point and a different index.
+  await screen.tapAt({ x: box.x + box.width * 0.9, y: box.y + box.height / 2 });
+  await expect(index).toHaveText('2');
 });
