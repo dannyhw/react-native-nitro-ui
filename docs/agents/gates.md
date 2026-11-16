@@ -64,7 +64,8 @@ missing.
   `real-input:ios` and `real-input:android` on its own digest.
 - Each device gate has a digest of its own: its platform's half of the tree, less the paths
   only the other suite reads (`GATE_DIGEST_EXCLUSIONS` in `scripts/gate-core.mjs`). The harness
-  digests leave out `scripts/real-input/`, `example/e2e/` and the example screens; the
+  digests leave out `scripts/real-input/`, `example/e2e/` and the example screens, but keep
+  every file the harness Jest `testMatch` selects wherever it sits; the
   real-input digests leave out the harness tests and configs, and each leaves out the other
   platform's real-input files. `scripts/__tests__/gate-digests.test.js` walks every run's
   imports and fails when a run reaches a path its digest leaves out. A path that cannot be

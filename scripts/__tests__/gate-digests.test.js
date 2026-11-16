@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
+import picomatch from 'picomatch';
 
 import {
   DEVICE_GATES,
@@ -14,6 +15,7 @@ import {
   gateRowFor,
   gateTreesFromEntries,
   gatesTouchedByPaths,
+  isHarnessTestFile,
   ledgerLineFromRun,
   platformTreesFromEntries,
   platformsOwningFile,
@@ -32,6 +34,8 @@ const FILES = {
   'example/src/SwitchScreen.tsx': 'screen',
   'example/src/assets/icons/star_24px.xml': 'icon',
   'example/__tests__/Switch.harness.tsx': 'harness test',
+  'example/src/pickers/__tests__/Picker.harness.tsx':
+    'harness test by a screen',
   'example/e2e/real-input/switch.e2e.ts': 'e2e test',
   'example/e2e/e2e.config.ts': 'e2e config',
   'example/metro.config.js': 'metro',
@@ -80,6 +84,12 @@ describe('each device gate is keyed to the files its own run reads', () => {
       'harness:ios',
       'harness:android',
     ]);
+  });
+
+  it('a harness test the testMatch finds under example/src/ moves the harness gates too', () => {
+    expect(movedBy('example/src/pickers/__tests__/Picker.harness.tsx')).toEqual(
+      DEVICE_GATES
+    );
   });
 
   it('an example screen moves the real-input gates and no harness gate', () => {
@@ -320,6 +330,7 @@ const ROOTS = {
     'example/babel.config.js',
     'scripts/build-app.mjs',
     ...tracked('example/__tests__'),
+    ...tracked('example').filter(isHarnessTestFile),
   ],
   'real-input:ios': () => [
     'scripts/real-input/ios.mjs',
@@ -453,18 +464,68 @@ describe('a path leaves a gate digest only when that gate never reads it', () =>
     }
   });
 
-  it('no e2e file is a harness test: the harness testMatch never picks one up', () => {
-    const config = fs.readFileSync(
-      path.join(REPO, 'example/jest.harness.config.mjs'),
-      'utf8'
-    );
-    expect(config).toContain("'<rootDir>/**/__tests__/**/*.harness.[jt]s?(x)'");
-    for (const file of tracked('example/e2e')) {
-      expect([file, /\/__tests__\/|\.harness\.[jt]sx?$/.test(file)]).toEqual([
-        file,
-        false,
-      ]);
+  it('the digests keep exactly the files the harness testMatch selects', () => {
+    const exampleDir = path.join(REPO, 'example');
+    const selects = (patterns) => {
+      const globs = patterns.map((glob) =>
+        glob.replace('<rootDir>', exampleDir)
+      );
+      const yes = globs.filter((glob) => !glob.startsWith('!'));
+      const no = globs.filter((glob) => glob.startsWith('!'));
+      // jest-util's globsToMatcher: any positive glob and no negated one, with dot files.
+      const any = picomatch(yes, { dot: true });
+      const none =
+        no.length > 0
+          ? picomatch(
+              no.map((glob) => glob.slice(1)),
+              { dot: true }
+            )
+          : () => false;
+      return (file) =>
+        any(path.join(REPO, file)) && !none(path.join(REPO, file));
+    };
+    const testMatch = (isolated) => {
+      const before = process.env.NITRO_UI_HARNESS_ISOLATED;
+      process.env.NITRO_UI_HARNESS_ISOLATED = isolated ? '1' : '0';
+      let config;
+      jest.isolateModules(() => {
+        config = require('../../example/jest.harness.config.mjs').default;
+      });
+      if (before === undefined) delete process.env.NITRO_UI_HARNESS_ISOLATED;
+      else process.env.NITRO_UI_HARNESS_ISOLATED = before;
+      return config.testMatch;
+    };
+    const plain = selects(testMatch(false));
+    const isolated = selects(testMatch(true));
+    const candidates = [
+      ...tracked('example'),
+      'example/src/pickers/__tests__/Picker.harness.tsx',
+      'example/src/__tests__/isolated/Cold.harness.ts',
+      'example/src/__tests__/helpers.ts',
+      'example/src/PickerScreen.harness.tsx',
+      'example/e2e/__tests__/form.harness.jsx',
+    ];
+    for (const file of candidates) {
+      const run = plain(file) || isolated(file);
+      expect([file, isHarnessTestFile(file)]).toEqual([file, run]);
+      if (run) {
+        expect([file, gateDigestOwnsFile('harness:ios', file)]).toEqual([
+          file,
+          true,
+        ]);
+        expect([file, gateDigestOwnsFile('harness:android', file)]).toEqual([
+          file,
+          true,
+        ]);
+      }
     }
+    // The fixture has to exercise both answers, or the loop above proves nothing.
+    expect(candidates.filter((file) => plain(file))).toContain(
+      'example/src/pickers/__tests__/Picker.harness.tsx'
+    );
+    expect(candidates.filter((file) => isolated(file))).toContain(
+      'example/src/__tests__/isolated/Cold.harness.ts'
+    );
   });
 
   it('a harness run never bundles the app entry: react-native-harness swaps it', () => {

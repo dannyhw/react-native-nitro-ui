@@ -291,6 +291,21 @@ export const EXAMPLE_SCREEN_PATHS = [
   { path: 'example/src/', except: ['example/src/assets/'] },
 ];
 
+/**
+ * Does the harness's Jest `testMatch` (`example/jest.harness.config.mjs`) select this
+ * file: a `*.harness.[jt]s(x)` file inside a `__tests__/` directory anywhere under
+ * `example/`. Such a file stays in the harness digests wherever it sits, so a harness
+ * test under `example/src/` is never left out with the screens around it.
+ *
+ * @param {string} file repo-relative
+ * @returns {boolean}
+ */
+export function isHarnessTestFile(file) {
+  return /^example\/(?:.*\/)?__tests__\/(?:.*\/)?[^/]*\.harness\.[jt]sx?$/.test(
+    String(file ?? '').replace(/^\.\//, '')
+  );
+}
+
 /** Real-input files only the Android run reaches. */
 export const ANDROID_REAL_INPUT_ONLY_PATHS = [
   'example/e2e/',
@@ -369,6 +384,7 @@ export function gateDigestOwnsFile(gate, file) {
   const platform = platformOfGate(gate);
   if (platform == null) return false;
   if (!platformsOwningFile(clean).includes(platform)) return false;
+  if (gate.startsWith('harness:') && isHarnessTestFile(clean)) return true;
   return !(GATE_DIGEST_EXCLUSIONS[gate] ?? []).some((exclusion) =>
     exclusionCovers(exclusion, clean)
   );
