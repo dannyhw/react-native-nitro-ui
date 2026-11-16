@@ -30,7 +30,8 @@ export default {
   workers: 1,
   // A flaky check is fixed or reported, never retried green (AGENTS.md).
   retries: 0,
-  // The runner passes --reporter json for a gate run; a human gets the list.
+  // The gate reads the JSON report e2e writes to `output`; the list is for a
+  // human running the suite by hand.
   reporters: ['list'],
   output: '.e2e',
   timeout: 240_000,

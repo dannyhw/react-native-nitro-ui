@@ -769,8 +769,13 @@ The harness drives controls through the library's own test hooks. The real-input
 what that cannot: that a touch delivered by the operating system reaches a hosted SwiftUI or
 Compose control inside a React Native app. It synthesises taps and drags outside the app
 (`XCUIDevice`'s event path on iOS, `agent-device`'s on Android) and asserts only on `Text` the
-app renders on screen. It uses no test hook, no Nitro callback and no in-app tracer. On Android
-the checks are an e2e suite in `example/e2e/`, one file per control.
+app renders on screen. It uses no test hook, no Nitro callback and no in-app tracer. Android is
+two phases on one device session: an e2e suite in `example/e2e/`, one file per control, then —
+with the driver's daemon stopped, because `uiautomator dump` will not answer while it is attached
+— the accessibility sweep and the `adb input` + `uiautomator` checks in
+`scripts/real-input/a11y-sweep-device.mjs` and `scripts/real-input/android-tree-checks.mjs`. Both
+phases decide one exit code and one ledger line, and `--control` narrows both.
+`example/e2e/README.md` says what each phase asserts.
 
 ```sh
 # iOS - the simulator must already be booted (the suite boots nothing)
@@ -800,11 +805,13 @@ minutes. Run them when you change how a control receives touch.
 Both run on the Node version `.nvmrc` pins: started on another version, they restart
 themselves under it with `fnm exec`.
 
-Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the full `xcodebuild`
-and `adb` logs, the accessibility hierarchy printed by a failing case, the `.xcresult` bundle,
-and Metro's log. Android also keeps e2e's own `report.json` in `example/e2e/.e2e/android/`,
-with a `trace.md`, the screen as the driver read it, and a screenshot for every attempt. Read
-those when a check fails.
+Each run keeps its evidence in `.real-input/<platform>/` (gitignored): the `xcodebuild` log and
+the `.xcresult` bundle on iOS, Metro's log and the driver's state directory on Android. Android
+also keeps e2e's own `report.json` in `example/e2e/.e2e/android/`, with a trace, the screen as
+the driver read it, and a screenshot for every attempt. A phase-2 check writes no file: the dump
+a refused press was refused against, and the readings that decided a failed check, are printed
+into the run's log, which `node scripts/gate.mjs` keeps beside the ledger line. Read those when a
+check fails.
 
 ### Adding a control to the suite
 

@@ -81,8 +81,9 @@ android/generated
 # run itself is the report.
 .real-input/
 
-# e2e's own output for a manual `e2e run` inside example/e2e. A gate run writes
-# its artifacts under .real-input/ instead, so this is the developer's copy.
+# e2e's own output: its report, traces and screenshots. A gate run writes these
+# under example/e2e/.e2e/android, and Metro's log and the driver's state under
+# .real-input/android.
 example/e2e/.e2e/
 
 # react-native-harness artifacts
