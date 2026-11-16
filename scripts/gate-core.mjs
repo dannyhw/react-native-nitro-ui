@@ -142,7 +142,7 @@ export function requiredGatesFor({
   for (const platform of PLATFORMS) {
     const harness = `harness:${platform}`;
     // With the gates' own digests known, a diff only real-input reads asks for
-    // no harness run; without them, the platform decides as it always has.
+    // no harness run; without them, the platform decides.
     const touched =
       touchedGates == null
         ? touchedPlatforms.includes(platform)

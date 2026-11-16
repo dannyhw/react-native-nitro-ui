@@ -113,7 +113,7 @@ describe('the units a run records', () => {
 
   it('the report writes what the units are read from', () => {
     const file = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'x48-units-')),
+      fs.mkdtempSync(path.join(os.tmpdir(), 'gate-units-')),
       'units.json'
     );
     const controls = [
@@ -530,7 +530,7 @@ function git(dir, args) {
  * `FAKE_EXIT`.
  */
 function makeRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'x48-rerun-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-rerun-'));
   cleanup.push(dir);
   const write = (file, content) => {
     fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
@@ -546,7 +546,7 @@ function makeRepo() {
   ).toBe(fs.realpathSync(dir));
   git(dir, ['add', '-A']);
   git(dir, ['commit', '-qm', 'base']);
-  git(dir, ['checkout', '-qb', 'task/x48']);
+  git(dir, ['checkout', '-qb', 'task/rerun']);
   const bin = path.join(dir, 'fake-bin');
   fs.mkdirSync(bin);
   fs.writeFileSync(
@@ -561,7 +561,7 @@ function makeRepo() {
   return { dir, bin };
 }
 
-const LEASE = leaseRecord({ id: 'X48-1', task: 'X48', platform: 'ios' });
+const LEASE = leaseRecord({ id: 'RERUN-1', task: 'RERUN', platform: 'ios' });
 
 function runCli({ dir, bin }, args, env = {}) {
   const home = path.join(dir, 'state');
@@ -583,7 +583,7 @@ function runCli({ dir, bin }, args, env = {}) {
 
 function ledger(dir) {
   return fs
-    .readFileSync(path.join(dir, '.gates', 'task', 'x48.jsonl'), 'utf8')
+    .readFileSync(path.join(dir, '.gates', 'task', 'rerun.jsonl'), 'utf8')
     .split('\n')
     .filter((text) => text.trim() !== '')
     .map((text) => JSON.parse(text));
