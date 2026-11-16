@@ -1750,6 +1750,12 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     };
     for (const line of verdict.why) note(`gate: completion: ${line}\n`);
   }
+  // The gate's own code, not the child's alone: a completion or a `check` can fail
+  // while the child exits 0, and `wait` returns what is recorded here.
+  const exitCode =
+    result === 'fail' && exit.code === 0
+      ? 1
+      : (exit.code ?? (exit.signal != null ? null : 1));
   const line = ledgerLineFromRun({
     // The canonical name from `resolveGate`, never `argv[0]`: a filtered run
     // must not be recorded as the full gate.
@@ -1776,7 +1782,7 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     suiteTimings,
     logPath,
     startedAt,
-    exitCode: exit.code ?? (exit.signal != null ? null : 1),
+    exitCode,
     signal: exit.signal,
     units,
     completion: completionRecord,
@@ -1801,7 +1807,7 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     ...readBackgroundRecord(recordPath),
     done: true,
     finishedAt: Date.now(),
-    exitCode: exit.code ?? (exit.signal != null ? null : 1),
+    exitCode,
     signal: exit.signal,
     result,
     ledgerLine: line,
@@ -1868,10 +1874,7 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     return 1;
   }
   if (exit.signal != null) return 1;
-  // The recorded result decides, not the child's status alone: `check` can
-  // exit 0 having run no steps.
-  if (result === 'fail') return exit.code === 0 ? 1 : (exit.code ?? 1);
-  return exit.code ?? 0;
+  return exitCode ?? 1;
 }
 
 function printCodeTree({ tree, trees, gateTrees, head, files }) {

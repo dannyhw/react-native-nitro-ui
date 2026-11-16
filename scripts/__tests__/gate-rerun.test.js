@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from '@jest/globals';
 import {
   completeRerun,
   decideNeed,
+  decideWait,
   harnessUnitsFromTimings,
   ledgerLineFromRun,
   planRerunFailed,
@@ -394,6 +395,37 @@ describe('completeRerun', () => {
 
 /* ------------------------- a completed run is never a clean one ------------------------- */
 
+describe('wait after a completion that failed while its re-run exited 0', () => {
+  const done = {
+    gate: 'real-input:ios',
+    pid: 1,
+    done: true,
+    exitCode: 0,
+    result: 'fail',
+  };
+  const asked = {
+    pidAlive: false,
+    elapsedMs: 1,
+    timeoutMs: 60_000,
+    progress: null,
+  };
+
+  it('reads the stored result, so a fail is never exit 0', () => {
+    const decision = decideWait({ record: done, ...asked });
+    expect(decision.exitCode).toBe(1);
+    expect(decision.message).toContain('real-input:ios failed');
+  });
+
+  it('reads the ledger line the same way when the record is not done', () => {
+    const decision = decideWait({
+      record: { ...done, done: false },
+      ...asked,
+      ledgerEntry: { gate: 'real-input:ios', exitCode: 0, result: 'fail' },
+    });
+    expect(decision.exitCode).toBe(1);
+  });
+});
+
 describe('a completed run in table, status and need', () => {
   const completed = line({
     result: 'pass',
@@ -605,6 +637,34 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
     expect(status.stdout).toMatch(
       /green\s+real-input:ios .*completed: 2 of 3 units re-run, attempt 1/
     );
+  }, 120_000);
+
+  it('a completion whose re-run exits 0 but leaves a unit unreported is stored and waited on as failed', () => {
+    const repo = makeRepo();
+    runCli(repo, ['real-input:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: results({ switch: 'pass', form: 'fail' }),
+    });
+    const started = runCli(
+      repo,
+      ['real-input:ios', '--rerun-failed', '--background'],
+      { FAKE_EXIT: '0', FAKE_UNITS: results({ switch: 'pass' }) }
+    );
+    // The fake runner ends before the launcher hands off, so the launcher reports too.
+    expect(started.stderr).toContain('(exit 1)');
+    expect(started.status).toBe(1);
+    const waited = runCli(repo, [
+      'wait',
+      '--gate',
+      'real-input:ios',
+      '--timeout-minutes',
+      '1',
+    ]);
+    expect(waited.stderr).toContain('real-input:ios failed with exit 1');
+    expect(waited.status).toBe(1);
+    const [, completion] = ledger(repo.dir);
+    expect(completion.result).toBe('fail');
+    expect(completion.exitCode).toBe(1);
   }, 120_000);
 
   it('refuses after the digest moved, and records nothing', () => {

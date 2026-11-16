@@ -2371,6 +2371,20 @@ export function pidMayBeRunning(pid, kill = process.kill) {
 }
 
 /**
+ * The exit code a finished run stands for. A recorded `fail` is never 0, whatever
+ * code was stored beside it.
+ */
+function codeOfFinishedRun(run) {
+  const code =
+    run.exitCode == null
+      ? run.result === 'pass'
+        ? 0
+        : 1
+      : Number(run.exitCode);
+  return code === 0 && run.result === 'fail' ? 1 : code;
+}
+
+/**
  * What `gate.mjs wait` should do next, given one read of the background record.
  *
  * `record.done` is written by the detached runner only after the ledger line is on
@@ -2419,12 +2433,7 @@ export function decideWait({
   if (record.done === true) {
     // A signal-killed gate records `exitCode: null`, which is a failure and must
     // never collapse into "passed" through `?? 0`.
-    const code =
-      record.exitCode == null
-        ? record.result === 'pass'
-          ? 0
-          : 1
-        : Number(record.exitCode);
+    const code = codeOfFinishedRun(record);
     return {
       kind: 'exit',
       exitCode: code,
@@ -2440,9 +2449,7 @@ export function decideWait({
     // landed after the run's `done` write and overwrote it. Either way the ledger
     // is the source of truth: a line there means the gate finished with that code.
     if (ledgerEntry != null) {
-      const code = Number(
-        ledgerEntry.exitCode ?? (ledgerEntry.result === 'pass' ? 0 : 1)
-      );
+      const code = codeOfFinishedRun(ledgerEntry);
       return {
         kind: 'exit',
         exitCode: code,
