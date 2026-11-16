@@ -18,9 +18,3 @@ export function nativeChecked(
   tree: ReadonlyArray<UiautomatorNode>,
   description: string
 ): 'on' | 'off' | null;
-
-/** `"true"` / `"false"` on the clickable node carrying this control, or null. */
-export function nativeEnabled(
-  tree: ReadonlyArray<UiautomatorNode>,
-  description: string
-): 'true' | 'false' | null;

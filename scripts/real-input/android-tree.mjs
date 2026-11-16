@@ -62,25 +62,3 @@ export function nativeChecked(tree, description) {
   const control = tightestFlaggedNode(tree, labelled ?? null, 'checkable');
   return control == null ? null : control.checked === 'true' ? 'on' : 'off';
 }
-
-/**
- * Whether the control a person would press is enabled: `enabled` on the tightest
- * *clickable* node that carries this labelled control.
- *
- * The same shape as {@link nativeChecked}, for the same reason: a disabled Material 3
- * chip publishes `enabled="false"` on its touch-target node, and the node inside it
- * carrying the control's name says `enabled="true"` — so reading the labelled node
- * reports every disabled control as enabled.
- *
- * @param {ReadonlyArray<{contentDesc: string, clickable: string, enabled: string, bounds: {x1: number, y1: number, x2: number, y2: number, width: number, height: number}}>} tree
- * @param {string} description the control's `accessibilityLabel`
- * @returns {string | null} `"true"` / `"false"`, or null when no clickable node
- *   carries the control
- */
-export function nativeEnabled(tree, description) {
-  const labelled = tree.find(
-    (node) => node.contentDesc === description && node.bounds.height > 0
-  );
-  const control = tightestFlaggedNode(tree, labelled ?? null, 'clickable');
-  return control == null ? null : control.enabled;
-}

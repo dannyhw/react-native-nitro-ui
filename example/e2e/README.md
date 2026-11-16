@@ -24,9 +24,8 @@ gate. `retries` is 0 — a flaky check is fixed or reported, never retried green
 
 **Phase 1** is this directory: one `<control-id>.e2e.ts` per row of
 `scripts/real-input/controls.mjs`, a real touch per control and the assertions that
-only a delivered touch can make. The driver's own node map carries no `clickable`,
-`checkable` or `scrollable`, and it refuses a swipe whose path leaves the view it
-started inside, so a lot of reading has to wait for phase 2.
+only a delivered touch can make, including what the accessibility tree says on the
+node a finger lands on. Almost every control is asserted here in full.
 
 **Phase 2** runs after the last test has reported, with the daemon stopped:
 `uiautomator dump` dies while the driver's session holds the device's one
@@ -39,8 +38,10 @@ accessibility connection. Two passes, in this order:
 - `scripts/real-input/android-tree-checks.mjs` then drives the device itself —
   `input tap`, `input motionevent`, `uiautomator dump` — at the leased serial only,
   one check per control id in `TREE_CHECK_IDS`, each navigating to its own screen.
-  These are the checks that read a control's state off the node a finger lands on,
-  count popup windows, hold a finger down, or roll a wheel.
+  These are the few checks the driver cannot make: reading `clickable`, `focusable`
+  or `long-clickable` as a flag of its own (the driver folds the first two into
+  `hittable` and has no third), and holding a finger down and then dragging it
+  without lifting. A check leaves this file when the driver can make it.
 
 A phase-2 failure lands on the same summary line as a test failure, named
 `<control> (tree)`.
@@ -61,11 +62,12 @@ device can see and `example/__tests__` cannot:
    point and asserts the menu opened there and the view under it never fired.
 2. **The screen-reader tree.** `reader.ts` asks whether the reader is _told_ a
    state, and `os-tree.ts` asks what the tree says on the node a finger lands on:
-   in phase 1 that is `enabled` and `checked`; phase 2 adds the `selected` a group
-   reports and the Android class a role reaches the tree as. The driver's snapshot
-   normalises those flags away, and an in-app query cannot see a hosted control's
-   name at all, because Compose publishes it on a `SemanticsNode` rather than a
-   `View`. The whole-table version is the sweep in phase 2.
+   `enabled`, `checked`, the `selected` a group reports and the Android class a role
+   reaches the tree as. It reads the unmerged tree where the driver's default
+   snapshot would fold a role-only child into its parent. An in-app query cannot
+   see a hosted control's name at all, because Compose publishes it on a
+   `SemanticsNode` rather than a `View`. The whole-table version is the sweep in
+   phase 2.
 3. **Keyboard avoidance.** `keyboard.ts`, for the text controls: a focused field
    the keyboard would cover is moved clear of it, a `TextInput` inside a Popover
    stays above it, and the Popover itself is pushed, not only its field. Both

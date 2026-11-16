@@ -80,8 +80,8 @@ export { expect };
 
 /**
  * What the tree itself says about the node a person acts on, as a claim separate from
- * what the reader is told: the driver’s normalised snapshot carries no `checked`,
- * `selected` or role, and a hosted control’s name is not on the node holding its state.
+ * what the reader is told: a hosted control’s name is not on the node holding its state,
+ * so the state is read on the node that has it.
  */
 export function treeAnnounces(
   name: string,
@@ -91,7 +91,9 @@ export function treeAnnounces(
     role?: string;
   }
 ): void {
-  const facts = screenReaderFacts(name);
+  const facts = screenReaderFacts(name, {
+    unmerged: expected.enabled != null,
+  });
   if (expected.checked != null) {
     expect(
       facts.checked,

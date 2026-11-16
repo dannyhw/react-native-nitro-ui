@@ -2,8 +2,9 @@
  * The a11y sweep's device: bring up each case's screen, and answer with the tree as
  * the accessibility service serves it. Both happen outside an `agent-device` session
  * because `uiautomator dump` is killed while its snapshot helper holds the device's
- * single `UiAutomation` connection, and the rule grades `clickable`, `checkable` and
- * `scrollable`, which the driver's own node map does not carry.
+ * single `UiAutomation` connection, and the rule grades `clickable` and `scrollable`,
+ * which the driver's own node map does not carry: it folds `clickable` into a wider
+ * flag and leaves `scrollable` out.
  *
  * @file
  */
