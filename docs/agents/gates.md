@@ -134,15 +134,19 @@ including this one, that is all of these decides, green or red:
 - on the gate's own digest equal to the current one, with no fallback to the platform half,
   so a line written before per-gate digests never counts;
 - unmoved: the tree and the gate's digest read after the run equal the ones before it;
-- for a green, written by this ledger version and not relaxed: the line records which relaxing switches the run had set
-  (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`: `NITRO_UI_ALLOW_UNSTAMPED`,
+- for a green, written by this ledger version and not relaxed: the line records which relaxing
+  switches the run had set (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`: `NITRO_UI_ALLOW_UNSTAMPED`,
   `NITRO_UI_ALLOW_LOCALE_MISMATCH`, the `*_FORCE` switches, a substituted `lsof`, `adb` or
   `simctl`, and the timeout switches including `CI`), and only a line that records none
   counts;
 - for a green, judged by the same gate code: the line's `judge` digest, over the check-only
   files a device run executes or that decide its result (`JUDGE_FILES` in
   `scripts/gate-core.mjs`: the gate, its supervisor, the lease and what they import), equals
-  the current one. A line without it never counts from elsewhere.
+  the current one. A line without it never counts from elsewhere;
+- for a completion, the red run it completed would have counted too. A completion records
+  that run's relaxing switches together with its own, and a `judge` digest only when both
+  runs have the same one, so completing a relaxed red, a red written by an older ledger
+  version or one judged by other gate code never gives another branch a green.
 
 A red that is relaxed or judged by other gate code still decides: it can only ask for a run.
 

@@ -60,6 +60,7 @@ import {
   harnessUnitsFromTimings,
   planRerunFailed,
   completeRerun,
+  completionProvenance,
   realInputUnitsFromResults,
   isDeviceGate,
   isUsageProbe,
@@ -1851,8 +1852,13 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     signal: exit.signal,
     units,
     completion: completionRecord,
-    relaxed: relaxedSwitches(process.env),
-    judge: before.judge,
+    ...(completion == null
+      ? { relaxed: relaxedSwitches(process.env), judge: before.judge }
+      : completionProvenance({
+          base: completion.base,
+          relaxed: relaxedSwitches(process.env),
+          judge: before.judge,
+        })),
   });
   const file = appendLedgerLine(branch, line);
   // The store's record of this run. For a backgrounded run it is the "done"
@@ -2529,7 +2535,6 @@ async function rerunFailedGate({ command, extraArgs, background }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
-    judge: read.judge,
   });
   if (plan.refusal != null) {
     process.stderr.write(`gate: refused before the run - ${plan.refusal}\n`);

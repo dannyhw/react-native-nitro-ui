@@ -2491,6 +2491,36 @@ export function completeRerun({
   return { result: why.length === 0 ? 'pass' : 'fail', units: merged, why };
 }
 
+/**
+ * The `relaxed` and `judge` a completion line records. Most of its units come
+ * from the red run it completes, so it is no stricter than that run: it carries
+ * the base run's switches as well as its own, and a judging digest only when
+ * both runs were judged by the same gate code. A base line from another ledger
+ * version, or one that recorded neither, leaves `null`, which never counts on
+ * another branch.
+ *
+ * @param {object} options
+ * @param {object} options.base the red line being completed
+ * @param {Record<string, string>} options.relaxed the completion's own switches
+ * @param {string | null} options.judge the completion's own judging digest
+ * @returns {{relaxed: Record<string, string> | null, judge: string | null}}
+ */
+export function completionProvenance({ base, relaxed, judge }) {
+  const baseRelaxed = base?.relaxed;
+  const recorded =
+    base?.v === LEDGER_VERSION &&
+    baseRelaxed != null &&
+    typeof baseRelaxed === 'object' &&
+    !Array.isArray(baseRelaxed);
+  return {
+    relaxed: recorded ? { ...baseRelaxed, ...relaxed } : null,
+    judge:
+      base?.v === LEDGER_VERSION && judge != null && base?.judge === judge
+        ? judge
+        : null,
+  };
+}
+
 /** `from task/x` for a row proved by a run recorded on another branch, else `null`. */
 export function formatFrom(row) {
   return row?.from == null ? null : `from \`${row.from}\``;

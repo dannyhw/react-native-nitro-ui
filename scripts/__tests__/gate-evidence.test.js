@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from '@jest/globals';
 
 import {
+  completionProvenance,
   decideNeed,
   foreignProofKey,
   gateRowFor,
@@ -257,6 +258,89 @@ describe('a green run recorded on another branch', () => {
     expect(rowOf('real-input:ios', { foreign: [unnamed] }).state).toBe(
       'missing'
     );
+  });
+});
+
+describe('a completion counts elsewhere only when the run it completed would have', () => {
+  const units = {
+    kind: 'real-input',
+    results: { switch: 'pass', form: 'pass' },
+    everyRun: {},
+    unnamed: [],
+  };
+  const redOf = (overrides) =>
+    run({
+      gate: 'real-input:ios',
+      command: 'node scripts/real-input/ios.mjs',
+      result: 'fail',
+      exitCode: 1,
+      units: { ...units, results: { switch: 'pass', form: 'fail' } },
+      ...overrides,
+    });
+  /** A green completion of `base` recorded from a clean shell with today's gate code. */
+  const completionOf = (base) =>
+    run({
+      gate: 'real-input:ios',
+      command: 'node scripts/real-input/ios.mjs --control form',
+      startedAt: Date.parse('2026-11-16T11:00:00Z'),
+      units,
+      completion: {
+        of: { ts: base.ts, logPath: base.logPath, durationMs: 3_000_000 },
+        attempt: 1,
+        rerun: ['form'],
+        filtered: 'real-input:ios:--control:form',
+      },
+      ...completionProvenance({ base, relaxed: {}, judge: JUDGE }),
+    });
+
+  it('a relaxed red run completed from a clean shell stays relaxed, and gives no other branch a green', () => {
+    const red = redOf({ relaxed: { NITRO_UI_ALLOW_UNSTAMPED: '1' } });
+    const done = completionOf(red);
+    expect(done.relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe('red');
+    // On its own branch it still completes the run, and shows as relaxed.
+    const own = rowOf('real-input:ios', { list: [red, done] });
+    expect(own.state).toBe('green');
+    expect(own.entry.relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+  });
+
+  it('a red run written before judging digests existed, then completed, gives no other branch a green', () => {
+    const red = { ...redOf({}), v: LEDGER_VERSION - 1 };
+    delete red.relaxed;
+    delete red.judge;
+    const done = completionOf(red);
+    expect(done.relaxed).toBeNull();
+    expect(done.judge).toBeNull();
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe('red');
+    expect(rowOf('real-input:ios', { list: [red, done] }).state).toBe('green');
+  });
+
+  it('a red run judged by other gate code, then completed, gives no other branch a green', () => {
+    const red = redOf({ judge: 'k'.repeat(64) });
+    const done = completionOf(red);
+    expect(done.judge).toBeNull();
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe('red');
+  });
+
+  it('a clean red run completed from a clean shell clears the red on every branch', () => {
+    const red = redOf({});
+    const done = completionOf(red);
+    expect(done.relaxed).toEqual({});
+    expect(done.judge).toBe(JUDGE);
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe(
+      'green'
+    );
+  });
+
+  it("the completion's own switches are added to the red run's", () => {
+    const red = redOf({ relaxed: { CI: '1' } });
+    expect(
+      completionProvenance({
+        base: red,
+        relaxed: { NITRO_UI_ALLOW_UNSTAMPED: '1' },
+        judge: JUDGE,
+      }).relaxed
+    ).toEqual({ CI: '1', NITRO_UI_ALLOW_UNSTAMPED: '1' });
   });
 });
 

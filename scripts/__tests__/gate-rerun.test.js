@@ -752,6 +752,46 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
     expect(completion.exitCode).toBe(1);
   }, 120_000);
 
+  it("a completion carries the red run's relaxing switches and judging digest, never its own clean shell's", () => {
+    const repo = makeRepo();
+    runCli(repo, ['real-input:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: results({ switch: 'pass', form: 'fail' }),
+      NITRO_UI_ALLOW_UNSTAMPED: '1',
+    });
+    const done = runCli(repo, ['real-input:ios', '--rerun-failed'], {
+      FAKE_UNITS: results({ form: 'pass' }),
+    });
+    expect(done.status).toBe(0);
+    const [red, completion] = ledger(repo.dir);
+    expect(red.relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+    expect(completion.result).toBe('pass');
+    expect(completion.relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+    expect(completion.judge).toBe(red.judge);
+  }, 120_000);
+
+  it('a completion of a red run that recorded no switches or judging digest records neither', () => {
+    const repo = makeRepo();
+    runCli(repo, ['real-input:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: results({ switch: 'pass', form: 'fail' }),
+    });
+    const file = path.join(repo.dir, '.gates', 'task', 'rerun.jsonl');
+    const [red] = ledger(repo.dir);
+    const older = { ...red, v: red.v - 1 };
+    delete older.relaxed;
+    delete older.judge;
+    fs.writeFileSync(file, `${JSON.stringify(older)}\n`);
+    const done = runCli(repo, ['real-input:ios', '--rerun-failed'], {
+      FAKE_UNITS: results({ form: 'pass' }),
+    });
+    expect(done.status).toBe(0);
+    const [, completion] = ledger(repo.dir);
+    expect(completion.result).toBe('pass');
+    expect(completion.relaxed).toBeNull();
+    expect(completion.judge).toBeNull();
+  }, 120_000);
+
   it('refuses after the digest moved, and records nothing', () => {
     const repo = makeRepo();
     runCli(repo, ['real-input:ios'], {
