@@ -580,6 +580,26 @@ function makeContext(device, log) {
      * @param {number} minCount
      * @param {number} [timeoutMs]
      */
+    /**
+     * Look a control up again, and say if it moved.
+     *
+     * A picker's anchor widens on purpose when the chosen title is wider than the last
+     * one, so every second touch on the same control is aimed at the box it has now.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @param {import('./uiautomator.mjs').UiautomatorNode} previous where it was
+     */
+    requireControlAt(description, previous) {
+      const node = this.requireControl(description);
+      if (this.boundsText(node) !== this.boundsText(previous)) {
+        this.log.note(
+          `"${description}" moved from ${this.boundsText(previous)} to ` +
+            `${this.boundsText(node)} - the tap is aimed at the new box`
+        );
+      }
+      return node;
+    },
+
     waitForNodes(predicate, why, minCount = 1, timeoutMs = REACT_TIMEOUT) {
       const deadline = Date.now() + timeoutMs;
       for (;;) {
@@ -2025,8 +2045,96 @@ async function bottomSheetChecks(t) {
 async function contextMenuChecks(t) {
   const { log } = t;
   await contextReset(t);
+  const density = t.density();
   const target = t.nodeByTestId('ctx-target')?.bounds;
-  if (target == null) t.log.abort('no ctx-target on the ContextMenu screen');
+  if (target == null) log.abort('no ctx-target on the ContextMenu screen');
+  // Off-centre on purpose: the press point is the anchor, and a menu anchored to the
+  // view's centre or corner would read tens of dp off here (S3: 329/48/141 px).
+  const at = pointIn(target, 0.3, 0.4);
+
+  // 1. Quick taps are the child's: one onPress each, no menu.
+  let quick = 0;
+  for (let i = 0; i < 3; i += 1) {
+    const before = contextEcho(t);
+    await t.tapPx(at.x, at.y);
+    const after = await contextEchoWhen(t, (e) => e.press === before.press + 1);
+    await sleep(500);
+    if (
+      contextEcho(t).press === before.press + 1 &&
+      after.opens === before.opens
+    ) {
+      quick += 1;
+    }
+  }
+  log.checkEquals(
+    'a quick tap presses the child once and opens nothing (of 3)',
+    quick,
+    3
+  );
+  t.waitForPopupCount(0, 'no popup after the quick taps');
+
+  // 2. A still hold opens the menu at the finger, with no onPress; a row picks, select
+  //    then close; the next tap presses once.
+  const anchors = [];
+  let opened = 0;
+  let pressAfterOpen = 0;
+  let picked = 0;
+  let fresh = 0;
+  const orders = [];
+  for (let i = 0; i < 3; i += 1) {
+    const before = contextEcho(t);
+    await t.holdAt(at.x, at.y, 1000);
+    const popup = await contextPopupWithin(t);
+    if (popup == null || !popup.rows.includes('Copy text')) {
+      log.note(`hold ${String(i + 1)}: no popup with "Copy text"`);
+      await contextClose(t);
+      continue;
+    }
+    opened += 1;
+    anchors.push({ dx: popup.bounds.x1 - at.x, dy: popup.bounds.y1 - at.y });
+    const row = popup.nodes.find((node) => node.text === 'Copy text');
+    if (row != null) await t.tapPx(row.bounds.cx, row.bounds.cy);
+    t.waitForPopupCount(0, 'the pick to take the popup down');
+    const mid = await contextEchoWhen(t, (e) => e.closes === before.closes + 1);
+    pressAfterOpen += mid.press - before.press;
+    if (mid.selects === before.selects + 1) picked += 1;
+    orders.push(
+      (t.echo('ctx-order') ?? '')
+        .replace('order=', '')
+        .split(',')
+        .slice(-3)
+        .join('>')
+    );
+    await t.tapPx(at.x, at.y);
+    const after = await contextEchoWhen(t, (e) => e.press === mid.press + 1);
+    await sleep(400);
+    if (after.press === mid.press + 1) fresh += 1;
+  }
+  log.note(
+    `popup top-start minus the press point, px at density ${String(density)}: ` +
+      anchors.map((a) => `${String(a.dx)},${String(a.dy)}`).join(' | ')
+  );
+  log.checkEquals('a still hold opens the menu (of 3)', opened, 3);
+  log.checkEquals(
+    'and the child is never pressed by a hold that opened it',
+    pressAfterOpen,
+    0
+  );
+  log.checkEquals('a row picks (of 3)', picked, 3);
+  log.checkEquals(
+    'a pick reports select before close, every time',
+    orders.filter((order) => order === 'open>select:copy>close').length,
+    3
+  );
+  log.checkEquals('a fresh tap after each menu presses once (of 3)', fresh, 3);
+  log.checkEquals(
+    "the popup's top-start is the finger, within 1 dp (of 3)",
+    anchors.filter(
+      (a) => Math.abs(a.dx) <= density && Math.abs(a.dy) <= density
+    ).length,
+    3
+  );
+
   // 3. A drag that starts on the ContextMenu scrolls the page and opens nothing.
   let scrolled = 0;
   let openedByDrag = 0;
@@ -2081,6 +2189,151 @@ async function contextMenuChecks(t) {
     log.checkEquals(
       'Back closes it, reported once',
       after.closes - before.closes,
+      1
+    );
+  }
+
+  // 5. A horizontal ScrollView inside pans and opens nothing.
+  {
+    const strip = t.nodeByTestId('ctx-hscroll')?.bounds;
+    if (strip == null) log.abort('no ctx-hscroll on the ContextMenu screen');
+    const from = pointIn(strip, 0.8, 0.5);
+    const to = pointIn(strip, 0.2, 0.5);
+    const before = contextEcho(t);
+    await t.swipePx(from.x, from.y, to.x, to.y, 300);
+    await sleep(800);
+    const after = contextEcho(t);
+    log.check('the inner horizontal ScrollView pans', after.hX !== before.hX);
+    log.checkEquals('and opens no menu', after.opens - before.opens, 0);
+    await t.swipePx(to.x, to.y, from.x, from.y, 300);
+    await sleep(600);
+  }
+
+  // 6. An outside tap closes the menu and presses nothing below it.
+  {
+    const below = t.nodeByTestId('ctx-below')?.bounds;
+    if (below == null) log.abort('no ctx-below on the ContextMenu screen');
+    const belowAt = pointIn(below, 0.85, 0.5);
+    const before = contextEcho(t);
+    await t.holdAt(at.x, at.y, 1000);
+    const popup = await contextPopupWithin(t);
+    log.check('the hold before the outside tap opens the menu', popup != null);
+    await t.tapPx(belowAt.x, belowAt.y);
+    t.waitForPopupCount(0, 'the outside tap to close the menu');
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.closes === before.closes + 1
+    );
+    await sleep(400);
+    log.checkEquals(
+      'an outside tap closes the menu',
+      after.closes - before.closes,
+      1
+    );
+    log.checkEquals(
+      'and the press under it never lands',
+      contextEcho(t).below - before.below,
+      0
+    );
+  }
+
+  // 7. Nested: the innermost ContextMenu opens, the outer does not.
+  {
+    const before = contextEcho(t);
+    const inner = await contextReveal(t, 'ctx-inner');
+    const innerAt = pointIn(inner, 0.5, 0.5);
+    await t.holdAt(innerAt.x, innerAt.y, 1000);
+    const popup = await contextPopupWithin(t);
+    log.check(
+      `a hold on the inner ContextMenu opens the inner menu (rows ${popup == null ? '-' : popup.rows.join('/')})`,
+      popup != null &&
+        popup.rows.includes('Inner action') &&
+        !popup.rows.includes('Outer action')
+    );
+    await contextClose(t);
+    const after = await contextEchoWhen(t, (e) => e.inner === before.inner + 1);
+    log.checkEquals(
+      'the inner reports the open',
+      after.inner - before.inner,
+      1
+    );
+    log.checkEquals('the outer does not', after.outer - before.outer, 0);
+  }
+
+  // 8. Disabled: no menu, and the hold is the child's (a Pressable with no onLongPress
+  //    presses on release).
+  {
+    const before = contextEcho(t);
+    const child = await contextReveal(t, 'ctx-disabled-target');
+    const childAt = pointIn(child, 0.5, 0.5);
+    await t.holdAt(childAt.x, childAt.y, 1000);
+    const popup = await contextPopupWithin(t, 1500);
+    await contextClose(t);
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.dPress === before.dPress + 1
+    );
+    log.check('a disabled ContextMenu opens nothing on a hold', popup == null);
+    log.checkEquals('and reports no open', after.dOpens - before.dOpens, 0);
+    log.checkEquals(
+      'the child keeps the gesture: one press on release',
+      after.dPress - before.dPress,
+      1
+    );
+  }
+
+  // 9. An accessible ContextMenu is one node with the label, long-clickable: what
+  //    TalkBack offers its double-tap-and-hold on. (The a11y sweep grades its name.)
+  {
+    await contextReveal(t, 'ctx-accessible');
+    const named = t
+      .dump()
+      .filter((node) => node.contentDesc === 'Message from Grace');
+    log.checkEquals('one node carries "Message from Grace"', named.length, 1);
+    log.checkEquals(
+      'and it is long-clickable',
+      named[0]?.longClickable,
+      'true'
+    );
+    log.checkEquals('and focusable', named[0]?.focusable, 'true');
+    // And one that is not `accessible`, around Text only, is a `View` to TalkBack: a
+    // long-clickable node is an actionable stop, which would read its Text as one stop
+    // the app never asked for (D36 item 1 makes the element opt-in).
+    const plain = t.nodeByTestId('ctx-bottom');
+    log.checkEquals(
+      'a ContextMenu that is not accessible offers TalkBack no long-click',
+      plain?.longClickable,
+      'false'
+    );
+    log.checkEquals('and is not focusable', plain?.focusable, 'false');
+  }
+
+  // 10. At the bottom edge the popup opens above the finger. Last, from the top of the
+  //     page, because the bottom row sits outside the ScrollView.
+  {
+    await contextTop(t);
+    const bottom = t.nodeByTestId('ctx-bottom')?.bounds;
+    if (bottom == null) log.abort('no ctx-bottom on the ContextMenu screen');
+    const low = pointIn(bottom, 0.3, 0.5);
+    const before = contextEcho(t);
+    await t.holdAt(low.x, low.y, 1000);
+    const popup = await contextPopupWithin(t);
+    log.note(
+      `bottom edge: press=${String(low.x)},${String(low.y)} popup=` +
+        (popup == null ? '-' : t.boundsText({ bounds: popup.bounds }))
+    );
+    log.check(
+      'near the bottom edge the popup opens above the finger',
+      popup != null && popup.bounds.y2 <= low.y
+    );
+    await contextClose(t);
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.bottom === before.bottom + 1
+    );
+    log.checkEquals(
+      'and that ContextMenu reported the open',
+      after.bottom - before.bottom,
       1
     );
   }
@@ -2275,6 +2528,41 @@ async function dialogChecks(t) {
     'a real tap on a disabled action leaves the alert up',
     upCount(ALERT)(),
     1
+  );
+  const waitGone = async (text, description) => {
+    const deadline = Date.now() + REACT_TIMEOUT;
+    while (upCount(text)() > 0) {
+      if (Date.now() > deadline) {
+        t.log.abort(`timed out waiting for ${description}`);
+      }
+      await t.settle(250);
+    }
+  };
+
+  // 5. The action that reports, before the close it causes.
+  t.log.checkEquals(
+    'a real tap on an action reports its id, then the close - once each, in order',
+    await t.tapOptionUntilValue(
+      'Delete draft',
+      ECHO.dialogLog,
+      'action:delete > presented:false',
+      'the real tap on "Delete draft"'
+    ),
+    'action:delete > presented:false'
+  );
+  await waitGone(ALERT, 'the action to take the alert down');
+
+  // 6. Back and a tap outside close a dismissible alert, and report the close alone.
+  await open('dialog-open-alert', ALERT, 'the real tap that reopens the alert');
+  await t.pressBack();
+  await waitGone(ALERT, 'Back to take the dismissible alert down');
+  await open('dialog-open-alert', ALERT, 'the real tap that opens it again');
+  await t.tapScrim();
+  await waitGone(ALERT, 'a tap outside to take the dismissible alert down');
+  t.log.checkEquals(
+    'Back and a tap outside each closed the alert with one close and no action',
+    t.requireEcho(ECHO.dialogLog),
+    'action:delete > presented:false > presented:false > presented:false'
   );
 }
 
@@ -2497,9 +2785,36 @@ async function iconButtonChecks(t) {
     'off'
   );
 
+  // 2. Pressed twice: two reports, one per tap, and nothing else moved. The counter
+  //    is asserted as an exact number rather than `atLeast`, which is the point — a
+  //    press that fired twice per tap is the bug this row is for.
+  const BOX = 'Real-input icon button';
+  for (const count of ['1', '2']) {
+    t.log.checkEquals(
+      `real tap ${count} on the press button reports one onPress`,
+      await t.tapUntilValue(
+        () => named(BOX),
+        ECHO.iconButtonPresses,
+        count,
+        `the real tap that makes press ${count}`
+      ),
+      count
+    );
+  }
+  t.log.checkEquals(
+    'two presses on the press button change no toggle: the value echo is where it started',
+    t.requireEcho(ECHO.iconButtonValue),
+    'off'
+  );
+  t.log.checkEquals(
+    'and the toggle still reports no change',
+    t.requireEcho(ECHO.iconButtonEvents),
+    '0'
+  );
+
   // 3. The toggle, once per direction. `nativeLabel` is passed because the node
   //    publishes its own state: without that witness a lost change event is
-  //    exactly what a retry would turn green (F1 M3).
+  //    exactly what a retry would turn green.
   t.log.checkEquals(
     'one real tap checks the toggle (React renders "on")',
     await t.tapUntilValue(
@@ -2540,6 +2855,11 @@ async function iconButtonChecks(t) {
   t.log.checkEquals(
     'two taps report two changes, one per tap',
     t.requireEcho(ECHO.iconButtonEvents),
+    '2'
+  );
+  t.log.checkEquals(
+    'a tap on the toggle is not also a press: the press counter stayed at 2',
+    t.requireEcho(ECHO.iconButtonPresses),
     '2'
   );
 }
@@ -2782,6 +3102,25 @@ async function pickerChecks(t) {
       : `${node.className} enabled=${node.enabled} checkable=${node.checkable} ` +
         `checked=${node.checked} at ${node.bounds.x1},${node.bounds.y1}-` +
         `${node.bounds.x2},${node.bounds.y2}`;
+  // The menu variant first, while the page is still at its top: the platform places
+  // this popup by the room under the anchor, and Back is the person's other way out.
+  const anchor = await t.requireControlOnScreen('Real-input picker');
+  t.log.checkEquals(
+    'a real tap on the anchor opens the menu as a popup window',
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input picker', anchor),
+      'a real tap on the anchor to open a popup window',
+      () => t.popupWindowCount()
+    ),
+    '1'
+  );
+  await t.pressBack();
+  t.log.checkEquals(
+    'Back shuts the popup (no window left behind)',
+    t.waitForPopupCount(0, 'the back gesture to take the popup down'),
+    0
+  );
+
   await t.requireControlOnScreen('Real-input radio picker');
   t.log.checkEquals(
     'the radio group has reported no index before a touch',
@@ -2877,6 +3216,22 @@ async function pickerChecks(t) {
     t.requireEchoToStay(ECHO.radioIndex, '2', 'a tap on a disabled radio row'),
     '2'
   );
+
+  // The plain menu variant again, for what a screen reader is offered: the dump is the
+  // only witness here, and a name sitting on a node that does not say it is disabled
+  // misdescribes the control however well the taps land.
+  await t.requireControlOnScreen('Real-input disabled picker');
+  const lockedNodes = t.nodesNamed('Real-input disabled picker');
+  t.log.checkEquals(
+    'the disabled picker is one node as well',
+    lockedNodes.length,
+    1
+  );
+  t.log.checkEquals(
+    'and that node is the one that says it is disabled',
+    lockedNodes[0]?.enabled,
+    'false'
+  );
 }
 
 /** `enabled` on the disabled row's own node, and the live row behind it. */
@@ -2924,6 +3279,359 @@ async function listItemChecks(t) {
   );
 }
 
+/** The split trigger's list half, and the Back that answers it. */
+async function menuChecks(t) {
+  const SPLIT_ACTION = 'Real-input split menu';
+  const SPLIT_LIST = 'More options';
+  await t.requireControlOnScreen(SPLIT_ACTION);
+  // The halves of ONE control share a vertical band, so the band is what pairs them,
+  // and every press re-reads it: the boxes this lookup returns are the boxes the taps
+  // are aimed at.
+  const listHalf = () => {
+    const nodes = t.dump();
+    const action = findAllByDescription(nodes, SPLIT_ACTION)[0];
+    if (action == null) {
+      t.log.abort(
+        `no node named "${SPLIT_ACTION}" in the accessibility tree - the split ` +
+          'trigger offers nothing a real tap could be aimed at'
+      );
+    }
+    const named = findAllByDescription(nodes, SPLIT_LIST).filter(
+      (node) =>
+        node.bounds.y1 === action.bounds.y1 &&
+        node.bounds.y2 === action.bounds.y2 &&
+        node.bounds.x2 > action.bounds.x1
+    );
+    if (named.length === 0) {
+      t.log.abort(
+        `no "${SPLIT_LIST}" half beside "${SPLIT_ACTION}" in the accessibility tree`
+      );
+    }
+    return named[0];
+  };
+
+  // The action half first, because it has no window of its own to answer with: the
+  // echo is the only witness that this half is a press and not a second way to open
+  // the same list.
+  const actionHalf = () => {
+    const nodes = t.dump();
+    const named = findAllByDescription(nodes, SPLIT_ACTION);
+    if (named.length === 0) {
+      t.log.abort(
+        `no node named "${SPLIT_ACTION}" in the accessibility tree - the split ` +
+          'trigger offers nothing a real tap could be aimed at'
+      );
+    }
+    return named[0];
+  };
+  await t.tapNode(actionHalf());
+  t.log.checkEquals(
+    'a real tap on the action half runs the primary action',
+    t.requireEcho(ECHO.menuSplitEvents),
+    'action'
+  );
+  t.log.checkEquals(
+    'and raises no list - no window, and no open in the echo either',
+    `${String(t.popupWindowCount())} | ${t.requireEcho(ECHO.menuSplitEvents)}`,
+    '0 | action'
+  );
+
+  // One press of the list half is one open, and Back is the person's other way out of
+  // it: a window the platform closes and the control does not report is a window that
+  // can be left behind.
+  await t.tapUntilUp(
+    listHalf,
+    'a real tap on the list half of the split trigger',
+    () => t.popupWindowCount(),
+    { pollMs: DUMP_POLL_MS }
+  );
+  await t.pressBack();
+  t.log.checkEquals(
+    'the list half shuts on Back',
+    t.waitForPopupCount(0, 'the split list to come down'),
+    0
+  );
+  t.log.checkEquals(
+    'one press of the list half is one open and one close',
+    t.requireEcho(ECHO.menuSplitEvents),
+    'action > open > close'
+  );
+}
+
+/** Back takes a hosted popup's window down, and leaves none. */
+async function hostedPickerChecks(t) {
+  const PICK = 'Gamma';
+  let aimed = await t.requireControlOnScreen('Hosted picker');
+  t.log.checkEquals(
+    'a real tap on the hosted anchor opens the menu as a popup window',
+    await t.tapUntilUp(
+      () => (aimed = t.requireControlAt('Hosted picker', aimed)),
+      'a real tap on the hosted anchor to open a popup window',
+      () => t.popupWindowCount()
+    ),
+    '1'
+  );
+  t.waitForOption(PICK, 'the hosted menu to open');
+  await t.pressBack();
+  t.log.checkEquals(
+    'Back shuts the hosted popup (no window left behind)',
+    t.waitForPopupCount(0, 'the back gesture to take the hosted popup down'),
+    0
+  );
+  t.log.checkEquals(
+    'opening and dismissing reported no selection - a menu is not a choice',
+    t.requireEcho(ECHO.hostPickerIndex),
+    '1'
+  );
+}
+
+/** What a screen reader is offered around a `<Host>`: its own text, in order. */
+async function hostedSwitchChecks(t) {
+  await t.requireControlOnScreen('Hosted switch 0');
+  // `uiautomator dump` lists nodes in traversal order, so where a hosted label sits
+  // among the plain React Native text nodes around it is the order TalkBack reads them
+  // in. The `<Host>` here sits between two `Text`s and holds three labelled Switches,
+  // which gives both halves of the claim: one node per child, in mount order, between
+  // the RN siblings rather than before or after them.
+  const tree = t.dump();
+  // Matched without case because the tree carries what is drawn, not what JSX says:
+  // this screen's section headings carry `textTransform: 'uppercase'`.
+  const textOrder = (needle) =>
+    tree.findIndex((node) =>
+      node.text.toLowerCase().includes(needle.toLowerCase())
+    );
+  const descOrder = (description) =>
+    tree.findIndex((node) => node.contentDesc === description);
+  const section = textOrder('Three Switches, one composition');
+  const followingNote = textOrder('The Host has a height');
+  const hosted = [0, 1, 2].map((index) =>
+    descOrder(`Hosted switch ${String(index)}`)
+  );
+
+  // A red ordering claim has to say where the tree actually put things, and a missing
+  // node has to say what it saw instead.
+  const where = tree
+    .map((node, index) =>
+      node.text || node.contentDesc
+        ? `${String(index)}:${(node.text || node.contentDesc).slice(0, 22)}`
+        : null
+    )
+    .filter(Boolean)
+    .join(' | ');
+  t.log.note(
+    `tree positions — section=${String(section)}, hosted=${hosted.join(
+      '/'
+    )}, note=${String(followingNote)}; named nodes: ${where}`
+  );
+
+  t.log.checkEquals(
+    'the tree carries the RN text above the Host',
+    section >= 0,
+    true
+  );
+  t.log.checkEquals(
+    'the tree carries the RN note below the Host',
+    followingNote >= 0,
+    true
+  );
+  t.log.checkEquals(
+    'the tree carries a node for each hosted Switch',
+    hosted.map((at) => at >= 0),
+    [true, true, true]
+  );
+  t.log.checkEquals(
+    'each hosted Switch is its own labelled node, in mount order',
+    hosted,
+    [...hosted].sort((left, right) => left - right)
+  );
+  t.log.checkEquals(
+    'the RN text above the Host is read before every hosted Switch',
+    hosted.map((at) => at > section),
+    [true, true, true]
+  );
+  t.log.checkEquals(
+    'the RN note below the Host is read after every hosted Switch',
+    hosted.map((at) => at < followingNote),
+    [true, true, true]
+  );
+}
+
+/** Keystrokes reach the field inside a popover, before that popover closes. */
+async function popoverChecks(t) {
+  const FIELD = 'Rename this list';
+  const upCount = (text) => () =>
+    t.dump().filter((node) => node.text === text).length;
+  const waitGone = async (witness, description) => {
+    const deadline = Date.now() + REACT_TIMEOUT;
+    while (upCount(witness)() > 0) {
+      if (Date.now() > deadline) {
+        t.log.abort(`timed out waiting for ${description}`);
+      }
+      await t.settle(250);
+    }
+  };
+  // Outside: the log line, a `Text` with no press of its own at the top of the page,
+  // above every anchor. Aimed at its first line rather than its centre, because that
+  // line grows downward as events arrive and a centre tap would drift onto the Reset
+  // button.
+  const logNode = t.nodeByTestId(ECHO.popoverLog);
+  if (logNode == null) {
+    t.log.abort('no "popover-log" on the Popover screen to tap outside on');
+  }
+  const outside = { x: logNode.bounds.x1 + 6, y: logNode.bounds.y1 + 4 };
+
+  // An emulator answers `hw.keyboard=yes`, which hides the soft keyboard, and the
+  // keystrokes have to go to a field the IME is actually attached to; the setting goes
+  // back either way.
+  const hardKeyboard = t.setImeWithHardKeyboard(true);
+  try {
+    await t.tapTestId('popover-field-anchor');
+    t.waitForOption(FIELD, 'the popover with a field to open');
+    const field = t.nodeByTestId('popover-inner-field');
+    if (field == null) {
+      t.log.abort('the field popover is up without its TextInput in the tree');
+    }
+    await t.tapNode(field);
+    const imeDeadline = Date.now() + REACT_TIMEOUT;
+    while (!t.imeShown() && Date.now() < imeDeadline) {
+      await t.settle(250);
+    }
+    t.log.checkEquals(
+      'a real tap on the TextInput inside the popover brings up the keyboard',
+      t.imeShown(),
+      true
+    );
+    // Asserted on the committed value rather than on one entry per character, because
+    // `input text` can deliver both characters in one commit and RN then reports the
+    // field's text once. The screen also records the popover's own close from that
+    // outside tap, so the claim is the order the log carries — a bare suffix cannot see
+    // which of the two happened first.
+    await t.type('ab');
+    await t.hideKeyboard();
+    await t.tapPx(outside.x, outside.y);
+    await t.settle(400);
+    await waitGone(FIELD, 'the outside tap to take the field popover down');
+    const typedLog = t.requireEcho(ECHO.popoverLog);
+    t.log.checkEquals(
+      `real keystrokes reach the field inside the popover, before its own close (${typedLog.slice(-70)})`,
+      typedLog.includes('typed:ab') &&
+        typedLog.indexOf('typed:ab') <
+          typedLog.lastIndexOf('field:presented:false'),
+      true
+    );
+  } finally {
+    t.setImeWithHardKeyboard(hardKeyboard);
+  }
+}
+
+/** One named radio node per option, each carrying the selection. */
+async function segmentedControlChecks(t) {
+  const control = await t.requireControlOnScreen(
+    'Real-input segmented control'
+  );
+  // The selection has to be one the *finger* made, so the claim below cannot be the
+  // fixture's default, and the middle of the box is the segment drawn '2'.
+  t.log.checkEquals(
+    'a real tap on the second segment reaches JS as index 1',
+    await t.tapUntilValue(
+      () => t.requireControl('Real-input segmented control'),
+      ECHO.segmentedIndex,
+      '1',
+      'a real tap to register'
+    ),
+    '1'
+  );
+
+  // Each of the three claims lives on a different entry, and that is Compose's doing:
+  // a selectable item is published as the item itself — a node at the segment's box
+  // carrying `checkable`/`checked`, which is what TalkBack reads as "selected" — with
+  // the `Role` on its own `RadioButton` node at that same box and the label as a child
+  // `TextView`. An assertion that one node carries all three describes a tree this row
+  // does not have, so each claim is read where it is, and the note prints all three.
+  const box = await t.requireControl('Real-input segmented control');
+  const tree = t.dump();
+  const insideBox = (node) =>
+    node.bounds.x1 >= box.bounds.x1 - 1 &&
+    node.bounds.x2 <= box.bounds.x2 + 1 &&
+    node.bounds.y1 >= box.bounds.y1 - 1 &&
+    node.bounds.y2 <= box.bounds.y2 + 1;
+  const centreInside = (node, other) =>
+    (node.bounds.x1 + node.bounds.x2) / 2 >= other.bounds.x1 - 1 &&
+    (node.bounds.x1 + node.bounds.x2) / 2 <= other.bounds.x2 + 1 &&
+    (node.bounds.y1 + node.bounds.y2) / 2 >= other.bounds.y1 - 1 &&
+    (node.bounds.y1 + node.bounds.y2) / 2 <= other.bounds.y2 + 1;
+  const boundsText = (node) =>
+    `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
+    `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
+  const items = tree
+    .filter((node) => node.checkable === 'true' && insideBox(node))
+    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
+  const radios = tree
+    .filter(
+      (node) =>
+        node.className === 'android.widget.RadioButton' && insideBox(node)
+    )
+    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
+  items.forEach((node, index) => {
+    const radio = radios.find((candidate) => centreInside(candidate, node));
+    const label = tree.find(
+      (candidate) =>
+        candidate.text === String(index + 1) && insideBox(candidate)
+    );
+    t.log.note(
+      `segment ${String(index + 1)}: item ${node.className.split('.').pop()} ` +
+        `[${boundsText(node)}] checked=${node.checked}; role ` +
+        `${radio == null ? 'MISSING' : `[${boundsText(radio)}]`}; label ` +
+        `${label == null ? 'MISSING' : `[${boundsText(label)}]`}`
+    );
+  });
+  t.log.checkEquals('the group still has one node per option', items.length, 3);
+  t.log.checkEquals(
+    'the group publishes one radio node per option',
+    radios.length,
+    3
+  );
+  items.forEach((node, index) => {
+    t.log.checkEquals(
+      `segment ${String(index + 1)} of ${String(items.length)} is still a radio button`,
+      radios.some((candidate) => centreInside(candidate, node)),
+      true
+    );
+    t.log.checkEquals(
+      `segment ${String(index + 1)} is announced with its own label`,
+      tree.some(
+        (candidate) =>
+          candidate.text === String(index + 1) && centreInside(candidate, node)
+      ),
+      true
+    );
+    t.log.checkEquals(
+      `segment ${String(index + 1)} reports the selection the control has (index 1)`,
+      node.checked,
+      index === 1 ? 'true' : 'false'
+    );
+  });
+}
+
+/** A hold on a Stepper half is one step, and not a run of them. */
+async function stepperChecks(t) {
+  // The two halves are positions on one node: 48 dp of button, an 8 dp gap, 48 dp of
+  // button, so 0.2 and 0.8 land on the glyphs and clear of the gap.
+  const PLUS = 0.8;
+  const held = await t.requireControlOnScreen('Real-input hold stepper');
+  await t.holdAt(
+    held.bounds.x1 + held.bounds.width * PLUS,
+    held.bounds.cy,
+    1400
+  );
+  await t.settle(400);
+  t.log.checkEquals(
+    'a 1.4 s hold on the plus half steps exactly once (no Android repeat, as documented)',
+    t.requireEcho(ECHO.stepperHoldValue),
+    '6'
+  );
+}
+
 /**
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
@@ -2934,6 +3642,9 @@ const TREE_CHECKS = [
   { id: 'date-picker', run: datePickerChecks },
   { id: 'hosted-date-picker', run: hostedDatePickerChecks },
   { id: 'hosted-mixed', run: hostedMixedChecks },
+  { id: 'hosted-picker', run: hostedPickerChecks },
+  { id: 'hosted-switch', run: hostedSwitchChecks },
+  { id: 'menu', run: menuChecks },
   { id: 'dialog', run: dialogChecks },
   { id: 'chip', run: chipChecks },
   { id: 'checkbox', run: checkboxChecks },
@@ -2941,6 +3652,9 @@ const TREE_CHECKS = [
   { id: 'button-group', run: buttonGroupChecks },
   { id: 'picker', run: pickerChecks },
   { id: 'list-item', run: listItemChecks },
+  { id: 'popover', run: popoverChecks },
+  { id: 'segmented-control', run: segmentedControlChecks },
+  { id: 'stepper', run: stepperChecks },
 ];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */
