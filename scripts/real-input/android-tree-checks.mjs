@@ -3394,7 +3394,38 @@ async function hostedPickerChecks(t) {
 }
 
 /** What a screen reader is offered around a `<Host>`: its own text, in order. */
+/**
+ * Draw the three hosted Switches together: back to the top of the page first, then down.
+ *
+ * A `<Host>` child only earns a box in the dump once it has been drawn, and the page is wherever
+ * the previous control's checks left it, so a search from there can spend every scroll travelling
+ * away. The three rows are the first block of Hosts, so the walk restarts above them. The drags
+ * are on the right-edge strip, where no control owns the finger.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function walkOntoHostedSwitches(t) {
+  const names = ['Hosted switch 0', 'Hosted switch 1', 'Hosted switch 2'];
+  const { width, height } = t.screenSize();
+  const edge = width - 8;
+  const middle = Math.round(height / 2);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await t.swipePx(edge, middle, edge, middle + 900, 300);
+  }
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (
+      names.every((name) =>
+        t.nodesNamed(name).some((node) => node.bounds.height > 0)
+      )
+    ) {
+      return;
+    }
+    await t.swipePx(edge, middle, edge, middle - 500, 600);
+  }
+}
+
 async function hostedSwitchChecks(t) {
+  await walkOntoHostedSwitches(t);
   await t.requireControlOnScreen('Hosted switch 0');
   // `uiautomator dump` lists nodes in traversal order, so where a hosted label sits
   // among the plain React Native text nodes around it is the order TalkBack reads them
