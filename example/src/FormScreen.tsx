@@ -332,7 +332,7 @@ export default function FormScreen() {
           for the row behind it, and a list that *ends* at the note field has no
           scroll left to lift that field clear of it: the check that focuses it
           could only ever tap the warning box. More rows to look at is what a
-          settings screen has anyway, and they are the scroll room. (X35)
+          settings screen has anyway, and they are the scroll room.
         */}
         <Form.Section title="Diagnostics">
           {TAIL.map((row) => (
