@@ -61,6 +61,7 @@ import {
   planRerunFailed,
   completeRerun,
   completionProvenance,
+  isolatedSwitchBlock,
   realInputUnitsFromResults,
   isDeviceGate,
   isUsageProbe,
@@ -2506,6 +2507,7 @@ async function main(argv) {
   // that never started. The disk is asked last: a missing lease is the more
   // useful thing to be told.
   const leaseBlock =
+    isolatedSwitchBlock(resolved.gate, process.env) ??
     deviceGateLeaseBlock(resolved, process.env) ??
     deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {
@@ -2548,6 +2550,7 @@ async function rerunFailedGate({ command, extraArgs, background }) {
     return 2;
   }
   const leaseBlock =
+    isolatedSwitchBlock(command, process.env) ??
     deviceGateLeaseBlock(resolved, process.env) ??
     deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {

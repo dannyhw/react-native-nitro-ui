@@ -16,6 +16,7 @@ import {
   LEDGER_VERSION,
   ledgerLineFromRun,
   RELAXING_SWITCHES,
+  relaxedSwitches,
   renderGateTable,
   summarizeGates,
 } from '../gate-core.mjs';
@@ -189,6 +190,19 @@ describe('a green run recorded on another branch', () => {
       relaxed: { NITRO_UI_GATE_DEVICE_FORCE: '1' },
     });
     expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('red');
+  });
+
+  it('records a pinned zone or locale replaced, even by an empty value, as relaxed', () => {
+    for (const name of [
+      'NITRO_UI_TEST_TZ',
+      'NITRO_UI_TEST_LOCALE',
+      'NITRO_UI_TEST_LANGUAGES',
+    ]) {
+      expect(relaxedSwitches({ [name]: 'UTC' })).toEqual({ [name]: 'UTC' });
+      expect(relaxedSwitches({ [name]: '' })).toEqual({ [name]: '' });
+    }
+    // An empty value of any other switch is the switch off.
+    expect(relaxedSwitches({ NITRO_UI_ALLOW_UNSTAMPED: '' })).toEqual({});
   });
 
   it('proves nothing when another ledger version wrote it', () => {
@@ -522,6 +536,8 @@ function gitEnv(home) {
     'GIT_OBJECT_DIRECTORY',
     // A switch inherited from the shell, `CI` on a CI runner, would mark every run relaxed.
     ...RELAXING_SWITCHES,
+    // Refused for a full harness gate, so one exported in the shell would fail these runs.
+    'NITRO_UI_HARNESS_ISOLATED',
   ]) {
     delete env[name];
   }
@@ -696,6 +712,42 @@ describe('gate.mjs across the worktrees of one clone', () => {
     );
     const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
     expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
+  }, 120_000);
+
+  it('an empty NITRO_UI_TEST_TZ is recorded as relaxed and proves nothing elsewhere', () => {
+    const clone = makeClone();
+    expect(
+      runCli(clone, clone.there, ['harness:ios'], { NITRO_UI_TEST_TZ: '' })
+        .status
+    ).toBe(0);
+    const line = JSON.parse(
+      fs
+        .readFileSync(
+          path.join(clone.there, '.gates', 'task', 'there.jsonl'),
+          'utf8'
+        )
+        .trim()
+    );
+    expect(line.relaxed).toEqual({ NITRO_UI_TEST_TZ: '' });
+    const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
+    expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
+  }, 120_000);
+
+  it('a full harness gate is refused while the isolated-suites switch is exported, and records nothing', () => {
+    const clone = makeClone();
+    for (const args of [['harness:ios'], ['harness:ios', '--background']]) {
+      const refused = runCli(clone, clone.there, args, {
+        NITRO_UI_HARNESS_ISOLATED: '1',
+      });
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain(
+        'gate: refused before the run - NITRO_UI_HARNESS_ISOLATED is set in this shell'
+      );
+      expect(refused.stdout).not.toContain('fake runner');
+    }
+    expect(
+      fs.existsSync(path.join(clone.there, '.gates', 'task', 'there.jsonl'))
+    ).toBe(false);
   }, 120_000);
 
   it('a run judged by other gate code proves nothing here', () => {

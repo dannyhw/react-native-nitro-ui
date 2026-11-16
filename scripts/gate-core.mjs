@@ -5,6 +5,7 @@
 
 import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
 import { ACQUIRE_HINT, emulatorSerial, leaseIsLive } from './lease-core.mjs';
+import { ISOLATED_ENV } from './harness-isolated.mjs';
 
 /** Where a machine's ledgers live. Gitignored: a ledger is local evidence. */
 export const LEDGER_DIR = '.gates';
@@ -40,6 +41,9 @@ export const LEDGER_VERSION = 8;
  * - `NITRO_UI_LSOF_BIN`, `NITRO_UI_ADB_BIN`, `NITRO_UI_SIMCTL_BIN`: another
  *   program answers for the port check or drives the device.
  * - `HARNESS_TEST_TIMEOUT`, `REAL_INPUT_TIMEOUT`, `CI`: longer timeouts.
+ * - `NITRO_UI_TEST_TZ`, `NITRO_UI_TEST_LOCALE`, `NITRO_UI_TEST_LANGUAGES`: the app
+ *   runs in another zone or locale than the pinned one, so the DST and locale
+ *   cases it exists for may not run. Empty asks the device, so it counts as set.
  */
 export const RELAXING_SWITCHES = [
   'NITRO_UI_ALLOW_UNSTAMPED',
@@ -52,7 +56,17 @@ export const RELAXING_SWITCHES = [
   'HARNESS_TEST_TIMEOUT',
   'REAL_INPUT_TIMEOUT',
   'CI',
+  'NITRO_UI_TEST_TZ',
+  'NITRO_UI_TEST_LOCALE',
+  'NITRO_UI_TEST_LANGUAGES',
 ];
+
+/** Relaxing switches whose empty value still changes the run. */
+const SET_WHEN_EMPTY = new Set([
+  'NITRO_UI_TEST_TZ',
+  'NITRO_UI_TEST_LOCALE',
+  'NITRO_UI_TEST_LANGUAGES',
+]);
 
 /**
  * The relaxing switches set in `env`, as `{NAME: value}`; `{}` when none is.
@@ -63,8 +77,27 @@ export const RELAXING_SWITCHES = [
 export function relaxedSwitches(env) {
   return Object.fromEntries(
     RELAXING_SWITCHES.filter(
-      (name) => env?.[name] != null && env[name] !== ''
+      (name) =>
+        env?.[name] != null && (env[name] !== '' || SET_WHEN_EMPTY.has(name))
     ).map((name) => [name, String(env[name])])
+  );
+}
+
+/**
+ * Why a run that records `gate` must not start with this environment, or `null`.
+ * The harness's own isolated-suites switch, left exported in a shell, makes a full
+ * `harness:<platform>` run test only the isolated files and still exit 0.
+ *
+ * @param {string} gate the gate the run is recorded as
+ * @param {Record<string, string | undefined>} env
+ * @returns {string | null}
+ */
+export function isolatedSwitchBlock(gate, env) {
+  if (!/^harness:[^:]+$/.test(gate) || env?.[ISOLATED_ENV] == null) return null;
+  return (
+    `${ISOLATED_ENV} is set in this shell, so ${gate} would run only the ` +
+    `isolated suites and record a full run. Unset it (\`unset ${ISOLATED_ENV}\`) ` +
+    `and start the gate again.`
   );
 }
 

@@ -508,6 +508,8 @@ function gitEnv(dir) {
     'GIT_OBJECT_DIRECTORY',
     // A switch inherited from the shell, `CI` on a CI runner, would mark every run relaxed.
     ...RELAXING_SWITCHES,
+    // Refused for a full harness gate, so one exported in the shell would fail these runs.
+    'NITRO_UI_HARNESS_ISOLATED',
   ]) {
     delete env[name];
   }
