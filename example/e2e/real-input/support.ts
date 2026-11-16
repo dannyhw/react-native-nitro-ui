@@ -9,7 +9,7 @@
 import { expect, type Locator, type Screen } from 'e2e';
 
 /** The sideways strip the example app navigates with (`example/src/App.tsx`). */
-const TAB_STRIP = 'tab-strip';
+const TAB_STRIP = 'example-tabs';
 
 /** The Android view React Native draws the app's content into. */
 const CONTENT_ROOT = 'android:id/content';

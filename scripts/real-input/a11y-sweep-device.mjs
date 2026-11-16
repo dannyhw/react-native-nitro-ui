@@ -95,7 +95,7 @@ export class SweepDevice {
     this.adbShell('cmd statusbar collapse');
     this.adbShell(`am start -n ${this.appId}/.MainActivity`);
     const firstTab = () =>
-      this.hierarchy().some((node) => node.resourceId === 'tab-strip');
+      this.hierarchy().some((node) => node.resourceId === 'example-tabs');
     const deadline = Date.now() + 120_000;
     while (Date.now() < deadline) {
       if (firstTab()) return;

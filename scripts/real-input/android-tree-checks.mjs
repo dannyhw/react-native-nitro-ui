@@ -3871,7 +3871,7 @@ function screenOf(id) {
 async function returnToAppWindow(device) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const nodes = device.hierarchy();
-    const tabStrip = nodes.some((node) => node.resourceId === 'tab-strip');
+    const tabStrip = nodes.some((node) => node.resourceId === 'example-tabs');
     const ownWindow = nodes.some(
       (node) => node.resourceId === 'android:id/content'
     );
