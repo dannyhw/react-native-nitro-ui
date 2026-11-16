@@ -76,25 +76,6 @@ export async function actsOnOneNamedNode(
   }
 }
 
-/**
- * The same node, after the gesture: what the reader is told changed with it.
- *
- * Reading the state once cannot tell “the tree says checked” from “the tree says checked
- * and says it changed”, and only the second is the regression guard.
- */
-export async function nodeReports(
-  screen: Screen,
-  name: string,
-  state: NodeState
-): Promise<void> {
-  const named = screen.getByLabel(name);
-  expect(
-    await readState(named, state),
-    `after the gesture, "${name}" does not report "${state}" on the node a person ` +
-      'acts on: the value moved somewhere the screen reader is not looking'
-  ).toBe(true);
-}
-
 export { expect };
 
 /**

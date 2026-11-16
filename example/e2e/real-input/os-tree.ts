@@ -249,16 +249,6 @@ export function screenReaderFacts(label: string): ScreenReaderFacts {
   };
 }
 
-/** The parts of a grouped control — its items, its roles, its selection. */
-export interface GroupFacts {
-  /** Nodes inside the group's box that carry a toggleable state: one per option. */
-  items: TreeNode[];
-  /** Nodes with the given Android class inside the group's box: the roles. */
-  roles: TreeNode[];
-  /** How many of the items say they hold the selection. */
-  selected: number;
-}
-
 /** What the node behind a piece of text says about itself. */
 export interface TextFacts {
   checked: 'on' | 'off' | null;

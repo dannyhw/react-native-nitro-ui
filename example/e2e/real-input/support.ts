@@ -538,32 +538,3 @@ export async function flick(
 }
 
 export { expect };
-
-/** The content view's box, which is the page a scroll may travel. */
-async function contentBox(screen: Screen): Promise<Box> {
-  const content = await screen.getByTestId(CONTENT_ROOT).boundingBox();
-  if (content == null) {
-    throw new Error(
-      'real-input: the content view has no box, so a page scroll has nowhere to start.'
-    );
-  }
-  return content;
-}
-
-/**
- * Scroll the page by a number of pixels: positive travels towards the bottom of the list,
- * negative back towards its top. The same column and centred trajectory as every other
- * scroll here, because a swipe that starts near an edge lands on whichever control owns
- * that edge. Booked in the same counter as `reveal`’s drags so {@link pageToTop} can
- * undo it.
- */
-export async function pageScroll(
-  screen: Screen,
-  pixels: number
-): Promise<void> {
-  const content = await contentBox(screen);
-  const fraction = Math.min(Math.abs(pixels) / content.height, 0.4);
-  await dragContentFraction(screen, pixels > 0 ? fraction : -fraction);
-  if (pixels > 0) downDrags += 1;
-  else downDrags = Math.max(0, downDrags - 1);
-}
