@@ -13,6 +13,8 @@ import {
   LOG_STORE_BASENAME,
   gateLogStoreDir,
   ledgerLogCandidates,
+  LOG_NAME_GATE_MAX,
+  canonicalGateName,
   logNameFor,
   logRelativePath,
   planLogRetention,
@@ -293,6 +295,48 @@ describe('gateLogStoreDir / logRelativePath (where a log goes)', () => {
     const name = logNameFor('harness:android', Date.UTC(2026, 9, 28, 12, 0, 0));
     expect(name).toBe('harness+android-2026-10-28T12-00-00.000Z.log');
     expect(name).not.toContain(':');
+  });
+
+  it('keeps a filtered run naming eleven controls under the file-name limit, unique and readable', () => {
+    const controls = [
+      'segmented-control',
+      'date-picker',
+      'text-field',
+      'bottom-sheet',
+      'context-menu',
+      'search-field',
+      'icon-button',
+      'button-group',
+      'hosted-segmented',
+      'hosted-date-picker',
+      'list-item',
+    ];
+    const gate = canonicalGateName(
+      'real-input:android',
+      controls.flatMap((id) => ['--control', id])
+    );
+    expect(gate.length).toBeGreaterThan(255);
+    const at = Date.UTC(2026, 10, 16, 12, 0, 0);
+    const name = logNameFor(gate, at);
+    // The longest file written beside a log.
+    expect(
+      Buffer.byteLength(`${name}.suites.json.isolated.json`)
+    ).toBeLessThanOrEqual(255);
+    expect(
+      name.startsWith('real-input+android+--control+segmented-control')
+    ).toBe(true);
+    expect(name).toMatch(/~[0-9a-f]{10}-2026-11-16T12-00-00\.000Z\.log$/);
+    const other = canonicalGateName(
+      'real-input:android',
+      [...controls.slice(0, -1), 'form'].flatMap((id) => ['--control', id])
+    );
+    expect(logNameFor(other, at)).not.toBe(name);
+    // A name under the cap is left as it was.
+    const short = canonicalGateName('real-input:ios', ['--control', 'form']);
+    expect(short.length).toBeLessThan(LOG_NAME_GATE_MAX);
+    expect(logNameFor(short, at)).toBe(
+      'real-input+ios+--control+form-2026-11-16T12-00-00.000Z.log'
+    );
   });
 });
 

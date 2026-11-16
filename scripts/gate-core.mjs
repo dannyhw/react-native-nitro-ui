@@ -1278,14 +1278,29 @@ export function logRelativePath(branch, logName) {
 }
 
 /**
- * The name of one run's log file: `<gate>-<iso-time>.log`, with `:` folded to `-`.
+ * The longest gate part a log name keeps. A file name is capped at 255 bytes, and the
+ * longest sibling of a log (`<log>.suites.json.isolated.json`) adds 26 characters to
+ * the 29 of `-<iso-time>.log`.
+ */
+export const LOG_NAME_GATE_MAX = 160;
+
+/**
+ * The name of one run's log file: `<gate>-<iso-time>.log`, with `:` folded to `-`. A
+ * gate part longer than `LOG_NAME_GATE_MAX` (a filtered run naming many controls) is
+ * cut and ends in `~` and a short hash of the whole name, so two such runs never share
+ * a name. The ledger and the run's record keep the full gate name.
  *
  * @param {string} gate
  * @param {number} startedAt
  * @returns {string}
  */
 export function logNameFor(gate, startedAt) {
-  return `${String(gate).replaceAll(/[^\w.-]+/g, '+')}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
+  let part = String(gate).replaceAll(/[^\w.-]+/g, '+');
+  if (part.length > LOG_NAME_GATE_MAX) {
+    const hash = contentHash(String(gate)).slice(0, 10);
+    part = `${part.slice(0, LOG_NAME_GATE_MAX - hash.length - 1)}~${hash}`;
+  }
+  return `${part}-${new Date(startedAt).toISOString().replaceAll(':', '-')}.log`;
 }
 
 /**
