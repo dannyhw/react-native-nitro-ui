@@ -144,49 +144,62 @@ function makeContext(device, log) {
     async requireControlOnScreen(description) {
       let namedOffScreen = 0;
       let clipped = 0;
+      let scrolls = 0;
       /** @type {import('./uiautomator.mjs').UiautomatorNode | null} */
       let lastClipped = null;
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        const node = findByDescription(device.hierarchy(), description);
-        const { width, height } = device.size();
-        if (node != null && node.bounds.width > 0 && node.bounds.height > 0) {
-          const centreX = (node.bounds.x1 + node.bounds.x2) / 2;
-          const centreY = (node.bounds.y1 + node.bounds.y2) / 2;
-          const pressable =
-            node.bounds.height >= MIN_PRESSABLE_PX &&
-            centreX > 0 &&
-            centreX < width &&
-            centreY > 0 &&
-            centreY < height;
-          if (pressable) {
-            if (attempt > 0) {
+      const { width, height } = device.size();
+      // Down first, then back up. The page is wherever the previous control's checks
+      // left it, and on a screen this long a control the earlier scroll travelled past
+      // is not a control that has gone away.
+      for (const direction of [1, -1]) {
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const node = findByDescription(device.hierarchy(), description);
+          if (node != null && node.bounds.width > 0 && node.bounds.height > 0) {
+            const centreX = (node.bounds.x1 + node.bounds.x2) / 2;
+            const centreY = (node.bounds.y1 + node.bounds.y2) / 2;
+            const pressable =
+              node.bounds.height >= MIN_PRESSABLE_PX &&
+              centreX > 0 &&
+              centreX < width &&
+              centreY > 0 &&
+              centreY < height;
+            if (pressable) {
+              if (scrolls > 0) {
+                log.note(
+                  `"${description}" needed ${String(scrolls)} scroll` +
+                    `${scrolls === 1 ? '' : 's'} to come on screen` +
+                    (namedOffScreen > 0
+                      ? ` - after ${String(namedOffScreen)} naming` +
+                        `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
+                        'outside the clip)'
+                      : '') +
+                    (clipped > 0
+                      ? `, and ${String(clipped)} with a box clipped to ` +
+                        `${String(MIN_PRESSABLE_PX)} px or less`
+                      : '')
+                );
+              }
               log.note(
-                `"${description}" needed ${String(attempt)} scroll` +
-                  `${attempt === 1 ? '' : 's'} to come on screen` +
-                  (namedOffScreen > 0
-                    ? ` - after ${String(namedOffScreen)} naming` +
-                      `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
-                      'outside the clip)'
-                    : '') +
-                  (clipped > 0
-                    ? `, and ${String(clipped)} with a box clipped to ` +
-                      `${String(MIN_PRESSABLE_PX)} px or less`
-                    : '')
+                `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
+                  `${node.bounds.x2},${node.bounds.y2}`
               );
+              return node;
             }
-            log.note(
-              `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
-                `${node.bounds.x2},${node.bounds.y2}`
-            );
-            return node;
+            clipped += 1;
+            lastClipped = node;
+          } else if (node != null) {
+            namedOffScreen += 1;
           }
-          clipped += 1;
-          lastClipped = node;
-        } else if (node != null) {
-          namedOffScreen += 1;
+          scrolls += 1;
+          device.swipe(
+            width / 2,
+            direction > 0 ? height * 0.7 : height * 0.32,
+            width / 2,
+            direction > 0 ? height * 0.32 : height * 0.7,
+            400
+          );
+          await sleep(400);
         }
-        device.swipe(width / 2, height * 0.7, width / 2, height * 0.32, 400);
-        await sleep(400);
       }
       if (lastClipped != null) {
         log.abort(
@@ -197,7 +210,8 @@ function makeContext(device, log) {
         );
       }
       log.abort(
-        `scrolling six times never brought "${description}" on screen` +
+        `scrolling twelve times, down then back up, never brought ` +
+          `"${description}" on screen` +
           (namedOffScreen > 0
             ? `, although it was named ${String(namedOffScreen)} time` +
               `${namedOffScreen === 1 ? '' : 's'} with no box at all`
@@ -3033,7 +3047,9 @@ async function pickerChecks(t) {
     'a real tap that reopens the menu',
     () => t.popupWindowCount()
   );
-  await t.tapNode(t.waitForOption('Onyx', 'the menu to show the current choice'));
+  await t.tapNode(
+    t.waitForOption('Onyx', 'the menu to show the current choice')
+  );
   t.log.checkEquals(
     'tapping the row that is already chosen closes the menu',
     t.waitForPopupCount(
