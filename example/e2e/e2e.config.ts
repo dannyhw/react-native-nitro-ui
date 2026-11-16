@@ -1,6 +1,6 @@
 /**
- * The example app's e2e suite: X35's real-input checks, driven by
- * `@e2e-dev/mobile` (agent-device) on the emulator the lease exported.
+ * The example app's e2e suite: the real-input checks, driven by `@e2e-dev/mobile`
+ * (agent-device) on the emulator the lease exported.
  *
  * Everything device-shaped comes from the environment, and the only device in
  * it is the leased one: `ANDROID_SERIAL` picks the emulator, and the adb server
@@ -28,7 +28,7 @@ export default {
   ],
   // One emulator, one run: two workers would drive the same device at once.
   workers: 1,
-  // A flaky check is fixed or reported, never retried green (AGENTS.md).
+  // A flaky check is fixed or reported, never retried green.
   retries: 0,
   // The gate reads the JSON report e2e writes to `output`; the list is for a
   // human running the suite by hand.

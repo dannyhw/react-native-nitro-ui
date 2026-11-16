@@ -16,9 +16,8 @@ test('a real tap on the icon Button reaches JS once', async ({
   const presses = screen.getByTestId('real-input-icon-button-presses');
   await reveal(screen, press);
 
-  // G23 iOS: the VoiceOver element sat inset inside the 44 pt target, so a
-  // reader's target and a finger's target were different boxes. Name plus box
-  // plus the report is that class, on the node both actors use.
+  // A reader's element can sit inset inside the box a finger lands on, so the name,
+  // the box and the report are read on the one node both actors use.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(presses).toHaveText('0');
 

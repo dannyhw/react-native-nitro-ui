@@ -23,8 +23,8 @@
  *   ANDROID_AVD=<avd> ANDROID_SERIAL=<serial> ANDROID_ADB_SERVER_PORT=<port> \
  *   METRO_PORT=<port> bun run test:real-input:android [--control <id>]
  *
- * The emulator must already be booted: AGENTS.md says only touch devices you
- * started, so this script boots nothing and shuts nothing down. It addresses one
+ * The emulator must already be booted: a device gate boots nothing and shuts nothing
+ * down. It addresses one
  * device — the serial its lease exported, through that lease's adb server — and
  * tells agent-device no other device exists.
  */
@@ -109,9 +109,8 @@ function adbBinary(env) {
 /**
  * The `adb` for this run: pinned to the lease's server and the lease's serial.
  *
- * Every call carries `-P` and `-s`. An unqualified `adb` reaches whichever
- * device the server lists first, and AGENTS.md is explicit that another
- * emulator is on that server.
+ * Every call carries `-P` and `-s`. An unqualified `adb` reaches whichever device the
+ * server lists first, and another emulator is usually on that server.
  *
  * @param {NodeJS.ProcessEnv} env
  */
@@ -140,8 +139,8 @@ function resolveDevice(env) {
   const assigned = device.avd;
   if (assigned != null && /^PR15\d\d/i.test(assigned)) {
     throw new Error(
-      `real-input: ANDROID_AVD="${assigned}" is the device AGENTS.md says belongs ` +
-        'to the human. Refusing to touch it.'
+      `real-input: ANDROID_AVD="${assigned}" is the one reserved ` +
+        'for the human running this gate. Refusing to touch it.'
     );
   }
   if (isReservedSerial(device.serial)) {
@@ -183,12 +182,9 @@ function resolveDevice(env) {
 }
 
 /**
- * The control ids the suite has files for, and the files that name no control.
- *
- * The old driver kept a `CHECKS` object and compared it to the shared table; the
- * suite is files now, and the same two silent gaps exist: a control with no file
- * would pass by never running, and a file named after a control that left the
- * table would run for nobody.
+ * The control ids the suite has files for. Two silent gaps are closed here: a control
+ * with no file would pass by never running, and a file named after a control that left
+ * the table would run for nobody.
  *
  * @param {string} dir `example/e2e/real-input`
  */
@@ -348,9 +344,8 @@ function recordResults(suite, controls, report) {
       (result) => result.kind === 'test' && result.file === file
     );
     if (fromFile.length === 0) {
-      // A control that ran nothing is a failure, never a skip — the rule the old
-      // driver enforced with `markMissing`, kept for the case where the file
-      // exists but collected nothing (a filter, a skipped test, a bad import).
+      // A control that ran nothing is a failure, never a skip: the file exists but
+      // collected nothing (a filter, a skipped test, a bad import).
       suite.markMissing(control.id);
       failures += 1;
       continue;

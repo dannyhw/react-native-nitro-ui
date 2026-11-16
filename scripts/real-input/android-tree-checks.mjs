@@ -12,12 +12,8 @@
  * - `uiautomator dump` is killed while its session holds the device's one accessibility
  *   connection.
  *
- * Each check here is the one this gate made before the suite existed, moved with the
- * helpers it needs: the sheet's drags and the field inside it, the ContextMenu's scroll and
- * hold, the time wheel's drums and the calendar's columns, the hosted dialog's Cancel and
- * Back, a hosted Progress's width, and the state published on the node a person acts on.
- *
- * The device is the caller's: one `adb shell` at a time, at the leased serial only.
+ * The device is the caller's: one `adb shell` at a time, at the leased serial only. A
+ * check navigates to its own screen, drives real input, and reads the tree back.
  *
  * @file
  */
@@ -1095,7 +1091,7 @@ function isCancelLabel(node) {
  * drum's rows they are plain `Text` nodes — a handful of two-digit rows per column, one
  * of which sits under the centre line — and that is enough to
  * aim a fling (the column's own x, not a fraction of the control's box) and — the
- * half that matters for G29 — to read *which row the drum stopped on*, which is the
+ * half that matters here — to read *which row the drum stopped on*, which is the
  * only way this gate can say "the time shown is the time reported" about a wheel
  * rather than assert it from the Kotlin.
  *
@@ -1314,21 +1310,13 @@ function wheelColumns(t, drum) {
 }
 
 /**
- * G29: the two `variant="wheel"` drums, rolled with a finger.
- *
- * Split out of the `date-picker` check because it is the only part of that screen
- * that presses nothing: a drum is rolled, and what a roll is worth asserting is
- * how many events it costs. Same reason `checkInlineCalendarGrids` is separate.
+ * The two `variant="wheel"` drums, rolled with a finger: a drum presses nothing, so
+ * what a roll is worth asserting is how many events it costs.
  */
 async function checkTimeDrums(t) {
-  // ---------------------------------------------------------------------------
-  // G29: `variant="wheel"` with `mode="time"` is a drum per field, and a pick is a roll
-  // that comes to rest. Everything the dialog tests above
-  // do with a tap, this does with a fling, and the assertion that matters is a count:
-  // a roll across three rows reports **one** change, not three. A `ScrollField` names the
-  // row nearest its snap line continuously, so a control that read each of those as a pick
-  // would report one event per row here, on the real input path, with the real timing a
-  // pager has.
+  // A drum per field, and a pick is a roll that comes to rest. `ScrollField` names the
+  // row nearest its snap line continuously, so a control that read each of those as a
+  // pick would report one event per row crossed, on the real input path.
   //
   // Red proof: make the settle a wall-clock window again instead of the wheel's own rest —
   // in `syncTimeWheel`, trade `nuiReportAtWheelRest(active) { … }` for
@@ -1392,10 +1380,9 @@ async function checkTimeDrums(t) {
   if (wheelNodes.length > 1) {
     t.log.warn(
       `the label is on ${String(wheelNodes.length)} nodes, not one: a screen ` +
-        'reader meets "Real-input wheel time picker" once per node, which is the ' +
-        'a11y gap docs/components/date-picker.md records for this wheel. The two ' +
-        'drums themselves are not separately named, so which drum is which is not ' +
-        'said either.'
+        'reader meets "Real-input wheel time picker" once per node. The two drums ' +
+        'themselves are not separately named, so which drum is which is not said ' +
+        'either.'
     );
   }
   t.log.note(
@@ -1447,8 +1434,7 @@ async function checkTimeDrums(t) {
       'the drum rows are NOT in the accessibility tree - `ScrollField` keeps its ' +
         "rows to itself, so the aim is the control's own thirds and the four " +
         '"the row shown is the value reported" comparisons below cannot be made ' +
-        'from a dump (the event-count assertions can, and are the point of the ' +
-        'flings). docs/components/date-picker.md records the gap.'
+        'from a dump; the event-count assertions can, and are the point of the flings.'
     );
   }
   /** Re-read a drum's columns, with the same fallback every time. */
@@ -2034,8 +2020,8 @@ async function contextMenuChecks(t) {
   const density = t.density();
   const target = t.nodeByTestId('ctx-target')?.bounds;
   if (target == null) log.abort('no ctx-target on the ContextMenu screen');
-  // Off-centre on purpose: the press point is the anchor, and a menu anchored to the
-  // view's centre or corner would read tens of dp off here (S3: 329/48/141 px).
+  // Off-centre on purpose: the press point is the anchor, so a menu anchored to the
+  // view's centre or corner reads tens of dp away from the finger.
   const at = pointIn(target, 0.3, 0.4);
 
   // 1. Quick taps are the child's: one onPress each, no menu.
@@ -2282,9 +2268,9 @@ async function contextMenuChecks(t) {
       'true'
     );
     log.checkEquals('and focusable', named[0]?.focusable, 'true');
-    // And one that is not `accessible`, around Text only, is a `View` to TalkBack: a
-    // long-clickable node is an actionable stop, which would read its Text as one stop
-    // the app never asked for (D36 item 1 makes the element opt-in).
+    // A long-clickable node is an actionable stop, so a menu that is not `accessible`
+    // has to offer none: it would otherwise read its own Text as a stop the app never
+    // asked for.
     const plain = t.nodeByTestId('ctx-bottom');
     log.checkEquals(
       'a ContextMenu that is not accessible offers TalkBack no long-click',
@@ -3070,12 +3056,9 @@ async function buttonGroupChecks(t) {
 async function pickerChecks(t) {
   const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
   const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
-  // The row a screen reader stops on, not the words inside it. A Compose row keeps
-  // its own state on its own node and leaves the label a node of its own, so
-  // reading whichever node carries the text reports every disabled row as enabled -
-  // the G12 Chip lesson, and the reason `android-tree.mjs` exists. The row is
-  // `selectable(role = Role.RadioButton)`, and a `Role` is what makes it the
-  // tightest `checkable` box around its own label.
+  // The row a screen reader stops on, not the words inside it: a Compose row keeps its
+  // own state on its own node and leaves the label a node of its own, so reading the
+  // node that carries the text reports every disabled row as enabled.
   const radioRowNode = (label, nodes = t.dump()) =>
     tightestFlaggedNode(
       nodes,

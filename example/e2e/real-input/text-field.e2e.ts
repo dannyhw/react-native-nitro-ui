@@ -39,16 +39,13 @@ test('a real tap on a field brings up the real keyboard, and the field stays abo
 }) => {
   await app.open();
   await openScreen(screen, 'textfield');
-  const field = editableField(screen, FOCUS);
   const field = editableField(screen, 'Focus field');
   const echo = screen.getByTestId('text-focus-echo');
   await reveal(screen, field);
 
-  // No in-app test can show a keyboard, so this is the delivery proof for the
-  // text controls on this platform: the tap focuses the field *and* the window
-  // shrinks by the IME's height. The field's own position is read as well, so a
-  // keyboard that arrived over the field — the G24 defect, in another screen —
-  // cannot pass by simply being present.
+  // No in-app test can show a keyboard, so this is the delivery proof for the text
+  // controls: the tap focuses the field and the window manager reports an IME. The
+  // field's own position is read too, so a keyboard on top of it cannot pass.
   await expect(echo).toHaveText('focus: 0 blur: 0 submitted: -');
   await withRealKeyboard(async () => {
     await focusAndExpectKeyboard(field);

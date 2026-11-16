@@ -1,26 +1,19 @@
 /**
  * The accessibility tree the driver reads, with the state facts still on it.
  *
- * e2e answers questions about nodes — this file answers questions about *flags*: the
+ * e2e answers questions about nodes; this file answers questions about *flags*: the
  * `checked` a toggle answers with, the `selected` a segment answers with, the Android
- * class a screen reader takes for the control's role, and whether the node carrying a
- * control's name is also the node carrying its state. Those are the facts five of this
- * suite's real defects came in through (G15, G16, G23, G24, G31), and no in-app query
- * can see them: a hosted Compose control publishes its name on a `SemanticsNode`, not
- * on a React Native view, so from inside the app the name and the state are simply not
- * two things that could be compared.
+ * class a reader takes for a role, and whether the node carrying a control's name is
+ * the node carrying its state. A hosted Compose control publishes its name on a
+ * `SemanticsNode`, so from inside the app those are not two comparable things.
  *
  * The capture is the driver's own, taken again for every read: the facts answer "what
  * does the tree say *now*", and a check that looks once before a gesture and once after
  * it must not be handed the same capture twice.
  *
- * What this cannot answer is actionability. The driver's node map carries `hittable`,
- * which is geometric — a name slid onto a plain `View` is still hittable, which is
- * exactly the defect the actionable-node rule exists to catch — so that half of the
- * rule is graded by the a11y sweep against `uiautomator dump`, in
- * `scripts/real-input/a11y-sweep-device.mjs`, which also says why a dump cannot be read
- * while a session is open. Reading a geometric flag as though it were the real one would
- * turn that rule green for every control at once.
+ * What this cannot answer is actionability: `hittable` is geometric, so a name slid onto
+ * a plain `View` still reads as hittable. That half is graded against `uiautomator dump`
+ * by the a11y sweep, which also says why a dump cannot be read while a session is open.
  */
 import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';

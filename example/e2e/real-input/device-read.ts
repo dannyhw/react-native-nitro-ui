@@ -25,10 +25,9 @@
  * publish (`clickable`, `checkable`, `scrollable`) reads `uiautomator dump` outside the
  * driver's session, in `scripts/real-input/a11y-sweep-device.mjs`.
  *
- * Both are reads. Nothing in this file drives a device: no `input`, no `am`.
- * Every call names the leased serial on the leased adb server, because another
- * task's emulator — and the human's `emulator-5560` — are visible on the default
- * server, and AGENTS.md is explicit about not reaching them.
+ * Both are reads. Nothing in this file drives a device: no `input`, no `am`. Every
+ * call names the leased serial on the leased adb server, because other emulators —
+ * including the one a person is using — are visible on the default server.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

@@ -18,8 +18,7 @@ test('a real tap selects the segment under the finger', async ({
 
   // Three options ('1', '2', '3'), so the middle of the control's box is the
   // segment drawn '2' and the index JS reports has to be 1, not merely "not 0":
-  // a control that answered the tap at the wrong x is the failure here (E1 read
-  // a corner probe late and passed for the wrong reason).
+  // a control that answered the tap at the wrong x is the failure here.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('-');
 

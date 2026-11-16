@@ -29,9 +29,8 @@ test('a real tap on a Form row presses it once', async ({ app, screen }) => {
   const presses = screen.getByTestId('form-row-presses');
   await reveal(screen, row);
 
-  // The row's name is on the clickable node itself, which is the X24 iOS finding
-  // (a row's name left on the RN wrapper) inverted: here the reader and the
-  // finger have to agree about which node the row is.
+  // The row's name has to sit on the clickable node itself, so a reader and a
+  // finger agree about which node the row is.
   await actsOnOneNamedNode(screen, { name: ROW, state: 'enabled' });
   await expect(presses).toHaveText('0');
 
@@ -39,7 +38,7 @@ test('a real tap on a Form row presses it once', async ({ app, screen }) => {
   await expect(presses).toHaveText('1');
 });
 
-test('a flick across a Form row scrolls the list and presses nothing (X32)', async ({
+test('a flick across a Form row scrolls the list and presses nothing', async ({
   app,
   screen,
 }) => {
@@ -49,11 +48,9 @@ test('a flick across a Form row scrolls the list and presses nothing (X32)', asy
   const presses = screen.getByTestId('form-row-presses');
   await reveal(screen, row);
 
-  // X32: a row pressed when the list was scrolled over it. The regression guard is
-  // a drag that starts on the row and ends 700 px above it, which is the gesture a
-  // person makes when they mean "scroll" — and it has to be a *real* drag, so the
-  // row's own box is read afterwards to prove the list moved. A flick that did
-  // nothing would leave the press count alone for the wrong reason.
+  // A drag that starts on the row and ends 700 px above it is what "scroll" looks
+  // like to a recogniser. The row's box is read again afterwards to prove the list
+  // really moved: a flick that did nothing would leave the count alone for nothing.
   const before = await boxOf(row);
   if (before == null) {
     throw new Error('real-input: the Form row has no box to flick over.');
@@ -115,7 +112,7 @@ test('a row that was not given a press stays unpressed, however it is touched', 
   await expect(presses).toHaveText('1');
 });
 
-test('a field the keyboard would cover is moved clear of it (G24)', async ({
+test('a field the keyboard would cover is moved clear of it', async ({
   app,
   screen,
 }) => {
@@ -125,16 +122,9 @@ test('a field the keyboard would cover is moved clear of it (G24)', async ({
   const focus = screen.getByTestId('form-field-focus');
   await revealLowInPage(screen, field);
 
-  // G24 Android, twice in the excerpts: the focused field was left behind the
-  // keyboard. The claim is only worth making about a field that had somewhere to be
-  // covered, so the row is parked in the bottom of the page first and the premise is
-  // asserted below: a check that measures avoidance where nothing was ever hidden
-  // passes without measuring anything.
-  //
-  // `form-keyboard-inset` is an iOS-only echo. The Android measurement is the
-  // window manager's own `ime` inset, which is why this runs under a real keyboard
-  // rather than the driver's headless one, and why the witness that anything moved is
-  // the field's own box rather than a number the Form reports.
+  // The claim is only worth making about a field that had somewhere to be covered, so
+  // the row is parked at the bottom of the page and the premise is asserted below.
+  // The measurement is the window manager's own `ime` inset, under a real keyboard.
   const beforeFocus = await boxOf(field);
   if (beforeFocus == null) {
     throw new Error(

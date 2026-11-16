@@ -90,12 +90,10 @@ export function nativeChecked(tree, description) {
  * Whether the control a person would press is enabled: `enabled` on the tightest
  * *clickable* node that carries this labelled control.
  *
- * The same shape as {@link nativeChecked}, for the same reason, measured on G12's
- * Chip screen: a disabled Material 3 chip publishes `enabled="false"` on its 48 dp
- * touch-target node at `[562,738][964,864]`, and the node carrying
- * `content-desc="Real-input disabled chip"` inside it at `[562,759][964,843]` says
- * `enabled="true"` - so reading the labelled node reports every disabled chip as
- * enabled.
+ * The same shape as {@link nativeChecked}, for the same reason: a disabled Material 3
+ * chip publishes `enabled="false"` on its touch-target node, and the node inside it
+ * carrying the control's name says `enabled="true"` — so reading the labelled node
+ * reports every disabled control as enabled.
  *
  * @param {ReadonlyArray<{contentDesc: string, clickable: string, enabled: string, bounds: {x1: number, y1: number, x2: number, y2: number, width: number, height: number}}>} tree
  * @param {string} description the control's `accessibilityLabel`

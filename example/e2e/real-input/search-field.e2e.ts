@@ -23,10 +23,8 @@ test('real keystrokes reach the field, and the clear button reports the empty qu
 
   // The clear button is Material's own `IconButton`, named by the framework
   // (`Clear query`) and present only while the query is non-empty. It exists in no
-  // React tree, so the harness cannot press it: this is the half of
-  // `SearchField.harness` "reports the clear button as one empty edit…" that only
-  // a device can check. G17's defect — the button was unnamed for TalkBack — is
-  // exactly why the tap is placed by that name.
+  // React tree, so the harness cannot press it, and the tap is placed by that name
+  // rather than by a box that would say nothing about what a reader is told.
   await expect(echo).toHaveText('query:  (0)');
   await field.tap();
   await field.pressSequentially('abc');

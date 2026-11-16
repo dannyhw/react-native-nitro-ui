@@ -46,13 +46,6 @@ const TEST_IME_RECORD = 'agent_device_ime_helper_previous_ime';
 /** How long a keyboard may take to publish its inset, in ms. */
 const KEYBOARD_TIMEOUT_MS = 10_000;
 
-/**
- * Run `adb` against the leased device only, and nothing else.
- *
- * Every call carries the lease's server port and the lease's serial: another
- * person's emulator is visible on the default server, and AGENTS.md is explicit
- * about not reaching it.
- */
 /** One setting, read back; `null` for the `null` the settings provider prints. */
 function setting(key: string): string | null {
   const value = adb(['settings', 'get', 'secure', key]);

@@ -16,11 +16,9 @@ test('a real tap on a hosted SegmentedControl picks the segment under the finger
   const index = screen.getByTestId('host-segmented-index');
   await reveal(screen, control);
 
-  // The name is on a node with nothing actionable at it — the row's own
-  // `A11Y_EXEMPTIONS` debt (X4: nothing actionable at the named node) — so the
-  // tap is placed by geometry at the middle of the control's box, which is where
-  // the segment drawn "Two" is. A tap that picks the wrong segment is the failure
-  // this is looking for, and it is why the index is read rather than "changed".
+  // The name sits on a node with nothing actionable at it, so the tap is placed by
+  // geometry at the middle of the control's box. Which index the app was told is read
+  // rather than "something changed": a tap on the wrong segment must not pass.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('0');
 

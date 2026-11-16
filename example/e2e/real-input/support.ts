@@ -76,10 +76,9 @@ export async function tapBand(screen: Screen): Promise<TapBand> {
 /**
  * Open one of the example app's screens by tapping its tab.
  *
- * The strip scrolls sideways — a 15-way row gave each tab 23 dp (X19) — so a tab
- * that is off screen is not in the tree at all: drag the strip until it is, then
- * tap it. Every test launches the app fresh, so the strip always starts at its
- * beginning and one direction of travel is enough.
+ * The strip scrolls sideways, so a tab that is off screen is not in the tree at all:
+ * drag the strip until it is, then tap it. Every test launches the app fresh, so the
+ * strip starts at its beginning and one direction of travel is enough.
  */
 export async function openScreen(screen: Screen, tab: string): Promise<void> {
   resetTapBand();

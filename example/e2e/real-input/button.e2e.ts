@@ -16,9 +16,8 @@ test('a real tap on the Button reaches JS and reports one press', async ({
   const count = screen.getByTestId('real-input-count');
   await reveal(screen, press);
 
-  // T15b concluded the press this check was written for was a harness limitation,
-  // not a defect, and the check has never been red. It stays as the delivery
-  // proof for a Compose-drawn Button: the touch arrives, JS counts it.
+  // The delivery proof for a control drawn by Compose: the touch arrives, and JS
+  // counts it.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(count).toHaveText('0');
 

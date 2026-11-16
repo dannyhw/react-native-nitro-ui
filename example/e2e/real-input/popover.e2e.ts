@@ -43,7 +43,7 @@ test('a real tap opens the popover and a Pressable inside it answers exactly onc
   await expect(log).toContainText('press:popover-short');
 });
 
-test('a TextInput inside a popover stays above the keyboard (G22)', async ({
+test('a TextInput inside a popover stays above the keyboard', async ({
   app,
   screen,
 }) => {
@@ -52,10 +52,9 @@ test('a TextInput inside a popover stays above the keyboard (G22)', async ({
   const anchor = screen.getByTestId('popover-field-anchor');
   await reveal(screen, anchor);
 
-  // G22 Android: the popup was placed under the keyboard, and then 43 px past it.
   // The measurement is the window's own `ime` inset — the number the popup has to
-  // honour — read under a real keyboard, because the driver's headless IME shows
-  // no keyboard to be placed under.
+  // honour — read under a real keyboard, because the driver's headless IME shows no
+  // keyboard to be placed under.
   await anchor.tap();
   const popover = screen.getByTestId('popover-field-popover');
   await popover.waitFor({ state: 'visible' });
@@ -67,7 +66,7 @@ test('a TextInput inside a popover stays above the keyboard (G22)', async ({
   });
 });
 
-test('the keyboard pushes the popover itself, not only the field inside it (G22)', async ({
+test('the keyboard pushes the popover itself, not only the field inside it', async ({
   app,
   screen,
 }) => {
@@ -76,10 +75,9 @@ test('the keyboard pushes the popover itself, not only the field inside it (G22)
   const anchor = screen.getByTestId('popover-field-anchor');
   await reveal(screen, anchor);
 
-  // The anchor's box is read before the popup opens and never again: while a
-  // focusable popup is up, the tree the reader walks is the popup's window, so the
-  // anchor the popup was placed against is no longer in the read. The margin and
-  // the spacing are the placement model's own numbers, in dp.
+  // The anchor's box is read before the popup opens and never again: while a focusable
+  // popup is up, the tree is the popup's window, and the anchor is not in it. The
+  // margin and the spacing are the placement model's own numbers, in dp.
   const anchorBox = await anchor.boundingBox();
   if (anchorBox == null) {
     throw new Error(
@@ -98,11 +96,9 @@ test('the keyboard pushes the popover itself, not only the field inside it (G22)
     const { keyboardTop: top } = await measureAtRest(field, beforeFocus);
     const density = displayDensity();
     const popupBox = await popover.boundingBox();
-    // `fieldAboveKeyboard` alone is half-blind here, and G22 stayed hidden because
-    // of it: a popup pinned to the top of the screen keeps the field above the
-    // keyboard *better* than a placed one does. The popup has to be next to the
-    // thing it points at, or against the keyboard's edge when there is no room for
-    // either — the three branches `PopoverPlacement` answers with.
+    // A popup pinned to the top of the screen keeps a field above the keyboard better
+    // than a placed one does, so the field alone is half-blind: the popup has to be
+    // beside its anchor, or against the keyboard's edge when there is no room.
     const placement = judgePopupPlacement({
       popupBox:
         popupBox == null

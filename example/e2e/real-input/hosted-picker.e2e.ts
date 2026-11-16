@@ -16,10 +16,9 @@ test('a hosted Picker opens its menu, and a row reaches JS', async ({
   const index = screen.getByTestId('host-picker-index');
   await reveal(screen, field);
 
-  // X24 and X31 each got this wrong by anchoring on the wrong rectangle. The
-  // popup's position against the Host's own box is asserted by the harness from
-  // inside (`HostPopups` "anchors under the box the Host drew"), so what is left
-  // for the device is the part only a real tap can do: open it and pick a row.
+  // Where the popup sits against the Host's box is measured from inside React; what
+  // is left for the device is the part only a real tap can do: open it and pick a
+  // row, through the composition rather than through a view of its own.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('1');
 

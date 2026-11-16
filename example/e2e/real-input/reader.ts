@@ -7,21 +7,13 @@
  * does TalkBack stop on, and what does it say about it" cannot. e2e reads the
  * same tree a screen reader walks, so the assertion lives here.
  *
- * The rule per control: the name a person is given resolves to exactly one node;
- * that node has a box a finger can hit; and the state a reader is told — enabled
- * or unavailable, checked or not — sits on that node rather than on a neighbour.
- * Five of the real defects this suite ever caught came in through this rule
- * (audit A.1: G15, G16, G23, G24, G31), every one of them a name on one node and
- * a state on another, or a duplicate of the same control.
+ * The rule per control: the name a person is given resolves to exactly one node; that
+ * node has a box a finger can hit; and the state a reader is told — enabled or
+ * unavailable, checked or not — sits on that node and not on a neighbour.
  *
- * The other half of the rule — is the named node one a person can *act* on — is not
- * read here, because the driver cannot be asked: its node map has `hittable`, which
- * says a touch lands, not that the node answers anything, so the name-on-an-inert-`View`
- * defect this half exists for passes it. `scripts/real-input/a11y-sweep-device.mjs`
- * grades that half against `uiautomator dump`, for every control in the table, on the
- * same run and the same device, with `A11Y_EXEMPTIONS` deciding debt one row at a time.
- * What is read here is the half the driver *can* answer, read at the moment a person is
- * about to act: the name resolves to one box, and the state a reader is told sits on it.
+ * Whether the named node is one a person can *act* on is not read here: the driver's
+ * node map has `hittable`, which says a touch lands, not that the node answers. That
+ * half is graded against `uiautomator dump` in `scripts/real-input/a11y-sweep-device.mjs`.
  */
 import { expect, type Locator, type Screen } from 'e2e';
 
@@ -72,13 +64,13 @@ export async function actsOnOneNamedNode(
     `"${options.name}" is announced on ${String(count)} node(s); a person gets ` +
       (count === 0
         ? 'no node at all, so there is nothing to act on'
-        : 'more than one, which is the duplicate-node defect (G15 Android: a labelled checkbox was two nodes, one inert)')
+        : 'more than one, so a person hears the control twice and one of them may be inert')
   ).toBe(1);
   const box = await named.boundingBox();
   expect(
     box,
     `"${options.name}" has no box: a reader can stop on it but a finger cannot ` +
-      'reach it (G23 iOS: a VoiceOver element inset inside its own target)'
+      'reach it - the named element can be inset inside the box a finger lands on'
   ).not.toBeNull();
   if (box != null) {
     expect(

@@ -7,16 +7,10 @@ import { actsOnOneNamedNode } from './reader';
 const NAME = 'Real-input menu';
 
 /**
- * Dismiss whatever popup is up, without assuming how many Backs it takes.
- *
- * FOLLOWUPS 62-63 is still open on exactly this: an Android menu that once needed
- * two dismissals after a disabled row was tapped. The count is not what this suite
- * is for and asserting one number would turn an unresolved question into a gate, so
- * the dismissal is a loop with a ceiling, and the ceiling is what fails if the
- * popup has become undismisable. Each round asks with `waitFor`, not `count`:
- * `count` answers from the observation the last step left behind and never
- * re-observes, so a popup that has already come down still counts, and the loop
- * spends its Backs on the page beneath and reports a popup that is not there.
+ * Dismiss whatever popup is up, without assuming how many Backs it takes: an Android
+ * menu can need more than one. The ceiling is what fails if the popup becomes
+ * undismisable. Each round asks with `waitFor`, not `count` — `count` answers from the
+ * observation the last step left behind, so a popup already down still counts.
  */
 async function dismissPopup(
   app: App,

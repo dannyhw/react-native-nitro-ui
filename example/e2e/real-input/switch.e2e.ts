@@ -16,9 +16,9 @@ test('a real tap on the Switch reaches JS, and the node says so too', async ({
   const value = screen.getByTestId('switch-controlled-value');
   await reveal(screen, flipper);
 
-  // A-REG / T15: a controlled Switch whose value moved pushed the hosted Toggle
-  // out of its row, which only a real tap on a real layout showed. The name, the
-  // box and the value all have to be on the one node a person acts on.
+  // A layout that moves when a value changes puts the finger somewhere else than the
+  // reader's node, so the name, the box and the value are read on the one node a
+  // person acts on, after a touch the operating system delivered.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('off');
   // The state a reader is told sits on the toggle's own node, not on a neighbour —

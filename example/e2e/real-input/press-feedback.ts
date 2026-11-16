@@ -1,12 +1,9 @@
 /**
  * Pressed-state feedback: the ink a person sees while their finger is down.
  *
- * This is the fourth class the audit kept (A.3: drawn press feedback — G30
- * Android, "no press feedback drawn", and the Form section rows that drew no
- * ripple ink under a held press). Nothing inside the React tree knows what was
- * painted, so the check reads the screen: a frame with the row at rest, a frame
- * with the same row held, and the mean luminance of a grid inside the row's box,
- * before and during.
+ * Nothing inside the React tree knows what was painted, so this reads the screen: a
+ * frame with the row at rest, a frame with the same row held, and the mean luminance of
+ * a grid inside the row's box, before and during.
  *
  * The grid, not one pixel: a bounded ripple is brightest near the touch point and
  * a single sample can land on the one spot it has not reached at the instant of
@@ -120,8 +117,7 @@ function meanLuma(image: DecodedPng, box: Box): number {
  * @param hold the control to hold; its box is the region that must change
  * @param options.minimumDrop how much darker the row has to get, as mean luminance.
  *   Small on purpose: Material's state-layer ink over a light row is a few percent,
- *   and a threshold tuned to one theme hides a faint-but-present regression in
- *   another. It is the number the adb driver measured G30 with, and it has not moved.
+ *   and a threshold tuned to one theme hides a faint-but-present regression in another.
  */
 export async function pressPaintsFeedback(
   screen: Screen,
@@ -170,8 +166,8 @@ export async function pressPaintsFeedback(
       `${duringMean.toFixed(4)} (frame asked for +${String(askedAt)}ms after the ` +
       `press was issued and read ${String(took)}ms later, inside a ` +
       `${String(HOLD_MS)}ms press), against ${before.toFixed(4)} at rest: a press ` +
-      `that paints nothing is what G30 Android shipped with ("no press feedback ` +
-      `drawn"). The sampled region is ${JSON.stringify(region)} of a ` +
+      `that paints nothing leaves a person with no answer to their press. The sampled ` +
+      `region is ${JSON.stringify(region)} of a ` +
       `${String(held.width)}x${String(held.height)} frame`
   ).toBeGreaterThan(minimumDrop);
 

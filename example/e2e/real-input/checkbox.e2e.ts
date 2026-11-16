@@ -16,10 +16,9 @@ test('a real tap on the Checkbox reaches JS, on one named node', async ({
   const value = screen.getByTestId('real-input-checkbox-value');
   await reveal(screen, box);
 
-  // G15 Android: a labelled checkbox was two accessibility nodes and one of them
-  // was inert, so a person heard the label and pressed something else. The
-  // count-1 assertion is that defect's guard; the harness query cannot see the
-  // tree a reader walks and did not prevent it.
+  // A labelled control can be two accessibility nodes with one of them inert, so a
+  // person hears the label and presses something else. An in-app query cannot see the
+  // tree a reader walks, so the count of named nodes is the guard.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('off');
 

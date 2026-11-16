@@ -21,11 +21,9 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
   // publishes for the track describes the composition, not the pixel on screen.
   await reveal(screen, value, { reads: [track, gesture] });
 
-  // The hosted Slider's track is the <Host>'s own width, which React Native
-  // measures and not the child's style, so a drag proves both that the gesture
-  // reached Compose and that the geometry it used is the box on screen. The
-  // gesture echo is read as well because a drag that arrives as two taps, or
-  // never completes, is the failure that was B-TIMING here three times (E5).
+  // The track is the <Host>'s own width, which React Native measures and not the
+  // child's style, so a drag proves both that the gesture reached Compose and that it
+  // used the box on screen. The gesture echo says a drag arrived as one gesture.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('0.40');
 
