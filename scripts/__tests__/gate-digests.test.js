@@ -66,7 +66,9 @@ describe('each device gate is keyed to the files its own run reads', () => {
     expect(movedBy('example/e2e/real-input/switch.e2e.ts')).toEqual([
       'real-input:android',
     ]);
-    expect(movedBy('example/e2e/e2e.config.ts')).toEqual(['real-input:android']);
+    expect(movedBy('example/e2e/e2e.config.ts')).toEqual([
+      'real-input:android',
+    ]);
   });
 
   it('a harness test file moves the harness gates and no real-input gate', () => {
@@ -310,7 +312,7 @@ const tracked = (dir) =>
  * Android also runs the e2e project and installs the `build-app.mjs` APK.
  */
 const ROOTS = {
-  harness: () => [
+  'harness': () => [
     'scripts/harness.mjs',
     'example/rn-harness.config.mjs',
     'example/jest.harness.config.mjs',
@@ -399,7 +401,8 @@ function violations(gate, roots) {
     if (inApp(file)) continue;
     for (const literal of record.literals) {
       const hit =
-        namesExcluded(literal, [...excluded]) ?? namesExcludedDir(literal, gate);
+        namesExcluded(literal, [...excluded]) ??
+        namesExcludedDir(literal, gate);
       if (hit != null) {
         found.push(
           `${gate}: ${file} names "${literal}", which the ${gate} digest leaves out (${hit})`
@@ -490,8 +493,8 @@ describe('a path leaves a gate digest only when that gate never reads it', () =>
       'utf8'
     );
     const imports = [...entry.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
-    expect(imports.every((spec) => spec === 'react-native' || spec.startsWith('./'))).toBe(
-      true
-    );
+    expect(
+      imports.every((spec) => spec === 'react-native' || spec.startsWith('./'))
+    ).toBe(true);
   });
 });

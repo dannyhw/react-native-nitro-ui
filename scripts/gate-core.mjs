@@ -2022,7 +2022,9 @@ export function harnessUnitsFromTimings(
     );
   }
   if ((shared.suites ?? []).length === 0) {
-    unnamed.push('no test file reported: the run stopped before its first suite');
+    unnamed.push(
+      'no test file reported: the run stopped before its first suite'
+    );
   }
   if (isolatedExpected) {
     if (isolated == null) {
@@ -2080,7 +2082,9 @@ export function planRerunFailed({ gate, entries, tree, trees, gateTrees }) {
   const list = listByGate(entries)[gate] ?? [];
   const row = gateRowFor({ gate, list, tree, trees, gateTrees });
   if (row.state === 'green') {
-    return { refusal: `${gate} is already green on this digest: nothing to complete` };
+    return {
+      refusal: `${gate} is already green on this digest: nothing to complete`,
+    };
   }
   if (row.state !== 'red') {
     return {
@@ -2193,7 +2197,10 @@ export function completeRerun({
   for (const id of plan.rerun) {
     const status = childUnits?.results?.[id] ?? 'not-run';
     merged.results[id] = status;
-    if (status !== 'pass') why.push(`${id} ${status === 'not-run' ? 'did not run' : 'failed again'}`);
+    if (status !== 'pass')
+      why.push(
+        `${id} ${status === 'not-run' ? 'did not run' : 'failed again'}`
+      );
   }
   for (const [id, before] of Object.entries(plan.base.units.everyRun ?? {})) {
     const now = childUnits?.everyRun?.[id] ?? null;

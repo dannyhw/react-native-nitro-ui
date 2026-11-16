@@ -157,7 +157,9 @@ describe('the units a run records', () => {
     expect(
       harnessUnitsFromTimings(shared, {
         files: ['__tests__/isolated/X.harness.tsx'],
-        suites: [{ file: '__tests__/isolated/X.harness.tsx', status: 'failed' }],
+        suites: [
+          { file: '__tests__/isolated/X.harness.tsx', status: 'failed' },
+        ],
       }).unnamed
     ).toHaveLength(1);
     expect(harnessUnitsFromTimings(shared, null).unnamed).toHaveLength(1);
@@ -165,7 +167,9 @@ describe('the units a run records', () => {
       harnessUnitsFromTimings({ files: ['a'], suites: [] }, null, {
         isolatedExpected: false,
       }).unnamed
-    ).toEqual(['no test file reported: the run stopped before its first suite']);
+    ).toEqual([
+      'no test file reported: the run stopped before its first suite',
+    ]);
   });
 });
 
@@ -173,10 +177,19 @@ describe('the units a run records', () => {
 
 describe('planRerunFailed', () => {
   it('re-runs every unit that did not pass, including one that never ran', () => {
-    const plan = planRerunFailed({ gate: 'real-input:ios', entries: [line()], ...now });
+    const plan = planRerunFailed({
+      gate: 'real-input:ios',
+      entries: [line()],
+      ...now,
+    });
     expect(plan.refusal).toBeNull();
     expect(plan.rerun).toEqual(['form', 'stepper']);
-    expect(plan.filterArgs).toEqual(['--control', 'form', '--control', 'stepper']);
+    expect(plan.filterArgs).toEqual([
+      '--control',
+      'form',
+      '--control',
+      'stepper',
+    ]);
     expect(plan.attempt).toBe(1);
     expect(plan.of.durationMs).toBe(3_000_000);
   });
@@ -210,7 +223,9 @@ describe('planRerunFailed', () => {
       ...now,
       gateTrees: { ...GATE_TREES, 'real-input:ios': '9'.repeat(64) },
     });
-    expect(plan.refusal).toMatch(/no full real-input:ios run is red on the current digest/);
+    expect(plan.refusal).toMatch(
+      /no full real-input:ios run is red on the current digest/
+    );
   });
 
   it('refuses a gate that is already green, and one never run', () => {
@@ -255,7 +270,12 @@ describe('planRerunFailed', () => {
         entries: [
           line({
             gate: 'harness:ios',
-            units: { kind: 'harness', results: {}, everyRun: {}, unnamed: ['x'] },
+            units: {
+              kind: 'harness',
+              results: {},
+              everyRun: {},
+              unnamed: ['x'],
+            },
           }),
         ],
         ...now,
@@ -271,8 +291,12 @@ describe('planRerunFailed', () => {
 
   it('a second attempt starts from the first completion and keeps the original run', () => {
     const first = line({
-      command: 'node scripts/real-input/ios.mjs --control form --control stepper',
-      units: { ...UNITS, results: { switch: 'pass', form: 'fail', stepper: 'pass' } },
+      command:
+        'node scripts/real-input/ios.mjs --control form --control stepper',
+      units: {
+        ...UNITS,
+        results: { switch: 'pass', form: 'fail', stepper: 'pass' },
+      },
       completion: {
         of: { ts: 'original', logPath: 'orig.log', durationMs: 3_000_000 },
         attempt: 1,
@@ -294,7 +318,11 @@ describe('planRerunFailed', () => {
 /* ---------------------------- the completion verdict ---------------------------- */
 
 describe('completeRerun', () => {
-  const plan = planRerunFailed({ gate: 'real-input:ios', entries: [line()], ...now });
+  const plan = planRerunFailed({
+    gate: 'real-input:ios',
+    entries: [line()],
+    ...now,
+  });
   const passing = {
     kind: 'real-input',
     results: { form: 'pass', stepper: 'pass' },
@@ -324,9 +352,9 @@ describe('completeRerun', () => {
   });
 
   it('fails when the digest moved during the re-run or since the red run', () => {
-    expect(
-      completeRerun({ ...args, digestAfter: '0'.repeat(64) }).result
-    ).toBe('fail');
+    expect(completeRerun({ ...args, digestAfter: '0'.repeat(64) }).result).toBe(
+      'fail'
+    );
     expect(
       completeRerun({
         ...args,
@@ -349,7 +377,9 @@ describe('completeRerun', () => {
   it('fails when an every-run check that failed before did not pass now', () => {
     const red = planRerunFailed({
       gate: 'real-input:ios',
-      entries: [line({ units: { ...UNITS, everyRun: { 'tab-targets': 'fail' } } })],
+      entries: [
+        line({ units: { ...UNITS, everyRun: { 'tab-targets': 'fail' } } }),
+      ],
       ...now,
     });
     expect(
@@ -369,7 +399,10 @@ describe('a completed run in table, status and need', () => {
     result: 'pass',
     exitCode: 0,
     durationMs: 240_000,
-    units: { ...UNITS, results: { switch: 'pass', form: 'pass', stepper: 'pass' } },
+    units: {
+      ...UNITS,
+      results: { switch: 'pass', form: 'pass', stepper: 'pass' },
+    },
     completion: {
       of: { ts: 'x', logPath: 'x.log', durationMs: 3_000_000 },
       attempt: 1,
@@ -379,8 +412,12 @@ describe('a completed run in table, status and need', () => {
 
   it('the table says it was completed, how many units were re-run and which attempt', () => {
     const table = renderGateTable({ entries: [line(), completed], ...now });
-    const row = table.split('\n').find((text) => text.startsWith('| `real-input:ios`'));
-    expect(row).toContain('**PASS** (completed: 2 of 3 units re-run, attempt 1)');
+    const row = table
+      .split('\n')
+      .find((text) => text.startsWith('| `real-input:ios`'));
+    expect(row).toContain(
+      '**PASS** (completed: 2 of 3 units re-run, attempt 1)'
+    );
     expect(row).toContain('4 m 00 s + full run 50 m 00 s');
     expect(row).not.toMatch(/\| \*\*PASS\*\* \|/);
   });
@@ -391,7 +428,11 @@ describe('a completed run in table, status and need', () => {
       result: 'pass',
       exitCode: 0,
     });
-    const without = decideNeed({ entries: [line(), filtered], ...now, stage: 'merge' });
+    const without = decideNeed({
+      entries: [line(), filtered],
+      ...now,
+      stage: 'merge',
+    });
     expect(without.missing).toContain('real-input:ios');
     const withCompletion = decideNeed({
       entries: [line(), filtered, completed],
@@ -441,9 +482,15 @@ function gitEnv(dir) {
 }
 
 function git(dir, args) {
-  const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: gitEnv(dir) });
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
-  if (fs.realpathSync(result.stdout.trim() || dir) == null) throw new Error('no repo');
+  const result = spawnSync('git', args, {
+    cwd: dir,
+    encoding: 'utf8',
+    env: gitEnv(dir),
+  });
+  if (result.status !== 0)
+    throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+  if (fs.realpathSync(result.stdout.trim() || dir) == null)
+    throw new Error('no repo');
   return result.stdout;
 }
 
@@ -464,9 +511,9 @@ function makeRepo() {
   write('example/package.json', '{"name":"x"}\n');
   write('.gitignore', '.gates/\nfake-bin/\nstate/\n');
   git(dir, ['init', '-q', '-b', 'main']);
-  expect(fs.realpathSync(git(dir, ['rev-parse', '--show-toplevel']).trim())).toBe(
-    fs.realpathSync(dir)
-  );
+  expect(
+    fs.realpathSync(git(dir, ['rev-parse', '--show-toplevel']).trim())
+  ).toBe(fs.realpathSync(dir));
   git(dir, ['add', '-A']);
   git(dir, ['commit', '-qm', 'base']);
   git(dir, ['checkout', '-qb', 'task/x48']);
@@ -540,8 +587,13 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
     });
     expect(done.stderr).toContain('re-running 2 unit(s) - form, stepper');
     expect(done.status).toBe(0);
-    const args = fs.readFileSync(path.join(repo.dir, 'state', 'args.log'), 'utf8').trim().split('\n');
-    expect(args[1]).toBe('scripts/real-input/ios.mjs --control form --control stepper');
+    const args = fs
+      .readFileSync(path.join(repo.dir, 'state', 'args.log'), 'utf8')
+      .trim()
+      .split('\n');
+    expect(args[1]).toBe(
+      'scripts/real-input/ios.mjs --control form --control stepper'
+    );
     const [, completion] = ledger(repo.dir);
     expect(completion.gate).toBe('real-input:ios');
     expect(completion.result).toBe('pass');
@@ -552,7 +604,9 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
       '| `real-input:ios` | **PASS** (completed: 2 of 3 units re-run, attempt 1)'
     );
     const status = runCli(repo, ['status', '--for', 'merge']);
-    expect(status.stdout).toMatch(/green\s+real-input:ios .*completed: 2 of 3 units re-run, attempt 1/);
+    expect(status.stdout).toMatch(
+      /green\s+real-input:ios .*completed: 2 of 3 units re-run, attempt 1/
+    );
   }, 120_000);
 
   it('refuses after the digest moved, and records nothing', () => {
@@ -577,6 +631,8 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
     runCli(repo, ['real-input:ios'], { FAKE_EXIT: '1', FAKE_UNITS: '' });
     const refused = runCli(repo, ['real-input:ios', '--rerun-failed']);
     expect(refused.status).toBe(1);
-    expect(refused.stderr).toContain('a build failure, or a crash before the first unit');
+    expect(refused.stderr).toContain(
+      'a build failure, or a crash before the first unit'
+    );
   }, 120_000);
 });
