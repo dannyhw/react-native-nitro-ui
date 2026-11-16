@@ -25,8 +25,19 @@ any unit that never ran. The outcome is recorded under the full gate's name.
   passed, and the gate's digest was the same at the red run, at the start and at the end.
 - It refuses, saying why and recording nothing, when there is no red run on this digest, when
   the digest moved, or when the failure is not a unit a filter can name: a build failure, a
-  crash before the first unit, a failed isolated harness suite (only a full run starts that app
-  instance), or a real-input check that rides every run while every control passed.
+  failed isolated harness suite (only a full run starts that app instance), or a real-input
+  check that rides every run while every control passed.
+- A crash before the first unit:
+  - `harness:<p>`: no test file reported, so it refuses.
+  - `real-input:ios`: a build or install failure, or an `xcodebuild` run that reports no case,
+    ends the run before its report, so there are no per-control results and it refuses.
+  - `real-input:android`: a failure before the e2e run starts (the build, the install, Metro)
+    ends it before its report, and it refuses. An e2e run that starts and dies before its first
+    test still writes the report, with every control not run, so the completion re-runs every
+    control: `completed: N of N units re-run`, a full run under the completion's name.
+- When a unit failed and the run also failed as a whole (an e2e exit code, a cleanup error),
+  only the failed units are re-run. The completion judges its own run's whole-run checks, not
+  the red run's.
 - `table` and `status` show it as `completed: N of M units re-run, attempt K`, and the duration
   as the completion's plus the full run's. A red completion can be completed again; the tool
   records every attempt and caps none. The `flake` skill says how many are reasonable.
