@@ -84,5 +84,8 @@ test('a drag that starts on a ListItem row is the list asking for the page', asy
     Math.abs(after.y - before.y) > 40 ||
     (await row.count()) === 0;
   expect(moved, 'the flick did not move the list at all').toBe(true);
+  // The flick can carry the echo off screen, which is not the echo refusing to move: scroll
+  // it back into the band before reading it, so the read is of a node on screen.
+  await reveal(screen, presses);
   await expect(presses).toHaveText('0');
 });
