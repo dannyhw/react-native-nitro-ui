@@ -913,9 +913,10 @@ export function gateStateFor({
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
  *   - not filtered: the command is the gate's own unfiltered command;
- *   - for a green, written by this ledger version, not relaxed: the line says no relaxing switch was set, and
- *     judged by the same gate code: its `judge` digest equals `judge`. A red
- *     still decides either way, since it can only ask for a run.
+ *   - for a green, written by this ledger version, not relaxed (the line says no
+ *     relaxing switch was set), and judged by the same gate code: its `judge`
+ *     digest equals `judge`. A red still decides either way, since it can only
+ *     ask for a run.
  *
  * @returns {{state: 'green'|'red', key: string} | null} the verdict and the
  *   digest key it matched on, or `null` when the line decides nothing here
