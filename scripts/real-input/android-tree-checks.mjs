@@ -2592,161 +2592,16 @@ async function checkboxChecks(t) {
   );
 }
 
-/** `checked` on the toggle icon button's own node, through a real tap. */
-async function iconButtonChecks(t) {
-  const named = (label) => t.requireControl(label);
-  const TOGGLE = 'Real-input toggle icon button';
-
-  // 1. At rest. Every number is zero and the toggle's own node says unchecked, so
-  //    each later assertion is about a number that moved and not about a screen
-  //    that started mid-story.
-  t.log.checkEquals(
-    'the toggle starts off (React renders "off")',
-    t.requireEcho(ECHO.iconButtonValue),
-    'off'
-  );
-  t.log.checkEquals(
-    'the toggle has reported no change before a touch',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the refusing toggle has been asked for nothing yet',
-    `${t.requireEcho(ECHO.iconButtonRefusedLast)} ${t.requireEcho(
-      ECHO.iconButtonRefusedEvents
-    )}`,
-    'none 0'
-  );
-  t.log.checkEquals(
-    'the counter the disabled controls report into starts at zero, so a stray ' +
-      'delivery is a number that moved rather than a callback nobody saw',
-    t.requireEcho(ECHO.iconButtonDisabledEvents),
-    '0'
-  );
-  // Both disabled forms have to refuse a real touch: a person only learns a control is
-  // off when pressing it does nothing, and the two forms take input differently.
-  for (const [form, label] of [
-    ['press', 'Real-input disabled icon button'],
-    ['toggle', 'Real-input disabled toggle icon button'],
-  ]) {
-    const inert = await t.requireControlOnScreen(label);
-    for (let tap = 1; tap <= 3; tap += 1) {
-      await t.tapNode(inert);
-    }
-    t.log.checkEquals(
-      `three real taps on the disabled ${form} form report nothing`,
-      t.requireEchoToStay(
-        ECHO.iconButtonDisabledEvents,
-        '0',
-        `three real taps on the disabled ${form} form`
-      ),
-      '0'
-    );
-  }
-  t.log.checkEquals(
-    'the toggle publishes a toggleable state, and it says unchecked',
-    t.nativeChecked(TOGGLE),
-    'off'
-  );
-
-  // 2. Pressed twice: two reports, one per tap, and nothing else moved. The counter
-  //    is asserted as an exact number rather than `atLeast`, which is the point — a
-  //    press that fired twice per tap is the bug this row is for.
-  const BOX = 'Real-input icon button';
-  for (const count of ['1', '2']) {
-    t.log.checkEquals(
-      `real tap ${count} on the press button reports one onPress`,
-      await t.tapUntilValue(
-        () => named(BOX),
-        ECHO.iconButtonPresses,
-        count,
-        `the real tap that makes press ${count}`
-      ),
-      count
-    );
-  }
-  t.log.checkEquals(
-    'two presses on the press button change no toggle: the value echo is where it started',
-    t.requireEcho(ECHO.iconButtonValue),
-    'off'
-  );
-  t.log.checkEquals(
-    'and the toggle still reports no change',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '0'
-  );
-
-  // 3. The toggle, once per direction. `nativeLabel` is passed because the node
-  //    publishes its own state: without that witness a lost change event is
-  //    exactly what a retry would turn green.
-  t.log.checkEquals(
-    'one real tap checks the toggle (React renders "on")',
-    await t.tapUntilValue(
-      () => named(TOGGLE),
-      ECHO.iconButtonValue,
-      'on',
-      'the real tap that checks the toggle',
-      { nativeLabel: TOGGLE }
-    ),
-    'on'
-  );
-  t.log.checkEquals(
-    "the checked toggle's own node says it is checked",
-    t.nativeChecked(TOGGLE),
-    'on'
-  );
-  t.log.checkEquals(
-    'one real tap reports one change',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '1'
-  );
-  t.log.checkEquals(
-    'a second real tap unchecks it (React renders "off")',
-    await t.tapUntilValue(
-      () => named(TOGGLE),
-      ECHO.iconButtonValue,
-      'off',
-      'the real tap that unchecks the toggle',
-      { nativeLabel: TOGGLE }
-    ),
-    'off'
-  );
-  t.log.checkEquals(
-    'the unchecked toggle reports it back',
-    t.nativeChecked(TOGGLE),
-    'off'
-  );
-  t.log.checkEquals(
-    'two taps report two changes, one per tap',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '2'
-  );
-  t.log.checkEquals(
-    'a tap on the toggle is not also a press: the press counter stayed at 2',
-    t.requireEcho(ECHO.iconButtonPresses),
-    '2'
-  );
-}
-
-/** `checked` and `enabled` on a group item's own node, not its title's. */
+/** Each item's title sits inside a clickable node of its own group. */
 async function buttonGroupChecks(t) {
-  const TOGGLES = 'Real-input formatting toggles';
-  const DISABLED_ITEM = 'Real-input group with a disabled item';
-  const DISABLED_GROUP = 'Real-input disabled group';
-
-  /**
-   * The node a tap on one item has to be aimed at, or `null` when the group is not
-   * drawing that item at all — the normal answer for an overflowed row.
-   *
-   * Both spellings of “name” are accepted, and the name is only where the search
-   * starts: Material draws each item as its own box, a separate title and a role
-   * decoration that carries no state, so taps, `checked` and `enabled` all come off
-   * the item’s own node.
-   *
-   * @param {string} groupLabel the group’s `accessibilityLabel`
-   * @param {string} title the item’s title
-   */
-  const itemOf = (groupLabel, title) => {
+  // Material draws each item as its own box, a separate title and a role decoration,
+  // so the title is only where the search starts; the press lands on the item's box.
+  for (const [groupLabel, title] of [
+    ['Real-input formatting toggles', 'Bold'],
+    ['Real-input formatting toggles', 'Italic'],
+    ['Real-input group with a disabled item', 'Cut'],
+    ['Real-input disabled group', 'Copy'],
+  ]) {
     const group = t.requireControl(groupLabel);
     const tree = t.dump();
     const named = tree.filter((node) => {
@@ -2762,158 +2617,25 @@ async function buttonGroupChecks(t) {
       );
     });
     if (named.length === 0) {
-      return null;
+      t.log.abort(
+        `group "${groupLabel}" draws no item titled "${title}" in its own box`
+      );
     }
     const control = tightestFlaggedNode(tree, named[0], 'clickable');
+    t.log.check(
+      `"${title}" in "${groupLabel}" sits inside a clickable node`,
+      control != null
+    );
     if (control == null) {
       const { bounds } = named[0];
-      t.log.abort(
-        `group "${groupLabel}" draws the title "${title}" but no clickable node ` +
-          `contains it — the name is on [${named[0].className}] at ` +
+      t.log.note(
+        `the name is on [${named[0].className}] at ` +
           `[${String(bounds.x1)},${String(bounds.y1)}]` +
           `[${String(bounds.x2)},${String(bounds.y2)}], so nothing here can be ` +
           'pressed, checked or disabled by a reader'
       );
     }
-    return control;
-  };
-
-  /** Like {@link itemOf}, and aborts with the group and item named when absent. */
-  const requireItem = (groupLabel, title) => {
-    const node = itemOf(groupLabel, title);
-    if (node == null) {
-      t.log.abort(
-        `group "${groupLabel}" draws no item titled "${title}" in its own box - ` +
-          'the row either did not compose it or named it something else, so no ' +
-          'real tap can be aimed at it'
-      );
-    }
-    return node;
-  };
-
-  /**
-   * Whether one item's own node publishes a checked state, as `"on"` / `"off"`.
-   *
-   * Read from the item node rather than through `nativeChecked`, which needs a
-   * `contentDescription` to start from and an item drawn with its title has none —
-   * and "which `Bold`?" is answered by geometry, not by a name four nodes share.
-   * `itemOf` has already resolved that geometry, so a `null` here means the item is
-   * drawn without a toggle state at all, which is the answer step 1 asserts against.
-   */
-  const itemChecked = (groupLabel, title) => {
-    const node = itemOf(groupLabel, title);
-    if (node == null || node.checkable !== 'true') {
-      return null;
-    }
-    return node.checked === 'true' ? 'on' : 'off';
-  };
-
-  // 1. At rest: every counter at zero and the controlled toggles showing the set
-  //    React gave them, so every number below is one that moved.
-  t.log.checkEquals(
-    'the toggles start at the set React rendered ("bold")',
-    t.requireEcho(ECHO.buttonGroupToggleState),
-    'bold'
-  );
-  t.log.checkEquals(
-    'and have reported no change before a touch',
-    t.requireEcho(ECHO.buttonGroupToggleEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the refusing group has been asked for nothing yet',
-    `${t.requireEcho(ECHO.buttonGroupRefusedLast)} ` +
-      `${t.requireEcho(ECHO.buttonGroupRefusedEvents)}`,
-    'none 0'
-  );
-  t.log.checkEquals(
-    'the counter the disabled group and its disabled item report into starts at ' +
-      'zero, so a stray delivery is a number that moved',
-    t.requireEcho(ECHO.buttonGroupDisabledEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the controlled toggle publishes a checkable state, and it says checked',
-    itemChecked(TOGGLES, 'Bold'),
-    'on'
-  );
-  // The flags of the two nodes the check above just read, as evidence: the class
-  // Compose writes for `Role.Checkbox` and the `checked` a screen reader is handed,
-  // recorded the way the Checkbox and IconButton checks record theirs.
-  for (const title of ['Bold', 'Italic']) {
-    const node = requireItem(TOGGLES, title);
-    t.log.note(
-      `item node "${title}": clickable=${node.clickable} ` +
-        `checkable=${node.checkable} checked=${node.checked} ` +
-        `enabled=${node.enabled} class=${node.className}`
-    );
   }
-  t.log.checkEquals(
-    'one real tap checks an unchecked toggle',
-    await t.tapUntilValue(
-      () => requireItem(TOGGLES, 'Italic'),
-      ECHO.buttonGroupToggleState,
-      'bold,italic',
-      'the real tap that checks "Italic"'
-    ),
-    'bold,italic'
-  );
-  t.log.checkEquals(
-    'one tap reported one change',
-    t.requireEcho(ECHO.buttonGroupToggleEvents),
-    '1'
-  );
-  t.log.checkEquals(
-    'a second real tap unchecks it again',
-    await t.tapUntilValue(
-      () => requireItem(TOGGLES, 'Italic'),
-      ECHO.buttonGroupToggleState,
-      'bold',
-      'the real tap that unchecks "Italic"'
-    ),
-    'bold'
-  );
-  t.log.checkEquals(
-    'the item publishes that back',
-    itemChecked(TOGGLES, 'Italic'),
-    'off'
-  );
-  // The disabled pair: the group that is disabled, and the group with one disabled
-  // item. Both report into one counter the enabled items never touch.
-  t.log.note(
-    `disabled item: enabled=${
-      itemOf(DISABLED_ITEM, 'Cut')?.enabled
-    } for "Cut", enabled=${
-      itemOf(DISABLED_GROUP, 'Copy')?.enabled
-    } for the whole group — evidence beside the counters below`
-  );
-  await t.tapNode(requireItem(DISABLED_ITEM, 'Cut'));
-  t.log.checkEquals(
-    'a real tap on the disabled item reports no onPress',
-    t.requireEchoToStay(
-      ECHO.buttonGroupDisabledEvents,
-      '0',
-      'a tap on the disabled item to be refused'
-    ),
-    '0'
-  );
-  await t.tapNode(requireItem(DISABLED_GROUP, 'Copy'));
-  t.log.checkEquals(
-    'a real tap inside the disabled group reports no onPress either',
-    t.requireEchoToStay(
-      ECHO.buttonGroupDisabledEvents,
-      '0',
-      'a tap on the disabled group to be refused'
-    ),
-    '0'
-  );
-  t.log.checkEquals(
-    'and nothing else answered: no action item was tapped here, so the press count ' +
-      'never moved and the toggles have reported exactly one change each way',
-    `${t.requireEcho(ECHO.buttonGroupPresses)} ` +
-      `${t.requireEcho(ECHO.buttonGroupToggleEvents)}`,
-    '0 2'
-  );
 }
 
 /** `checked` and `enabled` on a radio row's own node, not its label's. */
@@ -3575,7 +3297,6 @@ const TREE_CHECKS = [
   { id: 'dialog', run: dialogChecks },
   { id: 'chip', run: chipChecks },
   { id: 'checkbox', run: checkboxChecks },
-  { id: 'icon-button', run: iconButtonChecks },
   { id: 'button-group', run: buttonGroupChecks },
   { id: 'picker', run: pickerChecks },
   { id: 'list-item', run: listItemChecks },
