@@ -57,7 +57,7 @@ device can see and `example/__tests__` cannot:
    `hosted-slider.e2e.ts` drag a track and read the value back — up, back down, and
    over a drag that takes three seconds; `form.e2e.ts` flicks across a row and
    asserts the list moved and nothing pressed, and taps a row that was given no
-   `onPress`; `list-item.e2e.ts` starts a drag on a row; `context-menu.e2e.ts`
+   `onPress`; `context-menu.e2e.ts`
    holds at one point and asserts the menu opened there and the view under it never
    fired.
 2. **The screen-reader tree.** `reader.ts` asks whether the reader is _told_ a
