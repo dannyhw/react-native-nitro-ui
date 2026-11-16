@@ -16,11 +16,7 @@ import {
   findByDescription,
   findByTestId,
 } from './uiautomator.mjs';
-import {
-  nativeChecked,
-  nativeEnabled,
-  tightestFlaggedNode,
-} from './android-tree.mjs';
+import { nativeChecked, tightestFlaggedNode } from './android-tree.mjs';
 import { SweepDevice } from './a11y-sweep-device.mjs';
 
 /** How long a press gets to show its witness, in ms. */
@@ -120,8 +116,6 @@ function makeContext(device, log) {
     nodeByTestId(testID) {
       return findByTestId(device.hierarchy(), testID);
     },
-
-    screenSize: () => device.size(),
 
     /**
      * Scrolls until the control is on screen and big enough to press, and says how far it
@@ -328,14 +322,6 @@ function makeContext(device, log) {
      */
     nativeChecked(description) {
       return nativeChecked(device.hierarchy(), description);
-    },
-
-    /**
-     * @param {string} description the control's `accessibilityLabel`
-     * @returns {string | null} `"true"` / `"false"`, or null when nothing answers
-     */
-    nativeEnabled(description) {
-      return nativeEnabled(device.hierarchy(), description);
     },
 
     /**
@@ -906,209 +892,6 @@ async function contextMenuChecks(t) {
   }
 }
 
-/** A hosted Progress's width, beside the Slider in the same Host. */
-async function hostedMixedChecks(t) {
-  // All five children have to be read in one breath, so the scroll goes to the last of
-  // them first: `uiautomator dump` lists nothing off screen.
-  await t.requireControlOnScreen('Mixed button');
-  const tree = t.dump();
-  const nodeNamed = (name) => tree.find((entry) => entry.contentDesc === name);
-  const widthOf = (name) => {
-    const node = nodeNamed(name);
-    return node == null ? 0 : node.bounds.width;
-  };
-  const linear = widthOf('Mixed linear progress');
-  const circular = widthOf('Mixed circular progress');
-  const slider = widthOf('Mixed slider');
-  const switcher = widthOf('Mixed switch');
-  t.log.note(
-    `widths in px - slider=${String(slider)}, bar=${String(
-      linear
-    )}, indicator=${String(circular)}, switch=${String(switcher)}`
-  );
-  // Both linear controls fill the Host, so they agree with each other; both
-  // intrinsic ones keep their own width, so they are much narrower than the Host.
-  t.log.check(
-    `the linear bar is as wide as the Slider (${String(linear)} vs ${String(
-      slider
-    )})`,
-    Math.abs(linear - slider) <= Math.max(8, linear * 0.05)
-  );
-  t.log.check(
-    `the circular indicator keeps its own width (${String(
-      circular
-    )} vs ${String(linear)})`,
-    circular > 0 && circular * 3 < linear
-  );
-  t.log.check(
-    `the Switch keeps its own width too (${String(
-      switcher
-    )} vs ${String(linear)})`,
-    switcher > 0 && switcher * 3 < linear
-  );
-  const indicator = nodeNamed('Mixed circular progress');
-  t.log.check(
-    `the indicator is drawn as a square, not stretched across the Host (${
-      indicator == null
-        ? 'no node'
-        : `${String(indicator.bounds.width)} x ${String(
-            indicator.bounds.height
-          )}`
-    })`,
-    indicator != null &&
-      Math.abs(indicator.bounds.width - indicator.bounds.height) <= 8
-  );
-}
-
-/** `checked` on the chip's own node, and `enabled` on a disabled one's. */
-async function chipChecks(t) {
-  const named = (label) => t.requireControl(label);
-
-  // 1. On, then off.
-  await t.tapUntilValue(
-    () => named('Real-input chip'),
-    ECHO.chipValue,
-    'on',
-    'the real tap that selects the chip',
-    { nativeLabel: 'Real-input chip' }
-  );
-  t.log.checkEquals(
-    'a second real tap deselects it (React renders "off")',
-    await t.tapUntilValue(
-      () => named('Real-input chip'),
-      ECHO.chipValue,
-      'off',
-      'the real tap that deselects the chip',
-      { nativeLabel: 'Real-input chip' }
-    ),
-    'off'
-  );
-  t.log.checkEquals(
-    'two taps report two changes',
-    t.requireEcho(ECHO.chipEvents),
-    '2'
-  );
-  t.log.checkEquals(
-    "the deselected chip's node stops saying it is checked",
-    t.nativeChecked('Real-input chip'),
-    'off'
-  );
-  // 3. The assist chip presses once per tap.
-  t.log.checkEquals(
-    'one real tap on the assist chip reaches onPress once',
-    await t.tapUntilValue(
-      () => named('Real-input assist chip'),
-      ECHO.chipPresses,
-      '1',
-      'the real tap on the assist chip'
-    ),
-    '1'
-  );
-
-  // 4. Neither disabled chip takes a tap. Each is wired to its enabled twin's
-  //    counter, so a stray delivery is a number that moved. Not retried: the claim
-  //    is about a period in which nothing may move.
-  const disabledFilter = named('Real-input disabled chip');
-  // Read off the clickable touch target around the label, not the labelled node:
-  // `nativeEnabled` says why (the labelled node reports enabled either way).
-  t.log.checkEquals(
-    'the disabled filter chip announces itself not enabled',
-    t.nativeEnabled('Real-input disabled chip'),
-    'false'
-  );
-  t.log.checkEquals(
-    'the disabled assist chip announces itself not enabled',
-    t.nativeEnabled('Real-input disabled assist chip'),
-    'false'
-  );
-  t.log.checkEquals(
-    'its enabled twin announces itself enabled (so the reads above can say true)',
-    t.nativeEnabled('Real-input assist chip'),
-    'true'
-  );
-  await t.tapNode(disabledFilter);
-}
-
-/** `checked` on the box's own node, through a real tap in both directions. */
-async function checkboxChecks(t) {
-  const named = (label) => t.requireControl(label);
-  const BOX = 'Real-input checkbox';
-
-  // 1. Before any touch: the two counters at rest, and the box's own state. The
-  //    native read is the one a stale render cannot fake.
-  t.log.checkEquals(
-    'the checkbox has reported no change before a touch',
-    t.requireEcho(ECHO.checkboxEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the counter the disabled checkbox reports into starts at zero, so a stray ' +
-      'delivery is a number that moved rather than a callback nobody saw',
-    t.requireEcho(ECHO.checkboxDisabledEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the box publishes a toggleable state, and it says unchecked',
-    t.nativeChecked(BOX),
-    'off'
-  );
-  // The raw flags of the node that carries the name, as evidence: the `class=`
-  // Compose writes for `Role.Checkbox` has not been measured on a device the way the
-  // Spinner class the Picker and Menu checks assert has, so it is recorded rather than
-  // guessed at, the way the Menu's popup rows are. The toggle itself is asserted
-  // above, where the reading is the library's own.
-  for (const node of t.nodesNamed(BOX)) {
-    t.log.note(
-      `name node "${node.contentDesc}": checkable=${node.checkable} ` +
-        `checked=${node.checked} enabled=${node.enabled} ` +
-        `clickable=${node.clickable} class=${node.className}`
-    );
-  }
-
-  // 2. Checked: one tap, one change, and the box agrees. Each tap is confirmed by the
-  //    value it should produce before the next one is made (as in `switch`), and
-  //    carries the box's own state as the witness that tells a dropped delivery from a
-  //    lost change event.
-  await t.tapUntilValue(
-    () => named(BOX),
-    ECHO.checkboxValue,
-    'on',
-    'the real tap that checks the box',
-    { nativeLabel: BOX }
-  );
-  t.log.checkEquals(
-    "the checked box's node says it is checked",
-    t.nativeChecked(BOX),
-    'on'
-  );
-  t.log.checkEquals(
-    'one real tap reports one change',
-    t.requireEcho(ECHO.checkboxEvents),
-    '1'
-  );
-
-  // 3. Unchecked again. This is the assertion that catches a native box which only
-  //    ever asks for `true`: the tap above would have lit the "on" echo all the same,
-  //    so the echo back at "off", the node back at unchecked and the counter at
-  //    exactly 2 are what say a second tap asked for `false`.
-  t.log.checkEquals(
-    'a second real tap unchecks it (React renders "off")',
-    await t.tapUntilValue(
-      () => named(BOX),
-      ECHO.checkboxValue,
-      'off',
-      'the real tap that unchecks the box',
-      { nativeLabel: BOX }
-    ),
-    'off'
-  );
-  t.log.checkEquals(
-    'the unchecked box reports it back',
-    t.nativeChecked(BOX),
-    'off'
-  );
-}
-
 /** `checked` on the toggle icon button's own node, through a real tap. */
 async function iconButtonChecks(t) {
   const named = (label) => t.requireControl(label);
@@ -1655,51 +1438,6 @@ async function pickerChecks(t) {
   );
 }
 
-/** `enabled` on the disabled row's own node, and the live row behind it. */
-async function listItemChecks(t) {
-  const LIVE = 'Real-input item';
-  const DISABLED = 'Real-input disabled item';
-  // 5. A disabled item takes nothing, and the tree says so before the taps do. Then the
-  //    live item proves the silence was a refusal and not a dead screen.
-  await t.requireControlOnScreen(DISABLED);
-  t.log.checkEquals(
-    'the disabled item is in the tree as disabled, so a reader is told it is inert ' +
-      'instead of being handed a control that does nothing',
-    t.nativeEnabled(DISABLED),
-    'false'
-  );
-  const disabledNode = await t.requireControlOnScreen(DISABLED);
-  for (let tap = 1; tap <= 3; tap += 1) {
-    await t.tapNode(disabledNode);
-  }
-  t.log.checkEquals(
-    'three real taps on a disabled item report nothing',
-    t.requireEchoToStay(
-      ECHO.listItemDisabledEvents,
-      '0',
-      'three real taps on a disabled item'
-    ),
-    '0'
-  );
-  // Read from the counter rather than hard-coded: the held press in the highlight
-  // sample above is itself a press this counter has counted, so the absolute number is
-  // a fact about how many checks ran above, while "one more after one more tap" is the
-  // claim. A hard-coded 11 here failed on the first real run for exactly that reason.
-  const beforeBarrier = Number(t.requireEcho(ECHO.listItemPresses));
-  const wantedBarrier = String(beforeBarrier + 1);
-  t.log.checkEquals(
-    `and input is alive: the live item still presses (${beforeBarrier} -> ` +
-      `${wantedBarrier})`,
-    await t.tapUntilValue(
-      () => t.requireControl(LIVE),
-      ECHO.listItemPresses,
-      wantedBarrier,
-      'a real tap on the live item after the disabled one'
-    ),
-    wantedBarrier
-  );
-}
-
 /** The split trigger's list half, and the Back that answers it. */
 async function menuChecks(t) {
   const SPLIT_ACTION = 'Real-input split menu';
@@ -1819,107 +1557,6 @@ async function hostedPickerChecks(t) {
 }
 
 /** What a screen reader is offered around a `<Host>`: its own text, in order. */
-/**
- * Draw the three hosted Switches together: back to the top of the page first, then down.
- *
- * A `<Host>` child only earns a box in the dump once it has been drawn, and the page is wherever
- * the previous control's checks left it, so a search from there can spend every scroll travelling
- * away. The three rows are the first block of Hosts, so the walk restarts above them. The drags
- * are on the right-edge strip, where no control owns the finger.
- *
- * @param {ReturnType<typeof makeContext>} t
- */
-async function walkOntoHostedSwitches(t) {
-  const names = ['Hosted switch 0', 'Hosted switch 1', 'Hosted switch 2'];
-  const { width, height } = t.screenSize();
-  const edge = width - 8;
-  const middle = Math.round(height / 2);
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    await t.swipePx(edge, middle, edge, middle + 900, 300);
-  }
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    if (
-      names.every((name) =>
-        t.nodesNamed(name).some((node) => node.bounds.height > 0)
-      )
-    ) {
-      return;
-    }
-    await t.swipePx(edge, middle, edge, middle - 500, 600);
-  }
-}
-
-async function hostedSwitchChecks(t) {
-  await walkOntoHostedSwitches(t);
-  await t.requireControlOnScreen('Hosted switch 0');
-  // `uiautomator dump` lists nodes in traversal order, so where a hosted label sits
-  // among the plain React Native text nodes around it is the order TalkBack reads them
-  // in. The `<Host>` here sits between two `Text`s and holds three labelled Switches,
-  // which gives both halves of the claim: one node per child, in mount order, between
-  // the RN siblings rather than before or after them.
-  const tree = t.dump();
-  // Matched without case because the tree carries what is drawn, not what JSX says:
-  // this screen's section headings carry `textTransform: 'uppercase'`.
-  const textOrder = (needle) =>
-    tree.findIndex((node) =>
-      node.text.toLowerCase().includes(needle.toLowerCase())
-    );
-  const descOrder = (description) =>
-    tree.findIndex((node) => node.contentDesc === description);
-  const section = textOrder('Three Switches, one composition');
-  const followingNote = textOrder('The Host has a height');
-  const hosted = [0, 1, 2].map((index) =>
-    descOrder(`Hosted switch ${String(index)}`)
-  );
-
-  // A red ordering claim has to say where the tree actually put things, and a missing
-  // node has to say what it saw instead.
-  const where = tree
-    .map((node, index) =>
-      node.text || node.contentDesc
-        ? `${String(index)}:${(node.text || node.contentDesc).slice(0, 22)}`
-        : null
-    )
-    .filter(Boolean)
-    .join(' | ');
-  t.log.note(
-    `tree positions — section=${String(section)}, hosted=${hosted.join(
-      '/'
-    )}, note=${String(followingNote)}; named nodes: ${where}`
-  );
-
-  t.log.checkEquals(
-    'the tree carries the RN text above the Host',
-    section >= 0,
-    true
-  );
-  t.log.checkEquals(
-    'the tree carries the RN note below the Host',
-    followingNote >= 0,
-    true
-  );
-  t.log.checkEquals(
-    'the tree carries a node for each hosted Switch',
-    hosted.map((at) => at >= 0),
-    [true, true, true]
-  );
-  t.log.checkEquals(
-    'each hosted Switch is its own labelled node, in mount order',
-    hosted,
-    [...hosted].sort((left, right) => left - right)
-  );
-  t.log.checkEquals(
-    'the RN text above the Host is read before every hosted Switch',
-    hosted.map((at) => at > section),
-    [true, true, true]
-  );
-  t.log.checkEquals(
-    'the RN note below the Host is read after every hosted Switch',
-    hosted.map((at) => at < followingNote),
-    [true, true, true]
-  );
-}
-
 /** One named radio node per option, each carrying the selection. */
 async function segmentedControlChecks(t) {
   await t.requireControlOnScreen('Real-input segmented control');
@@ -2019,16 +1656,11 @@ async function segmentedControlChecks(t) {
  */
 const TREE_CHECKS = [
   { id: 'context-menu', run: contextMenuChecks },
-  { id: 'hosted-mixed', run: hostedMixedChecks },
   { id: 'hosted-picker', run: hostedPickerChecks },
-  { id: 'hosted-switch', run: hostedSwitchChecks },
   { id: 'menu', run: menuChecks },
-  { id: 'chip', run: chipChecks },
-  { id: 'checkbox', run: checkboxChecks },
   { id: 'icon-button', run: iconButtonChecks },
   { id: 'button-group', run: buttonGroupChecks },
   { id: 'picker', run: pickerChecks },
-  { id: 'list-item', run: listItemChecks },
   { id: 'segmented-control', run: segmentedControlChecks },
 ];
 

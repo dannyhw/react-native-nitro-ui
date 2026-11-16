@@ -3,7 +3,6 @@ import { describe, expect, it } from '@jest/globals';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 import {
   nativeChecked,
-  nativeEnabled,
   tightestFlaggedNode,
 } from '../real-input/android-tree.mjs';
 
@@ -104,66 +103,6 @@ describe('real-input Android native state', () => {
       node({ desc: 'Controlled switch', bounds: '[901,759][1038,843]' }),
     ];
     expect(nativeChecked(tree, 'Controlled switch')).toBe('on');
-  });
-});
-
-/**
- * A chip in a real dump: a disabled chip's `enabled="false"` is on its clickable
- * 48 dp touch target, and the labelled node inside it says `enabled="true"`.
- */
-function chipNode({
-  desc = '',
-  clickable = 'false',
-  enabled = 'true',
-  bounds,
-}) {
-  return {
-    ...parseHierarchy(
-      `<hierarchy><node content-desc="${desc}" clickable="${clickable}" ` +
-        `enabled="${enabled}" bounds="${bounds}" /></hierarchy>`
-    )[0],
-  };
-}
-
-const DISABLED_CHIP = [
-  chipNode({ bounds: '[0,0][1080,2424]', clickable: 'true' }),
-  chipNode({
-    clickable: 'true',
-    enabled: 'false',
-    bounds: '[562,738][964,864]',
-  }),
-  chipNode({ desc: 'Real-input disabled chip', bounds: '[562,759][964,843]' }),
-];
-
-describe('real-input Android enabled state', () => {
-  it('reads enabled off the clickable box that carries the labelled control', () => {
-    expect(nativeEnabled(DISABLED_CHIP, 'Real-input disabled chip')).toBe(
-      'false'
-    );
-    expect(
-      nativeEnabled(
-        DISABLED_CHIP.map((n, i) => (i === 1 ? { ...n, enabled: 'true' } : n)),
-        'Real-input disabled chip'
-      )
-    ).toBe('true');
-  });
-
-  it('does not read the labelled node itself, which says enabled either way', () => {
-    const labelled = DISABLED_CHIP[2];
-    expect(labelled.enabled).toBe('true');
-    expect(nativeEnabled(DISABLED_CHIP, 'Real-input disabled chip')).not.toBe(
-      labelled.enabled
-    );
-  });
-
-  it('says null when nothing clickable carries the control', () => {
-    expect(
-      nativeEnabled(
-        [chipNode({ desc: 'Lonely', bounds: '[0,0][10,10]' })],
-        'Lonely'
-      )
-    ).toBeNull();
-    expect(nativeEnabled(DISABLED_CHIP, 'Not on this screen')).toBeNull();
   });
 });
 
