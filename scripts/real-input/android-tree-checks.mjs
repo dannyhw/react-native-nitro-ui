@@ -3197,25 +3197,25 @@ async function pickerChecks(t) {
   t.waitForPopupCount(0, "the enabled picker's popup to come down");
   // What a screen reader is offered: a name on a node with no value, or spread over two
   // nodes, misdescribes the control however well the taps land.
-  const anchor = t.nodesNamed('Real-input enabled picker');
+  const pickerNode = t.nodesNamed('Real-input enabled picker');
   t.log.checkEquals(
     "one node carries the enabled picker's name, so it is announced once",
-    anchor.length,
+    pickerNode.length,
     1
   );
   t.log.checkEquals(
     'and that same node carries the value it shows',
-    anchor[0]?.text,
+    pickerNode[0]?.text,
     'Mica'
   );
   t.log.checkEquals(
     'it is the node a tap is aimed at, too (the name is not parked on a container)',
-    anchor[0]?.clickable,
+    pickerNode[0]?.clickable,
     'true'
   );
   t.log.checkEquals(
     'the node announces the role of a list of choices',
-    anchor[0]?.className,
+    pickerNode[0]?.className,
     'android.widget.Spinner'
   );
 }
