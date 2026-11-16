@@ -48,18 +48,20 @@ assertion each, because each needs the driver's `clickable` flag.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1987 tests / 88 suites | `2a41cfe1f33c` | 2 m 00 s | start 6.8 / med 12.6 / max 38.5 |
+| `check` | **PASS** | 1987 tests / 88 suites | `19752255ee9c` | 1 m 32 s | start 8.9 / med 12.0 / max 13.6 |
 | `harness:ios` | missing | — | — | — | — |
-| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `2a41cfe1f33c` (android tree) | 18 m 21 s | start 7.2 / med 9.6 / max 27.2 |
+| `harness:android` | stale | 659 tests / 31 suites + isolated 6 tests / 3 suites | 2a41cfe1f33c (not this tree) | 18 m 21 s | start 7.2 / med 9.6 / max 27.2 |
 | `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | **PASS** | — | `2a41cfe1f33c` (android tree) | 51 m 52 s | start 4.6 / med 8.7 / max 81.0 |
+| `real-input:android` | stale | — | 2a41cfe1f33c (not this tree) | 51 m 52 s | start 4.6 / med 8.7 / max 81.0 |
+| `real-input:android:--control:button-group` | stale | — | 5a2c86838ff0 (not this tree) | 11 m 46 s | start 4.1 / med 7.0 / max 21.3 |
+| `real-input:android:--control:button-group:--control:menu:--control:picker:--control:segmented-control` | **PASS** | — | `19752255ee9c` (android tree) | 15 m 47 s | start 8.6 / med 6.8 / max 18.8 |
 | `real-input:android:--control:icon-button` | stale | — | e90a72db3856 (not this tree) | 0.8 s | start 4.8 / med 4.8 / max 4.8 |
 | `real-input:android:--control:icon-button:--control:button-group` | stale | — | 802490351dd8 (not this tree) | 12 m 09 s | start 4.5 / med 5.4 / max 17.4 |
 | `real-input:android:--control:picker` | stale | — | ddb25a36844d (not this tree) | 13 m 58 s | start 5.6 / med 6.7 / max 20.1 |
 
-`need --for review`: `harness:ios`, which runs at merge. On the final tree, the e2e phase of
-`real-input:android` ran 49 tests in 23 m 15 s against its 25-minute ceiling. The whole gate
-took 51 m 52 s.
+Round one: `need --for review` asked for `harness:ios`, which runs at merge. On round one's
+final tree, the e2e phase of `real-input:android` ran 49 tests in 23 m 15 s against its
+25-minute ceiling. The whole gate took 51 m 52 s. Fix round 1's gates are under its section.
 
 ## Red proofs
 
@@ -106,3 +108,24 @@ assertions are the ones cited.
 
   I recommend (a) now, sized from the merged suite's measured length, with (c) as a
   follow-up task. I did not take any of them.
+
+## Fix round 1
+
+- **M1.** `button-group.e2e.ts`'s toggle test taps `Cut` in the group with a disabled item and
+  `Copy` in the disabled group by coordinates (`liftIntoBand`, then `tapAt`), waits 800 ms and
+  reads `button-group-disabled-events` as `0` at `:95`, and again after the live `Italic` taps.
+  The appendix rows for BG11a and BG11b say they moved to e2e.
+- **N1.** The split menu's action half and the radio Picker row wait 800 ms before the window
+  count is read. The menu's second echo read now follows that wait, so it checks the echo stays
+  `action`.
+- **N2.** The SegmentedControl test polls the unmerged tree until the segments' `checked` read
+  `false,true,false`, then grades that snapshot.
+- **N5, N6.** The button-group total is 18, and BG2 stays because the audit marks it "Needs a
+  driver change".
+
+Red proof: `button-group.e2e.ts` "one real tap per direction toggles one item once…" ->
+`enabled = true` for action items (`HybridNitroUiButtonGroup.kt:755`) -> `button-group.e2e.ts:95`
+`expect(disabledEvents).toHaveText('0')` observed `2`.
+
+The filtered run's e2e phase ran 10 tests in 4 m 19 s. `task-ready` lists `harness:ios` and
+`harness:android` as missing; they and the full `real-input:android` run once at merge.
