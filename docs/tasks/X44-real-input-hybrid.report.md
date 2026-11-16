@@ -39,16 +39,8 @@ green `real-input:android` runs in a row were not reached.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1987 tests / 88 suites | `03759525c338` | 1 m 33 s | start 6.4 / med 7.0 / max 8.2 |
-| `harness:ios` | missing | — | — | — | — |
-| `harness:android` | stale | 659 tests / 31 suites + isolated 6 tests / 3 suites | 5c12f3af4b83 (not this tree) | 18 m 08 s | start 4.3 / med 4.1 / max 12.9 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | **FAIL** | — | `03759525c338` (android tree) | 44 m 03 s | start 2.7 / med 4.0 / max 14.8 |
-| `real-input:android:--control:bottom-sheet:--control:dialog:--control:chip` | stale | — | 28f58767cdbc (not this tree) | 14 m 05 s | start 3.6 / med 4.8 / max 6.2 |
-| `real-input:android:--control:date-picker` | stale | — | 2746bc7f812e (not this tree) | 12 m 39 s | start 3.6 / med 4.4 / max 10.0 |
-| `real-input:android:--control:date-picker:--control:hosted-mixed` | stale | — | 89b3158559a8 (not this tree) | 14 m 05 s | start 18.6 / med 5.5 / max 28.1 |
+Round 0 ran on `03759525c338`; those rows stay in the local ledger, which is not committed.
+The current table is under Fix round 1.
 
 Two clean full runs of the gate, one lease: 23:01 in 2 642.5 s (27/28 controls, 35/36 auxiliary)
 and 00:03 in 2 642.7 s (27/28 controls, 36/36 auxiliary). Phase 1 timed itself at 966.6 s (16 m 07 s)
@@ -409,3 +401,185 @@ The two raw reads in `example/e2e/real-input/device-read.ts` are the only places
    the merge at `0361d729` is against a commit that is no longer `main`, and `gate.mjs need` no
    longer knows the diff base. Should this branch re-merge, or is the rewrite the orchestrator's own
    history edit that the branch should simply be rebased onto at review time?
+
+## Fix round 1
+
+**M1** the exit code comes from `problems[]` — e2e exit code, each phase-1 test, each phase-2
+control, the sweep — so a filtered run is red as the full gate is (`0/5 controls passed`).
+**M2** the placement reads wait for the keyboard edge to be equal on two reads, and the field's box
+to differ from its pre-focus box and then equal on two reads, inside the existing deadline; later
+assertions unchanged. No poll, no raised timeout, no retry. **M3** day cells are tapped at the centre
+of the cell's own box.
+
+**Coverage** 55 phase-2 checks and 14 phase-1 reads restored, 53 kept; the two popup-leak cycles are
+out, under Questions.
+
+**M7** README and CONTRIBUTING match the gate; two false comments gone. **N2** one comment sweep, no
+code difference in `comments-only.mjs`. **N1 N3 N4 N7** done.
+
+Repairs, each seen red with no mutation: the `list-item` drag test is gone — its echo leaves the
+window with the row, and a Form row asserts the rule; `requireControlOnScreen` searches both ways;
+hosted `Switch` rows are walked from the page top. The tree is green: one full `real-input:android`
+(3 236 s), `harness:android`, `check`; a second in a row did not fit the budget.
+
+### Red proofs
+
+Filtered mutation run `--control hosted-slider search-field text-field form slider` — 892.7 s,
+exit 1, `FAIL`: also the **M1** proof, `0/5 controls passed · 23/24 auxiliary`, `real-input: the run
+is red — e2e exited 1`, `… does not prove every selected control passed`, `… a check failed`.
+`example/src` mutations only. Every full run below carries the same shape.
+
+Phase 1 — `check -> mutation -> the line that went red`:
+
+- form row that was given no press -> a plain Form row given an `onPress` -> `form.e2e.ts:107`
+  `expect(presses).toHaveText('0')` observed `"3"`
+- hosted Button press count -> the second press never arrives -> `hosted-button.e2e.ts:31`
+- mixed Host, one tap each -> its Button reports nothing -> `hosted-mixed.e2e.ts:31`
+- hosted SegmentedControl, last segment -> the index is clamped -> `hosted-segmented.e2e.ts:37`
+- hosted Slider drag -> the value is capped at 0.65 -> `hosted-slider.e2e.ts:60`
+  `toHaveText(/^0\.[0-4]\d$/)` observed `0.55`
+- hosted Switch -> only the first change is reported -> `hosted-switch.e2e.ts:26`
+- Slider drag back -> the value never comes down -> `slider.e2e.ts:56` "the drag back echoed
+  0.791 after the first drag left 0.750"
+- SearchField app-side blur -> `blurFromJs` made a no-op -> `search-field.e2e.ts:105`
+  `toContainText('blur: 1')`
+- TextField app-side blur -> the same -> `text-field.e2e.ts:71`
+- a field inside a popover, above the keyboard -> that field `editable={false}` ->
+  `popover.e2e.ts:42` and `popover.e2e.ts:65`
+- hosted Picker row -> the hosted picker starts on another row -> `hosted-picker.e2e.ts:23`
+- Picker row -> the menu variant's default row moved -> `picker.e2e.ts:27`
+- Tooltip action and close -> its log is not empty before a touch -> `tooltip.e2e.ts:19`
+
+Phase 2 — the sweep, then the moved checks:
+
+- a `ContextMenu` row's readable name -> `accessible` removed -> `✗ NitroUiContextMenu: 1 node(s)
+  carry the name "Message from Grace" and every one of them has a zero-sized box`
+- a quick tap presses the child once and opens nothing -> the child's `onPress` bumps twice ->
+  `✗ a quick tap presses the child once and opens nothing (of 3) — expected 3, saw 0`; the same
+  mutation: `✗ a fresh tap after each menu presses once (of 3) — expected 3, saw 0`,
+  `✗ the child keeps the gesture: one press on release — expected 1, saw 0`
+- the row inside the menu pans -> `scrollEnabled={false}` -> `✗ the inner horizontal ScrollView pans`
+- a nested menu opens -> the inner `ContextMenu` made `disabled` ->
+  `✗ a hold on the inner ContextMenu opens the inner menu (rows Outer action)`,
+  `✗ the inner reports the open — expected 1, saw 0`, `✗ the outer does not — expected 0, saw 1`
+- a disabled menu opens nothing -> its `disabled` removed ->
+  `✗ a disabled ContextMenu opens nothing on a hold`, `✗ and reports no open — expected 0, saw 1`
+- the row a reader can act on -> `accessible` removed -> `✗ and it is long-clickable — expected
+  true, saw false`, `✗ and focusable — expected true, saw false`
+- a popup near the bottom edge flips -> 500 px added under the row -> `✗ near the bottom edge the
+  popup opens above the finger`
+- the alert answers Back and an outside tap -> `dismissible={false}` -> `✗ timed out waiting for
+  Back to take the dismissible alert down`
+- the menu trigger carries its title as its value -> `title="More actions"` -> `✗ and that same
+  node carries the title it paints as its value — expected Actions, saw More actions`
+- a hosted picker that reports a choice it did not make -> `popPicker` starts at 2 -> `✗ opening
+  and dismissing reported no selection - a menu is not a choice — expected 1, saw 2`
+- the disabled icon-button press form -> its `disabled` removed -> `✗ three real taps on the
+  disabled press form: real-input-icon-button-disabled-events went to "3" when it should have
+  stayed "0"`
+- the toggle icon-button is a toggle, not a press -> its change also calls `onPress` -> `✗ a tap on
+  the toggle is not also a press: the press counter stayed at 2 — expected 2, saw 4`
+- a picker row that says it is disabled -> that picker's `disabled` removed -> `✗ and that node is
+  the one that says it is disabled — expected false, saw true`
+- a choice that changed nothing reports nothing -> `defaultSelectedIndex` 0 to 1 -> `✗ and a choice
+  that changed nothing reports nothing — expected 0, saw 1`
+- one segment tap, one change -> the parent counts two, and refuses the tap -> `✗ one tap reports
+  one change — expected 1, saw 2`
+- the split menu's action half -> the echoed id renamed -> `✗ a real tap on the action half runs
+  the primary action — expected action, saw act`, `✗ and raises no list - no window, and no open in
+  the echo either — expected 0 | action, saw 0 | act`, `✗ one press of the list half is one open and
+  one close — expected action > open > close, saw act > open > close`
+- a 1.4 s hold steps once -> the held stepper starts at 6 -> `✗ a 1.4 s hold on the plus half steps
+  exactly once (no Android repeat, as documented) — expected 6, saw 7`
+- the tooltip is silent before a touch, and says what it draws -> its log starts non-empty and its
+  title renamed -> `✗ no tooltip has reported anything before a touch — expected none, saw open`,
+  `✗ and opens nothing, reports nothing`, `✗ the tooltip shows its title and its action — expected
+  1 title, 1 action, saw 0 title, 1 action`, `✗ a tap outside closes the tooltip and reports the
+  close alone`, `✗ Back closes it and reports the close alone`
+- what a reader is told around a `<Host>`: its text, in order -> the section heading and the note
+  renamed, and the third `Switch` renamed -> `✗ the tree carries the RN text above the Host —
+  expected true, saw false`, `✗ the tree carries the RN note below the Host — expected true, saw
+  false`, `✗ the tree carries a node for each hosted Switch — expected true,true,true, saw
+  true,true,false`, `✗ each hosted Switch is its own labelled node, in mount order — expected
+  -1,35,39, saw 35,39,-1`, `✗ the RN text above the Host is read before every hosted Switch`,
+  `✗ the RN note below the Host is read after every hosted Switch`
+
+All three reach fixes were seen red on a tree with no mutation: `✗ scrolling six times never brought
+"Hosted switch 0" on screen, although it was named 1 time with no box at all` — the same six checks
+went red under mutations a run later; `✗ scrolling twelve times, down then back up, never brought
+"Hosted switch 0" on screen, although it was named 1 time with no box at all` in a later full run,
+which is why that block is now walked from the top of the page instead of searched from wherever the
+previous control left it; and `✗ scrolling six times never brought "Real-input drop picker" on
+screen`, which is what the leak cycles died on.
+
+### Restored checks not shown red
+
+28 of the 53 kept phase-2 checks came green under every mutation that could be applied without
+ending the run: a control's checks stop at the first abort, so a mutation that made an earlier check abort
+took the rest of that control with it, and the two full green runs the brief asks for leave no room
+for another mutation pass. They are, by control: ContextMenu (a child never pressed by a hold that
+opened it, a pick reporting select before close, an outside tap closing the menu, the press under it
+not landing, an inaccessible ContextMenu offering TalkBack no long-click, the popup's owner
+reporting the open); Picker (the popup opening as a window, Back shutting it, the already-chosen row
+closing the menu, the disabled picker being one node, that picker refusing a tap, the ordinary
+picker opening when tapped the same way, the node carrying the value it shows, that node being where
+a tap is aimed); hosted Picker (the popup opening, Back shutting it); Menu (the role a reader is
+told, the list half shutting on Back); IconButton (a press changing no toggle, and reporting no
+change); SegmentedControl (silence before a touch, the second segment's index, one radio node per
+option); Tooltip (the anchor pressing once while closed, its action reporting id then close, the
+anchor pressing once again when closed); Dialog (an action reporting id then close); Popover (the
+field inside it bringing up the keyboard — its only app-level mutation is `editable={false}`, which
+aborts the whole run).
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1987 tests / 88 suites | `49d94fec163a` | 1 m 30 s | start 4.5 / med 7.4 / max 8.5 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `49d94fec163a` (android tree) | 18 m 05 s | start 3.2 / med 4.4 / max 10.7 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `49d94fec163a` (android tree) | 53 m 56 s | start 5.7 / med 3.9 / max 13.0 |
+| `real-input:android:--control:bottom-sheet:--control:dialog:--control:chip` | stale | — | 28f58767cdbc (not this tree) | 14 m 05 s | start 3.6 / med 4.8 / max 6.2 |
+| `real-input:android:--control:date-picker` | stale | — | 2746bc7f812e (not this tree) | 12 m 39 s | start 3.6 / med 4.4 / max 10.0 |
+| `real-input:android:--control:date-picker:--control:hosted-mixed` | stale | — | 89b3158559a8 (not this tree) | 14 m 05 s | start 18.6 / med 5.5 / max 28.1 |
+| `real-input:android:--control:hosted-picker:--control:hosted-switch:--control:menu:--control:icon-button:--control:picker:--control:segmented-control:--control:stepper:--control:tooltip` | stale | — | 5c680f9071e6 (not this tree) | 22 m 38 s | start 3.0 / med 4.0 / max 15.4 |
+| `real-input:android:--control:hosted-slider:--control:search-field:--control:text-field:--control:form:--control:slider` | stale | — | e8f2b32187b4 (not this tree) | 14 m 53 s | start 4.0 / med 4.8 / max 13.8 |
+| `real-input:android:--control:hosted-switch:--control:picker:--control:icon-button:--control:menu` | stale | — | 85b654340d39 (not this tree) | 16 m 43 s | start 3.8 / med 4.0 / max 10.3 |
+| `real-input:android:--control:picker` | stale | — | 2b483b046415 (not this tree) | 17 m 23 s | start 5.5 / med 4.1 / max 10.4 |
+| `real-input:android:--control:picker:--control:hosted-switch` | stale | — | 3dfbb4b4402a (not this tree) | 14 m 43 s | start 6.1 / med 3.9 / max 13.4 |
+### Follow-ups
+
+- N5: the per-id guard names the control now, but one check still stands for twelve ids.
+- N6: a navigation failure inside a tree check throws a plain error, which ends the run before the
+  summary — the dialog abort in the run above is that shape.
+- N8: `date-picker.e2e.ts` picks the day from the host clock while the dialog opens on the device's;
+  nine `.d.mts` files are outside the type oracle.
+- N9: `android-tree-checks.mjs` keeps the one edited assertion (`'3 2'` to `'0 2'`) without saying
+  which twin it replaced.
+- `bun run check` and eslint do not parse `scripts/**/*.mjs`: a duplicate `const` and a missing
+  helper both stayed green until a device ran them. A parse step there is the real fix.
+- `gate.mjs` builds its log name from the CLI arguments, so past ~10 `--control` flags the run dies
+  with `ENAMETOOLONG`.
+- `scripts/real-input/a11y-sweep.mjs` still prints defect ids in its debt rows; the file is outside
+  this branch.
+- Left unrestored, for want of device time for their bodies and their red proofs: the ButtonGroup
+  overflow menu, its action against its toggle, and a refused group's neighbour; the Menu checked-row
+  pick; the order of presses inside a Popover; SearchField keystrokes after an IME change; the
+  SegmentedControl connected-gap pixel read and its first-segment index.
+- `PickerScreen` leaves the drop picker unmounted after its last cycle, so a visit to that screen
+  starts with the row and ends without it.
+- `PickerScreen`'s drop-picker fixtures are now used by nothing in the gate: no `uiautomator` dump names that row.
+- `bun run task-ready` asks for `harness:ios` on this tree; the brief says it runs at merge, so the
+  table above has no row for it.
+## Questions for orchestrator
+
+The `Picker` popup-leak cycles are gone from phase 2. They reach a `Picker` row that no dump on this
+device ever names: over ~30 slow drags down and back up `PickerScreen`, neither
+`real-input-drop-picker` nor `real-input-drop-remount` appears by `resource-id`, nor
+`"Real-input drop picker"` by `content-desc` — while the same phase finds every other row on that
+screen, one or two scrolls in. `content-desc` is the only lookup the driver on `origin/main` had for
+that row, so this is not a lookup this branch chose. Two ways out: find why that row is absent from
+`uiautomator` (it is the only fixture on the screen inside a conditional block, and the only one
+with no `label`), or accept that the observable — a menu outliving the view that opened it — is not
+asserted here and give it an instrument that can see a window nobody can see. Which do you want?
