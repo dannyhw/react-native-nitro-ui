@@ -3,6 +3,7 @@ import { expect } from 'e2e';
 
 import {
   boxOf,
+  centreOf,
   drag,
   editableField,
   flick,
@@ -69,6 +70,49 @@ test('a flick across a Form row scrolls the list and presses nothing (X32)', asy
     (await row.count()) === 0;
   expect(moved, 'the flick did not move the list at all').toBe(true);
   await expect(presses).toHaveText('0');
+});
+
+test('a row that was not given a press stays unpressed, however it is touched', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW);
+  const plain = screen.getByLabel('Row with no onPress');
+  const outside = screen.getByLabel('Outside the form');
+  const presses = screen.getByTestId('form-row-presses');
+  const outsidePresses = screen.getByTestId('form-outside-presses');
+  await reveal(screen, row);
+  await expect(presses).toHaveText('0');
+
+  // A thumb that wanders along a row and lifts did not choose it. Nothing here is a
+  // scrolling list that could cancel the touch — the finger never leaves the row — so
+  // the only thing between this gesture and `onPress` is the row's own slop rule.
+  const box = await boxOf(row);
+  if (box == null) {
+    throw new Error('real-input: the Form row has no box to drag along.');
+  }
+  await drag(
+    screen,
+    { x: box.x + box.width * 0.25, y: box.y + box.height / 2 },
+    { x: box.x + box.width * 0.75, y: box.y + box.height / 2 }
+  );
+  await expect(presses).toHaveText('0');
+
+  // A row with no handler is inert, and the controls beside it answer straight after:
+  // the silence is that row's own, not an app that stopped listening. The taps are
+  // aimed at the row's box because a row nobody can press has no touch point of its
+  // own for a tap to be given to.
+  await reveal(screen, plain);
+  for (let tap = 1; tap <= 3; tap += 1) {
+    await screen.tapAt(await centreOf(plain));
+  }
+  await expect(presses).toHaveText('0');
+  await outside.tap();
+  await expect(outsidePresses).toHaveText('1');
+  await row.tap();
+  await expect(presses).toHaveText('1');
 });
 
 test('a field the keyboard would cover is moved clear of it (G24)', async ({

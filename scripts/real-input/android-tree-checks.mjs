@@ -25,6 +25,7 @@
 import { blockMs, runCheck, sleep } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { ECHO } from './screens.mjs';
+import { imeServiceShown } from './ime-frame.mjs';
 import {
   findAllByDescription,
   findAllByText,
@@ -828,7 +829,98 @@ function makeContext(device, log) {
       device.swipe(x, from, x, from - pixels, 400);
       await sleep(500);
     },
+
+    /**
+     * A finger that arrives, stays `durationMs` and leaves: `input swipe` at zero
+     * distance, the only press length adb can be asked for.
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number} [durationMs]
+     */
+    async holdAt(x, y, durationMs = 1000) {
+      device.swipe(x, y, x, y, durationMs);
+      await sleep(300);
+    },
+
+    /** A tap on the empty strip near the bottom of the window: outside any popup. */
+    async tapScrim() {
+      const height = device.size().height;
+      const width = device.size().width;
+      device.tapAt(Math.round(width / 2), Math.round(height * 0.8));
+      await sleep(400);
+    },
+
+    /** Whether a soft keyboard is on screen, from the input method's own report. */
+    imeShown() {
+      return imeServiceShown(device.adbShell('dumpsys input_method'));
+    },
+
+    /**
+     * Ask the device to show a soft keyboard beside a hardware one, and hand back what
+     * the setting said before so the caller can put it back.
+     *
+     * @param {boolean} enabled
+     * @returns {boolean} the previous value
+     */
+    setImeWithHardKeyboard(enabled) {
+      const previous = device.imeWithHardKeyboard();
+      device.setImeWithHardKeyboard(enabled);
+      return previous;
+    },
+
+    /**
+     * Real key events into the focused window: `input text`, with no target argument,
+     * so the field has to hold focus already.
+     *
+     * @param {string} text
+     */
+    async type(text) {
+      device.typeText(encodeInputText(text));
+      await sleep(300);
+    },
+
+    /**
+     * Take the soft keyboard down if it is up, and leave focus where it is.
+     *
+     * Only when it is up: Back is offered to the IME first, but with no keyboard it is
+     * the app's Back, which sends a React Native root to the background.
+     */
+    async hideKeyboard() {
+      if (device.imeShown()) {
+        device.key(KEY_BACK);
+        await sleep(500);
+      }
+    },
   };
+}
+
+/**
+ * adb's `input text` argument form.
+ *
+ * The string is parsed twice - by the device's shell and by the `input` tool - so a
+ * space travels as `%s`. Anything outside a safe set is refused rather than escaped by
+ * guesswork: a check that typed the wrong string and asserted on it is worse than one
+ * that says it cannot type that string.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function encodeInputText(text) {
+  let encoded = '';
+  for (const char of text) {
+    if (char === ' ') {
+      encoded += '%s';
+    } else if (/^[A-Za-z0-9._\-@:/]$/.test(char)) {
+      encoded += char;
+    } else {
+      throw new Error(
+        `real-input: cannot type "${char}" with \`input text\` (outside the set it ` +
+          'accepts after being parsed twice)'
+      );
+    }
+  }
+  return encoded;
 }
 
 /* --------------------------------------------------------------------------- *

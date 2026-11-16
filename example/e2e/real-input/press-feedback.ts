@@ -157,6 +157,11 @@ export async function pressPaintsFeedback(
   const held = screenCapture();
   const took = Date.now() - downAt - askedAt;
   await pressed;
+  // A moment after the lift, so a highlight that is on its way out is not read as one
+  // that has stopped.
+  await sleepUntil(Date.now() + 500);
+  const afterGesture = screenCapture();
+  const afterMean = meanLuma(afterGesture, region);
 
   const duringMean = meanLuma(held, region);
   expect(
@@ -169,6 +174,17 @@ export async function pressPaintsFeedback(
       `drawn"). The sampled region is ${JSON.stringify(region)} of a ` +
       `${String(held.width)}x${String(held.height)} frame`
   ).toBeGreaterThan(minimumDrop);
+
+  // The other half of "feedback": the ink has to go when the finger does. A box that
+  // stays darker after the lift is a state the control got stuck in, which the held
+  // frame above would report as a working highlight.
+  expect(
+    Math.abs(afterMean - before),
+    `the box was still at mean luminance ${afterMean.toFixed(4)} once the finger had ` +
+      `lifted, against ${before.toFixed(4)} at rest: a highlight that never clears is ` +
+      `not press feedback. The sampled region is ${JSON.stringify(region)} of a ` +
+      `${String(afterGesture.width)}x${String(afterGesture.height)} frame`
+  ).toBeLessThan(0.01);
 }
 
 /** Wait until the wall clock reaches `at`, or return at once if it has passed. */

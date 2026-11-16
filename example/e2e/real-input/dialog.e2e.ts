@@ -3,7 +3,7 @@ import { expect } from 'e2e';
 
 import { openScreen, reveal } from './support';
 
-test('a real tap opens the dialog, an action is reported before the close, and Back is gone with it', async ({
+test('a real tap opens the alert, and an action inside it reaches JS', async ({
   app,
   screen,
 }) => {
@@ -15,9 +15,9 @@ test('a real tap opens the dialog, an action is reported before the close, and B
 
   // The window the Dialog presents is tagged `<testID>-dialog`, which is how the
   // action is tapped on the dialog rather than on whatever row of the page behind
-  // it says the same word. The order inside the log — action before the close it
-  // caused — is `Dialog.harness`'s claim ("reports an action before the close it
-  // causes"), so the tail is read, not re-derived.
+  // it says the same word: a tap that reached the page would count for nothing here.
+  // What that action reports, in which order, and what closes the window are read
+  // with the keyboard-free tree in hand, where the whole log can be compared.
   await expect(log).toHaveText('none');
   await opener.tap();
   const dialog = screen.getByTestId('dialog-alert-dialog');

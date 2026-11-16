@@ -27,6 +27,7 @@
 
 import { blockMs, sleep } from './support.mjs';
 import { screenTab } from './screens.mjs';
+import { imeServiceShown } from './ime-frame.mjs';
 import { findByTestId, parseHierarchy } from './uiautomator.mjs';
 import { runA11ySweep } from './a11y-sweep.mjs';
 
@@ -352,6 +353,36 @@ export class SweepDevice {
    */
   key(keyCode) {
     this.adbShell(`input keyevent ${String(keyCode)}`);
+  }
+
+  /** Real key events into the focused window, in adb's doubly-parsed argument form. */
+  typeText(encoded) {
+    this.adbShell(`input text ${encoded}`);
+  }
+
+  /** Whether a soft keyboard is on screen, from the input method's own report. */
+  imeShown() {
+    return imeServiceShown(this.adbShell('dumpsys input_method'));
+  }
+
+  /**
+   * Whether the device is told to show a soft keyboard beside a hardware one. An
+   * emulator reports a hardware keyboard and keeps the soft one away however focused
+   * the field is, so a keyboard check has to ask for it and put it back after.
+   *
+   * @param {boolean} enabled
+   */
+  setImeWithHardKeyboard(enabled) {
+    this.adbShell(
+      `settings put secure show_ime_with_hard_keyboard ${enabled ? '1' : '0'}`
+    );
+  }
+
+  /** @returns {boolean} the current `show_ime_with_hard_keyboard`, as written. */
+  imeWithHardKeyboard() {
+    return /1/.test(
+      this.adbShell('settings get secure show_ime_with_hard_keyboard')
+    );
   }
 
   /** @param {number} x @param {number} y */

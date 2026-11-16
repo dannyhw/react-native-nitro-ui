@@ -6,7 +6,7 @@ import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Hosted picker';
 
-test('a hosted Picker opens its menu under the box the Host drew, and a row reaches JS', async ({
+test('a hosted Picker opens its menu, and a row reaches JS', async ({
   app,
   screen,
 }) => {
@@ -23,19 +23,12 @@ test('a hosted Picker opens its menu under the box the Host drew, and a row reac
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('1');
 
-  const anchor = await field.boundingBox();
+  // Where the opened menu sits against the Host's box is not asserted here: Material
+  // measures the room under an anchor and opens above it when there is none, so a
+  // "below" comparison is only true of the branch the layout happened to take.
   await field.tap();
   const row = screen.getByText('Alpha');
   await row.waitFor({ state: 'visible' });
-  if (anchor != null) {
-    const rowBox = await row.boundingBox();
-    expect(
-      rowBox != null && rowBox.y > anchor.y,
-      `the hosted Picker's menu opened above the row the Host drew (` +
-        `row at ${String(Math.round(anchor.y))} px, "Alpha" at ` +
-        `${String(Math.round(rowBox?.y ?? 0))} px)`
-    ).toBe(true);
-  }
   await row.tap();
   await expect(index).toHaveText('0');
 });
