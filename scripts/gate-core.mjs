@@ -2554,6 +2554,49 @@ export function completionProvenance({ base, relaxed, judge }) {
   };
 }
 
+/**
+ * What a background launcher says when its gate process exits inside the hand-off
+ * window. A gate that finished wrote `done`, and then its own result is the
+ * answer; one that never got that far could not start, and its record is closed
+ * here.
+ *
+ * @param {object} options
+ * @param {string} options.name the gate
+ * @param {{code: number | null, signal: string | null}} options.earlyExit
+ * @param {object | null} options.record the run's record as it is now
+ * @param {string} options.logPath
+ * @param {number} options.now
+ * @returns {{code: number, message: string, record: object | null}} the exit
+ *   code, the line for stderr, and the record to write, or `null` to leave it
+ */
+export function earlyExitAnswer({ name, earlyExit, record, logPath, now }) {
+  if (record?.done === true) {
+    const code =
+      record.exitCode == null
+        ? record.result === 'pass'
+          ? 0
+          : 1
+        : Number(record.exitCode);
+    return {
+      code,
+      message: `gate: ${name} finished before this launcher handed off (exit ${String(code)}) - see ${logPath}\n`,
+      record: null,
+    };
+  }
+  return {
+    code: 1,
+    message: `gate: ${name} exited immediately with ${String(earlyExit.code ?? earlyExit.signal)} - see ${logPath}\n`,
+    record: {
+      ...record,
+      done: true,
+      finishedAt: now,
+      exitCode: earlyExit.code ?? 1,
+      signal: earlyExit.signal,
+      error: 'exited immediately',
+    },
+  };
+}
+
 /** `from task/x` for a row proved by a run recorded on another branch, else `null`. */
 export function formatFrom(row) {
   return row?.from == null ? null : `from \`${row.from}\``;

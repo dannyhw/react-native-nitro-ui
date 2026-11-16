@@ -9,6 +9,7 @@ import {
   completeRerun,
   decideNeed,
   decideWait,
+  earlyExitAnswer,
   harnessUnitsFromTimings,
   ledgerLineFromRun,
   planRerunFailed,
@@ -434,6 +435,56 @@ describe('wait after a completion that failed while its re-run exited 0', () => 
   });
 });
 
+describe('a background launcher whose gate ends inside the hand-off window', () => {
+  const asked = {
+    name: 'real-input:ios',
+    logPath: 'task/x/real-input+ios-a.log',
+    now: 5,
+  };
+
+  it("reports the gate's stored exit code, not its process's", () => {
+    const answer = earlyExitAnswer({
+      ...asked,
+      earlyExit: { code: 0, signal: null },
+      record: { done: true, exitCode: 1, result: 'fail' },
+    });
+    expect(answer.code).toBe(1);
+    expect(answer.message).toBe(
+      'gate: real-input:ios finished before this launcher handed off (exit 1) - see task/x/real-input+ios-a.log\n'
+    );
+    expect(answer.record).toBeNull();
+  });
+
+  it('reads the stored result when the record has no exit code', () => {
+    const answer = (result) =>
+      earlyExitAnswer({
+        ...asked,
+        earlyExit: { code: 0, signal: null },
+        record: { done: true, exitCode: null, result },
+      }).code;
+    expect(answer('fail')).toBe(1);
+    expect(answer('pass')).toBe(0);
+  });
+
+  it('a gate that never recorded a result could not start, and its record is closed', () => {
+    const answer = earlyExitAnswer({
+      ...asked,
+      earlyExit: { code: 2, signal: null },
+      record: { done: false, pid: 7 },
+    });
+    expect(answer.code).toBe(1);
+    expect(answer.message).toContain('exited immediately with 2');
+    expect(answer.record).toEqual({
+      done: true,
+      pid: 7,
+      finishedAt: 5,
+      exitCode: 2,
+      signal: null,
+      error: 'exited immediately',
+    });
+  });
+});
+
 describe('a completed run in table, status and need', () => {
   const completed = line({
     result: 'pass',
@@ -569,6 +620,8 @@ function makeRepo() {
       'if [ -n "$NITRO_UI_REAL_INPUT_UNITS" ]; then printf \'%s\' "$FAKE_UNITS" > "$NITRO_UI_REAL_INPUT_UNITS"; fi\n' +
       'if [ -n "$HARNESS_SUITE_TIMING" ] && [ -n "$FAKE_TIMING" ]; then printf \'%s\' "$FAKE_TIMING" > "$HARNESS_SUITE_TIMING"; fi\n' +
       'if [ -n "$HARNESS_SUITE_TIMING" ] && [ -n "$FAKE_ISOLATED" ]; then printf \'%s\' "$FAKE_ISOLATED" > "$HARNESS_SUITE_TIMING.isolated.json"; fi\n' +
+      // Held until the test says so, for a run that must outlast the launcher's hand-off.
+      'if [ -n "$FAKE_HOLD_FILE" ]; then i=0; while [ ! -f "$FAKE_HOLD_FILE" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done; fi\n' +
       'exit ${FAKE_EXIT:-0}\n'
   );
   fs.chmodSync(path.join(bin, 'node'), 0o755);
@@ -732,14 +785,57 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
       FAKE_EXIT: '1',
       FAKE_UNITS: results({ switch: 'pass', form: 'fail' }),
     });
+    const hold = path.join(repo.dir, 'state', 'release-runner');
+    const started = runCli(
+      repo,
+      ['real-input:ios', '--rerun-failed', '--background'],
+      {
+        FAKE_EXIT: '0',
+        FAKE_UNITS: results({ switch: 'pass' }),
+        FAKE_HOLD_FILE: hold,
+      }
+    );
+    // The runner is still held, so the launcher has handed off.
+    expect(started.stdout).toContain(
+      'real-input:ios started in the background'
+    );
+    expect(started.status).toBe(0);
+    fs.writeFileSync(hold, '');
+    const waited = runCli(repo, [
+      'wait',
+      '--gate',
+      'real-input:ios',
+      '--timeout-minutes',
+      '1',
+    ]);
+    expect(waited.stderr).toContain('real-input:ios failed with exit 1');
+    expect(waited.status).toBe(1);
+    const [, completion] = ledger(repo.dir);
+    expect(completion.result).toBe('fail');
+    expect(completion.exitCode).toBe(1);
+  }, 120_000);
+
+  it('the same completion with the runner unheld is failed whichever side of the hand-off it ends on', () => {
+    const repo = makeRepo();
+    runCli(repo, ['real-input:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: results({ switch: 'pass', form: 'fail' }),
+    });
     const started = runCli(
       repo,
       ['real-input:ios', '--rerun-failed', '--background'],
       { FAKE_EXIT: '0', FAKE_UNITS: results({ switch: 'pass' }) }
     );
-    // The fake runner ends before the launcher hands off, so the launcher reports too.
-    expect(started.stderr).toContain('(exit 1)');
-    expect(started.status).toBe(1);
+    // Ended inside the window: the launcher reports the stored failure itself.
+    // Ended after it: the launcher handed off, and `wait` reports it below.
+    if (started.status === 0) {
+      expect(started.stdout).toContain(
+        'real-input:ios started in the background'
+      );
+    } else {
+      expect(started.stderr).toContain('handed off (exit 1)');
+      expect(started.status).toBe(1);
+    }
     const waited = runCli(repo, [
       'wait',
       '--gate',

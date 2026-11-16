@@ -61,6 +61,7 @@ import {
   planRerunFailed,
   completeRerun,
   completionProvenance,
+  earlyExitAnswer,
   isolatedSwitchBlock,
   realInputUnitsFromResults,
   isDeviceGate,
@@ -1022,33 +1023,16 @@ async function startBackgroundGate(name, resolved) {
   });
   child.unref();
   if (earlyExit != null) {
-    // Either the gate could not start, or it finished inside this window. Only
-    // a finished gate wrote `done`, and then its own exit code is the answer.
-    const after = readBackgroundRecord(recordPath);
-    if (after?.done === true) {
-      const code =
-        after.exitCode == null
-          ? after.result === 'pass'
-            ? 0
-            : 1
-          : Number(after.exitCode);
-      process.stderr.write(
-        `gate: ${name} finished before this launcher handed off (exit ${String(code)}) - see ${logPath}\n`
-      );
-      return code;
-    }
-    process.stderr.write(
-      `gate: ${name} exited immediately with ${String(earlyExit.code ?? earlyExit.signal)} - see ${logPath}\n`
-    );
-    writeJsonAtomic(recordPath, {
-      ...after,
-      done: true,
-      finishedAt: Date.now(),
-      exitCode: earlyExit.code ?? 1,
-      signal: earlyExit.signal,
-      error: 'exited immediately',
+    const answer = earlyExitAnswer({
+      name,
+      earlyExit,
+      record: readBackgroundRecord(recordPath),
+      logPath,
+      now: Date.now(),
     });
-    return 1;
+    process.stderr.write(answer.message);
+    if (answer.record != null) writeJsonAtomic(recordPath, answer.record);
+    return answer.code;
   }
 
   process.stdout.write(
