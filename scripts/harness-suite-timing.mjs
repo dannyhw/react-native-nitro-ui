@@ -56,6 +56,7 @@ export function newSuiteTimingRecord({ gate, platform = null, startedAt }) {
     status: null,
     /** Files the run was told to run; `unaccountedMs` is derived from it and `suites`. */
     fileCount: null,
+    files: null,
     suites: [],
   };
 }
@@ -250,6 +251,12 @@ export function createSuiteTimingPlugin({
             platform: record.platform ?? ctx?.platform?.platformId ?? null,
             fileCount: Array.isArray(ctx?.testFiles)
               ? ctx.testFiles.length
+              : null,
+            // By name, so a file that never reports can be told from one that passed.
+            files: Array.isArray(ctx?.testFiles)
+              ? ctx.testFiles.map((file) =>
+                  relativeName(file, ctx?.projectRoot ?? null)
+                )
               : null,
           };
           persist();

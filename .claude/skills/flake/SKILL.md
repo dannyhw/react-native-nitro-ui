@@ -21,6 +21,11 @@ on demand.
    The orchestrator copies the line to "Flaky tests" in `docs/tasks/FOLLOWUPS.md` at
    merge and counts the sightings. Carry on.
 
+Before completing a red merge gate with `--rerun-failed`, ask whether the unit fails only
+in sequence: one that fails in the full run and passes alone (state left by an earlier file
+or control, such as a recycled view or a keyboard left up) reads green after a completion.
+Read what ran before it in the log; a failure that needs it is a bug, not a flake.
+
 Never loosen an assertion, raise a timeout or add a retry to get to green. Those hide a
 failure. A quarantine, below, does the opposite: the test is visibly off and listed.
 

@@ -1222,14 +1222,14 @@ describe('the merge bar keys a device gate on its platform half (X30 item 1)', (
     ];
   }
 
-  it('asks a device gate for its own half at both stages, and check for the whole', () => {
+  it('asks a device gate for its own digest at both stages, and check for the whole', () => {
     for (const stage of ['review', 'merge']) {
-      expect(digestKeyFor({ gate: 'harness:ios', stage })).toBe('ios');
+      expect(digestKeyFor({ gate: 'harness:ios', stage })).toBe('harness:ios');
       expect(digestKeyFor({ gate: 'real-input:android', stage })).toBe(
-        'android'
+        'real-input:android'
       );
       expect(digestKeyFor({ gate: 'harness:android:ColdSizing', stage })).toBe(
-        'android'
+        'harness:android'
       );
       expect(digestKeyFor({ gate: 'check', stage })).toBe('full');
       expect(digestKeyFor({ gate: 'smoke:pack', stage })).toBe('full');

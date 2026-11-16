@@ -33,6 +33,8 @@ const LEASE_SCOPED_NAMES = [
   'EMULATOR_BIN',
   // Metro and the artifact a device gate installs.
   'METRO_PORT',
+  'METRO_PORT_IOS',
+  'METRO_PORT_ANDROID',
   'HARNESS_APP_PATH',
 ];
 

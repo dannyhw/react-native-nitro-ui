@@ -15,6 +15,11 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-16 Nothing user-visible: almost every Android real-input check now runs in the e2e suite,
+  which leaves three controls and under 1,000 lines in the `uiautomator` phase (X45, X46, X47,
+  #85, #86, #87). Each device gate is keyed to the files its own run reads, a red run is
+  completed by re-running only what failed, and an iOS and an Android gate run side by side
+  under one lease (X48, #88).
 - 11-16 Nothing user-visible: the Android real-input gate runs an e2e suite and then the
   `uiautomator` checks e2e cannot express, in 54 minutes in place of 72 (X35, X44, #84). The
   watchdog brings its own checkout up to date before it looks.

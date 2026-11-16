@@ -385,7 +385,9 @@ node scripts/lease.mjs release <ID>
 when it refuses. It hands out `IOS_SIM_UDID`, `IOS_SIM`, `IOS_VERSION`, `ANDROID_AVD`,
 `ANDROID_API_LEVEL`, `AVD_PROFILE`, `EMULATOR_PORT`, `ANDROID_SERIAL`,
 `ANDROID_ADB_SERVER_PORT` and `METRO_PORT`, the variables `example/rn-harness.config.mjs` and
-the real-input scripts read.
+the real-input scripts read. It also exports `METRO_PORT_IOS` and `METRO_PORT_ANDROID` for the
+platforms the lease covers; `gate.mjs` runs each device gate on its own platform's port, so an
+iOS and an Android gate on one lease never share a Metro.
 
 The rules the script enforces:
 
@@ -469,6 +471,8 @@ cp scripts/devices.example.json ~/.nitro-ui/devices.json   # then put your real 
 ```
 
 A pair is one iOS simulator and one Android emulator that belong together, plus their ports.
+`metroPort` is the iOS Metro port. The Android one is `androidMetroPort` when the pair names it
+and `metroPort + 1000` otherwise; no two Metro ports in the file may be the same.
 `reservedIdentifiers` is for anything else that must never be handed out (a person's own
 device, another project's simulator). State lives in `~/.nitro-ui/leases.json` behind
 `~/.nitro-ui/leases.lock`. Leases expire after a TTL (`--ttl-minutes`), so a killed task cannot
@@ -594,13 +598,25 @@ start unless that lease is live and holds the device it is about to use.
 set -a; source <(node scripts/lease.mjs acquire --task <id> --platform android); set +a
 node scripts/build-app.mjs --platform android
 node scripts/gate.mjs harness:android      # `-- ColdSizing` records `harness:android:ColdSizing`
+node scripts/gate.mjs harness:android --rerun-failed   # after a red full run: re-runs only what failed
 node scripts/gate.mjs need --for merge     # exits 1 and lists what is still missing
 node scripts/gate.mjs table                # the gate table for a report
 node scripts/lease.mjs release <id>
 ```
 
-What review and merge need, how a run is matched to the tree, waiting for a background gate,
-and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
+Each device gate is keyed to the files its own run reads: on a branch whose gates are already
+green, an edit under `example/e2e/` owes `real-input:android` and nothing else, and an edit to a
+harness test owes the harness gates and no real-input gate. The ledger is per branch, so a fresh
+branch still owes all four device gates at merge, whatever it touched. A red full `harness:<p>` or `real-input:<p>` run can be completed with
+`--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
+outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
+and an Android gate can run side by side from one worktree under one lease for both platforms:
+the lease exports a Metro port per platform and each gate uses its own. Build both apps first,
+run the two harness gates one after the other, and run `real-input:ios` with no other gate
+beside it.
+
+What review and merge need, how a run is matched to the tree, completing a red run, waiting for
+a background gate, and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
 
 `table --full` adds the log path to every row and, under the table, the duration of each step
 of the `check` run. A task report carries the table (`AGENTS.md`, "Report"). The ledger stays

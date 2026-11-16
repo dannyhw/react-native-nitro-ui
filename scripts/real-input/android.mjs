@@ -62,11 +62,12 @@ const E2E_OUTPUT = path.join('.e2e', 'android');
  * What one e2e run may spend, in ms.
  *
  * The gate has no timeout of its own, and a run that hangs holds its lease.
- * 25 minutes is the suite's own budget (under 20) plus the tail; e2e ends the
- * run at the deadline and exits non-zero, which is a red gate rather than a
- * wedged one.
+ * The ceiling is the full suite's own length plus a tail of about a third, so
+ * it moves when the suite grows, never to get a slow run through; e2e ends
+ * the run at the deadline and exits non-zero, which is a red gate rather than
+ * a wedged one.
  */
-const RUN_MAX_MS = 25 * 60 * 1000;
+const RUN_MAX_MS = 45 * 60 * 1000;
 
 /** @returns {string} */
 function repoRoot() {

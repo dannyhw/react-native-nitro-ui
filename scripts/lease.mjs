@@ -32,6 +32,7 @@ import {
   formatWaited,
   leaseAcquiredAtMs,
   metroPortReason,
+  metroPortsOf,
   portListeners,
   pruneExpired,
   decideAcquire,
@@ -650,22 +651,26 @@ function metroPortBlockers({ devices, log = () => {} }) {
   const blockers = [];
   let warned = false;
   for (const pair of devices.pairs ?? []) {
-    const answer = portListeners({ port: pair.metroPort });
-    if (!answer.checked) {
-      if (!warned) {
-        warned = true;
-        log(
-          `lease: could not check the pool's Metro ports ` +
-            `(${String(answer.error)}) - leasing on the lease file alone`
-        );
+    const reasons = [];
+    for (const port of new Set(Object.values(metroPortsOf(pair)))) {
+      const answer = portListeners({ port });
+      if (!answer.checked) {
+        if (!warned) {
+          warned = true;
+          log(
+            `lease: could not check the pool's Metro ports ` +
+              `(${String(answer.error)}) - leasing on the lease file alone`
+          );
+        }
+        continue;
       }
-      continue;
+      if (answer.listeners.length === 0) continue;
+      reasons.push(
+        metroPortReason({ id: pair.id, metroPort: port }, answer.listeners)
+      );
     }
-    if (answer.listeners.length === 0) continue;
-    blockers.push({
-      id: pair.id,
-      reason: metroPortReason(pair, answer.listeners),
-    });
+    if (reasons.length > 0)
+      blockers.push({ id: pair.id, reason: reasons.join('; ') });
   }
   return blockers;
 }

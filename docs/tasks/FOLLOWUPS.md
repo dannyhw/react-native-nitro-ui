@@ -10,6 +10,10 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   `harness:ios` started 12:26 UTC, seen once.
 - App crash in the worklets runtime (SIGSEGV) during the BottomSheet and Popover suites,
   2026-11-15, `harness:ios` on a merge run, seen once.
+- `Form.harness.tsx`, an accessory drawn 1.1 dp off its row, 2026-11-16, `harness:android`
+  started 15:27 UTC, seen once.
+- `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet", the header did
+  not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate, seen once.
 
 ## Quarantined tests
 
@@ -287,13 +291,23 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - Android real-input gate, open after the move to the e2e suite:
   - Not asserted by any gate: the ButtonGroup overflow menu, its action against its toggle and a refused group's neighbour; the Menu checked-row pick; the order of presses inside a Popover; SearchField keystrokes after a keyboard change; the SegmentedControl connected-gap pixel read and its first-segment index; a drag that starts on a ListItem not pressing it.
   - Not asserted by any gate: a Picker menu outliving the view that opened it. No `uiautomator` dump names the drop-picker rows of `PickerScreen`, so its fixtures are unused; a harness test that counts windows is the instrument.
-  - Moved checks in `scripts/real-input/android-tree-checks.mjs` not yet shown red on this gate: 28, across ContextMenu, Picker, hosted Picker, Menu, IconButton, SegmentedControl, Tooltip, Dialog and Popover. A control's checks stop at its first abort, so one mutation per run and per control is the way to prove them.
-  - The gate takes 54 minutes. Nearly all of phase 2 is `uiautomator dump` latency, about 2 s a read; sharing a dump between two inputs saves a few minutes, and more needs the check bodies restructured.
+  - Each test for a control near the bottom of a screen scrolls there from the top, about 100 s a reveal on the Picker and Host screens. Starting from where the page is would take minutes off every run.
+  - The accessibility sweep still runs in the `uiautomator` phase, about ten minutes of every run. Three of its six rules read nothing the driver lacks.
+  - `makeContext` in `scripts/real-input/android-tree-checks.mjs` keeps helpers that nothing calls since most checks left the file.
+  - `segmented-control.e2e.ts` accepts a segment's label from the item's or the radio node's own description, and `getByRole('combobox')` is a looser read than the exact `android.widget.Spinner` class.
+  - `bottom-sheet.e2e.ts`: the vertical half of the drag test has not been shown red on its own. `list-item.e2e.ts` watches a disabled item for 0.8 s where the earlier check watched 1.5 s. `factsForItem` in `os-tree.ts` resolves its owner on the default tree while its comment says the unmerged one. The ContextMenu row that reads a non-accessible menu as not focusable may be readable from the driver's `hittable`.
+  - `tooltip.e2e.ts` reads the tooltip's message only once the popup is closed, and never presses the anchor a second time after a dismissal. `popupWindowCount` matches the app id as a substring, so a package whose name starts with it would count.
   - `check` does not parse `scripts/**/*.mjs`: a duplicate `const` stays green until a device runs the file.
-  - `gate.mjs` builds its log name from the arguments, so about ten `--control` flags end in `ENAMETOOLONG`.
   - A navigation failure inside a tree check ends the run before the summary, and one tree check for a control satisfies the "a check ran" guard for all of that control's ids.
   - `date-picker.e2e.ts` picks its day from the host's clock while the dialog opens on the device's.
-  - Limits of the e2e driver to raise with its project: no clickable, checkable or scrollable in the node map; a swipe that leaves its starting view is refused; a node covered by its interactive descendants refuses a tap.
+  - Limits of the e2e driver to raise with its project: `clickable` and `focusable` are published only folded into `hittable`; `scrollable` and `long-clickable` are not published; no gesture holds and then drags without lifting; a node covered by its interactive descendants refuses a tap now and then; the default snapshot folds a role-only child into its parent for some siblings and not others. Ten assertions and one sweep rule wait on these.
   - iOS real-input still runs the hand-written driver.
 - Comments that cite a task or decision id remain in about 30 files outside this gate (`example/src`, `scripts/real-input/a11y.mjs`, `screens.mjs`, `report.mjs`, a few script tests).
 - Lease store: a process killed while it holds `leases.lock` blocks every lease command until the lock is 30 s old, and commands give up after 10 s, so they fail in between. Stealing the lock at once when its holder's pid is gone would close the window.
+- Gate ledger, open after per-gate digests and completions:
+  - The ledger is per branch, so a merge branch owes every device gate even when a task branch proved the same digest. A green run could count on any branch whose digest for that gate is identical.
+  - A filtered `real-input:ios` run for one control takes about 14 minutes, most of it rebuilding the UI-test app.
+  - `scripts/real-input/ios.mjs` stops before its report when a case has no result, so that run cannot be completed with `--rerun-failed`. A failed isolated harness suite cannot be completed either.
+  - Two harness runs in one worktree share one run-state file, so only one harness gate runs at a time.
+  - `real-input:ios` beside an Android gate: 18 of 28 controls went red with dropped presses and drags (2026-11-16, load median 7.8, peak 46), and all 18 passed alone on the same tree. Its touches need a quiet machine, so it runs alone; why a second run drops them is not known.
+  - The iOS UI-test target stays in the `harness:ios` digest for want of proof that the harness build skips it.
