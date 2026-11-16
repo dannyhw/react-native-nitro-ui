@@ -164,6 +164,18 @@ export async function boxOf(locator: Locator): Promise<Box | null> {
 }
 
 /**
+ * A node's box now, or `null` at once when it is not in the tree.
+ *
+ * `boundingBox` waits the whole action timeout for a node to appear before it gives
+ * up, and an off-screen row never appears on its own: a scroll search that read it
+ * that way waited 30 s per read. A count answers from one snapshot.
+ */
+async function boxNow(locator: Locator): Promise<Box | null> {
+  if ((await locator.count()) === 0) return null;
+  return boxOf(locator);
+}
+
+/**
  * Scroll a control into the band a tap can reach, by dragging the viewport: the mobile
  * engine has no `scrollIntoView` for a node inside somebody else’s list. A hosted node
  * answers with a box whether or not the page reached it, so the engine’s own
@@ -182,7 +194,7 @@ export async function reveal(
   /** Drags that moved the control not at all: two of those is the page's end. */
   let stuck = 0;
   for (let attempt = 0; attempt <= swipes; attempt += 1) {
-    const box = await boxOf(locator);
+    const box = await boxNow(locator);
     const shown = box != null && (await isShown(locator));
     const inBand = box != null && (await isInBand(screen, box));
     const inSafeBand = box != null && (await isInSafeBand(screen, box));
@@ -217,7 +229,7 @@ export async function reveal(
       await dragContentUp(screen);
       downDrags += 1;
     }
-    const after = await boxOf(locator);
+    const after = await boxNow(locator);
     if (box != null && after != null && Math.abs(after.y - box.y) <= 2) {
       stuck += 1;
       // Something between the finger and the list took that drag, so the next one
@@ -233,7 +245,7 @@ export async function reveal(
     `real-input: the control was never in the tappable band, from the top of ` +
       `the screen down through ${String(swipes)} drags along content column ` +
       `${String(Math.round((DRAG_COLUMNS[dragColumn] ?? 0.5) * 100))}%; its box ` +
-      `now reads ${JSON.stringify(await boxOf(locator))}` +
+      `now reads ${JSON.stringify(await boxNow(locator))}` +
       (reads.length > 0
         ? `, and ${String(missing)} of the ${String(reads.length)} nodes this ` +
           `test still has to read is off screen.`
@@ -252,6 +264,7 @@ const STUCK_DRAGS = 2;
  * finger will not reach either.
  */
 async function isShown(locator: Locator): Promise<boolean> {
+  if ((await locator.count()) === 0) return false;
   try {
     return await locator.isVisible();
   } catch (error) {
@@ -309,10 +322,10 @@ async function settleIntoBand(
   locator: Locator
 ): Promise<Box | null> {
   const deadline = Date.now() + 2_000;
-  let last = await boxOf(locator);
+  let last = await boxNow(locator);
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 150));
-    const now = await boxOf(locator);
+    const now = await boxNow(locator);
     // Out of the tree again means the list is still travelling past it, and a box
     // that will not hold still is a box nothing may be aimed at.
     if (now == null || last == null) return null;
@@ -391,7 +404,7 @@ export async function liftIntoBand(
 ): Promise<Box> {
   const nudges = 4;
   for (let nudge = 0; nudge <= nudges; nudge += 1) {
-    const box = await boxOf(control);
+    const box = await boxNow(control);
     const parked =
       box != null &&
       (await isShown(control)) &&
@@ -411,7 +424,7 @@ export async function liftIntoBand(
   throw new Error(
     `real-input: ${String(nudges)} short drags towards the bottom of the page did ` +
       `not lift the control into the band; its box now reads ` +
-      `${JSON.stringify(await boxOf(control))}, and ${String(
+      `${JSON.stringify(await boxNow(control))}, and ${String(
         await countUnshown(reads)
       )} of the rows this test reads with it are off screen.`
   );
