@@ -91,7 +91,9 @@ export function treeAnnounces(
     role?: string;
   }
 ): void {
-  const facts = screenReaderFacts(name);
+  const facts = screenReaderFacts(name, {
+    unmerged: expected.enabled != null,
+  });
   if (expected.checked != null) {
     expect(
       facts.checked,

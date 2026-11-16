@@ -13,8 +13,11 @@ import {
 } from '../../../scripts/real-input/uiautomator.mjs';
 import { tightestFlaggedNode } from '../../../scripts/real-input/android-tree.mjs';
 
-/** A node of the driver's capture, in the shape the shared readers understand. */
-export type TreeNode = UiautomatorNode;
+/**
+ * A node of the driver's capture, in the shape the shared readers understand, plus the
+ * driver's `hittable`: clickable, focusable or focused, which a dump spells separately.
+ */
+export type TreeNode = UiautomatorNode & { hittable?: 'true' | 'false' };
 
 /** One node of the driver's snapshot, as its JSON prints it. */
 interface DriverNode {
@@ -27,6 +30,7 @@ interface DriverNode {
   enabled?: boolean;
   selected?: boolean;
   checked?: boolean;
+  hittable?: boolean;
   rect?: { x: number; y: number; width: number; height: number };
   parentIndex?: number;
   depth?: number;
@@ -129,6 +133,7 @@ function asTreeNode(node: DriverNode): TreeNode {
     className: node.type ?? '',
     contentDesc: hasText ? (node.contentDescription ?? '') : (node.label ?? ''),
     enabled: node.enabled === false ? 'false' : 'true',
+    hittable: node.hittable === true ? 'true' : 'false',
     clickable: '',
     longClickable: '',
     focusable: '',
@@ -165,15 +170,19 @@ function namedNodesIn(nodes: TreeNode[], label: string): TreeNode[] {
 }
 
 /**
- * The box that owns a node: the tightest other box that contains it, is roughly its size
- * and is not the page’s own scroller. This is what a press reaches for a piece of
- * on-screen words, and the node whose `enabled` a screen reader is told.
+ * The box a press on a node reaches, and the node whose `enabled` a screen reader is
+ * told: the tightest `hittable` box that contains it, itself included, roughly its size
+ * and not the page's own scroller. Read on the unmerged tree, where `hittable` is the
+ * dump's clickable-or-focusable node for node; a disabled Material chip or list item
+ * says `enabled="false"` only there, and `true` on the labelled node and its wrappers.
  */
 function ownerNode(nodes: TreeNode[], node: TreeNode): TreeNode | null {
   const area = Math.max(1, node.bounds.width * node.bounds.height);
   let owner: TreeNode | null = null;
   for (const candidate of nodes) {
-    if (candidate === node || candidate.scrollable === 'true') continue;
+    if (candidate.hittable !== 'true' || candidate.scrollable === 'true') {
+      continue;
+    }
     const covers =
       candidate.bounds.x1 <= node.bounds.x1 &&
       candidate.bounds.y1 <= node.bounds.y1 &&
@@ -191,7 +200,8 @@ function ownerNode(nodes: TreeNode[], node: TreeNode): TreeNode | null {
 
 function describe(node: TreeNode): string {
   return (
-    `${node.className} enabled=${node.enabled} checked=${node.checked} ` +
+    `${node.className} enabled=${node.enabled} hittable=${node.hittable} ` +
+    `checked=${node.checked} ` +
     `checkable=${node.checkable} selected=${node.selected} at ${String(
       node.bounds.x1
     )},${String(node.bounds.y1)}-${String(node.bounds.x2)},${String(
@@ -204,7 +214,7 @@ function describe(node: TreeNode): string {
 export interface ScreenReaderFacts {
   /** `on`/`off` on the checkable node that *is* the control. */
   checked: 'on' | 'off' | null;
-  /** `true`/`false` on the box that owns the control. */
+  /** `true`/`false` on the box a press on the control reaches. */
   enabled: 'true' | 'false' | null;
   /** The Android classes inside the control's box — a screen reader's role. */
   roles: string[];
@@ -216,17 +226,20 @@ export interface ScreenReaderFacts {
  * The state facts for a named control, in one capture of the tree.
  *
  * A selection is read as a check: Compose maps a selectable item’s selection onto the
- * toggleable state, which TalkBack says out loud as “selected”.
+ * toggleable state, which TalkBack says out loud as “selected”. `enabled` is only
+ * worth reading on the unmerged tree (see `ownerNode`).
  */
-export function screenReaderFacts(label: string): ScreenReaderFacts {
-  const nodes = tree();
+export function screenReaderFacts(
+  label: string,
+  options: { unmerged?: boolean } = {}
+): ScreenReaderFacts {
+  const nodes = tree(options);
   const labelled = namedNodesIn(nodes, label)[0];
   const checkedNode =
     labelled == null
       ? null
       : (tightestFlaggedNode(nodes, labelled, 'checkable') ?? labelled);
-  const enabledNode =
-    labelled == null ? null : (ownerNode(nodes, labelled) ?? labelled);
+  const enabledNode = labelled == null ? null : ownerNode(nodes, labelled);
   const home = checkedNode ?? enabledNode ?? null;
   const inside = (node: TreeNode): boolean =>
     home == null ||
