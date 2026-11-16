@@ -86,6 +86,38 @@ export function formatRelaxed(entry) {
   return `relaxed: ${names.map((name) => `${name}=${String(relaxed[name])}`).join(', ')}`;
 }
 
+/**
+ * The check-only files a device run executes or that decide its result: the gate
+ * and its supervisor, the lease that hands out the device, and the modules they
+ * import that no device digest holds. A green run counts on another branch only
+ * when these are the same there.
+ */
+export const JUDGE_FILES = [
+  'scripts/gate.mjs',
+  'scripts/gate-core.mjs',
+  'scripts/gate-runner.mjs',
+  'scripts/lease.mjs',
+  'scripts/lease-core.mjs',
+  'scripts/doctor-core.mjs',
+  'scripts/build-slot-core.mjs',
+];
+
+/**
+ * One digest over `JUDGE_FILES`, hashed the way the code tree hashes a file.
+ *
+ * @param {(file: string) => string | Buffer | null} read a file's content, or
+ *   `null` when it is missing
+ * @returns {string}
+ */
+export function judgeDigest(read) {
+  const entries = {};
+  for (const file of JUDGE_FILES) {
+    const content = read(file);
+    if (content != null) entries[file] = contentHash(content);
+  }
+  return codeTreeDigest(entries);
+}
+
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
 
@@ -520,7 +552,7 @@ export function changedPathsGitArgs(mergeBase) {
  * `check`) and `suiteTimings` (the suites of a harness run) are records only: no
  * decision in this file reads them. `relaxed` is `relaxedSwitches` of the run's
  * environment; `null` means it was not read, and such a line is never evidence on
- * another branch.
+ * another branch. `judge` is `judgeDigest` before the run.
  *
  * @returns {object} a JSON-ready line
  */
@@ -551,6 +583,7 @@ export function ledgerLineFromRun({
   units = null,
   completion = null,
   relaxed = null,
+  judge = null,
 }) {
   return {
     v: LEDGER_VERSION,
@@ -580,6 +613,7 @@ export function ledgerLineFromRun({
     units,
     completion,
     relaxed,
+    judge,
   };
 }
 
@@ -841,13 +875,14 @@ export function gateStateFor({
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
  *   - not filtered: the command is the gate's own unfiltered command;
- *   - for a green, not relaxed: the line says no relaxing switch was set. A
- *     relaxed red still decides, since it can only ask for a run.
+ *   - for a green, not relaxed: the line says no relaxing switch was set, and
+ *     judged by the same gate code: its `judge` digest equals `judge`. A red
+ *     still decides either way, since it can only ask for a run.
  *
  * @returns {{state: 'green'|'red', key: string} | null} the verdict and the
  *   digest key it matched on, or `null` when the line decides nothing here
  */
-export function foreignVerdict({ gate, entry, tree, gateTrees }) {
+export function foreignVerdict({ gate, entry, gateTrees, judge }) {
   if (entry == null || entry.corrupt || entry.gate !== gate) return null;
   const own = deviceGateOf(gate);
   if (own == null || !MERGE_GATES.includes(gate)) return null;
@@ -873,6 +908,7 @@ export function foreignVerdict({ gate, entry, tree, gateTrees }) {
   if (entry.gateTreesAfter?.[own] !== got) return null;
   if (entry.result === 'fail') return { state: 'red', key: own };
   if (!isUnrelaxed(entry)) return null;
+  if (judge == null || entry.judge !== judge) return null;
   return { state: 'green', key: own };
 }
 
@@ -917,6 +953,7 @@ export function gateRowFor({
   tree = null,
   trees = null,
   gateTrees = null,
+  judge = null,
 }) {
   const args = { gate, stage, tree, trees, gateTrees };
   let decisive = null;
@@ -929,7 +966,7 @@ export function gateRowFor({
   if (decisive != null) return { gate, from: null, ...decisive };
   let proof = null;
   for (const entry of foreign) {
-    const verdict = foreignVerdict({ gate, entry, tree, gateTrees });
+    const verdict = foreignVerdict({ gate, entry, gateTrees, judge });
     if (verdict == null) continue;
     if (proof == null || !(Date.parse(entry.ts) < Date.parse(proof.entry.ts)))
       proof = { entry, ...verdict };
@@ -1001,6 +1038,7 @@ export function summarizeGates({
   tree = null,
   trees = null,
   gateTrees = null,
+  judge = null,
   stage = 'review',
   required = MERGE_GATES,
 }) {
@@ -1015,6 +1053,7 @@ export function summarizeGates({
       tree,
       trees,
       gateTrees,
+      judge,
     })
   );
 }
@@ -1041,6 +1080,7 @@ export function decideNeed({
   tree,
   trees = null,
   gateTrees = null,
+  judge = null,
   stage,
   touchedPlatforms = [],
   touchedGates = null,
@@ -1064,6 +1104,7 @@ export function decideNeed({
       tree,
       trees,
       gateTrees,
+      judge,
     })
   );
 
@@ -1269,6 +1310,7 @@ export function renderGateTable({
   tree = null,
   trees = null,
   gateTrees = null,
+  judge = null,
   stage = 'review',
   required = MERGE_GATES,
   evidence = null,
@@ -1279,6 +1321,7 @@ export function renderGateTable({
     tree,
     trees,
     gateTrees,
+    judge,
     stage,
     required,
   });

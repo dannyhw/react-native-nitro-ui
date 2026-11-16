@@ -9,11 +9,15 @@ import {
   decideNeed,
   foreignProofKey,
   gateRowFor,
+  isToolingPath,
+  JUDGE_FILES,
+  judgeDigest,
   ledgerLineFromRun,
   RELAXING_SWITCHES,
   renderGateTable,
   summarizeGates,
 } from '../gate-core.mjs';
+import { reachableFiles } from './helpers/import-graph.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 import {
   DEFAULT_PAIR,
@@ -33,7 +37,8 @@ const GATE_TREES = {
   'real-input:ios': '3'.repeat(64),
   'real-input:android': '4'.repeat(64),
 };
-const now = { tree: TREE, trees: TREES, gateTrees: GATE_TREES };
+const JUDGE = 'j'.repeat(64);
+const now = { tree: TREE, trees: TREES, gateTrees: GATE_TREES, judge: JUDGE };
 
 const COMMANDS = {
   'check': 'bun run check',
@@ -60,6 +65,7 @@ function run(overrides = {}) {
     startedAt: Date.parse('2026-11-16T10:00:00Z'),
     logPath: 'task/other/harness+ios-a.log',
     relaxed: {},
+    judge: JUDGE,
     ...overrides,
   });
 }
@@ -180,6 +186,19 @@ describe('a green run recorded on another branch', () => {
       exitCode: 1,
       relaxed: { NITRO_UI_GATE_DEVICE_FORCE: '1' },
     });
+    expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('red');
+  });
+
+  it('proves nothing when other gate code judged it, or the line does not say', () => {
+    const other = run({ judge: 'k'.repeat(64) });
+    expect(rowOf('harness:ios', { foreign: [other] }).state).toBe('missing');
+    expect(
+      rowOf('harness:ios', { foreign: [run({ judge: null })] }).state
+    ).toBe('missing');
+    // On its own branch the gate code is not compared.
+    expect(rowOf('harness:ios', { list: [other] }).state).toBe('green');
+    // A red judged by other gate code still decides.
+    const red = run({ result: 'fail', exitCode: 1, judge: 'k'.repeat(64) });
     expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('red');
   });
 
@@ -331,6 +350,43 @@ describe('the newest decisive run across the clone decides', () => {
     const row = rowOf('harness:ios', { list: [own], foreign: [red] });
     expect(row.state).toBe('green');
     expect(row.from).toBeNull();
+  });
+});
+
+describe('the gate code a run is judged by', () => {
+  it('JUDGE_FILES holds every check-only file the gate or a device run executes', () => {
+    // The gate, its supervisor and the lease, then what each device gate starts.
+    const roots = [
+      'scripts/gate.mjs',
+      'scripts/gate-runner.mjs',
+      'scripts/lease.mjs',
+      'scripts/harness.mjs',
+      'example/rn-harness.config.mjs',
+      'example/jest.harness.config.mjs',
+      'example/metro.config.js',
+      'example/babel.config.js',
+      'example/index.js',
+      'scripts/build-app.mjs',
+      'scripts/real-input/ios.mjs',
+      'scripts/real-input/android.mjs',
+    ];
+    const reached = [...reachableFiles(process.cwd(), roots).keys()];
+    const checkOnly = reached.filter((file) => isToolingPath(file)).sort();
+    expect(checkOnly.filter((file) => !JUDGE_FILES.includes(file))).toEqual([]);
+    // Anything else is already in a device digest.
+    expect(JUDGE_FILES.filter((file) => !isToolingPath(file))).toEqual([]);
+  });
+
+  it('moves when one of its files changes, and only then', () => {
+    const files = Object.fromEntries(JUDGE_FILES.map((file) => [file, file]));
+    const read = (overrides) => (file) =>
+      ({ ...files, ...overrides })[file] ?? null;
+    const base = judgeDigest(read({}));
+    expect(judgeDigest(read({}))).toBe(base);
+    expect(judgeDigest(read({ 'scripts/gate-runner.mjs': 'edited' }))).not.toBe(
+      base
+    );
+    expect(judgeDigest(read({ 'scripts/check.mjs': 'edited' }))).toBe(base);
   });
 });
 
@@ -547,6 +603,25 @@ describe('gate.mjs across the worktrees of one clone', () => {
     );
     const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
     expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
+  }, 120_000);
+
+  it('a run judged by other gate code proves nothing here', () => {
+    const clone = makeClone();
+    // Check-only: no device digest moves, only the gate code.
+    fs.mkdirSync(path.join(clone.there, 'scripts'), { recursive: true });
+    fs.writeFileSync(
+      path.join(clone.there, 'scripts/gate-core.mjs'),
+      'export const judged = "differently";\n'
+    );
+    expect(runCli(clone, clone.there, ['harness:ios']).status).toBe(0);
+    const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
+    expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
+    fs.rmSync(path.join(clone.there, 'scripts'), { recursive: true });
+    expect(runCli(clone, clone.there, ['harness:ios']).status).toBe(0);
+    const after = runCli(clone, clone.here, ['need', '--for', 'merge']);
+    expect(needLine(after.stdout, 'harness:ios')).toContain(
+      '✓ harness:ios — green on its own digest (from `task/there`)'
+    );
   }, 120_000);
 
   it('a run on other files proves nothing here', () => {

@@ -65,6 +65,7 @@ import {
   isUsageProbe,
   lastLogLine,
   ledgerFileName,
+  judgeDigest,
   ledgerLineFromRun,
   relaxedSwitches,
   formatRelaxed,
@@ -1194,6 +1195,13 @@ function readTrees() {
     ...full,
     trees: platformTreesFromEntries(entries),
     gateTrees: gateTreesFromEntries(entries),
+    judge: judgeDigest((file) => {
+      try {
+        return fs.readFileSync(path.join(repoRoot, file));
+      } catch {
+        return null;
+      }
+    }),
   };
 }
 
@@ -1844,6 +1852,7 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     units,
     completion: completionRecord,
     relaxed: relaxedSwitches(process.env),
+    judge: before.judge,
   });
   const file = appendLedgerLine(branch, line);
   // The store's record of this run. For a backgrounded run it is the "done"
@@ -1969,6 +1978,7 @@ function commandStatus({ stage }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
     stage,
   });
   for (const row of rows) {
@@ -2073,6 +2083,7 @@ function commandNeed({ stage, base }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
     stage,
     touchedPlatforms: touched.platforms,
     touchedGates,
@@ -2121,6 +2132,7 @@ function commandTable({ stage, full }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
     stage,
     required: MERGE_GATES,
     evidence:
@@ -2140,6 +2152,7 @@ function commandTable({ stage, full }) {
       tree: read.tree,
       trees: read.trees,
       gateTrees: read.gateTrees,
+      judge: read.judge,
       stage,
       required: MERGE_GATES,
     });
@@ -2516,6 +2529,7 @@ async function rerunFailedGate({ command, extraArgs, background }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
+    judge: read.judge,
   });
   if (plan.refusal != null) {
     process.stderr.write(`gate: refused before the run - ${plan.refusal}\n`);

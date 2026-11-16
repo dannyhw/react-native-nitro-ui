@@ -129,13 +129,20 @@ including this one, that is all of these decides, green or red:
 
 - a full run of a device gate, or a completion of one (shown as completed); a filtered run
   never counts;
-- on the gate's own digest equal to the current one, with no fallback to the platform half, so a line written before per-gate digests never counts;
+- on the gate's own digest equal to the current one, with no fallback to the platform half,
+  so a line written before per-gate digests never counts;
 - unmoved: the tree and the gate's digest read after the run equal the ones before it;
 - for a green, not relaxed: the line records which relaxing switches the run had set
   (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`: `NITRO_UI_ALLOW_UNSTAMPED`,
   `NITRO_UI_ALLOW_LOCALE_MISMATCH`, the `*_FORCE` switches, a substituted `lsof`, `adb` or
   `simctl`, and the timeout switches including `CI`), and only a line that records none
-  counts. A relaxed red still decides.
+  counts;
+- for a green, judged by the same gate code: the line's `judge` digest, over the check-only
+  files a device run executes or that decide its result (`JUDGE_FILES` in
+  `scripts/gate-core.mjs`: the gate, its supervisor, the lease and what they import), equals
+  the current one. A line without it never counts from elsewhere.
+
+A red that is relaxed or judged by other gate code still decides: it can only ask for a run.
 
 A relaxed run still counts on its own branch, and its row says so:
 `**PASS** (relaxed: NITRO_UI_ALLOW_UNSTAMPED=1)`.
