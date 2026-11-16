@@ -99,7 +99,8 @@ missing.
   imports and fails when a run reaches a path its digest leaves out. A path that cannot be
   proved stays in both suites' digests.
 - A line recorded before these digests existed is compared on its platform half. A fix round
-  re-runs only the gates its diff moved.
+  re-runs only the gates its diff moved. That saving is within a branch: the ledger is per
+  branch, so a fresh branch owes all four device gates at merge, whatever it touched.
 - Shared code (`src/`, `cpp/`) counts as both platforms. So does any path the mapping does not
   claim: unknown is expensive, never free.
 - `status` and `need` print the platform halves and the four gate digests.

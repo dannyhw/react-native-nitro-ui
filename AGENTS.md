@@ -70,9 +70,10 @@ macOS, Xcode 27, bun 1.4, Node 24 (`fnm exec --using 24 --`), Java 17, CocoaPods
   whose stamp is fresh.
 - Before review, run exactly what `node scripts/gate.mjs need --for review` asks for. Do not run
   `real-input` gates before review unless your brief's Proof section names one: they run once, at
-  merge. A task that changes real-input tests proves them with a filtered run naming the controls
-  it touched (`-- --control <id>`); the merge run starts the two platforms side by side under one
-  lease for both, after building both apps, and completes a red one with `--rerun-failed`.
+  merge. The one exception: a task that changes real-input tests proves them with a filtered run
+  naming the controls it touched (`-- --control <id>`). The merge run starts the two platforms
+  side by side under one lease for both, after building both apps, and completes a red one with
+  `--rerun-failed`.
 - For a long gate, `node scripts/gate.mjs <gate> --background` starts it detached and
   `node scripts/gate.mjs wait --gate <gate> [--timeout-minutes N]` blocks until it ends, exiting
   with the gate's own code or `13` for "still running". Never a `sleep` or `tail` loop, and do not

@@ -604,9 +604,10 @@ node scripts/gate.mjs table                # the gate table for a report
 node scripts/lease.mjs release <id>
 ```
 
-Each device gate is keyed to the files its own run reads: an edit under `example/e2e/` owes
-`real-input:android` and nothing else, and an edit to a harness test owes the harness gates and
-no real-input gate. A red full `harness:<p>` or `real-input:<p>` run can be completed with
+Each device gate is keyed to the files its own run reads: on a branch whose gates are already
+green, an edit under `example/e2e/` owes `real-input:android` and nothing else, and an edit to a
+harness test owes the harness gates and no real-input gate. The ledger is per branch, so a fresh
+branch still owes all four device gates at merge, whatever it touched. A red full `harness:<p>` or `real-input:<p>` run can be completed with
 `--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
 outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
 and an Android gate run side by side from one worktree under one lease for both platforms: the
