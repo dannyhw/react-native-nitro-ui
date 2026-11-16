@@ -48,6 +48,31 @@ function boundsText(node: TreeNode): string {
   return `${String(x1)},${String(y1)}-${String(x2)},${String(y2)}`;
 }
 
+/** How long the segments' own nodes are given to follow a tap the echo already shows. */
+const NODE_FOLLOWS_MS = 5_000;
+
+function segmentsIn(
+  nodes: TreeNode[]
+): { items: TreeNode[]; radios: TreeNode[] } | null {
+  const group = nodes.find(
+    (node) => node.contentDesc === NAME && node.bounds.height > 0
+  );
+  if (group == null) return null;
+  const insideGroup = (node: TreeNode): boolean =>
+    node.bounds.x1 >= group.bounds.x1 - 1 &&
+    node.bounds.x2 <= group.bounds.x2 + 1 &&
+    node.bounds.y1 >= group.bounds.y1 - 1 &&
+    node.bounds.y2 <= group.bounds.y2 + 1;
+  const items = nodes
+    .filter((node) => node.checkable === 'true' && insideGroup(node))
+    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
+  const radios = nodes.filter(
+    (node) =>
+      node.className === 'android.widget.RadioButton' && insideGroup(node)
+  );
+  return { items, radios };
+}
+
 test('one real tap is one change, and each segment is a checkable item with a radio role and its own label', async ({
   app,
   screen,
@@ -73,27 +98,30 @@ test('one real tap is one change, and each segment is a checkable item with a ra
   // Compose publishes a selectable segment as three entries at one box: the item,
   // checkable, which TalkBack reads as "selected"; the role, on its own RadioButton
   // node; and the label, a child TextView. Only the unmerged tree keeps all three.
-  const nodes = tree({ unmerged: true });
-  const group = nodes.find(
-    (node) => node.contentDesc === NAME && node.bounds.height > 0
-  );
-  if (group == null) {
+  let nodes: TreeNode[] = [];
+  await expect
+    .poll(
+      () => {
+        nodes = tree({ unmerged: true });
+        const read = segmentsIn(nodes);
+        return read == null
+          ? `no node named "${NAME}"`
+          : read.items.map((item) => item.checked).join(',');
+      },
+      {
+        timeout: NODE_FOLLOWS_MS,
+        interval: 250,
+        message: 'the segments never reported the selection the control has',
+      }
+    )
+    .toBe('false,true,false');
+  const read = segmentsIn(nodes);
+  if (read == null) {
     throw new Error(
       `real-input: no node in the unmerged tree is named "${NAME}".`
     );
   }
-  const insideGroup = (node: TreeNode): boolean =>
-    node.bounds.x1 >= group.bounds.x1 - 1 &&
-    node.bounds.x2 <= group.bounds.x2 + 1 &&
-    node.bounds.y1 >= group.bounds.y1 - 1 &&
-    node.bounds.y2 <= group.bounds.y2 + 1;
-  const items = nodes
-    .filter((node) => node.checkable === 'true' && insideGroup(node))
-    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-  const radios = nodes.filter(
-    (node) =>
-      node.className === 'android.widget.RadioButton' && insideGroup(node)
-  );
+  const { items, radios } = read;
   const seen =
     `items ${items.map(boundsText).join(' ')}; ` +
     `radios ${radios.map(boundsText).join(' ')}`;
