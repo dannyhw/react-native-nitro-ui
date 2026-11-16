@@ -594,13 +594,22 @@ start unless that lease is live and holds the device it is about to use.
 set -a; source <(node scripts/lease.mjs acquire --task <id> --platform android); set +a
 node scripts/build-app.mjs --platform android
 node scripts/gate.mjs harness:android      # `-- ColdSizing` records `harness:android:ColdSizing`
+node scripts/gate.mjs harness:android --rerun-failed   # after a red full run: re-runs only what failed
 node scripts/gate.mjs need --for merge     # exits 1 and lists what is still missing
 node scripts/gate.mjs table                # the gate table for a report
 node scripts/lease.mjs release <id>
 ```
 
-What review and merge need, how a run is matched to the tree, waiting for a background gate,
-and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
+Each device gate is keyed to the files its own run reads: an edit under `example/e2e/` owes
+`real-input:android` and nothing else, and an edit to a harness test owes the harness gates and
+no real-input gate. A red full `harness:<p>` or `real-input:<p>` run can be completed with
+`--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
+outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
+and an Android gate run side by side from one worktree under two leases, one per platform,
+because each needs a Metro port of its own.
+
+What review and merge need, how a run is matched to the tree, completing a red run, waiting for
+a background gate, and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
 
 `table --full` adds the log path to every row and, under the table, the duration of each step
 of the `check` run. A task report carries the table (`AGENTS.md`, "Report"). The ledger stays

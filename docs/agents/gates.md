@@ -11,8 +11,35 @@ is the tutorial.
 - A filtered run is recorded under its own name and satisfies nothing else:
   `gate.mjs harness:android -- ColdSizing` is `harness:android:ColdSizing`. `check` takes no
   arguments.
-- `--background` is `gate.mjs`'s own flag and goes before the `--`. After the separator the
-  arguments go to the gate, and `--background` there is refused.
+- `--background` and `--rerun-failed` are `gate.mjs`'s own flags and go before the `--`. After
+  the separator the arguments go to the gate, and `--background` there is refused.
+
+## Completing a red run
+
+`node scripts/gate.mjs <harness|real-input>:<platform> --rerun-failed` completes the newest full
+run of that gate that is red on the current digest. It re-runs only the units that did not
+pass: real-input controls (a control's own tree check is part of it), harness test files, and
+any unit that never ran. The outcome is recorded under the full gate's name.
+
+- It is green only if every re-run unit passed, every check that runs on every real-input run
+  passed, and the gate's digest was the same at the red run, at the start and at the end.
+- It refuses, saying why and recording nothing, when there is no red run on this digest, when
+  the digest moved, or when the failure is not a unit a filter can name: a build failure, a
+  crash before the first unit, a failed isolated harness suite (only a full run starts that app
+  instance), or a real-input check that rides every run while every control passed.
+- `table` and `status` show it as `completed: N of M units re-run, attempt K`, and the duration
+  as the completion's plus the full run's. A red completion can be completed again; the tool
+  records every attempt and caps none. The `flake` skill says how many are reasonable.
+- An ordinary filtered run still satisfies nothing.
+
+## Running two gates at once
+
+An iOS gate and an Android gate can run at the same time from one worktree, each under its own
+lease (`--platform ios` for one shell, `--platform android` for the other), and both record
+correctly. One lease is not enough: it exports one Metro port, a harness run starts its own
+Metro that serves the harness's entry instead of the app's, and the gate refuses a port that is
+already served. Two harness runs at once share `example/harness-run/state.json`, so run the
+harness gates one after the other.
 
 ## Waiting for a gate
 
@@ -29,13 +56,22 @@ that gate elsewhere in the clone.
 `gate.mjs need --for review` and `gate.mjs need --for merge` exit non-zero and list what is
 missing.
 
-- **Review:** `check`, and `harness:<platform>` for each platform the diff touches.
-- **Merge:** `check` on the whole code tree; `harness:ios` and `real-input:ios` on the current iOS
-  half of the tree; `harness:android` and `real-input:android` on the current Android half.
-- A device run is keyed to its platform's half of the tree. A fix round re-runs only the
-  platforms its diff touched.
+- **Review:** `check`, and `harness:<platform>` when the diff touches a file that harness run
+  reads.
+- **Merge:** `check` on the whole code tree, and each of `harness:ios`, `harness:android`,
+  `real-input:ios` and `real-input:android` on its own digest.
+- Each device gate has a digest of its own: its platform's half of the tree, less the paths
+  only the other suite reads (`GATE_DIGEST_EXCLUSIONS` in `scripts/gate-core.mjs`). The harness
+  digests leave out `scripts/real-input/`, `example/e2e/` and the example screens; the
+  real-input digests leave out the harness tests and configs, and each leaves out the other
+  platform's real-input files. `scripts/__tests__/gate-digests.test.js` walks every run's
+  imports and fails when a run reaches a path its digest leaves out. A path that cannot be
+  proved stays in both suites' digests.
+- A line recorded before these digests existed is compared on its platform half. A fix round
+  re-runs only the gates its diff moved.
 - Shared code (`src/`, `cpp/`) counts as both platforms. So does any path the mapping does not
   claim: unknown is expensive, never free.
+- `status` and `need` print the platform halves and the four gate digests.
 - Paths on the check-only tooling list in `scripts/gate-core.mjs` (`scripts/gate*.mjs`,
   `scripts/__tests__`, `eslint-rules/` and its `eslint.config.mjs`, `etc/`, `.changeset/`) touch
   no platform half. `check` proves them, and a tooling-only commit on `main` re-owns `check`
