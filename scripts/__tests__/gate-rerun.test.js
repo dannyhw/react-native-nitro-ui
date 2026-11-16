@@ -563,6 +563,8 @@ function makeRepo() {
       'echo "fake runner: $*"\n' +
       'echo "$*" >> "$FAKE_ARGS_LOG"\n' +
       'if [ -n "$NITRO_UI_REAL_INPUT_UNITS" ]; then printf \'%s\' "$FAKE_UNITS" > "$NITRO_UI_REAL_INPUT_UNITS"; fi\n' +
+      'if [ -n "$HARNESS_SUITE_TIMING" ] && [ -n "$FAKE_TIMING" ]; then printf \'%s\' "$FAKE_TIMING" > "$HARNESS_SUITE_TIMING"; fi\n' +
+      'if [ -n "$HARNESS_SUITE_TIMING" ] && [ -n "$FAKE_ISOLATED" ]; then printf \'%s\' "$FAKE_ISOLATED" > "$HARNESS_SUITE_TIMING.isolated.json"; fi\n' +
       'exit ${FAKE_EXIT:-0}\n'
   );
   fs.chmodSync(path.join(bin, 'node'), 0o755);
@@ -605,6 +607,77 @@ const results = (controls) =>
       .map(([id, status]) => ({ id, status })),
     auxiliary: [{ id: 'tab-targets', passed: true }],
   });
+
+/** A harness run's per-suite record, as the suite-timing plugin writes it. */
+const timing = (suites) =>
+  JSON.stringify({
+    version: 1,
+    files: Object.keys(suites),
+    suites: Object.entries(suites)
+      .filter(([, status]) => status !== 'not-run')
+      .map(([file, status]) => ({ file, status, durationMs: 1000 })),
+  });
+
+describe('gate.mjs harness:ios --rerun-failed, end to end', () => {
+  it('re-runs only the test files that did not pass, by a pattern for each, and records the full gate', () => {
+    const repo = makeRepo();
+    const red = runCli(repo, ['harness:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_TIMING: timing({
+        '__tests__/Switch.harness.tsx': 'passed',
+        '__tests__/Form.harness.tsx': 'failed',
+        '__tests__/Picker.harness.tsx': 'not-run',
+      }),
+      FAKE_ISOLATED: timing({
+        '__tests__/isolated/Cold.harness.tsx': 'passed',
+      }),
+    });
+    expect(red.status).toBe(1);
+
+    const done = runCli(repo, ['harness:ios', '--rerun-failed'], {
+      FAKE_TIMING: timing({
+        '__tests__/Form.harness.tsx': 'passed',
+        '__tests__/Picker.harness.tsx': 'passed',
+      }),
+    });
+    expect(done.stderr).toContain(
+      're-running 2 unit(s) - __tests__/Form.harness.tsx, __tests__/Picker.harness.tsx'
+    );
+    expect(done.status).toBe(0);
+    const args = fs
+      .readFileSync(path.join(repo.dir, 'state', 'args.log'), 'utf8')
+      .trim()
+      .split('\n');
+    expect(args[1]).toBe(
+      '../scripts/harness.mjs --harnessRunner ios __tests__/Form.harness __tests__/Picker.harness'
+    );
+    const [, completion] = ledger(repo.dir);
+    expect(completion.gate).toBe('harness:ios');
+    expect(completion.result).toBe('pass');
+    const table = runCli(repo, ['table', '--for', 'merge']);
+    expect(table.stdout).toContain(
+      '| `harness:ios` | **PASS** (completed: 2 of 3 units re-run, attempt 1)'
+    );
+  }, 120_000);
+
+  it('fails the completion when a re-run file does not report', () => {
+    const repo = makeRepo();
+    runCli(repo, ['harness:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_TIMING: timing({
+        '__tests__/Switch.harness.tsx': 'passed',
+        '__tests__/Form.harness.tsx': 'failed',
+      }),
+      FAKE_ISOLATED: timing({}),
+    });
+    const done = runCli(repo, ['harness:ios', '--rerun-failed'], {
+      FAKE_TIMING: timing({ '__tests__/Switch.harness.tsx': 'passed' }),
+    });
+    expect(done.status).toBe(1);
+    const [, completion] = ledger(repo.dir);
+    expect(completion.result).toBe('fail');
+  }, 120_000);
+});
 
 describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
   it('re-runs only what did not pass, records it under the full gate, and the table says so', () => {
