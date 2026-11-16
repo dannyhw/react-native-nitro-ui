@@ -684,6 +684,37 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
     expect(ledger(repo.dir)).toHaveLength(1);
   }, 120_000);
 
+  it('refuses before starting the runner when the digest moves after the plan', () => {
+    const repo = makeRepo();
+    runCli(repo, ['real-input:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: results({ switch: 'pass', form: 'fail' }),
+    });
+    // The Metro pre-flight's `lsof` runs between the plan and the run: this one edits
+    // an iOS file there, then says the port is free.
+    const lsof = path.join(repo.bin, 'lsof-that-edits');
+    fs.writeFileSync(
+      lsof,
+      `#!/bin/sh\nprintf 'v2\\n' > "${path.join(repo.dir, 'ios/core/Core.swift')}"\nexit 1\n`
+    );
+    fs.chmodSync(lsof, 0o755);
+    const refused = runCli(repo, ['real-input:ios', '--rerun-failed'], {
+      NITRO_UI_LSOF_BIN: lsof,
+      FAKE_UNITS: results({ form: 'pass' }),
+    });
+    expect(refused.stderr).toContain('re-running 1 unit(s) - form');
+    expect(refused.stderr).toContain(
+      'refused before the run - the real-input:ios digest moved since the red run'
+    );
+    expect(refused.status).toBe(1);
+    expect(ledger(repo.dir)).toHaveLength(1);
+    const args = fs
+      .readFileSync(path.join(repo.dir, 'state', 'args.log'), 'utf8')
+      .trim()
+      .split('\n');
+    expect(args).toHaveLength(1);
+  }, 120_000);
+
   it('refuses a run that left no per-control results', () => {
     const repo = makeRepo();
     runCli(repo, ['real-input:ios'], { FAKE_EXIT: '1', FAKE_UNITS: '' });
