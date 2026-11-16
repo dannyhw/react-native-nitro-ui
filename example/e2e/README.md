@@ -53,20 +53,19 @@ the library's own hooks and has never proved the
 InputDispatcher → window → React Native → Compose path. Beyond that, only what a
 device can see and `example/__tests__` cannot:
 
-1. **Hit-testing and gesture arbitration.** `slider.e2e.ts` and
-   `hosted-slider.e2e.ts` drag a track and read the value back — up, back down, and
-   over a drag that takes three seconds; `form.e2e.ts` flicks across a row and
-   asserts the list moved and nothing pressed, and taps a row that was given no
-   `onPress`; `context-menu.e2e.ts`
-   holds at one point and asserts the menu opened there and the view under it never
-   fired.
+1. **Hit-testing and gesture arbitration.** `slider.e2e.ts` drags a track and reads
+   the value back — up, then back down the same way; `hosted-slider.e2e.ts` does the
+   same on a hosted track, once so slowly that the drag itself takes three seconds;
+   `form.e2e.ts` flicks across a row and asserts the list moved and nothing pressed,
+   and taps a row that was given no `onPress`; `context-menu.e2e.ts` holds at one
+   point and asserts the menu opened there and the view under it never fired.
 2. **The screen-reader tree.** `reader.ts` asks whether the reader is _told_ a
-   state, and `os-tree.ts` asks what the tree says on the node a finger lands on —
-   `checked`, `enabled`, a group's selection, and the Android class a role reaches
-   the tree as. The driver's snapshot normalises those flags away, and an in-app
-   query cannot see a hosted control's name at all, because Compose publishes it on
-   a `SemanticsNode` rather than a `View`. The whole-table version is the sweep in
-   phase 2.
+   state, and `os-tree.ts` asks what the tree says on the node a finger lands on:
+   in phase 1 that is `enabled` and `checked`; phase 2 adds the `selected` a group
+   reports and the Android class a role reaches the tree as. The driver's snapshot
+   normalises those flags away, and an in-app query cannot see a hosted control's
+   name at all, because Compose publishes it on a `SemanticsNode` rather than a
+   `View`. The whole-table version is the sweep in phase 2.
 3. **Keyboard avoidance.** `keyboard.ts`, for the text controls: a focused field
    the keyboard would cover is moved clear of it, a `TextInput` inside a Popover
    stays above it, and the Popover itself is pushed, not only its field. Both
