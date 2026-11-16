@@ -44,7 +44,7 @@ const HOLD_MS = 1400;
 /** How long after the lift a step that was still on its way would have landed. */
 const AFTER_LIFT_MS = 400;
 
-test('a 1.4 s hold on the Stepper\'s plus half steps once, with no repeat', async ({
+test("a 1.4 s hold on the Stepper's plus half steps once, with no repeat", async ({
   app,
   screen,
 }) => {
