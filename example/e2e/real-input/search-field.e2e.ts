@@ -74,7 +74,6 @@ test('a real tap on a search field brings up the keyboard and keeps the field ab
   await app.open();
   await openScreen(screen, 'searchfield');
   const field = editableField(screen, FOCUS);
-  const field = editableField(screen, 'Focus search field');
   const echo = screen.getByTestId('search-focus-echo');
   await reveal(screen, field);
 
@@ -95,7 +94,7 @@ test('an app-side focus and blur button take the keyboard and give it back', asy
 }) => {
   await app.open();
   await openScreen(screen, 'searchfield');
-  const field = editableField(screen, 'Focus search field');
+  const field = editableField(screen, FOCUS);
   const echo = screen.getByTestId('search-focus-echo');
   await reveal(screen, field);
   await expect(echo).toHaveText('focus: 0 blur: 0 submitted: -');

@@ -58,7 +58,7 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
     { x: back.x + back.width * 0.75, y: back.y + back.height / 2 },
     { x: back.x + back.width * 0.2, y: back.y + back.height / 2 }
   );
-  await expect(value).toHaveText(/^0\.[0-4]\d$/, 'dragging back');
+  await expect(value).toHaveText(/^0\.[0-4]\d$/);
 
   // A drag the machine stretches out: the samples reach Compose seconds apart, and
   // the thumb still has to be where the finger lifted, not where it happened to be
@@ -70,12 +70,6 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
     { x: slow.x + slow.width * 0.85, y: slow.y + slow.height / 2 },
     3000
   );
-  await expect(value).toHaveText(
-    /^(0\.[7-9]\d|1\.00)$/,
-    'a drag over several seconds'
-  );
-  await expect(gesture).toHaveText(
-    /start=3 complete=3/,
-    `the three drags each closed the gesture they opened`
-  );
+  await expect(value).toHaveText(/^(0\.[7-9]\d|1\.00)$/);
+  await expect(gesture).toHaveText(/start=3 complete=3/);
 });
