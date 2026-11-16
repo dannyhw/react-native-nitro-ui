@@ -5,7 +5,7 @@
 
 import path from 'node:path';
 
-import { RESERVED_EMULATOR_PORTS } from './lease-core.mjs';
+import { RESERVED_EMULATOR_PORTS, metroPortsOf } from './lease-core.mjs';
 
 const nodePath = path;
 
@@ -302,6 +302,8 @@ export function devicesConfigProblems(config, machine) {
       claim(android.adbPort, `${id} adb server`);
     }
     claim(pair.metroPort, `${id} Metro`);
+    if (Number.isInteger(pair.metroPort))
+      claim(metroPortsOf(pair).android, `${id} Android Metro`);
   }
   return problems;
 }

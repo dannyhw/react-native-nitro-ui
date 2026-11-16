@@ -212,6 +212,28 @@ export function statePaths(home) {
 }
 
 /**
+ * How far above a pair's `metroPort` its Android Metro port sits when `devices.json`
+ * names none (`androidMetroPort`).
+ */
+export const ANDROID_METRO_PORT_OFFSET = 1000;
+
+/**
+ * The Metro port each platform of a pair uses. An iOS gate and an Android gate under
+ * one lease each start their own Metro, so the two need different ports.
+ *
+ * @param {{metroPort: number, androidMetroPort?: number | null}} pair
+ * @returns {{ios: number, android: number}}
+ */
+export function metroPortsOf(pair) {
+  return {
+    ios: pair.metroPort,
+    android: Number.isInteger(pair.androidMetroPort)
+      ? pair.androidMetroPort
+      : pair.metroPort + ANDROID_METRO_PORT_OFFSET,
+  };
+}
+
+/**
  * Validate a `devices.json` and fill the defaults, throwing one message that lists
  * every problem.
  *
@@ -261,12 +283,37 @@ export function normalizeDevices(config) {
     if (!Number.isInteger(pair.metroPort)) {
       problems.push(`pair ${id}: needs an integer metroPort`);
     }
+    if (
+      pair.androidMetroPort != null &&
+      !Number.isInteger(pair.androidMetroPort)
+    ) {
+      problems.push(`pair ${id}: androidMetroPort must be an integer`);
+    }
     cleanPairs.push({
       id,
       ios: ios ?? null,
       android: android ?? null,
       metroPort: pair.metroPort,
+      androidMetroPort: Number.isInteger(pair.metroPort)
+        ? metroPortsOf(pair).android
+        : null,
     });
+  }
+
+  const metroOwners = new Map();
+  for (const pair of cleanPairs) {
+    if (!Number.isInteger(pair.metroPort)) continue;
+    const ports = metroPortsOf(pair);
+    for (const [platform, port] of Object.entries(ports)) {
+      const owner = `pair ${pair.id} ${platform} Metro`;
+      if (metroOwners.has(port)) {
+        problems.push(
+          `${owner} port ${port} is also the ${metroOwners.get(port)} port - set androidMetroPort to a free one`
+        );
+      } else {
+        metroOwners.set(port, owner);
+      }
+    }
   }
 
   const reservedEmulatorPorts = [
@@ -1185,7 +1232,16 @@ export function renderEnvFile(lease, pair, platform = lease.platform) {
       lines.push(exportLine('ANDROID_ADB_SERVER_PORT', pair.android.adbPort));
     }
   }
+  // `METRO_PORT` is what a runner started by hand reads. A gate reads its own
+  // platform's port, so an iOS and an Android gate on this lease can run at once.
   lines.push(exportLine('METRO_PORT', pair.metroPort));
+  const ports = metroPortsOf(pair);
+  if (platform !== 'android' && pair?.ios != null) {
+    lines.push(exportLine('METRO_PORT_IOS', ports.ios));
+  }
+  if (platform !== 'ios' && pair?.android != null) {
+    lines.push(exportLine('METRO_PORT_ANDROID', ports.android));
+  }
   return `${lines.join('\n')}\n`;
 }
 

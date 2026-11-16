@@ -63,6 +63,7 @@ import {
   ledgerLogCandidates,
   ledgerRelativePath,
   logNameFor,
+  metroPortForGate,
   logRelativePath,
   LOG_RETENTION_DAYS,
   LOG_RETENTION_MAX_BYTES,
@@ -1179,6 +1180,14 @@ function changedCodePaths({ base }) {
 async function runGate(name, resolved, options = {}) {
   let claim = null;
   if (resolved.platform != null) {
+    // Everything below, the runner included, reads `METRO_PORT`.
+    const port = metroPortForGate(resolved.platform, process.env);
+    if (port != null && port !== process.env.METRO_PORT) {
+      process.stderr.write(
+        `gate: ${name} runs Metro on ${port}, the lease's ${resolved.platform} port\n`
+      );
+      process.env.METRO_PORT = port;
+    }
     const preflight = metroPreflight();
     if (preflight !== 0) return preflight;
     try {

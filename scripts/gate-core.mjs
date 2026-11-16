@@ -2386,6 +2386,26 @@ export function pidMayBeRunning(pid, kill = process.kill) {
 }
 
 /**
+ * The Metro port a device gate runs on: its own platform's port from the lease
+ * (`METRO_PORT_IOS`, `METRO_PORT_ANDROID`), else `METRO_PORT`. With one port per
+ * platform, an iOS gate and an Android gate on one lease start two Metros that do
+ * not collide.
+ *
+ * @param {'ios' | 'android' | 'both' | null | undefined} platform
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {string | undefined}
+ */
+export function metroPortForGate(platform, env = {}) {
+  const own =
+    platform === 'ios'
+      ? env.METRO_PORT_IOS
+      : platform === 'android'
+        ? env.METRO_PORT_ANDROID
+        : undefined;
+  return own != null && String(own) !== '' ? String(own) : env.METRO_PORT;
+}
+
+/**
  * The exit code a finished run stands for. A recorded `fail` is never 0, whatever
  * code was stored beside it.
  */

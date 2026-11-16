@@ -34,14 +34,31 @@ any unit that never ran. The outcome is recorded under the full gate's name.
 
 ## Running two gates at once
 
-One lease cannot run an iOS gate and an Android gate at once: it exports one Metro port, a
-harness run starts its own Metro that serves the harness's entry instead of the app's, and the
-second gate is refused because the port is already served. Side by side takes two leases, one
-per platform (`--platform ios` in one shell, `--platform android` in the other), so each run
-has its own Metro port and device claim. Nothing else the two runs write is shared: the ledger
-takes one appended line per run, and each platform has its own `.real-input/<platform>/` and
-build stamp. Two harness runs at once would share `example/harness-run/state.json`, so the
-harness gates run one after the other.
+One lease taken for both platforms runs an iOS gate and an Android gate at the same time, from
+one worktree. Each gate starts its own Metro, so the lease exports one Metro port per platform:
+`METRO_PORT_IOS` (the pair's `metroPort`) and `METRO_PORT_ANDROID` (the pair's
+`androidMetroPort`, or `metroPort + 1000` when `devices.json` names none). A device gate runs
+on its own platform's port and says so in its output; `METRO_PORT` stays the iOS port, for a
+runner started by hand. The other pair stays free for other work.
+
+```sh
+node scripts/lease.mjs acquire --task <ID> --boot --out <env file>   # both platforms
+set -a; source <env file>; set +a
+node scripts/build-app.mjs --platform ios
+node scripts/build-app.mjs --platform android
+node scripts/gate.mjs real-input:ios --background
+node scripts/gate.mjs harness:android --background
+```
+
+What the two runs still share, and so must not do:
+
+- **Build both apps first.** A `build-app.mjs` run or a pod install during the other gate's run
+  can move the code tree, and a run during which the tree moved never reads green.
+- **One harness run at a time.** Two harness runs share `example/harness-run/state.json`, so
+  `harness:ios` and `harness:android` run one after the other; a harness gate beside a
+  real-input gate is fine.
+- The ledger takes one appended line per run, and each platform has its own
+  `.real-input/<platform>/`, build directory and build stamp, so these are safe to share.
 
 ## Waiting for a gate
 

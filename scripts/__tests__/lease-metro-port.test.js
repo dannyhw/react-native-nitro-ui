@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
-import { LOG_STORE_BASENAME } from '../gate-core.mjs';
+import { LOG_STORE_BASENAME, metroPortForGate } from '../gate-core.mjs';
 import { leaseRecord, writeLeaseStore } from './helpers/lease-store.js';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 import {
@@ -22,7 +22,9 @@ import {
   lsofListenArgs,
   metroPreflightFromEnv,
   metroPortReason,
+  metroPortsOf,
   normalizeDevices,
+  renderEnvFile,
   pidIsAlive,
   parseLsofListeners,
   portListeners,
@@ -130,6 +132,62 @@ describe('metroPortReason', () => {
 
   it('says nothing when nothing is listening', () => {
     expect(metroPortReason({ id: PAIR_A, metroPort: PORT_A }, [])).toBeNull();
+  });
+});
+
+describe('one Metro port per platform', () => {
+  const example = JSON.parse(readFileSync(EXAMPLE_CONFIG, 'utf8'));
+
+  it('gives Android a port of its own, 1000 above metroPort unless devices.json names one', () => {
+    const [a] = normalizeDevices(example).pairs;
+    expect(metroPortsOf(a)).toEqual({ ios: PORT_A, android: PORT_A + 1000 });
+    const named = { ...example.pairs[0], androidMetroPort: 8399 };
+    expect(metroPortsOf(normalizeDevices({ pairs: [named] }).pairs[0])).toEqual(
+      {
+        ios: PORT_A,
+        android: 8399,
+      }
+    );
+  });
+
+  it('refuses a devices.json where two Metro ports collide', () => {
+    const clash = {
+      ...example,
+      pairs: [
+        { ...example.pairs[0], androidMetroPort: PORT_B },
+        example.pairs[1],
+      ],
+    };
+    expect(() => normalizeDevices(clash)).toThrow(
+      `pair pair-b ios Metro port ${PORT_B} is also the pair pair-a android Metro port`
+    );
+  });
+
+  it('exports the port of each platform the lease covers', () => {
+    const [pair] = normalizeDevices(example).pairs;
+    const lease = { id: 'L', task: 'T', platform: 'both' };
+    const both = renderEnvFile(lease, pair, 'both');
+    expect(both).toContain(`export METRO_PORT='${PORT_A}'`);
+    expect(both).toContain(`export METRO_PORT_IOS='${PORT_A}'`);
+    expect(both).toContain(`export METRO_PORT_ANDROID='${PORT_A + 1000}'`);
+    expect(renderEnvFile(lease, pair, 'ios')).not.toContain(
+      'METRO_PORT_ANDROID'
+    );
+    expect(renderEnvFile(lease, pair, 'android')).not.toContain(
+      'METRO_PORT_IOS'
+    );
+  });
+
+  it("a gate runs on its own platform's port, and on METRO_PORT without one", () => {
+    const env = {
+      METRO_PORT: '8295',
+      METRO_PORT_IOS: '8295',
+      METRO_PORT_ANDROID: '9295',
+    };
+    expect(metroPortForGate('android', env)).toBe('9295');
+    expect(metroPortForGate('ios', env)).toBe('8295');
+    expect(metroPortForGate('android', { METRO_PORT: '8295' })).toBe('8295');
+    expect(metroPortForGate(null, env)).toBe('8295');
   });
 });
 
@@ -408,12 +466,12 @@ describeCli('a stale Metro server on a leased pair', () => {
   };
 
   /** `gate.mjs <gate>`, in a throwaway checkout with the lease env sourced. */
-  const gateCli = (args, extra = {}) => {
+  const gateCli = (args, extra = {}, lease = leasePairA) => {
     // The lease has to be in the store as well as in the environment: a device gate
     // refuses a run whose lease it cannot find, before it asks about the Metro port.
     writeLeaseStore(home, {
       skipDevices: true,
-      leases: [leasePairA],
+      leases: [lease],
     });
     const dir = makeCheckout();
     checkouts.push(dir);
@@ -501,6 +559,43 @@ describeCli('a stale Metro server on a leased pair', () => {
     // port while it was free, did record.
     expect(second.lines).toEqual([]);
     expect(run.lines).toHaveLength(1);
+  });
+
+  it('hands a lease on both platforms one Metro port per platform', () => {
+    const result = leaseCli(['acquire', '--task', 'X4', '--platform', 'both']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`export METRO_PORT_IOS='${PORT_A}'`);
+    expect(result.stdout).toContain(
+      `export METRO_PORT_ANDROID='${PORT_A + 1000}'`
+    );
+  });
+
+  it('runs an Android gate beside an iOS gate on one lease, each on its own port', () => {
+    const both = leaseRecord({
+      id: 'X4-1',
+      task: 'X4',
+      platform: 'both',
+      holds: [PAIR_A],
+    });
+    const bothEnv = {
+      ...PAIR_A_ENV,
+      NITRO_UI_LEASE_PLATFORM: 'both',
+      IOS_SIM_UDID: '00000000-0000-4000-8000-00000000000A',
+      IOS_SIM: 'iPhone 17',
+      METRO_PORT_IOS: String(PORT_A),
+      METRO_PORT_ANDROID: String(PORT_A + 1000),
+    };
+    // The iOS gate's Metro is up on the iOS port.
+    serve(PORT_A);
+    const android = gateCli(['harness:android'], bothEnv, both);
+    expect(android.stderr).not.toContain('refused before the run');
+    expect(android.stdout).toContain(`fake runner metro: ${PORT_A + 1000}`);
+    expect(android.status).toBe(0);
+    expect(android.lines).toHaveLength(1);
+    // The same lease's iOS gate is still refused while its own port is served.
+    const ios = gateCli(['harness:ios'], bothEnv, both);
+    expect(ios.stderr).toContain(`Metro port ${PORT_A}`);
+    expect(ios.status).toBe(1);
   });
 
   it('runs the gate under NITRO_UI_GATE_METRO_FORCE=1', () => {
@@ -708,6 +803,7 @@ function makeCheckout() {
   const script = [
     '#!/bin/sh',
     'echo "fake runner: $0 $*"',
+    'echo "fake runner metro: $METRO_PORT"',
     // `FAKE_SERVE_METRO` is "<port> <pid file>": start a listener as this shim's own
     // child, so it shares the shim's process group, and exit without stopping it.
     // `FAKE_REAL_NODE` names the interpreter, because `node` on this PATH is this shim.

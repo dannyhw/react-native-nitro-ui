@@ -385,7 +385,9 @@ node scripts/lease.mjs release <ID>
 when it refuses. It hands out `IOS_SIM_UDID`, `IOS_SIM`, `IOS_VERSION`, `ANDROID_AVD`,
 `ANDROID_API_LEVEL`, `AVD_PROFILE`, `EMULATOR_PORT`, `ANDROID_SERIAL`,
 `ANDROID_ADB_SERVER_PORT` and `METRO_PORT`, the variables `example/rn-harness.config.mjs` and
-the real-input scripts read.
+the real-input scripts read. It also exports `METRO_PORT_IOS` and `METRO_PORT_ANDROID` for the
+platforms the lease covers; `gate.mjs` runs each device gate on its own platform's port, so an
+iOS and an Android gate on one lease never share a Metro.
 
 The rules the script enforces:
 
@@ -469,6 +471,8 @@ cp scripts/devices.example.json ~/.nitro-ui/devices.json   # then put your real 
 ```
 
 A pair is one iOS simulator and one Android emulator that belong together, plus their ports.
+`metroPort` is the iOS Metro port. The Android one is `androidMetroPort` when the pair names it
+and `metroPort + 1000` otherwise; no two Metro ports in the file may be the same.
 `reservedIdentifiers` is for anything else that must never be handed out (a person's own
 device, another project's simulator). State lives in `~/.nitro-ui/leases.json` behind
 `~/.nitro-ui/leases.lock`. Leases expire after a TTL (`--ttl-minutes`), so a killed task cannot
@@ -605,8 +609,9 @@ Each device gate is keyed to the files its own run reads: an edit under `example
 no real-input gate. A red full `harness:<p>` or `real-input:<p>` run can be completed with
 `--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
 outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
-and an Android gate run side by side from one worktree only under two leases, one per platform:
-each needs a Metro port of its own, and one lease has one.
+and an Android gate run side by side from one worktree under one lease for both platforms: the
+lease exports a Metro port per platform and each gate uses its own. Build both apps first, and
+run the two harness gates one after the other.
 
 What review and merge need, how a run is matched to the tree, completing a red run, waiting for
 a background gate, and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
