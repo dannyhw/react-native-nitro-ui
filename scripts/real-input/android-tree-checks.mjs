@@ -2653,6 +2653,26 @@ async function iconButtonChecks(t) {
     t.requireEcho(ECHO.iconButtonDisabledEvents),
     '0'
   );
+  // Both disabled forms have to refuse a real touch: a person only learns a control is
+  // off when pressing it does nothing, and the two forms take input differently.
+  for (const [form, label] of [
+    ['press', 'Real-input disabled icon button'],
+    ['toggle', 'Real-input disabled toggle icon button'],
+  ]) {
+    const inert = await t.requireControlOnScreen(label);
+    for (let tap = 1; tap <= 3; tap += 1) {
+      await t.tapNode(inert);
+    }
+    t.log.checkEquals(
+      `three real taps on the disabled ${form} form report nothing`,
+      t.requireEchoToStay(
+        ECHO.iconButtonDisabledEvents,
+        '0',
+        `three real taps on the disabled ${form} form`
+      ),
+      '0'
+    );
+  }
   t.log.checkEquals(
     'the toggle publishes a toggleable state, and it says unchecked',
     t.nativeChecked(TOGGLE),
