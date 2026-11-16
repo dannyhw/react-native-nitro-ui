@@ -1,10 +1,29 @@
 import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
+import { popupWindowCount } from './device-read';
 import { boxOf, drag, openScreen, reveal, textOf } from './support';
-import { actsOnOneNamedNode } from './reader';
+import { actsOnOneNamedNode, itemAnnounces } from './reader';
 
 const NAME = 'Real-input picker';
+const RADIO = 'Real-input radio picker';
+const RADIO_LOCKED = 'Real-input disabled radio picker';
+
+/** How long a window opened by mistake would take to come up. */
+const NOTHING_OPENS_MS = 800;
+
+/** How long a popup window is given to reach the window manager, or to leave it. */
+const WINDOW_SETTLES_MS = 8_000;
+
+async function popupsReach(count: number, why: string): Promise<void> {
+  await expect
+    .poll(() => popupWindowCount(), {
+      timeout: WINDOW_SETTLES_MS,
+      interval: 250,
+      message: why,
+    })
+    .toBe(count);
+}
 
 test('a real tap opens the Picker and a real tap on a row reports it', async ({
   app,
@@ -83,4 +102,97 @@ test('a wheel drum inside a side-scroller keeps the drags it owns', async ({
   // And it stays where it was: a sideways gesture the drum kept would land on
   // another row, and the report arrives late rather than not at all.
   await expect(echo).toHaveText(rolled);
+});
+
+test('the menu is a popup window: Back closes it, and the row already chosen closes it with no report', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'picker');
+  const anchor = screen.getByLabel(NAME);
+  const events = screen.getByTestId('real-input-picker-events');
+  await reveal(screen, anchor);
+
+  await anchor.tap();
+  await popupsReach(1, 'a real tap on the anchor opened no popup window');
+  await app.back();
+  await popupsReach(0, 'Back left the popup window up');
+
+  // While the popup is up it owns the tree, so the row is the only 'Onyx' there is.
+  await anchor.tap();
+  await popupsReach(1, 'a second tap on the anchor opened no popup window');
+  const onyx = screen.getByText('Onyx');
+  await onyx.waitFor({ state: 'visible' });
+  await onyx.tap();
+  await popupsReach(0, 'a tap on the row already chosen left the menu up');
+  await expect(events).toHaveText('0');
+});
+
+test("the radio group's rows are the control: a real tap picks one, opens no window, and only that row says checked", async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'picker');
+  const group = screen.getByLabel(RADIO);
+  const index = screen.getByTestId('real-input-radio-index');
+  const events = screen.getByTestId('real-input-radio-events');
+  const locked = screen.getByLabel(RADIO_LOCKED);
+  await reveal(screen, group, { reads: [index, events, locked] });
+  await expect(index).toHaveText('-');
+  expect(popupWindowCount(), 'a window is up before a touch').toBe(0);
+
+  await group.getByText('Obsidian').tap();
+  await expect(index).toHaveText('2');
+  await expect(events).toHaveText('1');
+  expect(popupWindowCount(), 'a tap on a radio row opened a window').toBe(0);
+  for (const row of ['Basalt', 'Flint', 'Obsidian']) {
+    itemAnnounces(RADIO, row, {
+      checked: row === 'Obsidian' ? 'on' : 'off',
+      enabled: 'true',
+    });
+  }
+
+  for (const row of ['Gabbro', 'Peridot', 'Scoria']) {
+    itemAnnounces(RADIO_LOCKED, row, { enabled: 'false' });
+  }
+  expect(
+    await locked.getByText('Peridot').boundingBox(),
+    'the disabled group draws no "Peridot" row to aim at'
+  ).not.toBeNull();
+});
+
+test('a real tap on the disabled Picker opens nothing where the enabled one opens a window, and each is one node', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'picker');
+  const lockedName = 'Real-input disabled picker';
+  const enabledName = 'Real-input enabled picker';
+  const locked = screen.getByLabel(lockedName);
+  const enabled = screen.getByLabel(enabledName);
+  await reveal(screen, locked, { reads: [enabled] });
+  await actsOnOneNamedNode(screen, { name: lockedName, state: 'disabled' });
+
+  await locked.tap();
+  await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));
+  expect(
+    popupWindowCount(),
+    'a tap on the disabled Picker opened a window'
+  ).toBe(0);
+
+  // The same tap on the enabled twin is what makes the line above a refusal.
+  await enabled.tap();
+  await popupsReach(1, 'a real tap on the enabled Picker opened no window');
+  await app.back();
+  await popupsReach(0, "Back left the enabled Picker's window up");
+
+  // One node carries the name, the value it shows, and the role of a list of choices.
+  await actsOnOneNamedNode(screen, { name: enabledName, state: 'enabled' });
+  await expect(enabled).toHaveText('Mica');
+  await expect(screen.getByRole('combobox', { name: enabledName })).toHaveCount(
+    1
+  );
 });
