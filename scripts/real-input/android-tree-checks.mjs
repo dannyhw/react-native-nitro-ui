@@ -3218,6 +3218,111 @@ async function pickerChecks(t) {
     lockedNodes[0]?.enabled,
     'false'
   );
+  // A menu that outlives the view that opened it is a window nobody can see or dismiss.
+  // The row's unmount is on a timer inside the app, so the menu is open when the view
+  // goes away; a second tap would have dismissed the menu instead of proving anything.
+  for (let cycle = 1; cycle <= 3; cycle += 1) {
+    await t.requireControlOnScreen('Real-input drop picker');
+    // The arm button has its own echo, so the press that schedules the unmount is
+    // confirmed rather than assumed: a dropped press leaves nothing scheduled, and the
+    // count then goes to zero for the wrong reason.
+    await t.pressUntil({
+      what: 'the unmount button',
+      waitingFor: `cycle ${String(cycle)}: a real tap to arm the unmount`,
+      attempts: 2,
+      // Both readings are dumps, and a dump costs about two seconds here, so the poll
+      // is as slow as the reading can be.
+      windowMs: 4000,
+      pollMs: DUMP_POLL_MS,
+      press: async () => {
+        await t.tapNode(
+          t.waitForNodes(
+            (node) => node.resourceId === 'real-input-drop-button',
+            `cycle ${String(cycle)}: the unmount button`,
+            1,
+            20000
+          )[0]
+        );
+      },
+      reading: () =>
+        t.nodeByTestId('real-input-drop-armed') == null ? '0' : '1',
+      raised: (current) => current === '1',
+    });
+    await t.tapUntilUp(
+      () => t.requireControl('Real-input drop picker'),
+      `cycle ${String(cycle)}: a real tap to open the drop picker's menu`,
+      () => t.popupWindowCount(),
+      { attempts: 2, windowMs: 4000 }
+    );
+    t.log.checkEquals(
+      `cycle ${String(cycle)}: the drop picker's menu is open as a popup window`,
+      t.waitForPopupCount(
+        1,
+        `cycle ${String(cycle)}'s menu to open as a popup window`
+      ),
+      1
+    );
+    t.waitForNodes(
+      (node) => node.resourceId === ECHO.pickerGone,
+      `cycle ${String(cycle)}: the picker to unmount`,
+      1,
+      20000
+    );
+    t.log.checkEquals(
+      `cycle ${String(cycle)}: unmounting with the menu open leaves no popup window`,
+      t.waitForPopupCount(
+        0,
+        `cycle ${String(cycle)}: the unmount to take the open popup down`
+      ),
+      0
+    );
+    if (cycle < 3) {
+      // The remount's witness is the Picker's own node coming back, so a dropped press
+      // cannot come round the loop as "no drop picker on screen".
+      await t.pressUntil({
+        what: 'the remount button',
+        waitingFor: `cycle ${String(cycle)}: a real tap to mount the picker again`,
+        press: async () => {
+          await t.tapNode(
+            t.waitForNodes(
+              (node) => node.resourceId === 'real-input-drop-remount',
+              'the remount button',
+              1,
+              20000
+            )[0]
+          );
+        },
+        reading: () =>
+          t.dump().some((node) => node.contentDesc === 'Real-input drop picker')
+            ? '1'
+            : '0',
+        raised: (value) => value === '1',
+      });
+    }
+  }
+
+  // The accessibility `enabled` flag is a claim about the tree; a refusal is a claim
+  // about input, and only a real tap measures that. The ordinary picker, tapped the
+  // same way right after, is what turns "nothing happened" into "this one refused".
+  const locked = await t.requireControlOnScreen('Real-input disabled picker');
+  await t.tapNode(locked);
+  t.log.checkEquals(
+    'a real tap on the disabled picker opens no menu',
+    t.waitForPopupCount(0, 'a tap on the disabled picker to open nothing'),
+    0
+  );
+  await t.tapUntilUp(
+    () => t.requireControlOnScreen('Real-input enabled picker'),
+    'a real tap on the enabled picker to open its menu',
+    () => t.popupWindowCount()
+  );
+  t.log.checkEquals(
+    'the ordinary picker, tapped the same way, opens one - so the line above measured a refusal',
+    t.popupWindowCount(),
+    1
+  );
+  await t.pressBack();
+  t.waitForPopupCount(0, "the enabled picker's popup to come down");
 }
 
 /** `enabled` on the disabled row's own node, and the live row behind it. */
@@ -3617,6 +3722,145 @@ async function stepperChecks(t) {
 }
 
 /**
+ * The rich Tooltip, opened around its star by a real tap.
+ *
+ * Material shows a tooltip in a window of its own, and while it is up a dump can be
+ * that window's tree rather than the app's, so the app's echo is read only with the
+ * tooltip down and "up" is counted by the tooltip's own message.
+ */
+async function tooltipChecks(t) {
+  const MESSAGE = 'Tap the star to keep this search.';
+  const TITLE = 'Saved searches';
+  const ACTION = 'Got it';
+  const upCount = () => t.dump().filter((node) => node.text === MESSAGE).length;
+  const opener = () => {
+    const node = t.nodeByTestId('tooltip-open-rich');
+    if (node == null) {
+      t.log.abort('no "tooltip-open-rich" opener on the Tooltip screen');
+    }
+    return node;
+  };
+  const open = async (description) => {
+    await t.tapUntilUp(opener, description, upCount, {
+      pollMs: DUMP_POLL_MS,
+    });
+    t.waitForOption(MESSAGE, description);
+  };
+  const waitGone = async (description) => {
+    const deadline = Date.now() + REACT_TIMEOUT;
+    while (upCount() > 0) {
+      if (Date.now() > deadline) {
+        t.log.abort(`timed out waiting for ${description}`);
+      }
+      await t.settle(250);
+    }
+  };
+  // One real tap on the star, confirmed by the star's own count: the anchor is the
+  // app's `Pressable`, and the tooltip's overlay behind it takes no touch.
+  const pressAnchor = async (expected, description) => {
+    const { delivered, shown } = await t.pressUntil({
+      what: 'the star the tooltip points at (tooltip-anchor)',
+      waitingFor: description,
+      attempts: 1,
+      press: async () => {
+        await t.tapTestId('tooltip-anchor');
+      },
+      reading: () => t.echo(ECHO.tooltipPresses),
+      raised: (current) => current === expected,
+    });
+    if (!delivered) {
+      t.log.abort(
+        `${description}: the star's count says "${String(shown)}", not "${expected}"`
+      );
+    }
+    return shown;
+  };
+  // Outside means this `Text`, found while the tooltip is down and tapped where it
+  // was: it has no press of its own, whereas a fixed fraction of the screen could
+  // land on a tab, or on a button a passed-through touch would press.
+  const logNode = t.nodeByTestId(ECHO.tooltipLog);
+  if (logNode == null) {
+    t.log.abort('no "tooltip-log" on the Tooltip screen to tap outside on');
+  }
+  const tapOutside = async () => {
+    await t.tapNode(logNode);
+    await t.settle(400);
+  };
+
+  t.log.checkEquals(
+    'no tooltip has reported anything before a touch',
+    t.requireEcho(ECHO.tooltipLog),
+    'none'
+  );
+  t.log.checkEquals('no tooltip is up before a touch', upCount(), 0);
+  t.log.checkEquals(
+    'a real tap on the anchor of a closed tooltip presses the anchor once',
+    await pressAnchor('star presses: 1', 'the real tap on the star'),
+    'star presses: 1'
+  );
+  await t.settle(800);
+  t.log.checkEquals(
+    'and opens nothing, reports nothing',
+    `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
+    '0 up, log none'
+  );
+
+  // Opened by a press, with its title and its action on screen.
+  await open('the real tap that opens the rich tooltip');
+  t.log.checkEquals(
+    'the tooltip shows its title and its action',
+    `${String(t.dump().filter((n) => n.text === TITLE).length)} title, ` +
+      `${String(t.dump().filter((n) => n.text === ACTION).length)} action`,
+    '1 title, 1 action'
+  );
+
+  await tapOutside();
+  await waitGone('a tap outside to take the tooltip down');
+  t.log.checkEquals(
+    'a tap outside closes the tooltip and reports the close alone',
+    t.requireEcho(ECHO.tooltipLog),
+    'presented:false'
+  );
+
+  // Back closes a tooltip with an action: Material makes that one focusable.
+  await open('the real tap that reopens the rich tooltip');
+  await t.pressBack();
+  await waitGone('Back to take the tooltip down');
+  t.log.checkEquals(
+    'Back closes it and reports the close alone',
+    t.requireEcho(ECHO.tooltipLog),
+    'presented:false > presented:false'
+  );
+
+  await open('the real tap that opens it again');
+  const afterAction =
+    'presented:false > presented:false > action:ok > presented:false';
+  t.log.checkEquals(
+    'a real tap on its action reports the id, then the close - once each, in order',
+    await t.tapOptionUntilValue(
+      ACTION,
+      ECHO.tooltipLog,
+      afterAction,
+      `the real tap on "${ACTION}"`
+    ),
+    afterAction
+  );
+  await waitGone('the action to take the tooltip down');
+
+  t.log.checkEquals(
+    'once it is closed, a real tap on the anchor presses it once more',
+    await pressAnchor('star presses: 2', 'the second real tap on the star'),
+    'star presses: 2'
+  );
+  await t.settle(800);
+  t.log.checkEquals(
+    'and opens nothing, reports nothing',
+    `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
+    `0 up, log ${afterAction}`
+  );
+}
+
+/**
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
  */
@@ -3639,6 +3883,7 @@ const TREE_CHECKS = [
   { id: 'popover', run: popoverChecks },
   { id: 'segmented-control', run: segmentedControlChecks },
   { id: 'stepper', run: stepperChecks },
+  { id: 'tooltip', run: tooltipChecks },
 ];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */
