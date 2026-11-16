@@ -6,7 +6,8 @@ is the tutorial.
 ## Running a gate
 
 - Run `node scripts/gate.mjs <gate>`, not the `bun run` form. The gate names are in the script's
-  header. Every run is recorded in `.gates/<branch>.jsonl` against a hash of the code tree.
+  header. Every run is recorded in `.gates/<branch>.jsonl` against a hash of the code tree, and
+  copied to the clone-wide record (see "Runs from other branches").
 - `gate.mjs status` says what is green, red or missing for the tree in front of you.
 - A filtered run is recorded under its own name and satisfies nothing else:
   `gate.mjs harness:android -- ColdSizing` is `harness:android:ColdSizing`. `check` takes no
@@ -57,17 +58,18 @@ node scripts/lease.mjs acquire --task <ID> --boot --out <env file>   # both plat
 set -a; source <env file>; set +a
 node scripts/build-app.mjs --platform ios
 node scripts/build-app.mjs --platform android
-node scripts/gate.mjs real-input:android --background
 node scripts/gate.mjs harness:ios --background
+node scripts/gate.mjs harness:android --background
 ```
+
+`real-input:android` can take the place of either harness gate. Each harness run publishes its
+run state in `example/harness-run/state-<port>.json`, for its own Metro port, so the two
+harness gates do not see each other's.
 
 What the two runs still share, and so must not do:
 
 - **Build both apps first.** A `build-app.mjs` run or a pod install during the other gate's run
   can move the code tree, and a run during which the tree moved never reads green.
-- **One harness run at a time.** Two harness runs share `example/harness-run/state.json`, so
-  `harness:ios` and `harness:android` run one after the other; a harness gate beside
-  `real-input:android` is fine.
 - **`real-input:ios` runs alone.** It delivers synthesised touches through the simulator, and
   they are dropped when a second device run loads the machine: most controls go red on a tree
   that is green when the gate runs by itself.
@@ -102,8 +104,8 @@ missing.
   imports and fails when a run reaches a path its digest leaves out. A path that cannot be
   proved stays in both suites' digests.
 - A line recorded before these digests existed is compared on its platform half. A fix round
-  re-runs only the gates its diff moved. That saving is within a branch: the ledger is per
-  branch, so a fresh branch owes all four device gates at merge, whatever it touched.
+  re-runs only the gates its diff moved, and a fresh branch owes only the gates no branch of
+  the clone has passed on its digests (below).
 - Shared code (`src/`, `cpp/`) counts as both platforms. So does any path the mapping does not
   claim: unknown is expensive, never free.
 - `status` and `need` print the platform halves and the four gate digests.
@@ -116,12 +118,32 @@ missing.
   gates once, after merging the change. `gate.mjs status` shows whether a change does this.
 - Benches are never required by `need`.
 
+## Runs from other branches
+
+Each ledger line is also appended to `<git-common-dir>/nitro-ui-gate-evidence/<branch>.jsonl`.
+Every worktree of the clone reads it, and removing or pruning a worktree leaves it in place.
+`need`, `status` and `table` take a gate as green from it when this branch has no line of its
+own that decides the gate on the current digest, and the line is:
+
+- a pass of the full gate, or a completion of one (shown as completed); a filtered run and a
+  red run never count, and a red run elsewhere never makes a row red;
+- on the gate's own digest equal to the current one (`check`: the full code tree), with no
+  fallback to the platform half, so a line written before per-gate digests never counts;
+- unmoved: the tree and the gate's digest read after the run equal the ones before it.
+
+The row names the branch: `**PASS** (from \`task/x\`)`. A line of this branch still comes
+first, so a red run here on the current digest is not hidden by a green one from elsewhere.
+`--rerun-failed` reads only this branch's ledger. Nothing is inferred from commits or
+ancestry: identical files are the whole test. Evidence from another clone, another machine or
+CI is not read.
+
 ## Reports and the ledger
 
 - `gate.mjs table` prints the gate table for a report.
 - The per-branch ledger `.gates/<branch>.jsonl` is local evidence and is never committed. A
   report carries the table, and its red proofs as lines of its own.
-- The ledger is removed with its worktree, after "Cleanup" below has copied it.
+- The ledger is removed with its worktree, after "Cleanup" below has copied it. The clone-wide
+  record is not removed.
 
 ## Logs
 

@@ -104,10 +104,14 @@ or provider error. After that, replan around it.
   hours to share a run rather than re-gate each.
 - Run `node scripts/gate.mjs need --for merge` as its own command and read it. Never pipe
   it or chain it to the merge.
-- Under one lease for both platforms, after building both apps, run `real-input:android`
-  beside `harness:ios`, then `harness:android`, then `real-input:ios` with nothing beside it:
-  its touches are dropped when another device run loads the machine. The full real-input
-  gates run once, here; a red one is completed with `--rerun-failed`, not rerun whole.
+- Run only the gates `need --for merge` lists: a green run recorded on any branch of the
+  clone counts when its digest for the gate is the current one, so a gate the task branch
+  or the last merge run passed on the same files is not run again.
+- Under one lease for both platforms, after building both apps, run `harness:ios` beside
+  `harness:android` (or either beside `real-input:android`), then `real-input:ios` with
+  nothing beside it: its touches are dropped when another device run loads the machine.
+  The full real-input gates run once, here; a red one is completed with `--rerun-failed`,
+  not rerun whole.
 - A red gate: follow the `flake` skill. Never merge through red.
 - Before merging, `git log --format='%ae' main..<branch> | sort -u` shows only the
   repository's own email.

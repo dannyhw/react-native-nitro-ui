@@ -591,7 +591,9 @@ changes only the lock's `COCOAPODS:` trailer.
 `scripts/gate.mjs` runs a named gate and records the result: `check`, `harness:<ios|android>`,
 `real-input:<ios|android>`, `smoke:<pack|expo|rn-cli>` or `bench`. Each run appends one line to
 `.gates/<branch>.jsonl` (gitignored), keyed to the code tree the stamp uses, so a docs-only
-commit leaves a green gate green. A device gate reads its device from the lease and refuses to
+commit leaves a green gate green. The line is also copied to a record every worktree of the
+clone reads, so a full green run counts on any branch whose digest for that gate is the same,
+even after its worktree is removed; the row names the branch it came from. A device gate reads its device from the lease and refuses to
 start unless that lease is live and holds the device it is about to use.
 
 ```sh
@@ -606,14 +608,13 @@ node scripts/lease.mjs release <id>
 
 Each device gate is keyed to the files its own run reads: on a branch whose gates are already
 green, an edit under `example/e2e/` owes `real-input:android` and nothing else, and an edit to a
-harness test owes the harness gates and no real-input gate. The ledger is per branch, so a fresh
-branch still owes all four device gates at merge, whatever it touched. A red full `harness:<p>` or `real-input:<p>` run can be completed with
+harness test owes the harness gates and no real-input gate. A fresh branch owes only the gates
+no branch of the clone has passed on its files. A red full `harness:<p>` or `real-input:<p>` run can be completed with
 `--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
 outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
 and an Android gate can run side by side from one worktree under one lease for both platforms:
 the lease exports a Metro port per platform and each gate uses its own. Build both apps first,
-run the two harness gates one after the other, and run `real-input:ios` with no other gate
-beside it.
+and run `real-input:ios` with no other gate beside it; the two harness gates can run together.
 
 What review and merge need, how a run is matched to the tree, completing a red run, waiting for
 a background gate, and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
@@ -772,9 +773,10 @@ prints it and judges nothing; what the library costs is measured by `bench/`.
 Assertions run inside the app, which cannot see the runner's environment. The runner publishes
 the one setting an assertion depends on, the locale opt-out
 (`NITRO_UI_ALLOW_LOCALE_MISMATCH`, read by the conformance rule that compares a
-locale-dependent box). `rn-harness.config.mjs` writes `example/harness-run/state.json`
-(gitignored, refreshed every 2 s), and `example/metro.config.js` declares the one Metro route
-that serves it per request. It is served on the Metro port because an emulator reaches the host
+locale-dependent box). `rn-harness.config.mjs` writes `example/harness-run/state-<port>.json`
+for its Metro port (gitignored, refreshed every 2 s), and `example/metro.config.js` declares the
+one Metro route that serves, per request, the file for the port the request arrived on, so two
+runs on two ports never see each other's. It is served on the Metro port because an emulator reaches the host
 only through the `adb reverse` the harness sets up for Metro. A reader checks the file's
 `metroPort` and age before trusting it. `scripts/harness-run-state.js` holds the publishing and
 serving code for both config files.
