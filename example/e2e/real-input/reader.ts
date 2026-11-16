@@ -25,12 +25,7 @@
  */
 import { expect, type Locator, type Screen } from 'e2e';
 
-import {
-  factsForItem,
-  factsForText,
-  groupFacts,
-  screenReaderFacts,
-} from './os-tree';
+import { factsForItem, screenReaderFacts } from './os-tree';
 
 /** The state a reader is told about the node, read off that node. */
 export type NodeState = 'enabled' | 'disabled' | 'checked' | 'unchecked';
@@ -166,79 +161,6 @@ export function treeAnnounces(
         `has no "${expected.role}" in it — a screen reader announces whatever class ` +
         `the state landed on instead: ${facts.detail}`
     ).toContain(expected.role);
-  }
-}
-
-/**
- * A control that is a group of options, read one node per option.
- *
- * `role` is the Android class the option's role has to reach the tree as, and the
- * counts are the claim: one node per option carrying the selection, one role node
- * per option, and exactly one option holding it.
- */
-export function groupAnnounces(
-  name: string,
-  options: { role: string; options: number }
-): void {
-  const facts = groupFacts(name, options.role);
-  expect(
-    facts.items.length,
-    `"${name}" publishes ${String(facts.items.length)} node(s) that carry a ` +
-      `selection for ${String(options.options)} options — a person who asks for ` +
-      'the next option gets an option that is not there'
-  ).toBe(options.options);
-  expect(
-    facts.roles.length,
-    `"${name}" publishes ${String(facts.roles.length)} "${options.role}" node(s) ` +
-      `for ${String(options.options)} options — the rest are announced as whatever ` +
-      'class they happen to be'
-  ).toBe(options.options);
-  expect(
-    facts.selected,
-    `"${name}" has ${String(facts.selected)} option(s) claiming the selection; ` +
-      'exactly one may, or a screen reader cannot say where the finger is'
-  ).toBe(1);
-}
-
-/**
- * The same facts, for a control the tree names with words instead of a label.
- *
- * A dialog action and a radio row are Compose rows: the words are a child of the
- * node holding the state, and that child reports the same thing whether the row is
- * disabled or not. `flag` says which node is the row's — the clickable one for an
- * action, the checkable one for a selectable row.
- */
-export function textAnnounces(
-  text: string,
-  expected: {
-    checked?: 'on' | 'off';
-    enabled?: 'true' | 'false';
-    role?: string;
-    flag?: 'checkable' | 'clickable';
-  }
-): void {
-  const facts = factsForText(text, expected.flag ?? 'clickable');
-  const said = `the node behind "${text}"`;
-  if (expected.checked != null) {
-    expect(
-      facts.checked,
-      `${said} is not "${expected.checked}": ${facts.detail}`
-    ).toBe(expected.checked);
-  }
-  if (expected.enabled != null) {
-    expect(
-      facts.enabled,
-      `${said} is not enabled="${expected.enabled}" — a person is offered a ` +
-        `press here either way: ${facts.detail}`
-    ).toBe(expected.enabled);
-  }
-  if (expected.role != null) {
-    expect(
-      facts.role,
-      `${said} reaches the tree as "${String(facts.role)}", not as ` +
-        `"${expected.role}" — a screen reader announces the wrong kind of control ` +
-        `here: ${facts.detail}`
-    ).toBe(expected.role);
   }
 }
 

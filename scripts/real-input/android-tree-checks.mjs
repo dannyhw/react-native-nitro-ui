@@ -615,20 +615,6 @@ function makeContext(device, log) {
     },
 
     /**
-     * @param {string} testID
-     * @param {string} description
-     */
-    waitForNode(testID, description) {
-      /** @type {import('./uiautomator.mjs').UiautomatorNode | null} */
-      let found = null;
-      until(() => {
-        found = findByTestId(device.hierarchy(), testID) ?? null;
-        return found != null;
-      }, `${description} - no view with testID "${testID}"`);
-      return /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (found);
-    },
-
-    /**
      * The popup row with this label: Material's own rows name themselves with a localised
      * string rather than a testID.
      *
@@ -3526,9 +3512,7 @@ async function popoverChecks(t) {
 
 /** One named radio node per option, each carrying the selection. */
 async function segmentedControlChecks(t) {
-  const control = await t.requireControlOnScreen(
-    'Real-input segmented control'
-  );
+  await t.requireControlOnScreen('Real-input segmented control');
   // The selection has to be one the *finger* made, so the claim below cannot be the
   // fixture's default, and the middle of the box is the segment drawn '2'.
   t.log.checkEquals(

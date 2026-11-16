@@ -8,9 +8,6 @@
  */
 import { expect, type Locator, type Screen } from 'e2e';
 
-/** The example app's Android package. */
-export const APP_PACKAGE = 'nitroui.example';
-
 /** The sideways strip the example app navigates with (`example/src/App.tsx`). */
 const TAB_STRIP = 'tab-strip';
 
@@ -566,23 +563,6 @@ export async function centreOf(locator: Locator): Promise<Point> {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-/** The centre of a node's box, refused if a tap there would hit chrome. */
-export async function tappableCentreOf(
-  screen: Screen,
-  locator: Locator
-): Promise<Point> {
-  const point = await centreOf(locator);
-  const { top, bottom } = await tapBand(screen);
-  if (point.y <= top || point.y >= bottom) {
-    throw new Error(
-      `real-input: the point to aim at (${String(Math.round(point.y))} px) is ` +
-        `outside the tappable band (${String(Math.round(top))}–` +
-        `${String(Math.round(bottom))} px): scroll it in first.`
-    );
-  }
-  return point;
-}
-
 /** Drag from one viewport point to another, slowly enough to read as a drag. */
 export async function drag(
   screen: Screen,
@@ -647,16 +627,4 @@ export async function pageScroll(
   await dragContentFraction(screen, pixels > 0 ? fraction : -fraction);
   if (pixels > 0) downDrags += 1;
   else downDrags = Math.max(0, downDrags - 1);
-}
-
-/**
- * Bring the page back to its top, at the cost of the scrolls this test did going
- * down — and no more than that when it never went down at all.
- *
- * A screen that is already at its top answers a scroll with nothing moving, and a
- * pass that reads a control per case pays for eight of those per case.
- */
-export async function pageToTop(screen: Screen): Promise<void> {
-  if (downDrags === 0) return;
-  await rewindToTop(screen);
 }

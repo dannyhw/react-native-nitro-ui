@@ -30,7 +30,7 @@
  */
 
 import fs from 'node:fs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -116,7 +116,6 @@ function adbBinary(env) {
  * @param {NodeJS.ProcessEnv} env
  */
 function adbPrefix(env) {
-  const binary = adbBinary(env);
   const port = env.ANDROID_ADB_SERVER_PORT;
   return (/** @type {string[]} */ args) => [
     ...(port != null && port !== '' ? ['-P', String(port)] : []),
@@ -499,13 +498,8 @@ async function main() {
   // second half of that promise — to that daemon, no device but this one exists.
   const stateDir = path.join(out, 'agent-device');
   fs.mkdirSync(stateDir, { recursive: true });
-  // Screenshots from the press-feedback checks, which need a directory the
-  // run owns and can name in a failure message.
-  const pressDir = path.join(repoRoot(), E2E_DIR, E2E_OUTPUT, 'press');
-  fs.mkdirSync(pressDir, { recursive: true });
   const env = {
     ...process.env,
-    NITRO_UI_PRESS_DIR: pressDir,
     ANDROID_SERIAL: device.serial,
     AGENT_DEVICE_STATE_DIR: stateDir,
     AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST: device.serial,

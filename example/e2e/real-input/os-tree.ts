@@ -190,30 +190,6 @@ function namedNodesIn(nodes: TreeNode[], label: string): TreeNode[] {
     .filter((node) => node.bounds.width > 0 && node.bounds.height > 0);
 }
 
-/** Every node with a box that carries exactly this `content-desc`. */
-export function namedNodes(label: string): TreeNode[] {
-  return namedNodesIn(tree(), label);
-}
-
-/**
- * Several testIDs looked up in one capture.
- *
- * A check that compares two positions may not ask for them one at a time: a sheet that
- * is still rising answers with a different box in each read, and the comparison then
- * describes the animation rather than the layout it was meant to grade.
- */
-export function nodesForTestIds(
-  testIDs: readonly string[]
-): Map<string, TreeNode | null> {
-  const nodes = tree();
-  return new Map(
-    testIDs.map((testID) => [
-      testID,
-      nodes.find((node) => node.resourceId === testID) ?? null,
-    ])
-  );
-}
-
 /**
  * The box that owns a node: the tightest other box that contains it and is roughly its
  * size, and is not the page's own scroller.
@@ -319,57 +295,6 @@ export interface GroupFacts {
   selected: number;
 }
 
-/**
- * The same control read as a group rather than as a toggle.
- *
- * A segmented control, a radio Picker and a button group each publish one node per
- * option, and the claim worth making is a count: one node per option, one role node
- * per option, and exactly one of them selected.
- */
-export function groupFacts(label: string, role: string): GroupFacts {
-  const nodes = tree();
-  const group = namedNodesIn(nodes, label)[0];
-  const inside = (node: TreeNode): boolean =>
-    group != null &&
-    node !== group &&
-    node.bounds.cx >= group.bounds.x1 - 1 &&
-    node.bounds.cx <= group.bounds.x2 + 1 &&
-    node.bounds.cy >= group.bounds.y1 - 1 &&
-    node.bounds.cy <= group.bounds.y2 + 1;
-  const items = nodes
-    .filter((node) => node.checkable === 'true' && inside(node))
-    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-  return {
-    items,
-    roles: nodes
-      .filter((node) => node.className === role && inside(node))
-      .sort((a, b) => a.bounds.x1 - b.bounds.x1),
-    selected: items.filter((node) => node.checked === 'true').length,
-  };
-}
-
-/**
- * The control node behind a piece of on-screen text.
- *
- * `state` names the state the caller is after, because the two live on different
- * nodes: a row's selection is on the node that offers the toggle, an action's
- * enabled-ness is on the box that owns the words. The driver reports no clickable
- * flag, so the second half is resolved by box rather than by flag — the tightest
- * box around the words, which is the node a press reaches.
- */
-export function nodeForText(
-  text: string,
-  state: 'checkable' | 'clickable'
-): TreeNode | null {
-  const nodes = tree();
-  const titled =
-    findAllByText(nodes, text).find((node) => node.bounds.height > 0) ?? null;
-  if (titled == null) return null;
-  return state === 'checkable'
-    ? tightestFlaggedNode(nodes, titled, 'checkable')
-    : ownerNode(nodes, titled);
-}
-
 /** What the node behind a piece of text says about itself. */
 export interface TextFacts {
   checked: 'on' | 'off' | null;
@@ -378,48 +303,6 @@ export interface TextFacts {
   /** The Android class of the node holding the state — the role a reader gets. */
   role: string | null;
   detail: string;
-}
-
-/**
- * The state facts for a control named by its words rather than its label.
- *
- * Compose merges a row or an action into one node and leaves the words a node of their
- * own, and that words-node reports the same thing whether the control is disabled or
- * not. The state lives one box out.
- */
-export function factsForText(
-  text: string,
-  state: 'checkable' | 'clickable'
-): TextFacts {
-  const nodes = tree();
-  const titled =
-    findAllByText(nodes, text).find((node) => node.bounds.height > 0) ?? null;
-  if (titled == null) {
-    return {
-      checked: null,
-      enabled: null,
-      role: null,
-      detail: `no node with a box carries the words "${text}"`,
-    };
-  }
-  const node =
-    state === 'checkable'
-      ? tightestFlaggedNode(nodes, titled, 'checkable')
-      : ownerNode(nodes, titled);
-  if (node == null) {
-    return {
-      checked: null,
-      enabled: null,
-      role: null,
-      detail: `no ${state} node owns the words "${text}" (${describe(titled)})`,
-    };
-  }
-  return {
-    checked: node.checkable === 'true' ? stateOf(node.checked) : null,
-    enabled: node.enabled,
-    role: node.className,
-    detail: `${describe(titled)} owned by ${describe(node)}`,
-  };
 }
 
 /**
