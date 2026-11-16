@@ -592,9 +592,12 @@ changes only the lock's `COCOAPODS:` trailer.
 `real-input:<ios|android>`, `smoke:<pack|expo|rn-cli>` or `bench`. Each run appends one line to
 `.gates/<branch>.jsonl` (gitignored), keyed to the code tree the stamp uses, so a docs-only
 commit leaves a green gate green. The line is also copied to a record every worktree of the
-clone reads, so a full green run counts on any branch whose digest for that gate is the same,
-even after its worktree is removed; the row names the branch it came from. A device gate reads its device from the lease and refuses to
-start unless that lease is live and holds the device it is about to use.
+clone reads, even after its worktree is removed. When a branch has no line of its own on a
+device gate's current digest, the newest full run of that gate on that digest from any branch
+decides, green or red, and the row names the branch it came from. `check` is never taken from
+another branch: it reads docs and `bench/`, which the digest leaves out. A device gate reads its
+device from the lease and refuses to start unless that lease is live and holds the device it is
+about to use.
 
 ```sh
 set -a; source <(node scripts/lease.mjs acquire --task <id> --platform android); set +a
@@ -608,8 +611,9 @@ node scripts/lease.mjs release <id>
 
 Each device gate is keyed to the files its own run reads: on a branch whose gates are already
 green, an edit under `example/e2e/` owes `real-input:android` and nothing else, and an edit to a
-harness test owes the harness gates and no real-input gate. A fresh branch owes only the gates
-no branch of the clone has passed on its files. A red full `harness:<p>` or `real-input:<p>` run can be completed with
+harness test owes the harness gates and no real-input gate. A fresh branch owes `check` and the
+device gates no branch of the clone has passed on its files. A red full `harness:<p>` or
+`real-input:<p>` run can be completed with
 `--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
 outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
 and an Android gate can run side by side from one worktree under one lease for both platforms:

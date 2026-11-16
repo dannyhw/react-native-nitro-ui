@@ -84,16 +84,23 @@ describe('a green run recorded on another branch', () => {
     expect(rowOf('harness:ios', { foreign: [elsewhere] }).state).toBe(
       'missing'
     );
-    // `check` is keyed to the whole tree.
-    const check = run({
-      gate: 'check',
-      tree: OTHER_TREE,
-      treeAfter: OTHER_TREE,
+  });
+
+  it('never proves `check`, which reads files the code tree leaves out', () => {
+    for (const check of [
+      run({ gate: 'check' }),
+      run({ gate: 'check', result: 'fail', exitCode: 1 }),
+      run({ gate: 'check', tree: OTHER_TREE, treeAfter: OTHER_TREE }),
+    ]) {
+      expect(rowOf('check', { foreign: [check] }).state).toBe('missing');
+    }
+    const need = decideNeed({
+      entries: [],
+      foreign: [run({ gate: 'check' })],
+      ...now,
+      stage: 'review',
     });
-    expect(rowOf('check', { foreign: [check] }).state).toBe('missing');
-    expect(rowOf('check', { foreign: [run({ gate: 'check' })] }).state).toBe(
-      'green'
-    );
+    expect(need.missing).toContain('check');
   });
 
   it('is compared on its own digest only, never on a fallback a line of this branch may use', () => {
@@ -246,7 +253,7 @@ describe("this branch's own lines come first", () => {
 describe('the newest decisive run across the clone decides', () => {
   const at = (iso) => Date.parse(`2026-11-16T${iso}:00Z`);
 
-  it("a branch whose newest run on these files is red gives no other branch a green", () => {
+  it('a branch whose newest run on these files is red gives no other branch a green', () => {
     const green = run({ branch: 'task/t', startedAt: at('10:00') });
     const red = run({
       branch: 'task/t',
@@ -454,9 +461,7 @@ describe('gate.mjs across the worktrees of one clone', () => {
     expect(needLine(after.stdout, 'harness:ios')).toContain(
       '✓ harness:ios — green on its own digest (from `task/there`)'
     );
-    expect(needLine(after.stdout, 'check')).toContain(
-      '✓ check — green (from `task/there`)'
-    );
+    expect(needLine(after.stdout, 'check')).toContain('✗ check');
     expect(after.stdout).toContain('real-input:ios');
     const table = runCli(clone, clone.here, ['table', '--for', 'merge']);
     expect(table.status).toBe(0);

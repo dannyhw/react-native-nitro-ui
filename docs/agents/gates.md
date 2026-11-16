@@ -127,10 +127,9 @@ This branch's own lines decide first: a green or red line of this branch on the 
 is the answer. When there is none, the newest line in the clone-wide record, from any branch
 including this one, that is all of these decides, green or red:
 
-- a full run of the gate, or a completion of one (shown as completed); a filtered run never
-  counts;
-- on the gate's own digest equal to the current one (`check`: the full code tree), with no
-  fallback to the platform half, so a line written before per-gate digests never counts;
+- a full run of a device gate, or a completion of one (shown as completed); a filtered run
+  never counts;
+- on the gate's own digest equal to the current one, with no fallback to the platform half, so a line written before per-gate digests never counts;
 - unmoved: the tree and the gate's digest read after the run equal the ones before it.
 
 So a branch whose newest run on these files is red makes the gate red on every branch on the
@@ -138,6 +137,11 @@ same files, until a newer full run on that digest is green, and this holds after
 is removed. The row names the branch: `**PASS** (from \`task/x\`)`. `--rerun-failed` reads only
 this branch's ledger. Nothing is inferred from commits or ancestry: identical files are the
 whole test. Evidence from another clone, another machine or CI is not read.
+
+`check` is never taken from another branch. Its digest is the code tree, which leaves out
+`docs/`, `bench/`, `.github/` and every `*.md`, and `check` reads some of those (format, the
+README check, the API report, the bench typecheck). It costs under two minutes, so each branch
+runs its own.
 
 ## Reports and the ledger
 

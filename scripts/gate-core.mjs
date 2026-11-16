@@ -771,9 +771,10 @@ export function gateStateFor({
  * What a line recorded on another branch, or by another worktree, says about
  * `gate` for the tree being asked about. Stricter than a line of this branch:
  *
- *   - a full run of a merge gate, or a completion of one;
- *   - compared on the gate's own digest only (the full tree for `check`), never on
- *     a fallback, so a line written before per-gate digests never counts;
+ *   - a full run of a device gate, or a completion of one. Never `check`: it reads
+ *     docs, `bench/` and READMEs, which the code tree leaves out;
+ *   - compared on the gate's own digest only, never on a fallback, so a line
+ *     written before per-gate digests never counts;
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
  *   - not filtered: the command is the gate's own unfiltered command.
@@ -783,7 +784,8 @@ export function gateStateFor({
  */
 export function foreignVerdict({ gate, entry, tree, gateTrees }) {
   if (entry == null || entry.corrupt || entry.gate !== gate) return null;
-  if (!MERGE_GATES.includes(gate)) return null;
+  const own = deviceGateOf(gate);
+  if (own == null || !MERGE_GATES.includes(gate)) return null;
   if (entry.result !== 'pass' && entry.result !== 'fail') return null;
   if (entry.tree == null || entry.treeAfter !== entry.tree) return null;
   if (entry.completion == null) {
@@ -800,19 +802,11 @@ export function foreignVerdict({ gate, entry, tree, gateTrees }) {
   ) {
     return null;
   }
-  let key;
-  const own = deviceGateOf(gate);
-  if (own == null) {
-    if (tree == null || entry.tree !== tree) return null;
-    key = 'full';
-  } else {
-    const want = gateTrees?.[own] ?? null;
-    const got = entry.gateTrees?.[own] ?? null;
-    if (want == null || got !== want) return null;
-    if (entry.gateTreesAfter?.[own] !== got) return null;
-    key = own;
-  }
-  return { state: entry.result === 'pass' ? 'green' : 'red', key };
+  const want = gateTrees?.[own] ?? null;
+  const got = entry.gateTrees?.[own] ?? null;
+  if (want == null || got !== want) return null;
+  if (entry.gateTreesAfter?.[own] !== got) return null;
+  return { state: entry.result === 'pass' ? 'green' : 'red', key: own };
 }
 
 /**
@@ -874,8 +868,7 @@ export function gateRowFor({
       proof = { entry, ...verdict };
   }
   if (proof != null) {
-    const digest =
-      proof.key === 'full' ? tree : (gateTrees?.[proof.key] ?? null);
+    const digest = gateTrees?.[proof.key] ?? null;
     return {
       gate,
       state: proof.state,
