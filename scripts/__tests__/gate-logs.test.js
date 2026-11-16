@@ -1,5 +1,6 @@
 /* global Atomics, SharedArrayBuffer */
 
+import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
