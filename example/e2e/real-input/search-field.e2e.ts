@@ -76,6 +76,7 @@ test('a real tap on a search field brings up the keyboard and keeps the field ab
   await app.open();
   await openScreen(screen, 'searchfield');
   const field = editableField(screen, FOCUS);
+  const field = editableField(screen, 'Focus search field');
   const echo = screen.getByTestId('search-focus-echo');
   await reveal(screen, field);
 
@@ -88,4 +89,26 @@ test('a real tap on a search field brings up the keyboard and keeps the field ab
     await fieldAboveKeyboard(field);
   });
   await expect(echo).toContainText('focus: 1');
+});
+
+test('an app-side focus and blur button take the keyboard and give it back', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'searchfield');
+  const field = editableField(screen, 'Focus search field');
+  const echo = screen.getByTestId('search-focus-echo');
+  await reveal(screen, field);
+  await expect(echo).toHaveText('focus: 0 blur: 0 submitted: -');
+
+  // The same two presses on SearchField's own handle: a search screen that closes its
+  // own keyboard is an ordinary thing for an app to do, and the IME has to agree with
+  // the echo.
+  await withRealKeyboard(async () => {
+    await screen.getByTestId('search-focus-js').tap();
+    await expect(echo).toContainText('focus: 1');
+    await screen.getByTestId('search-blur-js').tap();
+    await expect(echo).toContainText('blur: 1');
+  });
 });

@@ -51,4 +51,33 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
   ).toBeGreaterThan(0.5);
   await expect(gesture).toContainText('start=1');
   await expect(gesture).toContainText('complete=1');
+
+  // The other way, from wherever the drag above left the thumb. A control that only
+  // ever reported one direction is fine until someone drags home.
+  const back = await liftIntoBand(screen, track, [value, gesture]);
+  await drag(
+    screen,
+    { x: back.x + back.width * 0.75, y: back.y + back.height / 2 },
+    { x: back.x + back.width * 0.2, y: back.y + back.height / 2 }
+  );
+  await expect(value).toHaveText(/^0\.[0-4]\d$/, 'dragging back');
+
+  // A drag the machine stretches out: the samples reach Compose seconds apart, and
+  // the thumb still has to be where the finger lifted, not where it happened to be
+  // read mid-flight.
+  const slow = await liftIntoBand(screen, track, [value, gesture]);
+  await drag(
+    screen,
+    { x: slow.x + slow.width * 0.2, y: slow.y + slow.height / 2 },
+    { x: slow.x + slow.width * 0.85, y: slow.y + slow.height / 2 },
+    3000
+  );
+  await expect(value).toHaveText(
+    /^(0\.[7-9]\d|1\.00)$/,
+    'a drag over several seconds'
+  );
+  await expect(gesture).toHaveText(
+    /start=3 complete=3/,
+    `the three drags each closed the gesture they opened`
+  );
 });
