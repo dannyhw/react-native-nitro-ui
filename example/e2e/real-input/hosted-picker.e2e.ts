@@ -20,7 +20,7 @@ async function popupsReach(count: number, why: string): Promise<void> {
     .toBe(count);
 }
 
-test('a hosted Picker opens its menu, and a row reaches JS', async ({
+test('a hosted Picker opens its menu as a window that Back takes down with no choice, and a row reaches JS', async ({
   app,
   screen,
 }) => {
@@ -36,6 +36,12 @@ test('a hosted Picker opens its menu, and a row reaches JS', async ({
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(index).toHaveText('1');
 
+  await field.tap();
+  await popupsReach(1, 'a real tap on the hosted anchor opened no window');
+  await app.back();
+  await popupsReach(0, 'Back left the hosted popup window up');
+  await expect(index).toHaveText('1');
+
   // Where the opened menu sits against the Host's box is not asserted here: Material
   // measures the room under an anchor and opens above it when there is none, so a
   // "below" comparison is only true of the branch the layout happened to take.
@@ -44,22 +50,4 @@ test('a hosted Picker opens its menu, and a row reaches JS', async ({
   await row.waitFor({ state: 'visible' });
   await row.tap();
   await expect(index).toHaveText('0');
-});
-
-test('the hosted menu is a popup window that Back takes down, and opening it is not a choice', async ({
-  app,
-  screen,
-}) => {
-  await app.open();
-  await openScreen(screen, 'host');
-  const field = screen.getByLabel(NAME);
-  const index = screen.getByTestId('host-picker-index');
-  await reveal(screen, field, { reads: [index] });
-  await expect(index).toHaveText('1');
-
-  await field.tap();
-  await popupsReach(1, 'a real tap on the hosted anchor opened no window');
-  await app.back();
-  await popupsReach(0, 'Back left the hosted popup window up');
-  await expect(index).toHaveText('1');
 });

@@ -136,7 +136,7 @@ test('the menu is a popup window: Back closes it, and the row already chosen clo
   await expect(events).toHaveText('0');
 });
 
-test("the radio group's rows are the control: a real tap picks one, opens no window, and only that row says checked", async ({
+test('a real tap picks one radio row, opens no window and checks only that row; a disabled Picker refuses the tap its enabled twin answers', async ({
   app,
   screen,
 }) => {
@@ -168,30 +168,26 @@ test("the radio group's rows are the control: a real tap picks one, opens no win
     await locked.getByText('Peridot').boundingBox(),
     'the disabled group draws no "Peridot" row to aim at'
   ).not.toBeNull();
-});
 
-test('a real tap on the disabled Picker opens nothing where the enabled one opens a window, and each is one node', async ({
-  app,
-  screen,
-}) => {
-  await app.open();
-  await openScreen(screen, 'picker');
+  // The menu pair sits just below the radio groups, so short drags reach it.
   const lockedName = 'Real-input disabled picker';
   const enabledName = 'Real-input enabled picker';
-  const locked = screen.getByLabel(lockedName);
+  const lockedMenu = screen.getByLabel(lockedName);
   const enabled = screen.getByLabel(enabledName);
-  await reveal(screen, locked, { reads: [enabled] });
+  const lockedBox = await liftIntoBand(screen, lockedMenu);
   await actsOnOneNamedNode(screen, { name: lockedName, state: 'disabled' });
 
-  await locked.tap();
+  await screen.tapAt({
+    x: lockedBox.x + lockedBox.width / 2,
+    y: lockedBox.y + lockedBox.height / 2,
+  });
   await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));
   expect(
     popupWindowCount(),
     'a tap on the disabled Picker opened a window'
   ).toBe(0);
 
-  // The same tap on the enabled twin is what makes the line above a refusal. The
-  // reveal parks the disabled one; its twin below can be left at the band's edge.
+  // The same tap on the enabled twin is what makes the line above a refusal.
   const twin = await liftIntoBand(screen, enabled);
   await screen.tapAt({
     x: twin.x + twin.width / 2,
