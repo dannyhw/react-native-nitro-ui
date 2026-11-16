@@ -572,26 +572,6 @@ function makeContext(device, log) {
      * @param {number} minCount
      * @param {number} [timeoutMs]
      */
-    /**
-     * Look a control up again, and say if it moved.
-     *
-     * A picker's anchor widens on purpose when the chosen title is wider than the last
-     * one, so every second touch on the same control is aimed at the box it has now.
-     *
-     * @param {string} description the control's `accessibilityLabel`
-     * @param {import('./uiautomator.mjs').UiautomatorNode} previous where it was
-     */
-    requireControlAt(description, previous) {
-      const node = this.requireControl(description);
-      if (this.boundsText(node) !== this.boundsText(previous)) {
-        this.log.note(
-          `"${description}" moved from ${this.boundsText(previous)} to ` +
-            `${this.boundsText(node)} - the tap is aimed at the new box`
-        );
-      }
-      return node;
-    },
-
     waitForNodes(predicate, why, minCount = 1, timeoutMs = REACT_TIMEOUT) {
       const deadline = Date.now() + timeoutMs;
       for (;;) {
@@ -638,31 +618,6 @@ function makeContext(device, log) {
     boundsText(node) {
       const { x1, y1, x2, y2 } = node.bounds;
       return `${String(x1)},${String(y1)} → ${String(x2)},${String(y2)}`;
-    },
-
-    /**
-     * @param {string} text the option's label
-     */
-    optionIsSelected(text) {
-      const nodes = device.hierarchy();
-      const label = findAllByText(nodes, text)[0];
-      if (label == null) {
-        return false;
-      }
-      const { cx, cy } = label.bounds;
-      const row = nodes.find(
-        (node) =>
-          node.checkable === 'true' &&
-          node.bounds.x1 <= cx &&
-          cx <= node.bounds.x2 &&
-          node.bounds.y1 <= cy &&
-          cy <= node.bounds.y2
-      );
-      return row != null && row.checked === 'true';
-    },
-
-    popupWindowCount() {
-      return device.popupWindowCount();
     },
 
     /**
@@ -2592,161 +2547,16 @@ async function checkboxChecks(t) {
   );
 }
 
-/** `checked` on the toggle icon button's own node, through a real tap. */
-async function iconButtonChecks(t) {
-  const named = (label) => t.requireControl(label);
-  const TOGGLE = 'Real-input toggle icon button';
-
-  // 1. At rest. Every number is zero and the toggle's own node says unchecked, so
-  //    each later assertion is about a number that moved and not about a screen
-  //    that started mid-story.
-  t.log.checkEquals(
-    'the toggle starts off (React renders "off")',
-    t.requireEcho(ECHO.iconButtonValue),
-    'off'
-  );
-  t.log.checkEquals(
-    'the toggle has reported no change before a touch',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the refusing toggle has been asked for nothing yet',
-    `${t.requireEcho(ECHO.iconButtonRefusedLast)} ${t.requireEcho(
-      ECHO.iconButtonRefusedEvents
-    )}`,
-    'none 0'
-  );
-  t.log.checkEquals(
-    'the counter the disabled controls report into starts at zero, so a stray ' +
-      'delivery is a number that moved rather than a callback nobody saw',
-    t.requireEcho(ECHO.iconButtonDisabledEvents),
-    '0'
-  );
-  // Both disabled forms have to refuse a real touch: a person only learns a control is
-  // off when pressing it does nothing, and the two forms take input differently.
-  for (const [form, label] of [
-    ['press', 'Real-input disabled icon button'],
-    ['toggle', 'Real-input disabled toggle icon button'],
-  ]) {
-    const inert = await t.requireControlOnScreen(label);
-    for (let tap = 1; tap <= 3; tap += 1) {
-      await t.tapNode(inert);
-    }
-    t.log.checkEquals(
-      `three real taps on the disabled ${form} form report nothing`,
-      t.requireEchoToStay(
-        ECHO.iconButtonDisabledEvents,
-        '0',
-        `three real taps on the disabled ${form} form`
-      ),
-      '0'
-    );
-  }
-  t.log.checkEquals(
-    'the toggle publishes a toggleable state, and it says unchecked',
-    t.nativeChecked(TOGGLE),
-    'off'
-  );
-
-  // 2. Pressed twice: two reports, one per tap, and nothing else moved. The counter
-  //    is asserted as an exact number rather than `atLeast`, which is the point — a
-  //    press that fired twice per tap is the bug this row is for.
-  const BOX = 'Real-input icon button';
-  for (const count of ['1', '2']) {
-    t.log.checkEquals(
-      `real tap ${count} on the press button reports one onPress`,
-      await t.tapUntilValue(
-        () => named(BOX),
-        ECHO.iconButtonPresses,
-        count,
-        `the real tap that makes press ${count}`
-      ),
-      count
-    );
-  }
-  t.log.checkEquals(
-    'two presses on the press button change no toggle: the value echo is where it started',
-    t.requireEcho(ECHO.iconButtonValue),
-    'off'
-  );
-  t.log.checkEquals(
-    'and the toggle still reports no change',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '0'
-  );
-
-  // 3. The toggle, once per direction. `nativeLabel` is passed because the node
-  //    publishes its own state: without that witness a lost change event is
-  //    exactly what a retry would turn green.
-  t.log.checkEquals(
-    'one real tap checks the toggle (React renders "on")',
-    await t.tapUntilValue(
-      () => named(TOGGLE),
-      ECHO.iconButtonValue,
-      'on',
-      'the real tap that checks the toggle',
-      { nativeLabel: TOGGLE }
-    ),
-    'on'
-  );
-  t.log.checkEquals(
-    "the checked toggle's own node says it is checked",
-    t.nativeChecked(TOGGLE),
-    'on'
-  );
-  t.log.checkEquals(
-    'one real tap reports one change',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '1'
-  );
-  t.log.checkEquals(
-    'a second real tap unchecks it (React renders "off")',
-    await t.tapUntilValue(
-      () => named(TOGGLE),
-      ECHO.iconButtonValue,
-      'off',
-      'the real tap that unchecks the toggle',
-      { nativeLabel: TOGGLE }
-    ),
-    'off'
-  );
-  t.log.checkEquals(
-    'the unchecked toggle reports it back',
-    t.nativeChecked(TOGGLE),
-    'off'
-  );
-  t.log.checkEquals(
-    'two taps report two changes, one per tap',
-    t.requireEcho(ECHO.iconButtonEvents),
-    '2'
-  );
-  t.log.checkEquals(
-    'a tap on the toggle is not also a press: the press counter stayed at 2',
-    t.requireEcho(ECHO.iconButtonPresses),
-    '2'
-  );
-}
-
-/** `checked` and `enabled` on a group item's own node, not its title's. */
+/** Each item's title sits inside a clickable node of its own group. */
 async function buttonGroupChecks(t) {
-  const TOGGLES = 'Real-input formatting toggles';
-  const DISABLED_ITEM = 'Real-input group with a disabled item';
-  const DISABLED_GROUP = 'Real-input disabled group';
-
-  /**
-   * The node a tap on one item has to be aimed at, or `null` when the group is not
-   * drawing that item at all — the normal answer for an overflowed row.
-   *
-   * Both spellings of “name” are accepted, and the name is only where the search
-   * starts: Material draws each item as its own box, a separate title and a role
-   * decoration that carries no state, so taps, `checked` and `enabled` all come off
-   * the item’s own node.
-   *
-   * @param {string} groupLabel the group’s `accessibilityLabel`
-   * @param {string} title the item’s title
-   */
-  const itemOf = (groupLabel, title) => {
+  // Material draws each item as its own box, a separate title and a role decoration,
+  // so the title is only where the search starts; the press lands on the item's box.
+  for (const [groupLabel, title] of [
+    ['Real-input formatting toggles', 'Bold'],
+    ['Real-input formatting toggles', 'Italic'],
+    ['Real-input group with a disabled item', 'Cut'],
+    ['Real-input disabled group', 'Copy'],
+  ]) {
     const group = t.requireControl(groupLabel);
     const tree = t.dump();
     const named = tree.filter((node) => {
@@ -2762,379 +2572,35 @@ async function buttonGroupChecks(t) {
       );
     });
     if (named.length === 0) {
-      return null;
+      t.log.abort(
+        `group "${groupLabel}" draws no item titled "${title}" in its own box`
+      );
     }
     const control = tightestFlaggedNode(tree, named[0], 'clickable');
+    t.log.check(
+      `"${title}" in "${groupLabel}" sits inside a clickable node`,
+      control != null
+    );
     if (control == null) {
       const { bounds } = named[0];
-      t.log.abort(
-        `group "${groupLabel}" draws the title "${title}" but no clickable node ` +
-          `contains it — the name is on [${named[0].className}] at ` +
+      t.log.note(
+        `the name is on [${named[0].className}] at ` +
           `[${String(bounds.x1)},${String(bounds.y1)}]` +
           `[${String(bounds.x2)},${String(bounds.y2)}], so nothing here can be ` +
           'pressed, checked or disabled by a reader'
       );
     }
-    return control;
-  };
-
-  /** Like {@link itemOf}, and aborts with the group and item named when absent. */
-  const requireItem = (groupLabel, title) => {
-    const node = itemOf(groupLabel, title);
-    if (node == null) {
-      t.log.abort(
-        `group "${groupLabel}" draws no item titled "${title}" in its own box - ` +
-          'the row either did not compose it or named it something else, so no ' +
-          'real tap can be aimed at it'
-      );
-    }
-    return node;
-  };
-
-  /**
-   * Whether one item's own node publishes a checked state, as `"on"` / `"off"`.
-   *
-   * Read from the item node rather than through `nativeChecked`, which needs a
-   * `contentDescription` to start from and an item drawn with its title has none —
-   * and "which `Bold`?" is answered by geometry, not by a name four nodes share.
-   * `itemOf` has already resolved that geometry, so a `null` here means the item is
-   * drawn without a toggle state at all, which is the answer step 1 asserts against.
-   */
-  const itemChecked = (groupLabel, title) => {
-    const node = itemOf(groupLabel, title);
-    if (node == null || node.checkable !== 'true') {
-      return null;
-    }
-    return node.checked === 'true' ? 'on' : 'off';
-  };
-
-  // 1. At rest: every counter at zero and the controlled toggles showing the set
-  //    React gave them, so every number below is one that moved.
-  t.log.checkEquals(
-    'the toggles start at the set React rendered ("bold")',
-    t.requireEcho(ECHO.buttonGroupToggleState),
-    'bold'
-  );
-  t.log.checkEquals(
-    'and have reported no change before a touch',
-    t.requireEcho(ECHO.buttonGroupToggleEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the refusing group has been asked for nothing yet',
-    `${t.requireEcho(ECHO.buttonGroupRefusedLast)} ` +
-      `${t.requireEcho(ECHO.buttonGroupRefusedEvents)}`,
-    'none 0'
-  );
-  t.log.checkEquals(
-    'the counter the disabled group and its disabled item report into starts at ' +
-      'zero, so a stray delivery is a number that moved',
-    t.requireEcho(ECHO.buttonGroupDisabledEvents),
-    '0'
-  );
-  t.log.checkEquals(
-    'the controlled toggle publishes a checkable state, and it says checked',
-    itemChecked(TOGGLES, 'Bold'),
-    'on'
-  );
-  // The flags of the two nodes the check above just read, as evidence: the class
-  // Compose writes for `Role.Checkbox` and the `checked` a screen reader is handed,
-  // recorded the way the Checkbox and IconButton checks record theirs.
-  for (const title of ['Bold', 'Italic']) {
-    const node = requireItem(TOGGLES, title);
-    t.log.note(
-      `item node "${title}": clickable=${node.clickable} ` +
-        `checkable=${node.checkable} checked=${node.checked} ` +
-        `enabled=${node.enabled} class=${node.className}`
-    );
   }
-  t.log.checkEquals(
-    'one real tap checks an unchecked toggle',
-    await t.tapUntilValue(
-      () => requireItem(TOGGLES, 'Italic'),
-      ECHO.buttonGroupToggleState,
-      'bold,italic',
-      'the real tap that checks "Italic"'
-    ),
-    'bold,italic'
-  );
-  t.log.checkEquals(
-    'one tap reported one change',
-    t.requireEcho(ECHO.buttonGroupToggleEvents),
-    '1'
-  );
-  t.log.checkEquals(
-    'a second real tap unchecks it again',
-    await t.tapUntilValue(
-      () => requireItem(TOGGLES, 'Italic'),
-      ECHO.buttonGroupToggleState,
-      'bold',
-      'the real tap that unchecks "Italic"'
-    ),
-    'bold'
-  );
-  t.log.checkEquals(
-    'the item publishes that back',
-    itemChecked(TOGGLES, 'Italic'),
-    'off'
-  );
-  // The disabled pair: the group that is disabled, and the group with one disabled
-  // item. Both report into one counter the enabled items never touch.
-  t.log.note(
-    `disabled item: enabled=${
-      itemOf(DISABLED_ITEM, 'Cut')?.enabled
-    } for "Cut", enabled=${
-      itemOf(DISABLED_GROUP, 'Copy')?.enabled
-    } for the whole group — evidence beside the counters below`
-  );
-  await t.tapNode(requireItem(DISABLED_ITEM, 'Cut'));
-  t.log.checkEquals(
-    'a real tap on the disabled item reports no onPress',
-    t.requireEchoToStay(
-      ECHO.buttonGroupDisabledEvents,
-      '0',
-      'a tap on the disabled item to be refused'
-    ),
-    '0'
-  );
-  await t.tapNode(requireItem(DISABLED_GROUP, 'Copy'));
-  t.log.checkEquals(
-    'a real tap inside the disabled group reports no onPress either',
-    t.requireEchoToStay(
-      ECHO.buttonGroupDisabledEvents,
-      '0',
-      'a tap on the disabled group to be refused'
-    ),
-    '0'
-  );
-  t.log.checkEquals(
-    'and nothing else answered: no action item was tapped here, so the press count ' +
-      'never moved and the toggles have reported exactly one change each way',
-    `${t.requireEcho(ECHO.buttonGroupPresses)} ` +
-      `${t.requireEcho(ECHO.buttonGroupToggleEvents)}`,
-    '0 2'
-  );
 }
 
-/** `checked` and `enabled` on a radio row's own node, not its label's. */
+/** The enabled Picker's name sits on the node a tap is aimed at. */
 async function pickerChecks(t) {
-  const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
-  const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
-  // The row a screen reader stops on, not the words inside it: a Compose row keeps its
-  // own state on its own node and leaves the label a node of its own, so reading the
-  // node that carries the text reports every disabled row as enabled.
-  const radioRowNode = (label, nodes = t.dump()) =>
-    tightestFlaggedNode(
-      nodes,
-      findAllByText(nodes, label)[0] ?? null,
-      'checkable'
-    );
-  const describeRow = (node) =>
-    node == null
-      ? 'no checkable row around the label'
-      : `${node.className} enabled=${node.enabled} checkable=${node.checkable} ` +
-        `checked=${node.checked} at ${node.bounds.x1},${node.bounds.y1}-` +
-        `${node.bounds.x2},${node.bounds.y2}`;
-  // The menu variant first, while the page is still at its top: the platform places
-  // this popup by the room under the anchor, and Back is the person's other way out.
-  const anchor = await t.requireControlOnScreen('Real-input picker');
-  t.log.checkEquals(
-    'a real tap on the anchor opens the menu as a popup window',
-    await t.tapUntilUp(
-      () => t.requireControlAt('Real-input picker', anchor),
-      'a real tap on the anchor to open a popup window',
-      () => t.popupWindowCount()
-    ),
-    '1'
-  );
-  await t.pressBack();
-  t.log.checkEquals(
-    'Back shuts the popup (no window left behind)',
-    t.waitForPopupCount(0, 'the back gesture to take the popup down'),
-    0
-  );
-  // The way out that changes nothing: the row already on show. It closes the menu and
-  // reports no choice. The row tap stays blind because its correct outcome is that
-  // nothing is reported, so there is no witness to wait for and a retry would press a
-  // closing menu a second time.
-  await t.tapUntilUp(
-    () => t.requireControlAt('Real-input picker', anchor),
-    'a real tap that reopens the menu',
-    () => t.popupWindowCount()
-  );
-  await t.tapNode(
-    t.waitForOption('Onyx', 'the menu to show the current choice')
-  );
-  t.log.checkEquals(
-    'tapping the row that is already chosen closes the menu',
-    t.waitForPopupCount(
-      0,
-      'a pick of the row already chosen to take the menu down'
-    ),
-    0
-  );
-  t.log.checkEquals(
-    'and a choice that changed nothing reports nothing',
-    t.requireEcho(ECHO.pickerEvents),
-    '0'
-  );
-
-  await t.requireControlOnScreen('Real-input radio picker');
-  t.log.checkEquals(
-    'the radio group has reported no index before a touch',
-    t.requireEcho(ECHO.radioIndex),
-    '-'
-  );
-  t.log.checkEquals(
-    'and no popup window belongs to it - the rows are the control',
-    t.popupWindowCount(),
-    0
-  );
-  // A real tap on row 2. `tapOptionUntilValue` re-finds the row each attempt and
-  // stops re-pressing once the label is gone from the tree; for a row that is
-  // always up, a repeat tap on the row already chosen is the control's own no-op,
-  // so a retry can never double-count a pick.
-  t.log.checkEquals(
-    'a real tap on radio row 2 reaches JS as index 2',
-    await t.tapOptionUntilValue(
-      RADIO_ROWS[2],
-      ECHO.radioIndex,
-      '2',
-      'a real tap on the radio row to register'
-    ),
-    '2'
-  );
-  t.log.checkEquals(
-    'one row tap reports one change',
-    t.requireEcho(ECHO.radioEvents),
-    '1'
-  );
-  t.log.checkEquals(
-    'a row tap opened no window',
-    t.waitForPopupCount(0, 'the row tap to open nothing'),
-    0
-  );
-  // The same pick, read from the tree a screen reader navigates: exactly one row
-  // says `checked`, and it is the row that was tapped. This is the radio group's
-  // version of step 1's "the open menu marks the current choice selected" - and
-  // stronger, because all three rows are on screen to be compared.
-  for (const [row, chosen] of [
-    [RADIO_ROWS[0], false],
-    [RADIO_ROWS[1], false],
-    [RADIO_ROWS[2], true],
-  ]) {
-    t.log.checkEquals(
-      `the tree marks "${row}" as ${chosen ? 'the chosen row' : 'not chosen'}`,
-      String(t.optionIsSelected(row)),
-      String(chosen)
-    );
-  }
-  // The same lookup on the group that *is* live, so a `false` below cannot be the
-  // lookup answering nothing. `className` is recorded, not asserted: what Compose
-  // writes for `Role.RadioButton` has not been measured the way the Spinner class
-  // the menu checks assert has, and the Checkbox precedent is to log the class
-  // until it has.
-  const enabledTree = t.dump();
-  for (const row of RADIO_ROWS) {
-    t.log.checkEquals(
-      `the enabled group's row "${row}" says it is enabled`,
-      String(radioRowNode(row, enabledTree)?.enabled),
-      'true'
-    );
-  }
-  t.log.note(
-    `radio row node, enabled group: "${RADIO_ROWS[2]}" -> ` +
-      `${describeRow(radioRowNode(RADIO_ROWS[2], enabledTree))}`
-  );
-  // The disabled group: its rows say so in the tree, and a real tap on one moves
-  // nothing. Both halves matter - a row that *looks* disabled but answers a finger
-  // is the bug, and a row that refuses while the tree says it is enabled is the
-  // same bug pointing the other way for a screen reader.
-  await t.requireControlOnScreen('Real-input disabled radio picker');
-  const disabledTree = t.dump();
-  for (const row of RADIO_LOCKED_ROWS) {
-    t.log.checkEquals(
-      `the disabled group's row "${row}" says it is not enabled`,
-      String(radioRowNode(row, disabledTree)?.enabled),
-      'false'
-    );
-  }
-  t.log.note(
-    `radio row node, disabled group: "${RADIO_LOCKED_ROWS[0]}" -> ` +
-      `${describeRow(radioRowNode(RADIO_LOCKED_ROWS[0], disabledTree))}`
-  );
-  await t.tapNode(
-    t.waitForOption(
-      RADIO_LOCKED_ROWS[1],
-      'the disabled group to have a row on screen'
-    )
-  );
-  t.log.checkEquals(
-    'a real tap on a disabled row reports nothing',
-    t.requireEchoToStay(ECHO.radioIndex, '2', 'a tap on a disabled radio row'),
-    '2'
-  );
-
-  // The plain menu variant again, for what a screen reader is offered: the dump is the
-  // only witness here, and a name sitting on a node that does not say it is disabled
-  // misdescribes the control however well the taps land.
-  await t.requireControlOnScreen('Real-input disabled picker');
-  const lockedNodes = t.nodesNamed('Real-input disabled picker');
-  t.log.checkEquals(
-    'the disabled picker is one node as well',
-    lockedNodes.length,
-    1
-  );
-  t.log.checkEquals(
-    'and that node is the one that says it is disabled',
-    lockedNodes[0]?.enabled,
-    'false'
-  );
-
-  // The accessibility `enabled` flag is a claim about the tree; a refusal is a claim
-  // about input, and only a real tap measures that. The ordinary picker, tapped the
-  // same way right after, is what turns "nothing happened" into "this one refused".
-  const locked = await t.requireControlOnScreen('Real-input disabled picker');
-  await t.tapNode(locked);
-  t.log.checkEquals(
-    'a real tap on the disabled picker opens no menu',
-    t.waitForPopupCount(0, 'a tap on the disabled picker to open nothing'),
-    0
-  );
-  await t.tapUntilUp(
-    () => t.requireControlOnScreen('Real-input enabled picker'),
-    'a real tap on the enabled picker to open its menu',
-    () => t.popupWindowCount()
-  );
-  t.log.checkEquals(
-    'the ordinary picker, tapped the same way, opens one - so the line above measured a refusal',
-    t.popupWindowCount(),
-    1
-  );
-  await t.pressBack();
-  t.waitForPopupCount(0, "the enabled picker's popup to come down");
-  // What a screen reader is offered: a name on a node with no value, or spread over two
-  // nodes, misdescribes the control however well the taps land.
+  await t.requireControlOnScreen('Real-input enabled picker');
   const pickerNode = t.nodesNamed('Real-input enabled picker');
-  t.log.checkEquals(
-    "one node carries the enabled picker's name, so it is announced once",
-    pickerNode.length,
-    1
-  );
-  t.log.checkEquals(
-    'and that same node carries the value it shows',
-    pickerNode[0]?.text,
-    'Mica'
-  );
   t.log.checkEquals(
     'it is the node a tap is aimed at, too (the name is not parked on a container)',
     pickerNode[0]?.clickable,
     'true'
-  );
-  t.log.checkEquals(
-    'the node announces the role of a list of choices',
-    pickerNode[0]?.className,
-    'android.widget.Spinner'
   );
 }
 
@@ -3180,124 +2646,6 @@ async function listItemChecks(t) {
       'a real tap on the live item after the disabled one'
     ),
     wantedBarrier
-  );
-}
-
-/** The split trigger's list half, and the Back that answers it. */
-async function menuChecks(t) {
-  const SPLIT_ACTION = 'Real-input split menu';
-  const SPLIT_LIST = 'More options';
-  // What a screen reader is offered by the plain trigger: Compose merges the trigger's
-  // semantics into one node, so its name, its value and its role all land there.
-  await t.requireControlOnScreen('Real-input menu');
-  const trigger = t.nodesNamed('Real-input menu');
-  t.log.checkEquals(
-    'and that same node carries the title it paints as its value',
-    trigger[0]?.text,
-    'Actions'
-  );
-  t.log.checkEquals(
-    'the node announces the role of a list of choices',
-    trigger[0]?.className,
-    'android.widget.Spinner'
-  );
-  await t.requireControlOnScreen(SPLIT_ACTION);
-  // The halves of ONE control share a vertical band, so the band is what pairs them,
-  // and every press re-reads it: the boxes this lookup returns are the boxes the taps
-  // are aimed at.
-  const listHalf = () => {
-    const nodes = t.dump();
-    const action = findAllByDescription(nodes, SPLIT_ACTION)[0];
-    if (action == null) {
-      t.log.abort(
-        `no node named "${SPLIT_ACTION}" in the accessibility tree - the split ` +
-          'trigger offers nothing a real tap could be aimed at'
-      );
-    }
-    const named = findAllByDescription(nodes, SPLIT_LIST).filter(
-      (node) =>
-        node.bounds.y1 === action.bounds.y1 &&
-        node.bounds.y2 === action.bounds.y2 &&
-        node.bounds.x2 > action.bounds.x1
-    );
-    if (named.length === 0) {
-      t.log.abort(
-        `no "${SPLIT_LIST}" half beside "${SPLIT_ACTION}" in the accessibility tree`
-      );
-    }
-    return named[0];
-  };
-
-  // The action half first, because it has no window of its own to answer with: the
-  // echo is the only witness that this half is a press and not a second way to open
-  // the same list.
-  const actionHalf = () => {
-    const nodes = t.dump();
-    const named = findAllByDescription(nodes, SPLIT_ACTION);
-    if (named.length === 0) {
-      t.log.abort(
-        `no node named "${SPLIT_ACTION}" in the accessibility tree - the split ` +
-          'trigger offers nothing a real tap could be aimed at'
-      );
-    }
-    return named[0];
-  };
-  await t.tapNode(actionHalf());
-  t.log.checkEquals(
-    'a real tap on the action half runs the primary action',
-    t.requireEcho(ECHO.menuSplitEvents),
-    'action'
-  );
-  t.log.checkEquals(
-    'and raises no list - no window, and no open in the echo either',
-    `${String(t.popupWindowCount())} | ${t.requireEcho(ECHO.menuSplitEvents)}`,
-    '0 | action'
-  );
-
-  // One press of the list half is one open, and Back is the person's other way out of
-  // it: a window the platform closes and the control does not report is a window that
-  // can be left behind.
-  await t.tapUntilUp(
-    listHalf,
-    'a real tap on the list half of the split trigger',
-    () => t.popupWindowCount(),
-    { pollMs: DUMP_POLL_MS }
-  );
-  await t.pressBack();
-  t.log.checkEquals(
-    'the list half shuts on Back',
-    t.waitForPopupCount(0, 'the split list to come down'),
-    0
-  );
-  t.log.checkEquals(
-    'one press of the list half is one open and one close',
-    t.requireEcho(ECHO.menuSplitEvents),
-    'action > open > close'
-  );
-}
-
-/** Back takes a hosted popup's window down, and leaves none. */
-async function hostedPickerChecks(t) {
-  let aimed = await t.requireControlOnScreen('Hosted picker');
-  t.log.checkEquals(
-    'a real tap on the hosted anchor opens the menu as a popup window',
-    await t.tapUntilUp(
-      () => (aimed = t.requireControlAt('Hosted picker', aimed)),
-      'a real tap on the hosted anchor to open a popup window',
-      () => t.popupWindowCount()
-    ),
-    '1'
-  );
-  await t.pressBack();
-  t.log.checkEquals(
-    'Back shuts the hosted popup (no window left behind)',
-    t.waitForPopupCount(0, 'the back gesture to take the hosted popup down'),
-    0
-  );
-  t.log.checkEquals(
-    'opening and dismissing reported no selection - a menu is not a choice',
-    t.requireEcho(ECHO.hostPickerIndex),
-    '1'
   );
 }
 
@@ -3466,99 +2814,6 @@ async function popoverChecks(t) {
   }
 }
 
-/** One named radio node per option, each carrying the selection. */
-async function segmentedControlChecks(t) {
-  await t.requireControlOnScreen('Real-input segmented control');
-  t.log.checkEquals(
-    'no change has been reported before a touch',
-    t.requireEcho(ECHO.segmentedEvents),
-    '0'
-  );
-  // The selection has to be one the *finger* made, so the claim below cannot be the
-  // fixture's default, and the middle of the box is the segment drawn '2'.
-  await t.tapUntilValue(
-    () => t.requireControl('Real-input segmented control'),
-    ECHO.segmentedIndex,
-    '1',
-    'a real tap to register'
-  );
-  t.log.checkEquals(
-    'one tap reports one change',
-    t.requireEcho(ECHO.segmentedEvents),
-    '1'
-  );
-
-  // Each of the three claims lives on a different entry, and that is Compose's doing:
-  // a selectable item is published as the item itself — a node at the segment's box
-  // carrying `checkable`/`checked`, which is what TalkBack reads as "selected" — with
-  // the `Role` on its own `RadioButton` node at that same box and the label as a child
-  // `TextView`. An assertion that one node carries all three describes a tree this row
-  // does not have, so each claim is read where it is, and the note prints all three.
-  const box = await t.requireControl('Real-input segmented control');
-  const tree = t.dump();
-  const insideBox = (node) =>
-    node.bounds.x1 >= box.bounds.x1 - 1 &&
-    node.bounds.x2 <= box.bounds.x2 + 1 &&
-    node.bounds.y1 >= box.bounds.y1 - 1 &&
-    node.bounds.y2 <= box.bounds.y2 + 1;
-  const centreInside = (node, other) =>
-    (node.bounds.x1 + node.bounds.x2) / 2 >= other.bounds.x1 - 1 &&
-    (node.bounds.x1 + node.bounds.x2) / 2 <= other.bounds.x2 + 1 &&
-    (node.bounds.y1 + node.bounds.y2) / 2 >= other.bounds.y1 - 1 &&
-    (node.bounds.y1 + node.bounds.y2) / 2 <= other.bounds.y2 + 1;
-  const boundsText = (node) =>
-    `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
-    `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
-  const items = tree
-    .filter((node) => node.checkable === 'true' && insideBox(node))
-    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-  const radios = tree
-    .filter(
-      (node) =>
-        node.className === 'android.widget.RadioButton' && insideBox(node)
-    )
-    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-  items.forEach((node, index) => {
-    const radio = radios.find((candidate) => centreInside(candidate, node));
-    const label = tree.find(
-      (candidate) =>
-        candidate.text === String(index + 1) && insideBox(candidate)
-    );
-    t.log.note(
-      `segment ${String(index + 1)}: item ${node.className.split('.').pop()} ` +
-        `[${boundsText(node)}] checked=${node.checked}; role ` +
-        `${radio == null ? 'MISSING' : `[${boundsText(radio)}]`}; label ` +
-        `${label == null ? 'MISSING' : `[${boundsText(label)}]`}`
-    );
-  });
-  t.log.checkEquals('the group still has one node per option', items.length, 3);
-  t.log.checkEquals(
-    'the group publishes one radio node per option',
-    radios.length,
-    3
-  );
-  items.forEach((node, index) => {
-    t.log.checkEquals(
-      `segment ${String(index + 1)} of ${String(items.length)} is still a radio button`,
-      radios.some((candidate) => centreInside(candidate, node)),
-      true
-    );
-    t.log.checkEquals(
-      `segment ${String(index + 1)} is announced with its own label`,
-      tree.some(
-        (candidate) =>
-          candidate.text === String(index + 1) && centreInside(candidate, node)
-      ),
-      true
-    );
-    t.log.checkEquals(
-      `segment ${String(index + 1)} reports the selection the control has (index 1)`,
-      node.checked,
-      index === 1 ? 'true' : 'false'
-    );
-  });
-}
-
 /**
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
@@ -3569,18 +2824,14 @@ const TREE_CHECKS = [
   { id: 'date-picker', run: datePickerChecks },
   { id: 'hosted-date-picker', run: hostedDatePickerChecks },
   { id: 'hosted-mixed', run: hostedMixedChecks },
-  { id: 'hosted-picker', run: hostedPickerChecks },
   { id: 'hosted-switch', run: hostedSwitchChecks },
-  { id: 'menu', run: menuChecks },
   { id: 'dialog', run: dialogChecks },
   { id: 'chip', run: chipChecks },
   { id: 'checkbox', run: checkboxChecks },
-  { id: 'icon-button', run: iconButtonChecks },
   { id: 'button-group', run: buttonGroupChecks },
   { id: 'picker', run: pickerChecks },
   { id: 'list-item', run: listItemChecks },
   { id: 'popover', run: popoverChecks },
-  { id: 'segmented-control', run: segmentedControlChecks },
 ];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */

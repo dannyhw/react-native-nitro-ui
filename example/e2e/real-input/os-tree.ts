@@ -269,10 +269,11 @@ export interface TextFacts {
  * The state facts for one item of a group, named by its title.
  *
  * A merged Material row draws the item’s box, a separate title, and a role decoration
- * that carries no state, so the title is resolved through the group’s box first.
+ * that carries no state, so the title is resolved through the group’s box first. The
+ * tree is the unmerged one, so the item is the node the platform itself publishes.
  */
 export function factsForItem(groupLabel: string, title: string): TextFacts {
-  const nodes = tree();
+  const nodes = tree({ unmerged: true });
   const group = namedNodesIn(nodes, groupLabel)[0];
   if (group == null) {
     return {
