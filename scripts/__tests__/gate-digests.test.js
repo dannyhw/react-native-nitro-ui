@@ -358,7 +358,14 @@ const inApp = (file) =>
 function namesExcluded(literal, excludedFiles) {
   const text = literal.replace(/\\/g, '/');
   // A sentence that mentions a file is a message, not a path anything opens.
-  if (!text.includes('/') || !/^[\w./@-]+$/.test(text)) return null;
+  if (!/^[\w./@-]+$/.test(text)) return null;
+  if (!text.includes('/')) {
+    // A bare file name, as `path.join(dir, 'rn-harness.config.mjs')` spells it.
+    if (!/\.\w+$/.test(text)) return null;
+    return (
+      excludedFiles.find((file) => path.posix.basename(file) === text) ?? null
+    );
+  }
   return (
     excludedFiles.find(
       (file) =>
