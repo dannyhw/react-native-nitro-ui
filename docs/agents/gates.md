@@ -122,20 +122,22 @@ missing.
 
 Each ledger line is also appended to `<git-common-dir>/nitro-ui-gate-evidence/<branch>.jsonl`.
 Every worktree of the clone reads it, and removing or pruning a worktree leaves it in place.
-`need`, `status` and `table` take a gate as green from it when this branch has no line of its
-own that decides the gate on the current digest, and the line is:
 
-- a pass of the full gate, or a completion of one (shown as completed); a filtered run and a
-  red run never count, and a red run elsewhere never makes a row red;
+This branch's own lines decide first: a green or red line of this branch on the current digest
+is the answer. When there is none, the newest line in the clone-wide record, from any branch
+including this one, that is all of these decides, green or red:
+
+- a full run of the gate, or a completion of one (shown as completed); a filtered run never
+  counts;
 - on the gate's own digest equal to the current one (`check`: the full code tree), with no
   fallback to the platform half, so a line written before per-gate digests never counts;
 - unmoved: the tree and the gate's digest read after the run equal the ones before it.
 
-The row names the branch: `**PASS** (from \`task/x\`)`. A line of this branch still comes
-first, so a red run here on the current digest is not hidden by a green one from elsewhere.
-`--rerun-failed` reads only this branch's ledger. Nothing is inferred from commits or
-ancestry: identical files are the whole test. Evidence from another clone, another machine or
-CI is not read.
+So a branch whose newest run on these files is red makes the gate red on every branch on the
+same files, until a newer full run on that digest is green, and this holds after its worktree
+is removed. The row names the branch: `**PASS** (from \`task/x\`)`. `--rerun-failed` reads only
+this branch's ledger. Nothing is inferred from commits or ancestry: identical files are the
+whole test. Evidence from another clone, another machine or CI is not read.
 
 ## Reports and the ledger
 

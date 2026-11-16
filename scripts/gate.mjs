@@ -19,9 +19,9 @@
  * Each run appends one JSON line to `.gates/<branch>.jsonl`, copies it to
  * `<git-common-dir>/nitro-ui-gate-evidence/<branch>.jsonl` and writes its log to
  * `<git-common-dir>/nitro-ui-gates/<branch>/`; both outlive the worktree.
- * `status`, `need` and `table` accept a full green run from that clone-wide
- * record when its digest for the gate is the current one, and this branch has
- * no line of its own on that digest.
+ * When this branch has no line of its own that decides a gate on the current
+ * digest, `status`, `need` and `table` take the newest full run on that digest
+ * from the clone-wide record, green or red.
  *
  * Exit codes: a gate run and `wait` exit with the gate's own code; 1 for a gate
  * refused before the run or an unmet `need`; 2 for a usage error; 13 from
@@ -488,7 +488,7 @@ function appendEvidenceLine(branch, line) {
 /**
  * Every line in the clone-wide record, from every branch including this one.
  * A line's `branch` is taken from the file it is in, which is where it was
- * recorded. Only lines `foreignProofKey` accepts ever decide anything.
+ * recorded. Only lines `foreignVerdict` accepts ever decide anything.
  */
 function readEvidence() {
   const dir = evidenceDir();

@@ -136,9 +136,28 @@ describe('a green run recorded on another branch', () => {
     }
   });
 
-  it('a red run elsewhere proves nothing and does not turn a row red', () => {
+  it('a red full run elsewhere on the current digest makes the row red and names its branch', () => {
     const red = run({ result: 'fail', exitCode: 1 });
-    expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('missing');
+    const row = rowOf('harness:ios', { foreign: [red] });
+    expect(row.state).toBe('red');
+    expect(row.from).toBe('task/other');
+    // On another digest, filtered or moved, a red decides nothing either.
+    for (const ignored of [
+      run({
+        result: 'fail',
+        gateTrees: { ...GATE_TREES, 'harness:ios': '9'.repeat(64) },
+        gateTreesAfter: { ...GATE_TREES, 'harness:ios': '9'.repeat(64) },
+      }),
+      run({
+        result: 'fail',
+        command: 'node ../scripts/harness.mjs --harnessRunner ios Switch',
+      }),
+      run({ result: 'fail', treeAfter: OTHER_TREE }),
+    ]) {
+      expect(rowOf('harness:ios', { foreign: [ignored] }).state).toBe(
+        'missing'
+      );
+    }
   });
 
   it('a completed run counts, shows as completed and names its branch', () => {
@@ -221,6 +240,62 @@ describe("this branch's own lines come first", () => {
     expect(rowOf('harness:ios', { foreign: [newer, older] }).from).toBe(
       'task/newer'
     );
+  });
+});
+
+describe('the newest decisive run across the clone decides', () => {
+  const at = (iso) => Date.parse(`2026-11-16T${iso}:00Z`);
+
+  it("a branch whose newest run on these files is red gives no other branch a green", () => {
+    const green = run({ branch: 'task/t', startedAt: at('10:00') });
+    const red = run({
+      branch: 'task/t',
+      result: 'fail',
+      exitCode: 1,
+      startedAt: at('12:00'),
+    });
+    // On its own branch the newest line decides, and it is red.
+    expect(rowOf('harness:ios', { list: [green, red] }).state).toBe('red');
+    // So it is red on any other branch on the same files.
+    const row = rowOf('harness:ios', { foreign: [green, red] });
+    expect(row.state).toBe('red');
+    expect(row.from).toBe('task/t');
+    const need = decideNeed({
+      entries: [],
+      foreign: [green, red],
+      ...now,
+      stage: 'merge',
+    });
+    expect(need.missing).toContain('harness:ios');
+  });
+
+  it('a red on one branch is cleared by a newer full green on the same digest from any branch', () => {
+    const red = run({
+      branch: 'task/t',
+      result: 'fail',
+      exitCode: 1,
+      startedAt: at('12:00'),
+    });
+    const later = run({ branch: 'task/u', startedAt: at('13:00') });
+    const row = rowOf('harness:ios', { foreign: [red, later] });
+    expect(row.state).toBe('green');
+    expect(row.from).toBe('task/u');
+    // A newer red on another branch voids an older green on a third.
+    const older = run({ branch: 'task/u', startedAt: at('09:00') });
+    expect(rowOf('harness:ios', { foreign: [older, red] }).state).toBe('red');
+  });
+
+  it("this branch's own green still decides first", () => {
+    const own = run({ branch: 'task/here', startedAt: at('09:00') });
+    const red = run({
+      branch: 'task/t',
+      result: 'fail',
+      exitCode: 1,
+      startedAt: at('12:00'),
+    });
+    const row = rowOf('harness:ios', { list: [own], foreign: [red] });
+    expect(row.state).toBe('green');
+    expect(row.from).toBeNull();
   });
 });
 
@@ -390,6 +465,27 @@ describe('gate.mjs across the worktrees of one clone', () => {
     );
     const status = runCli(clone, clone.here, ['status', '--for', 'merge']);
     expect(status.stdout).toMatch(/green\s+harness:ios .*from `task\/there`/);
+  }, 120_000);
+
+  it('a red run decides on every branch on the same files, after its worktree is removed too', () => {
+    const clone = makeClone();
+    expect(runCli(clone, clone.there, ['harness:ios']).status).toBe(0);
+    expect(
+      runCli(clone, clone.there, ['harness:ios'], { FAKE_EXIT: '1' }).status
+    ).toBe(1);
+    git(clone.here, ['worktree', 'remove', '--force', clone.there]);
+
+    const need = runCli(clone, clone.here, ['need', '--for', 'merge']);
+    expect(needLine(need.stdout, 'harness:ios')).toMatch(
+      /✗ harness:ios — red \(exit 1 .*from `task\/there`\)/
+    );
+    // The same branch in a fresh worktree reads its own red from the record.
+    const again = path.join(clone.parent, 'again');
+    git(clone.here, ['worktree', 'add', '-q', again, 'task/there']);
+    const there = runCli(clone, again, ['need', '--for', 'merge']);
+    expect(needLine(there.stdout, 'harness:ios')).toContain(
+      '✗ harness:ios — red'
+    );
   }, 120_000);
 
   it('a run on other files proves nothing here', () => {

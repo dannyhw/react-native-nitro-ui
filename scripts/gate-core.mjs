@@ -768,22 +768,23 @@ export function gateStateFor({
 }
 
 /**
- * Whether a line recorded on another branch, or by another worktree, proves
+ * What a line recorded on another branch, or by another worktree, says about
  * `gate` for the tree being asked about. Stricter than a line of this branch:
  *
- *   - a full run of a merge gate that passed, or a completion of one;
+ *   - a full run of a merge gate, or a completion of one;
  *   - compared on the gate's own digest only (the full tree for `check`), never on
  *     a fallback, so a line written before per-gate digests never counts;
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
  *   - not filtered: the command is the gate's own unfiltered command.
  *
- * @returns {string | null} the digest key it matched on, or `null` when it is not
- *   evidence here
+ * @returns {{state: 'green'|'red', key: string} | null} the verdict and the
+ *   digest key it matched on, or `null` when the line decides nothing here
  */
-export function foreignProofKey({ gate, entry, tree, gateTrees }) {
+export function foreignVerdict({ gate, entry, tree, gateTrees }) {
   if (entry == null || entry.corrupt || entry.gate !== gate) return null;
-  if (!MERGE_GATES.includes(gate) || entry.result !== 'pass') return null;
+  if (!MERGE_GATES.includes(gate)) return null;
+  if (entry.result !== 'pass' && entry.result !== 'fail') return null;
   if (entry.tree == null || entry.treeAfter !== entry.tree) return null;
   if (entry.completion == null) {
     let command;
@@ -799,15 +800,28 @@ export function foreignProofKey({ gate, entry, tree, gateTrees }) {
   ) {
     return null;
   }
+  let key;
   const own = deviceGateOf(gate);
   if (own == null) {
-    return tree != null && entry.tree === tree ? 'full' : null;
+    if (tree == null || entry.tree !== tree) return null;
+    key = 'full';
+  } else {
+    const want = gateTrees?.[own] ?? null;
+    const got = entry.gateTrees?.[own] ?? null;
+    if (want == null || got !== want) return null;
+    if (entry.gateTreesAfter?.[own] !== got) return null;
+    key = own;
   }
-  const want = gateTrees?.[own] ?? null;
-  const got = entry.gateTrees?.[own] ?? null;
-  if (want == null || got !== want) return null;
-  if (entry.gateTreesAfter?.[own] !== got) return null;
-  return own;
+  return { state: entry.result === 'pass' ? 'green' : 'red', key };
+}
+
+/**
+ * The digest key a line from elsewhere proves `gate` on, or `null` when it proves
+ * nothing here (see `foreignVerdict`).
+ */
+export function foreignProofKey(options) {
+  const verdict = foreignVerdict(options);
+  return verdict?.state === 'green' ? verdict.key : null;
 }
 
 /**
@@ -819,10 +833,11 @@ export function foreignProofKey({ gate, entry, tree, gateTrees }) {
  * is returned as `stale`, so `status` can still name the tree it came from. A line
  * whose tree moved mid-run is never decisive.
  *
- * `foreign` are the lines of this gate recorded elsewhere in the clone. They are
- * read only when no line of this branch decides, so this branch's own red is
- * never hidden, and only a line `foreignProofKey` accepts counts. Such a row
- * carries `from`, the branch the run was recorded on.
+ * `foreign` are the lines of this gate in the clone-wide record, from every
+ * branch including this one. They are read only when no line of this branch
+ * decides. Then the newest line `foreignVerdict` accepts decides, green or red, so
+ * a branch whose newest run on these files is red makes this row red too. Such a
+ * row carries `from`, the branch the run was recorded on.
  *
  * @param {object} options
  * @param {string} options.gate
@@ -853,17 +868,17 @@ export function gateRowFor({
   if (decisive != null) return { gate, from: null, ...decisive };
   let proof = null;
   for (const entry of foreign) {
-    const key = foreignProofKey({ gate, entry, tree, gateTrees });
-    if (key == null) continue;
+    const verdict = foreignVerdict({ gate, entry, tree, gateTrees });
+    if (verdict == null) continue;
     if (proof == null || !(Date.parse(entry.ts) < Date.parse(proof.entry.ts)))
-      proof = { entry, key };
+      proof = { entry, ...verdict };
   }
   if (proof != null) {
     const digest =
       proof.key === 'full' ? tree : (gateTrees?.[proof.key] ?? null);
     return {
       gate,
-      state: 'green',
+      state: proof.state,
       entry: proof.entry,
       matched: proof.key,
       key: proof.key,
@@ -2397,7 +2412,8 @@ export function explainNeedRow(row, codeTree) {
       : `${row.gate} — green${how}`;
   }
   if (row.state === 'red') {
-    return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${row.entry?.logPath ?? 'no log'})`;
+    const from = formatFrom(row);
+    return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${row.entry?.logPath ?? 'no log'}${from == null ? '' : `, ${from}`})`;
   }
   if (row.state === 'stale') {
     const ran = String(row.got ?? row.entry?.tree ?? '?').slice(0, 12);
