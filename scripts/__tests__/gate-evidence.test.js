@@ -10,11 +10,11 @@ import {
   foreignProofKey,
   gateRowFor,
   ledgerLineFromRun,
+  RELAXING_SWITCHES,
   renderGateTable,
   summarizeGates,
 } from '../gate-core.mjs';
 import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
-import { FREE_LSOF } from './helpers/free-lsof-stub.js';
 import {
   DEFAULT_PAIR,
   leaseRecord,
@@ -59,6 +59,7 @@ function run(overrides = {}) {
     exitCode: 0,
     startedAt: Date.parse('2026-11-16T10:00:00Z'),
     logPath: 'task/other/harness+ios-a.log',
+    relaxed: {},
     ...overrides,
   });
 }
@@ -165,6 +166,33 @@ describe('a green run recorded on another branch', () => {
         'missing'
       );
     }
+  });
+
+  it('proves nothing when a relaxing switch was set, or the line does not say', () => {
+    const relaxed = run({ relaxed: { NITRO_UI_ALLOW_UNSTAMPED: '1' } });
+    expect(rowOf('harness:ios', { foreign: [relaxed] }).state).toBe('missing');
+    expect(
+      rowOf('harness:ios', { foreign: [run({ relaxed: null })] }).state
+    ).toBe('missing');
+    // A relaxed red still decides: it can only ask for a run.
+    const red = run({
+      result: 'fail',
+      exitCode: 1,
+      relaxed: { NITRO_UI_GATE_DEVICE_FORCE: '1' },
+    });
+    expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('red');
+  });
+
+  it('a relaxed run still counts on its own branch, and shows as relaxed', () => {
+    const relaxed = run({
+      branch: 'task/here',
+      relaxed: { NITRO_UI_ALLOW_LOCALE_MISMATCH: '1' },
+    });
+    expect(rowOf('harness:ios', { list: [relaxed] }).state).toBe('green');
+    const table = renderGateTable({ entries: [relaxed], ...now });
+    expect(table).toContain(
+      '| `harness:ios` | **PASS** (relaxed: NITRO_UI_ALLOW_LOCALE_MISMATCH=1)'
+    );
   });
 
   it('a completed run counts, shows as completed and names its branch', () => {
@@ -343,6 +371,8 @@ function gitEnv(home) {
     'GIT_INDEX_FILE',
     'GIT_COMMON_DIR',
     'GIT_OBJECT_DIRECTORY',
+    // A switch inherited from the shell, `CI` on a CI runner, would mark every run relaxed.
+    ...RELAXING_SWITCHES,
   ]) {
     delete env[name];
   }
@@ -396,6 +426,9 @@ function makeClone() {
   git(here, ['worktree', 'add', '-q', '-b', 'task/there', there]);
   const bin = path.join(parent, 'fake-bin');
   fs.mkdirSync(bin);
+  // On PATH rather than through `NITRO_UI_LSOF_BIN`, which marks a run relaxed.
+  fs.writeFileSync(path.join(bin, 'lsof'), '#!/bin/sh\nexit 1\n');
+  fs.chmodSync(path.join(bin, 'lsof'), 0o755);
   for (const name of ['node', 'bun']) {
     fs.writeFileSync(
       path.join(bin, name),
@@ -426,7 +459,6 @@ function runCli(clone, dir, args, env = {}) {
       ...gitEnv(clone.parent),
       PATH: `${clone.bin}${path.delimiter}${process.env.PATH}`,
       ...leasedEnv({ home, pair: DEFAULT_PAIR, lease: LEASE }),
-      ...FREE_LSOF,
       ...env,
     },
   });
@@ -491,6 +523,30 @@ describe('gate.mjs across the worktrees of one clone', () => {
     expect(needLine(there.stdout, 'harness:ios')).toContain(
       '✗ harness:ios — red'
     );
+  }, 120_000);
+
+  it('a run with a relaxing switch is recorded as relaxed and proves nothing elsewhere', () => {
+    const clone = makeClone();
+    expect(
+      runCli(clone, clone.there, ['harness:ios'], {
+        NITRO_UI_ALLOW_UNSTAMPED: '1',
+      }).status
+    ).toBe(0);
+    const ledger = fs
+      .readFileSync(
+        path.join(clone.there, '.gates', 'task', 'there.jsonl'),
+        'utf8'
+      )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(ledger.at(-1).relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+    const there = runCli(clone, clone.there, ['need', '--for', 'merge']);
+    expect(needLine(there.stdout, 'harness:ios')).toContain(
+      '✓ harness:ios — green on its own digest (relaxed: NITRO_UI_ALLOW_UNSTAMPED=1)'
+    );
+    const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
+    expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
   }, 120_000);
 
   it('a run on other files proves nothing here', () => {

@@ -27,6 +27,65 @@ export const EVIDENCE_STORE_BASENAME = 'nitro-ui-gate-evidence';
  */
 export const LEDGER_VERSION = 7;
 
+/**
+ * Environment switches that loosen what a run checks: a run with any of them set
+ * is recorded as relaxed and is never evidence on another branch.
+ *
+ * - `NITRO_UI_ALLOW_UNSTAMPED`: tests whatever app the device has, unchecked.
+ * - `NITRO_UI_ALLOW_LOCALE_MISMATCH`: locale-dependent rows stop comparing.
+ * - `NITRO_UI_GATE_METRO_FORCE`, `NITRO_UI_GATE_DEVICE_FORCE`: start on a Metro
+ *   port, or a device, another run holds.
+ * - `NITRO_UI_LSOF_BIN`, `NITRO_UI_ADB_BIN`, `NITRO_UI_SIMCTL_BIN`: another
+ *   program answers for the port check or drives the device.
+ * - `HARNESS_TEST_TIMEOUT`, `REAL_INPUT_TIMEOUT`, `CI`: longer timeouts.
+ */
+export const RELAXING_SWITCHES = [
+  'NITRO_UI_ALLOW_UNSTAMPED',
+  'NITRO_UI_ALLOW_LOCALE_MISMATCH',
+  'NITRO_UI_GATE_METRO_FORCE',
+  'NITRO_UI_GATE_DEVICE_FORCE',
+  'NITRO_UI_LSOF_BIN',
+  'NITRO_UI_ADB_BIN',
+  'NITRO_UI_SIMCTL_BIN',
+  'HARNESS_TEST_TIMEOUT',
+  'REAL_INPUT_TIMEOUT',
+  'CI',
+];
+
+/**
+ * The relaxing switches set in `env`, as `{NAME: value}`; `{}` when none is.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {Record<string, string>}
+ */
+export function relaxedSwitches(env) {
+  return Object.fromEntries(
+    RELAXING_SWITCHES.filter(
+      (name) => env?.[name] != null && env[name] !== ''
+    ).map((name) => [name, String(env[name])])
+  );
+}
+
+/** Whether a line says no relaxing switch was set; a line that does not say is not. */
+export function isUnrelaxed(entry) {
+  const relaxed = entry?.relaxed;
+  return (
+    relaxed != null &&
+    typeof relaxed === 'object' &&
+    !Array.isArray(relaxed) &&
+    Object.keys(relaxed).length === 0
+  );
+}
+
+/** `relaxed: NAME=value, ...` for a line run with relaxing switches, else `null`. */
+export function formatRelaxed(entry) {
+  const relaxed = entry?.relaxed;
+  if (relaxed == null || typeof relaxed !== 'object') return null;
+  const names = Object.keys(relaxed);
+  if (names.length === 0) return null;
+  return `relaxed: ${names.map((name) => `${name}=${String(relaxed[name])}`).join(', ')}`;
+}
+
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
 
@@ -459,7 +518,9 @@ export function changedPathsGitArgs(mergeBase) {
  * It excludes docs, so a docs commit does not invalidate a device run; `head` is
  * recorded beside it and never gates anything. `stepTimings` (the steps of
  * `check`) and `suiteTimings` (the suites of a harness run) are records only: no
- * decision in this file reads them.
+ * decision in this file reads them. `relaxed` is `relaxedSwitches` of the run's
+ * environment; `null` means it was not read, and such a line is never evidence on
+ * another branch.
  *
  * @returns {object} a JSON-ready line
  */
@@ -489,6 +550,7 @@ export function ledgerLineFromRun({
   signal = null,
   units = null,
   completion = null,
+  relaxed = null,
 }) {
   return {
     v: LEDGER_VERSION,
@@ -517,6 +579,7 @@ export function ledgerLineFromRun({
     signal,
     units,
     completion,
+    relaxed,
   };
 }
 
@@ -777,7 +840,9 @@ export function gateStateFor({
  *     written before per-gate digests never counts;
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
- *   - not filtered: the command is the gate's own unfiltered command.
+ *   - not filtered: the command is the gate's own unfiltered command;
+ *   - for a green, not relaxed: the line says no relaxing switch was set. A
+ *     relaxed red still decides, since it can only ask for a run.
  *
  * @returns {{state: 'green'|'red', key: string} | null} the verdict and the
  *   digest key it matched on, or `null` when the line decides nothing here
@@ -806,7 +871,9 @@ export function foreignVerdict({ gate, entry, tree, gateTrees }) {
   const got = entry.gateTrees?.[own] ?? null;
   if (want == null || got !== want) return null;
   if (entry.gateTreesAfter?.[own] !== got) return null;
-  return { state: entry.result === 'pass' ? 'green' : 'red', key: own };
+  if (entry.result === 'fail') return { state: 'red', key: own };
+  if (!isUnrelaxed(entry)) return null;
+  return { state: 'green', key: own };
 }
 
 /**
@@ -1225,7 +1292,9 @@ export function renderGateTable({
     // A completed run is never shown as a clean one: the result says how it was
     // reached, and the duration names the full run it finished.
     const completion = formatCompletion(entry);
-    const how = [completion, formatFrom(row)].filter((part) => part != null);
+    const how = [completion, formatFrom(row), formatRelaxed(entry)].filter(
+      (part) => part != null
+    );
     const result =
       `${STATE_LABELS[row.state] ?? row.state}` +
       (how.length === 0 ? '' : ` (${how.join('; ')})`);
@@ -2394,9 +2463,11 @@ export function formatCompletion(entry) {
 /** The line `need` prints for one row, with the reason when it is not satisfied. */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
-    const parts = [formatCompletion(row.entry), formatFrom(row)].filter(
-      (part) => part != null
-    );
+    const parts = [
+      formatCompletion(row.entry),
+      formatFrom(row),
+      formatRelaxed(row.entry),
+    ].filter((part) => part != null);
     const how = parts.length === 0 ? '' : ` (${parts.join('; ')})`;
     if (row.matched != null && DEVICE_GATES.includes(row.matched))
       return `${row.gate} — green on its own digest${how}`;

@@ -66,6 +66,8 @@ import {
   lastLogLine,
   ledgerFileName,
   ledgerLineFromRun,
+  relaxedSwitches,
+  formatRelaxed,
   ledgerLogCandidates,
   ledgerRelativePath,
   logNameFor,
@@ -1841,6 +1843,7 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     signal: exit.signal,
     units,
     completion: completionRecord,
+    relaxed: relaxedSwitches(process.env),
   });
   const file = appendLedgerLine(branch, line);
   // The store's record of this run. For a backgrounded run it is the "done"
@@ -1970,7 +1973,11 @@ function commandStatus({ stage }) {
   });
   for (const row of rows) {
     const entry = row.entry;
-    const completion = [formatCompletion(entry), formatFrom(row)]
+    const completion = [
+      formatCompletion(entry),
+      formatFrom(row),
+      formatRelaxed(entry),
+    ]
       .filter((part) => part != null)
       .join(' ');
     const detail =
