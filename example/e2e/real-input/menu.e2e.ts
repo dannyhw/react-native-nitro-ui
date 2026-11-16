@@ -12,6 +12,9 @@ const SPLIT_LIST = 'More options';
 /** How long a popup window is given to reach the window manager, or to leave it. */
 const WINDOW_SETTLES_MS = 8_000;
 
+/** How long a window opened by mistake would take to come up. */
+const NOTHING_OPENS_MS = 800;
+
 async function popupsReach(count: number, why: string): Promise<void> {
   await expect
     .poll(() => popupWindowCount(), {
@@ -131,6 +134,7 @@ test("the trigger is one Spinner node showing its title, and the split trigger's
   await expect(echo).toHaveText('none');
   await action.tap();
   await expect(echo).toHaveText('action');
+  await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));
   expect(popupWindowCount(), 'the action half raised a window').toBe(0);
   await expect(echo).toHaveText('action');
 

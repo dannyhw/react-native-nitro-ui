@@ -153,6 +153,7 @@ test('a real tap picks one radio row, opens no window and checks only that row; 
   await group.getByText('Obsidian').tap();
   await expect(index).toHaveText('2');
   await expect(events).toHaveText('1');
+  await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));
   expect(popupWindowCount(), 'a tap on a radio row opened a window').toBe(0);
   for (const row of ['Basalt', 'Flint', 'Obsidian']) {
     itemAnnounces(RADIO, row, {
