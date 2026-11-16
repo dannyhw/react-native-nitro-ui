@@ -12,7 +12,7 @@ assertion each, because each needs the driver's `clickable` flag.
 | Control | Rows | Moved to e2e | Deleted, harness covers | Already gone (phase 1) | Left |
 | --- | --- | --- | --- | --- | --- |
 | icon-button | 19 | 17 | 1 (IB4b) | 1 (IB2) | 0 |
-| button-group | 20 | 12, BG6 made exact | 2 (BG11a, BG11b) | 3 (BG3a, BG3b, BG7) | 1 (BG2) |
+| button-group | 18 | 14, BG6 made exact, BG11a and BG11b by coordinates | 0 | 3 (BG3a, BG3b, BG7) | 1 (BG2) |
 | picker | 29 | 27, PK7 included | 1 (PK17b) | 0 | 1 (PK23) |
 | menu | 13 | 12 | 0 | 1 (MN2) | 0 |
 | hosted-picker | 5 | 4 | 0 | 1 (HP3) | 0 |
@@ -35,14 +35,13 @@ assertion each, because each needs the driver's `clickable` flag.
 **Rows deleted because a harness test covers them** (each line opened):
 
 - IB4b: `IconButton.harness.tsx:938` covers the press form: `expect(events).toEqual(['press-once:press', 'press-once:press'])`, read after pressing the disabled button. `:1177` covers the toggle form: `expect(events).toEqual([])`. The test at `:1155` presses only the toggle form, although its title says "either form".
-- BG11a: `ButtonGroup.harness.tsx:636`, `expect(events.slice(itemFrom)).toEqual([])`, read after pressing the disabled `cut`.
-- BG11b: `ButtonGroup.harness.tsx:619`, `expect(events.slice(from)).toEqual([])`, read after pressing every item of the disabled group.
 - PK17b: `Picker.harness.tsx:1769` and `:1772`, `expect(eventLog).toEqual([])`, read after `pickRow('radio-disabled', 1)` and `pickRow('radio-disabled', 2)`.
+- BG11a and BG11b were not deleted as covered; they moved to e2e. `ButtonGroup.harness.tsx:619` and `:636` press through the host's `press(id)`, which has its own guard, so they do not cover a real tap. `button-group.e2e.ts` taps `Cut` and the disabled group's `Copy` by coordinates and reads the disabled counter at `:95`.
 - PK7 was not deleted as covered; it moved to e2e. The context cites `:1738`/`:1769`, which test the radio variant, not the menu. The menu-variant line, `:1312`, reads the log straight after the pick, with no quiet wait. In e2e it costs one echo read (`picker.e2e.ts:136`).
 
 **Rows left, and what they wait for:**
 
-- BG2: a clickable node contains each item's title. Needs D-A, or `hittable` mapped in `os-tree.ts` (Q1 shows that it matches the dump in `--raw`). `os-tree.ts` belongs to the other task, so I did not add the mapping.
+- BG2: a clickable node contains each item's title. The audit marks it "Needs a driver change", so it stays (brief item 4). It waits on D-A, or on `hittable` mapped in `os-tree.ts`: Q1 shows that `hittable` over `--raw` matches the dump.
 - PK23: the enabled Picker's named node is clickable. Needs D-A, since `hittable` also counts `focusable`.
 
 ## Gates
