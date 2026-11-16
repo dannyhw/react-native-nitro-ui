@@ -3552,6 +3552,11 @@ async function popoverChecks(t) {
 /** One named radio node per option, each carrying the selection. */
 async function segmentedControlChecks(t) {
   await t.requireControlOnScreen('Real-input segmented control');
+  t.log.checkEquals(
+    'no change has been reported before a touch',
+    t.requireEcho(ECHO.segmentedEvents),
+    '0'
+  );
   // The selection has to be one the *finger* made, so the claim below cannot be the
   // fixture's default, and the middle of the box is the segment drawn '2'.
   t.log.checkEquals(
@@ -3562,6 +3567,11 @@ async function segmentedControlChecks(t) {
       '1',
       'a real tap to register'
     ),
+    '1'
+  );
+  t.log.checkEquals(
+    'one tap reports one change',
+    t.requireEcho(ECHO.segmentedEvents),
     '1'
   );
 
