@@ -132,7 +132,7 @@ including this one, that is all of these decides, green or red:
 - on the gate's own digest equal to the current one, with no fallback to the platform half,
   so a line written before per-gate digests never counts;
 - unmoved: the tree and the gate's digest read after the run equal the ones before it;
-- for a green, not relaxed: the line records which relaxing switches the run had set
+- for a green, written by this ledger version and not relaxed: the line records which relaxing switches the run had set
   (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`: `NITRO_UI_ALLOW_UNSTAMPED`,
   `NITRO_UI_ALLOW_LOCALE_MISMATCH`, the `*_FORCE` switches, a substituted `lsof`, `adb` or
   `simctl`, and the timeout switches including `CI`), and only a line that records none

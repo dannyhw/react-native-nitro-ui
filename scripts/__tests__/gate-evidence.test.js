@@ -12,6 +12,7 @@ import {
   isToolingPath,
   JUDGE_FILES,
   judgeDigest,
+  LEDGER_VERSION,
   ledgerLineFromRun,
   RELAXING_SWITCHES,
   renderGateTable,
@@ -187,6 +188,14 @@ describe('a green run recorded on another branch', () => {
       relaxed: { NITRO_UI_GATE_DEVICE_FORCE: '1' },
     });
     expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('red');
+  });
+
+  it('proves nothing when another ledger version wrote it', () => {
+    for (const v of [LEDGER_VERSION - 1, LEDGER_VERSION + 1]) {
+      expect(rowOf('harness:ios', { foreign: [{ ...run(), v }] }).state).toBe(
+        'missing'
+      );
+    }
   });
 
   it('proves nothing when other gate code judged it, or the line does not say', () => {

@@ -23,9 +23,11 @@ export const EVIDENCE_STORE_BASENAME = 'nitro-ui-gate-evidence';
  * The shape of the JSON lines this version writes (see `ledgerLineFromRun`).
  * Older lines are still read: with no `gateTrees` a device gate compares on its
  * platform half, with no `trees` on the full digest, and with no `treeAfter` they
- * are taken at their word.
+ * are taken at their word. On another branch only a green line of this version
+ * counts: an older one lacks `relaxed` and `judge`, and a newer one may carry a
+ * field this version does not know to refuse.
  */
-export const LEDGER_VERSION = 7;
+export const LEDGER_VERSION = 8;
 
 /**
  * Environment switches that loosen what a run checks: a run with any of them set
@@ -875,7 +877,7 @@ export function gateStateFor({
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
  *   - not filtered: the command is the gate's own unfiltered command;
- *   - for a green, not relaxed: the line says no relaxing switch was set, and
+ *   - for a green, written by this ledger version, not relaxed: the line says no relaxing switch was set, and
  *     judged by the same gate code: its `judge` digest equals `judge`. A red
  *     still decides either way, since it can only ask for a run.
  *
@@ -907,7 +909,7 @@ export function foreignVerdict({ gate, entry, gateTrees, judge }) {
   if (want == null || got !== want) return null;
   if (entry.gateTreesAfter?.[own] !== got) return null;
   if (entry.result === 'fail') return { state: 'red', key: own };
-  if (!isUnrelaxed(entry)) return null;
+  if (entry.v !== LEDGER_VERSION || !isUnrelaxed(entry)) return null;
   if (judge == null || entry.judge !== judge) return null;
   return { state: 'green', key: own };
 }
