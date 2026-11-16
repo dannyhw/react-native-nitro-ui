@@ -3195,6 +3195,29 @@ async function pickerChecks(t) {
   );
   await t.pressBack();
   t.waitForPopupCount(0, "the enabled picker's popup to come down");
+  // What a screen reader is offered: a name on a node with no value, or spread over two
+  // nodes, misdescribes the control however well the taps land.
+  const anchor = t.nodesNamed('Real-input enabled picker');
+  t.log.checkEquals(
+    "one node carries the enabled picker's name, so it is announced once",
+    anchor.length,
+    1
+  );
+  t.log.checkEquals(
+    'and that same node carries the value it shows',
+    anchor[0]?.text,
+    'Mica'
+  );
+  t.log.checkEquals(
+    'it is the node a tap is aimed at, too (the name is not parked on a container)',
+    anchor[0]?.clickable,
+    'true'
+  );
+  t.log.checkEquals(
+    'the node announces the role of a list of choices',
+    anchor[0]?.className,
+    'android.widget.Spinner'
+  );
 }
 
 /** `enabled` on the disabled row's own node, and the live row behind it. */
@@ -3246,6 +3269,25 @@ async function listItemChecks(t) {
 async function menuChecks(t) {
   const SPLIT_ACTION = 'Real-input split menu';
   const SPLIT_LIST = 'More options';
+  // What a screen reader is offered by the plain trigger: Compose merges the trigger's
+  // semantics into one node, so its name, its value and its role all land there.
+  await t.requireControlOnScreen('Real-input menu');
+  const trigger = t.nodesNamed('Real-input menu');
+  t.log.checkEquals(
+    "one node carries the trigger's name, so TalkBack announces it once",
+    trigger.length,
+    1
+  );
+  t.log.checkEquals(
+    'and that same node carries the title it paints as its value',
+    trigger[0]?.text,
+    'Actions'
+  );
+  t.log.checkEquals(
+    'the node announces the role of a list of choices',
+    trigger[0]?.className,
+    'android.widget.Spinner'
+  );
   await t.requireControlOnScreen(SPLIT_ACTION);
   // The halves of ONE control share a vertical band, so the band is what pairs them,
   // and every press re-reads it: the boxes this lookup returns are the boxes the taps
