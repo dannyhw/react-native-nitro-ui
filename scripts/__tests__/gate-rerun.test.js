@@ -489,8 +489,6 @@ function git(dir, args) {
   });
   if (result.status !== 0)
     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
-  if (fs.realpathSync(result.stdout.trim() || dir) == null)
-    throw new Error('no repo');
   return result.stdout;
 }
 
