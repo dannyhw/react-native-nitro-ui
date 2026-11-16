@@ -139,9 +139,13 @@ let dragColumn = 0;
  */
 let downDrags = 0;
 
+/** Whether the page is known to be at its top: a fresh screen, or one just rewound. */
+let atTop = true;
+
 /** Forget any scrolling this test has done (the next screen starts at the top). */
 export function resetScrollCount(): void {
   downDrags = 0;
+  atTop = true;
   dragColumn = 0;
 }
 
@@ -180,6 +184,10 @@ async function boxNow(locator: Locator): Promise<Box | null> {
  * engine has no `scrollIntoView` for a node inside somebody else’s list. A hosted node
  * answers with a box whether or not the page reached it, so the engine’s own
  * visibility is the witness. `reads` names nodes a test still has to read.
+ *
+ * The search starts from wherever the page is and travels towards the control when
+ * its box says which way that is. A control out of the tree on a page that has left
+ * its top could be either way, so only then is the page rewound and searched down.
  */
 export async function reveal(
   screen: Screen,
@@ -188,9 +196,7 @@ export async function reveal(
 ): Promise<void> {
   const swipes = options.swipes ?? 12;
   const reads = options.reads ?? [];
-  if (downDrags > 0) {
-    await rewindToTop(screen);
-  }
+  let rewound = false;
   /** Drags that moved the control not at all: two of those is the page's end. */
   let stuck = 0;
   for (let attempt = 0; attempt <= swipes; attempt += 1) {
@@ -211,23 +217,33 @@ export async function reveal(
     }
     if (attempt === swipes) break;
 
+    if (box == null && !atTop && !rewound) {
+      await rewindToTop(screen);
+      rewound = true;
+      stuck = 0;
+      attempt -= 1;
+      continue;
+    }
+
     // Which way to travel: with the control already reachable but a read still
     // missing, it is the *other* end of the window that has to come into view. A
     // control parked in the top half of the band has the missing node above it —
     // below it there is a whole window of room the node could have occupied and
-    // does not — so the page is nudged back down until the read returns.
-    if (
-      shown &&
-      inBand &&
-      !readsShown &&
+    // does not — so the page is nudged back down until the read returns. Otherwise a
+    // box above the band means the control lies towards the top, unless the page is
+    // already there.
+    const towardsTop =
       box != null &&
-      (await isInUpperHalf(screen, box))
-    ) {
+      (shown && inBand && !readsShown
+        ? await isInUpperHalf(screen, box)
+        : !atTop && (await isAboveSafeBand(screen, box)));
+    if (towardsTop) {
       await dragContentDown(screen);
       downDrags = Math.max(0, downDrags - 1);
     } else {
       await dragContentUp(screen);
       downDrags += 1;
+      atTop = false;
     }
     const after = await boxNow(locator);
     if (box != null && after != null && Math.abs(after.y - box.y) <= 2) {
@@ -242,8 +258,8 @@ export async function reveal(
   }
   const missing = await countUnshown(reads);
   throw new Error(
-    `real-input: the control was never in the tappable band, from the top of ` +
-      `the screen down through ${String(swipes)} drags along content column ` +
+    `real-input: the control was never in the tappable band after ` +
+      `${String(swipes)} drags${rewound ? ' and a rewind to the top' : ''} along content column ` +
       `${String(Math.round((DRAG_COLUMNS[dragColumn] ?? 0.5) * 100))}%; its box ` +
       `now reads ${JSON.stringify(await boxNow(locator))}` +
       (reads.length > 0
@@ -351,6 +367,7 @@ async function rewindToTop(screen: Screen): Promise<void> {
     await dragContentDown(screen);
   }
   downDrags = 0;
+  atTop = true;
 }
 
 /** One page-relative finger drag, `up` scrolling towards the bottom of the list. */
@@ -420,6 +437,7 @@ export async function liftIntoBand(
     const tooHigh = box != null && (await isAboveSafeBand(screen, box));
     await dragContentFraction(screen, tooHigh ? -LIFT_STEP : LIFT_STEP);
     downDrags = tooHigh ? Math.max(0, downDrags - 1) : downDrags + 1;
+    if (!tooHigh) atTop = false;
   }
   throw new Error(
     `real-input: ${String(nudges)} short drags towards the bottom of the page did ` +
