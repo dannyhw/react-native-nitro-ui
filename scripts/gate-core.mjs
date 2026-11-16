@@ -14,10 +14,11 @@ export const LOG_STORE_BASENAME = 'nitro-ui-gates';
 
 /**
  * The shape of the JSON lines this version writes (see `ledgerLineFromRun`).
- * Older lines are still read: with no `trees` they compare on the full digest, and
- * with no `treeAfter` they are taken at their word.
+ * Older lines are still read: with no `gateTrees` a device gate compares on its
+ * platform half, with no `trees` on the full digest, and with no `treeAfter` they
+ * are taken at their word.
  */
-export const LEDGER_VERSION = 6;
+export const LEDGER_VERSION = 7;
 
 /** The platforms a device gate can be keyed to. */
 export const PLATFORMS = ['ios', 'android'];
@@ -126,7 +127,11 @@ export function isToolingPath(file) {
  * Neither ever contains a bench (`bench` goes to the bench host), and neither
  * contains `harness:cold`/`smoke:*`, which are extra evidence rather than a bar.
  */
-export function requiredGatesFor({ stage, touchedPlatforms = [] }) {
+export function requiredGatesFor({
+  stage,
+  touchedPlatforms = [],
+  touchedGates = null,
+}) {
   if (stage === 'merge') return [...MERGE_GATES];
   if (stage !== 'review') {
     throw new Error(
@@ -135,7 +140,14 @@ export function requiredGatesFor({ stage, touchedPlatforms = [] }) {
   }
   const gates = ['check'];
   for (const platform of PLATFORMS) {
-    if (touchedPlatforms.includes(platform)) gates.push(`harness:${platform}`);
+    const harness = `harness:${platform}`;
+    // With the gates' own digests known, a diff only real-input reads asks for
+    // no harness run; without them, the platform decides as it always has.
+    const touched =
+      touchedGates == null
+        ? touchedPlatforms.includes(platform)
+        : touchedGates.includes(harness);
+    if (touched) gates.push(harness);
   }
   return gates;
 }
@@ -250,6 +262,156 @@ export function platformTreesFromEntries(entries) {
 }
 
 /**
+ * Paths only the real-input suites read: no harness run imports, bundles or opens
+ * them. `scripts/__tests__/gate-digests.test.js` walks every harness run's imports
+ * and fails when one of these is reached.
+ */
+export const REAL_INPUT_ONLY_PATHS = ['scripts/real-input/', 'example/e2e/'];
+
+/**
+ * Paths only a harness run reads. `scripts/harness-run-state.js` is not here:
+ * `example/metro.config.js` requires it, and every real-input run starts that Metro.
+ */
+export const HARNESS_ONLY_PATHS = [
+  'example/__tests__/',
+  'example/jest.harness.config.mjs',
+  'example/rn-harness.config.mjs',
+  'scripts/harness.mjs',
+  'scripts/harness-isolated.mjs',
+  'scripts/harness-suite-timing.mjs',
+];
+
+/**
+ * The example app's screens. A harness run replaces the app's entry
+ * (`example/index.js`) with react-native-harness's own and bundles only the test
+ * files and what they import, so a screen is never in it. The icon assets stay:
+ * harness tests require them.
+ */
+export const EXAMPLE_SCREEN_PATHS = [
+  { path: 'example/src/', except: ['example/src/assets/'] },
+];
+
+/** Real-input files only the Android run reaches. */
+export const ANDROID_REAL_INPUT_ONLY_PATHS = [
+  'example/e2e/',
+  'scripts/real-input/a11y-sweep-device.mjs',
+  'scripts/real-input/a11y-sweep.mjs',
+  'scripts/real-input/android-calendar.mjs',
+  'scripts/real-input/android-tree-checks.mjs',
+  'scripts/real-input/android-tree.mjs',
+  'scripts/real-input/android.mjs',
+  'scripts/real-input/ime-frame.mjs',
+  'scripts/real-input/png-pixel.mjs',
+  'scripts/real-input/popover-placement.mjs',
+  'scripts/real-input/screens.mjs',
+];
+
+/** Real-input files only the iOS run reaches. */
+export const IOS_REAL_INPUT_ONLY_PATHS = [
+  'scripts/real-input/ios.mjs',
+  'scripts/real-input/ios-log.mjs',
+];
+
+/** The device gates that have a digest of their own. */
+export const DEVICE_GATES = [
+  'harness:ios',
+  'harness:android',
+  'real-input:ios',
+  'real-input:android',
+];
+
+/**
+ * What each device gate's digest leaves out of its platform half. A path is here
+ * only when a test proves the gate never reads it; anything unproved stays in.
+ */
+export const GATE_DIGEST_EXCLUSIONS = {
+  'harness:ios': [...REAL_INPUT_ONLY_PATHS, ...EXAMPLE_SCREEN_PATHS],
+  'harness:android': [...REAL_INPUT_ONLY_PATHS, ...EXAMPLE_SCREEN_PATHS],
+  'real-input:ios': [...HARNESS_ONLY_PATHS, ...ANDROID_REAL_INPUT_ONLY_PATHS],
+  'real-input:android': [...HARNESS_ONLY_PATHS, ...IOS_REAL_INPUT_ONLY_PATHS],
+};
+
+/** Does one exclusion (`dir/`, a file, or `{path, except}`) cover this file? */
+function exclusionCovers(exclusion, file) {
+  const rule = typeof exclusion === 'string' ? { path: exclusion } : exclusion;
+  const hit = rule.path.endsWith('/')
+    ? file.startsWith(rule.path)
+    : file === rule.path;
+  if (!hit) return false;
+  return !(rule.except ?? []).some((kept) =>
+    kept.endsWith('/') ? file.startsWith(kept) : file === kept
+  );
+}
+
+/**
+ * The device gate whose digest a gate name is keyed to: a filtered run reads the
+ * same files as its full gate. `null` for a gate with no digest of its own.
+ *
+ * @param {string} gate e.g. `harness:android:ColdSizing`
+ * @returns {string | null}
+ */
+export function deviceGateOf(gate) {
+  const [kind, platform] = String(gate ?? '').split(':');
+  const base = `${kind}:${platform}`;
+  return DEVICE_GATES.includes(base) ? base : null;
+}
+
+/**
+ * Is this file in the digest of this device gate: in the gate's platform half and
+ * not excluded for it.
+ *
+ * @param {string} gate a name `DEVICE_GATES` lists
+ * @param {string} file repo-relative
+ * @returns {boolean}
+ */
+export function gateDigestOwnsFile(gate, file) {
+  const clean = String(file ?? '').replace(/^\.\//, '');
+  const platform = platformOfGate(gate);
+  if (platform == null) return false;
+  if (!platformsOwningFile(clean).includes(platform)) return false;
+  return !(GATE_DIGEST_EXCLUSIONS[gate] ?? []).some((exclusion) =>
+    exclusionCovers(exclusion, clean)
+  );
+}
+
+/**
+ * One digest per device gate, over the files that gate's run reads. Recorded beside
+ * the platform halves, which keep their meaning.
+ *
+ * @param {Record<string, string>} entries path -> content hash
+ * @returns {Record<string, string>}
+ */
+export function gateTreesFromEntries(entries) {
+  const byGate = Object.fromEntries(DEVICE_GATES.map((gate) => [gate, {}]));
+  for (const [file, hash] of Object.entries(entries ?? {})) {
+    for (const gate of DEVICE_GATES) {
+      if (gateDigestOwnsFile(gate, file)) byGate[gate][file] = hash;
+    }
+  }
+  return Object.fromEntries(
+    DEVICE_GATES.map((gate) => [gate, codeTreeDigest(byGate[gate])])
+  );
+}
+
+/**
+ * Which device gates a set of changed paths makes stale.
+ *
+ * @param {string[]} paths repo-relative
+ * @returns {string[]} in `DEVICE_GATES` order
+ */
+export function gatesTouchedByPaths(paths) {
+  const touched = new Set();
+  for (const raw of paths ?? []) {
+    const file = String(raw).replace(/^\.\//, '');
+    if (!isCodeFile(file)) continue;
+    for (const gate of DEVICE_GATES) {
+      if (gateDigestOwnsFile(gate, file)) touched.add(gate);
+    }
+  }
+  return DEVICE_GATES.filter((gate) => touched.has(gate));
+}
+
+/**
  * The git invocations that say what a branch changed (used by `need`).
  *
  * `--no-renames` is load-bearing: git follows renames by default and prints only
@@ -283,7 +445,9 @@ export function ledgerLineFromRun({
   command,
   tree,
   trees = null,
+  gateTrees = null,
   treeAfter = null,
+  gateTreesAfter = null,
   head,
   branch,
   platform = null,
@@ -300,6 +464,8 @@ export function ledgerLineFromRun({
   startedAt,
   exitCode = null,
   signal = null,
+  units = null,
+  completion = null,
 }) {
   return {
     v: LEDGER_VERSION,
@@ -308,7 +474,9 @@ export function ledgerLineFromRun({
     command,
     tree,
     trees,
+    gateTrees,
     treeAfter,
+    gateTreesAfter,
     head: head ?? null,
     branch: branch ?? null,
     platform,
@@ -324,6 +492,8 @@ export function ledgerLineFromRun({
     logPath,
     exitCode,
     signal,
+    units,
+    completion,
   };
 }
 
@@ -466,19 +636,48 @@ export function platformOfGate(gate) {
 /**
  * Which tree a line is evidence for.
  *
- * A device gate is evidence about one binary, so it is keyed to that platform's
- * half of the tree (`platformTreesFromEntries`) at both stages: a change inside
- * `ios/` voids only the iOS runs, shared or unmapped code voids both, and a
- * tooling-only commit voids neither. Any other gate, `check` above all, reads
- * every platform's files, so it is keyed to the whole tree.
+ * A device gate is keyed to its own digest (`gateTreesFromEntries`): its
+ * platform's half of the tree less the paths only the other suite reads. A line
+ * written before those digests existed falls back to the platform half. Any other
+ * gate, `check` above all, reads every platform's files, so it is keyed to the
+ * whole tree.
  *
  * `stage` is not part of the decision; callers may still pass it.
  *
  * @param {{gate: string, stage?: string}} options
- * @returns {'ios'|'android'|'full'}
+ * @returns {string} a `DEVICE_GATES` name, or `'full'`
  */
 export function digestKeyFor({ gate }) {
-  return platformOfGate(gate) ?? 'full';
+  return deviceGateOf(gate) ?? 'full';
+}
+
+/**
+ * The digests a line can be compared on, most specific first: the gate's own, its
+ * platform half, the full tree. The first one both sides carry decides. Every
+ * file of a gate digest is in its platform half, so a fallback is never looser.
+ */
+function comparableDigests({ gate, entry, tree, trees, gateTrees }) {
+  const levels = [];
+  const own = deviceGateOf(gate);
+  if (own != null) {
+    levels.push({
+      key: own,
+      want: gateTrees?.[own] ?? null,
+      got: entry?.gateTrees?.[own] ?? null,
+    });
+  }
+  const platform = platformOfGate(gate);
+  if (platform != null) {
+    levels.push({
+      key: platform,
+      want: trees?.[platform] ?? null,
+      got: entry?.trees?.[platform] ?? null,
+    });
+  }
+  const full = { key: 'full', want: tree, got: entry?.tree ?? null };
+  return (
+    levels.find((level) => level.want != null && level.got != null) ?? full
+  );
 }
 
 /**
@@ -506,6 +705,7 @@ export function gateStateFor({
   stage = 'merge',
   tree = null,
   trees = null,
+  gateTrees = null,
 }) {
   if (entry == null) {
     return {
@@ -518,15 +718,13 @@ export function gateStateFor({
       got: null,
     };
   }
-  const key = digestKeyFor({ gate, stage });
-  const want = key === 'full' ? tree : (trees?.[key] ?? null);
-  const got =
-    key === 'full' ? (entry.tree ?? null) : (entry.trees?.[key] ?? null);
-  // A line with no `trees` falls back to the full digest rather than reading as
-  // stale forever.
-  const useKey = want != null && got != null ? key : 'full';
-  const useWant = useKey === 'full' ? tree : want;
-  const useGot = useKey === 'full' ? (entry.tree ?? null) : got;
+  // A line with no per-gate digest falls back to the platform half, and one with
+  // neither to the full digest, rather than reading as stale forever.
+  const {
+    key: useKey,
+    want: useWant,
+    got: useGot,
+  } = comparableDigests({ gate, entry, tree, trees, gateTrees });
   const base = { entry, key: useKey, want: useWant, got: useGot };
   if (useWant == null || useGot == null || useWant !== useGot) {
     return { ...base, state: 'stale', matched: null, why: 'tree' };
@@ -569,8 +767,9 @@ export function gateRowFor({
   stage = 'merge',
   tree = null,
   trees = null,
+  gateTrees = null,
 }) {
-  const args = { gate, stage, tree, trees };
+  const args = { gate, stage, tree, trees, gateTrees };
   let decisive = null;
   let latest = null;
   for (const entry of list) {
@@ -628,12 +827,13 @@ export function summarizeGates({
   entries,
   tree = null,
   trees = null,
+  gateTrees = null,
   stage = 'review',
   required = MERGE_GATES,
 }) {
   const lists = listByGate(entries);
   return gatesSeen(entries, required).map((gate) =>
-    gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees })
+    gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees, gateTrees })
   );
 }
 
@@ -656,16 +856,22 @@ export function decideNeed({
   entries,
   tree,
   trees = null,
+  gateTrees = null,
   stage,
   touchedPlatforms = [],
+  touchedGates = null,
   unmappedPaths = [],
   toolingPaths = [],
   diffUnknown = false,
 }) {
-  const requiredGates = requiredGatesFor({ stage, touchedPlatforms });
+  const requiredGates = requiredGatesFor({
+    stage,
+    touchedPlatforms,
+    touchedGates,
+  });
   const lists = listByGate(entries);
   const required = requiredGates.map((gate) =>
-    gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees })
+    gateRowFor({ gate, list: lists[gate] ?? [], stage, tree, trees, gateTrees })
   );
 
   const missing = required
@@ -673,6 +879,18 @@ export function decideNeed({
     .map((row) => row.gate);
 
   const notes = [];
+  if (
+    stage === 'review' &&
+    touchedGates != null &&
+    touchedPlatforms.length > 0 &&
+    !touchedGates.some((gate) => gate.startsWith('harness:'))
+  ) {
+    notes.push(
+      `the code diff touches only files the harness never reads (it moves ${
+        touchedGates.join(', ') || 'no device gate'
+      }), so review asks for no harness run`
+    );
+  }
   if (stage === 'review' && touchedPlatforms.length === 0) {
     notes.push(
       toolingPaths.length > 0
@@ -830,6 +1048,8 @@ function formatTreeCell(row) {
   if (entry?.tree == null) return '—';
   const short = String(entry.tree).slice(0, 12);
   if (row.state === 'stale') return `${short} (not this tree)`;
+  if (row.matched != null && DEVICE_GATES.includes(row.matched))
+    return `\`${short}\` (${row.matched} digest)`;
   if (row.matched != null && row.matched !== 'full')
     return `\`${short}\` (${row.matched} tree)`;
   return `\`${short}\``;
@@ -853,11 +1073,19 @@ export function renderGateTable({
   entries,
   tree = null,
   trees = null,
+  gateTrees = null,
   stage = 'review',
   required = MERGE_GATES,
   evidence = null,
 }) {
-  const rows = summarizeGates({ entries, tree, trees, stage, required });
+  const rows = summarizeGates({
+    entries,
+    tree,
+    trees,
+    gateTrees,
+    stage,
+    required,
+  });
   const header =
     '| Gate | Result | Counts | Code tree | Duration | Load |' +
     '\n| --- | --- | --- | --- | --- | --- |';
@@ -865,10 +1093,23 @@ export function renderGateTable({
     const entry = row.entry;
     const evidenceText =
       evidence != null && entry != null ? ` ${evidence(entry)}` : '';
+    // A completed run is never shown as a clean one: the result says how it was
+    // reached, and the duration names the full run it finished.
+    const completion = formatCompletion(entry);
+    const result =
+      `${STATE_LABELS[row.state] ?? row.state}` +
+      (completion == null ? '' : ` (${completion})`);
+    const of = entry?.completion?.of;
+    const duration =
+      entry == null
+        ? '—'
+        : completion == null
+          ? formatDuration(entry.durationMs)
+          : `${formatDuration(entry.durationMs)} + full run ${formatDuration(of?.durationMs)}`;
     return (
-      `| \`${row.gate}\` | ${STATE_LABELS[row.state] ?? row.state} | ` +
+      `| \`${row.gate}\` | ${result} | ` +
       `${formatRowCounts(entry)} | ${formatTreeCell(row)} | ` +
-      `${entry == null ? '—' : formatDuration(entry.durationMs)} | ` +
+      `${duration} | ` +
       `${entry == null ? '—' : formatLoad(entry.load)}${evidenceText} |`
     );
   });
@@ -1703,12 +1944,295 @@ export function resolveGate(name, extraArgs = []) {
   );
 }
 
+/* ------------------------- completing a red full run ------------------------ */
+
+/** The gates `--rerun-failed` can complete. */
+export const COMPLETABLE_GATES = DEVICE_GATES;
+
+const TREE_CHECK_SUFFIX = ' (tree)';
+
+/**
+ * A real-input run's units from the file its report writes: one per selected
+ * control. A control's own tree check (`<id> (tree)`) belongs to that control's
+ * unit, because `--control <id>` re-runs it; any other auxiliary check runs on
+ * every run, filtered or not, so a re-run repeats it whatever it names.
+ *
+ * @param {{selected?: string[], controls?: Array<{id: string, status: string}>,
+ *   auxiliary?: Array<{id: string, passed: boolean}>} | null} results
+ * @returns {{kind: 'real-input', results: Record<string, string>,
+ *   everyRun: Record<string, string>, unnamed: string[]} | null}
+ */
+export function realInputUnitsFromResults(results) {
+  if (results == null || !Array.isArray(results.selected)) return null;
+  const units = Object.fromEntries(
+    results.selected.map((id) => [String(id), 'not-run'])
+  );
+  for (const control of results.controls ?? []) {
+    if (!(control?.id in units)) continue;
+    units[control.id] = control.status === 'pass' ? 'pass' : 'fail';
+  }
+  const everyRun = {};
+  for (const check of results.auxiliary ?? []) {
+    const id = String(check?.id ?? '');
+    const status = check?.passed === true ? 'pass' : 'fail';
+    if (id.endsWith(TREE_CHECK_SUFFIX)) {
+      const control = id.slice(0, -TREE_CHECK_SUFFIX.length);
+      if (control in units) {
+        if (status === 'fail' && units[control] === 'pass')
+          units[control] = 'fail';
+        continue;
+      }
+    }
+    everyRun[id] = everyRun[id] === 'fail' ? 'fail' : status;
+  }
+  return { kind: 'real-input', results: units, everyRun, unnamed: [] };
+}
+
+/** A harness suite status that a re-run would only repeat. */
+const HARNESS_SETTLED = new Set(['passed', 'skipped', 'todo']);
+
+/**
+ * A harness run's units from its per-suite records: one per test file the shared
+ * run was given. A file that never reported is `not-run`. The isolated suites run
+ * only on a full run, so a filter cannot name them: one that did not pass is a
+ * failure no completion can re-run.
+ *
+ * @param {object | null} shared the shared run's suite-timing record
+ * @param {object | null} isolated the isolated run's record, when it had one
+ * @param {{isolatedExpected?: boolean}} [options]
+ */
+export function harnessUnitsFromTimings(
+  shared,
+  isolated,
+  { isolatedExpected = true } = {}
+) {
+  if (shared == null) return null;
+  const unnamed = [];
+  const units = {};
+  const planned = Array.isArray(shared.files) ? shared.files : null;
+  for (const file of planned ?? []) units[String(file)] = 'not-run';
+  for (const suite of shared.suites ?? []) {
+    if (typeof suite?.file !== 'string') continue;
+    units[suite.file] = HARNESS_SETTLED.has(suite.status) ? 'pass' : 'fail';
+  }
+  if (planned == null) {
+    unnamed.push(
+      'the run did not record which test files it was given, so a file that ' +
+        'never reported cannot be named'
+    );
+  }
+  if ((shared.suites ?? []).length === 0) {
+    unnamed.push('no test file reported: the run stopped before its first suite');
+  }
+  if (isolatedExpected) {
+    if (isolated == null) {
+      unnamed.push('the isolated run left no per-suite record');
+    } else {
+      for (const suite of isolated.suites ?? []) {
+        if (!HARNESS_SETTLED.has(suite?.status)) {
+          unnamed.push(
+            `isolated suite ${String(suite?.file)} did not pass, and only a full ` +
+              'run starts the isolated app instance'
+          );
+        }
+      }
+      const reported = (isolated.suites ?? []).length;
+      if (Array.isArray(isolated.files) && isolated.files.length > reported) {
+        unnamed.push(
+          `${String(isolated.files.length - reported)} isolated suite(s) never reported`
+        );
+      }
+    }
+  }
+  return { kind: 'harness', results: units, everyRun: {}, unnamed };
+}
+
+/** `__tests__/Switch.harness.tsx` -> `__tests__/Switch.harness`, a pattern that names one file. */
+function harnessFilterFor(file) {
+  return String(file).replace(/\.[jt]sx?$/, '');
+}
+
+/**
+ * What `--rerun-failed` would do, or why it refuses.
+ *
+ * The run it completes is the newest line of the full gate that is red on the
+ * current digest. Every unit that did not pass, including one that never ran, is
+ * re-run; units that passed keep their verdict, because the digest they ran on is
+ * the one in front of us.
+ *
+ * @param {object} options
+ * @param {string} options.gate the full gate, e.g. `real-input:ios`
+ * @param {object[]} options.entries ledger lines
+ * @param {string | null} options.tree
+ * @param {Record<string, string> | null} options.trees
+ * @param {Record<string, string> | null} options.gateTrees
+ * @returns {{refusal: string} | {refusal: null, base: object, rerun: string[],
+ *   filterArgs: string[], attempt: number, of: object}}
+ */
+export function planRerunFailed({ gate, entries, tree, trees, gateTrees }) {
+  if (!COMPLETABLE_GATES.includes(gate)) {
+    return {
+      refusal:
+        `--rerun-failed completes a full ${COMPLETABLE_GATES.join(', ')} run; ` +
+        `${gate} is not one`,
+    };
+  }
+  const list = listByGate(entries)[gate] ?? [];
+  const row = gateRowFor({ gate, list, tree, trees, gateTrees });
+  if (row.state === 'green') {
+    return { refusal: `${gate} is already green on this digest: nothing to complete` };
+  }
+  if (row.state !== 'red') {
+    return {
+      refusal:
+        `no full ${gate} run is red on the current digest` +
+        (row.state === 'stale'
+          ? row.why === 'moved'
+            ? ': the newest one ran while the tree moved'
+            : `: the newest one ran on ${String(row.got ?? '?').slice(0, 12)}, ` +
+              `and this ${row.key} digest is ${String(row.want ?? '?').slice(0, 12)}`
+          : ''),
+    };
+  }
+  const base = row.entry;
+  if (row.key !== gate) {
+    return {
+      refusal:
+        `the red ${gate} run was recorded without its own digest, so it cannot ` +
+        'be completed: run the full gate',
+    };
+  }
+  const units = base.units;
+  if (units == null || typeof units.results !== 'object') {
+    return {
+      refusal:
+        `the red ${gate} run recorded no per-unit results: it failed before ` +
+        'its report (a build failure, or a crash before the first unit), so no ' +
+        'filter names what failed. Run the full gate',
+    };
+  }
+  if ((units.unnamed ?? []).length > 0) {
+    return {
+      refusal:
+        `the red ${gate} run failed in a way no filter can name: ` +
+        `${units.unnamed.join('; ')}. Run the full gate`,
+    };
+  }
+  const rerun = Object.entries(units.results)
+    .filter(([, status]) => status !== 'pass')
+    .map(([id]) => id);
+  if (rerun.length === 0) {
+    const everyRunFailed = Object.entries(units.everyRun ?? {})
+      .filter(([, status]) => status !== 'pass')
+      .map(([id]) => id);
+    return {
+      refusal:
+        `every unit of the red ${gate} run passed, so its failure ` +
+        (everyRunFailed.length > 0
+          ? `(${everyRunFailed.join(', ')}, which no filter selects)`
+          : `(exit ${String(base.exitCode ?? '?')})`) +
+        ' is not one a filter can name. Run the full gate',
+    };
+  }
+  const filterArgs =
+    units.kind === 'harness'
+      ? rerun.map(harnessFilterFor)
+      : rerun.flatMap((id) => ['--control', id]);
+  return {
+    refusal: null,
+    base,
+    rerun,
+    filterArgs,
+    attempt: Number(base.completion?.attempt ?? 0) + 1,
+    of: base.completion?.of ?? {
+      ts: base.ts ?? null,
+      logPath: base.logPath ?? null,
+      durationMs: base.durationMs ?? null,
+    },
+  };
+}
+
+/**
+ * The verdict of one completion attempt, and the units it leaves.
+ *
+ * Green only when the re-run itself passed, every re-run unit passed in it, every
+ * every-run check that failed before passed now, and the gate's digest was the
+ * same at the plan, at the start and at the end of the re-run.
+ *
+ * @param {object} options
+ * @param {object} options.plan `planRerunFailed`'s answer
+ * @param {object | null} options.childUnits the re-run's own units
+ * @param {number | null} options.exitCode the re-run's exit
+ * @param {string | null} options.digestBefore the gate's digest at the start
+ * @param {string | null} options.digestAfter the gate's digest at the end
+ * @param {string} options.gate
+ * @returns {{result: 'pass'|'fail', units: object, why: string[]}}
+ */
+export function completeRerun({
+  plan,
+  childUnits,
+  exitCode,
+  digestBefore,
+  digestAfter,
+  gate,
+}) {
+  const why = [];
+  const planned = plan.base?.gateTrees?.[gate] ?? null;
+  if (planned == null || digestBefore !== planned) {
+    why.push('the digest moved between the red run and this one');
+  }
+  if (digestAfter !== digestBefore) {
+    why.push('the digest moved during the re-run');
+  }
+  if (exitCode !== 0) why.push(`the re-run exited ${String(exitCode)}`);
+  const merged = {
+    ...plan.base.units,
+    results: { ...plan.base.units.results },
+    everyRun: { ...(plan.base.units.everyRun ?? {}) },
+  };
+  for (const id of plan.rerun) {
+    const status = childUnits?.results?.[id] ?? 'not-run';
+    merged.results[id] = status;
+    if (status !== 'pass') why.push(`${id} ${status === 'not-run' ? 'did not run' : 'failed again'}`);
+  }
+  for (const [id, before] of Object.entries(plan.base.units.everyRun ?? {})) {
+    const now = childUnits?.everyRun?.[id] ?? null;
+    if (now != null) merged.everyRun[id] = now;
+    if (before !== 'pass' && now !== 'pass') {
+      why.push(`${id} failed in the red run and did not pass in this one`);
+    }
+  }
+  for (const [id, now] of Object.entries(childUnits?.everyRun ?? {})) {
+    merged.everyRun[id] = now;
+    if (now !== 'pass' && !why.some((line) => line.startsWith(id))) {
+      why.push(`${id} failed`);
+    }
+  }
+  return { result: why.length === 0 ? 'pass' : 'fail', units: merged, why };
+}
+
+/** `completed: 1 of 28 units re-run, attempt 1` - what a completed row says. */
+export function formatCompletion(entry) {
+  const completion = entry?.completion;
+  if (completion == null) return null;
+  const total = Object.keys(entry?.units?.results ?? {}).length;
+  const rerun = Array.isArray(completion.rerun) ? completion.rerun.length : 0;
+  return (
+    `completed: ${String(rerun)} of ${String(total)} units re-run, ` +
+    `attempt ${String(completion.attempt ?? '?')}`
+  );
+}
+
 /** The line `need` prints for one row, with the reason when it is not satisfied. */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
+    const completion = formatCompletion(row.entry);
+    const how = completion == null ? '' : ` (${completion})`;
+    if (row.matched != null && DEVICE_GATES.includes(row.matched))
+      return `${row.gate} — green on its own digest${how}`;
     return row.matched != null && row.matched !== 'full'
-      ? `${row.gate} — green on the ${row.matched} code tree`
-      : `${row.gate} — green`;
+      ? `${row.gate} — green on the ${row.matched} code tree${how}`
+      : `${row.gate} — green${how}`;
   }
   if (row.state === 'red') {
     return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${row.entry?.logPath ?? 'no log'})`;
@@ -1721,8 +2245,10 @@ export function explainNeedRow(row, codeTree) {
     const label =
       row.key === 'full' || row.key == null
         ? 'code tree'
-        : `${row.key} code tree`;
-    return `${row.gate} — passed on ${row.key === 'full' ? 'tree' : `the ${row.key} tree`} ${ran} at ${String(row.entry?.head ?? 'unknown HEAD').slice(0, 7)}, which is not this ${label} (${String(row.want ?? codeTree ?? '?').slice(0, 12)}): re-run it`;
+        : DEVICE_GATES.includes(row.key)
+          ? `${row.key} digest`
+          : `${row.key} code tree`;
+    return `${row.gate} — passed on ${row.key === 'full' ? 'tree' : DEVICE_GATES.includes(row.key) ? `the ${row.key} digest` : `the ${row.key} tree`} ${ran} at ${String(row.entry?.head ?? 'unknown HEAD').slice(0, 7)}, which is not this ${label} (${String(row.want ?? codeTree ?? '?').slice(0, 12)}): re-run it`;
   }
   return `${row.gate} — never run on this tree`;
 }

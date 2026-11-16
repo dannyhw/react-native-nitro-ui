@@ -11,7 +11,15 @@
  * import keeps working.
  */
 
+import fs from 'node:fs';
+
 /** @typedef {(typeof import('./controls.mjs').REAL_INPUT_CONTROLS)[number]} RealInputControl */
+
+/**
+ * Names the file `Suite.finish` writes each control's verdict to. `gate.mjs` sets it,
+ * so a red run can later be completed by re-running only what did not pass.
+ */
+export const REAL_INPUT_UNITS_ENV = 'NITRO_UI_REAL_INPUT_UNITS';
 
 /**
  * One control's run: the assertions it made, and whether any failed.
@@ -255,11 +263,42 @@ export class Suite {
   }
 
   /**
+   * Each selected control's verdict and each auxiliary check's, as data. A control
+   * that never began has no entry: the reader counts it as not run.
+   */
+  units() {
+    return {
+      platform: this.platform,
+      selected: this.controls.map((control) => control.id),
+      controls: this.results.map((entry) => ({
+        id: entry.control.id,
+        status: entry.missing ? 'missing' : entry.log?.passed ? 'pass' : 'fail',
+      })),
+      auxiliary: this.auxiliary.map((entry) => ({
+        id: entry.id,
+        passed: entry.log.passed,
+      })),
+    };
+  }
+
+  /**
    * Print the summary and return the process exit code.
    *
+   * @param {NodeJS.ProcessEnv} [env]
    * @returns {number}
    */
-  finish() {
+  finish(env = process.env) {
+    const unitsFile = env[REAL_INPUT_UNITS_ENV];
+    if (typeof unitsFile === 'string' && unitsFile !== '') {
+      try {
+        fs.writeFileSync(unitsFile, `${JSON.stringify(this.units())}\n`);
+      } catch (error) {
+        console.log(
+          `real-input: could not write the per-control results to ${unitsFile}: ` +
+            `${String(error?.message ?? error)}`
+        );
+      }
+    }
     const expected = this.controls.length;
     const done = this.results.filter((entry) => !entry.missing);
     const passed = done.filter((entry) => entry.log?.passed);

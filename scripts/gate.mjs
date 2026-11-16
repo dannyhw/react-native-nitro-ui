@@ -47,7 +47,14 @@ import {
   DEVICE_CONTEXT_END,
   DEVICE_CONTEXT_START,
   explainNeedRow,
+  formatCompletion,
   gateLogStoreDir,
+  gateTreesFromEntries,
+  gatesTouchedByPaths,
+  harnessUnitsFromTimings,
+  planRerunFailed,
+  completeRerun,
+  realInputUnitsFromResults,
   isDeviceGate,
   isUsageProbe,
   lastLogLine,
@@ -99,6 +106,7 @@ import {
   suiteTimingPath,
 } from './harness-suite-timing.mjs';
 import { claimDevicesFromEnv } from './device-pool.mjs';
+import { REAL_INPUT_UNITS_ENV } from './real-input/report.mjs';
 import { diskRefusal, freeDiskGbFrom, isCiRunner } from './doctor-core.mjs';
 import {
   emulatorSerial,
@@ -119,6 +127,7 @@ import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
 const USAGE =
   'usage: node scripts/gate.mjs <gate> [-- <args>] [--background]\n' +
+  '       node scripts/gate.mjs <harness|real-input>:<platform> --rerun-failed [--background]\n' +
   '       node scripts/gate.mjs wait [--gate <name>] [--timeout-minutes N]\n' +
   '       node scripts/gate.mjs status [--for review|merge]\n' +
   '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
@@ -135,6 +144,9 @@ const USAGE =
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
   '\n' +
   '       (NITRO_UI_GATE_DEVICE_FORCE=1 claims a device another live run holds)\n' +
+  '       (--rerun-failed completes the newest full run of the gate that is red on\n' +
+  '        this digest: it re-runs only the units that did not pass and records the\n' +
+  '        outcome under the full gate, shown as completed, never as a clean pass)\n' +
   "       (--background is gate.mjs's own flag: beside the gate name or after it, " +
   'never\n' +
   '        after `--`, where the arguments belong to the gate)\n' +
@@ -162,6 +174,8 @@ const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 /** The flags this script owns on a gate run; they never reach the gate. */
 const BACKGROUND_FLAGS = ['--background', '--background=true'];
+const RERUN_FAILED_FLAG = '--rerun-failed';
+const OWN_FLAGS = [...BACKGROUND_FLAGS, RERUN_FAILED_FLAG];
 
 /** `NITRO_UI_GATE_DEVICE_FORCE` values: claim a device another run holds. */
 const DEVICE_FORCE_RE = /^(1|true|yes)$/i;
@@ -730,6 +744,15 @@ function renderDeviceContext(probes, { logPath = null } = {}) {
   return lines.join('\n');
 }
 
+/** A JSON file a run left behind, or null when it is missing or unreadable. */
+function readJsonFile(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The per-step timings `check.mjs` left behind, or null on any problem (no
  * file, unreadable, wrong shape): a missing breakdown is not a failed run.
@@ -1121,6 +1144,7 @@ function readTrees() {
   return {
     ...full,
     trees: platformTreesFromEntries(entries),
+    gateTrees: gateTreesFromEntries(entries),
   };
 }
 
@@ -1385,6 +1409,18 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // The tree is read before the run and again after it; a run during which it
   // moved is recorded with both and never reads green.
   const before = readTrees();
+  const completion = options.completion ?? null;
+  if (
+    completion != null &&
+    before.gateTrees[name] !== completion.base.gateTrees?.[name]
+  ) {
+    process.stderr.write(
+      `gate: refused before the run - the ${name} digest moved since the red run ` +
+        `(${String(completion.base.gateTrees?.[name]).slice(0, 12)} then, ` +
+        `${before.gateTrees[name].slice(0, 12)} now): run the full gate\n`
+    );
+    return 1;
+  }
   // A lease covers both halves of a pair, so a bench's own `--platform` wins
   // over what the environment suggests.
   const device = deviceFromEnv(
@@ -1417,6 +1453,10 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // in the store beside it and retention sweeps them together.
   const suiteTimingFile =
     resolved.platform == null ? null : suiteTimingPath(absoluteLog);
+  // Which controls a real-input run proved, written by its report.
+  const realInputUnitsFile = name.startsWith('real-input:')
+    ? `${absoluteLog}.units.json`
+    : null;
   // Append for a backgrounded run: the launcher has this file open as this
   // process's stdout and stderr, and truncating would erase those lines.
   const logStream = fs.createWriteStream(absoluteLog, {
@@ -1491,6 +1531,10 @@ async function runGateUnclaimed(name, resolved, options = {}) {
           if (suiteTimingFile != null) {
             childEnv[SUITE_TIMING_ENV] = suiteTimingFile;
             childEnv[SUITE_TIMING_GATE_ENV] = name;
+          }
+          delete childEnv[REAL_INPUT_UNITS_ENV];
+          if (realInputUnitsFile != null) {
+            childEnv[REAL_INPUT_UNITS_ENV] = realInputUnitsFile;
           }
           // The supervisor's instructions, cleared first so they are never
           // inherited from an outer gate. It gets this process's group as well
@@ -1670,9 +1714,42 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   // A missing breakdown (the runner could not write the file) decides nothing.
   const ranNothing =
     name === 'check' && stepTimings != null && stepTimings.steps.length === 0;
-  const result =
+  let result =
     exit.code === 0 && exit.signal == null && !ranNothing ? 'pass' : 'fail';
   const summaries = parseTestSummaries(logText);
+  const suiteTimings =
+    suiteTimingFile == null ? null : readSuiteTiming(suiteTimingFile);
+  let units = null;
+  if (realInputUnitsFile != null) {
+    units = realInputUnitsFromResults(readJsonFile(realInputUnitsFile));
+  } else if (name.startsWith('harness:') && suiteTimingFile != null) {
+    units = harnessUnitsFromTimings(
+      suiteTimings,
+      readSuiteTiming(`${suiteTimingFile}.isolated.json`),
+      { isolatedExpected: resolved.gate === name && completion == null }
+    );
+  }
+  let completionRecord = null;
+  if (completion != null) {
+    const verdict = completeRerun({
+      plan: completion,
+      childUnits: units,
+      exitCode: exit.signal == null ? exit.code : null,
+      digestBefore: before.gateTrees[name],
+      digestAfter: after.gateTrees[name],
+      gate: name,
+    });
+    result = verdict.result;
+    units = verdict.units;
+    completionRecord = {
+      of: completion.of,
+      attempt: completion.attempt,
+      rerun: completion.rerun,
+      filtered: resolved.gate,
+      why: verdict.why,
+    };
+    for (const line of verdict.why) note(`gate: completion: ${line}\n`);
+  }
   const line = ledgerLineFromRun({
     // The canonical name from `resolveGate`, never `argv[0]`: a filtered run
     // must not be recorded as the full gate.
@@ -1680,7 +1757,9 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     command: resolved.argv.join(' '),
     tree: before.tree,
     trees: before.trees,
+    gateTrees: before.gateTrees,
     treeAfter: after.tree,
+    gateTreesAfter: after.gateTrees,
     head: before.head,
     branch,
     platform: device.platform,
@@ -1694,12 +1773,13 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
     stepTimings,
-    suiteTimings:
-      suiteTimingFile == null ? null : readSuiteTiming(suiteTimingFile),
+    suiteTimings,
     logPath,
     startedAt,
     exitCode: exit.code ?? (exit.signal != null ? null : 1),
     signal: exit.signal,
+    units,
+    completion: completionRecord,
   });
   const file = appendLedgerLine(branch, line);
   // The store's record of this run. For a backgrounded run it is the "done"
@@ -1794,12 +1874,17 @@ async function runGateUnclaimed(name, resolved, options = {}) {
   return exit.code ?? 0;
 }
 
-function printCodeTree({ tree, trees, head, files }) {
+function printCodeTree({ tree, trees, gateTrees, head, files }) {
   process.stderr.write(
     `ledger: code tree ${tree.slice(0, 12)} at HEAD ${String(head ?? '?').slice(0, 7)} (branch ${currentBranch()}, ${String(files)} files)\n`
   );
   process.stderr.write(
     `ledger: platform trees ${PLATFORMS.map((platform) => `${platform} ${String(trees?.[platform] ?? '?').slice(0, 12)}`).join(' ')}\n`
+  );
+  process.stderr.write(
+    `ledger: gate digests ${Object.entries(gateTrees ?? {})
+      .map(([gate, digest]) => `${gate} ${String(digest).slice(0, 12)}`)
+      .join(' ')}\n`
   );
 }
 
@@ -1821,14 +1906,16 @@ function commandStatus({ stage }) {
     entries,
     tree: read.tree,
     trees: read.trees,
+    gateTrees: read.gateTrees,
     stage,
   });
   for (const row of rows) {
     const entry = row.entry;
+    const completion = formatCompletion(entry);
     const detail =
       entry == null
         ? ''
-        : ` [${String(entry.tree).slice(0, 12)}${row.matched == null ? ' not this tree' : row.matched === 'full' ? '' : ` ${row.matched} tree`}${formatMaybe(entry.durationMs)}${entry.lease != null ? ` lease ${entry.lease}` : ''}${row.why === 'moved' ? ' tree moved mid-run' : ''}]`;
+        : ` [${String(entry.tree).slice(0, 12)}${row.matched == null ? ' not this tree' : row.matched === 'full' ? '' : row.matched.includes(':') ? ' own digest' : ` ${row.matched} tree`}${formatMaybe(entry.durationMs)}${entry.lease != null ? ` lease ${entry.lease}` : ''}${row.why === 'moved' ? ' tree moved mid-run' : ''}${completion == null ? '' : ` ${completion}`}]`;
     process.stdout.write(`${row.state.padEnd(7)} ${row.gate}${detail}\n`);
   }
   const green = rows.filter((row) => row.state === 'green').length;
@@ -1901,13 +1988,17 @@ function commandNeed({ stage, base }) {
   const touched = diff.unknown
     ? { platforms: [...PLATFORMS], unmapped: [], tooling: [] }
     : platformsTouchedByPaths(diff.paths);
+  // An unread diff asks for every gate, the way it asks for both platforms.
+  const touchedGates = diff.unknown ? null : gatesTouchedByPaths(diff.paths);
 
   const decision = decideNeed({
     entries,
     tree: read.tree,
     trees: read.trees,
+    gateTrees: read.gateTrees,
     stage,
     touchedPlatforms: touched.platforms,
+    touchedGates,
     unmappedPaths: touched.unmapped,
     toolingPaths: touched.tooling,
     diffUnknown: diff.unknown,
@@ -1950,6 +2041,7 @@ function commandTable({ stage, full }) {
     entries,
     tree: read.tree,
     trees: read.trees,
+    gateTrees: read.gateTrees,
     stage,
     required: MERGE_GATES,
     evidence:
@@ -1967,6 +2059,7 @@ function commandTable({ stage, full }) {
       entries,
       tree: read.tree,
       trees: read.trees,
+      gateTrees: read.gateTrees,
       stage,
       required: MERGE_GATES,
     });
@@ -2263,13 +2356,14 @@ async function main(argv) {
   const ownArgs = separator === -1 ? rest : rest.slice(0, separator);
   const background =
     ownArgs.includes('--background') || ownArgs.includes('--background=true');
+  const rerunFailed = ownArgs.includes(RERUN_FAILED_FLAG);
   if (
     separator !== -1 &&
-    ownArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg)).length > 0
+    ownArgs.filter((arg) => !OWN_FLAGS.includes(arg)).length > 0
   ) {
     process.stderr.write(
       `gate: arguments before -- are not supported: ${ownArgs
-        .filter((arg) => !BACKGROUND_FLAGS.includes(arg))
+        .filter((arg) => !OWN_FLAGS.includes(arg))
         .join(' ')}\n${USAGE}`
     );
     return 2;
@@ -2278,8 +2372,11 @@ async function main(argv) {
   // own flags are taken out.
   const extraArgs =
     separator === -1
-      ? ownArgs.filter((arg) => !BACKGROUND_FLAGS.includes(arg))
+      ? ownArgs.filter((arg) => !OWN_FLAGS.includes(arg))
       : rest.slice(separator + 1);
+  if (rerunFailed) {
+    return await rerunFailedGate({ command, extraArgs, background });
+  }
   // `--background` after the separator would reach the gate as an argument
   // and record a red run about nothing, so it is refused before a runner, a
   // log file or a ledger line exists.
@@ -2318,6 +2415,56 @@ async function main(argv) {
   }
   if (background) return await startBackgroundGate(resolved.gate, resolved);
   return await runGate(resolved.gate, resolved, backgroundOptions());
+}
+
+/**
+ * `<gate> --rerun-failed`: completes the newest full run of the gate that is red
+ * on this digest, or refuses before anything runs and says why.
+ */
+async function rerunFailedGate({ command, extraArgs, background }) {
+  if (extraArgs.length > 0 || command.split(':').length !== 2) {
+    process.stderr.write(
+      `gate: --rerun-failed takes the full gate name and no filter (got ` +
+        `${[command, ...extraArgs].join(' ')}): it chooses the units itself\n${USAGE}`
+    );
+    return 2;
+  }
+  const read = readTrees();
+  const plan = planRerunFailed({
+    gate: command,
+    entries: readLedger(currentBranch()).entries,
+    tree: read.tree,
+    trees: read.trees,
+    gateTrees: read.gateTrees,
+  });
+  if (plan.refusal != null) {
+    process.stderr.write(`gate: refused before the run - ${plan.refusal}\n`);
+    return 1;
+  }
+  let resolved;
+  try {
+    resolved = resolveGate(command, plan.filterArgs);
+  } catch (error) {
+    process.stderr.write(`gate: ${String(error?.message ?? error)}\n${USAGE}`);
+    return 2;
+  }
+  const leaseBlock =
+    deviceGateLeaseBlock(resolved, process.env) ??
+    deviceGateDiskBlock(resolved, process.env);
+  if (leaseBlock != null) {
+    process.stderr.write(`gate: refused before the run - ${leaseBlock}\n`);
+    return 1;
+  }
+  process.stderr.write(
+    `gate: completing the red ${command} run of ${String(plan.of.ts)} ` +
+      `(attempt ${String(plan.attempt)}): re-running ${String(plan.rerun.length)} ` +
+      `unit(s) - ${plan.rerun.join(', ')}\n`
+  );
+  if (background) return await startBackgroundGate(command, resolved);
+  return await runGate(command, resolved, {
+    ...backgroundOptions(),
+    completion: plan,
+  });
 }
 
 /** The log a detached run was told to write, from its launcher's variable. */
