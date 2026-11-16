@@ -296,3 +296,4 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - Limits of the e2e driver to raise with its project: no clickable, checkable or scrollable in the node map; a swipe that leaves its starting view is refused; a node covered by its interactive descendants refuses a tap.
   - iOS real-input still runs the hand-written driver.
 - Comments that cite a task or decision id remain in about 30 files outside this gate (`example/src`, `scripts/real-input/a11y.mjs`, `screens.mjs`, `report.mjs`, a few script tests).
+- Lease store: a process killed while it holds `leases.lock` blocks every lease command until the lock is 30 s old, and commands give up after 10 s, so they fail in between. Stealing the lock at once when its holder's pid is gone would close the window.

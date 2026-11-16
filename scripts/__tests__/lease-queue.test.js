@@ -4,6 +4,7 @@ import {
   copyFileSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -515,6 +516,9 @@ describe('the CLI keeps a queue in the lease file', () => {
 
       waiter.child.kill('SIGKILL');
       await waiter.done;
+      // SIGKILL can land while the waiter holds the store's lock, which nothing else
+      // clears for 30 s: longer than the next command waits for it.
+      rmSync(join(home, 'leases.lock'), { force: true });
       expect(readState().leases.map((entry) => entry.task)).toEqual([
         'G6',
         'G7',
