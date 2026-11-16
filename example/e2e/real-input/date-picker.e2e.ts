@@ -148,7 +148,7 @@ async function parkWheel(
   screen: Screen,
   label: string,
   echoIds: string[]
-): Promise<{ wheel: TreeNode; hour: TreeNode }> {
+): Promise<{ wheel: TreeNode; hour: TreeNode; minutes: TreeNode | null }> {
   const band = await tapBand(screen);
   const window = await screen.getByTestId('android:id/content').boundingBox();
   if (window == null) {
@@ -162,17 +162,20 @@ async function parkWheel(
     const echoes = echoIds.map(
       (id) => nodes.find((node) => node.resourceId === id) ?? null
     );
-    const hour = nodes.find(
-      (node) =>
-        node.contentDesc === 'Select hour' &&
-        node.bounds.cy >= wheel.bounds.y1 &&
-        node.bounds.cy <= wheel.bounds.y2
-    );
+    const drum = (name: string) =>
+      nodes.find(
+        (node) =>
+          node.contentDesc === name &&
+          node.bounds.cy >= wheel.bounds.y1 &&
+          node.bounds.cy <= wheel.bounds.y2
+      ) ?? null;
+    const hour = drum('Select hour');
+    const minutes = drum('Select minutes');
     const top = Math.min(
       wheel.bounds.y1,
       ...echoes.map((node) => node?.bounds.y1 ?? wheel.bounds.y1)
     );
-    return { wheel, hour, echoes, top, bottom: wheel.bounds.y2 };
+    return { wheel, hour, minutes, echoes, top, bottom: wheel.bounds.y2 };
   };
   let at = place();
   for (let flick = 0; flick < 6 && at.bottom > band.bottom; flick += 1) {
@@ -187,7 +190,7 @@ async function parkWheel(
   for (let drag = 0; drag < 8; drag += 1) {
     const inBand = at.top >= band.top + 24 && at.bottom <= band.bottom - 24;
     if (inBand && at.hour != null && at.echoes.every((node) => node != null)) {
-      return { wheel: at.wheel, hour: at.hour };
+      return { wheel: at.wheel, hour: at.hour, minutes: at.minutes };
     }
     const off = Math.max(
       -700,
@@ -250,7 +253,7 @@ test('one fling of the hour drum reports one change, and three in a row move the
   await openScreen(screen, 'datepicker');
   const valueId = 'real-input-wheel-time-value';
   const eventsId = 'real-input-wheel-time-events';
-  const { wheel, hour } = await parkWheel(
+  const { wheel, hour, minutes } = await parkWheel(
     screen,
     'Real-input wheel time picker',
     [valueId, eventsId]
@@ -264,12 +267,18 @@ test('one fling of the hour drum reports one change, and three in a row move the
     await screen.getByLabel('Real-input wheel time picker').count(),
     'the wheel is not named in the tree'
   ).toBeGreaterThanOrEqual(1);
-  expect(
-    hour.bounds.cx >= wheel.bounds.x1 && hour.bounds.cx <= wheel.bounds.x2,
-    'the hour drum is not inside the wheel'
-  ).toBe(true);
-  const minutes = await screen.getByLabel('Select minutes').count();
-  expect(minutes, 'the minute drum is not named').toBeGreaterThanOrEqual(1);
+  // Material's own names for the drums, inside the wheel: the fling's aim.
+  for (const [name, node] of [
+    ['hour', hour],
+    ['minute', minutes],
+  ] as const) {
+    expect(
+      node != null &&
+        node.bounds.cx >= wheel.bounds.x1 &&
+        node.bounds.cx <= wheel.bounds.x2,
+      `the ${name} drum is not named inside the wheel`
+    ).toBe(true);
+  }
 
   let previous = '09';
   for (const roll of ['1', '2', '3']) {
