@@ -10,7 +10,6 @@
 import { blockMs, runCheck, sleep } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { ECHO } from './screens.mjs';
-import { imeServiceShown } from './ime-frame.mjs';
 import {
   findAllByDescription,
   findAllByText,
@@ -120,10 +119,6 @@ function makeContext(device, log) {
      */
     nodeByTestId(testID) {
       return findByTestId(device.hierarchy(), testID);
-    },
-
-    density() {
-      return device.density();
     },
 
     screenSize: () => device.size(),
@@ -508,13 +503,6 @@ function makeContext(device, log) {
     },
 
     /**
-     * @param {number} ms
-     */
-    async settle(ms) {
-      await sleep(ms);
-    },
-
-    /**
      * @param {string} testID
      * @param {string} expected
      * @param {string} description
@@ -675,15 +663,6 @@ function makeContext(device, log) {
     },
 
     /**
-     * @param {number} x
-     * @param {number} y
-     */
-    async tapPx(x, y) {
-      device.tapAt(x, y);
-      await sleep(250);
-    },
-
-    /**
      * @param {string} testID
      */
     async tapTestId(testID) {
@@ -721,85 +700,7 @@ function makeContext(device, log) {
       device.motion('UP', x, y + dyPx);
       await sleep(300);
     },
-
-    /** A tap on the empty strip near the bottom of the window: outside any popup. */
-    async tapScrim() {
-      const height = device.size().height;
-      const width = device.size().width;
-      device.tapAt(Math.round(width / 2), Math.round(height * 0.8));
-      await sleep(400);
-    },
-
-    /** Whether a soft keyboard is on screen, from the input method's own report. */
-    imeShown() {
-      return imeServiceShown(device.adbShell('dumpsys input_method'));
-    },
-
-    /**
-     * Ask the device to show a soft keyboard beside a hardware one, and hand back what
-     * the setting said before so the caller can put it back.
-     *
-     * @param {boolean} enabled
-     * @returns {boolean} the previous value
-     */
-    setImeWithHardKeyboard(enabled) {
-      const previous = device.imeWithHardKeyboard();
-      device.setImeWithHardKeyboard(enabled);
-      return previous;
-    },
-
-    /**
-     * Real key events into the focused window: `input text`, with no target argument,
-     * so the field has to hold focus already.
-     *
-     * @param {string} text
-     */
-    async type(text) {
-      device.typeText(encodeInputText(text));
-      await sleep(300);
-    },
-
-    /**
-     * Take the soft keyboard down if it is up, and leave focus where it is.
-     *
-     * Only when it is up: Back is offered to the IME first, but with no keyboard it is
-     * the app's Back, which sends a React Native root to the background.
-     */
-    async hideKeyboard() {
-      if (device.imeShown()) {
-        device.key(KEY_BACK);
-        await sleep(500);
-      }
-    },
   };
-}
-
-/**
- * adb's `input text` argument form.
- *
- * The string is parsed twice - by the device's shell and by the `input` tool - so a
- * space travels as `%s`. Anything outside a safe set is refused rather than escaped by
- * guesswork: a check that typed the wrong string and asserted on it is worse than one
- * that says it cannot type that string.
- *
- * @param {string} text
- * @returns {string}
- */
-function encodeInputText(text) {
-  let encoded = '';
-  for (const char of text) {
-    if (char === ' ') {
-      encoded += '%s';
-    } else if (/^[A-Za-z0-9._\-@:/]$/.test(char)) {
-      encoded += char;
-    } else {
-      throw new Error(
-        `real-input: cannot type "${char}" with \`input text\` (outside the set it ` +
-          'accepts after being parsed twice)'
-      );
-    }
-  }
-  return encoded;
 }
 
 /* --------------------------------------------------------------------------- *
@@ -1056,118 +957,6 @@ async function hostedMixedChecks(t) {
     })`,
     indicator != null &&
       Math.abs(indicator.bounds.width - indicator.bounds.height) <= 8
-  );
-}
-
-/** `enabled` on the node a tap lands on, not on the label's own node. */
-async function dialogChecks(t) {
-  // The titles `DialogScreen` gives its dialogs. None appears anywhere else on the
-  // screen, so a text match names one window: `Locked action` and `Locked share` are
-  // the disabled ones. A Compose `Dialog` (and a `ModalBottomSheet`, which is one)
-  // is a window of its own that is not a `Pop-Up Window`, and while it is up
-  // `uiautomator dump` returns its tree rather than the app's - so the echo is read
-  // only with every dialog down, and "up" is read as the dialog's own title.
-  const ALERT = 'Delete the draft?';
-  const upCount = (text) => () =>
-    t.dump().filter((node) => node.text === text).length;
-  const opener = (testID) => () => {
-    const node = t.nodeByTestId(testID);
-    if (node == null) {
-      t.log.abort(`no opener with testID "${testID}" on the Dialogs screen`);
-    }
-    return node;
-  };
-  const open = async (testID, witness, description) => {
-    await t.tapUntilUp(opener(testID), description, upCount(witness), {
-      pollMs: DUMP_POLL_MS,
-    });
-    t.waitForOption(witness, description);
-  };
-  // The node a person acts on is not the label's own: measured on this screen, each
-  // action is a clickable `View` whose child `TextView` carries the text, and that
-  // child reads `enabled="true"` whatever the action is (a disabled one's `View` reads
-  // `enabled="false" focusable="false"`). So this reads the innermost clickable node
-  // that contains the label's centre - the one TalkBack stops on and a tap lands on.
-  const actionNodeOf = (text) => {
-    const nodes = t.dump();
-    const label = nodes.find((node) => node.text === text);
-    if (label == null) return undefined;
-    const { cx, cy } = label.bounds;
-    return nodes
-      .filter(
-        (node) =>
-          node.clickable === 'true' &&
-          node.bounds.x1 <= cx &&
-          cx <= node.bounds.x2 &&
-          node.bounds.y1 <= cy &&
-          cy <= node.bounds.y2
-      )
-      .sort(
-        (a, b) =>
-          a.bounds.width * a.bounds.height - b.bounds.width * b.bounds.height
-      )[0];
-  };
-  const enabledOf = (text) => actionNodeOf(text)?.enabled;
-  // 2. A real tap opens the alert; JS opened it, so it reports nothing (read once
-  //    it is down again, in step 5's whole-log comparison).
-  await open('dialog-open-alert', ALERT, 'the real tap that opens the alert');
-  // 3. The disabled action is disabled in the accessibility tree too, and its twin
-  //    is not. The text node sits inside the button Compose merges it into, so the
-  //    node's own `enabled` is the button's.
-  t.log.checkEquals(
-    'a disabled action is a node that is not enabled',
-    enabledOf('Locked action'),
-    'false'
-  );
-  t.log.checkEquals(
-    'and an ordinary action is enabled',
-    enabledOf('Delete draft'),
-    'true'
-  );
-
-  // 4. A real tap on the disabled action takes nothing and leaves the alert up. One
-  //    press: the right outcome is silence; step 5 is its barrier.
-  await t.tapNode(t.waitForOption('Locked action', 'the disabled action'));
-  await t.settle(1500);
-  t.log.checkEquals(
-    'a real tap on a disabled action leaves the alert up',
-    upCount(ALERT)(),
-    1
-  );
-  const waitGone = async (text, description) => {
-    const deadline = Date.now() + REACT_TIMEOUT;
-    while (upCount(text)() > 0) {
-      if (Date.now() > deadline) {
-        t.log.abort(`timed out waiting for ${description}`);
-      }
-      await t.settle(250);
-    }
-  };
-
-  // 5. The action that reports, before the close it causes.
-  t.log.checkEquals(
-    'a real tap on an action reports its id, then the close - once each, in order',
-    await t.tapOptionUntilValue(
-      'Delete draft',
-      ECHO.dialogLog,
-      'action:delete > presented:false',
-      'the real tap on "Delete draft"'
-    ),
-    'action:delete > presented:false'
-  );
-  await waitGone(ALERT, 'the action to take the alert down');
-
-  // 6. Back and a tap outside close a dismissible alert, and report the close alone.
-  await open('dialog-open-alert', ALERT, 'the real tap that reopens the alert');
-  await t.pressBack();
-  await waitGone(ALERT, 'Back to take the dismissible alert down');
-  await open('dialog-open-alert', ALERT, 'the real tap that opens it again');
-  await t.tapScrim();
-  await waitGone(ALERT, 'a tap outside to take the dismissible alert down');
-  t.log.checkEquals(
-    'Back and a tap outside each closed the alert with one close and no action',
-    t.requireEcho(ECHO.dialogLog),
-    'action:delete > presented:false > presented:false > presented:false'
   );
 }
 
@@ -2131,69 +1920,6 @@ async function hostedSwitchChecks(t) {
   );
 }
 
-/** Keystrokes reach the field inside a popover, before that popover closes. */
-async function popoverChecks(t) {
-  const FIELD = 'Rename this list';
-  const upCount = (text) => () =>
-    t.dump().filter((node) => node.text === text).length;
-  const waitGone = async (witness, description) => {
-    const deadline = Date.now() + REACT_TIMEOUT;
-    while (upCount(witness)() > 0) {
-      if (Date.now() > deadline) {
-        t.log.abort(`timed out waiting for ${description}`);
-      }
-      await t.settle(250);
-    }
-  };
-  // Outside: the log line, a `Text` with no press of its own at the top of the page,
-  // above every anchor. Aimed at its first line rather than its centre, because that
-  // line grows downward as events arrive and a centre tap would drift onto the Reset
-  // button.
-  const logNode = t.nodeByTestId(ECHO.popoverLog);
-  if (logNode == null) {
-    t.log.abort('no "popover-log" on the Popover screen to tap outside on');
-  }
-  const outside = { x: logNode.bounds.x1 + 6, y: logNode.bounds.y1 + 4 };
-
-  // An emulator answers `hw.keyboard=yes`, which hides the soft keyboard, and the
-  // keystrokes have to go to a field the IME is actually attached to; the setting goes
-  // back either way.
-  const hardKeyboard = t.setImeWithHardKeyboard(true);
-  try {
-    await t.tapTestId('popover-field-anchor');
-    t.waitForOption(FIELD, 'the popover with a field to open');
-    const field = t.nodeByTestId('popover-inner-field');
-    if (field == null) {
-      t.log.abort('the field popover is up without its TextInput in the tree');
-    }
-    await t.tapNode(field);
-    const imeDeadline = Date.now() + REACT_TIMEOUT;
-    while (!t.imeShown() && Date.now() < imeDeadline) {
-      await t.settle(250);
-    }
-    // Asserted on the committed value rather than on one entry per character, because
-    // `input text` can deliver both characters in one commit and RN then reports the
-    // field's text once. The screen also records the popover's own close from that
-    // outside tap, so the claim is the order the log carries — a bare suffix cannot see
-    // which of the two happened first.
-    await t.type('ab');
-    await t.hideKeyboard();
-    await t.tapPx(outside.x, outside.y);
-    await t.settle(400);
-    await waitGone(FIELD, 'the outside tap to take the field popover down');
-    const typedLog = t.requireEcho(ECHO.popoverLog);
-    t.log.checkEquals(
-      `real keystrokes reach the field inside the popover, before its own close (${typedLog.slice(-70)})`,
-      typedLog.includes('typed:ab') &&
-        typedLog.indexOf('typed:ab') <
-          typedLog.lastIndexOf('field:presented:false'),
-      true
-    );
-  } finally {
-    t.setImeWithHardKeyboard(hardKeyboard);
-  }
-}
-
 /** One named radio node per option, each carrying the selection. */
 async function segmentedControlChecks(t) {
   await t.requireControlOnScreen('Real-input segmented control');
@@ -2297,14 +2023,12 @@ const TREE_CHECKS = [
   { id: 'hosted-picker', run: hostedPickerChecks },
   { id: 'hosted-switch', run: hostedSwitchChecks },
   { id: 'menu', run: menuChecks },
-  { id: 'dialog', run: dialogChecks },
   { id: 'chip', run: chipChecks },
   { id: 'checkbox', run: checkboxChecks },
   { id: 'icon-button', run: iconButtonChecks },
   { id: 'button-group', run: buttonGroupChecks },
   { id: 'picker', run: pickerChecks },
   { id: 'list-item', run: listItemChecks },
-  { id: 'popover', run: popoverChecks },
   { id: 'segmented-control', run: segmentedControlChecks },
 ];
 

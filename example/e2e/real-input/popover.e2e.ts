@@ -115,3 +115,37 @@ test('the keyboard pushes the popover itself, not only the field inside it', asy
     await fieldAboveKeyboard(field, beforeFocus);
   });
 });
+
+test('keystrokes reach the field inside the popover before a tap outside closes it', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'popover');
+  const anchor = screen.getByTestId('popover-field-anchor');
+  const log = screen.getByTestId('popover-log');
+  await reveal(screen, anchor, { reads: [log] });
+  await expect(log).toHaveText('none');
+
+  // Outside is the log's first line, a `Text` with no press of its own, read before the
+  // popup takes the tree. Its first line, because the line grows downward as events
+  // arrive and its centre drifts onto the Reset button.
+  const logBox = await log.boundingBox();
+  if (logBox == null) {
+    throw new Error(
+      'real-input: the popover log has no box to tap outside on.'
+    );
+  }
+  const outside = { x: logBox.x + 6, y: logBox.y + 4 };
+
+  await anchor.tap();
+  const popover = screen.getByTestId('popover-field-popover');
+  await popover.waitFor({ state: 'visible' });
+  await expect(popover.getByText('Rename this list')).toHaveCount(1);
+  const field = popover.getByTestId('popover-inner-field');
+  await field.tap();
+  await field.pressSequentially('ab');
+  await screen.tapAt(outside);
+  await popover.waitFor({ state: 'detached' });
+  await expect(log).toHaveText('typed:ab > field:presented:false');
+});
