@@ -288,6 +288,14 @@ describe('planRerunFailed', () => {
     expect(
       planRerunFailed({ gate: 'check', entries: [], ...now }).refusal
     ).toMatch(/is not one/);
+    const filtered = 'real-input:ios:--control:form';
+    expect(
+      planRerunFailed({
+        gate: filtered,
+        entries: [line({ gate: filtered })],
+        ...now,
+      }).refusal
+    ).toMatch(/is not one/);
   });
 
   it('a second attempt starts from the first completion and keeps the original run', () => {
@@ -713,6 +721,20 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
       .trim()
       .split('\n');
     expect(args).toHaveLength(1);
+  }, 120_000);
+
+  it('refuses a filter on the command line: it chooses the units itself', () => {
+    const repo = makeRepo();
+    for (const args of [
+      ['real-input:ios', '--rerun-failed', '--', '--control', 'form'],
+      ['real-input:ios:--control:form', '--rerun-failed'],
+    ]) {
+      const refused = runCli(repo, args);
+      expect(refused.stderr).toContain(
+        'takes the full gate name and no filter'
+      );
+      expect(refused.status).toBe(2);
+    }
   }, 120_000);
 
   it('refuses a run that left no per-control results', () => {
