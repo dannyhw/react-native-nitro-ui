@@ -7,8 +7,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const process = require('node:process');
 
-/** Path of the state file, relative to `example/` (Metro's project root). */
-const RUN_STATE_FILE = path.join('harness-run', 'state.json');
+/**
+ * Path of a run's state file, relative to `example/` (Metro's project root). One
+ * file per Metro port, so an iOS and an Android run from one checkout, each on its
+ * own port, never read or remove each other's.
+ *
+ * @param {number} port
+ * @returns {string}
+ */
+function runStateFile(port) {
+  return path.join('harness-run', `state-${String(port)}.json`);
+}
 
 /**
  * The same path as the URL the middleware serves it under. Served on the Metro port:
@@ -35,7 +44,8 @@ function runState({ env = process.env } = {}) {
 }
 
 /**
- * Connect middleware serving the published state at exactly `RUN_STATE_URL`.
+ * Connect middleware serving the published state at exactly `RUN_STATE_URL`: the
+ * state of the run on the port the request arrived on, which is this Metro's own.
  *
  * Anything else - including every other path under the state directory - goes to
  * `next()` untouched, so attaching this cannot shadow a route or a module.
@@ -45,16 +55,19 @@ function runState({ env = process.env } = {}) {
  * @returns {(req: unknown, res: unknown, next: () => void) => void}
  */
 function createRunStateMiddleware({ exampleDir }) {
-  const file = path.join(exampleDir, RUN_STATE_FILE);
   return function runStateMiddleware(req, res, next) {
     const url = typeof req.url === 'string' ? req.url : '';
     if (url.split('?')[0] !== RUN_STATE_URL) {
       next();
       return;
     }
+    // The listening socket's port, not the Host header: an emulator reaches Metro
+    // through `adb reverse`, which keeps the port and may rewrite the host.
+    const port = req.socket?.localPort;
     let body;
     try {
-      body = fs.readFileSync(file, 'utf8');
+      if (typeof port !== 'number') throw new Error('no local port');
+      body = fs.readFileSync(path.join(exampleDir, runStateFile(port)), 'utf8');
     } catch {
       // No run is publishing: a reader treats that as "no premise opted out".
       res.statusCode = 404;
@@ -101,7 +114,7 @@ function withRunStateRoute({ exampleDir }) {
  * @returns {() => void} stops publishing and removes the file.
  */
 function publishRunState({ exampleDir, port, log = () => {} }) {
-  const file = path.join(exampleDir, RUN_STATE_FILE);
+  const file = path.join(exampleDir, runStateFile(port));
   fs.mkdirSync(path.dirname(file), { recursive: true });
 
   const write = () => {
@@ -147,7 +160,7 @@ function publishRunState({ exampleDir, port, log = () => {} }) {
 }
 
 module.exports = {
-  RUN_STATE_FILE,
+  runStateFile,
   RUN_STATE_URL,
   runState,
   createRunStateMiddleware,
