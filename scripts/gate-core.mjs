@@ -79,13 +79,16 @@ export function isUnrelaxed(entry) {
   );
 }
 
-/** `relaxed: NAME=value, ...` for a line run with relaxing switches, else `null`. */
+/**
+ * `relaxed: NAME, ...` for a line run with relaxing switches, else `null`. The
+ * values stay on the line: one can be a local path.
+ */
 export function formatRelaxed(entry) {
   const relaxed = entry?.relaxed;
   if (relaxed == null || typeof relaxed !== 'object') return null;
   const names = Object.keys(relaxed);
   if (names.length === 0) return null;
-  return `relaxed: ${names.map((name) => `${name}=${String(relaxed[name])}`).join(', ')}`;
+  return `relaxed: ${names.join(', ')}`;
 }
 
 /**

@@ -147,7 +147,7 @@ including this one, that is all of these decides, green or red:
 A red that is relaxed or judged by other gate code still decides: it can only ask for a run.
 
 A relaxed run still counts on its own branch, and its row says so:
-`**PASS** (relaxed: NITRO_UI_ALLOW_UNSTAMPED=1)`.
+`**PASS** (relaxed: NITRO_UI_ALLOW_UNSTAMPED)`.
 
 So a branch whose newest run on these files is red makes the gate red on every branch on the
 same files, until a newer full run on that digest is green, and this holds after its worktree

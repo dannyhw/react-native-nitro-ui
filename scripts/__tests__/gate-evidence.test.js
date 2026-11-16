@@ -219,7 +219,7 @@ describe('a green run recorded on another branch', () => {
     expect(rowOf('harness:ios', { list: [relaxed] }).state).toBe('green');
     const table = renderGateTable({ entries: [relaxed], ...now });
     expect(table).toContain(
-      '| `harness:ios` | **PASS** (relaxed: NITRO_UI_ALLOW_LOCALE_MISMATCH=1)'
+      '| `harness:ios` | **PASS** (relaxed: NITRO_UI_ALLOW_LOCALE_MISMATCH)'
     );
   });
 
@@ -608,7 +608,7 @@ describe('gate.mjs across the worktrees of one clone', () => {
     expect(ledger.at(-1).relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
     const there = runCli(clone, clone.there, ['need', '--for', 'merge']);
     expect(needLine(there.stdout, 'harness:ios')).toContain(
-      '✓ harness:ios — green on its own digest (relaxed: NITRO_UI_ALLOW_UNSTAMPED=1)'
+      '✓ harness:ios — green on its own digest (relaxed: NITRO_UI_ALLOW_UNSTAMPED)'
     );
     const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
     expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
