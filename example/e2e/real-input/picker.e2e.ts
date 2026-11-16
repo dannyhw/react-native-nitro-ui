@@ -2,7 +2,14 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { popupWindowCount } from './device-read';
-import { boxOf, drag, openScreen, reveal, textOf } from './support';
+import {
+  boxOf,
+  drag,
+  liftIntoBand,
+  openScreen,
+  reveal,
+  textOf,
+} from './support';
 import { actsOnOneNamedNode, itemAnnounces } from './reader';
 
 const NAME = 'Real-input picker';
@@ -183,8 +190,13 @@ test('a real tap on the disabled Picker opens nothing where the enabled one open
     'a tap on the disabled Picker opened a window'
   ).toBe(0);
 
-  // The same tap on the enabled twin is what makes the line above a refusal.
-  await enabled.tap();
+  // The same tap on the enabled twin is what makes the line above a refusal. The
+  // reveal parks the disabled one; its twin below can be left at the band's edge.
+  const twin = await liftIntoBand(screen, enabled);
+  await screen.tapAt({
+    x: twin.x + twin.width / 2,
+    y: twin.y + twin.height / 2,
+  });
   await popupsReach(1, 'a real tap on the enabled Picker opened no window');
   await app.back();
   await popupsReach(0, "Back left the enabled Picker's window up");
