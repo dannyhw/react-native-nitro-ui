@@ -64,7 +64,9 @@ node scripts/gate.mjs harness:android --background
 
 `real-input:android` can take the place of either harness gate. Each harness run publishes its
 run state in `example/harness-run/state-<port>.json`, for its own Metro port, so the two
-harness gates do not see each other's.
+harness gates do not see each other's. Two harness runs in one worktree still share
+`example/.harness/manifest.js`, which the harness rewrites at each start, and Metro's cache in
+`example/.harness/cache/metro`: a race on either gives a red or a flaky run, never a false green.
 
 What the two runs still share, and so must not do:
 

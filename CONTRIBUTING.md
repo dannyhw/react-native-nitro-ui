@@ -613,12 +613,12 @@ Each device gate is keyed to the files its own run reads: on a branch whose gate
 green, an edit under `example/e2e/` owes `real-input:android` and nothing else, and an edit to a
 harness test owes the harness gates and no real-input gate. A fresh branch owes `check` and the
 device gates no branch of the clone has passed on its files. A red full `harness:<p>` or
-`real-input:<p>` run can be completed with
-`--rerun-failed`, which re-runs only the suites or controls that did not pass and records the
-outcome under the full gate; `table` shows it as completed, never as a clean pass. An iOS gate
-and an Android gate can run side by side from one worktree under one lease for both platforms:
-the lease exports a Metro port per platform and each gate uses its own. Build both apps first,
-and run `real-input:ios` with no other gate beside it; the two harness gates can run together.
+`real-input:<p>` run can be completed with `--rerun-failed`, which re-runs only the suites or
+controls that did not pass and records the outcome under the full gate; `table` shows it as
+completed, never as a clean pass. An iOS gate and an Android gate can run side by side from one
+worktree under one lease for both platforms: the lease exports a Metro port per platform and
+each gate uses its own. Build both apps first, and run `real-input:ios` with no other gate
+beside it; the two harness gates can run together.
 
 What review and merge need, how a run is matched to the tree, completing a red run, waiting for
 a background gate, and where logs are kept are in [docs/agents/gates.md](docs/agents/gates.md).
@@ -780,10 +780,10 @@ the one setting an assertion depends on, the locale opt-out
 locale-dependent box). `rn-harness.config.mjs` writes `example/harness-run/state-<port>.json`
 for its Metro port (gitignored, refreshed every 2 s), and `example/metro.config.js` declares the
 one Metro route that serves, per request, the file for the port the request arrived on, so two
-runs on two ports never see each other's. It is served on the Metro port because an emulator reaches the host
-only through the `adb reverse` the harness sets up for Metro. A reader checks the file's
-`metroPort` and age before trusting it. `scripts/harness-run-state.js` holds the publishing and
-serving code for both config files.
+runs on two ports never see each other's. It is served on the Metro port because an emulator
+reaches the host only through the `adb reverse` the harness sets up for Metro. A reader checks
+the file's `metroPort` and age before trusting it. `scripts/harness-run-state.js` holds the
+publishing and serving code for both config files.
 
 ## Running the real-input tests
 
