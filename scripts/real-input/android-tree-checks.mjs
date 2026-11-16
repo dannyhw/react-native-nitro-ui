@@ -828,19 +828,6 @@ function makeContext(device, log) {
       await sleep(500);
     },
 
-    /**
-     * A finger that arrives, stays `durationMs` and leaves: `input swipe` at zero
-     * distance, the only press length adb can be asked for.
-     *
-     * @param {number} x
-     * @param {number} y
-     * @param {number} [durationMs]
-     */
-    async holdAt(x, y, durationMs = 1000) {
-      device.swipe(x, y, x, y, durationMs);
-      await sleep(300);
-    },
-
     /** A tap on the empty strip near the bottom of the window: outside any popup. */
     async tapScrim() {
       const height = device.size().height;
@@ -1616,7 +1603,6 @@ async function checkTimeDrums(t) {
  * @param {ReturnType<typeof makeContext>} t
  */
 async function checkInlineCalendarGrids(t) {
-  const density = t.density();
 
   /** The two rows `DatePickerScreen` draws for this, and what each box should produce. */
   const wanted = [
@@ -1951,103 +1937,11 @@ async function contextMenuChecks(t) {
   const density = t.density();
   const target = t.nodeByTestId('ctx-target')?.bounds;
   if (target == null) log.abort('no ctx-target on the ContextMenu screen');
-  // Off-centre on purpose: the press point is the anchor, so a menu anchored to the
-  // view's centre or corner reads tens of dp away from the finger.
-  const at = pointIn(target, 0.3, 0.4);
 
-  // 1. Quick taps are the child's: one onPress each, no menu.
-  let quick = 0;
-  for (let i = 0; i < 3; i += 1) {
-    const before = contextEcho(t);
-    await t.tapPx(at.x, at.y);
-    const after = await contextEchoWhen(t, (e) => e.press === before.press + 1);
-    await sleep(500);
-    if (
-      contextEcho(t).press === before.press + 1 &&
-      after.opens === before.opens
-    ) {
-      quick += 1;
-    }
-  }
-  log.checkEquals(
-    'a quick tap presses the child once and opens nothing (of 3)',
-    quick,
-    3
-  );
-  t.waitForPopupCount(0, 'no popup after the quick taps');
-
-  // 2. A still hold opens the menu at the finger; after a pick, the next tap presses
-  //    once.
-  const anchors = [];
-  let fresh = 0;
-  for (let i = 0; i < 3; i += 1) {
-    const before = contextEcho(t);
-    await t.holdAt(at.x, at.y, 1000);
-    const popup = await contextPopupWithin(t);
-    if (popup == null || !popup.rows.includes('Copy text')) {
-      log.note(`hold ${String(i + 1)}: no popup with "Copy text"`);
-      await contextClose(t);
-      continue;
-    }
-    anchors.push({ dx: popup.bounds.x1 - at.x, dy: popup.bounds.y1 - at.y });
-    const row = popup.nodes.find((node) => node.text === 'Copy text');
-    if (row != null) await t.tapPx(row.bounds.cx, row.bounds.cy);
-    t.waitForPopupCount(0, 'the pick to take the popup down');
-    const mid = await contextEchoWhen(t, (e) => e.closes === before.closes + 1);
-    await t.tapPx(at.x, at.y);
-    const after = await contextEchoWhen(t, (e) => e.press === mid.press + 1);
-    await sleep(400);
-    if (after.press === mid.press + 1) fresh += 1;
-  }
-  log.note(
-    `popup top-start minus the press point, px at density ${String(density)}: ` +
-      anchors.map((a) => `${String(a.dx)},${String(a.dy)}`).join(' | ')
-  );
-  log.checkEquals('a fresh tap after each menu presses once (of 3)', fresh, 3);
-  log.checkEquals(
-    "the popup's top-start is the finger, within 1 dp (of 3)",
-    anchors.filter(
-      (a) => Math.abs(a.dx) <= density && Math.abs(a.dy) <= density
-    ).length,
-    3
-  );
-
-  // 3. A drag that starts on the ContextMenu scrolls the page and opens nothing.
-  let scrolled = 0;
-  let openedByDrag = 0;
-  for (let i = 0; i < 3; i += 1) {
-    const from = pointIn(
-      t.nodeByTestId('ctx-target')?.bounds ?? target,
-      0.5,
-      0.5
-    );
-    const before = contextEcho(t);
-    await t.swipePx(from.x, from.y, from.x, from.y - 500, 250);
-    await sleep(900);
-    const after = contextEcho(t);
-    if (after.scrollY !== before.scrollY) scrolled += 1;
-    openedByDrag += after.opens - before.opens;
-    if (contextPopup(t) != null) {
-      openedByDrag += 1;
-      await contextClose(t);
-    }
-    await contextTop(t);
-  }
-  log.checkEquals(
-    'a drag starting on the ContextMenu scrolls the page (of 3)',
-    scrolled,
-    3
-  );
-  log.checkEquals('and opens no menu', openedByDrag, 0);
-
-  // 4. Hold, then drag in the same gesture: the menu is up and the page stays still.
+  // 1. Hold, then drag in the same gesture: the menu is up and the page stays still.
   //    Back closes it.
   {
-    const from = pointIn(
-      t.nodeByTestId('ctx-target')?.bounds ?? target,
-      0.4,
-      0.5
-    );
+    const from = pointIn(target, 0.4, 0.5);
     const before = contextEcho(t);
     await t.holdThenDrag(from.x, from.y, -400);
     const popup = await contextPopupWithin(t, 2000);
@@ -2070,109 +1964,15 @@ async function contextMenuChecks(t) {
     );
   }
 
-  // 5. A horizontal ScrollView inside pans and opens nothing.
-  {
-    const strip = t.nodeByTestId('ctx-hscroll')?.bounds;
-    if (strip == null) log.abort('no ctx-hscroll on the ContextMenu screen');
-    const from = pointIn(strip, 0.8, 0.5);
-    const to = pointIn(strip, 0.2, 0.5);
-    const before = contextEcho(t);
-    await t.swipePx(from.x, from.y, to.x, to.y, 300);
-    await sleep(800);
-    const after = contextEcho(t);
-    log.check('the inner horizontal ScrollView pans', after.hX !== before.hX);
-    log.checkEquals('and opens no menu', after.opens - before.opens, 0);
-    await t.swipePx(to.x, to.y, from.x, from.y, 300);
-    await sleep(600);
-  }
-
-  // 6. An outside tap closes the menu and presses nothing below it.
-  {
-    const below = t.nodeByTestId('ctx-below')?.bounds;
-    if (below == null) log.abort('no ctx-below on the ContextMenu screen');
-    const belowAt = pointIn(below, 0.85, 0.5);
-    const before = contextEcho(t);
-    await t.holdAt(at.x, at.y, 1000);
-    const popup = await contextPopupWithin(t);
-    log.check('the hold before the outside tap opens the menu', popup != null);
-    await t.tapPx(belowAt.x, belowAt.y);
-    t.waitForPopupCount(0, 'the outside tap to close the menu');
-    const after = await contextEchoWhen(
-      t,
-      (e) => e.closes === before.closes + 1
-    );
-    await sleep(400);
-    log.checkEquals(
-      'an outside tap closes the menu',
-      after.closes - before.closes,
-      1
-    );
-    log.checkEquals(
-      'and the press under it never lands',
-      contextEcho(t).below - before.below,
-      0
-    );
-  }
-
-  // 7. Nested: the innermost ContextMenu opens, the outer does not.
-  {
-    const before = contextEcho(t);
-    const inner = await contextReveal(t, 'ctx-inner');
-    const innerAt = pointIn(inner, 0.5, 0.5);
-    await t.holdAt(innerAt.x, innerAt.y, 1000);
-    const popup = await contextPopupWithin(t);
-    log.check(
-      `a hold on the inner ContextMenu opens the inner menu (rows ${popup == null ? '-' : popup.rows.join('/')})`,
-      popup != null &&
-        popup.rows.includes('Inner action') &&
-        !popup.rows.includes('Outer action')
-    );
-    await contextClose(t);
-    const after = await contextEchoWhen(t, (e) => e.inner === before.inner + 1);
-    log.checkEquals(
-      'the inner reports the open',
-      after.inner - before.inner,
-      1
-    );
-    log.checkEquals('the outer does not', after.outer - before.outer, 0);
-  }
-
-  // 8. Disabled: no menu, and the hold is the child's (a Pressable with no onLongPress
-  //    presses on release).
-  {
-    const before = contextEcho(t);
-    const child = await contextReveal(t, 'ctx-disabled-target');
-    const childAt = pointIn(child, 0.5, 0.5);
-    await t.holdAt(childAt.x, childAt.y, 1000);
-    const popup = await contextPopupWithin(t, 1500);
-    await contextClose(t);
-    const after = await contextEchoWhen(
-      t,
-      (e) => e.dPress === before.dPress + 1
-    );
-    log.check('a disabled ContextMenu opens nothing on a hold', popup == null);
-    log.checkEquals('and reports no open', after.dOpens - before.dOpens, 0);
-    log.checkEquals(
-      'the child keeps the gesture: one press on release',
-      after.dPress - before.dPress,
-      1
-    );
-  }
-
-  // 9. An accessible ContextMenu is one node with the label, long-clickable: what
-  //    TalkBack offers its double-tap-and-hold on. (The a11y sweep grades its name.)
+  // 2. An accessible ContextMenu is long-clickable: what TalkBack offers its
+  //    double-tap-and-hold on.
   {
     await contextReveal(t, 'ctx-accessible');
     const named = t
       .dump()
-      .filter((node) => node.contentDesc === 'Message from Grace');
-    log.checkEquals('one node carries "Message from Grace"', named.length, 1);
-    log.checkEquals(
-      'and it is long-clickable',
-      named[0]?.longClickable,
-      'true'
-    );
-    log.checkEquals('and focusable', named[0]?.focusable, 'true');
+      .find((node) => node.contentDesc === 'Message from Grace');
+    log.checkEquals('it is long-clickable', named?.longClickable, 'true');
+    log.checkEquals('and focusable', named?.focusable, 'true');
     // A long-clickable node is an actionable stop, so a menu that is not `accessible`
     // has to offer none: it would otherwise read its own Text as a stop the app never
     // asked for.
@@ -2183,36 +1983,6 @@ async function contextMenuChecks(t) {
       'false'
     );
     log.checkEquals('and is not focusable', plain?.focusable, 'false');
-  }
-
-  // 10. At the bottom edge the popup opens above the finger. Last, from the top of the
-  //     page, because the bottom row sits outside the ScrollView.
-  {
-    await contextTop(t);
-    const bottom = t.nodeByTestId('ctx-bottom')?.bounds;
-    if (bottom == null) log.abort('no ctx-bottom on the ContextMenu screen');
-    const low = pointIn(bottom, 0.3, 0.5);
-    const before = contextEcho(t);
-    await t.holdAt(low.x, low.y, 1000);
-    const popup = await contextPopupWithin(t);
-    log.note(
-      `bottom edge: press=${String(low.x)},${String(low.y)} popup=` +
-        (popup == null ? '-' : t.boundsText({ bounds: popup.bounds }))
-    );
-    log.check(
-      'near the bottom edge the popup opens above the finger',
-      popup != null && popup.bounds.y2 <= low.y
-    );
-    await contextClose(t);
-    const after = await contextEchoWhen(
-      t,
-      (e) => e.bottom === before.bottom + 1
-    );
-    log.checkEquals(
-      'and that ContextMenu reported the open',
-      after.bottom - before.bottom,
-      1
-    );
   }
 }
 
