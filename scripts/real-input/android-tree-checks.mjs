@@ -1003,6 +1003,32 @@ async function contextClose(t) {
   await sleep(300);
 }
 
+/**
+ * The node with this testID, scrolled wholly inside `ctx-scroll` with slow drags on the
+ * right-edge strip: no fling, and no ContextMenu under the finger.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} testID
+ */
+async function contextReveal(t, testID) {
+  const edge = t.displayWidth() - 8;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const view = t.nodeByTestId('ctx-scroll')?.bounds;
+    const node = t.nodeByTestId(testID)?.bounds;
+    if (view == null) t.log.abort('the ContextMenu screen has no ctx-scroll');
+    if (node != null && node.y1 >= view.y1 + 8 && node.y2 <= view.y2 - 8) {
+      return node;
+    }
+    // Absent from the dump means scrolled out of sight, and everything here is below.
+    const down = node == null || node.y2 > view.y2 - 8;
+    const from = Math.round((view.y1 + view.y2) / 2);
+    await t.swipePx(edge, from, edge, down ? from - 350 : from + 350, 900);
+  }
+  const last = t.nodeByTestId(testID);
+  if (last == null) t.log.abort(`no "${testID}" on the ContextMenu screen`);
+  return last.bounds;
+}
+
 /** @param {ReturnType<typeof makeContext>} t */
 async function contextTop(t) {
   const edge = t.displayWidth() - 8;
