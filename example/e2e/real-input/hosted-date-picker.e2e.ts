@@ -23,11 +23,8 @@ test('a hosted DatePicker opens its dialog, and a day cell reaches JS', async ({
   await expect(value).toHaveText('2026-05-17');
 
   await field.tap();
-  // The Material dialog is a window of its own and, unlike the library's own
-  // `Dialog`, it is not a view the control stamps with its testID: while it is up,
-  // the tree the driver reads is the dialog and nothing else — the app's rows are
-  // gone from it. So the day is named the way a reader names it, and `OK` is the
-  // button's own drawn text.
+  // The Material dialog is a window of its own that the control does not stamp with its
+  // testID: while it is up, the tree the driver reads is the dialog and nothing else.
   const day = screen.getByLabel('Friday, May 22, 2026');
   await day.waitFor({ state: 'visible' });
   // The cell's own box rather than the driver's tap: the day is one node whose

@@ -1,12 +1,9 @@
 /**
- * Reading a hosted control's own state out of a `uiautomator dump`.
+ * Reading a hosted control’s own state out of a `uiautomator dump`.
  *
- * Split from `android.mjs` for the same reason `ios-log.mjs` exists: the script
- * boots nothing without a device, and this function's failure mode is silence. A
- * witness that answers `null` cannot report a change, so a retry loop blames every
- * dropped touch and a genuinely lost change event still reads as green. Reading a
- * dump is also pure geometry, so it is worth having on its own: a real dump, kept
- * as a fixture, exercises it without an emulator.
+ * A witness that answers `null` cannot report a change, so a retry loop blames every
+ * dropped touch and a genuinely lost change event still reads as green. Reading a dump
+ * is also pure geometry: a real dump, kept as a fixture, exercises it without one.
  */
 
 /**
@@ -48,21 +45,14 @@
 }
 
 /**
- * The control's own answer to "what value do I hold": `checked` on the checkable
- * node that carries this labelled control.
+ * The control’s own answer to “what value do I hold”: `checked` on the checkable node
+ * that carries this labelled control.
  *
- * A hosted Compose Switch publishes its state on its own accessibility node, and
- * the label the library sets lands on a *child* of it. Measured in a dump of the
- * running app: the parent is `checkable="true" checked="false"` at
- * `[901,738][1038,864]`, and the node carrying `content-desc="Controlled switch"`
- * is `checkable="false"` at `[901,759][1038,843]`. So this cannot simply read the
- * labelled node, and cannot walk backwards to the first checkable node it finds
- * either - the dump is flat, so document order is an accident of how the tree
- * happens to be written. It takes the tightest checkable box that *contains* the
- * labelled one, which is the node that actually is the control.
- *
+ * A hosted Compose Switch publishes its state on its own node and the label lands on
+ * a child of it; the dump is flat, so document order proves nothing. It takes the
+ * tightest checkable box containing the labelled one.
  * @param {ReadonlyArray<{contentDesc: string, checkable: string, checked: string, bounds: {x1: number, y1: number, x2: number, y2: number, width: number, height: number}}>} tree
- * @param {string} description the control's `accessibilityLabel`
+ * @param {string} description the control’s `accessibilityLabel`
  * @returns {string | null} `"on"` / `"off"`, or null when no node answers
  */
 export function nativeChecked(tree, description) {

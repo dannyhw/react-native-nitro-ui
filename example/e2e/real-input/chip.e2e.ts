@@ -13,10 +13,8 @@ test('a real tap on a filter Chip reaches JS', async ({ app, screen }) => {
   const value = screen.getByTestId('real-input-chip-value');
   await reveal(screen, chip);
 
-  // The Compose Chip puts its name on a node inside the 48 dp clickable one, so
-  // "the tap landed on the thing a reader named" is the part no harness test
-  // makes. The refused toggle and the disabled chip are the harness's
-  // ("reverts a toggle JS refused", "takes no toggle while disabled").
+  // Compose puts a Chip’s name on a node inside the 48 dp clickable one, so “the tap
+  // landed on the thing a reader named” is the part only a device can check.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('off');
   treeAnnounces(NAME, { checked: 'off' });

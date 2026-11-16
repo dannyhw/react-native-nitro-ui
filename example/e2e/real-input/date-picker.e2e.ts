@@ -34,14 +34,9 @@ test('a real tap opens the date dialog, a day cell reaches JS, OK closes it', as
 
   const target = targetDay();
 
-  // The day cells are named with the whole date — "Friday, November 20, 2026" —
-  // which is the screen-reader fact this suite keeps, and the only way to say
-  // *which* day a person is pressing: the grid's own nodes carry no testID and the
-  // dialog window carries none either, so a tap by number could land on any
-  // month's 20th. Picking by the name the reader reads is the honest version —
-  // and the name is the only handle: in the tree the driver reads, the day is one
-  // node carrying the date as its label and an unnamed clickable node beside it,
-  // so a role query for "button" answers a node with no name to aim at.
+  // The day cells are named with the whole date, which is the only way to say which day
+  // a person is pressing: the grid’s nodes carry no testID, so a tap by number could
+  // land on any month’s 20th.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('-');
 

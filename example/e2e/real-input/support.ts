@@ -54,11 +54,9 @@ export function resetTapBand(): void {
 /**
  * The band a tap can land in, measured rather than guessed.
  *
- * `boundingBox` reports device pixels, which differ per emulator profile, so
- * the bounds come from the app itself: under the tab strip, because a tap up
- * there selects another screen, and inside the content view, which excludes the
- * status bar, the system nav bar and the IME — the content view shrinks when the
- * keyboard is up, which is also what the keyboard checks read.
+ * `boundingBox` reports device pixels, which differ per emulator profile, so the bounds
+ * come from the app itself: under the tab strip, and inside the content view — which
+ * excludes the status bar, the nav bar and the IME, and shrinks when the keyboard is up.
  */
 export async function tapBand(screen: Screen): Promise<TapBand> {
   if (band != null) return band;
@@ -122,13 +120,10 @@ const CONTENT_STEP = 0.54;
 /**
  * Where across the window a content drag travels, as a fraction of its width.
  *
- * The middle is where a page's content is, which is the problem: a hosted Compose
- * `Slider` owns the horizontal gesture and is wide enough to lie across the middle
- * of the Host screen, so a "scroll" drag that crosses it is answered by the slider
- * and the page never moves — measured here as six `onSlidingStart` events and one
- * screen that would not scroll. A drag that moved nothing therefore travels the
- * page's own padding on the next try, a column no control draws into; and if that
- * is swallowed too, the right-hand gutter gets the last attempt.
+ * A hosted Compose `Slider` owns the horizontal gesture and is wide enough to lie across
+ * the middle of the Host screen, so a drag there is answered by the slider and the page
+ * never moves. A drag that moved nothing therefore travels the page’s own padding on
+ * the next try, and the right-hand gutter gets the last attempt.
  */
 const DRAG_COLUMNS = [0.5, 0.03, 0.97];
 
@@ -138,12 +133,9 @@ let dragColumn = 0;
 /**
  * Down-drags taken since the page last started at the top.
  *
- * A screen's list is composed lazily: a row that has been scrolled past is not
- * merely off screen, it is *out of the tree*, so its label matches no node at all
- * and there is nothing to aim at. The only reliable way back to a row is the way
- * a person takes — go up again — and the number of drags to undo is the number
- * this file took going down. `openScreen` zeroes it, because a freshly opened
- * screen starts at the top.
+ * A screen’s list is composed lazily: a row that has been scrolled past is out of the
+ * tree, so its label matches no node at all. The only reliable way back is the way a
+ * person takes — go up again — and the drags to undo are the drags taken going down.
  */
 let downDrags = 0;
 
@@ -172,13 +164,12 @@ export async function boxOf(locator: Locator): Promise<Box | null> {
 }
 
 /**
- * Scroll a control into the band a tap can reach, by dragging the viewport: the
- * mobile engine has no `scrollIntoView` for a node inside somebody else's list.
- * A hosted node answers with a box whether or not the page reached it, and a box
- * says nothing about scroll left, so the engine's own visibility is the witness.
- * `reads` names nodes a test still has to read, which come back by nudging the
- * page the other way while the control stays in the band.
- */ export async function reveal(
+ * Scroll a control into the band a tap can reach, by dragging the viewport: the mobile
+ * engine has no `scrollIntoView` for a node inside somebody else’s list. A hosted node
+ * answers with a box whether or not the page reached it, so the engine’s own
+ * visibility is the witness. `reads` names nodes a test still has to read.
+ */
+export async function reveal(
   screen: Screen,
   locator: Locator,
   options: { swipes?: number; reads?: Locator[] } = {}
@@ -299,26 +290,19 @@ async function isInUpperHalf(screen: Screen, box: Box): Promise<boolean> {
 /**
  * How far inside the band a revealed control has to sit, as a fraction of it.
  *
- * The band is "not the tab strip, not the system bars", which is the honest answer
- * to "can a tap land here" but not to "did this tap land on my control": a dev
- * build's LogBox notification docks at the bottom of the window and swallows
- * touches meant for the row behind it (seen on the Form screen, where the Note
- * field was revealed just above the navigation bar and under that box). Asking
- * for the middle of the band costs one more drag now and then, and keeps a
- * revealed control clear of anything that parks against an edge.
+ * A dev build’s LogBox notification docks at the bottom of the window and swallows
+ * touches meant for the row behind it, so the safe band asks for the middle of the band
+ * and keeps a revealed control clear of anything that parks against an edge.
  */
 const BAND_MARGIN = 0.12;
 
 /**
- * The row's box once it has stopped moving, or `null` for "not parked in the band".
+ * The row’s box once it has stopped moving, or `null` for “not parked in the band”.
  *
- * A drag leaves a list coasting: the box read a moment later is the row's box
- * *now*, and the finger that follows it lands where the row was about to be. That
- * is what makes a check aim at a control and press nothing — the tap goes into
- * the space a still-travelling row will occupy in 200 ms, and the check then
- * reports a control that does not answer. Two reads 150 ms apart that agree is
- * the cheapest proof that the page is standing still, and the band is re-checked
- * afterwards because coasting can carry a row out of it.
+ * A drag leaves a list coasting, and a finger aimed at the box read a moment later lands
+ * where the row was about to be. Two reads 150 ms apart that agree is the cheapest proof
+ * the page is standing still; the band is re-checked after, since coasting can carry a
+ * row out of it.
  */
 async function settleIntoBand(
   screen: Screen,
@@ -395,19 +379,10 @@ const LIFT_STEP = 0.12;
 /**
  * Bring a control into the band by short drags towards the bottom of the list.
  *
- * This is for the control that is on screen but parked low — at the bottom of the
- * window, below where a tap lands — because the reveal that got it there was
- * following a *different* node: a hosted control's own box is a fact about the
- * Compose composition rather than about the pixel the finger will hit, so a test
- * reveals the React Native echo above it and is left with the echo in the band and
- * the control under it. Nudging towards the bottom of the list raises the control;
- * a full `CONTENT_STEP` drag is too coarse for that last stretch because it lifts
- * the rows above it out of the tree, so the drags are short, and the rows the test
- * still has to read are required to stay on screen while they happen. The lift
- * aims at the safe band and not the bare one: at the very bottom of the window a
- * hosted control sits behind whatever chrome docks there — a dev build's LogBox
- * banner is a real view that takes the touch first — so a box just inside the band
- * is a box a drag never reaches.
+ * A hosted control’s box is a fact about the Compose composition rather than about the
+ * pixel the finger will hit, so a test that reveals the echo above it can be left with
+ * the echo in the band and the control under it. A full `CONTENT_STEP` drag is too coarse
+ * there — it lifts the rows above out of the tree — so the drags are short.
  */
 export async function liftIntoBand(
   screen: Screen,
@@ -494,13 +469,10 @@ export async function isInBand(
 /**
  * The editable node of the field a person is told about as `label`.
  *
- * The library publishes a field's accessibility label on a node *inside* its
- * `EditText` (a Compose semantics node, not the view that takes the caret), and
- * a driver types only into an editable node: `getByLabel(label).tap()` lands,
- * while `pressSequentially` refuses the group with "can only focus editable
- * fields". Asking for the editable node that *contains* the labelled one is the
- * honest reading of the tree — it names the caret owner and the announcement at
- * once, and it breaks loudly if the library ever moves the label off the field.
+ * The library publishes a field’s accessibility label on a node inside its `EditText`,
+ * and a driver types only into an editable node: `getByLabel(label).tap()` lands while
+ * `pressSequentially` refuses the group. The editable node containing the labelled one
+ * names the caret owner and the announcement at once.
  */
 export function editableField(screen: Screen, label: string): Locator {
   return screen
@@ -579,17 +551,11 @@ async function contentBox(screen: Screen): Promise<Box> {
 }
 
 /**
- * Scroll the page by a number of pixels: positive travels towards the bottom of
- * the list, negative back towards its top.
- *
- * The same column and the same centred trajectory as every other scroll in this
- * file, because a swipe that starts near an edge lands on whichever control owns
- * that edge — the DatePicker screen's own calendar scroller turns a month instead
- * of moving the page — and the injector refuses a trajectory that leaves the view
- * it started inside.
- *
- * Booked in the same counter as the drags `reveal` makes, because it is the same
- * kind of travel and {@link pageToTop} has to be able to undo it.
+ * Scroll the page by a number of pixels: positive travels towards the bottom of the list,
+ * negative back towards its top. The same column and centred trajectory as every other
+ * scroll here, because a swipe that starts near an edge lands on whichever control owns
+ * that edge. Booked in the same counter as `reveal`’s drags so {@link pageToTop} can
+ * undo it.
  */
 export async function pageScroll(
   screen: Screen,

@@ -25,10 +25,8 @@ test('a real tap opens the popover and a Pressable inside it answers exactly onc
   const presses = screen.getByTestId('popover-inner-presses');
   await reveal(screen, anchor);
 
-  // The window is tagged `popover-short-popover`, so the press is tapped on the
-  // popover's own content: a tap that reached the page behind it would count for
-  // nothing here. Ten open/close cycles and the event bookkeeping are the
-  // harness's (`Popover.harness` "cycles 10 more times").
+  // The window is tagged `popover-short-popover`, so the press is tapped on the popover’s
+  // own content: a tap that reached the page behind it would count for nothing here.
   await expect(log).toHaveText('none');
   await expect(presses).toHaveText('inner presses: 0');
   await anchor.tap();
@@ -36,10 +34,8 @@ test('a real tap opens the popover and a Pressable inside it answers exactly onc
   await popover.waitFor({ state: 'visible' });
   await popover.getByTestId('popover-short-inner-press').tap();
   await expect(presses).toHaveText('inner presses: 1');
-  // Contains, not equals: the tap also takes the popover away, and its dismiss
-  // lands in the same log line. Which events the popover announces in which order
-  // is `Popover.harness`'s claim; what only a device can say is that the press
-  // the finger made reached the control inside the window.
+  // Contains, not equals: the tap also takes the popover away, and its dismiss lands in the
+  // same log line. What only a device can say is that the press reached the content.
   await expect(log).toContainText('press:popover-short');
 });
 

@@ -21,12 +21,8 @@ test('real keystrokes reach the field and JS sees the text', async ({
   const echo = screen.getByTestId('text-typing-echo');
   await reveal(screen, field);
 
-  // Typed one key at a time, through the IME, because the whole point is that the
-  // keystrokes travel the input path: `fill` would set text and prove nothing.
-  // The refused edit, maxLength, focus/blur bookkeeping and the keyboard type are
-  // the harness's: `TextField.harness` "reverts an edit JS refuses…",
-  // "holds maxLength in UTF-16 units…", "reports focus and blur, focuses on a
-  // tap, and submits on Return".
+  // Typed one key at a time, through the IME, because the whole point is that the keystrokes
+  // travel the input path: `fill` would set text and prove nothing about the gesture.
   await expect(echo).toHaveText('typed:  (0)');
   await field.tap();
   await field.pressSequentially('abc');

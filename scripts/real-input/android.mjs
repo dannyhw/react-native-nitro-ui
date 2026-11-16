@@ -1,18 +1,12 @@
 #!/usr/bin/env node
 /**
- * The Android real-input gate: the e2e suite in `example/e2e/` delivers the touch and the
- * assertions read what the app draws. This file is the orchestrator — the lease's device,
- * the stamped APK, Metro and the private agent-device daemon — then the sweep and the
- * `uiautomator` checks, and finally one exit code and one ledger line for the run.
+ * The Android real-input gate: the e2e suite in `example/e2e/` delivers the touch and
+ * the assertions read what the app draws. This file is the orchestrator — the lease’s
+ * device, the stamped APK, Metro and the private agent-device daemon — then the sweep
+ * and the `uiautomator` checks, and finally one exit code for the run.
  *
- * Usage (devices and ports come from the environment, as everywhere else here):
- *
- *   ANDROID_AVD=<avd> ANDROID_SERIAL=<serial> ANDROID_ADB_SERVER_PORT=<port> \
- *   METRO_PORT=<port> bun run test:real-input:android [--control <id>]
- *
- * The emulator must already be booted: a device gate boots nothing and shuts nothing
- * down. It addresses one device — the serial its lease exported, through that lease's
- * adb server — and tells agent-device no other device exists.
+ * The emulator must already be booted, and only the serial this shell exported is
+ * addressed, through the adb server that lease owns.
  */
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -182,14 +176,11 @@ function suiteFiles(dir) {
 }
 
 /**
- * Install the stamped build and point it at this run's Metro.
+ * Install the stamped build and point it at this run’s Metro.
  *
- * `debug_http_host` is the preference the app itself reads for the bundler
- * address and `adb reverse` maps the device's localhost onto this host, so a
- * non-default Metro port needs both. The XML goes over base64 because it has to
- * survive adb's shell *and* the device's `sh -c` inside `run-as`, and nested
- * quotes do not make it through both.
- *
+ * `debug_http_host` and `adb reverse` together point the app at a non-default Metro
+ * port. The XML goes over base64: nested quotes do not survive adb’s shell and the
+ * device’s `sh -c` inside `run-as`.
  * @param {object} options
  * @param {(args: ReadonlyArray<string>) => {status: number, stdout: string, stderr: string}} options.adb
  * @param {string} options.apk
@@ -411,7 +402,7 @@ async function main() {
     });
   } catch (error) {
     // Before `adb` is even asked which devices exist: a refusal must not touch a
-    // device another task is holding.
+    // device another lease is holding.
     console.error(colorize(String(error?.message ?? error), 'red'));
     throw error;
   }

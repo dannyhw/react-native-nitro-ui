@@ -18,11 +18,9 @@ test('a real tap presses one item of a ButtonGroup and reports its id', async ({
   const pressed = screen.getByTestId('button-group-pressed-id');
   await reveal(screen, group);
 
-  // A group is `role: container`: the name is on the wrapper and the actionable
-  // nodes are the items inside it, so the group's own assertion is that it is one
-  // node with a box, and the tap has to go to the item drawn "Copy" — reached
-  // through the named group, so it cannot silently become some other 'Copy' on
-  // the screen. Which item answered is the echo, not a count.
+  // A group is `role: container`: the name sits on the wrapper and the actionable
+  // nodes are the items inside it, so the tap goes to the item drawn "Copy" through
+  // the named group and cannot silently become some other ‘Copy’ on the screen.
   await actsOnOneNamedNode(screen, { name: GROUP, state: 'enabled' });
   const copy = group.getByText('Copy');
   expect(

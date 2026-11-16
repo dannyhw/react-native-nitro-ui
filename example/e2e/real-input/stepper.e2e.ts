@@ -17,11 +17,9 @@ test("a real tap on the Stepper's upper half steps it exactly once", async ({
   const events = screen.getByTestId('real-input-stepper-events');
   await reveal(screen, stepper);
 
-  // Android merges the Stepper into one node and each Material button clears its
-  // own semantics (HybridNitroUiStepper.kt), so there is no plus node to tap: the
-  // suite aims at the right half of the merged box, which is where the increment
-  // is drawn. One tap has to be one step and one event — a step that fires twice
-  // is what the harness cannot see and a real tap can.
+  // Android merges the Stepper into one node and each Material button clears its own
+  // semantics (HybridNitroUiStepper.kt), so there is no plus node to tap: the suite aims
+  // at the right half of the merged box. One tap has to be one step and one event.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('1');
   await expect(events).toHaveText('0');

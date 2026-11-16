@@ -7,10 +7,9 @@ import { actsOnOneNamedNode } from './reader';
 const NAME = 'Real-input menu';
 
 /**
- * Dismiss whatever popup is up, without assuming how many Backs it takes: an Android
- * menu can need more than one. The ceiling is what fails if the popup becomes
- * undismisable. Each round asks with `waitFor`, not `count` — `count` answers from the
- * observation the last step left behind, so a popup already down still counts.
+ * Dismiss whatever popup is up, without assuming how many Backs it takes; the ceiling is
+ * what fails if the popup becomes undismisable. Each round asks with `waitFor`, not
+ * `count` — `count` answers from the last observation, so a popup already down counts.
  */
 async function dismissPopup(
   app: App,

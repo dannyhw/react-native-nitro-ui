@@ -1,10 +1,9 @@
 /**
- * The two reads of the device that `agent-device` will not make: the window
- * manager's keyboard inset, and a frame taken while a finger is down. The
- * automation helper that drives the device is serialised and installs a headless
- * IME, so both exist only beside it. Nothing here drives a device: no `input`, no
- * `am`, and every call names the leased serial on the leased adb server.
- */ import { execFileSync } from 'node:child_process';
+ * The two reads of the device that `agent-device` will not make: the window manager’s
+ * keyboard inset, and a frame taken while a finger is down. Both exist only beside it,
+ * because it is serialised and installs a headless IME. Nothing here drives a device.
+ */
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
 import {
@@ -55,12 +54,10 @@ export function adbShell(args: readonly string[]): string {
 }
 
 /**
- * One frame of the leased device's screen, in device px.
+ * One frame of the leased device’s screen, in device px.
  *
- * Deliberately not the driver's screenshot — see the file comment. The bytes come
- * back on stdout (`exec-out`, so no shell rewrites the `\n`s of a PNG) and are
- * decoded here rather than written to a file, because the caller compares two
- * frames and keeps neither unless the check goes red.
+ * `exec-out` so no shell rewrites the `\n`s of a PNG, and decoded from stdout because
+ * the caller compares two frames and keeps neither unless the check goes red.
  */
 export function screenCapture(): DecodedPng {
   let png: Buffer;
@@ -88,9 +85,9 @@ export function screenCapture(): DecodedPng {
 }
 
 /**
- * The screen's density, so a check can turn the library's dp numbers into the px
- * the device draws. `wm density` is the density the app lays out at, which an
- * emulator can have overridden from the profile's own number.
+ * The screen’s density, so a check can turn the library’s dp numbers into the px the
+ * device draws. `wm density` is the density the app lays out at, which an emulator can
+ * have overridden from the profile’s own number.
  */
 export function displayDensity(): number {
   const reported = /Physical density:\s*(\d+)|Override density:\s*(\d+)/g;

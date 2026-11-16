@@ -14,11 +14,9 @@ test('a real long press opens the context menu at the finger and the view under 
   const echo = screen.getByTestId('ctx-echo');
   await reveal(screen, target);
 
-  // Two claims, both gesture arbitration: the long press belongs to the
-  // ContextMenu (`open`), and the Pressable underneath is left alone (`press=0`).
-  // The echoes are read once the popup is gone, because while it is up the popup
-  // owns the window and the page's own text is not in the tree a reader gets —
-  // which is itself the proof that the menu took the gesture.
+  // Two claims, both gesture arbitration: the long press belongs to the ContextMenu
+  // (`open`), and the Pressable underneath is left alone (`press=0`). The echoes are
+  // read once the popup is gone — while it is up the page’s own text is not in the tree.
   await expect(order).toHaveText('order=');
   await target.longPress({ duration: 900 });
   const reply = screen.getByText('Reply');

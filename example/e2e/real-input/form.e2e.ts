@@ -97,10 +97,9 @@ test('a row that was not given a press stays unpressed, however it is touched', 
   );
   await expect(presses).toHaveText('0');
 
-  // A row with no handler is inert, and the controls beside it answer straight after:
-  // the silence is that row's own, not an app that stopped listening. The taps are
-  // aimed at the row's box because a row nobody can press has no touch point of its
-  // own for a tap to be given to.
+  // A row with no handler is inert, and the controls beside it answer straight after, so
+  // the silence is that row’s own. The taps are aimed at the row’s box because a row
+  // nobody can press has no touch point of its own.
   await reveal(screen, plain);
   for (let tap = 1; tap <= 3; tap += 1) {
     await screen.tapAt(await centreOf(plain));
@@ -157,10 +156,8 @@ test('a field the keyboard would cover is moved clear of it', async ({
 /**
  * Park a control low in its page, where the keyboard will reach it.
  *
- * `reveal` puts a control in the middle of the tappable band, which is the right
- * answer for a tap and the wrong one for an avoidance check: the band reaches the
- * bottom of the content view, and a control parked near the middle of it is already
- * clear of a keyboard that only occupies the bottom of the screen.
+ * A control parked in the middle of the band is already clear of a keyboard that only
+ * occupies the bottom of the screen, which would make an avoidance check vacuous.
  */
 async function revealLowInPage(
   screen: Parameters<typeof reveal>[0],

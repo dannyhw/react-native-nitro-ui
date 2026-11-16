@@ -2,11 +2,10 @@
  * Pressed-state feedback: the ink a person sees while their finger is down.
  *
  * Nothing inside the React tree knows what was painted, so this compares the mean
- * luminance of a grid inside the row's box at rest and while held, from frames taken
- * beside the automation helper — a capture asked for during a gesture is served only
- * once the gesture ends. The grid, not one pixel: a bounded ripple is brightest near
- * the touch point and a single sample can land where it has not reached.
- */ import { centreOf } from './support';
+ * luminance of a grid inside the box at rest and while held. The grid, not one pixel:
+ * a bounded ripple is brightest near the touch point.
+ */
+import { centreOf } from './support';
 import { screenCapture } from './device-read';
 import { expect, type Locator, type Screen } from 'e2e';
 
@@ -18,19 +17,15 @@ import {
 /**
  * How long the finger stays down, in ms.
  *
- * Long enough that Compose has composed and drawn the state layer by the time the
- * frame is read (the frame is asked for at {@link CAPTURE_AFTER_MS} and takes a few
- * hundred ms), and short enough that this is still the press a person makes. The
- * driver's own ceiling on a gesture is 10 000 ms, which the previous shape of this
- * check had to sit at for want of a frame that arrived in time.
+ * Long enough that Compose has composed and drawn the state layer by the time the frame
+ * is read, and short enough that this is still the press a person makes.
  */
 const HOLD_MS = 1_800;
 
 /**
- * How long after the press is *issued* the frame is asked for, in ms. Measured from
- * the call rather than from the finger, because the driver's own round trip to put
- * the finger down is not visible from here; the press is `HOLD_MS` long from the
- * same moment, so both ends of the window are counted the same way.
+ * How long after the press is issued the frame is asked for, in ms. Measured from the
+ * call rather than from the finger, because the driver’s own round trip to put the
+ * finger down is not visible from here; the press is `HOLD_MS` from the same moment.
  */
 const CAPTURE_AFTER_MS = 450;
 
@@ -94,11 +89,10 @@ function meanLuma(image: DecodedPng, box: Box): number {
 /**
  * A real press on this control paints a pressed state on it.
  *
- * @param screen only for the gesture: the press is e2e's own swipe
+ * @param screen only for the gesture: the press is e2e’s own swipe
  * @param hold the control to hold; its box is the region that must change
- * @param options.minimumDrop how much darker the row has to get, as mean luminance.
- *   Small on purpose: Material's state-layer ink over a light row is a few percent,
- *   and a threshold tuned to one theme hides a faint-but-present regression in another.
+ * @param options.minimumDrop how much darker the row has to get, as mean luminance —
+ *   small because Material’s state-layer ink over a light row is a few percent.
  */
 export async function pressPaintsFeedback(
   screen: Screen,
@@ -116,13 +110,10 @@ export async function pressPaintsFeedback(
   const atRest = screenCapture();
   const before = meanLuma(atRest, region);
 
-  // A press-and-hold expressed as a drag that travels two px while the finger is
-  // down. That shape is deliberate: it is one gesture stream that is genuinely *in
-  // flight* — a `longPress` presses and holds too, but a row inside a scrolling
-  // section settles it as its own gesture and paints nothing (measured: the
-  // standalone item inked either way, the section row only as a hold in flight). Two
-  // px is inside the touch slop, so the list does not scroll and nothing is
-  // cancelled.
+  // A press-and-hold expressed as a drag that travels two px while the finger is down: one
+  // gesture stream that is genuinely in flight. A `longPress` presses and holds too, but a
+  // row inside a scrolling section settles it as its own gesture and paints nothing. Two
+  // px is inside the touch slop, so the list does not scroll and nothing is cancelled.
   const pressed = screen.swipe({
     from: point,
     to: { x: point.x, y: point.y + 2 },

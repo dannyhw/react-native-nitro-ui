@@ -67,11 +67,9 @@ test('a drag that starts on a ListItem row is the list asking for the page', asy
   await reveal(screen, row);
   await expect(presses).toHaveText('0');
 
-  // Compose's own press cancels a touch that travels past the slop, so this is a
-  // guard rather than a bug report — but a row that fires on a scroll takes a person
-  // to a screen they only meant to scroll past. The list moving is the witness that
-  // the gesture was a scroll: a flick that did nothing would leave the count alone
-  // for the wrong reason.
+  // Compose’s own press cancels a touch that travels past the slop, so this is a guard — a
+  // row that fires on a scroll takes a person to a screen they meant to scroll past. The
+  // list moving is the witness that the gesture was a scroll.
   const before = await boxOf(row);
   if (before == null) {
     throw new Error('real-input: the ListItem row has no box to flick over.');

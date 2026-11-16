@@ -21,23 +21,19 @@ test('real keystrokes reach the field, and the clear button reports the empty qu
   const echo = screen.getByTestId('search-typing-echo');
   await reveal(screen, field);
 
-  // The clear button is Material's own `IconButton`, named by the framework
-  // (`Clear query`) and present only while the query is non-empty. It exists in no
-  // React tree, so the harness cannot press it, and the tap is placed by that name
-  // rather than by a box that would say nothing about what a reader is told.
+  // The clear button is Material’s own `IconButton`, named by the framework (`Clear query`)
+  // and present only while the query is non-empty. It exists in no React tree, so the
+  // harness cannot press it.
   await expect(echo).toHaveText('query:  (0)');
   await field.tap();
   await field.pressSequentially('abc');
   await expect(echo).toHaveText('query: abc (3)');
 
-  // Every field with a query draws Material's own clear button, and two fields on
-  // this screen hold a query at once, so the label names two nodes. Scoping by the
-  // row they sit in does not work on Android: React Native lifts the children of a
-  // view that carries nothing but a testID up to the nearest accessibility-
-  // important ancestor, so the row's own node has no children for a locator to
-  // look inside. The field's box is the window instead, and the button that
-  // belongs to this field is the one on this field's own line — and the echo below
-  // then says which of the two the finger actually pressed.
+  // Two fields on this screen hold a query at once, so the `Clear query` label names two
+  // nodes. Scoping by the row they sit in does not work on Android: React Native lifts the
+  // children of a view that carries nothing but a testID up to the nearest accessibility-
+  // important ancestor. The field’s box is the window instead, and the echo below says
+  // which of the two the finger pressed.
   const fieldBox = await boxOf(field);
   if (fieldBox == null) {
     throw new Error(

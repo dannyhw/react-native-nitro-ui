@@ -1,10 +1,9 @@
 /**
  * The screen-reader rule, on the node a person actually acts on: the name they are
  * given resolves to exactly one node, that node has a box a finger can hit, and the
- * state a reader is told sits on that node rather than on a neighbour. A hosted Compose
- * control publishes its name on a `SemanticsNode`, so an in-app query cannot compare
- * the two at all.
- */ import { expect, type Locator, type Screen } from 'e2e';
+ * state a reader is told sits on that node rather than on a neighbour.
+ */
+import { expect, type Locator, type Screen } from 'e2e';
 
 import { factsForItem, screenReaderFacts } from './os-tree';
 
@@ -80,9 +79,8 @@ export async function actsOnOneNamedNode(
 /**
  * The same node, after the gesture: what the reader is told changed with it.
  *
- * Split out from {@link actsOnOneNamedNode} because a check that reads the state
- * once cannot tell "the tree says checked" from "the tree says checked *and says
- * it changed*", and only the second is the regression guard.
+ * Reading the state once cannot tell “the tree says checked” from “the tree says checked
+ * and says it changed”, and only the second is the regression guard.
  */
 export async function nodeReports(
   screen: Screen,
@@ -100,18 +98,9 @@ export async function nodeReports(
 export { expect };
 
 /**
- * What the tree itself says about the node a person acts on.
- *
- * The reader-facing state above is read through the driver's normalised snapshot,
- * which has no `checked`, `selected` or role on it — and the node carrying a hosted
- * control's name is not the node carrying its state. So this is a second, separate
- * claim: not "the reader is told the box is checked" but "the node that would
- * receive the tap says checked", which is the half that caught a toggle whose value
- * lived on a decoration node nobody could reach.
- *
- * A fact the tree cannot answer at all (`null`) is a failure, not a pass: a control
- * that stopped publishing its state would otherwise answer "checked: on" with
- * silence and read as a control that never claimed to be checked.
+ * What the tree itself says about the node a person acts on, as a claim separate from
+ * what the reader is told: the driver’s normalised snapshot carries no `checked`,
+ * `selected` or role, and a hosted control’s name is not on the node holding its state.
  */
 export function treeAnnounces(
   name: string,
@@ -148,8 +137,8 @@ export function treeAnnounces(
 /**
  * The same facts for one item inside a named group.
  *
- * A merged row draws the item's title as a node of its own that carries no state,
- * so the title is only the place the search starts.
+ * A merged row draws the item’s title as a node of its own that carries no state, so the
+ * title is only the place the search starts.
  */
 export function itemAnnounces(
   groupLabel: string,

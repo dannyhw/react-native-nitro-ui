@@ -13,11 +13,9 @@ test('a real tap opens the sheet, a Pressable inside it counts, and Back closes 
   const log = screen.getByTestId('sheet-log');
   await reveal(screen, opener);
 
-  // One review-found defect sat here: the sheet's root intercepted touches and a
-  // `TextInput` underneath stopped answering. So the press that has to be counted
-  // is inside the sheet, on content that rose from the window's bottom edge, and
-  // the count is JS's own. The sticky sheet's "no gesture closes it" is the
-  // harness's, as is the dismissal bookkeeping.
+  // The sheet’s root can intercept touches, so the press that has to be counted is
+  // inside the sheet, on content that rose from the window’s bottom edge, and the
+  // count is JS’s own rather than a tree read.
   await expect(log).toHaveText('none');
   await opener.tap();
   const sheet = screen.getByTestId('sheet-fit-sheet');

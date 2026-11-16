@@ -1,10 +1,9 @@
 /**
  * The accessibility tree the driver reads, with the state facts still on it: the
- * `checked` a toggle answers with, the `selected` a segment answers with, the Android
- * class a reader takes for a role, and whether the node carrying a control's name is
- * the node carrying its state. Actionability is not here — `hittable` is geometric —
- * and is graded by the a11y sweep against `uiautomator dump` instead.
- */ import { execFileSync } from 'node:child_process';
+ * `checked` a toggle answers with, the `selected` a segment answers with, and whether
+ * the node carrying a control’s name is the node carrying its state.
+ */
+import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,11 +35,9 @@ interface DriverNode {
 /**
  * The driver session this run holds the device with.
  *
- * The device belongs to the session that opened it and `agent-device` refuses a second
- * client on it (`DEVICE_IN_USE`), so this read rides along in the session the worker
- * opened instead of opening one of its own. The name is the engine's own recipe -
- * `e2e-<target>-<worker slot>` - and the suite runs one worker, so the slot is 0. A
- * wrong name is not a silent pass: the refusal names the session holding the device.
+ * `agent-device` refuses a second client (`DEVICE_IN_USE`), so this read rides along in
+ * the session the worker opened. The name is the engine’s own recipe, `e2e-<target>-
+ * <worker slot>`, and the suite runs one worker.
  */
 const DRIVER_SESSION = 'e2e-android-0';
 
@@ -53,16 +50,11 @@ function driverBinary(): string {
 }
 
 /**
- * One fresh capture of the accessibility tree, as the flags-only shape the readers
- * below expect.
+ * One fresh capture of the accessibility tree, as the flags-only shape the readers need.
  *
- * `--force-full` because the driver answers a repeat of the same request with an
- * "unchanged" acknowledgement, and an acknowledgement has no nodes in it — a check
- * that read the tree twice around a gesture would be told nothing had changed, which is
- * the one answer it is not allowed to take on trust.
- *
- * The serial is passed rather than inherited: the same lease that scopes every other
- * device read scopes this one, and another task's emulator is visible to the daemon.
+ * `--force-full` because a repeat of the same request is answered with an “unchanged”
+ * acknowledgement that has no nodes in it, and the serial is passed rather than
+ * inherited so another lease’s emulator cannot be read.
  */
 export function tree(): TreeNode[] {
   const serial = process.env.ANDROID_SERIAL;
@@ -116,17 +108,11 @@ export function tree(): TreeNode[] {
 }
 
 /**
- * The driver's node, in the shape `uiautomator.mjs`'s readers understand.
+ * The driver’s node, in the shape `uiautomator.mjs`’s readers understand.
  *
- * The two trees name the same two things differently, and only one of them keeps them
- * apart: the driver prints `label` as *whatever a reader is told* — the text if the node
- * has text, its description otherwise — where a dump keeps `text` and `content-desc`
- * separate. Keeping them apart is what lets a reader tell a control's own name from the
- * words drawn inside it, so a node with text contributes text and nothing else, and a
- * node without it contributes its description.
- *
- * `clickable`, `focusable` and `longClickable` have no source here and stay empty;
- * nothing in this file may read them (see the file comment).
+ * The driver prints `label` as whatever a reader is told, where a dump keeps `text` and
+ * `content-desc` apart; keeping them apart is what lets a reader tell a control’s own
+ * name from the words drawn inside it. `clickable` and friends have no source here.
  */
 function asTreeNode(node: DriverNode): TreeNode {
   const hasText = node.value !== undefined;
@@ -173,13 +159,9 @@ function namedNodesIn(nodes: TreeNode[], label: string): TreeNode[] {
 }
 
 /**
- * The box that owns a node: the tightest other box that contains it and is roughly its
- * size, and is not the page's own scroller.
- *
- * This is what a press reaches for a piece of on-screen words, and it is the node whose
- * `enabled` a screen reader is told. The size guard is what keeps a screen-sized
- * container from being read as the owner, which is how a name that had slid onto the
- * page would otherwise pass for the control's own box.
+ * The box that owns a node: the tightest other box that contains it, is roughly its size
+ * and is not the page’s own scroller. This is what a press reaches for a piece of
+ * on-screen words, and the node whose `enabled` a screen reader is told.
  */
 function ownerNode(nodes: TreeNode[], node: TreeNode): TreeNode | null {
   const area = Math.max(1, node.bounds.width * node.bounds.height);
@@ -227,8 +209,8 @@ export interface ScreenReaderFacts {
 /**
  * The state facts for a named control, in one capture of the tree.
  *
- * A selection is read as a check: Compose maps a selectable item's selection onto the
- * toggleable state, which TalkBack says out loud as "selected".
+ * A selection is read as a check: Compose maps a selectable item’s selection onto the
+ * toggleable state, which TalkBack says out loud as “selected”.
  */
 export function screenReaderFacts(label: string): ScreenReaderFacts {
   const nodes = tree();
@@ -290,9 +272,8 @@ export interface TextFacts {
 /**
  * The state facts for one item of a group, named by its title.
  *
- * A merged Material row draws each item as the item's own box, a separate title, and a
- * role decoration that carries no state, so the title has to be resolved through the
- * group's box before any flag can be read.
+ * A merged Material row draws the item’s box, a separate title, and a role decoration
+ * that carries no state, so the title is resolved through the group’s box first.
  */
 export function factsForItem(groupLabel: string, title: string): TextFacts {
   const nodes = tree();
@@ -311,10 +292,9 @@ export function factsForItem(groupLabel: string, title: string): TextFacts {
     node.bounds.x2 <= group.bounds.x2 + 1 &&
     node.bounds.cy >= group.bounds.y1 - 1 &&
     node.bounds.cy <= group.bounds.y2 + 1;
-  // A Compose row that merges its descendants is *named* by its title and draws no
-  // separate text node at all, so the words are either a node's text or the name a
-  // reader is told - the two places the driver's own `getByText` looks. Refusing the
-  // second would call a merged row an item the group does not draw.
+  // A Compose row that merges its descendants is named by its title and draws no separate
+  // text node, so the words are either a node’s text or the name a reader is told — the
+  // two places the driver’s own `getByText` looks.
   const titled =
     findAllByText(nodes, title).find(insideGroup) ??
     namedNodesIn(nodes, title).find(insideGroup);

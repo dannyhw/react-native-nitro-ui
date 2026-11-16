@@ -214,18 +214,11 @@ function makeContext(device, log) {
     },
 
     /**
-     * Press, then wait for the witness that the press *arrived*, and retry until it shows.
+     * Press, then wait for the witness that the press arrived, and retry while it is
+     * absent: a synthesised injection can be dropped, and a check that taps once and
+     * waits reports a lost delivery as a control that refuses a finger.
      *
-     * A synthesised injection can be dropped, and a check that taps once and then waits for
-     * an answer reports a lost delivery as a control that refuses a finger. The witness has
-     * to be something a touch causes, and the retry only happens while it is absent, so a
-     * retry cannot manufacture a result.
-     *
-     * `nativeState` is the control's own published state. The witness is React's render, so
-     * its absence means either that the touch never arrived or that the control changed and
-     * lost the event on the way to JS, and one expired window cannot tell those apart: a
-     * further press would land the event and make a lost change look like a dropped tap.
-     * When the state moves while the witness does not, this stops and says so.
+     * When `nativeState` moves while the witness does not, this stops and says so.
      *
      * @param {object} options
      * @param {string} options.what
@@ -948,7 +941,7 @@ async function contextEchoWhen(t, ok, timeoutMs = 5000) {
 
 /**
  * The open popup's window and its rows, or `null` while the app's own window is on top.
- * The popup is the `android:id/content` that is not the whole display (S3's reading).
+ * The popup is the `android:id/content` window that is not the whole display.
  *
  * @param {ReturnType<typeof makeContext>} t
  */
@@ -1074,27 +1067,16 @@ function isCancelLabel(node) {
 }
 
 /**
- * The drums of a time wheel, as the accessibility tree shows them.
+ * The drums of a time wheel, as the accessibility tree shows them. A drum’s rows are
+ * plain `Text` nodes when the dump carries them at all, which is enough to aim a fling
+ * at the column’s own x and to read which row the drum stopped on.
  *
- * The time wheel is a vertical pager per field, side by side. When a dump carries a
- * drum's rows they are plain `Text` nodes — a handful of two-digit rows per column, one
- * of which sits under the centre line — and that is enough to
- * aim a fling (the column's own x, not a fraction of the control's box) and — the
- * half that matters here — to read *which row the drum stopped on*, which is the
- * only way this gate can say "the time shown is the time reported" about a wheel
- * rather than assert it from the Kotlin.
- *
- * Whether the rows are there is the control's business, not this check's: on
- * `nitroui_b` a `ScrollField` publishes the drum and not its rows, which is why
- * [wheelColumns] says out loud what a run loses when they are missing.
- *
- * Columns are found by clustering on x rather than by dividing the box: a 12-hour
- * wheel keeps an AM/PM column to the right of the two drums, and the drums are
- * not symmetric inside the control's box. Rows of one drum share an x exactly, so a
- * gap of more than 20 px is a different column.
+ * Columns are found by clustering on x, not by dividing the box: rows of one drum share
+ * an x exactly, so a gap of more than 20 px is a different column — a 12-hour wheel
+ * keeps an AM/PM column to the right of the two drums.
  *
  * @param {ReturnType<typeof makeContext>} t
- * @param {import('./uiautomator.mjs').UiautomatorNode} drum the wheel's own node
+ * @param {import('./uiautomator.mjs').UiautomatorNode} drum the wheel’s own node
  */
 function timeWheelColumns(t, drum) {
   const rows = t
@@ -1144,22 +1126,14 @@ function timeWheelColumns(t, drum) {
 /**
  * Bring a whole drum into the window, with the echo rows beside it.
  *
- * `requireControlOnScreen` stops the moment a control's *centre* is inside the window,
- * and a drum is 120-200 dp — 315-525 px of this device's ~2 000 px of window — so half
- * of it can still be hanging off the bottom edge. Two things the wheel checks then do
- * would be quietly wrong: the row under the centre line is not in the dump at all when
- * that line is off screen (so "the row shown is the value reported" would compare the
- * nearest *visible* row), and a swipe that leaves the window drags the page instead of
- * the drum. So the *visible band* — drum plus the echoes a check has to read while the
- * finger is on it — is what gets positioned.
- *
- * The band is centred rather than nudged to the nearest edge, so the next correction
- * has room in either direction, and the loop is bounded: a band taller than the window
- * can never satisfy it, and that is a fixture too tall for the device, said by the
- * caller's own `requireControl` rather than by an infinite scroll.
+ * `requireControlOnScreen` stops when a centre is inside the window, and a drum is
+ * 315-525 px of this device’s ~2 000 px, so half of it can hang off the bottom edge,
+ * where the row under the centre line is not in the dump and a swipe that leaves the
+ * window drags the page instead of the drum. The band is centred, not nudged to the
+ * nearest edge, so a correction has room in either direction.
  *
  * @param {ReturnType<typeof makeContext>} t
- * @param {string} label the drum's `accessibilityLabel`
+ * @param {string} label the drum’s `accessibilityLabel`
  * @param {string[]} echoIds testIDs that have to be visible with it
  */
 async function positionWheel(t, label, echoIds) {
@@ -1210,34 +1184,16 @@ async function positionWheel(t, label, echoIds) {
 }
 
 /**
- * Bring a control's centre to the middle of the window, and hand back its node there.
+ * Bring a control’s centre to the middle of the window, and hand back its node there.
  *
- * `requireControlOnScreen` stops as soon as a control's centre is *anywhere* inside the
- * window, which is the right ask for a check whose only business is pressing it. It is the
- * wrong ask for a check about to open a window that the platform places for itself:
- * Material measures the room under an anchor and opens above it when there is none, so a
- * control that was found on the lower fold decides where its menu appears, and a check that
- * expects the menu under the anchor is at the mercy of wherever the previous check left the
- * page. That is the shape `hosted-picker` failed twice in — the anchor at y 2242-2410 of a
- * 2 424 px window, three option rows and no room under it.
- *
- * So this positions rather than finds, on the same principle as [positionWheel]: aim the
- * band at the middle of the window, iterate because a 400 ms swipe carries momentum, and
- * bound the loop because a control that cannot be centred is a control this page will not
- * show, which the caller's own `requireControl` then says.
- *
- * Coming to rest inside the band is not the same as being at rest, and the caller is about to
- * aim a tap and a placement judge at the box it is handed. A dump taken while the list is
- * still coasting answers with a box that is already wrong — the page moves between this read
- * and the tap, and `requireControlAt` then notes that the control "moved" and aims at the new
- * box while everything else in the check still speaks of the old one. So a box inside the band
- * is only handed back once a second read agrees with the first. The re-read is a second dump,
- * about two seconds here, which happens to be the cheapest way to wait out a settle; if the
- * two never agree the caller still gets a box, with `centred: false` so that its own message
- * can say the anchor was nowhere near the middle when the side was judged.
+ * A check about to open a window the platform places for itself cannot use a control
+ * found anywhere in the window: Material opens above an anchor when there is no room
+ * under it, so wherever the previous check left the page would decide where the menu
+ * appears. A box is handed back only once a second read agrees, since a dump taken
+ * while the list is coasting names a box the tap would miss.
  *
  * @param {ReturnType<typeof makeContext>} t
- * @param {string} label the control's `accessibilityLabel`
+ * @param {string} label the control’s `accessibilityLabel`
  * @returns {{ node: import('./uiautomator.mjs').UiautomatorNode, centred: boolean,
  *   offCentre: number }} the control, whether it came to rest in the band, and how many px
  *   off the middle its centre was when this gave up or settled
@@ -1263,14 +1219,10 @@ function timeWheelDrums(t, control) {
 /**
  * [timeWheelColumns] with a fallback for a drum whose rows the tree does not carry.
  *
- * A `ScrollField` puts its own semantics on the drum and its rows are plain `Text`, so
- * whether a `uiautomator dump` can see them is the control's business and not this
- * check's. When it can, the row under the centre line is the strongest oracle available
- * for "the value shown is the value reported" — and the only one for a snap-back that
- * moves a wheel rather than a model. When it cannot, the fling still has an aim (the
- * two drums are the left and middle thirds of the control) and the event-count
- * assertions still mean what they say, so what is lost is the row comparisons, which
- * are then *said to be lost* rather than skipped quietly.
+ * When the dump can see the rows, the row under the centre line is the strongest
+ * oracle available for “the value shown is the value reported”. When it cannot, the
+ * fling still has an aim and the event-count assertions still mean what they say, so
+ * what is lost is the row comparisons — said to be lost, not skipped quietly.
  *
  * @param {ReturnType<typeof makeContext>} t
  * @param {import('./uiautomator.mjs').UiautomatorNode} drum
@@ -1306,15 +1258,6 @@ async function checkTimeDrums(t) {
   // A drum per field, and a pick is a roll that comes to rest. `ScrollField` names the
   // row nearest its snap line continuously, so a control that read each of those as a
   // pick would report one event per row crossed, on the real input path.
-  //
-  // Red proof: make the settle a wall-clock window again instead of the wheel's own rest —
-  // in `syncTimeWheel`, trade `nuiReportAtWheelRest(active) { … }` for
-  // `snapshotFlow { readTimeDrums(…) }.collectLatest { rolled -> delay(60); … }` — and the
-  // first fling below reports two changes for one roll ("expected 1, saw 2"), which is the
-  // defect the 180 ms window had on a loaded box: the gap between two row crossings is as
-  // long as the machine's frames let it be, so a window can expire mid-roll. Shortening it
-  // to 60 ms only makes the same defect arrive without waiting for load.
-  // ---------------------------------------------------------------------------
   const SEEDED = '2024-06-15 09:20';
   // Not `requireControlOnScreen`: a 200 dp drum is 525 px of a ~2 000 px window, so
   // "the centre is on screen" can still mean "the snap line and half the rows are
@@ -1345,15 +1288,9 @@ async function checkTimeDrums(t) {
       `${String(Math.round(wheel.bounds.width / density))} dp wide`
   );
 
-  // What TalkBack is offered, read out of the tree it navigates. The value itself
-  // travels as `stateDescription`, which a `uiautomator dump` does not transcribe, so
-  // this records the node's class, its name and whether it says it scrolls (the
-  // adjust actions). What the flings below carry is the *event count*, which is readable
-  // whatever the tree looks like. They also try to read the rows - and on this device's
-  // tree they cannot: `ScrollField` keeps its rows out of the accessibility tree, so
-  // `rowsReadable` is false, every "the row shown is the value reported" comparison below
-  // is skipped, and the WARN two lines later is the sentence that says so. A PASS on this
-  // control is not a claim that the rows were compared; on `nitroui_b` they never are.
+  // What TalkBack is offered, read out of the tree it navigates. The value itself travels
+  // as `stateDescription`, which a `uiautomator dump` does not transcribe, so this records
+  // the node’s class, its name and whether it says it scrolls.
   const wheelNodes = t.nodesNamed('Real-input wheel time picker');
   // The assertion is that the wheel is named at all - zero is the failure this can
   // catch, and does if `nuiControlSemantics` is dropped. How many nodes end up
@@ -1429,24 +1366,18 @@ async function checkTimeDrums(t) {
   /** Re-read a drum's columns, with the same fallback every time. */
   const columnsOf = (drum) => wheelColumns(t, drum);
 
-  // Roll one drum downwards, into the hours/minutes *before* the seeded 09:20 — the
-  // direction that cannot cross noon and so cannot change the AM/PM half of a
-  // 12-hour drum, which keeps the row-vs-echo comparison below about one field.
-  // The distance is three rows of pitch: far enough that a per-row emit is loud,
-  // short enough to stay inside the drum's own rows without a fling's throw.
-  // `drum` is re-read every time: the page settles after a fling, and a stale box
-  // aimed at where the control was rather than where it is.
+  // Roll one drum downwards, into the hours/minutes before the seeded 09:20 — the
+  // direction that cannot cross noon and so cannot change the AM/PM half of a 12-hour
+  // drum. Three rows of pitch: far enough that a per-row emit is loud, short enough to
+  // stay inside the drum’s own rows. `drum` is re-read every time, because the page
+  // settles after a fling.
   const rollDown = async (drumLabel, column) => {
     const box = t.requireControl(drumLabel).bounds;
-    // The drum's own box with a 12 % margin at each end, top to bottom, in 130 ms —
-    // the shape the Picker's drum fling uses and the one measured on `nitroui_b` to
-    // carry the hour drum from 09:20 to 07:20 while reporting exactly one change. The
-    // aim is [timeWheelDrums]'s box, not a fraction of the control's, so a drum that
-    // does not turn under this is the control's problem and not the check's aim.
-    //
-    // Where the tree does show rows the travel shrinks to three rows of the measured
-    // pitch, so the "the row shown is the value reported" comparisons below are about a
-    // roll a reader can count rather than one whose landing page Material decides.
+    // The drum’s own box with a 12 % margin at each end, top to bottom, in 130 ms — the
+    // shape the Picker’s drum fling uses. The aim is [timeWheelDrums]’s box, not a fraction
+    // of the control’s, so a drum that does not turn under this is the control’s problem
+    // and not the check’s aim. Where the tree does show rows the travel shrinks to three
+    // rows of the measured pitch, so the row comparisons are about a roll a reader can count.
     const pad = Math.round(box.height * 0.12);
     const travel = rowsReadable
       ? Math.min(
@@ -1560,14 +1491,11 @@ async function checkTimeDrums(t) {
     previous = after;
   }
 
-  // ---------------------------------------------------------------------------
-  // The drum whose parent refuses every roll. On the dial a refused pick is a value
-  // the model never had; a drum *stays* where the finger left it until something
-  // moves it, so the snap-back has to reach the pager — and a drum left on the
-  // refused row would also swallow the next pick of that same time, because the
-  // model refuses an instant it is already showing. Both halves are checked: the
-  // roll is reported, and the rows in the tree are back on the seeded time.
-  // ---------------------------------------------------------------------------
+  // The drum whose parent refuses every roll. On the dial a refused pick is a value the
+  // model never had; a drum stays where the finger left it, so the snap-back has to reach
+  // the pager — and a drum left on the refused row would also swallow the next pick of
+  // that same time. Both halves are checked: the roll is reported, and the rows in the
+  // tree are back on the seeded time.
   const refusedLabel = 'Real-input wheel refusing picker';
   const refused = await positionWheel(t, refusedLabel, [
     ECHO.wheelRefuseEvents,
@@ -1638,18 +1566,12 @@ async function checkTimeDrums(t) {
 /**
  * The two inline calendars whose grid the box is supposed to decide, both measured.
  *
- * The rule is in `./android-calendar.mjs`, and the reason it lives outside the app is
- * there too: an `inline` picker is a `fillWidth` control, so `measureContent()` answers
- * the box's width whether or not the calendar fits inside it, and the weekday cells are
- * Compose nodes the in-app queries cannot reach. The dump is the only thing that can see
- * the columns, and this is the only gate that takes one on a known screen.
+ * An `inline` picker is a `fillWidth` control, so `measureContent()` answers the box’s
+ * width whether or not the calendar fits inside it, and the dump is the only thing that
+ * can see the columns.
  *
- * Two fixtures, because the control now makes a decision rather than applying one size:
- * a 320 dp box, the width the README story uses, which is too narrow for Material's 48 dp
- * grid and must have come out at the 40 dp day cell; and a calendar stretched past 360 dp
- * by the page's own edges, which has to still be laying itself out at 48 dp. A calendar
- * that asked for 40 dp everywhere - which is what this fix first did - is caught by the
- * wide row, and one that never asks at all is caught by the narrow one.
+ * Two fixtures, because the control decides rather than applying one size: a 320 dp box
+ * too narrow for Material’s 48 dp grid, and a calendar stretched past 360 dp.
  *
  * @param {ReturnType<typeof makeContext>} t
  */
@@ -1663,19 +1585,10 @@ async function checkInlineCalendarGrids(t) {
   ];
   let namedWithNoBox = 0;
 
-  // The search is for a *measurable* grid, not merely for a control's name. Two reasons,
-  // both measured on this page: these rows are only reachable by scrolling, and a
-  // calendar whose name is in the dump can still have no columns in it - Compose keeps
-  // naming a scrolled-past node and reports it with `bounds=[0,0][0,0]`, and the header
-  // row itself is ~470 px below the top of a calendar whose box is 1344 px tall, so a box
-  // clipped to the bottom of the screen is a box with no header in it. Stopping at "the
-  // name has a box" is what made this abort on a run where the calendar was partly on
-  // screen and perfectly measurable two swipes later.
-  //
-  // One dump per throw, and the page is scrolled down: the wide row sits directly above
-  // the narrow one, so one downward pass can collect both and down stays monotonic. 600
-  // px a throw, twelve throws - more than the distance from the top of this page to the
-  // foot of the narrow row.
+  // The search is for a measurable grid, not merely for a control’s name: Compose keeps
+  // naming a scrolled-past node with `bounds=[0,0][0,0]`, and the header row is ~470 px
+  // below the top of a 1344 px calendar, so a box clipped to the bottom of the screen has
+  // no header in it.
   for (
     let attempt = 0;
     attempt < 12 && wanted.some((want) => want.grid == null);
@@ -2833,28 +2746,15 @@ async function buttonGroupChecks(t) {
 
   /**
    * The node a tap on one item has to be aimed at, or `null` when the group is not
-   * drawing that item at all — which is the *normal* answer for an overflowed row,
-   * and the reason this returns null instead of aborting.
+   * drawing that item at all — the normal answer for an overflowed row.
    *
-   * Both spellings of "name" are accepted because an item carries its title as the
-   * `Text` it paints when the label style shows titles, and as the
-   * `contentDescription` the component sets when it does not.
+   * Both spellings of “name” are accepted, and the name is only where the search
+   * starts: Material draws each item as its own box, a separate title and a role
+   * decoration that carries no state, so taps, `checked` and `enabled` all come off
+   * the item’s own node.
    *
-   * The name is only where the search starts. Measured on `emulator-5574` against
-   * the shipped control, Material merges the *row* and then draws each item as
-   * three nodes: the item's own box (`android.view.View`, `clickable=true`, and for
-   * a toggle `checkable=true checked=true|false`), the title as a separate
-   * `android.widget.TextView`, and the role decoration Compose writes for
-   * `Role.Button`/`Role.Checkbox` (`android.widget.Button`/`android.widget.CheckBox`,
-   * neither clickable nor checkable). "Bold" the `TextView` says
-   * `checkable=false enabled=true` whatever the item is, so an item read through its
-   * name answers "off" for a checked toggle and "enabled" for a disabled item —
-   * which is why the check below resolves the name through
-   * {@link tightestFlaggedNode}, the same rule `nativeChecked` measures for Switch
-   * and Chip, and taps, `checked` and `enabled` all come off the item's own node.
-   *
-   * @param {string} groupLabel the group's `accessibilityLabel`
-   * @param {string} title the item's title
+   * @param {string} groupLabel the group’s `accessibilityLabel`
+   * @param {string} title the item’s title
    */
   const itemOf = (groupLabel, title) => {
     const group = t.requireControl(groupLabel);

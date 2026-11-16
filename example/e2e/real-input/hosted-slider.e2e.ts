@@ -15,10 +15,9 @@ test('a real drag moves a hosted Slider, whose track is the Host width', async (
   const track = screen.getByLabel(NAME);
   const value = screen.getByTestId('host-slider-value');
   const gesture = screen.getByTestId('host-slider-gesture');
-  // Both echoes are real React Native rows *above* the composition, and they
-  // are the honest scroll target: their boxes are React Native's own, so a page
-  // that has them on screen has the track below them too, whereas the box Compose
-  // publishes for the track describes the composition, not the pixel on screen.
+  // Both echoes are React Native rows above the composition, and they are the honest scroll
+  // target: their boxes are React Native’s own, whereas the box Compose publishes for the
+  // track describes the composition, not the pixel on screen.
   await reveal(screen, value, { reads: [track, gesture] });
 
   // The track is the <Host>'s own width, which React Native measures and not the

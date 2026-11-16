@@ -16,10 +16,9 @@ test('one Host of mixed controls still gives each its own node and its own tap',
   const state = screen.getByTestId('host-mixed-state');
   await reveal(screen, flipper);
 
-  // Four kinds in one composition: the switch, the slider and the button each
-  // have to be named once and act on their own, or the composition has merged
-  // their semantics. The echo is the one line all three write, so it proves
-  // which of them answered.
+  // Four kinds in one composition: the switch, the slider and the button each have to be
+  // named once and act on their own, or the composition has merged their semantics. The
+  // echo is the one line all three write, so it proves which of them answered.
   await actsOnOneNamedNode(screen, { name: SWITCH, state: 'enabled' });
   await expect(state).toHaveText('off 0.50 0');
 

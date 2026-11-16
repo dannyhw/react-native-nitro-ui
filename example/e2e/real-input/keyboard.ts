@@ -1,11 +1,8 @@
 /**
- * Keyboard avoidance, measured against the keyboard's own insets.
+ * Keyboard avoidance, measured against the window manager’s own keyboard inset.
  *
- * The driver installs a headless IME, so nothing is ever drawn to avoid and a check
- * would pass by measuring nothing: `withRealKeyboard` puts the device's real IME back
- * for the length of one gesture. The content view is not resized on API 35, so the
- * edge comes from the window manager's `ime` `InsetsSource` — the number the library
- * itself has to honour — which `scripts/real-input/ime-frame.mjs` parses.
+ * The driver’s headless IME draws nothing, so `withRealKeyboard` puts the device’s real
+ * IME back; the content view is not resized on API 35, so the inset is the read.
  */
 import { expect, type Locator } from 'e2e';
 
@@ -37,14 +34,10 @@ function currentIme(): string | null {
 }
 
 /**
- * A keyboard that a person can see: an enabled IME that is not the driver's
- * headless helper.
+ * A keyboard that a person can see: an enabled IME that is not the driver’s helper.
  *
- * The record the helper leaves behind is preferred, because it is the IME this
- * device had before the driver took over. Failing that, the first enabled IME
- * that is not the helper. Nothing else is acceptable: a keyboard check run
- * against a keyboard-less IME is a check that cannot fail, which is worse than
- * no check.
+ * The helper’s own record is preferred because it is the IME this device had before the
+ * driver took over. A keyboard check against a keyboard-less IME cannot fail.
  */
 function realIme(): string {
   const recorded = setting(TEST_IME_RECORD);
@@ -69,8 +62,7 @@ function realIme(): string {
 /**
  * Switch the device to `component`, and refuse to continue if it did not stick.
  *
- * Not `useIme`: a helper named like a React hook is read as one by the lint rule,
- * and this is a call to `adb ime set` in a device gate, three files away from React.
+ * Not named `useIme`: a helper named like a React hook is read as one by the lint rule.
  */
 function selectIme(component: string): void {
   adb(['ime', 'set', component]);
@@ -87,9 +79,8 @@ function selectIme(component: string): void {
 /**
  * Run `body` with a real, visible keyboard available.
  *
- * Also lifts `show_ime_with_hard_keyboard`: an emulator reports a hardware
- * keyboard, and Android then keeps the soft one away however focused the field
- * is. Both settings go back the way they were, including when the body fails.
+ * Also lifts `show_ime_with_hard_keyboard`: an emulator reports a hardware keyboard, and
+ * Android then keeps the soft one away. Both settings go back, even when the body fails.
  */
 export async function withRealKeyboard<T>(body: () => Promise<T>): Promise<T> {
   const ime = realIme();
@@ -131,11 +122,10 @@ function sameBox(left: FieldBox | null, right: FieldBox | null): boolean {
 }
 
 /**
- * The keyboard's top edge, or `null` when the dump carries no visible one.
+ * The keyboard’s top edge, or `null` when the dump carries no visible one.
  *
- * `ime-frame.mjs` answers `null` for "this dump never mentioned a visible keyboard"
- * and never for "the keyboard is at the top", so a `null` here is the window manager
- * saying the keyboard is not up rather than a keyboard sitting at y = 0.
+ * `ime-frame.mjs` answers `null` for "this dump never mentioned a visible keyboard" and
+ * never for "the keyboard is at the top", so `null` here is not a keyboard at y = 0.
  */
 function rawKeyboardTop(): { top: number | null; sample: string } {
   const dump = adb(['dumpsys', 'activity', 'top']);
@@ -143,10 +133,9 @@ function rawKeyboardTop(): { top: number | null; sample: string } {
 }
 
 /**
- * The keyboard's top edge, failing with the dump's own IME lines.
+ * The keyboard’s top edge, failing with the dump’s own IME lines.
  *
- * The words are for the case the settle ended with no keyboard at all: a measurement
- * of nothing would otherwise read as a field that avoided it.
+ * A settle that ended with no keyboard at all must not read as a field that avoided it.
  */
 function requireKeyboardTop(when: string): number {
   const dump = adb(['dumpsys', 'activity', 'top']);
@@ -163,10 +152,8 @@ function requireKeyboardTop(when: string): number {
 /**
  * Put a finger on the field.
  *
- * Split from {@link expectKeyboard} so a test that has its own proof of focus —
- * an echo the app draws when the field takes it — can read that echo between the
- * tap and the keyboard. Without it, "no keyboard appeared" cannot be told apart
- * from "the tap never focused anything", and those two need different fixes.
+ * Split from {@link expectKeyboard} so a test with its own proof of focus can read that
+ * echo between the tap and the keyboard; otherwise “no keyboard” and “no focus” differ.
  */
 export async function focusField(field: Locator): Promise<void> {
   await field.tap();
@@ -176,9 +163,8 @@ export async function focusField(field: Locator): Promise<void> {
  * Wait for the keyboard to actually come up.
  *
  * A check that measures avoidance while nothing is on screen passes by measuring
- * nothing, so the inset itself is the first assertion: the window manager has to
- * report a visible IME source before any claim about the field's position means
- * anything.
+ * nothing, so the window manager has to report a visible IME source before any claim
+ * about the field’s position means anything.
  */
 export async function expectKeyboard(): Promise<{ keyboardTop: number }> {
   // Waited for by hand rather than with `expect.poll`, because the thing a reader
@@ -215,19 +201,9 @@ export async function focusAndExpectKeyboard(
 }
 
 /**
- * The keyboard's edge and the field's box, once both have come to rest.
- *
- * The inset animates in and a popup moves with it, so one read of each measures a
- * keyboard still on its way up and a popup that has not started to move — the
- * recorded failure was a field 431 px below an edge that had not finished arriving.
- * The conditions, in order and inside the deadline {@link expectKeyboard} already
- * allows: the edge equal on two reads, then the field's box different from the box it
- * had before the field was focused (only when a caller names one — a popup has to move
- * clear, a field that was already clear does not), then that box equal on two reads.
- *
- * The placement itself is never polled: a popup passing through a valid spot would
- * settle green. At the deadline the last readings are handed back, so the assertions
- * below still print the same numbers for a layout that never settles.
+ * The keyboard’s edge and the field’s box, once both have come to rest. Only the
+ * measurement settles: the placement itself is never polled, because a popup passing
+ * through a valid spot would settle green. At the deadline the last readings go as-is.
  */
 export async function measureAtRest(
   field: Locator,
@@ -279,11 +255,9 @@ export async function measureAtRest(
 }
 
 /**
- * The field stays above the keyboard.
+ * The field stays above the keyboard, so the caret and what has been typed are visible.
  *
- * What a person gets: the caret and what they have typed are visible. What the
- * defect gave: a field laid out behind the IME, so the app was still
- * taking keystrokes nobody could see.
+ * A field laid out behind the IME still takes keystrokes nobody can see.
  */
 export async function fieldAboveKeyboard(
   field: Locator,

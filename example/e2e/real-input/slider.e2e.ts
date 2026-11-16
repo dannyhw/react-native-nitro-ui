@@ -16,10 +16,9 @@ test('a real drag moves the Slider and the value JS echoes follows it', async ({
   const value = screen.getByTestId('slider-controlled-value');
   await reveal(screen, track);
 
-  // A drag, not a tap: a Slider is the one control whose whole point is a gesture
-  // that is not a press, and the value is a float the driver never reads off the
-  // tree — the echo is the only honest report of what JS was told. The starting
-  // value is 0.250, so a drag to 80% of the track has to move it up.
+  // A drag, not a tap: a Slider’s whole point is a gesture that is not a press, and the
+  // value is a float the driver never reads off the tree — the echo is the only honest
+  // report of what JS was told. The starting value is 0.250.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('0.250');
 

@@ -1,10 +1,7 @@
 /**
- * The example app's e2e suite: the real-input checks, driven by `@e2e-dev/mobile`
- * (agent-device) on the emulator the lease exported.
- *
- * Everything device-shaped comes from the environment, and the only device in
- * it is the leased one: `ANDROID_SERIAL` picks the emulator, and the adb server
- * behind `ANDROID_ADB_SERVER_PORT` is the one the lease owns.
+ * The example app’s e2e suite: the real-input checks, driven by `@e2e-dev/mobile`
+ * (agent-device). Everything device-shaped comes from the environment, and the only
+ * device in it is the leased one behind `ANDROID_SERIAL` and `ANDROID_ADB_SERVER_PORT`.
  */
 import type { E2EConfig } from 'e2e';
 import { mobile } from '@e2e-dev/mobile';
