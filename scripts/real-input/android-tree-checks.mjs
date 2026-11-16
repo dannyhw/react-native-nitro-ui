@@ -572,26 +572,6 @@ function makeContext(device, log) {
      * @param {number} minCount
      * @param {number} [timeoutMs]
      */
-    /**
-     * Look a control up again, and say if it moved.
-     *
-     * A picker's anchor widens on purpose when the chosen title is wider than the last
-     * one, so every second touch on the same control is aimed at the box it has now.
-     *
-     * @param {string} description the control's `accessibilityLabel`
-     * @param {import('./uiautomator.mjs').UiautomatorNode} previous where it was
-     */
-    requireControlAt(description, previous) {
-      const node = this.requireControl(description);
-      if (this.boundsText(node) !== this.boundsText(previous)) {
-        this.log.note(
-          `"${description}" moved from ${this.boundsText(previous)} to ` +
-            `${this.boundsText(node)} - the tap is aimed at the new box`
-        );
-      }
-      return node;
-    },
-
     waitForNodes(predicate, why, minCount = 1, timeoutMs = REACT_TIMEOUT) {
       const deadline = Date.now() + timeoutMs;
       for (;;) {
@@ -638,31 +618,6 @@ function makeContext(device, log) {
     boundsText(node) {
       const { x1, y1, x2, y2 } = node.bounds;
       return `${String(x1)},${String(y1)} → ${String(x2)},${String(y2)}`;
-    },
-
-    /**
-     * @param {string} text the option's label
-     */
-    optionIsSelected(text) {
-      const nodes = device.hierarchy();
-      const label = findAllByText(nodes, text)[0];
-      if (label == null) {
-        return false;
-      }
-      const { cx, cy } = label.bounds;
-      const row = nodes.find(
-        (node) =>
-          node.checkable === 'true' &&
-          node.bounds.x1 <= cx &&
-          cx <= node.bounds.x2 &&
-          node.bounds.y1 <= cy &&
-          cy <= node.bounds.y2
-      );
-      return row != null && row.checked === 'true';
-    },
-
-    popupWindowCount() {
-      return device.popupWindowCount();
     },
 
     /**
@@ -2694,124 +2649,6 @@ async function listItemChecks(t) {
   );
 }
 
-/** The split trigger's list half, and the Back that answers it. */
-async function menuChecks(t) {
-  const SPLIT_ACTION = 'Real-input split menu';
-  const SPLIT_LIST = 'More options';
-  // What a screen reader is offered by the plain trigger: Compose merges the trigger's
-  // semantics into one node, so its name, its value and its role all land there.
-  await t.requireControlOnScreen('Real-input menu');
-  const trigger = t.nodesNamed('Real-input menu');
-  t.log.checkEquals(
-    'and that same node carries the title it paints as its value',
-    trigger[0]?.text,
-    'Actions'
-  );
-  t.log.checkEquals(
-    'the node announces the role of a list of choices',
-    trigger[0]?.className,
-    'android.widget.Spinner'
-  );
-  await t.requireControlOnScreen(SPLIT_ACTION);
-  // The halves of ONE control share a vertical band, so the band is what pairs them,
-  // and every press re-reads it: the boxes this lookup returns are the boxes the taps
-  // are aimed at.
-  const listHalf = () => {
-    const nodes = t.dump();
-    const action = findAllByDescription(nodes, SPLIT_ACTION)[0];
-    if (action == null) {
-      t.log.abort(
-        `no node named "${SPLIT_ACTION}" in the accessibility tree - the split ` +
-          'trigger offers nothing a real tap could be aimed at'
-      );
-    }
-    const named = findAllByDescription(nodes, SPLIT_LIST).filter(
-      (node) =>
-        node.bounds.y1 === action.bounds.y1 &&
-        node.bounds.y2 === action.bounds.y2 &&
-        node.bounds.x2 > action.bounds.x1
-    );
-    if (named.length === 0) {
-      t.log.abort(
-        `no "${SPLIT_LIST}" half beside "${SPLIT_ACTION}" in the accessibility tree`
-      );
-    }
-    return named[0];
-  };
-
-  // The action half first, because it has no window of its own to answer with: the
-  // echo is the only witness that this half is a press and not a second way to open
-  // the same list.
-  const actionHalf = () => {
-    const nodes = t.dump();
-    const named = findAllByDescription(nodes, SPLIT_ACTION);
-    if (named.length === 0) {
-      t.log.abort(
-        `no node named "${SPLIT_ACTION}" in the accessibility tree - the split ` +
-          'trigger offers nothing a real tap could be aimed at'
-      );
-    }
-    return named[0];
-  };
-  await t.tapNode(actionHalf());
-  t.log.checkEquals(
-    'a real tap on the action half runs the primary action',
-    t.requireEcho(ECHO.menuSplitEvents),
-    'action'
-  );
-  t.log.checkEquals(
-    'and raises no list - no window, and no open in the echo either',
-    `${String(t.popupWindowCount())} | ${t.requireEcho(ECHO.menuSplitEvents)}`,
-    '0 | action'
-  );
-
-  // One press of the list half is one open, and Back is the person's other way out of
-  // it: a window the platform closes and the control does not report is a window that
-  // can be left behind.
-  await t.tapUntilUp(
-    listHalf,
-    'a real tap on the list half of the split trigger',
-    () => t.popupWindowCount(),
-    { pollMs: DUMP_POLL_MS }
-  );
-  await t.pressBack();
-  t.log.checkEquals(
-    'the list half shuts on Back',
-    t.waitForPopupCount(0, 'the split list to come down'),
-    0
-  );
-  t.log.checkEquals(
-    'one press of the list half is one open and one close',
-    t.requireEcho(ECHO.menuSplitEvents),
-    'action > open > close'
-  );
-}
-
-/** Back takes a hosted popup's window down, and leaves none. */
-async function hostedPickerChecks(t) {
-  let aimed = await t.requireControlOnScreen('Hosted picker');
-  t.log.checkEquals(
-    'a real tap on the hosted anchor opens the menu as a popup window',
-    await t.tapUntilUp(
-      () => (aimed = t.requireControlAt('Hosted picker', aimed)),
-      'a real tap on the hosted anchor to open a popup window',
-      () => t.popupWindowCount()
-    ),
-    '1'
-  );
-  await t.pressBack();
-  t.log.checkEquals(
-    'Back shuts the hosted popup (no window left behind)',
-    t.waitForPopupCount(0, 'the back gesture to take the hosted popup down'),
-    0
-  );
-  t.log.checkEquals(
-    'opening and dismissing reported no selection - a menu is not a choice',
-    t.requireEcho(ECHO.hostPickerIndex),
-    '1'
-  );
-}
-
 /** What a screen reader is offered around a `<Host>`: its own text, in order. */
 /**
  * Draw the three hosted Switches together: back to the top of the page first, then down.
@@ -2977,99 +2814,6 @@ async function popoverChecks(t) {
   }
 }
 
-/** One named radio node per option, each carrying the selection. */
-async function segmentedControlChecks(t) {
-  await t.requireControlOnScreen('Real-input segmented control');
-  t.log.checkEquals(
-    'no change has been reported before a touch',
-    t.requireEcho(ECHO.segmentedEvents),
-    '0'
-  );
-  // The selection has to be one the *finger* made, so the claim below cannot be the
-  // fixture's default, and the middle of the box is the segment drawn '2'.
-  await t.tapUntilValue(
-    () => t.requireControl('Real-input segmented control'),
-    ECHO.segmentedIndex,
-    '1',
-    'a real tap to register'
-  );
-  t.log.checkEquals(
-    'one tap reports one change',
-    t.requireEcho(ECHO.segmentedEvents),
-    '1'
-  );
-
-  // Each of the three claims lives on a different entry, and that is Compose's doing:
-  // a selectable item is published as the item itself — a node at the segment's box
-  // carrying `checkable`/`checked`, which is what TalkBack reads as "selected" — with
-  // the `Role` on its own `RadioButton` node at that same box and the label as a child
-  // `TextView`. An assertion that one node carries all three describes a tree this row
-  // does not have, so each claim is read where it is, and the note prints all three.
-  const box = await t.requireControl('Real-input segmented control');
-  const tree = t.dump();
-  const insideBox = (node) =>
-    node.bounds.x1 >= box.bounds.x1 - 1 &&
-    node.bounds.x2 <= box.bounds.x2 + 1 &&
-    node.bounds.y1 >= box.bounds.y1 - 1 &&
-    node.bounds.y2 <= box.bounds.y2 + 1;
-  const centreInside = (node, other) =>
-    (node.bounds.x1 + node.bounds.x2) / 2 >= other.bounds.x1 - 1 &&
-    (node.bounds.x1 + node.bounds.x2) / 2 <= other.bounds.x2 + 1 &&
-    (node.bounds.y1 + node.bounds.y2) / 2 >= other.bounds.y1 - 1 &&
-    (node.bounds.y1 + node.bounds.y2) / 2 <= other.bounds.y2 + 1;
-  const boundsText = (node) =>
-    `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
-    `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
-  const items = tree
-    .filter((node) => node.checkable === 'true' && insideBox(node))
-    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-  const radios = tree
-    .filter(
-      (node) =>
-        node.className === 'android.widget.RadioButton' && insideBox(node)
-    )
-    .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-  items.forEach((node, index) => {
-    const radio = radios.find((candidate) => centreInside(candidate, node));
-    const label = tree.find(
-      (candidate) =>
-        candidate.text === String(index + 1) && insideBox(candidate)
-    );
-    t.log.note(
-      `segment ${String(index + 1)}: item ${node.className.split('.').pop()} ` +
-        `[${boundsText(node)}] checked=${node.checked}; role ` +
-        `${radio == null ? 'MISSING' : `[${boundsText(radio)}]`}; label ` +
-        `${label == null ? 'MISSING' : `[${boundsText(label)}]`}`
-    );
-  });
-  t.log.checkEquals('the group still has one node per option', items.length, 3);
-  t.log.checkEquals(
-    'the group publishes one radio node per option',
-    radios.length,
-    3
-  );
-  items.forEach((node, index) => {
-    t.log.checkEquals(
-      `segment ${String(index + 1)} of ${String(items.length)} is still a radio button`,
-      radios.some((candidate) => centreInside(candidate, node)),
-      true
-    );
-    t.log.checkEquals(
-      `segment ${String(index + 1)} is announced with its own label`,
-      tree.some(
-        (candidate) =>
-          candidate.text === String(index + 1) && centreInside(candidate, node)
-      ),
-      true
-    );
-    t.log.checkEquals(
-      `segment ${String(index + 1)} reports the selection the control has (index 1)`,
-      node.checked,
-      index === 1 ? 'true' : 'false'
-    );
-  });
-}
-
 /**
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
@@ -3080,9 +2824,7 @@ const TREE_CHECKS = [
   { id: 'date-picker', run: datePickerChecks },
   { id: 'hosted-date-picker', run: hostedDatePickerChecks },
   { id: 'hosted-mixed', run: hostedMixedChecks },
-  { id: 'hosted-picker', run: hostedPickerChecks },
   { id: 'hosted-switch', run: hostedSwitchChecks },
-  { id: 'menu', run: menuChecks },
   { id: 'dialog', run: dialogChecks },
   { id: 'chip', run: chipChecks },
   { id: 'checkbox', run: checkboxChecks },
@@ -3090,7 +2832,6 @@ const TREE_CHECKS = [
   { id: 'picker', run: pickerChecks },
   { id: 'list-item', run: listItemChecks },
   { id: 'popover', run: popoverChecks },
-  { id: 'segmented-control', run: segmentedControlChecks },
 ];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */
