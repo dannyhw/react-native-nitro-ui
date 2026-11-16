@@ -172,39 +172,13 @@ export async function boxOf(locator: Locator): Promise<Box | null> {
 }
 
 /**
- * Scroll a control into the band a tap can reach.
- *
- * The mobile engine has no `scrollIntoView` — a node cannot be scrolled by
- * itself when it is a row of somebody else's list — so this drags the
- * viewport until the node sits in the band, and says so when it never does.
- *
- * It starts by going back to the top when this test has scrolled down, because
- * the alternative is to keep scrolling away from the row that is no longer in
- * the tree: with a lazy list, "not found" does not say which side of the
- * viewport the row is on, and only one of the two answers is to scroll down.
- *
- * Two things a box alone gets wrong, both measured on this bench:
- *
- * - **a box that is not the control on screen.** A hosted Compose node publishes
- *   its box whether or not the page has reached its composition, so a control far
- *   below the fold answers with a box that sits tidily inside the band. The
- *   engine's own visibility is the check on that: a node the screen reader cannot
- *   see — off screen, or behind a LogBox — reads hidden, and a hidden
- *   node has not been revealed however good its box looks.
- * - **a page with no scroll left.** Two drags that move the control nowhere mean
- *   the page has reached its end, and going on dragging is twelve reads of nothing
- *   — which is what it cost to learn that the control was never going to arrive.
- *   The band still has to be satisfied before that is accepted: a short list ends
- *   wherever it ends, and its last row can just as well end behind the LogBox a dev
- *   build docks against the bottom of the window, where a tap goes missing.
- *
- * `reads` names the nodes a test still has to read once the control is in
- * position — the echo row above a hosted control, say, which is a real React
- * Native node and leaves the tree when the scroll that raised the control pushes
- * it off the top. Those come back by nudging the page the other way, one drag at
- * a time, for as long as the control itself stays in the band.
- */
-export async function reveal(
+ * Scroll a control into the band a tap can reach, by dragging the viewport: the
+ * mobile engine has no `scrollIntoView` for a node inside somebody else's list.
+ * A hosted node answers with a box whether or not the page reached it, and a box
+ * says nothing about scroll left, so the engine's own visibility is the witness.
+ * `reads` names nodes a test still has to read, which come back by nudging the
+ * page the other way while the control stays in the band.
+ */ export async function reveal(
   screen: Screen,
   locator: Locator,
   options: { swipes?: number; reads?: Locator[] } = {}

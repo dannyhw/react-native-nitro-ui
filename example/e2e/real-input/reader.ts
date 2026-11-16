@@ -1,21 +1,10 @@
 /**
- * The screen-reader rule, on the node a person actually acts on.
- *
- * This is the one class of check no in-app query can make: a hosted Compose
- * control publishes its name on a `SemanticsNode`, not on a React Native view,
- * so `host-controlled-value` can be read from inside the app while "which node
- * does TalkBack stop on, and what does it say about it" cannot. e2e reads the
- * same tree a screen reader walks, so the assertion lives here.
- *
- * The rule per control: the name a person is given resolves to exactly one node; that
- * node has a box a finger can hit; and the state a reader is told — enabled or
- * unavailable, checked or not — sits on that node and not on a neighbour.
- *
- * Whether the named node is one a person can *act* on is not read here: the driver's
- * node map has `hittable`, which says a touch lands, not that the node answers. That
- * half is graded against `uiautomator dump` in `scripts/real-input/a11y-sweep-device.mjs`.
- */
-import { expect, type Locator, type Screen } from 'e2e';
+ * The screen-reader rule, on the node a person actually acts on: the name they are
+ * given resolves to exactly one node, that node has a box a finger can hit, and the
+ * state a reader is told sits on that node rather than on a neighbour. A hosted Compose
+ * control publishes its name on a `SemanticsNode`, so an in-app query cannot compare
+ * the two at all.
+ */ import { expect, type Locator, type Screen } from 'e2e';
 
 import { factsForItem, screenReaderFacts } from './os-tree';
 

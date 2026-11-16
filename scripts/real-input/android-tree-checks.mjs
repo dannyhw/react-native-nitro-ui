@@ -1,23 +1,12 @@
 /**
- * The Android real-input checks that only a `uiautomator` dump can make.
- *
- * The e2e suite delivers the touch and reads the screen through the driver. Three of that
- * driver's limits are what these checks run into, so they run after the suite with its
- * daemon down, the way the a11y sweep does:
- *
- * - its node map carries no `clickable`, `checkable` or `scrollable`, and a control's
- *   state lives on the actionable node rather than on the node carrying its name;
- * - it refuses a swipe whose path leaves the view it began inside, which is exactly what a
- *   page-scroll starting on a control or a drag across a drum has to do;
- * - `uiautomator dump` is killed while its session holds the device's one accessibility
- *   connection.
- *
- * The device is the caller's: one `adb shell` at a time, at the leased serial only. A
- * check navigates to its own screen, drives real input, and reads the tree back.
+ * The Android real-input checks that only a `uiautomator` dump can make, run after the
+ * e2e suite with its daemon down: the dump cannot be asked while the driver holds the
+ * device's one accessibility connection, and its node map carries no `clickable`,
+ * `checkable` or `scrollable` — the flags these checks read off the node a finger lands
+ * on. The device is the caller's: one `adb shell` at a time, at the leased serial only.
  *
  * @file
  */
-
 import { blockMs, runCheck, sleep } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { ECHO } from './screens.mjs';

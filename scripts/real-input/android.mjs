@@ -1,22 +1,9 @@
 #!/usr/bin/env node
 /**
- * Real-input checks on Android: the e2e suite in `example/e2e/` delivers the
- * touch, and the assertions read what the app draws.
- *
- * This file is the *orchestrator*, not a driver. It owns everything that has to
- * happen around a run — the lease's device, the stamped APK, Metro, the private
- * agent-device daemon — and then hands the device to `e2e`, which injects real
- * touches through `@e2e-dev/mobile` (agent-device) and reads the screen through
- * the same accessibility tree a screen reader gets. What the suite asserts is
- * what only OS-level input and that tree can see — see
- * `example/e2e/README.md`.
- *
- * One pass still reads the device from here rather than from the suite: the a11y
- * sweep, because the rule grades `clickable`/`checkable`/`scrollable` and the
- * driver's node map has none of them, while `uiautomator dump` has all three and
- * refuses to answer while the driver's session holds the device's one
- * accessibility connection. `a11y-sweep-device.mjs` carries the reason and the
- * navigation; this file only hands it the lease's `adb` and the daemon to stop.
+ * The Android real-input gate: the e2e suite in `example/e2e/` delivers the touch and the
+ * assertions read what the app draws. This file is the orchestrator — the lease's device,
+ * the stamped APK, Metro and the private agent-device daemon — then the sweep and the
+ * `uiautomator` checks, and finally one exit code and one ledger line for the run.
  *
  * Usage (devices and ports come from the environment, as everywhere else here):
  *
@@ -24,11 +11,9 @@
  *   METRO_PORT=<port> bun run test:real-input:android [--control <id>]
  *
  * The emulator must already be booted: a device gate boots nothing and shuts nothing
- * down. It addresses one
- * device — the serial its lease exported, through that lease's adb server — and
- * tells agent-device no other device exists.
+ * down. It addresses one device — the serial its lease exported, through that lease's
+ * adb server — and tells agent-device no other device exists.
  */
-
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';

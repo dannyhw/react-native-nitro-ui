@@ -1,35 +1,10 @@
 /**
- * The reads of the device that `agent-device` will not make for this suite.
- *
- * Everything else here is e2e's: the gesture, the tree query, the box, the
- * assertion. These two are raw `adb` because the driver's own route cannot answer
- * them, and mostly for the same reason — the Android *automation helper* that
- * `agent-device` installs owns device automation, and it serialises what it is
- * asked to do:
- *
- * - **The keyboard's edge.** The helper installs a headless IME so text entry is
- *   deterministic, so the app is never given a keyboard to avoid, and the edge a
- *   keyboard check has to measure exists only in the window manager's own report.
- *   `keyboard.ts` puts the device's real IME back for the length of the gesture
- *   and reads that report. (The suite cannot even ask the helper for it: it is not
- *   one of the helper's commands.)
- * - **A frame while a finger is down.** The driver takes a screenshot through the
- *   same helper that injects the gesture, so a capture asked for during an
- *   in-flight gesture is served only once the gesture ends: measured on
- *   `list-item`, a capture asked for 500 ms into a 10 000 ms press came back
- *   10 240 ms after it, and the row in it was already unpressed. Pixels taken
- *   beside the helper, not through it, are the only way to see a held press.
- *   `press-feedback.ts` is that caller.
- * The accessibility tree is not read from here at all: it is the driver's own capture,
- * asked for in `os-tree.ts`, and the pass that needs the flags the driver does not
- * publish (`clickable`, `checkable`, `scrollable`) reads `uiautomator dump` outside the
- * driver's session, in `scripts/real-input/a11y-sweep-device.mjs`.
- *
- * Both are reads. Nothing in this file drives a device: no `input`, no `am`. Every
- * call names the leased serial on the leased adb server, because other emulators —
- * including the one a person is using — are visible on the default server.
- */
-import { execFileSync } from 'node:child_process';
+ * The two reads of the device that `agent-device` will not make: the window
+ * manager's keyboard inset, and a frame taken while a finger is down. The
+ * automation helper that drives the device is serialised and installs a headless
+ * IME, so both exist only beside it. Nothing here drives a device: no `input`, no
+ * `am`, and every call names the leased serial on the leased adb server.
+ */ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
 import {

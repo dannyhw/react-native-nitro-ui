@@ -1,33 +1,12 @@
 /**
  * Keyboard avoidance, measured against the keyboard's own insets.
  *
- * The hardest check in the suite, and both difficulties come from the driver
- * rather than the library:
- *
- * 1. **The driver's keyboard draws nothing.** agent-device installs a headless
- *    test IME on every emulator session so text entry is deterministic
- *    (`com.callstack.agentdevice.imehelper`). It never shows a keyboard, so
- *    `WindowInsets.ime` stays empty: the app has nothing to avoid, and a check
- *    measuring avoidance would pass by measuring nothing. A keyboard check
- *    therefore puts the device's *real* IME back for the length of the gesture
- *    and restores the test IME afterwards. This is the one place the suite
- *    touches device settings, and it is configuration, not driving: the touch is
- *    still e2e's, and so is every read of the tree.
- * 2. **The keyboard's edge is not in the app's own geometry.** The example
- *    activity is `adjustResize`, but React Native on API 35 keeps its content
- *    view full-height and receives insets instead — measured with a real
- *    keyboard on screen, `android:id/content` still read its resting 2282 px. So
- *    the edge comes from the window manager's `ime` `InsetsSource`: the number
- *    the library itself has to honour. Reading it is the job
- *    `scripts/real-input/ime-frame.mjs` was written for, and that file is kept
- *    for this one call: e2e has no route to an `InsetsSource`.
- *
- * `ime-frame.mjs` answers `null` for "this dump never mentioned a visible
- * keyboard" and never for "the keyboard is at the top", and its sample goes into
- * every failure here, so a release that renames the line it parses reddens the
- * gate instead of quietly passing.
+ * The driver installs a headless IME, so nothing is ever drawn to avoid and a check
+ * would pass by measuring nothing: `withRealKeyboard` puts the device's real IME back
+ * for the length of one gesture. The content view is not resized on API 35, so the
+ * edge comes from the window manager's `ime` `InsetsSource` — the number the library
+ * itself has to honour — which `scripts/real-input/ime-frame.mjs` parses.
  */
-
 import { expect, type Locator } from 'e2e';
 
 import { adbShell as adb } from './device-read';

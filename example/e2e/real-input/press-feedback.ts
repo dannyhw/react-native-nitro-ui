@@ -1,31 +1,12 @@
 /**
  * Pressed-state feedback: the ink a person sees while their finger is down.
  *
- * Nothing inside the React tree knows what was painted, so this reads the screen: a
- * frame with the row at rest, a frame with the same row held, and the mean luminance of
- * a grid inside the row's box, before and during.
- *
- * The grid, not one pixel: a bounded ripple is brightest near the touch point and
- * a single sample can land on the one spot it has not reached at the instant of
- * the capture. The inset keeps the sample on the row's own fill rather than on a
- * pixel of whatever is drawn around it, and the whole thing is in device pixels
- * because the capture is in device pixels — `boundingBox()` and the frame share
- * one space.
- *
- * Why the frame comes from `device-read.ts` and not from e2e's own screenshot: the
- * driver takes a screenshot through the same on-device automation helper that
- * injects the gesture, and that helper serves one thing at a time. Measured on
- * `list-item`, a capture asked for 500 ms into a 10 000 ms press came back 10 240
- * ms later and showed the row *unpressed*, because by the time the helper got to
- * it the finger was up. That made this check unable to pass on a Form row however
- * well the library painted: the standalone item happened to still be fading its
- * ripple at the boundary, and the Form row was not. Asking for the frame beside
- * the helper — a read, one `adb exec-out screencap` on the leased serial — returns
- * in a few hundred ms, so the frame is genuinely taken under the finger, the press
- * can be a person's length rather than the driver's ceiling, and both rows are
- * measured the same way. The gesture itself is still e2e's.
- */
-import { centreOf } from './support';
+ * Nothing inside the React tree knows what was painted, so this compares the mean
+ * luminance of a grid inside the row's box at rest and while held, from frames taken
+ * beside the automation helper — a capture asked for during a gesture is served only
+ * once the gesture ends. The grid, not one pixel: a bounded ripple is brightest near
+ * the touch point and a single sample can land where it has not reached.
+ */ import { centreOf } from './support';
 import { screenCapture } from './device-read';
 import { expect, type Locator, type Screen } from 'e2e';
 

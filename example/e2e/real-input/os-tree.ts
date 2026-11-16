@@ -1,21 +1,10 @@
 /**
- * The accessibility tree the driver reads, with the state facts still on it.
- *
- * e2e answers questions about nodes; this file answers questions about *flags*: the
+ * The accessibility tree the driver reads, with the state facts still on it: the
  * `checked` a toggle answers with, the `selected` a segment answers with, the Android
  * class a reader takes for a role, and whether the node carrying a control's name is
- * the node carrying its state. A hosted Compose control publishes its name on a
- * `SemanticsNode`, so from inside the app those are not two comparable things.
- *
- * The capture is the driver's own, taken again for every read: the facts answer "what
- * does the tree say *now*", and a check that looks once before a gesture and once after
- * it must not be handed the same capture twice.
- *
- * What this cannot answer is actionability: `hittable` is geometric, so a name slid onto
- * a plain `View` still reads as hittable. That half is graded against `uiautomator dump`
- * by the a11y sweep, which also says why a dump cannot be read while a session is open.
- */
-import { execFileSync } from 'node:child_process';
+ * the node carrying its state. Actionability is not here — `hittable` is geometric —
+ * and is graded by the a11y sweep against `uiautomator dump` instead.
+ */ import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

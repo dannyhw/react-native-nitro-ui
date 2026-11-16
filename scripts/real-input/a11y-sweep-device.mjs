@@ -1,30 +1,12 @@
 /**
- * The a11y sweep's half of a device: bring up each case's screen, and answer with the
- * tree as the accessibility service serves it.
+ * The a11y sweep's device: bring up each case's screen, and answer with the tree as
+ * the accessibility service serves it. Both happen outside an `agent-device` session
+ * because `uiautomator dump` is killed while its snapshot helper holds the device's
+ * single `UiAutomation` connection, and the rule grades `clickable`, `checkable` and
+ * `scrollable`, which the driver's own node map does not carry.
  *
- * Both of those have to happen outside an `agent-device` session, which is why the
- * pass is not one more e2e file:
- *
- * - The rule grades `clickable`, `checkable` and `scrollable`, and the driver's tree
- *   does not carry them. Its node map is `type`, `label`, `value`, `identifier`,
- *   `enabled`, `selected`, `checked`, `hittable`, `rect` and `kind`; `hittable` is
- *   *geometric* actionability, which the exact defect this rule exists for — a name
- *   slid onto a plain `View` — passes. Grading the rule against it would report the
- *   defect fixed because the tool cannot see it.
- * - `uiautomator dump` *is* that tree with the flags still on it, and it cannot be
- *   asked while the driver is attached: the driver's snapshot helper holds the
- *   device's single `UiAutomation` connection for the length of its own session, and a
- *   dump asked for inside that window is killed (exit 137 with a session open, exit 0
- *   seconds after `close`, both measured on the leased emulator). So the pass runs
- *   after the suite, with the daemon down, and navigates by injecting the same real
- *   touch events the driver would have sent.
- *
- * @file The navigation is the driver's own, reduced to what this pass needs: a tab is
- *       the node carrying `tab-<id>` as its resource-id, it has to lie wholly inside
- *       the window to be tapped, and a screen counts as up when the testID no other
- *       screen renders is in the dump.
+ * @file
  */
-
 import { blockMs, sleep } from './support.mjs';
 import { screenTab } from './screens.mjs';
 import { imeServiceShown } from './ime-frame.mjs';
