@@ -55,8 +55,13 @@ function driverBinary(): string {
  * `--force-full` because a repeat of the same request is answered with an “unchanged”
  * acknowledgement that has no nodes in it, and the serial is passed rather than
  * inherited so another lease’s emulator cannot be read.
+ *
+ * `unmerged` asks for the tree as the accessibility service serves it. By default the
+ * driver folds a childless role node (a Compose `RadioButton`, say) into its clickable
+ * parent, which then reports the child's class with its own box. The unmerged tree also
+ * keeps off-screen nodes, at their own boxes, and other apps' windows.
  */
-export function tree(): TreeNode[] {
+export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
   const serial = process.env.ANDROID_SERIAL;
   if (serial == null || serial === '') {
     throw new Error(
@@ -77,6 +82,7 @@ export function tree(): TreeNode[] {
         serial,
         '--session',
         DRIVER_SESSION,
+        ...(options.unmerged === true ? ['--raw'] : []),
       ],
       { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60_000 }
     );
