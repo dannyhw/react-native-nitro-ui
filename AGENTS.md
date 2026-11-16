@@ -72,8 +72,10 @@ macOS, Xcode 27, bun 1.4, Node 24 (`fnm exec --using 24 --`), Java 17, CocoaPods
   `real-input` gates before review unless your brief's Proof section names one: they run once, at
   merge. The one exception: a task that changes real-input tests proves them with a filtered run
   naming the controls it touched (`-- --control <id>`). At merge, run only what
-  `need --for merge` lists: a green device-gate run on any branch of this clone whose digest for
-  the gate is the current one already counts, unless a newer run on it is red. `check` always
+  `need --for merge` lists: when the merge branch has no green or red run of its own on a
+  device gate's current digest, the newest (by start time) full run or completion on that
+  digest from any branch of this clone decides, green or red. A green from elsewhere counts
+  only on the conditions in `docs/agents/gates.md` "Runs from other branches". `check` always
   runs on the merge branch. The merge run may start a harness gate beside the other
   platform's gate, the two harness gates included, under one lease for both, after building
   both apps; `real-input:ios` runs with no other gate beside it. A red run is completed with

@@ -60,6 +60,9 @@ import {
   harnessUnitsFromTimings,
   planRerunFailed,
   completeRerun,
+  completionProvenance,
+  earlyExitAnswer,
+  isolatedSwitchBlock,
   realInputUnitsFromResults,
   isDeviceGate,
   isUsageProbe,
@@ -1020,33 +1023,16 @@ async function startBackgroundGate(name, resolved) {
   });
   child.unref();
   if (earlyExit != null) {
-    // Either the gate could not start, or it finished inside this window. Only
-    // a finished gate wrote `done`, and then its own exit code is the answer.
-    const after = readBackgroundRecord(recordPath);
-    if (after?.done === true) {
-      const code =
-        after.exitCode == null
-          ? after.result === 'pass'
-            ? 0
-            : 1
-          : Number(after.exitCode);
-      process.stderr.write(
-        `gate: ${name} finished before this launcher handed off (exit ${String(code)}) - see ${logPath}\n`
-      );
-      return code;
-    }
-    process.stderr.write(
-      `gate: ${name} exited immediately with ${String(earlyExit.code ?? earlyExit.signal)} - see ${logPath}\n`
-    );
-    writeJsonAtomic(recordPath, {
-      ...after,
-      done: true,
-      finishedAt: Date.now(),
-      exitCode: earlyExit.code ?? 1,
-      signal: earlyExit.signal,
-      error: 'exited immediately',
+    const answer = earlyExitAnswer({
+      name,
+      earlyExit,
+      record: readBackgroundRecord(recordPath),
+      logPath,
+      now: Date.now(),
     });
-    return 1;
+    process.stderr.write(answer.message);
+    if (answer.record != null) writeJsonAtomic(recordPath, answer.record);
+    return answer.code;
   }
 
   process.stdout.write(
@@ -1851,8 +1837,13 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     signal: exit.signal,
     units,
     completion: completionRecord,
-    relaxed: relaxedSwitches(process.env),
-    judge: before.judge,
+    ...(completion == null
+      ? { relaxed: relaxedSwitches(process.env), judge: before.judge }
+      : completionProvenance({
+          base: completion.base,
+          relaxed: relaxedSwitches(process.env),
+          judge: before.judge,
+        })),
   });
   const file = appendLedgerLine(branch, line);
   // The store's record of this run. For a backgrounded run it is the "done"
@@ -2500,6 +2491,7 @@ async function main(argv) {
   // that never started. The disk is asked last: a missing lease is the more
   // useful thing to be told.
   const leaseBlock =
+    isolatedSwitchBlock(resolved.gate, process.env) ??
     deviceGateLeaseBlock(resolved, process.env) ??
     deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {
@@ -2529,7 +2521,6 @@ async function rerunFailedGate({ command, extraArgs, background }) {
     tree: read.tree,
     trees: read.trees,
     gateTrees: read.gateTrees,
-    judge: read.judge,
   });
   if (plan.refusal != null) {
     process.stderr.write(`gate: refused before the run - ${plan.refusal}\n`);
@@ -2543,6 +2534,7 @@ async function rerunFailedGate({ command, extraArgs, background }) {
     return 2;
   }
   const leaseBlock =
+    isolatedSwitchBlock(command, process.env) ??
     deviceGateLeaseBlock(resolved, process.env) ??
     deviceGateDiskBlock(resolved, process.env);
   if (leaseBlock != null) {

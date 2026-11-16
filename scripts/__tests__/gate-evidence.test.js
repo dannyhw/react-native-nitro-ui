@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from '@jest/globals';
 
 import {
+  completionProvenance,
   decideNeed,
   foreignProofKey,
   gateRowFor,
@@ -15,6 +16,7 @@ import {
   LEDGER_VERSION,
   ledgerLineFromRun,
   RELAXING_SWITCHES,
+  relaxedSwitches,
   renderGateTable,
   summarizeGates,
 } from '../gate-core.mjs';
@@ -190,6 +192,19 @@ describe('a green run recorded on another branch', () => {
     expect(rowOf('harness:ios', { foreign: [red] }).state).toBe('red');
   });
 
+  it('records a pinned zone or locale replaced, even by an empty value, as relaxed', () => {
+    for (const name of [
+      'NITRO_UI_TEST_TZ',
+      'NITRO_UI_TEST_LOCALE',
+      'NITRO_UI_TEST_LANGUAGES',
+    ]) {
+      expect(relaxedSwitches({ [name]: 'UTC' })).toEqual({ [name]: 'UTC' });
+      expect(relaxedSwitches({ [name]: '' })).toEqual({ [name]: '' });
+    }
+    // An empty value of any other switch is the switch off.
+    expect(relaxedSwitches({ NITRO_UI_ALLOW_UNSTAMPED: '' })).toEqual({});
+  });
+
   it('proves nothing when another ledger version wrote it', () => {
     for (const v of [LEDGER_VERSION - 1, LEDGER_VERSION + 1]) {
       expect(rowOf('harness:ios', { foreign: [{ ...run(), v }] }).state).toBe(
@@ -257,6 +272,89 @@ describe('a green run recorded on another branch', () => {
     expect(rowOf('real-input:ios', { foreign: [unnamed] }).state).toBe(
       'missing'
     );
+  });
+});
+
+describe('a completion counts elsewhere only when the run it completed would have', () => {
+  const units = {
+    kind: 'real-input',
+    results: { switch: 'pass', form: 'pass' },
+    everyRun: {},
+    unnamed: [],
+  };
+  const redOf = (overrides) =>
+    run({
+      gate: 'real-input:ios',
+      command: 'node scripts/real-input/ios.mjs',
+      result: 'fail',
+      exitCode: 1,
+      units: { ...units, results: { switch: 'pass', form: 'fail' } },
+      ...overrides,
+    });
+  /** A green completion of `base` recorded from a clean shell with today's gate code. */
+  const completionOf = (base) =>
+    run({
+      gate: 'real-input:ios',
+      command: 'node scripts/real-input/ios.mjs --control form',
+      startedAt: Date.parse('2026-11-16T11:00:00Z'),
+      units,
+      completion: {
+        of: { ts: base.ts, logPath: base.logPath, durationMs: 3_000_000 },
+        attempt: 1,
+        rerun: ['form'],
+        filtered: 'real-input:ios:--control:form',
+      },
+      ...completionProvenance({ base, relaxed: {}, judge: JUDGE }),
+    });
+
+  it('a relaxed red run completed from a clean shell stays relaxed, and gives no other branch a green', () => {
+    const red = redOf({ relaxed: { NITRO_UI_ALLOW_UNSTAMPED: '1' } });
+    const done = completionOf(red);
+    expect(done.relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe('red');
+    // On its own branch it still completes the run, and shows as relaxed.
+    const own = rowOf('real-input:ios', { list: [red, done] });
+    expect(own.state).toBe('green');
+    expect(own.entry.relaxed).toEqual({ NITRO_UI_ALLOW_UNSTAMPED: '1' });
+  });
+
+  it('a red run written before judging digests existed, then completed, gives no other branch a green', () => {
+    const red = { ...redOf({}), v: LEDGER_VERSION - 1 };
+    delete red.relaxed;
+    delete red.judge;
+    const done = completionOf(red);
+    expect(done.relaxed).toBeNull();
+    expect(done.judge).toBeNull();
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe('red');
+    expect(rowOf('real-input:ios', { list: [red, done] }).state).toBe('green');
+  });
+
+  it('a red run judged by other gate code, then completed, gives no other branch a green', () => {
+    const red = redOf({ judge: 'k'.repeat(64) });
+    const done = completionOf(red);
+    expect(done.judge).toBeNull();
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe('red');
+  });
+
+  it('a clean red run completed from a clean shell clears the red on every branch', () => {
+    const red = redOf({});
+    const done = completionOf(red);
+    expect(done.relaxed).toEqual({});
+    expect(done.judge).toBe(JUDGE);
+    expect(rowOf('real-input:ios', { foreign: [red, done] }).state).toBe(
+      'green'
+    );
+  });
+
+  it("the completion's own switches are added to the red run's", () => {
+    const red = redOf({ relaxed: { CI: '1' } });
+    expect(
+      completionProvenance({
+        base: red,
+        relaxed: { NITRO_UI_ALLOW_UNSTAMPED: '1' },
+        judge: JUDGE,
+      }).relaxed
+    ).toEqual({ CI: '1', NITRO_UI_ALLOW_UNSTAMPED: '1' });
   });
 });
 
@@ -438,6 +536,8 @@ function gitEnv(home) {
     'GIT_OBJECT_DIRECTORY',
     // A switch inherited from the shell, `CI` on a CI runner, would mark every run relaxed.
     ...RELAXING_SWITCHES,
+    // Refused for a full harness gate, so one exported in the shell would fail these runs.
+    'NITRO_UI_HARNESS_ISOLATED',
   ]) {
     delete env[name];
   }
@@ -612,6 +712,42 @@ describe('gate.mjs across the worktrees of one clone', () => {
     );
     const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
     expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
+  }, 120_000);
+
+  it('an empty NITRO_UI_TEST_TZ is recorded as relaxed and proves nothing elsewhere', () => {
+    const clone = makeClone();
+    expect(
+      runCli(clone, clone.there, ['harness:ios'], { NITRO_UI_TEST_TZ: '' })
+        .status
+    ).toBe(0);
+    const line = JSON.parse(
+      fs
+        .readFileSync(
+          path.join(clone.there, '.gates', 'task', 'there.jsonl'),
+          'utf8'
+        )
+        .trim()
+    );
+    expect(line.relaxed).toEqual({ NITRO_UI_TEST_TZ: '' });
+    const here = runCli(clone, clone.here, ['need', '--for', 'merge']);
+    expect(needLine(here.stdout, 'harness:ios')).toContain('✗');
+  }, 120_000);
+
+  it('a full harness gate is refused while the isolated-suites switch is exported, and records nothing', () => {
+    const clone = makeClone();
+    for (const args of [['harness:ios'], ['harness:ios', '--background']]) {
+      const refused = runCli(clone, clone.there, args, {
+        NITRO_UI_HARNESS_ISOLATED: '1',
+      });
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain(
+        'gate: refused before the run - NITRO_UI_HARNESS_ISOLATED is set in this shell'
+      );
+      expect(refused.stdout).not.toContain('fake runner');
+    }
+    expect(
+      fs.existsSync(path.join(clone.there, '.gates', 'task', 'there.jsonl'))
+    ).toBe(false);
   }, 120_000);
 
   it('a run judged by other gate code proves nothing here', () => {

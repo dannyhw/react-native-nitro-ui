@@ -134,26 +134,35 @@ including this one, that is all of these decides, green or red:
 - on the gate's own digest equal to the current one, with no fallback to the platform half,
   so a line written before per-gate digests never counts;
 - unmoved: the tree and the gate's digest read after the run equal the ones before it;
-- for a green, written by this ledger version and not relaxed: the line records which relaxing switches the run had set
-  (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`: `NITRO_UI_ALLOW_UNSTAMPED`,
-  `NITRO_UI_ALLOW_LOCALE_MISMATCH`, the `*_FORCE` switches, a substituted `lsof`, `adb` or
-  `simctl`, and the timeout switches including `CI`), and only a line that records none
-  counts;
+- for a green, written by this ledger version and not relaxed: the line records which relaxing
+  switches the run had set (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`:
+  `NITRO_UI_ALLOW_UNSTAMPED`, `NITRO_UI_ALLOW_LOCALE_MISMATCH`, the `*_FORCE` switches, a
+  substituted `lsof`, `adb` or `simctl`, the timeout switches including `CI`, and
+  `NITRO_UI_TEST_TZ`, `NITRO_UI_TEST_LOCALE` and `NITRO_UI_TEST_LANGUAGES`, set even when
+  empty), and only a line that records none counts;
 - for a green, judged by the same gate code: the line's `judge` digest, over the check-only
   files a device run executes or that decide its result (`JUDGE_FILES` in
   `scripts/gate-core.mjs`: the gate, its supervisor, the lease and what they import), equals
-  the current one. A line without it never counts from elsewhere.
+  the current one. A line without it never counts from elsewhere;
+- for a completion, the red run it completed would have counted too. A completion records
+  that run's relaxing switches together with its own, and a `judge` digest only when both
+  runs have the same one, so completing a relaxed red, a red written by an older ledger
+  version or one judged by other gate code never gives another branch a green.
 
 A red that is relaxed or judged by other gate code still decides: it can only ask for a run.
 
 A relaxed run still counts on its own branch, and its row says so:
-`**PASS** (relaxed: NITRO_UI_ALLOW_UNSTAMPED)`.
+`**PASS** (relaxed: NITRO_UI_ALLOW_UNSTAMPED)`. A full `harness:<platform>` gate, or its
+completion, refuses to start while `NITRO_UI_HARNESS_ISOLATED` is set: the harness would run
+only the isolated suites.
 
-So a branch whose newest run on these files is red makes the gate red on every branch on the
-same files, until a newer full run on that digest is green, and this holds after its worktree
-is removed. The row names the branch: `**PASS** (from \`task/x\`)`. `--rerun-failed` reads only
-this branch's ledger. Nothing is inferred from commits or ancestry: identical files are the
-whole test. Evidence from another clone, another machine or CI is not read.
+So a red run on these files decides only for a branch with no green or red line of its own on
+the current digest. For each such branch the gate stays red until a newer full run on that
+digest, from any branch, is green, or a completion of that red run is. Newer is by start time,
+the line's `ts`. This holds after the red run's worktree is removed. The row names the branch:
+`**PASS** (from \`task/x\`)`. `--rerun-failed` reads only this branch's ledger. Nothing is
+inferred from commits or ancestry: identical files are the whole test. Evidence from another
+clone, another machine or CI is not read.
 
 `check` is never taken from another branch. Its digest is the code tree, which leaves out
 `docs/`, `bench/`, `.github/` and every `*.md`, and `check` reads some of those (format, the

@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-16 Nothing user-visible: a green device gate counts on any branch whose files for that
+  gate are the same, and the two harness gates run at the same time (X50, #89).
 - 11-16 Nothing user-visible: almost every Android real-input check now runs in the e2e suite,
   which leaves three controls and under 1,000 lines in the `uiautomator` phase (X45, X46, X47,
   #85, #86, #87). Each device gate is keyed to the files its own run reads, a red run is

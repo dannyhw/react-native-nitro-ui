@@ -593,8 +593,10 @@ changes only the lock's `COCOAPODS:` trailer.
 `.gates/<branch>.jsonl` (gitignored), keyed to the code tree the stamp uses, so a docs-only
 commit leaves a green gate green. The line is also copied to a record every worktree of the
 clone reads, even after its worktree is removed. When a branch has no line of its own on a
-device gate's current digest, the newest full run of that gate on that digest from any branch
-decides, green or red, and the row names the branch it came from. `check` is never taken from
+device gate's current digest, the newest (by start time) full run or completion of that gate
+on that digest from any branch decides, green or red, and the row names the branch it came
+from. A relaxed green, or one written by other gate code or another ledger version, never
+counts from elsewhere (`docs/agents/gates.md`, "Runs from other branches"). `check` is never taken from
 another branch: it reads docs and `bench/`, which the digest leaves out. A device gate reads its
 device from the lease and refuses to start unless that lease is live and holds the device it is
 about to use.

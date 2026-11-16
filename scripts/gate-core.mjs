@@ -5,6 +5,7 @@
 
 import { codeTreeDigest, contentHash, isCodeFile } from './app-stamp-core.mjs';
 import { ACQUIRE_HINT, emulatorSerial, leaseIsLive } from './lease-core.mjs';
+import { ISOLATED_ENV } from './harness-isolated.mjs';
 
 /** Where a machine's ledgers live. Gitignored: a ledger is local evidence. */
 export const LEDGER_DIR = '.gates';
@@ -40,6 +41,9 @@ export const LEDGER_VERSION = 8;
  * - `NITRO_UI_LSOF_BIN`, `NITRO_UI_ADB_BIN`, `NITRO_UI_SIMCTL_BIN`: another
  *   program answers for the port check or drives the device.
  * - `HARNESS_TEST_TIMEOUT`, `REAL_INPUT_TIMEOUT`, `CI`: longer timeouts.
+ * - `NITRO_UI_TEST_TZ`, `NITRO_UI_TEST_LOCALE`, `NITRO_UI_TEST_LANGUAGES`: the app
+ *   runs in another zone or locale than the pinned one, so the DST and locale
+ *   cases it exists for may not run. Empty asks the device, so it counts as set.
  */
 export const RELAXING_SWITCHES = [
   'NITRO_UI_ALLOW_UNSTAMPED',
@@ -52,7 +56,17 @@ export const RELAXING_SWITCHES = [
   'HARNESS_TEST_TIMEOUT',
   'REAL_INPUT_TIMEOUT',
   'CI',
+  'NITRO_UI_TEST_TZ',
+  'NITRO_UI_TEST_LOCALE',
+  'NITRO_UI_TEST_LANGUAGES',
 ];
+
+/** Relaxing switches whose empty value still changes the run. */
+const SET_WHEN_EMPTY = new Set([
+  'NITRO_UI_TEST_TZ',
+  'NITRO_UI_TEST_LOCALE',
+  'NITRO_UI_TEST_LANGUAGES',
+]);
 
 /**
  * The relaxing switches set in `env`, as `{NAME: value}`; `{}` when none is.
@@ -63,8 +77,27 @@ export const RELAXING_SWITCHES = [
 export function relaxedSwitches(env) {
   return Object.fromEntries(
     RELAXING_SWITCHES.filter(
-      (name) => env?.[name] != null && env[name] !== ''
+      (name) =>
+        env?.[name] != null && (env[name] !== '' || SET_WHEN_EMPTY.has(name))
     ).map((name) => [name, String(env[name])])
+  );
+}
+
+/**
+ * Why a run that records `gate` must not start with this environment, or `null`.
+ * The harness's own isolated-suites switch, left exported in a shell, makes a full
+ * `harness:<platform>` run test only the isolated files and still exit 0.
+ *
+ * @param {string} gate the gate the run is recorded as
+ * @param {Record<string, string | undefined>} env
+ * @returns {string | null}
+ */
+export function isolatedSwitchBlock(gate, env) {
+  if (!/^harness:[^:]+$/.test(gate) || env?.[ISOLATED_ENV] == null) return null;
+  return (
+    `${ISOLATED_ENV} is set in this shell, so ${gate} would run only the ` +
+    `isolated suites and record a full run. Unset it (\`unset ${ISOLATED_ENV}\`) ` +
+    `and start the gate again.`
   );
 }
 
@@ -880,9 +913,10 @@ export function gateStateFor({
  *   - the tree, and the gate's digest, were read again after the run and had not
  *     moved; a line without that second reading never counts;
  *   - not filtered: the command is the gate's own unfiltered command;
- *   - for a green, written by this ledger version, not relaxed: the line says no relaxing switch was set, and
- *     judged by the same gate code: its `judge` digest equals `judge`. A red
- *     still decides either way, since it can only ask for a run.
+ *   - for a green, written by this ledger version, not relaxed (the line says no
+ *     relaxing switch was set), and judged by the same gate code: its `judge`
+ *     digest equals `judge`. A red still decides either way, since it can only
+ *     ask for a run.
  *
  * @returns {{state: 'green'|'red', key: string} | null} the verdict and the
  *   digest key it matched on, or `null` when the line decides nothing here
@@ -2489,6 +2523,79 @@ export function completeRerun({
     }
   }
   return { result: why.length === 0 ? 'pass' : 'fail', units: merged, why };
+}
+
+/**
+ * The `relaxed` and `judge` a completion line records. Most of its units come
+ * from the red run it completes, so it is no stricter than that run: it carries
+ * the base run's switches as well as its own, and a judging digest only when
+ * both runs were judged by the same gate code. A base line from another ledger
+ * version, or one that recorded neither, leaves `null`, which never counts on
+ * another branch.
+ *
+ * @param {object} options
+ * @param {object} options.base the red line being completed
+ * @param {Record<string, string>} options.relaxed the completion's own switches
+ * @param {string | null} options.judge the completion's own judging digest
+ * @returns {{relaxed: Record<string, string> | null, judge: string | null}}
+ */
+export function completionProvenance({ base, relaxed, judge }) {
+  const baseRelaxed = base?.relaxed;
+  const recorded =
+    base?.v === LEDGER_VERSION &&
+    baseRelaxed != null &&
+    typeof baseRelaxed === 'object' &&
+    !Array.isArray(baseRelaxed);
+  return {
+    relaxed: recorded ? { ...baseRelaxed, ...relaxed } : null,
+    judge:
+      base?.v === LEDGER_VERSION && judge != null && base?.judge === judge
+        ? judge
+        : null,
+  };
+}
+
+/**
+ * What a background launcher says when its gate process exits inside the hand-off
+ * window. A gate that finished wrote `done`, and then its own result is the
+ * answer; one that never got that far could not start, and its record is closed
+ * here.
+ *
+ * @param {object} options
+ * @param {string} options.name the gate
+ * @param {{code: number | null, signal: string | null}} options.earlyExit
+ * @param {object | null} options.record the run's record as it is now
+ * @param {string} options.logPath
+ * @param {number} options.now
+ * @returns {{code: number, message: string, record: object | null}} the exit
+ *   code, the line for stderr, and the record to write, or `null` to leave it
+ */
+export function earlyExitAnswer({ name, earlyExit, record, logPath, now }) {
+  if (record?.done === true) {
+    const code =
+      record.exitCode == null
+        ? record.result === 'pass'
+          ? 0
+          : 1
+        : Number(record.exitCode);
+    return {
+      code,
+      message: `gate: ${name} finished before this launcher handed off (exit ${String(code)}) - see ${logPath}\n`,
+      record: null,
+    };
+  }
+  return {
+    code: 1,
+    message: `gate: ${name} exited immediately with ${String(earlyExit.code ?? earlyExit.signal)} - see ${logPath}\n`,
+    record: {
+      ...record,
+      done: true,
+      finishedAt: now,
+      exitCode: earlyExit.code ?? 1,
+      signal: earlyExit.signal,
+      error: 'exited immediately',
+    },
+  };
 }
 
 /** `from task/x` for a row proved by a run recorded on another branch, else `null`. */

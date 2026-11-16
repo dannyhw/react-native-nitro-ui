@@ -12,6 +12,9 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   2026-11-15, `harness:ios` on a merge run, seen once.
 - `Form.harness.tsx`, an accessory drawn 1.1 dp off its row, 2026-11-16, `harness:android`
   started 15:27 UTC, seen once.
+- `BottomSheetModalHazard` (isolated) "leaves no Modal host behind", render timeout 1000 ms,
+  2026-11-16, `harness:android` started 21:46 UTC while an iOS test build loaded the machine,
+  seen before at a load peak.
 - `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet", the header did
   not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate, seen once.
 
@@ -305,9 +308,10 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - Comments that cite a task or decision id remain in about 30 files outside this gate (`example/src`, `scripts/real-input/a11y.mjs`, `screens.mjs`, `report.mjs`, a few script tests).
 - Lease store: a process killed while it holds `leases.lock` blocks every lease command until the lock is 30 s old, and commands give up after 10 s, so they fail in between. Stealing the lock at once when its holder's pid is gone would close the window.
 - Gate ledger, open after per-gate digests and completions:
-  - The ledger is per branch, so a merge branch owes every device gate even when a task branch proved the same digest. A green run could count on any branch whose digest for that gate is identical.
   - A filtered `real-input:ios` run for one control takes about 14 minutes, most of it rebuilding the UI-test app.
   - `scripts/real-input/ios.mjs` stops before its report when a case has no result, so that run cannot be completed with `--rerun-failed`. A failed isolated harness suite cannot be completed either.
-  - Two harness runs in one worktree share one run-state file, so only one harness gate runs at a time.
+  - The app's build stamp follows the whole code tree, so an edit to gate code alone makes every device gate refuse the installed app until `build-app.mjs` runs again.
+  - A run is void when any code file changed while it ran, gate code included, although a device gate is keyed to its own digest. Comparing the gate's own digest before and after would let a tooling edit land during a device run.
+  - Runs from other branches are ordered by start time, where a branch's own are ordered as recorded. The shared record is never pruned. The hooks the harness package itself reads are neither recorded as relaxing nor refused. Two harness runs that start together both rewrite the harness package's manifest file.
   - `real-input:ios` beside an Android gate: 18 of 28 controls went red with dropped presses and drags (2026-11-16, load median 7.8, peak 46), and all 18 passed alone on the same tree. Its touches need a quiet machine, so it runs alone; why a second run drops them is not known.
   - The iOS UI-test target stays in the `harness:ios` digest for want of proof that the harness build skips it.
