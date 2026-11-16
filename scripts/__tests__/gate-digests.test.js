@@ -395,6 +395,28 @@ function namesExcludedDir(literal, gate) {
   return null;
 }
 
+/**
+ * A harness test can fetch a file through Metro's dev server, whose root is `example/`:
+ * `${devServerOrigin()}src/assets/...`. Only the icon assets under `example/src/` stay in the
+ * harness digests, so a URL to anything else there is a read the digest leaves out.
+ */
+function devServerReads(gate, file, literals) {
+  const found = [];
+  for (const literal of literals) {
+    // `../../src/...` is a module specifier the import walk already follows.
+    if (literal.startsWith('.')) continue;
+    for (const match of literal.matchAll(/(?:^|\/)src\/([\w./-]+)/g)) {
+      const target = `example/src/${match[1]}`;
+      if (gateDigestOwnsFile(gate, target)) continue;
+      if (target.startsWith('example/src/assets/')) continue;
+      found.push(
+        `${gate}: ${file} fetches "${literal}" from the dev server, which the ${gate} digest leaves out (${target})`
+      );
+    }
+  }
+  return found;
+}
+
 function excludedFor(gate) {
   return tracked('.').filter(
     (file) =>
@@ -416,7 +438,11 @@ function violations(gate, roots) {
       found.push(`${gate} reads ${chainTo(reached, file)}`);
       continue;
     }
-    if (inApp(file)) continue;
+    if (inApp(file)) {
+      if (gate.startsWith('harness:') && file.startsWith('example/'))
+        found.push(...devServerReads(gate, file, record.literals));
+      continue;
+    }
     for (const literal of record.literals) {
       const hit =
         namesExcluded(literal, [...excluded]) ??
