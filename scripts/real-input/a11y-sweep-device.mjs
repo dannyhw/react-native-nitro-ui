@@ -385,8 +385,10 @@ export class SweepDevice {
   density() {
     const out = this.adbShell('wm density');
     const dpi = Number(
-      (out.match(/Override density:\s*(\d+(?:\.\d+)?)/) ??
-        out.match(/Physical density:\s*(\d+(?:\.\d+)?)/))?.[1]
+      (
+        out.match(/Override density:\s*(\d+(?:\.\d+)?)/) ??
+        out.match(/Physical density:\s*(\d+(?:\.\d+)?)/)
+      )?.[1]
     );
     if (!Number.isFinite(dpi) || dpi <= 0) {
       throw new Error(

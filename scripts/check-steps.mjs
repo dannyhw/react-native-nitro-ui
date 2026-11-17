@@ -29,7 +29,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [],
-    note: 'tsc --noEmit over src, example/src, example/__tests__, scripts/smoke',
+    note: 'bun check (tsconfig.json, noEmit) over src, example/src, example/__tests__, example/e2e, scripts/smoke',
   },
   {
     name: 'lock:check',
@@ -45,7 +45,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [],
-    note: 'two tsc --noEmit passes over bench/ (its own tsconfigs, paths point at ../src)',
+    note: 'two bun check passes over bench/ (its own tsconfigs, paths point at ../src)',
   },
   {
     name: 'lint',
@@ -53,7 +53,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [FINDINGS.nitrogenDir],
-    note: 'eslint over **/*.{js,mjs,ts,tsx}; ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
+    note: 'oxlint over the tree (.oxlintrc.json); ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
   },
   {
     name: 'format',
@@ -61,7 +61,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [FINDINGS.nitrogenDir],
-    note: 'prettier --check .; .prettierignore covers lib, nitrogen/generated, .turbo, and prettier 3 also reads .gitignore - but not nitrogen/ as a whole',
+    note: 'oxfmt --check; .prettierignore covers lib, nitrogen/generated, .turbo, and oxfmt also reads .gitignore - but not nitrogen/ as a whole',
   },
   {
     name: 'test',
@@ -177,7 +177,7 @@ export function commandForStep(step) {
 
 /**
  * How many steps may run at once: half the cores, capped at `MAX_DEFAULT_JOBS`,
- * because the heavy steps (Jest, tsc, ESLint) already fan out across cores.
+ * because the heavy steps (Jest, the type checker, oxlint) already fan out across cores.
  *
  * @param {number} parallelism `os.availableParallelism()` or `os.cpus().length`
  * @returns {number}

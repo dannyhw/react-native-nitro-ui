@@ -1,0 +1,358 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "jest", "node", "unicorn"],
+  "options": {
+    "reportUnusedDisableDirectives": "warn"
+  },
+  "categories": {
+    "correctness": "off"
+  },
+  "env": {
+    "builtin": true
+  },
+  "globals": {
+    "ArrayBuffer": "readonly",
+    "DataView": "readonly",
+    "Float32Array": "readonly",
+    "Float64Array": "readonly",
+    "Int16Array": "readonly",
+    "Int32Array": "readonly",
+    "Int8Array": "readonly",
+    "Map": "writable",
+    "Promise": "writable",
+    "Proxy": "readonly",
+    "Reflect": "readonly",
+    "Set": "writable",
+    "Symbol": "readonly",
+    "Uint16Array": "readonly",
+    "Uint32Array": "readonly",
+    "Uint8Array": "readonly",
+    "Uint8ClampedArray": "readonly",
+    "WeakMap": "readonly",
+    "WeakSet": "readonly",
+    "__DEV__": "writable",
+    "__dirname": "readonly",
+    "__fbBatchedBridgeConfig": "readonly",
+    "AbortController": "readonly",
+    "Blob": "writable",
+    "alert": "readonly",
+    "cancelAnimationFrame": "readonly",
+    "cancelIdleCallback": "readonly",
+    "clearImmediate": "writable",
+    "clearInterval": "readonly",
+    "clearTimeout": "readonly",
+    "console": "readonly",
+    "document": "readonly",
+    "ErrorUtils": "readonly",
+    "escape": "readonly",
+    "Event": "readonly",
+    "EventTarget": "readonly",
+    "exports": "readonly",
+    "fetch": "readonly",
+    "File": "writable",
+    "FileReader": "readonly",
+    "FormData": "readonly",
+    "global": "readonly",
+    "Headers": "readonly",
+    "Intl": "readonly",
+    "module": "readonly",
+    "navigator": "readonly",
+    "process": "readonly",
+    "requestAnimationFrame": "writable",
+    "requestIdleCallback": "writable",
+    "require": "readonly",
+    "setImmediate": "writable",
+    "setInterval": "readonly",
+    "setTimeout": "readonly",
+    "queueMicrotask": "writable",
+    "URL": "readonly",
+    "URLSearchParams": "readonly",
+    "WebSocket": "writable",
+    "window": "readonly",
+    "XMLHttpRequest": "readonly"
+  },
+  "settings": {
+    "react": {
+      "version": "19.3"
+    }
+  },
+  "ignorePatterns": [
+    "lib/",
+    "dist/",
+    "nitrogen/generated/",
+    "docs/",
+    "**/build/",
+    "**/Pods/",
+    "**/.gradle/",
+    "**/.cxx/",
+    "**/.expo/",
+    "**/dist/",
+    "**/vendor/",
+    "**/.harness/",
+    "example/.rnstorybook/storybook.requires.*",
+    "coverage/",
+    ".turbo/"
+  ],
+  "rules": {
+    "no-cond-assign": ["warn", "except-parens"],
+    "no-const-assign": "error",
+    "no-control-regex": "warn",
+    "no-debugger": "warn",
+    "no-dupe-class-members": "error",
+    "no-dupe-keys": "error",
+    "no-ex-assign": "warn",
+    "no-extra-boolean-cast": ["warn", {}],
+    "no-func-assign": "warn",
+    "no-invalid-regexp": ["warn", {}],
+    "no-unsafe-negation": "warn",
+    "no-obj-calls": "warn",
+    "no-regex-spaces": "warn",
+    "no-sparse-arrays": "warn",
+    "no-unreachable": "error",
+    "use-isnan": [
+      "warn",
+      {
+        "enforceForIndexOf": false,
+        "enforceForSwitchCase": true
+      }
+    ],
+    "valid-typeof": [
+      "warn",
+      {
+        "requireStringLiterals": false
+      }
+    ],
+    "eqeqeq": [
+      "warn",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "no-alert": "warn",
+    "no-caller": "warn",
+    "no-div-regex": "warn",
+    "no-eval": [
+      "error",
+      {
+        "allowIndirect": false
+      }
+    ],
+    "no-extend-native": [
+      "warn",
+      {
+        "exceptions": []
+      }
+    ],
+    "no-extra-bind": "warn",
+    "no-fallthrough": [
+      "warn",
+      {
+        "allowEmptyCase": false,
+        "reportUnusedFallthroughComment": false
+      }
+    ],
+    "no-implied-eval": "warn",
+    "no-labels": [
+      "warn",
+      {
+        "allowLoop": false,
+        "allowSwitch": false
+      }
+    ],
+    "no-iterator": "warn",
+    "no-lone-blocks": "warn",
+    "no-new": "warn",
+    "no-new-func": "error",
+    "no-new-wrappers": "warn",
+    "no-proto": "warn",
+    "no-return-assign": ["warn", "except-parens"],
+    "no-script-url": "warn",
+    "no-self-compare": "warn",
+    "no-sequences": [
+      "warn",
+      {
+        "allowInParentheses": true
+      }
+    ],
+    "no-useless-escape": [
+      "warn",
+      {
+        "allowRegexCharacters": []
+      }
+    ],
+    "no-void": [
+      "warn",
+      {
+        "allowAsStatement": false
+      }
+    ],
+    "no-with": "warn",
+    "radix": ["warn", "always"],
+    "yoda": [
+      "warn",
+      "never",
+      {
+        "exceptRange": false,
+        "onlyEquality": false
+      }
+    ],
+    "no-delete-var": "warn",
+    "no-global-assign": [
+      "error",
+      {
+        "exceptions": []
+      }
+    ],
+    "no-label-var": "warn",
+    "no-shadow-restricted-names": [
+      "warn",
+      {
+        "reportGlobalThis": false
+      }
+    ],
+    "node/handle-callback-err": "warn",
+    "node/no-mixed-requires": "warn",
+    "node/no-new-require": "warn",
+    "node/no-path-concat": "warn",
+    "unicorn/no-abusive-eslint-disable": "warn",
+    "no-array-constructor": "warn",
+    "no-empty-character-class": "warn",
+    "no-object-constructor": "warn",
+    "no-bitwise": [
+      "warn",
+      {
+        "allow": [],
+        "int32Hint": false
+      }
+    ],
+    "react/jsx-no-comment-textnodes": "error",
+    "react/jsx-no-duplicate-props": "error",
+    "react/jsx-no-undef": "error",
+    "react/no-did-mount-set-state": "warn",
+    "react/no-did-update-set-state": "warn",
+    "react/no-string-refs": "error",
+    "react/no-unstable-nested-components": "warn",
+    "react/self-closing-comp": "warn",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "jest/no-disabled-tests": "warn",
+    "jest/no-focused-tests": "warn",
+    "jest/no-identical-title": "warn",
+    "jest/valid-expect": "warn",
+    "eslint-comments/no-aggregating-enable": "warn",
+    "eslint-comments/no-unused-enable": "warn",
+    "eslint-core/dot-notation": [
+      "warn",
+      {
+        "allowKeywords": true,
+        "allowPattern": ""
+      }
+    ],
+    "eslint-core/consistent-this": ["warn", "that"],
+    "eslint-core/no-undef-init": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+      "rules": {
+        "no-shadow": "warn",
+        "no-unused-vars": [
+          "error",
+          {
+            "argsIgnorePattern": "^_",
+            "destructuredArrayIgnorePattern": "^_"
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx"],
+      "rules": {
+        "no-shadow": [
+          "warn",
+          {
+            "hoist": "functions"
+          }
+        ],
+        "no-unused-vars": [
+          "warn",
+          {
+            "vars": "all",
+            "args": "none",
+            "ignoreRestSiblings": true
+          }
+        ],
+        "no-undef": "error"
+      }
+    },
+    {
+      "files": ["**/*.{js,jsx,ts,tsx}"],
+      "rules": {
+        "@react-native/no-deep-imports": "warn"
+      }
+    },
+    {
+      "files": [
+        "**/*.{spec,test}.{js,ts,tsx}",
+        "**/__{mocks,tests}__/**/*.{js,ts,tsx}"
+      ],
+      "env": {
+        "jest": true
+      }
+    },
+    {
+      "files": ["eslint-rules/**/*.js", "scripts/**/*.mjs"],
+      "rules": {
+        "no-undef": "off",
+        "no-unused-expressions": [
+          "error",
+          {
+            "allowShortCircuit": true,
+            "allowTernary": true
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/**/*.{ts,tsx}", "example/**/*.tsx", "bench/**/*.tsx"],
+      "jsPlugins": [
+        {
+          "name": "nitro-ui",
+          "specifier": "./eslint-rules/index.js"
+        }
+      ],
+      "rules": {
+        "nitro-ui/no-inline-callback-in-jsx": "error"
+      }
+    },
+    {
+      "files": ["src/**/*.nitro.ts", "bench/**/*.nitro.ts"],
+      "jsPlugins": [
+        {
+          "name": "nitro-ui",
+          "specifier": "./eslint-rules/index.js"
+        }
+      ],
+      "rules": {
+        "nitro-ui/no-anymap-in-spec": "error",
+        "nitro-ui/no-json-string-prop": "error",
+        "nitro-ui/no-optional-view-props": "error"
+      }
+    }
+  ],
+  "jsPlugins": [
+    {
+      "name": "@react-native",
+      "specifier": "@react-native/eslint-plugin"
+    },
+    {
+      "name": "eslint-comments",
+      "specifier": "eslint-plugin-eslint-comments"
+    },
+    {
+      "name": "eslint-core",
+      "specifier": "./eslint-rules/core.js"
+    }
+  ]
+}

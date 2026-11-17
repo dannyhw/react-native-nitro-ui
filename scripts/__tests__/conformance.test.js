@@ -51,7 +51,7 @@ function manifest(overrides = {}) {
   };
 }
 
-// Not `structuredClone`: ESLint declares no globals for this directory.
+// Not `structuredClone`: the lint config declares no globals for this directory.
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }

@@ -2,6 +2,7 @@ import { RuleTester } from 'eslint';
 import * as tsParserModule from '@typescript-eslint/parser';
 
 import nitroUi from '../index.js';
+import core from '../core.js';
 
 // ESLint wants the parser namespace itself (default export under real ESM).
 const parser =
@@ -226,3 +227,109 @@ ruleTester.run(
     ],
   }
 );
+
+const DOT_OPTIONS = [{ allowKeywords: true, allowPattern: '' }];
+
+ruleTester.run('dot-notation', core.rules['dot-notation'], {
+  valid: [
+    { code: 'a.b;', options: DOT_OPTIONS },
+    { code: "a['b-c'];", options: DOT_OPTIONS },
+    { code: 'a[b];', options: DOT_OPTIONS },
+    { code: "a['1st'];", options: DOT_OPTIONS },
+    { code: 'a[`${b}`];', options: DOT_OPTIONS },
+    { code: 'a[0];', options: DOT_OPTIONS },
+    { code: 'a.class;', options: DOT_OPTIONS },
+  ],
+  invalid: [
+    {
+      code: "a['b'];",
+      options: DOT_OPTIONS,
+      errors: [{ messageId: 'useDot', data: { key: '"b"' } }],
+    },
+    {
+      code: 'a[true];',
+      options: DOT_OPTIONS,
+      errors: [{ messageId: 'useDot', data: { key: 'true' } }],
+    },
+    {
+      code: 'a[null];',
+      options: DOT_OPTIONS,
+      errors: [{ messageId: 'useDot', data: { key: 'null' } }],
+    },
+    {
+      code: 'a[`b`];',
+      options: DOT_OPTIONS,
+      errors: [{ messageId: 'useDot', data: { key: '`b`' } }],
+    },
+    {
+      code: "a['class'];",
+      options: DOT_OPTIONS,
+      errors: [{ messageId: 'useDot' }],
+    },
+    {
+      code: 'a.class;',
+      options: [{ allowKeywords: false }],
+      errors: [{ messageId: 'useBrackets' }],
+    },
+  ],
+});
+
+ruleTester.run('consistent-this', core.rules['consistent-this'], {
+  valid: [
+    { code: 'function f() { const that = this; }', options: ['that'] },
+    { code: 'function f() { let that; that = this; }', options: ['that'] },
+    { code: 'function f() { const self = other; }', options: ['that'] },
+  ],
+  invalid: [
+    {
+      code: 'function f() { const self = this; }',
+      options: ['that'],
+      errors: [{ messageId: 'unexpectedAlias', data: { name: 'self' } }],
+    },
+    {
+      code: 'function f() { const that = 42; }',
+      options: ['that'],
+      errors: [{ messageId: 'aliasNotAssignedToThis' }],
+    },
+    {
+      code: 'function f() { let that; }',
+      options: ['that'],
+      errors: [{ messageId: 'aliasNotAssignedToThis' }],
+    },
+    {
+      code: 'let that;\nexport {};',
+      options: ['that'],
+      errors: [{ messageId: 'aliasNotAssignedToThis' }],
+    },
+    {
+      code: 'function f() { let self; self = this; }',
+      options: ['that'],
+      errors: [{ messageId: 'unexpectedAlias' }],
+    },
+  ],
+});
+
+ruleTester.run('no-undef-init', core.rules['no-undef-init'], {
+  valid: [
+    'let a;',
+    'const a = undefined;',
+    'let a = null;',
+    'function f(undefined) { let a = undefined; }',
+  ],
+  invalid: [
+    {
+      code: 'let a = undefined;',
+      errors: [{ messageId: 'unnecessaryUndefinedInit', data: { name: 'a' } }],
+    },
+    {
+      code: 'var a = undefined;',
+      errors: [{ messageId: 'unnecessaryUndefinedInit' }],
+    },
+    {
+      code: 'let [a] = undefined;',
+      errors: [
+        { messageId: 'unnecessaryUndefinedInit', data: { name: '[a]' } },
+      ],
+    },
+  ],
+});

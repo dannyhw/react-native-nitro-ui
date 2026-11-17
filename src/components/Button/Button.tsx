@@ -24,7 +24,11 @@ export type { AndroidIconProp } from '../../iconSource';
  * to one.
  */
 export type ButtonVariant =
-  'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
+  | 'filled'
+  | 'tonal'
+  | 'outlined'
+  | 'text'
+  | 'elevated';
 
 /**
  * The button's size.

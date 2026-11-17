@@ -24,7 +24,11 @@ import { NativeNitroUiBottomSheet } from './NativeNitroUiBottomSheet';
  * has only `'medium'` and `'large'`, and shows every other kind as `'large'`.
  */
 export type BottomSheetDetent =
-  'fit' | 'medium' | 'large' | { height: number } | { fraction: number };
+  | 'fit'
+  | 'medium'
+  | 'large'
+  | { height: number }
+  | { fraction: number };
 
 /** Props of {@link BottomSheet}. */
 export interface BottomSheetProps {

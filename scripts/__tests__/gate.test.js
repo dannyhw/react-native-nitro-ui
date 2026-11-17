@@ -2747,11 +2747,13 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
     expect(run.stderr).toContain('--all shows every branch)');
   });
 
-  it('and eslint is set to catch the shape of the bug itself', () => {
-    const config = fs.readFileSync(
-      path.join(process.cwd(), 'eslint.config.mjs'),
-      'utf8'
+  it('and the linter is set to catch the shape of the bug itself', () => {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), '.oxlintrc.json'), 'utf8')
     );
-    expect(config).toContain("'no-unused-expressions': [");
+    const scripts = config.overrides.find((override) =>
+      override.files.includes('scripts/**/*.mjs')
+    );
+    expect(scripts.rules['no-unused-expressions'][0]).toBe('error');
   });
 });
