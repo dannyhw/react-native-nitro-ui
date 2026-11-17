@@ -100,6 +100,31 @@ describe('the units a run records', () => {
     expect(units.everyRun).toEqual({ 'a11y:switch': 'fail' });
   });
 
+  it('an auxiliary check that records what re-runs it is a unit of its own', () => {
+    const units = realInputUnitsFromResults({
+      selected: ['switch'],
+      controls: [{ id: 'switch', status: 'pass' }],
+      auxiliary: [
+        { id: 'a11y:switch', passed: true, rerun: ['--a11y', 'switch'] },
+        { id: 'a11y:slider', passed: false, rerun: ['--a11y', 'slider'] },
+        { id: 'tab-targets', passed: false, rerun: ['--tab-targets'] },
+        { id: 'a11y', passed: false },
+      ],
+    });
+    expect(units.results).toEqual({
+      'switch': 'pass',
+      'a11y:switch': 'pass',
+      'a11y:slider': 'fail',
+      'tab-targets': 'fail',
+    });
+    expect(units.filters).toEqual({
+      'a11y:switch': ['--a11y', 'switch'],
+      'a11y:slider': ['--a11y', 'slider'],
+      'tab-targets': ['--tab-targets'],
+    });
+    expect(units.everyRun).toEqual({ a11y: 'fail' });
+  });
+
   it('a missing check is a failure', () => {
     const units = realInputUnitsFromResults({
       selected: ['form'],
@@ -194,6 +219,52 @@ describe('planRerunFailed', () => {
     ]);
     expect(plan.attempt).toBe(1);
     expect(plan.of.durationMs).toBe(3_000_000);
+  });
+
+  it('re-reads failed a11y cases and the tab bar by what their checks recorded', () => {
+    const plan = planRerunFailed({
+      gate: 'real-input:ios',
+      entries: [
+        line({
+          units: {
+            kind: 'real-input',
+            results: {
+              'switch': 'pass',
+              'form': 'fail',
+              'a11y:switch': 'pass',
+              'a11y:slider': 'fail',
+              'a11y:ios-debt': 'fail',
+              'tab-targets': 'fail',
+            },
+            filters: {
+              'a11y:switch': ['--a11y', 'switch'],
+              'a11y:slider': ['--a11y', 'slider'],
+              'a11y:ios-debt': ['--a11y', 'slider', '--a11y', 'stepper'],
+              'tab-targets': ['--tab-targets'],
+            },
+            everyRun: {},
+            unnamed: [],
+          },
+        }),
+      ],
+      ...now,
+    });
+    expect(plan.refusal).toBeNull();
+    expect(plan.rerun).toEqual([
+      'form',
+      'a11y:slider',
+      'a11y:ios-debt',
+      'tab-targets',
+    ]);
+    expect(plan.filterArgs).toEqual([
+      '--control',
+      'form',
+      '--a11y',
+      'slider',
+      '--a11y',
+      'stepper',
+      '--tab-targets',
+    ]);
   });
 
   it('names harness files with a pattern that matches only that file', () => {
@@ -382,6 +453,73 @@ describe('completeRerun', () => {
     expect(verdict.result).toBe('fail');
     expect(verdict.why).toContain('stepper did not run');
     expect(completeRerun({ ...args, exitCode: 1 }).result).toBe('fail');
+  });
+
+  it('fails when a re-read a11y case or the tab bar fails again', () => {
+    const red = planRerunFailed({
+      gate: 'real-input:ios',
+      entries: [
+        line({
+          units: {
+            kind: 'real-input',
+            results: {
+              'switch': 'pass',
+              'a11y:slider': 'fail',
+              'tab-targets': 'fail',
+            },
+            filters: {
+              'a11y:slider': ['--a11y', 'slider'],
+              'tab-targets': ['--tab-targets'],
+            },
+            everyRun: {},
+            unnamed: [],
+          },
+        }),
+      ],
+      ...now,
+    });
+    expect(red.filterArgs).toEqual(['--a11y', 'slider', '--tab-targets']);
+    const child = (slider, tabs) => ({
+      kind: 'real-input',
+      results: { 'a11y:slider': slider, 'tab-targets': tabs },
+      everyRun: {},
+      unnamed: [],
+    });
+    const green = completeRerun({
+      ...args,
+      plan: red,
+      childUnits: child('pass', 'pass'),
+    });
+    expect(green.result).toBe('pass');
+    expect(green.units.results).toEqual({
+      'switch': 'pass',
+      'a11y:slider': 'pass',
+      'tab-targets': 'pass',
+    });
+    const again = completeRerun({
+      ...args,
+      plan: red,
+      childUnits: child('pass', 'fail'),
+    });
+    expect(again.result).toBe('fail');
+    expect(again.why).toContain('tab-targets failed again');
+    expect(
+      completeRerun({
+        ...args,
+        plan: red,
+        childUnits: { ...child('fail', 'pass') },
+      }).why
+    ).toContain('a11y:slider failed again');
+    expect(
+      completeRerun({
+        ...args,
+        plan: red,
+        childUnits: {
+          ...child('pass', 'pass'),
+          results: { 'tab-targets': 'pass' },
+        },
+      }).why
+    ).toContain('a11y:slider did not run');
   });
 
   it('fails when an every-run check that failed before did not pass now', () => {
@@ -777,6 +915,58 @@ describe('gate.mjs real-input:ios --rerun-failed, end to end', () => {
     expect(status.stdout).toMatch(
       /green\s+real-input:ios .*completed: 2 of 3 units re-run, attempt 1/
     );
+  }, 120_000);
+
+  it('completes a red run whose only failures are a11y cases and the tab bar, and stays red when they fail again', () => {
+    const repo = makeRepo();
+    const report = (aux) =>
+      JSON.stringify({ selected: [], controls: [], auxiliary: aux });
+    const red = runCli(repo, ['real-input:ios'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: JSON.stringify({
+        selected: ['switch'],
+        controls: [{ id: 'switch', status: 'pass' }],
+        auxiliary: [
+          { id: 'tab-targets', passed: false, rerun: ['--tab-targets'] },
+          { id: 'a11y:switch', passed: true, rerun: ['--a11y', 'switch'] },
+          { id: 'a11y:slider', passed: false, rerun: ['--a11y', 'slider'] },
+        ],
+      }),
+    });
+    expect(red.status).toBe(1);
+
+    const again = runCli(repo, ['real-input:ios', '--rerun-failed'], {
+      FAKE_EXIT: '1',
+      FAKE_UNITS: report([
+        { id: 'tab-targets', passed: true, rerun: ['--tab-targets'] },
+        { id: 'a11y:slider', passed: false, rerun: ['--a11y', 'slider'] },
+      ]),
+    });
+    expect(again.stderr).toContain(
+      're-running 2 unit(s) - tab-targets, a11y:slider'
+    );
+    expect(again.status).toBe(1);
+    expect(ledger(repo.dir)[1].result).toBe('fail');
+
+    const done = runCli(repo, ['real-input:ios', '--rerun-failed'], {
+      FAKE_UNITS: report([
+        { id: 'a11y:slider', passed: true, rerun: ['--a11y', 'slider'] },
+      ]),
+    });
+    expect(done.status).toBe(0);
+    const args = fs
+      .readFileSync(path.join(repo.dir, 'state', 'args.log'), 'utf8')
+      .trim()
+      .split('\n');
+    // The second attempt re-reads only what the first left red.
+    expect(args.slice(1)).toEqual([
+      'scripts/real-input/ios.mjs --tab-targets --a11y slider',
+      'scripts/real-input/ios.mjs --a11y slider',
+    ]);
+    const completion = ledger(repo.dir)[2];
+    expect(completion.gate).toBe('real-input:ios');
+    expect(completion.result).toBe('pass');
+    expect(completion.completion.attempt).toBe(2);
   }, 120_000);
 
   it('a completion whose re-run exits 0 but leaves a unit unreported is stored and waited on as failed', () => {
