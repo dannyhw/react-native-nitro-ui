@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -20,6 +21,7 @@ import {
   resolveAndroidAbis,
   withGradleProperties,
 } from '../build-speed-lib.mjs';
+import { ccacheSetup } from '../ccache-setup.mjs';
 
 describe('resolveAndroidAbis', () => {
   it('builds the ABI this machine runs, not all four', () => {
@@ -163,20 +165,52 @@ describe('iosModuleCacheDir', () => {
     // compile into the default cache with CCACHE_BASEDIR set.
     const read = (file) =>
       fs.readFileSync(path.resolve(process.cwd(), 'scripts', file), 'utf8');
-    const ccacheBuilders = ['build-app.mjs', 'bench/build.mjs'];
+    // The real-input build shares `build-app.mjs`'s derived data, so it compiles
+    // with the same environment and cache, or each build recompiles the other's.
+    const ccacheBuilders = [
+      'build-app.mjs',
+      'bench/build.mjs',
+      'real-input/ios.mjs',
+    ];
     for (const file of ccacheBuilders) {
       expect(read(file)).toContain('iosModuleCacheArgs(');
       expect(read(file)).toContain('ccache: ccache.enabled');
     }
-    // These compile without ccache, so each keeps the default name.
-    for (const file of ['real-input/ios.mjs', 'smoke/common.sh']) {
-      const text = read(file);
-      expect(text).not.toContain(CCACHE_MODULE_CACHE_NAME);
-      expect(text).not.toContain('ccache: true');
-    }
-    expect(read('real-input/ios.mjs')).toContain(
-      'iosModuleCacheArgs({ derivedData: derived, ccache: false })'
-    );
+    expect(read('real-input/ios.mjs')).toContain('...ccache.env');
+    // This compiles without ccache, so it keeps the default name.
+    const text = read('smoke/common.sh');
+    expect(text).not.toContain(CCACHE_MODULE_CACHE_NAME);
+    expect(text).not.toContain('ccache: true');
+  });
+});
+
+describe('ccacheSetup', () => {
+  it('without ccache, every build compiles plainly into the default module cache', () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'no-ccache-'));
+    const off = ccacheSetup({ repoRoot: '/r', env: { PATH: empty } });
+    expect(off).toEqual({
+      enabled: false,
+      binary: null,
+      env: {},
+      gradleArgs: [],
+    });
+    expect(
+      iosModuleCacheArgs({ derivedData: '/d', ccache: off.enabled })
+    ).toEqual([`MODULE_CACHE_DIR=${path.join('/d', 'ModuleCache.noindex')}`]);
+  });
+
+  it('finds ccache on PATH, and stays out when asked to', () => {
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'ccache-bin-'));
+    const fake = path.join(bin, 'ccache');
+    fs.writeFileSync(fake, '#!/bin/sh\nexit 1\n');
+    fs.chmodSync(fake, 0o755);
+    const on = ccacheSetup({ repoRoot: '/r', env: { PATH: bin } });
+    expect(on.enabled).toBe(true);
+    expect(on.env).toMatchObject({ CCACHE_BASEDIR: '/r', CCACHE_BINARY: fake });
+    expect(
+      ccacheSetup({ repoRoot: '/r', env: { PATH: bin, NITRO_UI_CCACHE: '0' } })
+        .enabled
+    ).toBe(false);
   });
 });
 

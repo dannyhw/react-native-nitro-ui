@@ -4,8 +4,7 @@
  * device's one accessibility connection. They read `clickable`, `focusable` and
  * `long-clickable` each on its own, where the driver's node map folds the first two into
  * one flag and has no third, and they hold a finger down and then drag it without
- * lifting, a gesture the driver has no form for. The device is the caller's: one
- * `adb shell` at a time, at the leased serial only.
+ * lifting. The device is the caller's: one `adb shell` at a time, at the leased serial only.
  *
  * @file
  */

@@ -19,15 +19,16 @@ is the tutorial.
 
 `node scripts/gate.mjs <harness|real-input>:<platform> --rerun-failed` completes the newest full
 run of that gate that is red on the current digest. It re-runs only the units that did not
-pass: real-input controls (a control's own tree check is part of it), harness test files, and
-any unit that never ran. The outcome is recorded under the full gate's name.
+pass: real-input controls (a control's own tree check is part of it), the iOS accessibility
+cases (`--a11y <case>`) and the iOS tab-bar pass (`--tab-targets`), harness test files, and any
+unit that never ran. The outcome is recorded under the full gate's name.
 
 - It is green only if every re-run unit passed, every check that runs on every real-input run
   passed, and the gate's digest was the same at the red run, at the start and at the end.
 - It refuses, saying why and recording nothing, when there is no red run on this digest, when
   the digest moved, or when the failure is not a unit a filter can name: a build failure, a
   failed isolated harness suite (only a full run starts that app instance), or a real-input
-  check that rides every run while every control passed.
+  check that rides every run (the Android accessibility sweep) while every control passed.
 - A crash before the first unit:
   - `harness:<p>`: no test file reported, so it refuses.
   - `real-input:ios`: a build or install failure, or an `xcodebuild` run that reports no case,

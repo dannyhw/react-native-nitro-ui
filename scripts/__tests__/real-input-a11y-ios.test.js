@@ -839,9 +839,8 @@ describe('the accessibility re-read', () => {
   });
 
   it('has the runner hand the anchor-flagged box, not index zero, to the reporter', () => {
-    // `ios.mjs` needs a simulator to import, so its call site is read as text.
     const runner = require('node:fs').readFileSync(
-      `${__dirname}/../real-input/ios.mjs`,
+      `${__dirname}/../real-input/ios-run.mjs`,
       'utf8'
     );
     const call = runner.slice(

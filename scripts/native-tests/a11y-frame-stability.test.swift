@@ -574,6 +574,36 @@ struct A11yFrameStabilityTest {
       )
     }
 
+    // A tree React Native finishes laying out 600 ms after the first read, read with a snapshot
+    // that costs 30 ms: the default gap keeps two reads of the half-built tree from agreeing.
+    do {
+      let clock = Clock()
+      let halfBuilt = Snapshot(anchor: switchBox, nodes: [scaledBox])
+      let laidOut = Snapshot(anchor: switchBox, nodes: [switchBox])
+      var readStarts: [Int] = []
+      let outcome = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        read: {
+          readStarts.append(clock.ms)
+          let snapshot = clock.ms >= 600 ? laidOut : halfBuilt
+          clock.spend(30)
+          return snapshot
+        },
+        nowMs: clock.now,
+        pause: { clock.spend($0) }
+      )
+      check(outcome.settled, "a tree laid out within a second settles")
+      check(
+        outcome.snapshot.frames == laidOut.frames,
+        "on the laid-out tree, not two quick reads of the half-built one"
+      )
+      let gaps = zip(readStarts.dropFirst(), readStarts).map { $0 - $1 }
+      check(
+        gaps.allSatisfy { $0 >= 1_000 },
+        "every read starts at least a second after the one before (gaps \(gaps))"
+      )
+    }
+
     if failures > 0 {
       print("FAILED: \(failures) check(s)")
       exit(1)
