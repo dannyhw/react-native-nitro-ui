@@ -36,13 +36,16 @@ const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
 const CONTENT_ROOT = 'android:id/content';
 
 /**
- * A row near the end of the Form — the ruler the keyboard opt-out check measures.
+ * A row the keyboard opt-out check measures at the end of the list.
  *
- * Not the very last row: at the end of the list that one sits flush with the bottom of
- * the viewport, where the tree stops reporting it, and a box read on a node the tree
- * does not report costs the driver its whole action timeout.
+ * Not one of the last rows: a Form that opts out leaves its own tail where the keyboard
+ * stands, so the only rows readable at the end of the list with the keys up are the ones
+ * well above it. Padding under the last row still lifts this one, by the same amount.
  */
-const CONTENT_RULER = 'Cache';
+const CONTENT_RULER = 'Downloads';
+
+/** Drags enough to reach the end of the list from wherever the list happens to be. */
+const END_DRAGS = 14;
 
 /** How long a counter or a box is watched for a second value or a second move. */
 const SETTLE_MS = 500;
@@ -295,7 +298,7 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   await expect(avoid).toHaveText('no');
 
   // The end of the list is where a reservation shows: content that grows under the last
-  // row is content that moved. Both readings are taken there, once with no keyboard and
+  // row lifts every row there. Both readings are taken there, once with no keyboard and
   // once with one.
   await reveal(screen, field);
   const path = await endDragPath(screen);
@@ -347,7 +350,29 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
     ).toBeLessThanOrEqual(2);
 
     const stillUp = await expectKeyboard();
-    const after = await restingBoxAtEnd(screen, ruler, path);
+    // The same travel again with the keyboard up, started below the field: a
+    // `TextInput` owns a gesture that begins inside it, and the list would never
+    // travel. The bottom of that travel stays clear of the keyboard's own top.
+    const belowField = {
+      x: path.from.x,
+      y: afterFocus.y + afterFocus.height + 40,
+    };
+    const downPath = {
+      from: {
+        x: belowField.x,
+        y: Math.min(belowField.y, stillUp.keyboardTop - 60),
+      },
+      to: path.to,
+    };
+    expect(
+      downPath.from.y,
+      `the focused field ends at ${String(
+        Math.round(afterFocus.y + afterFocus.height)
+      )} px and the keyboard starts at ${String(
+        Math.round(stillUp.keyboardTop)
+      )} px, which leaves no room to drag the list between them`
+    ).toBeGreaterThan(afterFocus.y + afterFocus.height + 8);
+    const after = await endBox(screen, ruler, downPath);
     expect(
       Math.abs(after.y - atEnd.y),
       `the Form's content sits ${String(
@@ -414,36 +439,27 @@ async function endDragPath(
 }
 
 /**
- * Where a row comes to rest when the list is dragged to its end.
+ * Where a row sits once the list has been dragged to the end of its content.
  *
- * Two drags that move the row no further is the end of the content: it is the one
- * reading of "the list cannot travel" that does not need the last row to be somewhere
- * the keyboard is not standing in.
+ * A fixed number of drags reaches the end without claiming to know where it is; the
+ * reading that matters is this one against the same one taken with a keyboard up.
  */
-async function restingBoxAtEnd(
+async function endBox(
   screen: Screen,
   ruler: Locator,
   path: { from: Point; to: Point }
 ): Promise<{ y: number; height: number }> {
-  const { from, to } = path;
-  let last: { y: number; height: number } | null = null;
-  let unmoved = 0;
-  for (let dragNumber = 1; dragNumber <= 14; dragNumber += 1) {
-    await drag(screen, from, to, 500);
-    const box = await boxIfPresent(ruler);
-    if (box == null) {
-      unmoved = 0;
-      last = null;
-      continue;
-    }
-    unmoved = last != null && Math.abs(box.y - last.y) <= 1 ? unmoved + 1 : 0;
-    last = box;
-    if (unmoved >= 2) return box;
+  for (let dragNumber = 1; dragNumber <= END_DRAGS; dragNumber += 1) {
+    await drag(screen, path.from, path.to, 500);
   }
-  throw new Error(
-    'real-input: the list never came to rest on its end within 14 drags; the ' +
-      `"${CONTENT_RULER}" row reads ${JSON.stringify(last)}.`
-  );
+  const box = await boxIfPresent(ruler);
+  if (box == null) {
+    throw new Error(
+      `real-input: the "${CONTENT_RULER}" row is not on screen at the end of the ` +
+        'list, so the content there cannot be read.'
+    );
+  }
+  return box;
 }
 
 /**
