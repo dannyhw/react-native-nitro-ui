@@ -308,7 +308,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - Comments that cite a task or decision id remain in about 30 files outside this gate (`example/src`, `scripts/real-input/a11y.mjs`, `screens.mjs`, `report.mjs`, a few script tests).
 - Lease store: a process killed while it holds `leases.lock` blocks every lease command until the lock is 30 s old, and commands give up after 10 s, so they fail in between. Stealing the lock at once when its holder's pid is gone would close the window.
 - Gate ledger, open after per-gate digests and completions:
-  - A filtered `real-input:ios` run for one control takes about 14 minutes, most of it rebuilding the UI-test app.
+  - The iOS tab-bar pass takes about 95 s of every full `real-input:ios` run, most of it revealing tabs one drag at a time.
   - `scripts/real-input/ios.mjs` stops before its report when a case has no result, so that run cannot be completed with `--rerun-failed`. A failed isolated harness suite cannot be completed either.
   - The app's build stamp follows the whole code tree, so an edit to gate code alone makes every device gate refuse the installed app until `build-app.mjs` runs again.
   - A run is void when any code file changed while it ran, gate code included, although a device gate is keyed to its own digest. Comparing the gate's own digest before and after would let a tooling edit land during a device run.

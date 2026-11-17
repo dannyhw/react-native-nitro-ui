@@ -813,8 +813,18 @@ ANDROID_AVD=<avd> ANDROID_ADB_SERVER_PORT=<port> METRO_PORT=8292 \
 bun run test:real-input:android --control slider
 ```
 
-iOS builds first (`pod install` and the workspace's `NitroUiExampleUITests` scheme) and
-refreshes `app.stamp` with what it built. Android installs the debug APK that
+A full iOS run also reads every accessibility case and measures every example tab as a touch
+target. A filtered iOS run reads only the accessibility cases of the controls it names, and the
+tab bar only when asked, so proving one control costs that control and a build:
+
+```sh
+node scripts/gate.mjs real-input:ios -- --control switch           # the switch and its a11y case
+node scripts/gate.mjs real-input:ios -- --a11y form --tab-targets  # one a11y case and the tab bar
+```
+
+iOS builds first (`pod install` and the workspace's `NitroUiExampleUITests` scheme), with the
+same ccache environment and module cache as `build-app.mjs`, so neither build recompiles what
+the other compiled, and refreshes `app.stamp` with what it built. Android installs the debug APK that
 `node scripts/build-app.mjs --platform android` left, and refuses when that stamp does not
 match the tree. Both install, point the debug build at your `METRO_PORT`, and read the screen
 afterwards: `accessibilityIdentifier` on iOS, the accessibility tree on Android, which is what
