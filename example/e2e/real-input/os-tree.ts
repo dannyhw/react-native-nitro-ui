@@ -126,17 +126,22 @@ export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
  *
  * The driver prints `label` as whatever a reader is told, where a dump keeps `text` and
  * `content-desc` apart; keeping them apart is what lets a reader tell a control’s own
- * name from the words drawn inside it. A flag the driver left out stays empty, as a
- * dump leaves an attribute it did not write.
+ * name from the words drawn inside it. A node with no `value` and a description of its
+ * own (a `Spinner` naming itself while it shows its choice) printed its text as `label`.
+ * A flag the driver left out stays empty, as a dump leaves an attribute it did not write.
  */
 function asTreeNode(node: DriverNode): TreeNode {
   const hasText = node.value !== undefined;
+  const textInLabel = !hasText && node.contentDescription !== undefined;
   const rect = node.rect ?? { x: 0, y: 0, width: 0, height: 0 };
   return {
-    text: hasText ? (node.value ?? '') : '',
+    text: hasText ? (node.value ?? '') : textInLabel ? (node.label ?? '') : '',
     resourceId: node.identifier ?? '',
     className: node.type ?? '',
-    contentDesc: hasText ? (node.contentDescription ?? '') : (node.label ?? ''),
+    contentDesc:
+      hasText || textInLabel
+        ? (node.contentDescription ?? '')
+        : (node.label ?? ''),
     enabled: node.enabled === false ? 'false' : 'true',
     hittable: node.hittable === true ? 'true' : 'false',
     clickable: flag(node.clickable),
