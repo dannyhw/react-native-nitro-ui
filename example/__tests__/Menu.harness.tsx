@@ -1876,34 +1876,12 @@ async function readDrawn(
   return seen.drawn ?? '';
 }
 
-/** How far below a popup's own window a harness press has to land to be an outside one, dp. */
-const OUTSIDE_POPUP_DP = 60;
-
-/**
- * Closes an open Android popup with a press beside it, which is how a person closes one:
- * the rows are in the popup's own window, so a harness press cannot reach one, and a row
- * that cannot be picked holds the menu open. The point is below the popup's window, where
- * no test in this file mounts anything.
- */
+/** Close an open Android popup through a row that reports nothing (`date` is disabled). */
 async function closeQuietly(testId: string): Promise<void> {
-  if (Platform.OS !== 'android') {
-    return;
+  if (Platform.OS === 'android') {
+    await pickRow(testId, 'date');
+    await waitForMenu(testId, (r) => r.expanded === false);
   }
-  const open = await waitForMenu(
-    testId,
-    (r) => {
-      const [left, , right, bottom] = edges(r.menu, 'menu');
-      return r.expanded === true && right > left && bottom > 0;
-    },
-    8000
-  );
-  const [left, , right, bottom] = edges(open.menu, 'menu');
-  const density = PixelRatio.get();
-  await userEvent.pressAt(
-    (left + right) / 2 / density,
-    bottom / density + OUTSIDE_POPUP_DP
-  );
-  await waitForMenu(testId, (r) => r.expanded === false);
 }
 
 /** Mount-time state for {@link E2Menu}: the setter a test uses to change `group`. */
@@ -2936,7 +2914,7 @@ describe('Menu · the row glyphs (G21)', () => {
   const ROW_ICON_DP = 20;
 
   /**
-   * One row with a glyph, one row without, and a disabled row that answers nothing. Every
+   * One row with a glyph, one row without, and a disabled row to close through. Every
    * comparison menu uses the same titles, so subtracting one probe from another
    * cancels the text and leaves the artwork.
    */
