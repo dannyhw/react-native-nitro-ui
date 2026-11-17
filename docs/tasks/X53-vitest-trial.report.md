@@ -39,13 +39,7 @@ keep the timeout in a flat config.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 8 tests / 8 suites | `9ea147a1d91e` | 1 m 06 s | start 7.4 / med 13.1 / max 34.6 |
-| `harness:ios` | missing | — | — | — | — |
-| `harness:android` | missing | — | — | — | — |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
+Round 1's table is replaced by the current one, under "Round 2".
 
 `need --for review`: `need: 2 gate(s) missing for review: harness:ios, harness:android`. They are
 owed only because the diff from `main` touches `package.json` and `bun.lock`. This brief has no
@@ -226,3 +220,32 @@ change) at load 22. Paths are from the repo root.
 | `scripts/__tests__/pod-install.test.js` | 0.0 | 0.0 | 0.0 |
 | `scripts/__tests__/bench-device-key.test.js` | 0.0 | 0.0 | 0.0 |
 | `scripts/__tests__/real-input-gesture-echo.test.js` | 0.0 | 0.0 | 0.0 |
+
+## Round 2
+
+Rebased on `task/X52-faster-js-tooling` at `9de754dc` without `9dc9e8b9`: `src/__tests__` and
+reassure stay on Jest, and `vitest-native` is gone. `bun install` left `bun.lock` as merged.
+`real-input-ios-run.test.js`, new from `main`, moved to Vitest. `bun run test` runs
+`test:library` (Jest), then `test:tooling` (Vitest), and fails if either fails; `check` runs them
+as two parallel steps. The summary parser reads Vitest's lines too, and a `check` row sums each
+runner's first summary (270 + 1882 tests, 28 + 66 suites), not reassure's.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2152 tests / 94 suites | `4a2c7c9a9e37` | 1 m 02 s | start 11.0 / med 11.3 / max 12.5 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: harness:ios and harness:android, owed for `package.json` and `bun.lock`;
+not run, they run at merge.
+
+- `check`: 117.7 s @6.5, 57.2 s @10.1, 62.2 s @11.0 (load at start); `test:native:android` skipped
+  each time (no `ANDROID_HOME` in this shell).
+- Tooling suites, ten runs in a row: 10 of 10 green, 1882 tests, 55–60 s, load 8.6–30.9.
+- `parseTestCounts` "sums each runner's first summary" -> parser reads Jest lines only -> `3 failed | 9 passed`.
+- `countsForDisplay` "reports both runners' unit steps" -> green row shows `summaries[0]` -> `1 failed | 11 passed`.
+
+Follow-ups:
+- gate: `vitest.config.mjs` is not on the check-only tooling list, so editing it owes both harness gates.
