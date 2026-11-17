@@ -239,7 +239,18 @@
     "jest/no-disabled-tests": "warn",
     "jest/no-focused-tests": "warn",
     "jest/no-identical-title": "warn",
-    "jest/valid-expect": "warn"
+    "jest/valid-expect": "warn",
+    "eslint-comments/no-aggregating-enable": "warn",
+    "eslint-comments/no-unused-enable": "warn",
+    "eslint-core/dot-notation": [
+      "warn",
+      {
+        "allowKeywords": true,
+        "allowPattern": ""
+      }
+    ],
+    "eslint-core/consistent-this": ["warn", "that"],
+    "eslint-core/no-undef-init": "warn"
   },
   "overrides": [
     {
@@ -273,6 +284,12 @@
           }
         ],
         "no-undef": "error"
+      }
+    },
+    {
+      "files": ["**/*.{js,jsx,ts,tsx}"],
+      "rules": {
+        "@react-native/no-deep-imports": "warn"
       }
     },
     {
@@ -322,6 +339,20 @@
         "nitro-ui/no-json-string-prop": "error",
         "nitro-ui/no-optional-view-props": "error"
       }
+    }
+  ],
+  "jsPlugins": [
+    {
+      "name": "@react-native",
+      "specifier": "@react-native/eslint-plugin"
+    },
+    {
+      "name": "eslint-comments",
+      "specifier": "eslint-plugin-eslint-comments"
+    },
+    {
+      "name": "eslint-core",
+      "specifier": "./eslint-rules/core.js"
     }
   ]
 }

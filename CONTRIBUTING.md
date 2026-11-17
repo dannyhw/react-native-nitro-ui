@@ -1029,6 +1029,9 @@ not track a callback hoisted into a variable in a render body
 (`const onChange = callback(fn); <Switch onChange={onChange} />`): keep such values at module
 scope or inside a stable hook.
 
+`eslint-rules/core.js` holds three ESLint core rules oxlint does not implement (`dot-notation`,
+`consistent-this`, `no-undef-init`), loaded the same way.
+
 The rest of the contract is checked in review. It is listed in `AGENTS.md` and explained in
 `docs/architecture/core.md` and `docs/DESIGN.md` 3.3.
 
