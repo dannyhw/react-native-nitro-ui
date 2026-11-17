@@ -36,13 +36,13 @@ const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
 const CONTENT_ROOT = 'android:id/content';
 
 /**
- * The last row the Form draws — the ruler the keyboard opt-out check measures.
+ * A row near the end of the Form — the ruler the keyboard opt-out check measures.
  *
- * It has to be the last row and not merely a low one: a row the list can scroll past
- * is not in the tree at all once the list is at its end, and a box read on a node that
- * is not there costs the driver its whole action timeout.
+ * Not the very last row: at the end of the list that one sits flush with the bottom of
+ * the viewport, where the tree stops reporting it, and a box read on a node the tree
+ * does not report costs the driver its whole action timeout.
  */
-const CONTENT_RULER = 'Diagnostics log';
+const CONTENT_RULER = 'Cache';
 
 /** How long a counter or a box is watched for a second value or a second move. */
 const SETTLE_MS = 500;
@@ -252,8 +252,28 @@ test('a tap on React Native content inside a pressing row is answered by both, a
   await expect(screen.getByTestId(innerPresses)).toHaveText('1');
   await staysAt(screen, rowPresses, '1');
 
-  // And the row is not harmed by it: its own tap still presses it.
-  await row.tap();
+  // And the row is not harmed by it: its own tap, aimed beside the `Pressable` rather
+  // than at the middle of the row, still presses the row and nothing inside it.
+  const rowBox = await boxOf(row);
+  const pressableBox = await boxOf(control);
+  if (rowBox == null || pressableBox == null) {
+    throw new Error(
+      `real-input: the pressing row or its pressable has no box to aim at: row ` +
+        `${JSON.stringify(rowBox)}, pressable ${JSON.stringify(pressableBox)}.`
+    );
+  }
+  const beside = {
+    x: rowBox.x + rowBox.width - 24,
+    y: rowBox.y + rowBox.height / 2,
+  };
+  expect(
+    beside.x > pressableBox.x + pressableBox.width + 8,
+    `the point meant for the row (${String(Math.round(beside.x))} px) is not clear ` +
+      `of the pressable's box ${JSON.stringify(pressableBox)}, so the two taps would ` +
+      'be the same tap'
+  ).toBe(true);
+
+  await screen.tapAt(beside);
   await expect(screen.getByTestId(rowPresses)).toHaveText('2');
   await staysAt(screen, innerPresses, '1');
 });
