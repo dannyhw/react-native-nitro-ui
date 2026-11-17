@@ -87,7 +87,9 @@ Run from the repo root.
 | `bun run bench:typecheck`       | `bun check` over `bench/` for each platform                                    |
 | `bun run lint`                  | oxlint, including the local perf-contract rules                                |
 | `bun run format`                | oxfmt check (`format:write` to fix)                                            |
-| `bun run test`                  | Jest unit tests (JS wrappers, lint rules, patch script)                        |
+| `bun run test`                  | Runs `test:library` then `test:tooling`; fails if either fails                 |
+| `bun run test:library`          | Jest over `src/__tests__` (the library's JS wrappers and hooks)                |
+| `bun run test:tooling`          | Vitest over `scripts/__tests__` and `eslint-rules/__tests__`                   |
 | `bun run test:native`           | Host-side C++ and Swift unit tests of the core (macOS only)                    |
 | `bun run test:native:android`   | JVM unit tests of the Kotlin core (needs the Android SDK; in `check`)          |
 | `bun run nitrogen`              | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`                 |
@@ -128,13 +130,15 @@ Run from the repo root.
 | `bun run hooks:uninstall`       | Remove them again                                                              |
 | `bun run clean`                 | Delete build outputs (`lib/`, native build dirs)                               |
 
-`bun run check` is seventeen steps: typecheck, lock:check, bench:typecheck, lint, format, test,
-test:native, test:native:android, perf:renders, nitrogen:check, registry:check,
-autolinking:check, prepare, api-extractor:check, publint, manifest:check and readme:check. A
-scheduler runs them (`scripts/check.mjs`, with the step graph in `scripts/check-steps.mjs`), so
-independent steps overlap: up to half the machine's cores at once, capped at 4. `--jobs N`
-overrides that. `perf:renders` is in `check` because render counts are deterministic, so they
-can block.
+`bun run check` is eighteen steps: typecheck, lock:check, bench:typecheck, lint, format,
+test:library, test:native, test:tooling, test:native:android, perf:renders, nitrogen:check,
+registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check and
+readme:check. A scheduler runs them (`scripts/check.mjs`, with the step graph in
+`scripts/check-steps.mjs`), so independent steps overlap: up to half the machine's cores at
+once, capped at 4. `--jobs N` overrides that. The two unit-test runners are separate steps, so
+Jest (`test:library`) and Vitest (`test:tooling`) overlap; Jest also runs reassure's
+`*.perf-test.*` files in `perf:renders`. `perf:renders` is in `check` because render counts are
+deterministic, so they can block.
 
 ### Changing a README example
 
@@ -1024,7 +1028,7 @@ is the Reassure render count, because it is deterministic.
 
 The local lint plugin in `eslint-rules/` enforces these rules. oxlint loads it as a JS plugin
 (`.oxlintrc.json` says which files each rule covers), and its unit test runs on ESLint's
-`RuleTester`:
+`RuleTester` under Vitest (`bun run test:tooling`):
 
 | Rule                                 | Enforces                                                                                                                   |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
