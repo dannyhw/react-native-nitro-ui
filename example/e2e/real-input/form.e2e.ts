@@ -269,14 +269,19 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   const avoid = screen.getByTestId('form-avoid-echo');
   const ruler = screen.getByText(CONTENT_RULER);
 
-  // The page is scrolled once to its end with nothing up, which is the position the
-  // keyboard is not allowed to move.
-  await reveal(screen, field);
+  // The toggle is tapped first, while the page is still at its top: every scroll this
+  // check makes is one it needs, because a drag costs the test several seconds.
   await screen.getByLabel('Keyboard avoidance').tap();
   await expect(avoid).toHaveText('no');
+
+  // The end of the list is where a reservation shows: content that grows under the last
+  // row is content that moved. Both readings are taken there, once with no keyboard and
+  // once with one.
+  await reveal(screen, field);
   const path = await endDragPath(screen);
   const atEnd = await restingBoxAtEnd(screen, ruler, path);
-
+  // Back to the field, and its box is taken once it is in reach: this is where it has
+  // to stay, whatever the keyboard does to the content below it.
   await reveal(screen, field);
   const parked = await boxOf(field);
   if (parked == null) {
@@ -302,18 +307,25 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
         'for it would not be a change anything could see'
     ).toBeGreaterThan(120);
 
-    // No reveal: the field stays where it was parked.
-    const afterFocus = await settleFieldBox(field, parked);
+    // The field is where it was parked: no scroll for a keyboard the Form was told to
+    // leave alone. Read again after the list has been travelled below, so a late scroll
+    // has had half a minute to arrive.
+    const afterFocus = await boxOf(field);
+    if (afterFocus == null) {
+      throw new Error(
+        `real-input: the focused Note field left the tree; it was parked at ` +
+          `${JSON.stringify(parked)}.`
+      );
+    }
     expect(
       Math.abs(afterFocus.y - parked.y),
-      `focusing the field moved it ${String(
-        Math.round(parked.y - afterFocus.y)
-      )} px with keyboard avoidance off: the Form scrolled for a keyboard it was ` +
-        'told to leave alone'
+      `focusing the field left it ${String(
+        Math.round(Math.abs(afterFocus.y - parked.y))
+      )} px from where it was parked (${String(Math.round(parked.y))} px, now ` +
+        `${String(Math.round(afterFocus.y))} px) with keyboard avoidance off: the Form ` +
+        'scrolled for a keyboard it was told to leave alone'
     ).toBeLessThanOrEqual(2);
 
-    // The content at the end of the list is where it stood before the keyboard:
-    // nothing was padded under it.
     const stillUp = await expectKeyboard();
     const after = await restingBoxAtEnd(screen, ruler, path);
     expect(
@@ -401,39 +413,6 @@ async function restingBoxAtEnd(
     'real-input: the list never came to rest on its end within 14 drags; the ' +
       `"${CONTENT_RULER}" row reads ${JSON.stringify(last)}.`
   );
-}
-
-/**
- * The field's box once it has stopped moving, however briefly.
- *
- * Only the measurement is polled; the position it ends at is what the check then
- * judges, so a field that was shoved clear of the keyboard and shoved back cannot
- * read as one that was left alone.
- */
-async function settleFieldBox(
-  field: Locator,
-  from: { y: number; height: number }
-): Promise<{ y: number; height: number }> {
-  let last = await boxOf(field);
-  for (let read = 0; read < 8; read += 1) {
-    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-    const now = await boxOf(field);
-    if (now == null) {
-      throw new Error(
-        `real-input: the focused Note field left the tree; it was last at ` +
-          `${JSON.stringify(last)}.`
-      );
-    }
-    if (
-      last != null &&
-      Math.abs(now.y - last.y) <= 1 &&
-      Math.abs(now.y - from.y) <= 2
-    ) {
-      return now;
-    }
-    last = now;
-  }
-  return last ?? from;
 }
 
 /**
