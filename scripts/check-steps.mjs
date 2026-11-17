@@ -5,7 +5,7 @@
 
 /**
  * The regions steps declare in `writes`/`reads`. `prepare` (bob) deletes and
- * regenerates `nitrogen/` before it writes `lib/`, and `test` and `perf:renders`
+ * regenerates `nitrogen/` before it writes `lib/`, and `test:library` and `perf:renders`
  * share one Jest haste-map cache file that is written without a lock.
  */
 export const FINDINGS = Object.freeze({
@@ -64,7 +64,7 @@ export const CHECK_STEPS = Object.freeze([
     note: 'oxfmt --check; .prettierignore covers lib, nitrogen/generated, .turbo, and oxfmt also reads .gitignore - but not nitrogen/ as a whole',
   },
   {
-    name: 'test',
+    name: 'test:library',
     needs: [],
     group: 'jest',
     writes: [FINDINGS.jestCache],
@@ -132,7 +132,7 @@ export const CHECK_STEPS = Object.freeze([
     needs: [
       'lock:check',
       'nitrogen:check',
-      'test',
+      'test:library',
       'perf:renders',
       'test:native:android',
       // These two ignore only `nitrogen/generated`, so they read the rest of

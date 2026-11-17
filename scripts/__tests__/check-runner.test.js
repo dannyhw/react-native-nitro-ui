@@ -53,7 +53,7 @@ describe('the check step list', () => {
     const problems = planProblems(mutated);
     expect(problems).toEqual(
       expect.arrayContaining([
-        'shared output: prepare writes nitrogen/generated while test reads it - add a needs edge or a shared group',
+        'shared output: prepare writes nitrogen/generated while test:library reads it - add a needs edge or a shared group',
       ])
     );
   });
@@ -66,7 +66,7 @@ describe('the check step list', () => {
       'bench:typecheck',
       'lint',
       'format',
-      'test',
+      'test:library',
       'test:native',
       'test:tooling',
       'test:native:android',
@@ -136,7 +136,7 @@ describe('steps that share an output are ordered', () => {
     // builder-bob's `custom` target has `clean: "nitrogen/"`, so `prepare`
     // deletes and rewrites the directory: a concurrent reader can see it gone.
     expect(prepare.needs).toEqual(
-      expect.arrayContaining(['nitrogen:check', 'test', 'perf:renders'])
+      expect.arrayContaining(['nitrogen:check', 'test:library', 'perf:renders'])
     );
   });
 
@@ -149,7 +149,7 @@ describe('steps that share an output are ordered', () => {
     expect(findOutputConflicts(mutated).map((c) => c.kind)).toEqual([
       'prepare writes nitrogen while lint reads it',
       'prepare writes nitrogen while format reads it',
-      'prepare writes nitrogen/generated while test reads it',
+      'prepare writes nitrogen/generated while test:library reads it',
       // The Android JVM test compiles the library, whose autolinking adds
       // `nitrogen/generated/android/kotlin` to the Kotlin source set.
       'prepare writes nitrogen/generated while test:native:android reads it',
@@ -203,8 +203,8 @@ describe('steps that share an output are ordered', () => {
     ]);
   });
 
-  it('`test` and `perf:renders` never both write Jest cache', () => {
-    const test = CHECK_STEPS.find((step) => step.name === 'test');
+  it('`test:library` and `perf:renders` never both write Jest cache', () => {
+    const test = CHECK_STEPS.find((step) => step.name === 'test:library');
     const perf = CHECK_STEPS.find((step) => step.name === 'perf:renders');
     // Reassure spawns Jest with no `--config`, so both runs get the same cache id
     // and the same roots: one haste-map file, written with a plain writeFileSync.
@@ -217,7 +217,7 @@ describe('steps that share an output are ordered', () => {
       step.name === 'perf:renders' ? { ...step, group: null } : step
     );
     expect(findOutputConflicts(ungrouped).map((c) => c.kind)).toEqual([
-      'test and perf:renders both write jest-cache',
+      'test:library and perf:renders both write jest-cache',
     ]);
   });
 
@@ -418,11 +418,11 @@ describe('the scheduler', () => {
   });
 
   it('two steps in a group never overlap', async () => {
-    // `test` and `perf:renders` share the `jest` group, which has one slot.
+    // `test:library` and `perf:renders` share the `jest` group, which has one slot.
     const { events } = await drive({
       steps: CHECK_STEPS,
       jobs: 4,
-      durations: { 'test': 5, 'perf:renders': 5 },
+      durations: { 'test:library': 5, 'perf:renders': 5 },
     });
     const inFlight = new Set();
     for (const event of events) {
@@ -454,7 +454,9 @@ describe('the scheduler', () => {
     expect(at('prepare', 'start')).toBeGreaterThanOrEqual(
       at('nitrogen:check', 'end')
     );
-    expect(at('prepare', 'start')).toBeGreaterThanOrEqual(at('test', 'end'));
+    expect(at('prepare', 'start')).toBeGreaterThanOrEqual(
+      at('test:library', 'end')
+    );
     expect(at('api-extractor:check', 'start')).toBeGreaterThanOrEqual(
       at('prepare', 'end')
     );
@@ -502,12 +504,12 @@ describe('the scheduler', () => {
   });
 
   it('on the first failure it starts nothing new, lets running steps finish, and says who was skipped', async () => {
-    // `typecheck` fails at t=10 while `test` (50) is in flight and everything
+    // `typecheck` fails at t=10 while `test:library` (50) is in flight and everything
     // else is queued behind the slots.
     const { plan, seen } = await drive({
       steps: CHECK_STEPS,
       jobs: 4,
-      durations: { 'typecheck': 10, 'test': 50, 'test:native': 20 },
+      durations: { 'typecheck': 10, 'test:library': 50, 'test:native': 20 },
       defaultMs: 5,
       fail: ['typecheck'],
     });
@@ -517,7 +519,7 @@ describe('the scheduler', () => {
     );
     expect(status.typecheck).toBe('fail');
     // Started before the failure, so it is allowed to finish and its log stands.
-    expect(status.test).toBe('pass');
+    expect(status['test:library']).toBe('pass');
     expect(status['test:native']).toBe('pass');
     expect(status.lint).toBe('pass');
     expect(status['nitrogen:check']).toBe('skipped');
