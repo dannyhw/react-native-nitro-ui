@@ -56,3 +56,24 @@ all of `check`.
 `package.json` (`jest`, `scripts.test`), `babel.config.mjs`, `scripts/__tests__/helpers/`,
 `scripts/check-steps.mjs` (the `test` step and its `jest` group), `src/__tests__/`,
 `eslint-rules/__tests__/rules.test.js`.
+
+## Round 2 — land the tooling suites on Vitest
+
+The trial's answer is "move the tooling suites only". This round turns the branch into a pull
+request that sits on top of the X52 branch.
+
+1. The branch is rebased on `task/X52-faster-js-tooling` as it is now, without the commit that
+   moved `src/__tests__` to Vitest: the library suites and the render-performance tests stay on
+   Jest, and `vitest-native` is not a dependency.
+2. `bun run test` runs both runners and fails if either fails. The tooling suites, including
+   every test X52 added to `eslint-rules/__tests__`, run on Vitest with the 30 s timeout.
+3. The `check` gate's table counts the tests and suites of both runners, not Jest's alone.
+4. `check`, the hooks, CI and the contributor docs name what runs where.
+
+Proof: `node scripts/gate.mjs check` passes and `node scripts/gate.mjs table` shows the combined
+count; one red proof for the count (a Vitest summary the parser must read); `check` timed three
+times with the load average beside each; ten runs of the tooling suites in a row, all green, or
+the failing test named. The report gains a `## Round 2` section of 200 words or less.
+
+The count parser lives in the gate code, which is otherwise out of scope: change only what
+reads a runner's summary.
