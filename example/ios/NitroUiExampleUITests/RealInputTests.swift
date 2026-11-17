@@ -6095,16 +6095,18 @@ final class RealInputTests: XCTestCase {
         )
       }
     }
-    let inset = Self.geometryNumber(after.geometry, "ib")
-    XCTAssertNotNil(inset, "the Form's echoed geometry carries no `ib=`: \(after.geometry)")
-    if let inset {
+    let insetBefore = Self.geometryNumber(before.geometry, "ib")
+    let insetAfter = Self.geometryNumber(after.geometry, "ib")
+    XCTAssertNotNil(insetBefore, "the Form's echoed geometry carries no `ib=`: \(before.geometry)")
+    XCTAssertNotNil(insetAfter, "the Form's echoed geometry carries no `ib=`: \(after.geometry)")
+    if let insetBefore, let insetAfter {
       XCTAssertLessThanOrEqual(
-        inset,
+        abs(insetAfter - insetBefore),
         0.5,
-        "the Form asked its list for a bottom inset of \(inset) for the keyboard after the app "
-          + "turned its avoidance off (\(Echo.formAvoidEcho) reads "
-          + "\"\(echoText(Echo.formAvoidEcho))\"): it reserves room it was told to leave to the "
-          + "app. The list reported \(after.geometry)."
+        "the Form asked its list for a bottom inset of \(insetAfter) with the keyboard up and "
+          + "\(insetBefore) without one, after the app turned its avoidance off (\"\(Echo.formAvoidEcho)\" "
+          + "reads \"\(echoText(Echo.formAvoidEcho))\"): it reserves room it was told to leave to the "
+          + "app. It reported \(before.geometry) and then \(after.geometry)."
       )
     }
 
