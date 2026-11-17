@@ -30,11 +30,8 @@ async function popupsReach(count: number, why: string): Promise<void> {
 
 /**
  * A point outside the open popup that lies on nothing: the page's own padding beside the
- * trigger. A popup is anchored under its trigger, so the trigger's band sits above the
- * popup's window, and no control of this page lies in that padding.
- *
- * It is read before the popup goes up: an open popup owns the window, so the page's own
- * nodes are not in the tree a reader gets until it is down again.
+ * trigger, above the popup anchored under it. Read it before the popup goes up, because an
+ * open popup owns the window and the page's nodes leave the tree until it is down.
  */
 async function besideThePopup(trigger: Locator): Promise<Point> {
   const box = await trigger.boundingBox();
@@ -116,7 +113,7 @@ test('a real tap opens the Menu, a row reaches JS, and a disabled row takes noth
     'the disabled row of an open menu does not report itself disabled: a person is ' +
       'offered a row that will not answer'
   ).toBe(true);
-  // A row Material draws as dimmed swallows its own press, and the menu with it:
+  // A row Material draws as dimmed swallows its own press and the menu stays up;
   // `Menu.harness` asserts the refusal from inside the control.
   await locked.tap();
   await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));

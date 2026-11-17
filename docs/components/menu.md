@@ -93,8 +93,8 @@ interface MenuSection {
   test presses, so it must be unique within the menu and stable across renders.
 - `title` is optional on a section. A section with no title is a group of rows with no header.
 - `disabled` draws the row dimmed and answers nothing: no `onSelect`, and the menu stays open
-  for a dismissal of its own — the back gesture, a tap outside, a pick of another row. A screen
-  reader is told the row is disabled; see [Accessibility](#accessibility).
+  until a tap outside, a pick of another row or, on Android, the back gesture. A screen reader
+  is told the row is disabled; see [Accessibility](#accessibility).
 - `subtitle` is a second, smaller line under a row's title: iOS `UIAction.subtitle`, Android the
   row's supporting text. `null`, `''` or absent draws none.
 - `checked` makes a row checkable: `true` draws it checked, `false` unchecked, `null` or absent
@@ -354,7 +354,7 @@ hosted control.
 The popup's rows are the platform's own elements and are not re-labelled. A disabled row refuses
 a pick on both platforms, and the row says so itself: the Android row is Material's own node and
 reports `enabled="false"` where an enabled row reports `enabled="true"`, which is what a screen
-reader is told. `menu.e2e.ts` reads one row of each from the tree of an open menu.
+reader is told.
 
 Not covered by an automated test: that a destructive row is announced as such on iOS, the order
 rows are announced in, and what TalkBack says out loud about a row the tree marks disabled.
