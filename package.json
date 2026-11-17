@@ -58,6 +58,7 @@
     "format": "oxfmt --check",
     "format:write": "oxfmt",
     "test": "jest",
+    "test:tooling": "vitest run",
     "test:native": "bash scripts/native-tests.sh",
     "test:native:android": "bash scripts/native-tests-android.sh",
     "test:real-input:ios": "node scripts/real-input/ios.mjs",
@@ -149,7 +150,9 @@
     "react-test-renderer": "19.3.0",
     "reassure": "^1.6.1",
     "turbo": "^2.11.10",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
   },
   "peerDependencies": {
     "react": "*",
@@ -189,7 +192,6 @@
   },
   "jest": {
     "preset": "@react-native/jest-preset",
-    "globalSetup": "<rootDir>/scripts/__tests__/helpers/jest-global-setup.js",
     "testEnvironmentOptions": {
       "customExportConditions": [
         "require",
@@ -203,6 +205,8 @@
       "<rootDir>/lib/"
     ],
     "testPathIgnorePatterns": [
+      "<rootDir>/scripts/",
+      "<rootDir>/eslint-rules/",
       "<rootDir>/example/",
       "<rootDir>/bench/",
       "<rootDir>/lib/"

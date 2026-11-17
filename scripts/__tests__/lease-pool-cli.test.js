@@ -1,5 +1,5 @@
 /* global Atomics, SharedArrayBuffer */
-import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,

@@ -69,7 +69,7 @@ export const CHECK_STEPS = Object.freeze([
     group: 'jest',
     writes: [FINDINGS.jestCache],
     reads: [FINDINGS.generatedDir],
-    note: 'jest; reads nitrogen/generated/shared/json via src/__tests__/viewConfigs.test.ts, ignores lib/',
+    note: 'jest over src/__tests__; reads nitrogen/generated/shared/json via src/__tests__/viewConfigs.test.ts, ignores lib/',
   },
   {
     name: 'test:native',
@@ -78,6 +78,14 @@ export const CHECK_STEPS = Object.freeze([
     writes: ['tmp:nitro-ui-native-tests'],
     reads: [],
     note: 'clang/swiftc into $TMPDIR/nitro-ui-native-tests-$$ - the $$ makes it per-process',
+  },
+  {
+    name: 'test:tooling',
+    needs: [],
+    group: null,
+    writes: ['node_modules/.vite'],
+    reads: [],
+    note: 'vitest over scripts/__tests__ and eslint-rules/__tests__ (vitest.config.mjs); its results cache is node_modules/.vite/vitest',
   },
   {
     name: 'test:native:android',

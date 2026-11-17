@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');

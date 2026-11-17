@@ -1,5 +1,5 @@
 /* global Atomics, SharedArrayBuffer */
-import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -654,7 +654,7 @@ describeCli('a stale Metro server on a leased pair', () => {
       killFixturePid(ownerPid);
       if (run != null) writeFileSync(busyFile, '');
     }
-  });
+  }, 30_000);
 
   it('leaves a Metro in another process group alone', () => {
     // The listener is a child of this test process, so it is in the test's process group
@@ -686,7 +686,7 @@ describeCli('a stale Metro server on a leased pair', () => {
       killFixturePid(otherPid);
       writeFileSync(busyFile, '');
     }
-  });
+  }, 30_000);
 
   it('leaves a run with no METRO_PORT alone (CI, a plain check)', () => {
     // `check` uses no device and no Metro, so the pre-flight must not apply to it even

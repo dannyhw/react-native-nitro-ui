@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 
-import { scrubLeaseEnv } from './helpers/jest-global-setup.js';
+import { scrubLeaseEnv } from './helpers/test-global-setup.js';
 import {
   LEASE_SCOPED_PROBE_NAMES,
   childEnv,
@@ -48,13 +48,13 @@ describe('jest starts with no lease in its environment', () => {
     });
   });
 
-  it('is the setup jest is configured to run', () => {
-    const configured = require('../../package.json').jest.globalSetup;
+  it('is the setup vitest is configured to run', async () => {
+    const config = (await import('../../vitest.config.mjs')).default;
     expect(
-      require('node:path').resolve(
-        configured.replace('<rootDir>', `${__dirname}/../..`)
+      config.test.globalSetup.map((file) =>
+        require('node:path').resolve(`${__dirname}/../..`, file)
       )
-    ).toBe(require.resolve('./helpers/jest-global-setup.js'));
+    ).toEqual([require.resolve('./helpers/test-global-setup.js')]);
   });
 
   it('hands a child that was given no `env` an environment with no lease in it', () => {

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 
 import {
   CHECK_STEPS,
@@ -38,7 +38,7 @@ describe('the check step list', () => {
     for (const name of stepNames()) {
       expect(packageJson.scripts[name]).toEqual(expect.any(String));
     }
-    expect(stepNames()).toHaveLength(17);
+    expect(stepNames()).toHaveLength(18);
     expect(stepNames().indexOf('prepare')).toBeLessThan(
       stepNames().indexOf('api-extractor:check')
     );
@@ -68,6 +68,7 @@ describe('the check step list', () => {
       'format',
       'test',
       'test:native',
+      'test:tooling',
       'test:native:android',
       'perf:renders',
       'nitrogen:check',
