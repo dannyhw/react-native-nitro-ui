@@ -131,6 +131,8 @@ final class RealInputTests: XCTestCase {
     static let formRowSwitchValue = "form-row-switch-value"
     static let formRowInnerPresses = "form-row-inner-presses"
     static let formRowInnerInnerPresses = "form-row-inner-inner-presses"
+    static let formRowContextPresses = "form-row-context-presses"
+    static let formRowContextOpens = "form-row-context-opens"
     static let formAvoidEcho = "form-avoid-echo"
   }
 
@@ -5278,6 +5280,7 @@ final class RealInputTests: XCTestCase {
 
     try assertPressInsideAPressingRow()
     try assertPressInsideAPressingRowAnswersReactNativeContentToo()
+    try assertWrapperOfReactNativeContentInsideAPressingRowIsTheRows()
 
     try assertFormKeepsFieldAboveKeyboard()
 
@@ -5990,6 +5993,45 @@ final class RealInputTests: XCTestCase {
       Echo.formRowInnerInnerPresses,
       "1",
       as: "the pressable of a tap that belonged to the row"
+    )
+  }
+
+  /// A tap on a nitro-ui view that only holds React Native content is the row's own tap.
+  ///
+  /// A `ContextMenu` inside a row is drawn elsewhere, in a popup, and the thing under this
+  /// finger is the row's own text — so the row presses once and the menu stays shut.
+  private func assertWrapperOfReactNativeContentInsideAPressingRowIsTheRows() throws {
+    try scrollIntoView("form-row-context", as: "the form row with onPress and a context menu")
+    let row = try required("form-row-context", as: "the form row with onPress and a context menu")
+    let wrapper = try required("form-row-context-menu", as: "the ContextMenu inside that row")
+    // The tap has to land on the menu rather than in the row's own padding: a point the row
+    // holds alone reads the same whatever the row makes of a wrapper's children.
+    let onMenu = wrapper.centre
+    XCTAssertGreaterThan(
+      onMenu.x,
+      row.frame.minX + 1,
+      "the context menu's centre \(onMenu.x) is not to the right of the row's left edge "
+        + "\(row.frame.minX): the two boxes do not overlap the way the fixture lays them out."
+    )
+    XCTAssertLessThan(
+      onMenu.x,
+      row.frame.maxX - 1,
+      "the context menu's centre \(onMenu.x) is past the row's right edge \(row.frame.maxX), so "
+        + "this tap is not a tap on the row at all."
+    )
+    try assertEchoStays(Echo.formRowContextPresses, "0", as: "the row before any tap")
+
+    onMenu.fingerTap()
+    try assertEchoStays(
+      Echo.formRowContextPresses,
+      "1",
+      as: "the row of a tap that landed on the context menu inside it"
+    )
+    // A tap that opened the menu answered with a popup, not with the row.
+    try assertEchoStays(
+      Echo.formRowContextOpens,
+      "0",
+      as: "the menu of a tap that was not a long press"
     )
   }
 

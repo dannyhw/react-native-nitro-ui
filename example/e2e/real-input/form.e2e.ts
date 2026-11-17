@@ -32,6 +32,10 @@ const SWITCH_IN_ROW = 'Switch in a pressed row';
 const ROW_AND_PRESSABLE = 'Row with onPress and a pressable';
 const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
 
+/** A row with `onPress` whose content is a nitro-ui wrapper around React Native text. */
+const ROW_AND_CONTEXT_MENU = 'Row with onPress and a context menu';
+const CONTEXT_MENU_IN_ROW = 'form-row-context-menu';
+
 /** The Android view React Native draws the app's content into. */
 const CONTENT_ROOT = 'android:id/content';
 
@@ -279,6 +283,51 @@ test('a tap on React Native content inside a pressing row is answered by both, a
   await screen.tapAt(beside);
   await expect(screen.getByTestId(rowPresses)).toHaveText('2');
   await staysAt(screen, innerPresses, '1');
+});
+
+test('a tap on a nitro-ui wrapper of React Native content inside a pressing row is the row’s', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW_AND_CONTEXT_MENU);
+  const wrapper = screen.getByTestId(CONTEXT_MENU_IN_ROW);
+  const presses = 'form-row-context-presses';
+  const opens = 'form-row-context-opens';
+  await reveal(screen, row, { reads: [wrapper] });
+
+  // The tap has to land on the nitro-ui view rather than in the row's own padding: a
+  // point the row holds alone is green whatever it makes of a wrapper's children.
+  const wrapperBox = await boxOf(wrapper);
+  const rowBox = await boxOf(row);
+  if (wrapperBox == null || rowBox == null) {
+    throw new Error(
+      `real-input: the context menu or its row has no box to aim at: menu ` +
+        `${JSON.stringify(wrapperBox)}, row ${JSON.stringify(rowBox)}.`
+    );
+  }
+  const onMenu = {
+    x: wrapperBox.x + wrapperBox.width / 2,
+    y: wrapperBox.y + wrapperBox.height / 2,
+  };
+  expect(
+    onMenu.x > rowBox.x &&
+      onMenu.x < rowBox.x + rowBox.width &&
+      onMenu.y > rowBox.y &&
+      onMenu.y < rowBox.y + rowBox.height,
+    `the point meant for the context menu ${JSON.stringify(
+      onMenu
+    )} is not inside the row's box ${JSON.stringify(
+      rowBox
+    )}, so this tap would not be a tap on the row at all`
+  ).toBe(true);
+
+  await screen.tapAt(onMenu);
+  // One press for one tap, and no menu: a tap that opened the menu answered with a
+  // popup, not with the row.
+  await expect(screen.getByTestId(presses)).toHaveText('1');
+  await staysAt(screen, opens, '0');
 });
 
 test('opting out of keyboard avoidance leaves the content and its offset alone', async ({

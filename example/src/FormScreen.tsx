@@ -8,7 +8,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Form, Switch, TextField } from 'react-native-nitro-ui';
+import {
+  ContextMenu,
+  Form,
+  type MenuGroup,
+  Switch,
+  TextField,
+} from 'react-native-nitro-ui';
 
 // The one thing this screen reads that app code has no business reading: the Form's own
 // report, whose `keyboard=` field is UIKit's number for the keyboard. `hybridRef` and its
@@ -91,6 +97,9 @@ function Echo({
  *   stays where it was. A tap on the same row beside the switch is the row's.
  * - `form-row-inner` - a `Pressable` inside a row that has `onPress`, which says
  *   out loud on the screen which of the two answered that tap.
+ * - `form-row-context` - a `ContextMenu` around plain text inside a row that has
+ *   `onPress`. The menu is a nitro-ui view, but it draws nothing where the finger
+ *   lands and holds only React Native children, so a tap on it is the row's.
  * - `form-avoid-keyboard` - the Form's `keyboardAvoidance`, flipped by a real tap.
  *   With it off the Form must leave its content alone while a keyboard is up.
  * - `form-outside` - a `Pressable` outside the Form. It answers whether input is
@@ -111,6 +120,8 @@ export default function FormScreen() {
   const [rowSwitchPresses, setRowSwitchPresses] = useState(0);
   const [innerRowPresses, setInnerRowPresses] = useState(0);
   const [innerInnerPresses, setInnerInnerPresses] = useState(0);
+  const [rowContextPresses, setRowContextPresses] = useState(0);
+  const [rowContextOpens, setRowContextOpens] = useState(0);
   const [avoidKeyboard, setAvoidKeyboard] = useState(true);
   const [note, setNote] = useState('');
   const [focused, setFocused] = useState(false);
@@ -177,6 +188,14 @@ export default function FormScreen() {
   const countInnerRow = useCallback(() => setInnerRowPresses((n) => n + 1), []);
   const countInnerInner = useCallback(
     () => setInnerInnerPresses((n) => n + 1),
+    []
+  );
+  const countRowContext = useCallback(
+    () => setRowContextPresses((n) => n + 1),
+    []
+  );
+  const openRowContext = useCallback(
+    () => setRowContextOpens((n) => n + 1),
     []
   );
   const toggleAvoidKeyboard = useCallback(
@@ -258,6 +277,18 @@ export default function FormScreen() {
             label="inner3"
             testID="form-row-inner-inner-presses"
             value={String(innerInnerPresses)}
+          />
+          <Echo
+            ink={ink}
+            label="ctx"
+            testID="form-row-context-presses"
+            value={String(rowContextPresses)}
+          />
+          <Echo
+            ink={ink}
+            label="menu"
+            testID="form-row-context-opens"
+            value={String(rowContextOpens)}
           />
           <Echo
             ink={ink}
@@ -421,6 +452,26 @@ export default function FormScreen() {
               </Pressable>
             </View>
           </Form.Row>
+          {/* A nitro-ui wrapper whose content is React Native's own: the menu is drawn
+              in a popup of its own, so nothing under this finger is a hosted control. */}
+          <Form.Row
+            accessibilityLabel="Row with onPress and a context menu"
+            onPress={countRowContext}
+            testID="form-row-context"
+          >
+            <View style={styles.rowContent}>
+              <ContextMenu
+                accessibilityLabel="Context menu in a pressed row"
+                group={ROW_CONTEXT_GROUP}
+                onOpen={openRowContext}
+                style={styles.context}
+                testID="form-row-context-menu"
+              >
+                <Text style={styles.label}>Account</Text>
+              </ContextMenu>
+              <Text style={styles.detail}>Long press for its menu</Text>
+            </View>
+          </Form.Row>
         </Form.Section>
 
         <Form.Section title="Network">
@@ -492,6 +543,12 @@ const FILLER = [
   'Downloads',
 ];
 
+// Row titles no text on this screen repeats: iOS reads an open menu's rows from the same
+// accessibility tree as the page behind it.
+const ROW_CONTEXT_GROUP: MenuGroup = {
+  actions: [{ id: 'row-context-archive', title: 'Archive the account' }],
+};
+
 const styles = StyleSheet.create({
   page: { flex: 1 },
   echoBar: { gap: 4, paddingHorizontal: 12, paddingVertical: 6 },
@@ -529,4 +586,5 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   innerText: { fontWeight: '600' },
+  context: { paddingHorizontal: 10, paddingVertical: 6 },
 });
