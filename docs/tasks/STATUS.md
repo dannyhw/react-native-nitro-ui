@@ -15,6 +15,10 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-17 Nothing user-visible: an Android Menu is shown to close on one Back or one outside tap
+  after a tap on a disabled row, and the row to read as disabled to a screen reader; the Menu
+  page says what a disabled row does (FIX5, #92).
+- 11-17 0.9.2 released (#83).
 - 11-17 Nothing user-visible: a filtered `real-input:ios` run reads only the accessibility cases
   and tab targets it names, from one snapshot per case, and the UI-test build shares the app
   build's compiler cache: a one-control run takes 2 to 3 minutes in place of 14 (X51, #91).
@@ -93,8 +97,6 @@ pull request number is left out where the records do not carry one.
 
 ## Blocked or waiting
 
-- Release: 0.9.2 is versioned on `main` (#83) and npm's latest is 0.9.1. Check `npm view` before
-  saying anything about it.
 - Records: `node scripts/task-records.mjs` keeps S5, S6 and S6b while their unmerged prototype
   branches are live, and FIX3 and T18 because each has a brief and no report.
   Deleting a branch, or the brief, lets the records be archived.
