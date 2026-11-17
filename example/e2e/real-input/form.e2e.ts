@@ -352,9 +352,10 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   await reveal(screen, field);
   const path = await endDragPath(screen);
   const atEnd = await endBox(screen, ruler, path);
-  // Back to the field, and its box is taken once it is in reach: this is where it has
-  // to stay, whatever the keyboard does to the content below it.
-  await reveal(screen, field);
+  // Back to the field, and parked low in the page as the default case parks it: a field
+  // the keyboard does not reach is never scrolled, avoidance on or off, so the offset
+  // check below would be true of a Form that ignores the prop as much as of this one.
+  await revealLowInPage(screen, field);
   const parked = await boxIfPresent(field);
   if (parked == null) {
     throw new Error(
@@ -379,9 +380,17 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
         'for it would not be a change anything could see'
     ).toBeGreaterThan(120);
 
-    // The field is where it was parked: no scroll for a keyboard the Form was told to
-    // leave alone. Read again after the list has been travelled below, so a late scroll
-    // has had half a minute to arrive.
+    expect(
+      parked.y + parked.height,
+      `the premise of this check is missing: the field was parked with its bottom at ` +
+        `${String(Math.round(parked.y + parked.height))} px, above the keyboard's top at ` +
+        `${String(Math.round(keyboardTop))} px, so nothing covered it and no Form would ` +
+        'have scrolled for it'
+    ).toBeGreaterThan(keyboardTop);
+
+    // The field is read here, before the list is travelled below: a Form that scrolls
+    // for its keyboard has already moved the row by the time the keys are up, and the
+    // travel that follows reads the end of the content, not this row.
     const afterFocus = await boxIfPresent(field);
     if (afterFocus == null) {
       throw new Error(
@@ -399,29 +408,27 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
     ).toBeLessThanOrEqual(2);
 
     const stillUp = await expectKeyboard();
-    // The same travel again with the keyboard up, started below the field: a
-    // `TextInput` owns a gesture that begins inside it, and the list would never
-    // travel. The bottom of that travel stays clear of the keyboard's own top.
-    const belowField = {
-      x: path.from.x,
-      y: afterFocus.y + afterFocus.height + 40,
-    };
-    const downPath = {
+    // The same travel again with the keyboard up. It starts above the field, which is
+    // under the keyboard by now: a `TextInput` owns a gesture that begins inside it, and
+    // a gesture that begins under the keyboard belongs to the keyboard's own window.
+    const upPath = {
       from: {
-        x: belowField.x,
-        y: Math.min(belowField.y, stillUp.keyboardTop - 60),
+        x: path.from.x,
+        y: Math.min(afterFocus.y - 40, stillUp.keyboardTop - 60),
       },
       to: path.to,
     };
     expect(
-      downPath.from.y,
-      `the focused field ends at ${String(
-        Math.round(afterFocus.y + afterFocus.height)
-      )} px and the keyboard starts at ${String(
+      upPath.from.y - upPath.to.y,
+      `the field starts at ${String(
+        Math.round(afterFocus.y)
+      )} px and the keyboard at ${String(
         Math.round(stillUp.keyboardTop)
-      )} px, which leaves no room to drag the list between them`
-    ).toBeGreaterThan(afterFocus.y + afterFocus.height + 8);
-    const after = await endBox(screen, ruler, downPath);
+      )} px, which leaves only ${String(
+        Math.round(upPath.from.y - upPath.to.y)
+      )} px of travel above them for the list to travel along`
+    ).toBeGreaterThan(120);
+    const after = await endBox(screen, ruler, upPath);
     expect(
       Math.abs(after.y - atEnd.y),
       `the Form's content sits ${String(
