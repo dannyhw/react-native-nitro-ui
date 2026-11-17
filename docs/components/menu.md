@@ -92,6 +92,9 @@ interface MenuSection {
 - `id` is required on every row, submenu and section. It is what `onSelect` reports and what a
   test presses, so it must be unique within the menu and stable across renders.
 - `title` is optional on a section. A section with no title is a group of rows with no header.
+- `disabled` draws the row dimmed and answers nothing: no `onSelect`, and the menu stays open
+  for a dismissal of its own — the back gesture, a tap outside, a pick of another row. A screen
+  reader is told the row is disabled; see [Accessibility](#accessibility).
 - `subtitle` is a second, smaller line under a row's title: iOS `UIAction.subtitle`, Android the
   row's supporting text. `null`, `''` or absent draws none.
 - `checked` makes a row checkable: `true` draws it checked, `false` unchecked, `null` or absent
@@ -136,6 +139,8 @@ re-conversion.
 
 No prop controls whether the menu is open. It opens on a trigger press and closes on a pick, an
 outside tap, the back gesture, or, on Android only, a `disabled` that arrives while it is open.
+A press on a `disabled` row closes nothing: such a row reports nothing and keeps the menu up,
+as a disabled row of the platform's own menu does.
 
 | Event           | Fires                                                                                                    | iOS   | Android |
 | --------------- | -------------------------------------------------------------------------------------------------------- | ----- | ------- |
@@ -347,11 +352,12 @@ Android the trigger is a single node built with `clearAndSetSemantics` (`content
 hosted control.
 
 The popup's rows are the platform's own elements and are not re-labelled. A disabled row refuses
-a pick on both platforms. In the Android accessibility tree the rows are `TextView`s that all
-report `enabled="true"`, a disabled one included.
+a pick on both platforms, and the row says so itself: the Android row is Material's own node and
+reports `enabled="false"` where an enabled row reports `enabled="true"`, which is what a screen
+reader is told. `menu.e2e.ts` reads one row of each from the tree of an open menu.
 
 Not covered by an automated test: that a destructive row is announced as such on iOS, the order
-rows are announced in, and what TalkBack says about a disabled row.
+rows are announced in, and what TalkBack says out loud about a row the tree marks disabled.
 
 ## Limits
 
