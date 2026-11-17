@@ -31,6 +31,10 @@ interface DriverNode {
   selected?: boolean;
   checked?: boolean;
   hittable?: boolean;
+  clickable?: boolean;
+  focusable?: boolean;
+  longClickable?: boolean;
+  scrollable?: boolean;
   rect?: { x: number; y: number; width: number; height: number };
   parentIndex?: number;
   depth?: number;
@@ -122,7 +126,8 @@ export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
  *
  * The driver prints `label` as whatever a reader is told, where a dump keeps `text` and
  * `content-desc` apart; keeping them apart is what lets a reader tell a control’s own
- * name from the words drawn inside it. `clickable` and friends have no source here.
+ * name from the words drawn inside it. A flag the driver left out stays empty, as a
+ * dump leaves an attribute it did not write.
  */
 function asTreeNode(node: DriverNode): TreeNode {
   const hasText = node.value !== undefined;
@@ -134,21 +139,15 @@ function asTreeNode(node: DriverNode): TreeNode {
     contentDesc: hasText ? (node.contentDescription ?? '') : (node.label ?? ''),
     enabled: node.enabled === false ? 'false' : 'true',
     hittable: node.hittable === true ? 'true' : 'false',
-    clickable: '',
-    longClickable: '',
-    focusable: '',
+    clickable: flag(node.clickable),
+    longClickable: flag(node.longClickable),
+    focusable: flag(node.focusable),
     // The driver prints `checked` only for a node that offers the state, so its
     // presence is the flag a dump spells `checkable="true"`.
     checkable: node.checked === undefined ? 'false' : 'true',
     checked: node.checked === undefined ? '' : node.checked ? 'true' : 'false',
     selected: node.selected === true ? 'true' : 'false',
-    // No flag, but a class that cannot be anything else: the rule this serves is the
-    // one that refuses a control's name sitting on the page's own scroller.
-    scrollable: /scroll|recycler|listview|gridview|collection/i.test(
-      node.type ?? ''
-    )
-      ? 'true'
-      : 'false',
+    scrollable: flag(node.scrollable),
     bounds: {
       x1: rect.x,
       y1: rect.y,
@@ -160,6 +159,10 @@ function asTreeNode(node: DriverNode): TreeNode {
       height: rect.height,
     },
   };
+}
+
+function flag(value: boolean | undefined): string {
+  return value === undefined ? '' : String(value);
 }
 
 /** Every node with a box that carries exactly this description. */
