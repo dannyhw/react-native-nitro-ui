@@ -1,8 +1,8 @@
 import { test } from '@e2e-dev/mobile';
-import { expect, type App, type Locator, type Screen } from 'e2e';
+import { expect, type Locator, type Screen } from 'e2e';
 
 import { popupWindowCount } from './device-read';
-import { openScreen, reveal } from './support';
+import { openScreen, reveal, type Point } from './support';
 import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Real-input menu';
@@ -15,6 +15,9 @@ const WINDOW_SETTLES_MS = 8_000;
 /** How long a window opened by mistake would take to come up. */
 const NOTHING_OPENS_MS = 800;
 
+/** How far outside the popup's own window an outside tap aims, in device px. */
+const OUTSIDE_MARGIN_PX = 12;
+
 async function popupsReach(count: number, why: string): Promise<void> {
   await expect
     .poll(() => popupWindowCount(), {
@@ -26,35 +29,22 @@ async function popupsReach(count: number, why: string): Promise<void> {
 }
 
 /**
- * Dismiss whatever popup is up, without assuming how many Backs it takes; the ceiling is
- * what fails if the popup becomes undismisable. Each round asks with `waitFor`, not
- * `count` — `count` answers from the last observation, so a popup already down counts.
+ * A point outside the open popup that lies on nothing: the page's own padding beside the
+ * trigger. A popup is anchored under its trigger, so the trigger's band sits above the
+ * popup's window, and no control of this page lies in that padding.
  */
-async function dismissPopup(
-  app: App,
-  screen: Screen,
-  row: RegExp,
-  tries = 3
-): Promise<void> {
-  const gone = screen.getByText(row);
-  for (let press = 0; press <= tries; press += 1) {
-    const down = await gone
-      .waitFor({ state: 'detached', timeout: DISMISS_SETTLE_MS })
-      .then(
-        () => true,
-        () => false
-      );
-    if (down) return;
-    if (press === tries) break;
-    await app.back();
+async function besideThePopup(trigger: Locator): Promise<Point> {
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error(
+      'real-input: the Menu trigger has no box to aim a tap beside.'
+    );
   }
-  throw new Error(
-    `real-input: the menu popup was still up after ${String(tries)} Backs.`
-  );
+  return {
+    x: Math.max(2, box.x - OUTSIDE_MARGIN_PX),
+    y: box.y + box.height / 2,
+  };
 }
-
-/** How long one Back is given to bring the popup down, in ms. */
-const DISMISS_SETTLE_MS = 2_500;
 
 test('a real tap opens the Menu, a row reaches JS, and a disabled row takes nothing', async ({
   app,
@@ -64,6 +54,7 @@ test('a real tap opens the Menu, a row reaches JS, and a disabled row takes noth
   await openScreen(screen, 'menu');
   const trigger = screen.getByLabel(NAME);
   const pick = screen.getByTestId('real-input-menu-pick');
+  const events = screen.getByTestId('real-input-menu-events');
   await reveal(screen, trigger);
 
   // Menu keeps more of its old check than the other controls, for the reason above.
@@ -78,16 +69,72 @@ test('a real tap opens the Menu, a row reaches JS, and a disabled row takes noth
   await alpha.tap();
   await alpha.waitFor({ state: 'detached' });
   await expect(pick).toHaveText('alpha');
+  await expect(events).toHaveText('open > select alpha > close');
 
-  // A real tap on a row Material draws as dimmed has to be swallowed by the row,
-  // not by the test's own aim. `Menu.harness` asserts the refusal from inside
-  // ("reports one onSelect per pick and nothing for a row that cannot be picked").
+  await trigger.tap();
+  const locked = screen.getByText('Locked row');
+  await locked.waitFor({ state: 'visible' });
+  // The tap below aims at a row the tree itself calls disabled, beside one it calls
+  // enabled: a reader is told what a finger finds out by pressing.
+  expect(
+    await screen.getByText('Alpha').isEnabled(),
+    'the enabled row of an open menu does not report itself enabled'
+  ).toBe(true);
+  expect(
+    await locked.isDisabled(),
+    'the disabled row of an open menu does not report itself disabled: a person is ' +
+      'offered a row that will not answer'
+  ).toBe(true);
+  // A row Material draws as dimmed swallows its own press, and the menu with it:
+  // `Menu.harness` asserts the refusal from inside the control.
+  await locked.tap();
+  await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));
+  expect(
+    popupWindowCount(),
+    'the tap on the disabled row took the popup down by itself'
+  ).toBe(1);
+
+  // One Back brings it down: the press that answered nothing leaves one dismissal owed.
+  await app.back();
+  await popupsReach(
+    0,
+    'the popup stood through the Back that followed a disabled-row tap'
+  );
+  await expect(pick).toHaveText('alpha');
+  // One open, one close: the disabled row reported neither a pick nor a close.
+  await expect(events).toHaveText('open > select alpha > close > open > close');
+});
+
+test('one tap outside closes the menu after a tap on its disabled row', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'menu');
+  const trigger = screen.getByLabel(NAME);
+  const pick = screen.getByTestId('real-input-menu-pick');
+  const events = screen.getByTestId('real-input-menu-events');
+  await reveal(screen, trigger);
+  await expect(pick).toHaveText('-');
+
   await trigger.tap();
   const locked = screen.getByText('Locked row');
   await locked.waitFor({ state: 'visible' });
   await locked.tap();
-  await dismissPopup(app, screen, /^Locked row$/);
-  await expect(pick).toHaveText('alpha');
+  await new Promise((resolve) => setTimeout(resolve, NOTHING_OPENS_MS));
+  expect(
+    popupWindowCount(),
+    'the tap on the disabled row took the popup down by itself'
+  ).toBe(1);
+
+  await screen.tapAt(await besideThePopup(trigger));
+  await popupsReach(
+    0,
+    'the popup stood through the tap outside that followed a disabled-row tap'
+  );
+  await expect(pick).toHaveText('-');
+  // The one dismissal the open owed, and no pick.
+  await expect(events).toHaveText('open > close');
 });
 
 test("the trigger is one Spinner node showing its title, and the split trigger's halves are a press and a list", async ({
