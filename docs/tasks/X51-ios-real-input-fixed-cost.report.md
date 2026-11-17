@@ -12,14 +12,20 @@ per settle read, walked level by level, which is the order `descendants(matching
 Two values a snapshot cannot give are read live, once, after the tree settles: `isHittable`,
 and the value of a text-entry element (an empty field's live value is its placeholder). Without
 a scroll drag, the pass skips the one-second `waitForExistence`. No case kept single lookups. Same run before and after, both reading every case: the pass took 511 s, then 216 s
-(median load 11.9 and 13.9), with identical verdicts. Of the 161 case lines, 152 are
-identical:
+(median load 11.9 and 13.9), with identical verdicts. Of the 161 case lines, 129 are identical:
 
-- 4 boxes differ in the last double digit (`h=34.33333333333334` against
-  `34.333333333333314`), about 1e-14 pt, under the rule's 0.5 pt tolerance.
-- The 5 Host-screen cases read 3.7 pt lower. Fling drags scroll that screen, and where a
-  fling stops varies: older runs of the unchanged pass put `host-segmented` anywhere from
-  y 1066.67 to 1077.33.
+- 3 boxes differ in the last double digit (picker, button-group `scissors`, search-field
+  `magnifyingglass`; `h=34.33333333333334` against `34.333333333333314`), about 1e-14 pt, under
+  the rule's 0.5 pt tolerance.
+- 29 lines of 4 Host-screen cases (hosted-segmented, hosted-picker, hosted-date-picker,
+  hosted-progress) sit a few points lower. Fling drags scroll that screen, and where a fling
+  stops varies: the three post-change runs put `host-segmented` at y 1072.67, 1079.0 and
+  1076.33, where older runs of the unchanged pass put it anywhere from 1066.67 to 1077.33.
+- One stability line is new: `case=button-group kind=stability reads=3 settled=true moved=6`,
+  with `firstAnchorH=30.999984741210938`, on every post-change run and never before. Its tab
+  opens with no drag, so the pass skips the existence wait and its first snapshot comes while
+  the group's items are still being laid out. The settle rejects that read, and the settled
+  boxes match the baseline.
 
 **Filtered runs (lines 2 and 3).** `scripts/real-input/ios-run.mjs` turns the arguments into a
 plan:
@@ -53,14 +59,15 @@ The app build's 112 is those 56 files for arm64 and x86_64. Before, the test bui
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2118 tests / 94 suites | `7304be20133a` | 1 m 34 s | start 3.9 / med 15.9 / max 23.3 |
-| `harness:ios` | **PASS** | 601 tests / 30 suites + isolated 6 tests / 3 suites | `7304be20133a` (harness:ios digest) | 16 m 37 s | start 22.4 / med 8.3 / max 26.6 |
-| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `7304be20133a` (harness:android digest) | 18 m 18 s | start 20.9 / med 8.1 / max 25.4 |
+| `check` | **PASS** | 2119 tests / 94 suites | `c8f043f243c9` | 1 m 30 s | start 6.3 / med 6.6 / max 7.8 |
+| `harness:ios` | **PASS** | 601 tests / 30 suites + isolated 6 tests / 3 suites | `c8f043f243c9` (harness:ios digest) | 18 m 55 s | start 10.2 / med 5.2 / max 22.0 |
+| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `c8f043f243c9` (harness:android digest) | 18 m 10 s | start 5.0 / med 5.6 / max 20.1 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `real-input:ios:--a11y:context-menu` | stale | — | 370f90be2c73 (not this tree) | 1 m 03 s | start 11.8 / med 28.0 / max 70.5 |
 | `real-input:ios:--a11y:form` | stale | — | 41014d0ed771 (not this tree) | 1 m 06 s | start 64.6 / med 37.4 / max 64.6 |
-| `real-input:ios:--control:switch` | **PASS** | — | `7304be20133a` (real-input:ios digest) | 2 m 18 s | start 14.6 / med 8.7 / max 14.6 |
+| `real-input:ios:--control:button-group` | **PASS** | — | `c8f043f243c9` (real-input:ios digest) | 3 m 11 s | start 7.9 / med 6.3 / max 9.4 |
+| `real-input:ios:--control:switch` | **PASS** | — | `c8f043f243c9` (real-input:ios digest) | 1 m 56 s | start 9.3 / med 15.4 / max 26.8 |
 | `real-input:ios:--tab-targets` | stale | — | 1b2828b96fd1 (not this tree) | 2 m 07 s | start 17.1 / med 8.2 / max 17.1 |
 
 `need --for review`: `need: review is satisfied on this code tree.` The full `real-input` gates are left for merge.
@@ -96,3 +103,25 @@ The app build's 112 is those 56 files for arm64 and x86_64. Before, the test bui
 - iOS a11y pass: the Host cases below the fold are measured after fling drags that end in a different place each run; a hold before lifting would make their boxes repeatable.
 - iOS builds: the generic-simulator app build compiles x86_64 as well as arm64, which the test build never uses.
 - An iOS a11y case that prints no lines is still read again by a completion; a stale-debt failure can only clear on a full run.
+- `--rerun-failed` on a red `a11y:ios-debt` spends a device run that cannot go green; `planRerunFailed` could refuse it up front, or the report could emit a passing debt check for the cases it re-read.
+- `--rerun-failed` on a failed `a11y` parse cannot go green either: the child run reports `a11y:<case>` units, never `a11y`. Refuse it, or leave `rerun` off that check.
+
+## Fix round 1
+
+- Settle: two agreeing reads are at least 1 s apart (`A11yFrameStability.defaultPauseMs`); no
+  existence wait without a drag, as before.
+- `withLiveReads` checks count, identifier and element type, and on a mismatch the case prints
+  `| error |` and no nodes, fails, and the next case is read.
+- `AGENTS.md` and the brief skill name `--a11y <case>` and `--tab-targets`.
+- Summary comparison corrected; review N4 and N5 are follow-ups.
+
+Final tree: `--control button-group` PASS, 191.0 s, prints
+`reads=3 settled=true moved=6 elapsedMs=2342` (first read still mid-layout, the agreeing pair
+now a second apart); `--control switch` PASS, 116.5 s, no stability line.
+`need --for review` is satisfied.
+
+Red proofs:
+
+- `a11y-frame-stability.test (Swift)` -> `defaultPauseMs` 120 -> `FAIL on the laid-out tree, not two quick reads of the half-built one`.
+- `real-input-ios-run.test.js` -> a stability line counts as read -> `✕ a case whose live tree stopped pairing with its settled read fails, and the next case is still read`.
+- `a11y:switch` (`--control switch`) -> live index offset by one -> `case=switch | error | element 3 is switch "" live but other "" in the settled read`, then `a11y:switch: failed: no elements were printed`.
