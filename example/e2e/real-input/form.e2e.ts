@@ -302,7 +302,7 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   // once with one.
   await reveal(screen, field);
   const path = await endDragPath(screen);
-  const atEnd = await restingBoxAtEnd(screen, ruler, path);
+  const atEnd = await endBox(screen, ruler, path);
   // Back to the field, and its box is taken once it is in reach: this is where it has
   // to stay, whatever the keyboard does to the content below it.
   await reveal(screen, field);
