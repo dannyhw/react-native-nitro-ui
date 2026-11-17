@@ -6006,22 +6006,15 @@ final class RealInputTests: XCTestCase {
     let wrapper = try required("form-row-context-menu", as: "the ContextMenu inside that row")
     // The tap has to land on the menu rather than in the row's own padding: a point the row
     // holds alone reads the same whatever the row makes of a wrapper's children.
-    let onMenu = wrapper.centre
-    XCTAssertGreaterThan(
-      onMenu.x,
-      row.frame.minX + 1,
-      "the context menu's centre \(onMenu.x) is not to the right of the row's left edge "
-        + "\(row.frame.minX): the two boxes do not overlap the way the fixture lays them out."
-    )
-    XCTAssertLessThan(
-      onMenu.x,
-      row.frame.maxX - 1,
-      "the context menu's centre \(onMenu.x) is past the row's right edge \(row.frame.maxX), so "
-        + "this tap is not a tap on the row at all."
+    let onMenu = CGPoint(x: wrapper.frame.midX, y: wrapper.frame.midY)
+    XCTAssert(
+      row.frame.contains(onMenu),
+      "the context menu's centre \(onMenu) is outside the row's box \(row.frame), so this tap "
+        + "is not a tap on the row at all."
     )
     try assertEchoStays(Echo.formRowContextPresses, "0", as: "the row before any tap")
 
-    onMenu.fingerTap()
+    wrapper.centre.fingerTap()
     try assertEchoStays(
       Echo.formRowContextPresses,
       "1",
