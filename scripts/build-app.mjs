@@ -38,12 +38,8 @@ import {
   stampPath,
 } from './app-stamp.mjs';
 import {
-  ccacheEnv,
-  ccacheRequested,
-  ccacheEffectiveForWorktrees,
   decideSkipBuild,
   gradleArchArgs,
-  gradleCcacheArgs,
   iosCleanTargets,
   iosModuleCacheArgs,
   POD_INPUTS_RECORD,
@@ -55,12 +51,16 @@ import {
   buildTaskName,
   takeBuildSlot,
 } from './build-slot-core.mjs';
+import { ccacheSetup } from './ccache-setup.mjs';
 import { installPods } from './pod-install.mjs';
 import { assertSupportedNodeOrReexec } from './node-version.mjs';
 
 const REPO_ROOT = repoRootOf(path.dirname(fileURLToPath(import.meta.url)));
 
-const ccache = ccacheSetup();
+const ccache = ccacheSetup({
+  repoRoot: REPO_ROOT,
+  warn: (message) => console.warn(`build-app: ${message}`),
+});
 
 const USAGE =
   'usage: node scripts/build-app.mjs --platform ios|android\n' +
@@ -93,77 +93,6 @@ assertSupportedNodeOrReexec({
 function parseArg(argv, name) {
   const index = argv.indexOf(name);
   return index === -1 || index + 1 >= argv.length ? null : argv[index + 1];
-}
-
-/**
- * Where ccache is, or null. Scans `PATH` rather than asking a shell, so the
- * answer does not depend on which shell is configured.
- *
- * @returns {string | null}
- */
-function findCcache() {
-  const named =
-    process.env.CCACHE_PATH ?? process.env.CCACHE_BINARY_PATH ?? null;
-  const candidates =
-    named != null && named !== ''
-      ? [named]
-      : (process.env.PATH ?? '')
-          .split(path.delimiter)
-          .filter((dir) => dir !== '')
-          .map((dir) => path.join(dir, 'ccache'));
-  for (const candidate of candidates) {
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return candidate;
-    } catch {
-      // Not here; try the next PATH entry.
-    }
-  }
-  return null;
-}
-
-/**
- * ccache, if this machine has it. Everything ccache-related is conditional on
- * this one lookup, so a machine without it builds as usual.
- */
-function ccacheSetup() {
-  const binary = ccacheRequested(process.env) ? findCcache() : null;
-  if (binary == null) {
-    return { enabled: false, binary: null, env: {}, gradleArgs: [] };
-  }
-  const env = {
-    ...ccacheEnv({ enabled: true, repoRoot: REPO_ROOT, binary }),
-    // Read by scripts/gradle-ccache.init.gradle, which is passed with -I only
-    // when ccache exists.
-    CCACHE_GRADLE_LAUNCHER: binary,
-  };
-  // ccache ignores an environment variable it does not recognise, so the two
-  // settings that make a second worktree a hit are worth reading back once:
-  // a wrong name costs every build a cache and says nothing about it.
-  const effective = spawnSync(binary, ['--show-config'], {
-    env: { ...process.env, ...env },
-    encoding: 'utf8',
-  });
-  if (
-    effective.status === 0 &&
-    !ccacheEffectiveForWorktrees(effective.stdout ?? '')
-  ) {
-    console.warn(
-      'build-app: ccache is missing base_dir/hash_dir - expect a miss in every ' +
-        'new worktree (see ccacheEnv in scripts/build-speed-lib.mjs)'
-    );
-  }
-  return {
-    enabled: true,
-    binary,
-    env,
-    // The NDK's CMake projects live in the published package's `android/` and
-    // in nitro-modules, so the launcher goes in through an init script.
-    gradleArgs: gradleCcacheArgs({
-      enabled: true,
-      initScript: path.join(REPO_ROOT, 'scripts', 'gradle-ccache.init.gradle'),
-    }),
-  };
 }
 
 /** The environment every compile in this run sees. */

@@ -2262,14 +2262,17 @@ const TREE_CHECK_SUFFIX = ' (tree)';
 
 /**
  * A real-input run's units from the file its report writes: one per selected
- * control. A control's own tree check (`<id> (tree)`) belongs to that control's
- * unit, because `--control <id>` re-runs it; any other auxiliary check runs on
- * every run, filtered or not, so a re-run repeats it whatever it names.
+ * control, and one per auxiliary check that carries the runner arguments that
+ * re-run it (`rerun`, kept in `filters`). A control's own tree check
+ * (`<id> (tree)`) belongs to that control's unit, because `--control <id>`
+ * re-runs it; any other auxiliary check runs on every run, filtered or not, so a
+ * re-run repeats it whatever it names.
  *
  * @param {{selected?: string[], controls?: Array<{id: string, status: string}>,
- *   auxiliary?: Array<{id: string, passed: boolean}>} | null} results
+ *   auxiliary?: Array<{id: string, passed: boolean, rerun?: string[]}>} | null} results
  * @returns {{kind: 'real-input', results: Record<string, string>,
- *   everyRun: Record<string, string>, unnamed: string[]} | null}
+ *   everyRun: Record<string, string>, unnamed: string[],
+ *   filters?: Record<string, string[]>} | null}
  */
 export function realInputUnitsFromResults(results) {
   if (results == null || !Array.isArray(results.selected)) return null;
@@ -2281,9 +2284,19 @@ export function realInputUnitsFromResults(results) {
     units[control.id] = control.status === 'pass' ? 'pass' : 'fail';
   }
   const everyRun = {};
+  const filters = {};
   for (const check of results.auxiliary ?? []) {
     const id = String(check?.id ?? '');
     const status = check?.passed === true ? 'pass' : 'fail';
+    if (
+      Array.isArray(check?.rerun) &&
+      check.rerun.length > 0 &&
+      !(id in units)
+    ) {
+      units[id] = status;
+      filters[id] = check.rerun.map(String);
+      continue;
+    }
     if (id.endsWith(TREE_CHECK_SUFFIX)) {
       const control = id.slice(0, -TREE_CHECK_SUFFIX.length);
       if (control in units) {
@@ -2294,7 +2307,13 @@ export function realInputUnitsFromResults(results) {
     }
     everyRun[id] = everyRun[id] === 'fail' ? 'fail' : status;
   }
-  return { kind: 'real-input', results: units, everyRun, unnamed: [] };
+  return {
+    kind: 'real-input',
+    results: units,
+    everyRun,
+    unnamed: [],
+    ...(Object.keys(filters).length > 0 ? { filters } : {}),
+  };
 }
 
 /** A harness suite status that a re-run would only repeat. */
@@ -2356,6 +2375,35 @@ export function harnessUnitsFromTimings(
     }
   }
   return { kind: 'harness', results: units, everyRun: {}, unnamed };
+}
+
+/**
+ * The runner arguments that re-run these real-input units: `--control <id>` for a
+ * control, and the arguments an auxiliary check recorded for itself. An argument
+ * group two units share (`--tab-targets`, one case named twice) is passed once.
+ *
+ * @param {string[]} ids
+ * @param {Record<string, string[]> | undefined} filters
+ * @returns {string[]}
+ */
+function realInputFilterArgs(ids, filters) {
+  const groups = [];
+  for (const id of ids) {
+    const args = filters?.[id] ?? ['--control', id];
+    for (let index = 0; index < args.length; index += 1) {
+      const value = args[index + 1];
+      const takesValue =
+        args[index].startsWith('--') &&
+        value != null &&
+        !value.startsWith('--');
+      const group = takesValue ? [args[index], value] : [args[index]];
+      if (takesValue) index += 1;
+      if (!groups.some((seen) => seen.join('\0') === group.join('\0'))) {
+        groups.push(group);
+      }
+    }
+  }
+  return groups.flat();
 }
 
 /** `__tests__/Switch.harness.tsx` -> `__tests__/Switch.harness`, a pattern that names one file. */
@@ -2450,7 +2498,7 @@ export function planRerunFailed({ gate, entries, tree, trees, gateTrees }) {
   const filterArgs =
     units.kind === 'harness'
       ? rerun.map(harnessFilterFor)
-      : rerun.flatMap((id) => ['--control', id]);
+      : realInputFilterArgs(rerun, units.filters);
   return {
     refusal: null,
     base,

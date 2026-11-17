@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-17 Nothing user-visible: a filtered `real-input:ios` run reads only the accessibility cases
+  and tab targets it names, from one snapshot per case, and the UI-test build shares the app
+  build's compiler cache: a one-control run takes 2 to 3 minutes in place of 14 (X51, #91).
 - 11-17 Nothing user-visible: the Android real-input suite no longer waits out a timeout on a
   control that is off screen, 3.7 minutes off a 31-minute run (X49, #90).
 - 11-16 Nothing user-visible: a green device gate counts on any branch whose files for that
@@ -86,16 +89,12 @@ pull request number is left out where the records do not carry one.
 - 11-03 BottomSheet, new (G14, #28). Chip, new (G12, #27). TextField, new (G13, #26).
 - 11-03 README rewritten for people who use the library (D5); every component has iOS and
   Android screenshots, checked (D4, #29).
-- 11-02 0.4.3 and 0.5.0 released (#19, #25). AlertDialog and ConfirmationDialog, new (G11, #24).
-- 11-02 Android Menu dropdown sizes to its items; the inline DatePicker fits 320 dp (G8, #18).
-- 11-02 Slider, Button, Progress and SegmentedControl follow-up fixes (G10, #23). Tooling
-  sweeps (X16, #20; X17, #22).
 - Research and spikes in the window, nothing user-visible: Q5 to Q9, S2, S3, S5, S6, S6b, T19.
 
 ## Blocked or waiting
 
-- Release: one patch changeset is on `main` since 0.9.1 (`x37-harness-trims-form-reference`), and
-  the Version Packages pull request is #83. Check `npm view` before saying anything about it.
-- Records: `node scripts/task-records.mjs` keeps G12, S2, S3, S5, S6, S6b and T19 while their
-  unmerged prototype branches are live, and FIX3 and T18 because each has a brief and no report.
+- Release: 0.9.2 is versioned on `main` (#83) and npm's latest is 0.9.1. Check `npm view` before
+  saying anything about it.
+- Records: `node scripts/task-records.mjs` keeps S5, S6 and S6b while their unmerged prototype
+  branches are live, and FIX3 and T18 because each has a brief and no report.
   Deleting a branch, or the brief, lets the records be archived.

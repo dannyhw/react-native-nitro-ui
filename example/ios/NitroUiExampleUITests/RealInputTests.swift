@@ -171,9 +171,12 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Prints what a screen reader is told about each control. It measures and never fails a
-  /// case: the runner's log parser applies the rule to the printed lines.
+  /// case: the runner's log parser applies the rule to the printed lines. The runner names
+  /// the cases to read in `NITRO_UI_A11Y_CASES`, comma separated; unset reads them all.
   func testRealInputA11y() throws {
-    for one in A11yCase.all {
+    let only = ProcessInfo.processInfo.environment["NITRO_UI_A11Y_CASES"]
+      .map { Set($0.split(separator: ",").map(String.init)) }
+    for one in A11yCase.all where only?.contains(one.id) ?? true {
       do {
         try measure(one)
       } catch is RealInputCheckAborted {
@@ -220,16 +223,23 @@ final class RealInputTests: XCTestCase {
   /// single read of `XCUIElement.frame` can return a stale snapshot.
   private func measure(_ one: A11yCase) throws {
     try goToTab(one.tab, showing: one.screenAnchor)
-    bringIntoView(one.testId)
-    let anchor = try required(one.testId, as: "the control \"\(one.testId)\"")
+    let dragged = bringIntoView(one.testId) > 0
+    // `waitForExistence` takes a second to answer even for an element that is there. After a
+    // drag that second is also what lets the scroll come to rest, so it is kept then.
+    let onScreen = app.descendants(matching: .any)[one.testId].firstMatch
+    let anchor =
+      !dragged && onScreen.exists
+      ? onScreen : try required(one.testId, as: "the control \"\(one.testId)\"")
+    var snapshotError: Error?
     func readCase() -> A11ySnapshot {
-      A11ySnapshot(
-        nodes: [A11yNode(element: anchor)]
-          + anchor
-            .descendants(matching: .any)
-            .allElementsBoundByIndex
-            .map(A11yNode.init(element:))
-      )
+      do {
+        let nodes = try A11yNode.tree(of: anchor)
+        snapshotError = nil
+        return A11ySnapshot(nodes: nodes)
+      } catch {
+        snapshotError = error
+        return A11ySnapshot(nodes: [])
+      }
     }
 
     let settled = A11yFrameStability.settle(
@@ -238,6 +248,7 @@ final class RealInputTests: XCTestCase {
       confirmationNeeded: { $0.mergedChildrenInQuestion },
       read: readCase
     )
+    if let snapshotError { throw snapshotError }
     // Printed only when the reads disagreed. `firstAnchor*` is the box a single read would
     // have reported.
     if A11yFrameStability.shouldReport(settled) {
@@ -252,7 +263,7 @@ final class RealInputTests: XCTestCase {
           } ?? "")
       )
     }
-    let nodes = settled.snapshot.nodes
+    let nodes = try settled.snapshot.withLiveReads(of: anchor).nodes
     let anchorFrame = nodes[0].frame
     // The log parser reads these lines. The frame numbers are spelled out because the shape
     // of a `CGRect`'s description is not ours to rely on.
@@ -276,10 +287,12 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Scrolls until an element is inside the window, without failing when the screen will not
-  /// bring it in: an element below the fold is still measured where it is.
-  private func bringIntoView(_ identifier: String) {
+  /// bring it in: an element below the fold is still measured where it is. Returns how many
+  /// drags it made.
+  @discardableResult
+  private func bringIntoView(_ identifier: String) -> Int {
     let node = app.descendants(matching: .any)[identifier].firstMatch
-    guard node.exists else { return }
+    guard node.exists else { return 0 }
     let window = app.windows.firstMatch.frame
 
     func inWindow() -> Bool {
@@ -305,6 +318,7 @@ final class RealInputTests: XCTestCase {
           + "not bring into view"
       )
     }
+    return steps
   }
 
   /// The cases, in the order of the shared table in `scripts/real-input/a11y.mjs`. A unit test
@@ -378,6 +392,37 @@ final class RealInputTests: XCTestCase {
   private struct A11ySnapshot {
     let nodes: [A11yNode]
 
+    /// The same nodes with what a snapshot cannot answer read from the live elements, matched
+    /// by position: the anchor first, then its descendants in query order. Throws when the live
+    /// tree no longer lines up with the snapshot, rather than reading one element into another.
+    func withLiveReads(of anchor: XCUIElement) throws -> A11ySnapshot {
+      let descendants = anchor.descendants(matching: .any)
+      // Checked first: a property read on an index past the end fails the whole test method.
+      let liveCount = descendants.count + 1
+      guard liveCount == nodes.count else {
+        throw LiveTreeMismatch(
+          "the live tree has \(liveCount) elements where the settled read had \(nodes.count)"
+        )
+      }
+      var read = nodes
+      for index in read.indices {
+        let live = index == 0 ? anchor : descendants.element(boundBy: index - 1)
+        let liveType = live.elementType
+        let liveId = live.identifier
+        guard liveType == read[index].elementType, liveId == read[index].identifier else {
+          throw LiveTreeMismatch(
+            "element \(index) is \(RealInputTests.traitName(liveType)) \"\(liveId)\" live "
+              + "but \(read[index].traitName) \"\(read[index].identifier)\" in the settled read"
+          )
+        }
+        read[index].hittable = live.isHittable
+        if A11yNode.liveValueTypes.contains(read[index].elementType) {
+          read[index].valueText = A11yNode.text(of: live.value)
+        }
+      }
+      return A11ySnapshot(nodes: read)
+    }
+
     var frames: [CGRect] { nodes.map(\.frame) }
 
     /// One string per element: trait, name and value. Not deduplicated, because the runner
@@ -397,17 +442,29 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// One read of one accessibility element. Every property is a round trip to the test
-  /// manager, so a subtree is captured in one pass.
+  /// One accessibility element. Each property of a live `XCUIElement` is a round trip to the
+  /// test manager; a snapshot of a subtree is one for the whole subtree.
   private struct A11yNode {
     let identifier: String
     let label: String
     let elementType: XCUIElement.ElementType
     let frame: CGRect
     let enabled: Bool
-    let hittable: Bool
+    /// A snapshot cannot say whether a touch would land on the element, so for one this is
+    /// read from the live element once the tree has settled, and is `false` until then.
+    var hittable: Bool
     let selected: Bool
-    let valueText: String
+    var valueText: String
+
+    /// An empty text-entry element's live `value` is its placeholder, and its snapshot's is
+    /// not, so for these the value is read from the live element too.
+    static let liveValueTypes: Set<XCUIElement.ElementType> = [
+      .textField, .secureTextField, .searchField, .textView,
+    ]
+
+    static func text(of raw: Any?) -> String {
+      (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+    }
 
     init(element: XCUIElement) {
       identifier = element.identifier
@@ -417,8 +474,30 @@ final class RealInputTests: XCTestCase {
       enabled = element.isEnabled
       hittable = element.isHittable
       selected = element.isSelected
-      let raw = element.value
-      valueText = (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+      valueText = A11yNode.text(of: element.value)
+    }
+
+    init(snapshot: XCUIElementSnapshot) {
+      identifier = snapshot.identifier
+      label = snapshot.label
+      elementType = snapshot.elementType
+      frame = snapshot.frame
+      enabled = snapshot.isEnabled
+      hittable = false
+      selected = snapshot.isSelected
+      valueText = A11yNode.text(of: snapshot.value)
+    }
+
+    /// The element and every descendant, level by level, which is the order
+    /// `descendants(matching: .any)` lists them in.
+    static func tree(of element: XCUIElement) throws -> [A11yNode] {
+      var nodes: [A11yNode] = []
+      var level = [try element.snapshot()]
+      while !level.isEmpty {
+        nodes += level.map(A11yNode.init(snapshot:))
+        level = level.flatMap(\.children)
+      }
+      return nodes
     }
 
     var traitName: String {
@@ -5907,6 +5986,12 @@ final class RealInputTests: XCTestCase {
 /// letting the next assertion run against nothing.
 private struct RealInputCheckAborted: Error {
   let identifier: String
+}
+
+/// The live elements no longer pair with the settled snapshot one for one.
+private struct LiveTreeMismatch: Error, CustomStringConvertible {
+  let description: String
+  init(_ description: String) { self.description = description }
 }
 
 
