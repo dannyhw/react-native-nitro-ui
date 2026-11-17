@@ -12,6 +12,11 @@ enum A11yFrameStability {
   /// publishes accessibility elements on the JS thread, so the window has to outlast a frame.
   static let defaultConfirmMs = 2_000
 
+  /// The least time between two reads, by default. A read is one snapshot of the subtree and
+  /// takes tens of milliseconds, so without this gap two reads could agree on a tree React Native
+  /// is still laying out.
+  static let defaultPauseMs = 1_000
+
   /// What one settle call ended with.
   struct Outcome<Snapshot> {
     /// The read to print. When `settled`, the second of the two agreeing reads; otherwise the
@@ -79,9 +84,9 @@ enum A11yFrameStability {
 
   /// Read until two consecutive reads agree, or the cap or the budget says stop.
   ///
-  /// A read is a round trip to the test manager and takes seconds, so `minReads` are always taken
-  /// and `budgetMs` only refuses reads after that. `pauseMs` gives the test manager time to rebuild
-  /// its snapshot. Agreement is judged on `framesOf` and `identitiesOf`, so pass the whole tree.
+  /// `minReads` are always taken, and `budgetMs` only refuses reads after that. Each read starts
+  /// at least `pauseMs` after the previous one ended, so two agreeing reads are that far apart.
+  /// Agreement is judged on `framesOf` and `identitiesOf`, so pass the whole tree.
   /// When `confirmationNeeded` says the element set is in question, an agreeing pair is confirmed
   /// by one more read `confirmMs` later: React Native publishes accessibility elements on the JS
   /// thread, and one can still be on its way. `nowMs` and `pause` are injected for the host tests.
@@ -89,7 +94,7 @@ enum A11yFrameStability {
     maxReads: Int = 6,
     budgetMs: Int = 60_000,
     minReads: Int = 2,
-    pauseMs: Int = 120,
+    pauseMs: Int = A11yFrameStability.defaultPauseMs,
     framesOf: (Snapshot) -> [CGRect],
     identitiesOf: (Snapshot) -> [String] = { _ in [] },
     confirmationNeeded: (Snapshot) -> Bool = { _ in false },
