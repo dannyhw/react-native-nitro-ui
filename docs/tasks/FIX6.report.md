@@ -87,6 +87,16 @@ press proof is owed and is not claimed here.
 - A React Native `Pressable`, `Switch` or `TextInput` inside a row with `onPress` presses the
   row as well as answering (documented). Matching the hosted-control rule needs a way to tell
   a pressable React Native view from plain content at touch-down.
+- `form.e2e.ts`: the opt-out check's content comparison allows 12 px. What it looks for is the
+  IME inset — the red run read 883 px — so the tolerance hides nothing; recorded so a later
+  round does not tighten it for nothing.
+- The row's hit walk is geometric on both platforms: it reads layout boxes, so it ignores a
+  control's `translation`/`scale`, React Native's `zIndex` drawing order on Android, and zero
+  -size wrappers whose children overflow. A control moved by a transform is hit-tested where
+  its box is, not where it is drawn.
+- `example/src/FormScreen.tsx`: the echo bar is now 18 counters, the `echoGrid` comment still
+  promises two lines of them, and the `Keyboard avoidance` toggle shares a row with
+  `form-outside` at half its width. On iOS a taller bar shortens the Form's viewport.
 
 ## Questions for orchestrator
 
