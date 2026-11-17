@@ -17,6 +17,7 @@ import com.facebook.react.views.view.ReactViewGroup
 import com.facebook.react.views.view.ReactViewManager
 import com.margelo.nitro.R.id.associated_hybrid_view_tag
 import com.margelo.nitro.core.NullType
+import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiLifetimeGate
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.views.HybridNitroUiFormRowStateUpdater
@@ -285,11 +286,12 @@ internal class NitroUiFormRowView(
   }
 
   /**
-   * Whether a hosted nitro-ui view owns this point of the row.
+   * Whether a hosted nitro-ui control owns this point of the row.
    *
-   * A control's root view is the one its View Manager tagged with `associated_hybrid_view_tag`,
-   * and React Native's own views are indistinguishable from plain content at this point, so
-   * only a hosted view takes the tap away from the row.
+   * A control draws itself in the Compose host that is its own view. The tag every Nitro view
+   * manager puts on its root is not the sign: it also lands on a wrapper that only holds React
+   * Native children, and those children are the row's own content. React Native's views claim a
+   * touch the same way plain content does, so nothing tells a `Pressable` from a `Text` here.
    */
   private fun hostedControlAt(
     x: Float,
@@ -297,7 +299,7 @@ internal class NitroUiFormRowView(
   ): Boolean {
     var target = deepestChildAt(this, x, y)
     while (target != null && target !== this) {
-      if (target.getTag(associated_hybrid_view_tag) != null) return true
+      if (target is NitroComposeHost<*>) return true
       target = target.parent as? View
     }
     return false
