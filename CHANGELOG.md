@@ -8,6 +8,12 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.9.2
+
+### Patch Changes
+
+- 52add32: The package no longer ships a SwiftUI reference `Form` that only the library's own tests used. Nothing an app can call changes.
+
 ## 0.9.1
 
 ### Patch Changes
