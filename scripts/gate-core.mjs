@@ -239,6 +239,10 @@ export const TOOLING_FILES = [
   '.oxlintrc.json',
   // The formatter's options; no build reads it.
   '.oxfmtrc.jsonc',
+  // The tooling suites' runner options; `check` runs them.
+  'vitest.config.mjs',
+  // The opt-in git hooks; no build or device run reads them.
+  'lefthook.yml',
   '.gitignore',
   '.prettierignore',
 ];
