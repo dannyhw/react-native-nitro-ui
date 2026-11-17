@@ -2,7 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { liftIntoBand, openScreen, reveal } from './support';
-import { factsForItem } from './os-tree';
+import { factsForItem, pressableItem } from './os-tree';
 import { actsOnOneNamedNode, itemAnnounces } from './reader';
 
 const GROUP = 'Real-input actions';
@@ -85,6 +85,11 @@ test("one real tap per direction toggles one item once, and the item's own node 
       await group.getByText(title).count(),
       `"${label}" draws no item titled "${title}" inside its own box`
     ).toBe(1);
+    const item = pressableItem(label, title);
+    expect(
+      item.node,
+      `"${title}" sits inside no clickable node of "${label}": ${item.detail}`
+    ).not.toBeNull();
     if (label === TOGGLES) continue;
     // Aimed at the pixel rather than the node: a locator tap may refuse or wait on a
     // disabled node, and only Compose's own gating stands between this touch and onPress.

@@ -290,37 +290,13 @@ export interface TextFacts {
  */
 export function factsForItem(groupLabel: string, title: string): TextFacts {
   const nodes = tree({ unmerged: true });
-  const group = namedNodesIn(nodes, groupLabel)[0];
-  if (group == null) {
-    return {
-      checked: null,
-      enabled: null,
-      role: null,
-      detail: `no node carries the group name "${groupLabel}"`,
-    };
-  }
-  const insideGroup = (node: TreeNode): boolean =>
-    node.bounds.x1 >= group.bounds.x1 - 1 &&
-    node.bounds.y1 >= group.bounds.y1 - 1 &&
-    node.bounds.x2 <= group.bounds.x2 + 1 &&
-    node.bounds.cy >= group.bounds.y1 - 1 &&
-    node.bounds.cy <= group.bounds.y2 + 1;
-  // A Compose row that merges its descendants is named by its title and draws no separate
-  // text node, so the words are either a node’s text or the name a reader is told — the
-  // two places the driver’s own `getByText` looks.
-  const titled =
-    findAllByText(nodes, title).find(insideGroup) ??
-    namedNodesIn(nodes, title).find(insideGroup);
-  if (titled == null) {
-    return {
-      checked: null,
-      enabled: null,
-      role: null,
-      detail: `"${groupLabel}" draws no item titled "${title}" inside its own box`,
-    };
+  const found = itemTitle(nodes, groupLabel, title);
+  if ('missing' in found) {
+    return { checked: null, enabled: null, role: null, detail: found.missing };
   }
   const item =
-    tightestFlaggedNode(nodes, titled, 'checkable') ?? ownerNode(nodes, titled);
+    tightestFlaggedNode(nodes, found.titled, 'checkable') ??
+    ownerNode(nodes, found.titled);
   if (item == null) {
     return {
       checked: null,
@@ -335,6 +311,107 @@ export function factsForItem(groupLabel: string, title: string): TextFacts {
     role: item.className,
     detail: describe(item),
   };
+}
+
+/**
+ * The node drawing an item's title inside its group's own box, on the unmerged tree.
+ *
+ * A Compose row that merges its descendants is named by its title and draws no separate
+ * text node, so the words are either a node’s text or the name a reader is told — the
+ * two places the driver’s own `getByText` looks.
+ */
+function itemTitle(
+  nodes: TreeNode[],
+  groupLabel: string,
+  title: string
+): { group: TreeNode; titled: TreeNode } | { missing: string } {
+  const group = namedNodesIn(nodes, groupLabel)[0];
+  if (group == null) {
+    return { missing: `no node carries the group name "${groupLabel}"` };
+  }
+  const titled =
+    findAllByText(nodes, title).find((node) => insideBox(group, node)) ??
+    namedNodesIn(nodes, title).find((node) => insideBox(group, node));
+  if (titled == null) {
+    return {
+      missing: `"${groupLabel}" draws no item titled "${title}" inside its own box`,
+    };
+  }
+  return { group, titled };
+}
+
+function insideBox(box: TreeNode, node: TreeNode): boolean {
+  return (
+    node.bounds.x1 >= box.bounds.x1 - 1 &&
+    node.bounds.y1 >= box.bounds.y1 - 1 &&
+    node.bounds.x2 <= box.bounds.x2 + 1 &&
+    node.bounds.cy >= box.bounds.y1 - 1 &&
+    node.bounds.cy <= box.bounds.y2 + 1
+  );
+}
+
+/**
+ * The node a press on a group's item lands on: the tightest clickable node around the
+ * item's title, read on the unmerged tree. `null` when nothing clickable holds it, or
+ * when what does is not inside the group's own box.
+ */
+export function pressableItem(
+  groupLabel: string,
+  title: string
+): { node: TreeNode | null; detail: string } {
+  const nodes = tree({ unmerged: true });
+  const found = itemTitle(nodes, groupLabel, title);
+  if ('missing' in found) return { node: null, detail: found.missing };
+  const clickable = tightestFlaggedNode(nodes, found.titled, 'clickable');
+  const detail =
+    `title on ${describeFlags(found.titled)}; tightest clickable around it: ` +
+    (clickable == null ? 'none' : describeFlags(clickable));
+  return {
+    node:
+      clickable != null && insideBox(found.group, clickable) ? clickable : null,
+    detail,
+  };
+}
+
+/** What the platform says about pressing a node, as a dump spells it. */
+export interface ActionFlags {
+  clickable: string;
+  longClickable: string;
+  focusable: string;
+  detail: string;
+}
+
+/**
+ * The action flags on the first node carrying this name or testID, read on the unmerged
+ * tree, which keeps a node scrolled out of sight at its own box.
+ */
+export function actionFlags(
+  by: { label: string } | { testId: string }
+): ActionFlags | null {
+  const nodes = tree({ unmerged: true });
+  const node =
+    'label' in by
+      ? namedNodesIn(nodes, by.label)[0]
+      : nodes.find((entry) => entry.resourceId === by.testId);
+  if (node == null) return null;
+  return {
+    clickable: node.clickable,
+    longClickable: node.longClickable,
+    focusable: node.focusable,
+    detail: describeFlags(node),
+  };
+}
+
+function describeFlags(node: TreeNode): string {
+  return (
+    `${node.className} "${node.contentDesc || node.text}" ` +
+    `clickable=${node.clickable} long-clickable=${node.longClickable} ` +
+    `focusable=${node.focusable} scrollable=${node.scrollable} at ${String(
+      node.bounds.x1
+    )},${String(node.bounds.y1)}-${String(node.bounds.x2)},${String(
+      node.bounds.y2
+    )}`
+  );
 }
 
 function stateOf(value: string): 'on' | 'off' {
