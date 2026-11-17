@@ -1,5 +1,5 @@
 import { test } from '@e2e-dev/mobile';
-import { expect } from 'e2e';
+import { expect, type Locator, type Screen } from 'e2e';
 
 import {
   boxOf,
@@ -21,6 +21,30 @@ import {
 } from './keyboard';
 
 const ROW = 'Row with onPress';
+
+/** A row with `onPress` that has a hosted `Switch` in it. */
+const ROW_AND_SWITCH = 'Row with onPress and a switch';
+const SWITCH_IN_ROW = 'Switch in a pressed row';
+
+/** The same pair with React Native's own `Pressable` in place of the switch. */
+const ROW_AND_PRESSABLE = 'Row with onPress and a pressable';
+const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
+
+/** The Android view React Native draws the app's content into. */
+const CONTENT_ROOT = 'android:id/content';
+
+/**
+ * A row far enough from the end of the list to stay above a keyboard.
+ *
+ * The check that opts out of keyboard avoidance compares where the list's content
+ * stands when it is scrolled to its end, with a keyboard up and without one. A row
+ * near the end sits behind the keyboard at that point, so the ruler has to be a row
+ * the keyboard leaves in the open.
+ */
+const CONTENT_RULER = 'Downloads';
+
+/** How long a counter or a box is watched for a second value or a second move. */
+const SETTLE_MS = 500;
 
 test('a real tap on a Form row presses it once', async ({ app, screen }) => {
   await app.open();
@@ -152,6 +176,246 @@ test('a field the keyboard would cover is moved clear of it', async ({
     await fieldAboveKeyboard(field);
   });
 });
+
+test('a tap on a control inside a pressing row is the control’s, and a tap beside it is the row’s', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW_AND_SWITCH);
+  const control = screen.getByLabel(SWITCH_IN_ROW);
+  const presses = 'form-row-switch-presses';
+  const changes = 'form-row-switch-changes';
+  const value = screen.getByTestId('form-row-switch-value');
+  await reveal(screen, row, { reads: [control] });
+
+  // The row is asked to answer first: a row that never pressed at all would keep its
+  // counter still for a tap on its switch too, and that silence is not the promise.
+  const rowBox = await boxOf(row);
+  const switchBox = await boxOf(control);
+  if (rowBox == null || switchBox == null) {
+    throw new Error(
+      `real-input: the pressing row or its switch has no box to aim at: row ` +
+        `${JSON.stringify(rowBox)}, switch ${JSON.stringify(switchBox)}.`
+    );
+  }
+  const beside = { x: rowBox.x + 24, y: rowBox.y + rowBox.height / 2 };
+  expect(
+    beside.x < switchBox.x - 8,
+    `the point meant for the row (${String(Math.round(beside.x))} px) is not clear ` +
+      `of the switch's box ${JSON.stringify(switchBox)}, so the two taps would be ` +
+      'the same tap'
+  ).toBe(true);
+
+  await screen.tapAt(beside);
+  await expect(screen.getByTestId(presses)).toHaveText('1');
+  await expect(screen.getByTestId(changes)).toHaveText('0');
+  await expect(value).toHaveText('off');
+
+  // The switch's own tap: the flip and its one change report are the whole answer.
+  await screen.tapAt(await centreOf(control));
+  await expect(value).toHaveText('on');
+  await expect(screen.getByTestId(changes)).toHaveText('1');
+  await staysAt(screen, presses, '1');
+
+  // The row answers again after its content did: the rule is "whosever touch this
+  // was", not a latch that swallows every row press after the first control tap.
+  await screen.tapAt(beside);
+  await expect(screen.getByTestId(presses)).toHaveText('2');
+  await staysAt(screen, changes, '1');
+
+  await screen.tapAt(await centreOf(control));
+  await expect(value).toHaveText('off');
+  await expect(screen.getByTestId(changes)).toHaveText('2');
+  await staysAt(screen, presses, '2');
+});
+
+test('a tap on React Native content inside a pressing row is that content’s alone', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW_AND_PRESSABLE);
+  const control = screen.getByLabel(PRESSABLE_IN_ROW);
+  const rowPresses = 'form-row-inner-presses';
+  const innerPresses = 'form-row-inner-inner-presses';
+  await reveal(screen, row, { reads: [control] });
+
+  await screen.tapAt(await centreOf(control));
+  await expect(screen.getByTestId(innerPresses)).toHaveText('1');
+  await staysAt(screen, rowPresses, '0');
+
+  // And the row is not harmed by it: its own tap still presses it.
+  await row.tap();
+  await expect(screen.getByTestId(rowPresses)).toHaveText('1');
+  await staysAt(screen, innerPresses, '1');
+});
+
+test('opting out of keyboard avoidance leaves the content and its offset alone', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const field = editableField(screen, 'Note');
+  const focus = screen.getByTestId('form-field-focus');
+  const avoid = screen.getByTestId('form-avoid-echo');
+  const ruler = screen.getByText(CONTENT_RULER);
+
+  // The page is scrolled once to its end with nothing up, which is the position the
+  // keyboard is not allowed to move.
+  await reveal(screen, field);
+  await screen.getByLabel('Keyboard avoidance').tap();
+  await expect(avoid).toHaveText('no');
+  const atEnd = await restingBoxAtEnd(screen, ruler);
+
+  await reveal(screen, field);
+  const parked = await boxOf(field);
+  if (parked == null) {
+    throw new Error(
+      'real-input: the Note field has no box to watch for a move.'
+    );
+  }
+  await expect(focus).toHaveText('no');
+
+  await withRealKeyboard(async () => {
+    await focusField(field);
+    expect(
+      await textOf(screen, 'form-field-focus'),
+      'a real tap on the Note field did not focus it, so a Form that does nothing ' +
+        'would look like a Form that opted out'
+    ).toBe('yes');
+    const { keyboardTop } = await expectKeyboard();
+    const band = await tapBand(screen);
+    expect(
+      band.bottom - keyboardTop,
+      `the premise of this check is missing: the keyboard is only ` +
+        `${String(Math.round(band.bottom - keyboardTop))} px tall, so padding room ` +
+        'for it would not be a change anything could see'
+    ).toBeGreaterThan(120);
+
+    // No reveal: the field stays where it was parked.
+    const afterFocus = await settleFieldBox(field, parked);
+    expect(
+      Math.abs(afterFocus.y - parked.y),
+      `focusing the field moved it ${String(
+        Math.round(parked.y - afterFocus.y)
+      )} px with keyboard avoidance off: the Form scrolled for a keyboard it was ` +
+        'told to leave alone'
+    ).toBeLessThanOrEqual(2);
+
+    // The content at the end of the list is where it stood before the keyboard:
+    // nothing was padded under it.
+    const stillUp = await expectKeyboard();
+    const after = await restingBoxAtEnd(screen, ruler);
+    expect(
+      Math.abs(after.y - atEnd.y),
+      `the Form's content sits ${String(
+        Math.round(atEnd.y - after.y)
+      )} px higher at the end of its list with the keyboard up (top ` +
+        `${String(Math.round(stillUp.keyboardTop))} px) than with no keyboard, which ` +
+        `is what padding the "${CONTENT_RULER}" row with the keyboard's own height ` +
+        'does to it'
+    ).toBeLessThanOrEqual(12);
+  });
+});
+
+/**
+ * Read a counter, wait, and read it again.
+ *
+ * A press that arrives late is still a second press, and `toHaveText` is satisfied
+ * by the first correct reading it sees.
+ */
+async function staysAt(
+  screen: Screen,
+  testId: string,
+  text: string
+): Promise<void> {
+  await expect(screen.getByTestId(testId)).toHaveText(text);
+  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+  expect(
+    await textOf(screen, testId),
+    `"${testId}" moved off "${text}" while the screen was watched`
+  ).toBe(text);
+}
+
+/**
+ * Where a row comes to rest when the list is dragged to its end.
+ *
+ * Two drags that move the row no further is the end of the content: it is the one
+ * reading of "the list cannot travel" that does not need the last row to be somewhere
+ * the keyboard is not standing in.
+ */
+async function restingBoxAtEnd(
+  screen: Screen,
+  ruler: Locator
+): Promise<{ y: number; height: number }> {
+  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
+  if (content == null) {
+    throw new Error('real-input: the content view has no box to drag along.');
+  }
+  const band = await tapBand(screen);
+  const span = band.bottom - band.top;
+  // The travel stays in the top half of the band, where a keyboard cannot be.
+  const from = {
+    x: content.x + content.width * 0.05,
+    y: band.top + span * 0.5,
+  };
+  const to = { x: from.x, y: band.top + span * 0.1 };
+  let last: { y: number; height: number } | null = null;
+  let unmoved = 0;
+  for (let dragNumber = 1; dragNumber <= 14; dragNumber += 1) {
+    await drag(screen, from, to, 500);
+    const box = await boxOf(ruler);
+    if (box == null) {
+      unmoved = 0;
+      last = null;
+      continue;
+    }
+    unmoved = last != null && Math.abs(box.y - last.y) <= 1 ? unmoved + 1 : 0;
+    last = box;
+    if (unmoved >= 2) return box;
+  }
+  throw new Error(
+    'real-input: the list never came to rest on its end within 14 drags; the ' +
+      `"${CONTENT_RULER}" row reads ${JSON.stringify(last)}.`
+  );
+}
+
+/**
+ * The field's box once it has stopped moving, however briefly.
+ *
+ * Only the measurement is polled; the position it ends at is what the check then
+ * judges, so a field that was shoved clear of the keyboard and shoved back cannot
+ * read as one that was left alone.
+ */
+async function settleFieldBox(
+  field: Locator,
+  from: { y: number; height: number }
+): Promise<{ y: number; height: number }> {
+  let last = await boxOf(field);
+  for (let read = 0; read < 8; read += 1) {
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+    const now = await boxOf(field);
+    if (now == null) {
+      throw new Error(
+        `real-input: the focused Note field left the tree; it was last at ` +
+          `${JSON.stringify(last)}.`
+      );
+    }
+    if (
+      last != null &&
+      Math.abs(now.y - last.y) <= 1 &&
+      Math.abs(now.y - from.y) <= 2
+    ) {
+      return now;
+    }
+    last = now;
+  }
+  return last ?? from;
+}
 
 /**
  * Park a control low in its page, where the keyboard will reach it.
