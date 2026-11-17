@@ -195,6 +195,8 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     'scripts/task-ready-core.mjs',
     '.oxlintrc.json',
     '.oxfmtrc.jsonc',
+    'vitest.config.mjs',
+    'lefthook.yml',
     'scripts/worktrees.mjs',
     'scripts/worktrees-core.mjs',
     'scripts/watchdog.mjs',
