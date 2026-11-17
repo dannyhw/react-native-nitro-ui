@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-17 Nothing user-visible: the Android real-input suite no longer waits out a timeout on a
+  control that is off screen, 3.7 minutes off a 31-minute run (X49, #90).
 - 11-16 Nothing user-visible: a green device gate counts on any branch whose files for that
   gate are the same, and the two harness gates run at the same time (X50, #89).
 - 11-16 Nothing user-visible: almost every Android real-input check now runs in the e2e suite,

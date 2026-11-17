@@ -139,9 +139,17 @@ let dragColumn = 0;
  */
 let downDrags = 0;
 
+/** Whether the page is known to be at its top: a fresh screen, or one just rewound. */
+let atTop = true;
+
+/** Whether nothing on this screen has been read yet. */
+let freshScreen = true;
+
 /** Forget any scrolling this test has done (the next screen starts at the top). */
 export function resetScrollCount(): void {
   downDrags = 0;
+  atTop = true;
+  freshScreen = true;
   dragColumn = 0;
 }
 
@@ -164,10 +172,26 @@ export async function boxOf(locator: Locator): Promise<Box | null> {
 }
 
 /**
+ * A node's box now, or `null` at once when it is not in the tree.
+ *
+ * `boundingBox` waits the whole action timeout for a node to appear before it gives
+ * up, and an off-screen row never appears on its own, so a scroll search must not
+ * read it that way: each read would cost 30 s. A count answers from one snapshot.
+ */
+async function boxNow(locator: Locator): Promise<Box | null> {
+  if ((await locator.count()) === 0) return null;
+  return boxOf(locator);
+}
+
+/**
  * Scroll a control into the band a tap can reach, by dragging the viewport: the mobile
  * engine has no `scrollIntoView` for a node inside somebody else’s list. A hosted node
  * answers with a box whether or not the page reached it, so the engine’s own
  * visibility is the witness. `reads` names nodes a test still has to read.
+ *
+ * The search starts from wherever the page is and travels towards the control when
+ * its box says which way that is. A control out of the tree on a page that has left
+ * its top could be either way, so only then is the page rewound and searched down.
  */
 export async function reveal(
   screen: Screen,
@@ -176,13 +200,15 @@ export async function reveal(
 ): Promise<void> {
   const swipes = options.swipes ?? 12;
   const reads = options.reads ?? [];
-  if (downDrags > 0) {
-    await rewindToTop(screen);
-  }
+  let rewound = false;
   /** Drags that moved the control not at all: two of those is the page's end. */
   let stuck = 0;
   for (let attempt = 0; attempt <= swipes; attempt += 1) {
-    const box = await boxOf(locator);
+    // A screen whose tab was just tapped may still be mounting, and an absent read
+    // then sends a drag down a page that is about to show the control. The first
+    // read waits for the control as long as the engine waits for any node.
+    const box = freshScreen ? await boxOf(locator) : await boxNow(locator);
+    freshScreen = false;
     const shown = box != null && (await isShown(locator));
     const inBand = box != null && (await isInBand(screen, box));
     const inSafeBand = box != null && (await isInSafeBand(screen, box));
@@ -199,25 +225,44 @@ export async function reveal(
     }
     if (attempt === swipes) break;
 
+    if (box == null && !atTop && !rewound) {
+      await rewindToTop(screen);
+      rewound = true;
+      stuck = 0;
+      attempt -= 1;
+      continue;
+    }
+
     // Which way to travel: with the control already reachable but a read still
     // missing, it is the *other* end of the window that has to come into view. A
     // control parked in the top half of the band has the missing node above it —
     // below it there is a whole window of room the node could have occupied and
     // does not — so the page is nudged back down until the read returns.
-    if (
+    const readsAbove =
+      box != null &&
       shown &&
       inBand &&
       !readsShown &&
+      (await isInUpperHalf(screen, box));
+    // A box above the band means the control lies towards the top, unless the page
+    // is already there.
+    const passed =
       box != null &&
-      (await isInUpperHalf(screen, box))
-    ) {
+      !(shown && inBand && !readsShown) &&
+      !atTop &&
+      (await isAboveSafeBand(screen, box));
+    if (readsAbove) {
       await dragContentDown(screen);
+      downDrags = Math.max(0, downDrags - 1);
+    } else if (passed) {
+      await dragContentFraction(screen, -(await stepBackTo(screen, box)));
       downDrags = Math.max(0, downDrags - 1);
     } else {
       await dragContentUp(screen);
       downDrags += 1;
+      atTop = false;
     }
-    const after = await boxOf(locator);
+    const after = await boxNow(locator);
     if (box != null && after != null && Math.abs(after.y - box.y) <= 2) {
       stuck += 1;
       // Something between the finger and the list took that drag, so the next one
@@ -230,10 +275,10 @@ export async function reveal(
   }
   const missing = await countUnshown(reads);
   throw new Error(
-    `real-input: the control was never in the tappable band, from the top of ` +
-      `the screen down through ${String(swipes)} drags along content column ` +
+    `real-input: the control was never in the tappable band after ` +
+      `${String(swipes)} drags${rewound ? ' and a rewind to the top' : ''} along content column ` +
       `${String(Math.round((DRAG_COLUMNS[dragColumn] ?? 0.5) * 100))}%; its box ` +
-      `now reads ${JSON.stringify(await boxOf(locator))}` +
+      `now reads ${JSON.stringify(await boxNow(locator))}` +
       (reads.length > 0
         ? `, and ${String(missing)} of the ${String(reads.length)} nodes this ` +
           `test still has to read is off screen.`
@@ -252,6 +297,7 @@ const STUCK_DRAGS = 2;
  * finger will not reach either.
  */
 async function isShown(locator: Locator): Promise<boolean> {
+  if ((await locator.count()) === 0) return false;
   try {
     return await locator.isVisible();
   } catch (error) {
@@ -309,10 +355,10 @@ async function settleIntoBand(
   locator: Locator
 ): Promise<Box | null> {
   const deadline = Date.now() + 2_000;
-  let last = await boxOf(locator);
+  let last = await boxNow(locator);
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 150));
-    const now = await boxOf(locator);
+    const now = await boxNow(locator);
     // Out of the tree again means the list is still travelling past it, and a box
     // that will not hold still is a box nothing may be aimed at.
     if (now == null || last == null) return null;
@@ -338,6 +384,7 @@ async function rewindToTop(screen: Screen): Promise<void> {
     await dragContentDown(screen);
   }
   downDrags = 0;
+  atTop = true;
 }
 
 /** One page-relative finger drag, `up` scrolling towards the bottom of the list. */
@@ -377,6 +424,23 @@ async function dragContentFraction(
 const LIFT_STEP = 0.12;
 
 /**
+ * How far to drag back towards the top for a control above the band, as a fraction
+ * of the content view: the distance to the band's middle, no more than one stride.
+ *
+ * A full stride for a control just above the band flings it past the band, and its
+ * finger starts high on the page, where it lands on whatever control sits there.
+ */
+async function stepBackTo(screen: Screen, box: Box): Promise<number> {
+  const { top, bottom } = await tapBand(screen);
+  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
+  if (content == null) {
+    throw new Error('real-input: the content view has no box to scroll along.');
+  }
+  const distance = (top + bottom) / 2 - (box.y + box.height / 2);
+  return Math.min(CONTENT_STEP, Math.max(LIFT_STEP, distance / content.height));
+}
+
+/**
  * Bring a control into the band by short drags towards the bottom of the list.
  *
  * A hosted control’s box is a fact about the Compose composition rather than about the
@@ -391,7 +455,7 @@ export async function liftIntoBand(
 ): Promise<Box> {
   const nudges = 4;
   for (let nudge = 0; nudge <= nudges; nudge += 1) {
-    const box = await boxOf(control);
+    const box = await boxNow(control);
     const parked =
       box != null &&
       (await isShown(control)) &&
@@ -407,11 +471,12 @@ export async function liftIntoBand(
     const tooHigh = box != null && (await isAboveSafeBand(screen, box));
     await dragContentFraction(screen, tooHigh ? -LIFT_STEP : LIFT_STEP);
     downDrags = tooHigh ? Math.max(0, downDrags - 1) : downDrags + 1;
+    if (!tooHigh) atTop = false;
   }
   throw new Error(
     `real-input: ${String(nudges)} short drags towards the bottom of the page did ` +
       `not lift the control into the band; its box now reads ` +
-      `${JSON.stringify(await boxOf(control))}, and ${String(
+      `${JSON.stringify(await boxNow(control))}, and ${String(
         await countUnshown(reads)
       )} of the rows this test reads with it are off screen.`
   );
