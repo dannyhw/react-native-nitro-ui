@@ -221,7 +221,10 @@ final class RealInputTests: XCTestCase {
   private func measure(_ one: A11yCase) throws {
     try goToTab(one.tab, showing: one.screenAnchor)
     bringIntoView(one.testId)
-    let anchor = try required(one.testId, as: "the control \"\(one.testId)\"")
+    // `bringIntoView` has just found it, and `waitForExistence` takes a second to say so.
+    let onScreen = app.descendants(matching: .any)[one.testId].firstMatch
+    let anchor =
+      onScreen.exists ? onScreen : try required(one.testId, as: "the control \"\(one.testId)\"")
     var snapshotError: Error?
     func readCase() -> A11ySnapshot {
       do {
@@ -255,7 +258,7 @@ final class RealInputTests: XCTestCase {
           } ?? "")
       )
     }
-    let nodes = settled.snapshot.withHittable(of: anchor).nodes
+    let nodes = settled.snapshot.withLiveReads(of: anchor).nodes
     let anchorFrame = nodes[0].frame
     // The log parser reads these lines. The frame numbers are spelled out because the shape
     // of a `CGRect`'s description is not ours to rely on.
@@ -381,14 +384,17 @@ final class RealInputTests: XCTestCase {
   private struct A11ySnapshot {
     let nodes: [A11yNode]
 
-    /// The same nodes with `hittable` read from the live elements, matched by position: the
-    /// anchor first, then its descendants in query order.
-    func withHittable(of anchor: XCUIElement) -> A11ySnapshot {
+    /// The same nodes with what a snapshot cannot answer read from the live elements, matched
+    /// by position: the anchor first, then its descendants in query order.
+    func withLiveReads(of anchor: XCUIElement) -> A11ySnapshot {
       let descendants = anchor.descendants(matching: .any)
       var read = nodes
       for index in read.indices {
-        read[index].hittable =
-          index == 0 ? anchor.isHittable : descendants.element(boundBy: index - 1).isHittable
+        let live = index == 0 ? anchor : descendants.element(boundBy: index - 1)
+        read[index].hittable = live.isHittable
+        if A11yNode.liveValueTypes.contains(read[index].elementType) {
+          read[index].valueText = A11yNode.text(of: live.value)
+        }
       }
       return A11ySnapshot(nodes: read)
     }
@@ -424,7 +430,17 @@ final class RealInputTests: XCTestCase {
     /// read from the live element once the tree has settled, and is `false` until then.
     var hittable: Bool
     let selected: Bool
-    let valueText: String
+    var valueText: String
+
+    /// An empty text-entry element's live `value` is its placeholder, and its snapshot's is
+    /// not, so for these the value is read from the live element too.
+    static let liveValueTypes: Set<XCUIElement.ElementType> = [
+      .textField, .secureTextField, .searchField, .textView,
+    ]
+
+    static func text(of raw: Any?) -> String {
+      (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+    }
 
     init(element: XCUIElement) {
       identifier = element.identifier
@@ -434,8 +450,7 @@ final class RealInputTests: XCTestCase {
       enabled = element.isEnabled
       hittable = element.isHittable
       selected = element.isSelected
-      let raw = element.value
-      valueText = (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+      valueText = A11yNode.text(of: element.value)
     }
 
     init(snapshot: XCUIElementSnapshot) {
@@ -446,17 +461,19 @@ final class RealInputTests: XCTestCase {
       enabled = snapshot.isEnabled
       hittable = false
       selected = snapshot.isSelected
-      let raw = snapshot.value
-      valueText = (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+      valueText = A11yNode.text(of: snapshot.value)
     }
 
-    /// The element and every descendant, depth first, which is the order
+    /// The element and every descendant, level by level, which is the order
     /// `descendants(matching: .any)` lists them in.
     static func tree(of element: XCUIElement) throws -> [A11yNode] {
-      func walk(_ node: XCUIElementSnapshot) -> [A11yNode] {
-        [A11yNode(snapshot: node)] + node.children.flatMap(walk)
+      var nodes: [A11yNode] = []
+      var level = [try element.snapshot()]
+      while !level.isEmpty {
+        nodes += level.map(A11yNode.init(snapshot:))
+        level = level.flatMap(\.children)
       }
-      return walk(try element.snapshot())
+      return nodes
     }
 
     var traitName: String {
