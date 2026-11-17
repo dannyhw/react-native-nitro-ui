@@ -17,7 +17,11 @@
  * Usage (devices and ports come from the environment, as everywhere else here):
  *
  *   IOS_UDID=<simulator udid> METRO_PORT=<port> \
- *     bun run test:real-input:ios [--control <id>]   # ids: controls.mjs
+ *     bun run test:real-input:ios [--control <id>] [--a11y <case>] [--tab-targets]
+ *
+ * With no arguments it runs every control, the accessibility pass over every case and
+ * the tab-bar pass. A filtered run reads only the accessibility cases of what it names,
+ * and the tab bar only with `--tab-targets` (`ios-run.mjs`).
  *
  * The simulator must already be booted: AGENTS.md says only touch devices you
  * started, so this script boots nothing and shuts nothing down.
@@ -28,30 +32,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import {
-  artifactsDir,
-  chosenControls,
-  ensureMetro,
-  run,
-  sleep,
-  Suite,
-} from './support.mjs';
+import { artifactsDir, ensureMetro, run, sleep, Suite } from './support.mjs';
 import { parseTestResults, realInputLine } from './ios-log.mjs';
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
 import {
-  A11Y_CONTROLS,
-  checkIosControlA11y,
-  parseIosA11yLog,
-  parseIosA11yStability,
-  reportIosStability,
-  staleExemptions,
-} from './a11y.mjs';
-import {
-  checkTabTargets,
-  exampleTabs,
-  parseIosTabTargets,
-  unreadTabTargetLines,
-} from './tab-targets.mjs';
+  A11Y_CASES_ENV,
+  A11Y_METHOD,
+  TAB_METHOD,
+  describeIosRunPlan,
+  iosRunPlan,
+  iosTestMethods,
+  iosUsage,
+  reportA11yPass,
+  reportTabTargets,
+} from './ios-run.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
 import { iosModuleCacheArgs } from '../build-speed-lib.mjs';
@@ -69,27 +63,6 @@ const BUNDLE_ID = 'nitroui.example';
 const WORKSPACE = 'NitroUiExample.xcworkspace';
 const SCHEME = 'NitroUiExampleUITests';
 const TEST_CLASS = 'RealInputTests';
-
-/**
- * The accessibility pass's method name, and the id it reports under.
- *
- * It is not a control: it asserts nothing about a press, and a control's totals have to
- * keep meaning "every control answered a real touch". `A11Y_METHOD` is exempt from the
- * coverage guard below for the same reason `a11y-sweep.mjs` does not appear in the
- * Android `CHECKS` table, and it is reported through `Suite.beginAuxiliary`, which is how
- * the Android half reports its own sweep.
- */
-const A11Y_METHOD = 'testRealInputA11y';
-const A11Y_ID = 'a11y';
-
-/**
- * The tab-bar pass (X19): it measures every example tab as a touch target, and the rule
- * in `tab-targets.mjs` decides. Not a control for the same reason as {@link A11Y_METHOD},
- * so it is exempt from the coverage guard and reported as an auxiliary check, and it
- * rides every run for the same reason too: it needs no gesture beyond the scroll that
- * every navigation now depends on.
- */
-const TAB_METHOD = 'testRealInputTabTargets';
 
 /**
  * Guard that the Swift file and the shared table describe one suite, then pick
@@ -199,14 +172,16 @@ async function resolveDevice(env) {
  * @param {object} options
  * @param {string} options.logFile
  * @param {string} options.what for the error if it fails
+ * @param {NodeJS.ProcessEnv} options.env
  * @returns {Promise<number>} the exit status
  */
-function xcodebuild(args, { logFile, what }) {
+function xcodebuild(args, { logFile, what, env }) {
   console.log(`  ${what} (log: ${logFile})`);
   const out = fs.createWriteStream(logFile, { flags: 'w' });
   return new Promise((resolve, reject) => {
     const child = spawn('xcodebuild', [...args], {
       cwd: iosDir(),
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let done = false;
@@ -309,7 +284,13 @@ function clearJsLocation(udid) {
 }
 
 async function main() {
-  const controls = chosenControls(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(iosUsage());
+    return 0;
+  }
+  const plan = iosRunPlan(argv);
+  const controls = plan.controls;
   const suite = new Suite('ios', controls);
   const out = artifactsDir('ios');
   const metroPort = Number(process.env.METRO_PORT ?? 8291);
@@ -337,7 +318,11 @@ async function main() {
     }
   }
   const toRun = checkCoverage(swiftSource, controls);
-  if (toRun.length === 0) {
+  const methods = iosTestMethods(
+    plan,
+    toRun.map((control) => iosCheckName(control.id))
+  );
+  if (methods.length === 0) {
     return suite.finish();
   }
 
@@ -345,6 +330,7 @@ async function main() {
     `real-input (ios): ${device.name} · ${device.udid} · Metro ` +
       `${String(metroPort)} · scheme ${SCHEME}`
   );
+  console.log(`  reads ${describeIosRunPlan(plan)}`);
 
   const stopMetro = await ensureMetro({
     port: metroPort,
@@ -364,6 +350,7 @@ async function main() {
     // would have picked anyway: a `build-app.mjs` build in the same derived data
     // has CCACHE_BASEDIR and compiles into its own, and a `.pcm` written by that
     // environment makes this one report Foundation defined in two places.
+    const buildEnv = process.env;
     const settings = [
       'CODE_SIGNING_ALLOWED=NO',
       ...iosModuleCacheArgs({ derivedData: derived, ccache: false }),
@@ -383,7 +370,11 @@ async function main() {
         derived,
         ...settings,
       ],
-      { logFile: buildLog, what: 'building the app and the UI-test bundle' }
+      {
+        logFile: buildLog,
+        what: 'building the app and the UI-test bundle',
+        env: buildEnv,
+      }
     );
     if (built !== 0) {
       throw new Error(
@@ -422,17 +413,9 @@ async function main() {
     }
     setJsLocation(device.udid, metroPort);
 
-    const selectors = toRun
-      .map(
-        (control) =>
-          `-only-testing:${SCHEME}/${TEST_CLASS}/${iosCheckName(control.id)}`
-      )
-      // The a11y pass rides every run, filtered or not. `--control switch` is how a task
-      // iterates on one control, and the accessibility rule is the one thing on this
-      // platform that needs no gesture to be worth re-checking — excluding it would mean
-      // the mutation that proves it red had to be run as a full suite.
-      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${A11Y_METHOD}`)
-      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${TAB_METHOD}`);
+    const selectors = methods.map(
+      (method) => `-only-testing:${SCHEME}/${TEST_CLASS}/${method}`
+    );
     status = await xcodebuild(
       [
         'test-without-building',
@@ -456,7 +439,11 @@ async function main() {
         ...selectors,
         ...settings,
       ],
-      { logFile: testLog, what: 'running the real-input cases' }
+      {
+        logFile: testLog,
+        what: 'running the real-input cases',
+        env: { ...buildEnv, [A11Y_CASES_ENV]: plan.a11yCases.join(',') },
+      }
     );
 
     const log = fs.readFileSync(testLog, 'utf8');
@@ -488,186 +475,25 @@ async function main() {
       );
     }
 
-    reportTabTargets({ log, suite, status, testLog });
-    reportA11yPass({ log, suite, status, testLog });
+    if (plan.tabTargets) {
+      reportTabTargets({
+        log,
+        suite,
+        status,
+        testLog,
+        appSource: fs.readFileSync(
+          path.resolve(root, '..', 'src', 'App.tsx'),
+          'utf8'
+        ),
+      });
+    }
+    reportA11yPass({ log, suite, status, testLog, cases: plan.a11yCases });
   } finally {
     clearJsLocation(device.udid);
     stopMetro();
   }
 
   return suite.finish();
-}
-
-/**
- * The accessibility pass's own section of the report.
- *
- * One auxiliary check per case in `A11Y_CONTROLS`, decided by the rule in
- * `a11y.mjs` — the same file the Android sweep reads — from the elements the Swift pass
- * printed. Two reasons it is done here rather than as `XCTAssert` calls in the test file:
- * the rule needs the shared table (which label, which trait, which debt row), and a rule
- * decided in a log parser can be shown red with a fixture in
- * `scripts/__tests__/real-input-a11y.test.js` instead of on a device.
- *
- * Three things make a case fail, and each is reported separately so a reader learns which
- * half of the rule broke:
- *
- * - no elements at all for a case: the pass did not reach the screen, so the case is
- *   *not run* and says so — a control nobody measured is never a pass.
- * - the case's own XCUITest method failed or never reported: same reason.
- * - the rule found problems: new ones fail the run; ones that match a debt row are
- *   printed as `known failing`, and a debt row that matched nothing is itself reported, so
- *   a fix has to delete its row rather than let it sit there excusing nothing.
- *
- * @param {object} args
- * @param {string} args.log the xcodebuild test log
- * @param {import('./support.mjs').Suite} args.suite
- * @param {number} args.status xcodebuild's exit status
- * @param {string} args.testLog where that log lives, for the failure message
- */
-function reportA11yPass({ log, suite, status, testLog }) {
-  const outcome = parseTestResults(log).get(A11Y_METHOD);
-  let trees;
-  let stabilityByCase;
-  try {
-    trees = parseIosA11yLog(log);
-    stabilityByCase = parseIosA11yStability(log);
-  } catch (error) {
-    // A line whose box did not parse means the format moved under the parser. That is a
-    // broken measurement, not a control's failure, so it fails the run outright rather
-    // than reporting fourteen cases as unmeasured.
-    const check = suite.beginAuxiliary(
-      A11Y_ID,
-      'the accessibility rule (XCUITest)'
-    );
-    check.abort(`${String(error?.message ?? error)} — see ${testLog}`);
-    return;
-  }
-  /** @type {string[]} */
-  const covered = [];
-  /** @type {string[]} */
-  const matched = [];
-  for (const entry of A11Y_CONTROLS) {
-    // A case with no lines was never measured. Saying `not measured` rather than staying
-    // quiet is the difference between a gap and a pass — the same rule `markMissing`
-    // applies to a control with no check.
-    const check = suite.beginAuxiliary(
-      `a11y:${entry.id}`,
-      `${entry.component} a11y (XCUITest)`
-    );
-    const nodes = trees.get(entry.id);
-    if (nodes == null || nodes.length === 0) {
-      check.check(
-        `no elements were printed for ${entry.id}, so this run never read its ` +
-          `accessibility tree (the pass reported "${String(
-            outcome?.outcome ?? 'nothing'
-          )}"; exit ${String(status)}). See ${testLog}`,
-        false
-      );
-      continue;
-    }
-    covered.push(entry.id);
-    // The stability line first, so it reads as the provenance of every box noted below it (X16
-    // item 4). A case that settled after two reads prints no line and gets no note; more reads
-    // than that, or no settle at all, is the interesting case and belongs in the report — a fix
-    // that retried its way to a green would otherwise be indistinguishable from a clean run.
-    // The wrapper's box is the one the stability line's `firstAnchor` describes — the Swift pass
-    // prints frames[0], which is the element it anchored on. Looked up by the anchor flag rather
-    // than by index, so the note cannot compare the first read's box against a descendant's.
-    reportIosStability(
-      check,
-      stabilityByCase.get(entry.id),
-      nodes.find((element) => element.anchor)?.frame ?? nodes[0]?.frame
-    );
-    for (const node of nodes) {
-      check.note(
-        `${node.type} id="${node.id}" label="${node.label}" ` +
-          `value="${node.value}" box ${iosBoxText(node.frame)}` +
-          `${node.anchor ? ' [the React Native wrapper]' : ''}`
-      );
-    }
-    const result = checkIosControlA11y(entry, nodes);
-    for (const problem of result.known) {
-      check.note(problem);
-    }
-    if (result.exempt) matched.push(entry.id);
-    // The line has to agree with the notes above it (X4 re-review, low). Printing "is named
-    // on one element, at the control's own box, as the slider it claims to be" with a
-    // `known failing (… announced as an other and not as a slider)` note two lines earlier
-    // is a ✓ that contradicts the finding: a reader who scans the verdict column, or a tool
-    // that greps for the ✓, gets the opposite of the run's own answer. So the passing line
-    // says which of the two kinds of pass this is, and the debt one says that the rule was
-    // answered *only* because a row excuses the finding.
-    check.check(
-      result.failures.length === 0
-        ? result.known.length === 0
-          ? `${entry.hybridView} is named on one element, at the control's own box, as ${
-              entry.iosTrait == null
-                ? 'a control'
-                : `the ${entry.iosTrait} it claims to be`
-            }`
-          : `${entry.hybridView} has no new a11y finding — and no clean pass either: ` +
-            `${String(result.known.length)} of its problems match a debt row, printed ` +
-            'above, so the rule is answered by the exemption rather than by the tree'
-        : result.failures.join(' | '),
-      result.failures.length === 0
-    );
-  }
-
-  const stale = staleExemptions(covered, matched, 'ios');
-  if (stale.length > 0) {
-    const check = suite.beginAuxiliary(
-      'a11y:ios-debt',
-      'the iOS a11y debt list still describes this code'
-    );
-    for (const line of stale) check.check(line, false);
-  }
-}
-
-/**
- * The tab-bar pass's section of the report: one line per tab, decided by
- * `checkTabTargets` from the boxes the Swift pass printed.
- *
- * A pass that printed nothing is a failure, never a quiet pass: every tab then reads
- * "never measured", and the method's own outcome is noted so the reader knows why.
- *
- * @param {object} args
- * @param {string} args.log the xcodebuild test log
- * @param {import('./support.mjs').Suite} args.suite
- * @param {number} args.status xcodebuild's exit status
- * @param {string} args.testLog
- */
-function reportTabTargets({ log, suite, status, testLog }) {
-  const check = suite.beginAuxiliary(
-    'tab-targets',
-    'every example tab is a 44 pt touch target (XCUITest)'
-  );
-  const outcome = parseTestResults(log).get(TAB_METHOD);
-  if (outcome?.outcome !== 'passed') {
-    check.note(
-      `${TAB_METHOD} reported "${String(outcome?.outcome ?? 'nothing')}" ` +
-        `(exit ${String(status)}); see ${testLog}`
-    );
-  }
-  const tabs = exampleTabs(
-    fs.readFileSync(path.resolve(iosDir(), '..', 'src', 'App.tsx'), 'utf8')
-  );
-  // One device pixel of slack, at the lease's @3x simulators.
-  for (const verdict of checkTabTargets({
-    platform: 'ios',
-    tabs,
-    measured: parseIosTabTargets(log),
-    strays: unreadTabTargetLines(log),
-    pixel: 1 / 3,
-  })) {
-    check.check(verdict.line, verdict.ok);
-  }
-}
-
-/**
- * @param {{x: number, y: number, width: number, height: number}} frame
- */
-function iosBoxText(frame) {
-  return `(${frame.x}, ${frame.y}, ${frame.width}x${frame.height})`;
 }
 
 process.exitCode = await main().catch((error) => {

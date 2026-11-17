@@ -171,9 +171,12 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Prints what a screen reader is told about each control. It measures and never fails a
-  /// case: the runner's log parser applies the rule to the printed lines.
+  /// case: the runner's log parser applies the rule to the printed lines. The runner names
+  /// the cases to read in `NITRO_UI_A11Y_CASES`, comma separated; unset reads them all.
   func testRealInputA11y() throws {
-    for one in A11yCase.all {
+    let only = ProcessInfo.processInfo.environment["NITRO_UI_A11Y_CASES"]
+      .map { Set($0.split(separator: ",").map(String.init)) }
+    for one in A11yCase.all where only?.contains(one.id) ?? true {
       do {
         try measure(one)
       } catch is RealInputCheckAborted {

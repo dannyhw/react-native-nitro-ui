@@ -212,7 +212,7 @@ export class Suite {
      * Logs for checks that are not about one control, so they cannot inflate the
      * control totals. See {@link beginAuxiliary}.
      *
-     * @type {Array<{ id: string, log: CheckLog }>}
+     * @type {Array<{ id: string, log: CheckLog, rerun: string[] | null }>}
      */
     this.auxiliary = [];
   }
@@ -253,12 +253,14 @@ export class Suite {
    *
    * @param {string} id
    * @param {string} title
+   * @param {{rerun?: string[]}} [options] `rerun`: the runner arguments that run this
+   *   check again on its own. Without them the check runs on every run, filtered or not.
    * @returns {CheckLog}
    */
-  beginAuxiliary(id, title) {
+  beginAuxiliary(id, title, { rerun } = {}) {
     const log = new CheckLog(title);
     console.log(`\n  ${id}: ${title}`);
-    this.auxiliary.push({ id, log });
+    this.auxiliary.push({ id, log, rerun: rerun == null ? null : [...rerun] });
     return log;
   }
 
@@ -277,6 +279,7 @@ export class Suite {
       auxiliary: this.auxiliary.map((entry) => ({
         id: entry.id,
         passed: entry.log.passed,
+        ...(entry.rerun == null ? {} : { rerun: entry.rerun }),
       })),
     };
   }
