@@ -68,20 +68,30 @@ class MenuModelTest {
   }
 
   @Test
-  fun everyPathThatReportsNothingStillClosesThePopup() {
+  fun aPressOnARowThatCannotBePickedAnswersNothingAndHoldsThePopupOpen() {
+    // "paste" is a disabled row, "share" a submenu's header and "no-such-row" absent:
+    // none of them is a pick, and an open menu stays open through none of them.
     for (id in listOf("paste", "share", "no-such-row")) {
       val events = mutableListOf<String>()
       val model = openModel(events)
       model.applyPick(id)
-      assertEquals("row \"$id\" reports nothing but closes the menu", listOf("close"), events)
-      assertFalse("row \"$id\" still took the menu down", model.expanded)
+      assertEquals("row \"$id\" reported something", emptyList<String>(), events)
+      assertTrue("row \"$id\" took the menu down", model.expanded)
     }
 
     val disabled = mutableListOf<String>()
     val model = openModel(disabled).apply { enabled = false }
     model.applyPick("copy")
-    assertEquals("a disabled control is inert, but the menu still comes down", listOf("close"), disabled)
-    assertFalse(model.expanded)
+    assertEquals("a disabled control is inert", emptyList<String>(), disabled)
+    assertTrue("a disabled control took its own menu down", model.expanded)
+
+    // The refusals above mean nothing unless this model does answer: an id it can pick
+    // reports once and takes the menu down.
+    val twin = mutableListOf<String>()
+    val enabled = openModel(twin)
+    enabled.applyPick("copy")
+    assertEquals(listOf("select:copy", "close"), twin)
+    assertFalse(enabled.expanded)
   }
 
   // `reset` writes `expanded` directly, not through `setOpen`: a recycled model must not

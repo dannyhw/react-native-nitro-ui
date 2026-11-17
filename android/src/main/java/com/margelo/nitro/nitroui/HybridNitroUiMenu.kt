@@ -359,26 +359,30 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     }
 
   /**
-   * Reports the pick, then closes. Every press closes the popup; only the report is refused,
-   * for a disabled control, a disabled row or an unknown id.
+   * Reports the pick, then closes. A press on a row that cannot be picked - a disabled row,
+   * an id the group does not hold, or any row of a disabled control - reports nothing and
+   * leaves the popup standing: Material swallows such a press the same way, so this is the
+   * one answer both the test hook and a real finger give.
    */
   fun applyPick(id: String) {
-    if (enabled) {
-      for (entry in entries) {
-        val candidates: List<MenuActionItem> =
-          when (entry) {
-            is MenuEntry.Action -> listOf(entry.item)
-            is MenuEntry.Submenu -> entry.item.items
-            is MenuEntry.Section -> entry.item.items
-          }
-        val row = candidates.firstOrNull { it.id == id } ?: continue
-        if (!row.disabled) {
-          onSelect?.invoke(row.id)
-        }
-        break
-      }
+    if (!enabled) {
+      return
     }
-    setOpen(false)
+    for (entry in entries) {
+      val candidates: List<MenuActionItem> =
+        when (entry) {
+          is MenuEntry.Action -> listOf(entry.item)
+          is MenuEntry.Submenu -> entry.item.items
+          is MenuEntry.Section -> entry.item.items
+        }
+      val row = candidates.firstOrNull { it.id == id } ?: continue
+      if (row.disabled) {
+        return
+      }
+      onSelect?.invoke(row.id)
+      setOpen(false)
+      return
+    }
   }
 
   /** The leading half was pressed: runs the app's primary action and never opens the list. */
