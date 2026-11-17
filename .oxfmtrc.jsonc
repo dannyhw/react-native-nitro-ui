@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "quoteProps": "consistent",
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "useTabs": false,
+  // package.json key order is ours to choose; tools rewrite parts of it.
+  "sortPackageJson": false,
+  // .gitignore is read as well, so these are only the tracked or vendored paths.
+  "ignorePatterns": [
+    "node_modules",
+    "lib",
+    "nitrogen/generated",
+    "coverage",
+    ".turbo",
+    // Research notes, task briefs and agent rules are kept as written.
+    "docs",
+    "AGENTS.md",
+    "example/ios/Pods",
+    "example/ios/build",
+    "example/android",
+    "android/build",
+    "example/**/__image_snapshots__",
+    "**/.harness",
+    "package-lock.json",
+    "bench/android",
+    "bench/ios/Pods",
+    "bench/ios/build",
+    "bench/dist",
+    "bench/.expo",
+    "example/vendor",
+    "**/Pods",
+    "**/.expo",
+    // api-extractor writes this report itself.
+    "etc/*.api.md",
+    // The registry writes nitro.json's autolinking section in its own layout;
+    // formatting it would make `registry` and `format` trade edits.
+    "nitro.json",
+    "example/.rnstorybook/storybook.requires.*",
+    // Byte-exact copies of CocoaPods output: a test compares their sha1 with the
+    // checksum in a committed Podfile.lock.
+    "scripts/__tests__/fixtures/x13-json-empty-array/*.podspec.json",
+  ],
+}

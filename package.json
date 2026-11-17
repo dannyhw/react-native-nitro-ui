@@ -55,8 +55,8 @@
     "lock:check": "node scripts/sync-example-lock.mjs",
     "typecheck": "tsc",
     "lint": "oxlint",
-    "format": "prettier --check .",
-    "format:write": "prettier --write .",
+    "format": "oxfmt --check",
+    "format:write": "oxfmt",
     "test": "jest",
     "test:native": "bash scripts/native-tests.sh",
     "test:native:android": "bash scripts/native-tests-android.sh",
@@ -139,7 +139,6 @@
     "nitrogen": "^0.37.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
-    "prettier": "^3.9.10",
     "publint": "^0.3.25",
     "react": "19.3.0",
     "react-native": "0.88.0",
@@ -185,13 +184,6 @@
         }
       ]
     ]
-  },
-  "prettier": {
-    "quoteProps": "consistent",
-    "singleQuote": true,
-    "tabWidth": 2,
-    "trailingComma": "es5",
-    "useTabs": false
   },
   "jest": {
     "preset": "@react-native/jest-preset",

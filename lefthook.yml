@@ -9,7 +9,7 @@ pre-commit:
       run: bunx --no-install oxlint {staged_files}
 
     format:
-      run: bunx --no-install prettier --check --ignore-unknown {staged_files}
+      run: bunx --no-install oxfmt --check --no-error-on-unmatched-pattern {staged_files}
 
     types:
       glob: '*.{js,ts,jsx,tsx}'

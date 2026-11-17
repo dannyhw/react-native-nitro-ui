@@ -3,7 +3,7 @@
   "changelog": "@changesets/changelog-git",
   "baseBranch": "main",
   "access": "public",
-  "format": "prettier",
+  "format": "oxfmt",
   "ignore": [
     "react-native-nitro-ui-example",
     "nitro-ui-bench",
