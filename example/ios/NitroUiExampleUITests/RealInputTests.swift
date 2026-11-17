@@ -220,11 +220,13 @@ final class RealInputTests: XCTestCase {
   /// single read of `XCUIElement.frame` can return a stale snapshot.
   private func measure(_ one: A11yCase) throws {
     try goToTab(one.tab, showing: one.screenAnchor)
-    bringIntoView(one.testId)
-    // `bringIntoView` has just found it, and `waitForExistence` takes a second to say so.
+    let dragged = bringIntoView(one.testId) > 0
+    // `waitForExistence` takes a second to answer even for an element that is there. After a
+    // drag that second is also what lets the scroll come to rest, so it is kept then.
     let onScreen = app.descendants(matching: .any)[one.testId].firstMatch
     let anchor =
-      onScreen.exists ? onScreen : try required(one.testId, as: "the control \"\(one.testId)\"")
+      !dragged && onScreen.exists
+      ? onScreen : try required(one.testId, as: "the control \"\(one.testId)\"")
     var snapshotError: Error?
     func readCase() -> A11ySnapshot {
       do {
@@ -282,10 +284,12 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Scrolls until an element is inside the window, without failing when the screen will not
-  /// bring it in: an element below the fold is still measured where it is.
-  private func bringIntoView(_ identifier: String) {
+  /// bring it in: an element below the fold is still measured where it is. Returns how many
+  /// drags it made.
+  @discardableResult
+  private func bringIntoView(_ identifier: String) -> Int {
     let node = app.descendants(matching: .any)[identifier].firstMatch
-    guard node.exists else { return }
+    guard node.exists else { return 0 }
     let window = app.windows.firstMatch.frame
 
     func inWindow() -> Bool {
@@ -311,6 +315,7 @@ final class RealInputTests: XCTestCase {
           + "not bring into view"
       )
     }
+    return steps
   }
 
   /// The cases, in the order of the shared table in `scripts/real-input/a11y.mjs`. A unit test
