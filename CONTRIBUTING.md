@@ -1063,9 +1063,9 @@ bun run hooks:install      # commit-msg runs commitlint; pre-commit runs oxlint,
 bun run hooks:uninstall    # remove them again
 ```
 
-The hooks call `bunx --no-install`, so they use that checkout's local binaries and fail instead
-of downloading a package. `pre-commit` typechecks the whole program; the gate that has to pass
-is `bun run check`.
+The lint, format and commit-message hooks call `bunx --no-install`, so they use that checkout's
+local binaries and fail instead of downloading a package. The type-check hook runs
+`bun run typecheck` over the whole program. The gate that has to pass is `bun run check`.
 
 ## Releasing
 
