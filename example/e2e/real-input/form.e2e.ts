@@ -11,6 +11,7 @@ import {
   reveal,
   tapBand,
   textOf,
+  type Point,
 } from './support';
 import { actsOnOneNamedNode } from './reader';
 import {
@@ -231,7 +232,7 @@ test('a tap on a control inside a pressing row is the control’s, and a tap bes
   await staysAt(screen, presses, '2');
 });
 
-test('a tap on React Native content inside a pressing row is that content’s alone', async ({
+test('a tap on React Native content inside a pressing row is answered by both, and the row keeps answering its own', async ({
   app,
   screen,
 }) => {
@@ -243,13 +244,17 @@ test('a tap on React Native content inside a pressing row is that content’s al
   const innerPresses = 'form-row-inner-inner-presses';
   await reveal(screen, row, { reads: [control] });
 
+  // The documented limit of the rule: a row gives its press up to a hosted control,
+  // and React Native content cannot be told apart from plain content in the row's
+  // box, so a `Pressable` inside a pressing row answers alongside the row. One tap,
+  // both counters — the reading that would be wrong is either control alone.
   await screen.tapAt(await centreOf(control));
   await expect(screen.getByTestId(innerPresses)).toHaveText('1');
-  await staysAt(screen, rowPresses, '0');
+  await staysAt(screen, rowPresses, '1');
 
   // And the row is not harmed by it: its own tap still presses it.
   await row.tap();
-  await expect(screen.getByTestId(rowPresses)).toHaveText('1');
+  await expect(screen.getByTestId(rowPresses)).toHaveText('2');
   await staysAt(screen, innerPresses, '1');
 });
 
@@ -269,7 +274,8 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   await reveal(screen, field);
   await screen.getByLabel('Keyboard avoidance').tap();
   await expect(avoid).toHaveText('no');
-  const atEnd = await restingBoxAtEnd(screen, ruler);
+  const path = await endDragPath(screen);
+  const atEnd = await restingBoxAtEnd(screen, ruler, path);
 
   await reveal(screen, field);
   const parked = await boxOf(field);
@@ -309,7 +315,7 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
     // The content at the end of the list is where it stood before the keyboard:
     // nothing was padded under it.
     const stillUp = await expectKeyboard();
-    const after = await restingBoxAtEnd(screen, ruler);
+    const after = await restingBoxAtEnd(screen, ruler, path);
     expect(
       Math.abs(after.y - atEnd.y),
       `the Form's content sits ${String(
@@ -342,6 +348,29 @@ async function staysAt(
 }
 
 /**
+ * The drag that pulls the list to its end, measured while nothing is above it.
+ *
+ * The path cannot be read once a keyboard is up: the IME's own window carries the
+ * same `android:id/content` id, so the content view is two nodes by then. The travel
+ * stays in the top half of the band, where a keyboard cannot be.
+ */
+async function endDragPath(
+  screen: Screen
+): Promise<{ from: Point; to: Point }> {
+  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
+  const band = await tapBand(screen);
+  if (content == null) {
+    throw new Error('real-input: the content view has no box to drag along.');
+  }
+  const span = band.bottom - band.top;
+  const from = {
+    x: content.x + content.width * 0.05,
+    y: band.top + span * 0.5,
+  };
+  return { from, to: { x: from.x, y: band.top + span * 0.1 } };
+}
+
+/**
  * Where a row comes to rest when the list is dragged to its end.
  *
  * Two drags that move the row no further is the end of the content: it is the one
@@ -350,20 +379,10 @@ async function staysAt(
  */
 async function restingBoxAtEnd(
   screen: Screen,
-  ruler: Locator
+  ruler: Locator,
+  path: { from: Point; to: Point }
 ): Promise<{ y: number; height: number }> {
-  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
-  if (content == null) {
-    throw new Error('real-input: the content view has no box to drag along.');
-  }
-  const band = await tapBand(screen);
-  const span = band.bottom - band.top;
-  // The travel stays in the top half of the band, where a keyboard cannot be.
-  const from = {
-    x: content.x + content.width * 0.05,
-    y: band.top + span * 0.5,
-  };
-  const to = { x: from.x, y: band.top + span * 0.1 };
+  const { from, to } = path;
   let last: { y: number; height: number } | null = null;
   let unmoved = 0;
   for (let dragNumber = 1; dragNumber <= 14; dragNumber += 1) {
