@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.os.Looper
 import android.os.Handler
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.ViewConfiguration
 import androidx.compose.foundation.interaction.PressInteraction
@@ -30,9 +32,11 @@ import kotlin.math.hypot
  * `Form.Row` on Android: a React Native view group whose children stay where Yoga put them.
  *
  * The row watches the gesture in `dispatchTouchEvent` and never intercepts it, so a `Switch`
- * or `Pressable` inside a row keeps its own touch. It draws nothing itself: the section's one
- * Compose layer draws the shape and the ripple behind all of its rows, fed a
- * `PressInteraction` from here.
+ * or `Pressable` inside a row keeps its own touch. A tap that lands on a hosted control is
+ * that control's alone and leaves the row's `onPress` un-fired; a tap on React Native content
+ * inside the row is answered by both, because nothing tells it apart from plain content.
+ * It draws nothing itself: the section's one Compose layer draws the shape and the ripple
+ * behind all of its rows, fed a `PressInteraction` from here.
  */
 internal class HybridNitroUiFormRow(
   private val reactContext: ThemedReactContext,
@@ -255,7 +259,7 @@ internal class NitroUiFormRowView(
       MotionEvent.ACTION_DOWN -> {
         downX = event.x
         downY = event.y
-        pending = hybrid.pressable
+        pending = hybrid.pressable && !hostedControlAt(event.x, event.y)
         if (pending) setPressed(true, event)
       }
 
@@ -278,6 +282,46 @@ internal class NitroUiFormRowView(
     }
     // Never consumed here: the children still get every event.
     return super.dispatchTouchEvent(event)
+  }
+
+  /**
+   * Whether a hosted nitro-ui view owns this point of the row.
+   *
+   * A control's root view is the one its View Manager tagged with `associated_hybrid_view_tag`,
+   * and React Native's own views are indistinguishable from plain content at this point, so
+   * only a hosted view takes the tap away from the row.
+   */
+  private fun hostedControlAt(
+    x: Float,
+    y: Float,
+  ): Boolean {
+    var target = deepestChildAt(this, x, y)
+    while (target != null && target !== this) {
+      if (target.getTag(associated_hybrid_view_tag) != null) return true
+      target = target.parent as? View
+    }
+    return false
+  }
+
+  /** The deepest visible descendant drawn over this point, in [parent]'s coordinates. */
+  private fun deepestChildAt(
+    parent: ViewGroup,
+    x: Float,
+    y: Float,
+  ): View? {
+    for (index in parent.childCount - 1 downTo 0) {
+      val child = parent.getChildAt(index)
+      if (child.visibility != View.VISIBLE || child.alpha <= 0f) continue
+      val left = child.left - parent.scrollX
+      val top = child.top - parent.scrollY
+      if (x < left || x >= left + child.width || y < top || y >= top + child.height) continue
+      if (child is ViewGroup) {
+        val deeper = deepestChildAt(child, x - left, y - top)
+        if (deeper != null) return deeper
+      }
+      return child
+    }
+    return null
   }
 
   private fun setPressed(
