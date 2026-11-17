@@ -35,14 +35,13 @@ const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
 const CONTENT_ROOT = 'android:id/content';
 
 /**
- * A row far enough from the end of the list to stay above a keyboard.
+ * The row the keyboard opt-out check measures where the list stands at its end.
  *
- * The check that opts out of keyboard avoidance compares where the list's content
- * stands when it is scrolled to its end, with a keyboard up and without one. A row
- * near the end sits behind the keyboard at that point, so the ruler has to be a row
- * the keyboard leaves in the open.
+ * It is the Form's own lowest testID rather than a text a screen draws: a box read
+ * through a text query costs seconds on this driver, and the check reads its ruler
+ * once per drag. Six rows hang below it, so it is in the open at the end of the list.
  */
-const CONTENT_RULER = 'Downloads';
+const CONTENT_RULER = 'form-note-field';
 
 /** How long a counter or a box is watched for a second value or a second move. */
 const SETTLE_MS = 500;
@@ -267,10 +266,10 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   const field = editableField(screen, 'Note');
   const focus = screen.getByTestId('form-field-focus');
   const avoid = screen.getByTestId('form-avoid-echo');
-  const ruler = screen.getByText(CONTENT_RULER);
+  const ruler = screen.getByTestId(CONTENT_RULER);
 
-  // The toggle is tapped first, while the page is still at its top: every scroll this
-  // check makes is one it needs, because a drag costs the test several seconds.
+  // The toggle is tapped first, while the page is still at its top: this check travels to
+  // the end of a long form twice, so it starts no further down it than it has to.
   await screen.getByLabel('Keyboard avoidance').tap();
   await expect(avoid).toHaveText('no');
 
@@ -334,8 +333,8 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
         Math.round(atEnd.y - after.y)
       )} px higher at the end of its list with the keyboard up (top ` +
         `${String(Math.round(stillUp.keyboardTop))} px) than with no keyboard, which ` +
-        `is what padding the "${CONTENT_RULER}" row with the keyboard's own height ` +
-        'does to it'
+        "is what padding the bottom of its scroll content by the keyboard's own " +
+        'height does to it'
     ).toBeLessThanOrEqual(12);
   });
 });
