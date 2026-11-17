@@ -36,7 +36,11 @@ export type IconButtonVariant = 'standard' | 'filled' | 'tonal' | 'outlined';
  * size.
  */
 export type IconButtonSize =
-  'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
+  | 'small'
+  | 'medium'
+  | 'large'
+  | 'xlarge'
+  | 'xxlarge';
 
 /**
  * How wide the control is for its size: Material's three width options.

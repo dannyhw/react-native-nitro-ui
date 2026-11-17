@@ -18,7 +18,8 @@ export interface A11ySweepLog {
 export interface A11ySweepNavigation {
   goToScreen(screen: string, log: A11ySweepLog): void | Promise<void>;
   dump():
-    ReadonlyArray<UiautomatorNode> | Promise<ReadonlyArray<UiautomatorNode>>;
+    | ReadonlyArray<UiautomatorNode>
+    | Promise<ReadonlyArray<UiautomatorNode>>;
   scrollPage(pixels: number): void | Promise<void>;
   scrollToTop(): void | Promise<void>;
 }

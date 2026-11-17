@@ -116,7 +116,11 @@ export function onRowPress(): void {
 function isSizedByContent(
   component: ComponentName
 ): component is
-  'button' | 'segmented-control' | 'date-picker' | 'picker' | 'menu' {
+  | 'button'
+  | 'segmented-control'
+  | 'date-picker'
+  | 'picker'
+  | 'menu' {
   return (
     component === 'button' ||
     component === 'segmented-control' ||

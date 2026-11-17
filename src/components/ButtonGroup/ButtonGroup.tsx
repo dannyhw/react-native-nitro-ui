@@ -36,7 +36,10 @@ export type ButtonGroupAppearance = 'standard' | 'connected';
  * value to make a screen look the same on both.
  */
 export type ButtonGroupLabelStyle =
-  'automatic' | 'titleOnly' | 'iconOnly' | 'titleAndIcon';
+  | 'automatic'
+  | 'titleOnly'
+  | 'iconOnly'
+  | 'titleAndIcon';
 
 /**
  * One item of a {@link ButtonGroup}. Items are data, not children, so the
