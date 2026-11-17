@@ -1,5 +1,5 @@
 import { test } from '@e2e-dev/mobile';
-import { expect, type Locator } from 'e2e';
+import { expect, type Locator, type Screen } from 'e2e';
 
 import { popupWindowCount } from './device-read';
 import { openScreen, reveal, type Point } from './support';
@@ -32,6 +32,9 @@ async function popupsReach(count: number, why: string): Promise<void> {
  * A point outside the open popup that lies on nothing: the page's own padding beside the
  * trigger. A popup is anchored under its trigger, so the trigger's band sits above the
  * popup's window, and no control of this page lies in that padding.
+ *
+ * It is read before the popup goes up: an open popup owns the window, so the page's own
+ * nodes are not in the tree a reader gets until it is down again.
  */
 async function besideThePopup(trigger: Locator): Promise<Point> {
   const box = await trigger.boundingBox();
@@ -44,6 +47,34 @@ async function besideThePopup(trigger: Locator): Promise<Point> {
     x: Math.max(2, box.x - OUTSIDE_MARGIN_PX),
     y: box.y + box.height / 2,
   };
+}
+
+/**
+ * The row a reader is told about, rather than the words drawn inside it: a row's own node
+ * is the one that carries its state — `disabled` among them — and `getByText` resolves to
+ * the text Material draws inside that node.
+ */
+async function rowOf(screen: Screen, title: string): Promise<Locator> {
+  const words = await screen.getByText(title).boundingBox();
+  if (words == null) {
+    throw new Error(`real-input: the "${title}" row has no box to look for.`);
+  }
+  for (const row of await screen.getByRole('button').all()) {
+    const box = await row.boundingBox();
+    if (
+      box != null &&
+      box.x <= words.x &&
+      box.y <= words.y &&
+      box.x + box.width >= words.x + words.width &&
+      box.y + box.height >= words.y + words.height
+    ) {
+      return row;
+    }
+  }
+  throw new Error(
+    `real-input: no button's box holds the "${title}" row, so its words are drawn ` +
+      'somewhere a person cannot press as a row.'
+  );
 }
 
 test('a real tap opens the Menu, a row reaches JS, and a disabled row takes nothing', async ({
@@ -77,11 +108,11 @@ test('a real tap opens the Menu, a row reaches JS, and a disabled row takes noth
   // The tap below aims at a row the tree itself calls disabled, beside one it calls
   // enabled: a reader is told what a finger finds out by pressing.
   expect(
-    await screen.getByText('Alpha').isEnabled(),
+    await (await rowOf(screen, 'Alpha')).isEnabled(),
     'the enabled row of an open menu does not report itself enabled'
   ).toBe(true);
   expect(
-    await locked.isDisabled(),
+    await (await rowOf(screen, 'Locked row')).isDisabled(),
     'the disabled row of an open menu does not report itself disabled: a person is ' +
       'offered a row that will not answer'
   ).toBe(true);
@@ -117,6 +148,9 @@ test('one tap outside closes the menu after a tap on its disabled row', async ({
   await reveal(screen, trigger);
   await expect(pick).toHaveText('-');
 
+  // Read while the page is still readable: the popup that is about to open owns the
+  // window, and a point outside it has to be aimed before it is up.
+  const outside = await besideThePopup(trigger);
   await trigger.tap();
   const locked = screen.getByText('Locked row');
   await locked.waitFor({ state: 'visible' });
@@ -127,7 +161,7 @@ test('one tap outside closes the menu after a tap on its disabled row', async ({
     'the tap on the disabled row took the popup down by itself'
   ).toBe(1);
 
-  await screen.tapAt(await besideThePopup(trigger));
+  await screen.tapAt(outside);
   await popupsReach(
     0,
     'the popup stood through the tap outside that followed a disabled-row tap'
