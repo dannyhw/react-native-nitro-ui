@@ -110,7 +110,7 @@
   },
   "author": "Daniel Williams <me@dannyhw.com> (https://github.com/dannyhw)",
   "license": "MIT",
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.4",
   "bugs": {
     "url": "https://github.com/dannyhw/react-native-nitro-ui/issues"
   },

@@ -50,10 +50,13 @@ describe('versions', () => {
     expect(cocoapodsProblem(null)).toBe('not installed');
   });
 
-  it('accepts another bun patch, warns on another minor, fails on none', () => {
-    expect(bunStatus('1.4.0', '1.4.2')).toBe('ok');
-    expect(bunStatus('1.4.0', '1.5.0')).toBe('warn');
-    expect(bunStatus('1.4.0', null)).toBe('fail');
+  it('accepts a newer bun patch, warns on a newer minor, fails on older or none', () => {
+    expect(bunStatus('1.4.4', '1.4.4')).toBe('ok');
+    expect(bunStatus('1.4.4', '1.4.6')).toBe('ok');
+    expect(bunStatus('1.4.4', '1.5.0')).toBe('warn');
+    expect(bunStatus('1.4.4', '1.4.3')).toBe('fail');
+    expect(bunStatus('1.4.4', '1.3.9')).toBe('fail');
+    expect(bunStatus('1.4.4', null)).toBe('fail');
   });
 });
 
