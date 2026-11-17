@@ -13,7 +13,7 @@ pre-commit:
 
     types:
       glob: '*.{js,ts,jsx,tsx}'
-      run: bunx --no-install tsc
+      run: bun run typecheck
 commit-msg:
   parallel: true
   commands:

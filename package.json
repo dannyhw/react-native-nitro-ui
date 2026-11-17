@@ -53,7 +53,7 @@
     "regen": "bun run registry && bun run nitrogen && bun run registry",
     "autolinking:check": "node scripts/check-autolinking.mjs",
     "lock:check": "node scripts/sync-example-lock.mjs",
-    "typecheck": "tsc",
+    "typecheck": "bun check --no-script --all",
     "lint": "oxlint",
     "format": "oxfmt --check",
     "format:write": "oxfmt",
