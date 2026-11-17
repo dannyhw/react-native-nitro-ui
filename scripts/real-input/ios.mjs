@@ -47,8 +47,9 @@ import {
   reportTabTargets,
 } from './ios-run.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
-import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
+import { currentCodeTree, recordBuild, repoRootOf } from '../app-stamp.mjs';
 import { iosModuleCacheArgs } from '../build-speed-lib.mjs';
+import { ccacheSetup } from '../ccache-setup.mjs';
 
 // One Node across every device gate: the harness cannot run on Node 25/26 at
 // all, so a real-input run on that runtime is not comparable evidence. When this
@@ -345,15 +346,18 @@ async function main() {
     const treeBefore = currentCodeTree();
     const destination = `platform=iOS Simulator,id=${device.udid}`;
     // Same arguments for both phases: a different build setting between them
-    // would make xcodebuild throw the whole build away.
-    // This suite compiles without ccache, so it names the module cache Xcode
-    // would have picked anyway: a `build-app.mjs` build in the same derived data
-    // has CCACHE_BASEDIR and compiles into its own, and a `.pcm` written by that
-    // environment makes this one report Foundation defined in two places.
-    const buildEnv = process.env;
+    // would make xcodebuild throw the whole build away. The compiler environment
+    // and module cache are the ones `build-app.mjs` uses in this derived data, so
+    // neither build recompiles what the other just compiled; a `.pcm` written
+    // under the other environment reports Foundation defined in two places.
+    const ccache = ccacheSetup({
+      repoRoot: repoRootOf(root),
+      warn: (message) => console.log(`  ${message}`),
+    });
+    const buildEnv = { ...process.env, ...ccache.env };
     const settings = [
       'CODE_SIGNING_ALLOWED=NO',
-      ...iosModuleCacheArgs({ derivedData: derived, ccache: false }),
+      ...iosModuleCacheArgs({ derivedData: derived, ccache: ccache.enabled }),
     ];
     const built = await xcodebuild(
       [

@@ -163,20 +163,22 @@ describe('iosModuleCacheDir', () => {
     // compile into the default cache with CCACHE_BASEDIR set.
     const read = (file) =>
       fs.readFileSync(path.resolve(process.cwd(), 'scripts', file), 'utf8');
-    const ccacheBuilders = ['build-app.mjs', 'bench/build.mjs'];
+    // The real-input build shares `build-app.mjs`'s derived data, so it compiles
+    // with the same environment and cache, or each build recompiles the other's.
+    const ccacheBuilders = [
+      'build-app.mjs',
+      'bench/build.mjs',
+      'real-input/ios.mjs',
+    ];
     for (const file of ccacheBuilders) {
       expect(read(file)).toContain('iosModuleCacheArgs(');
       expect(read(file)).toContain('ccache: ccache.enabled');
     }
-    // These compile without ccache, so each keeps the default name.
-    for (const file of ['real-input/ios.mjs', 'smoke/common.sh']) {
-      const text = read(file);
-      expect(text).not.toContain(CCACHE_MODULE_CACHE_NAME);
-      expect(text).not.toContain('ccache: true');
-    }
-    expect(read('real-input/ios.mjs')).toContain(
-      'iosModuleCacheArgs({ derivedData: derived, ccache: false })'
-    );
+    expect(read('real-input/ios.mjs')).toContain('...ccache.env');
+    // This compiles without ccache, so it keeps the default name.
+    const text = read('smoke/common.sh');
+    expect(text).not.toContain(CCACHE_MODULE_CACHE_NAME);
+    expect(text).not.toContain('ccache: true');
   });
 });
 
