@@ -263,7 +263,7 @@ final class RealInputTests: XCTestCase {
           } ?? "")
       )
     }
-    let nodes = settled.snapshot.withLiveReads(of: anchor).nodes
+    let nodes = try settled.snapshot.withLiveReads(of: anchor).nodes
     let anchorFrame = nodes[0].frame
     // The log parser reads these lines. The frame numbers are spelled out because the shape
     // of a `CGRect`'s description is not ours to rely on.
@@ -393,12 +393,28 @@ final class RealInputTests: XCTestCase {
     let nodes: [A11yNode]
 
     /// The same nodes with what a snapshot cannot answer read from the live elements, matched
-    /// by position: the anchor first, then its descendants in query order.
-    func withLiveReads(of anchor: XCUIElement) -> A11ySnapshot {
+    /// by position: the anchor first, then its descendants in query order. Throws when the live
+    /// tree no longer lines up with the snapshot, rather than reading one element into another.
+    func withLiveReads(of anchor: XCUIElement) throws -> A11ySnapshot {
       let descendants = anchor.descendants(matching: .any)
+      // Checked first: a property read on an index past the end fails the whole test method.
+      let liveCount = descendants.count + 1
+      guard liveCount == nodes.count else {
+        throw LiveTreeMismatch(
+          "the live tree has \(liveCount) elements where the settled read had \(nodes.count)"
+        )
+      }
       var read = nodes
       for index in read.indices {
         let live = index == 0 ? anchor : descendants.element(boundBy: index - 1)
+        let liveType = live.elementType
+        let liveId = live.identifier
+        guard liveType == read[index].elementType, liveId == read[index].identifier else {
+          throw LiveTreeMismatch(
+            "element \(index) is \(RealInputTests.traitName(liveType)) \"\(liveId)\" live "
+              + "but \(read[index].traitName) \"\(read[index].identifier)\" in the settled read"
+          )
+        }
         read[index].hittable = live.isHittable
         if A11yNode.liveValueTypes.contains(read[index].elementType) {
           read[index].valueText = A11yNode.text(of: live.value)
@@ -5970,6 +5986,12 @@ final class RealInputTests: XCTestCase {
 /// letting the next assertion run against nothing.
 private struct RealInputCheckAborted: Error {
   let identifier: String
+}
+
+/// The live elements no longer pair with the settled snapshot one for one.
+private struct LiveTreeMismatch: Error, CustomStringConvertible {
+  let description: String
+  init(_ description: String) { self.description = description }
 }
 
 

@@ -179,6 +179,22 @@ describe('reportA11yPass', () => {
     });
   });
 
+  it('a case whose live tree stopped pairing with its settled read fails, and the next case is still read', () => {
+    const suite = report(
+      [
+        'real-input a11y case=button kind=stability reads=3 settled=true moved=1 elapsedMs=2100 firstAnchorX=16.0 firstAnchorY=250.3 firstAnchorW=99.3 firstAnchorH=31.0',
+        'real-input a11y case=button | error | element 2 is button "" live but static text "" in the settled read',
+        ...SWITCH_LINES,
+        passed(A11Y_METHOD),
+      ].join('\n'),
+      ['switch', 'button']
+    );
+    expect(units(suite).results).toEqual({
+      'a11y:switch': 'pass',
+      'a11y:button': 'fail',
+    });
+  });
+
   it('a case that breaks the rule fails on its own', () => {
     const run = (label) =>
       units(
