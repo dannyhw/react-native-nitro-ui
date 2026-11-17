@@ -158,7 +158,7 @@ describe('steps that share an output are ordered', () => {
   });
 
   it('`nitrogen/` as a whole is a region, and lint/format are its readers (N5)', () => {
-    // ESLint and Prettier ignore `nitrogen/generated` only, so they walk the rest
+    // The linter and the formatter ignore `nitrogen/generated` only, so they walk the rest
     // of the directory that `prepare` deletes.
     const lint = CHECK_STEPS.find((step) => step.name === 'lint');
     const format = CHECK_STEPS.find((step) => step.name === 'format');
@@ -684,7 +684,7 @@ const line = (text) => fs.appendFileSync(trace, text + '\\n');
 // Wall clock on purpose, and plain arithmetic: the stamps are compared *across*
 // processes to see whether two steps overlapped, so a per-process monotonic
 // clock would not answer the question, and this fixture stays within the globals
-// the repo's eslint config gives scripts/.
+// the repo's lint config gives scripts/.
 const nowMs = () => Date.now();
 line('start ' + step + ' ' + nowMs() + ' stepsfile=' + (process.env.NITRO_UI_CHECK_STEPS_FILE ? 'set' : 'unset'));
 for (let i = 0; i < 20; i += 1) console.log(step + ':' + i);

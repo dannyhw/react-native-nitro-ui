@@ -53,7 +53,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [FINDINGS.nitrogenDir],
-    note: 'eslint over **/*.{js,mjs,ts,tsx}; ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
+    note: 'oxlint over the tree (.oxlintrc.json); ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
   },
   {
     name: 'format',
@@ -177,7 +177,7 @@ export function commandForStep(step) {
 
 /**
  * How many steps may run at once: half the cores, capped at `MAX_DEFAULT_JOBS`,
- * because the heavy steps (Jest, tsc, ESLint) already fan out across cores.
+ * because the heavy steps (Jest, tsc, oxlint) already fan out across cores.
  *
  * @param {number} parallelism `os.availableParallelism()` or `os.cpus().length`
  * @returns {number}
