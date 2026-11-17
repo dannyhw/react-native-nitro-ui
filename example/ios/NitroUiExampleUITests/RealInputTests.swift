@@ -126,6 +126,12 @@ final class RealInputTests: XCTestCase {
     static let formFieldValue = "form-field-value"
     static let formKeyboardInset = "form-keyboard-inset"
     static let formListGeometry = "form-list-geometry"
+    static let formRowSwitchPresses = "form-row-switch-presses"
+    static let formRowSwitchChanges = "form-row-switch-changes"
+    static let formRowSwitchValue = "form-row-switch-value"
+    static let formRowInnerPresses = "form-row-inner-presses"
+    static let formRowInnerInnerPresses = "form-row-inner-inner-presses"
+    static let formAvoidEcho = "form-avoid-echo"
   }
 
   /// The three titles of `real-input-picker`. None appears anywhere else on that screen, so a
@@ -5270,7 +5276,12 @@ final class RealInputTests: XCTestCase {
       from: try pressCount(Echo.formRowPresses)
     )
 
+    try assertPressInsideAPressingRow()
+    try assertPressInsideAPressingRowAnswersReactNativeContentToo()
+
     try assertFormKeepsFieldAboveKeyboard()
+
+    try assertFormWithoutAvoidanceLeavesItsContentAlone()
   }
 
   /// On iOS a `ListItem` is drawn by UIKit's `UIListContentView` inside a SwiftUI host. Inside
@@ -5900,6 +5911,258 @@ final class RealInputTests: XCTestCase {
         + "top edge \(keyboardTop): the inset that placed it there no longer keeps it on screen. "
         + "Before the scroll it sat \(frame) and the list reported \(geometryBefore); after it the "
         + "list reports \(rest.geometry)."
+    )
+  }
+
+  /// A tap inside a row that has `onPress` belongs to the control under the finger.
+  ///
+  /// The hosted `Switch` flips and reports its change once while the row's counter stays
+  /// where it was; the row answers a tap that lands beside the switch, before and after its
+  /// content has answered one.
+  private func assertPressInsideAPressingRow() throws {
+    try scrollIntoView("form-row-switch", as: "the form row with onPress and a switch")
+    let row = try required("form-row-switch", as: "the form row with onPress and a switch")
+    let control = try required("form-row-switch-control", as: "the Switch inside that row")
+    // The two taps have to be two points: a row whose middle is under the switch would make
+    // "the switch answered" and "the row answered" one observation.
+    XCTAssertGreaterThan(
+      control.frame.minX,
+      row.frame.midX + 8,
+      "the switch sits at \(control.frame) inside a row whose centre is \(row.frame.midX), so a "
+        + "tap on the middle of the row would land on the switch as well."
+    )
+    try assertEchoStays(Echo.formRowSwitchPresses, "0", as: "the row before any tap")
+
+    row.atFraction(0.05).fingerTap()
+    try assertEchoStays(Echo.formRowSwitchPresses, "1", as: "a tap on the row beside the switch")
+    try assertEchoStays(Echo.formRowSwitchValue, "off", as: "the switch beside a row that pressed")
+
+    control.fingerTap()
+    try assertEchoStays(Echo.formRowSwitchValue, "on", as: "the switch's own tap")
+    try assertEchoStays(Echo.formRowSwitchChanges, "1", as: "one change report for one tap")
+    try assertEchoStays(
+      Echo.formRowSwitchPresses,
+      "1",
+      as: "the row of a tap that belonged to its switch"
+    )
+
+    // The rule is "whosever touch this was", not a latch: the row answers again after its
+    // content did, and its content again after it.
+    row.atFraction(0.05).fingerTap()
+    try assertEchoStays(Echo.formRowSwitchPresses, "2", as: "the row again, after its switch")
+    control.fingerTap()
+    try assertEchoStays(Echo.formRowSwitchValue, "off", as: "the switch's second tap")
+    try assertEchoStays(Echo.formRowSwitchChanges, "2", as: "two change reports for two taps")
+    try assertEchoStays(
+      Echo.formRowSwitchPresses,
+      "2",
+      as: "the row, still untouched by its switch's taps"
+    )
+  }
+
+  /// What a row does with a tap on React Native content of its own.
+  ///
+  /// React Native's `Pressable` cannot be told apart from plain content in the row's box, so
+  /// the row answers the touch as well and both counters move. Documented behaviour, measured
+  /// so that the sentence in `docs/components/form.md` is a measurement and not a hope.
+  private func assertPressInsideAPressingRowAnswersReactNativeContentToo() throws {
+    try scrollIntoView("form-row-inner", as: "the form row with onPress and a pressable")
+    let row = try required("form-row-inner", as: "the form row with onPress and a pressable")
+    let control = try required("form-row-inner-control", as: "the Pressable inside that row")
+    try assertEchoStays(Echo.formRowInnerPresses, "0", as: "the row before any tap")
+    try assertEchoStays(Echo.formRowInnerInnerPresses, "0", as: "the pressable before any tap")
+
+    control.fingerTap()
+    try assertEchoStays(
+      Echo.formRowInnerInnerPresses,
+      "1",
+      as: "the React Native pressable inside a pressing row"
+    )
+    try assertEchoStays(
+      Echo.formRowInnerPresses,
+      "1",
+      as: "the row of a tap on React Native content inside it"
+    )
+
+    row.atFraction(0.05).fingerTap()
+    try assertEchoStays(Echo.formRowInnerPresses, "2", as: "the row's own tap, after the content's")
+    try assertEchoStays(
+      Echo.formRowInnerInnerPresses,
+      "1",
+      as: "the pressable of a tap that belonged to the row"
+    )
+  }
+
+  /// `keyboardAvoidance={false}`: the keyboard comes up and the Form's content does not move.
+  ///
+  /// Neither the height of the content nor its scroll offset, read from the list's own
+  /// numbers, and the field stays at the frame XCUITest measured before the focus.
+  private func assertFormWithoutAvoidanceLeavesItsContentAlone() throws {
+    // The check before this one ends with the keyboard up, and "nothing moved" needs a
+    // reading taken with nothing up.
+    try dismissKeyboard(as: "the keyboard the check before this one left up")
+
+    let avoid = try required("form-avoid-keyboard", as: "the keyboardAvoidance toggle")
+    try assertEchoStays(Echo.formAvoidEcho, "yes", as: "the Form before it is told to opt out")
+    avoid.fingerTap()
+    try assertEchoStays(
+      Echo.formAvoidEcho,
+      "no",
+      as: "the Form after a real tap turned its keyboard avoidance off"
+    )
+
+    try scrollIntoView("form-note-field", as: "the note field")
+    let field = try required("form-note-field", as: "the note field")
+    XCTAssertEqual(
+      try read(Echo.formFieldFocus),
+      "no",
+      "the note field should not be focused before this check taps it"
+    )
+    // The end of the list is where a reservation shows: content that grows under the last
+    // row is content that moved, and this is the one position the Form cannot argue about.
+    var atEnd = field.frame
+    for _ in 0..<12 {
+      app.swipeUp()
+      let after = field.frame
+      if after == atEnd { break }
+      atEnd = after
+    }
+    let before = settleFormKeyboard(field: field)
+    let offsetBefore = Self.geometryNumber(before.geometry, "off")
+    let heightBefore = Self.geometryNumber(before.geometry, "h")
+    XCTAssertNotNil(
+      offsetBefore,
+      "the Form's echoed geometry carries no `off=`, so the scroll offset cannot be asked: "
+        + "\(before.geometry)"
+    )
+    XCTAssertNotNil(
+      heightBefore,
+      "the Form's echoed geometry carries no `h=`, so the height of its content cannot be "
+        + "asked: \(before.geometry)"
+    )
+
+    try focusByTap(field, echo: Echo.formFieldFocus, as: "the note field with avoidance off")
+    let keyboard = app.keyboards.firstMatch
+    guard keyboard.waitForExistence(timeout: 5) else {
+      dumpHierarchy("no keyboard window after focusing the note field")
+      throw XCTSkip(
+        "nothing says a keyboard came up: XCUITest sees no keyboard window (a simulator with "
+          + "its hardware keyboard connected shows none), so there is no keyboard for the Form "
+          + "to leave alone. Not a pass: opting out of keyboard avoidance is unmeasured on this "
+          + "host."
+      )
+    }
+    let window = app.windows.firstMatch.frame
+    XCTAssertLessThan(
+      keyboard.frame.minY,
+      window.maxY - 120,
+      "the keyboard is only \(window.maxY - keyboard.frame.minY) pt tall, so a reservation for "
+        + "it would be a change nothing could see."
+    )
+
+    let after = settleFormKeyboard(field: field)
+    // The field's own frame is XCUITest's, not the Form's: the one witness here that cannot
+    // agree with a bug by construction.
+    XCTAssertLessThanOrEqual(
+      abs(after.frame.maxY - before.frame.maxY),
+      2,
+      "focusing the field moved it from \(before.frame) to \(after.frame) with keyboard "
+        + "avoidance off: the Form scrolled for a keyboard it was told to leave alone."
+    )
+    if let offsetBefore {
+      let offset = Self.geometryNumber(after.geometry, "off")
+      XCTAssertNotNil(offset, "the Form stopped echoing its scroll offset: \(after.geometry)")
+      if let offset {
+        XCTAssertLessThanOrEqual(
+          abs(offset - offsetBefore),
+          2,
+          "the list's content stands at offset \(offset) with the keyboard up and stood at "
+            + "\(offsetBefore) without one, with avoidance off: the Form moved its content for "
+            + "the keys. It reported \(before.geometry) and then \(after.geometry)."
+        )
+      }
+    }
+    if let heightBefore {
+      let height = Self.geometryNumber(after.geometry, "h")
+      XCTAssertNotNil(height, "the Form stopped echoing its content height: \(after.geometry)")
+      if let height {
+        XCTAssertLessThanOrEqual(
+          abs(height - heightBefore),
+          2,
+          "the Form's content is \(height) pt tall with the keyboard up and was \(heightBefore) "
+            + "pt without one, with avoidance off: it reserved a keyboard's worth of room that "
+            + "the app asked it not to. It reported \(before.geometry) and then \(after.geometry)."
+        )
+      }
+    }
+    let inset = Self.geometryNumber(after.geometry, "ib")
+    XCTAssertNotNil(inset, "the Form's echoed geometry carries no `ib=`: \(after.geometry)")
+    if let inset {
+      XCTAssertLessThanOrEqual(
+        inset,
+        0.5,
+        "the Form asked its list for a bottom inset of \(inset) for the keyboard after the app "
+          + "turned its avoidance off (\(Echo.formAvoidEcho) reads "
+          + "\"\(echoText(Echo.formAvoidEcho))\"): it reserves room it was told to leave to the "
+          + "app. The list reported \(after.geometry)."
+      )
+    }
+
+    try dismissKeyboard(as: "the keyboard this check raised")
+  }
+
+  /// Take the keyboard away again, and prove it went.
+  ///
+  /// A single-line field blurs when its return key is pressed, and the Form's list carries the
+  /// keyboard down with an interactive drag; both are tried because what follows reads the
+  /// content's position with no keyboard up.
+  private func dismissKeyboard(as what: String) throws {
+    let keyboard = app.keyboards.firstMatch
+    guard keyboard.waitForExistence(timeout: 1) else { return }
+    for _ in 0..<4 {
+      guard keyboard.exists else { break }
+      let key = keyboard.buttons.matching(
+        NSPredicate(
+          format: "label == 'return' OR label == 'Return' OR label == 'Done' "
+            + "OR identifier == 'return' OR identifier == 'done'"
+        )
+      ).firstMatch
+      if key.exists {
+        key.tap()
+      } else {
+        let anchor = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        anchor.press(forDuration: 0.3, thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: 160)))
+      }
+      _ = waitUntil({ !keyboard.exists }, window: 2)
+    }
+    guard !keyboard.exists else {
+      dumpHierarchy("\(what): the keyboard is still up")
+      XCTFail(
+        "\(what) is still up after a return key and three downward drags, so a reading taken "
+          + "after it is a reading with a keyboard in it."
+      )
+      throw RealInputCheckAborted(identifier: "keyboard")
+    }
+  }
+
+  /// Wait for an echo to read `wanted`, then require that it keeps reading it.
+  ///
+  /// A press that arrives late is still a second press, and one correct reading does not
+  /// rule out a second one behind it.
+  private func assertEchoStays(_ identifier: String, _ wanted: String, as what: String) throws {
+    if !waitUntil({ self.echoText(identifier) == wanted }, window: reactTimeout) {
+      dumpHierarchy("echo \(identifier) never read \(wanted)")
+      XCTFail(
+        "\(what): \"\(identifier)\" should read \"\(wanted)\"; it reads "
+          + "\"\(echoText(identifier))\" after \(Int(reactTimeout))s."
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
+    let moved = waitUntil({ self.echoText(identifier) != wanted }, window: 1)
+    XCTAssertFalse(
+      moved,
+      "\"\(identifier)\" moved off \"\(wanted)\" while the screen was watched — it now "
+        + "reads \"\(echoText(identifier))\"."
     )
   }
 
