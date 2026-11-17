@@ -1,0 +1,44 @@
+node_modules
+lib
+nitrogen/generated
+coverage
+.turbo
+# oxfmt reads this file (and .gitignore) as its ignore list.
+# Inputs owned outside this task: the research notes, task briefs and agent
+# rules are source material, and formatting them would rewrite other people's
+# files. Same reason `docs/` is in the oxlint ignore list.
+docs
+AGENTS.md
+example/ios/Pods
+example/ios/build
+example/android
+android/build
+example/**/__image_snapshots__
+**/.harness
+package-lock.json
+# Future T02 bench app: same generated/vendored outputs as the example app.
+bench/android
+bench/ios/Pods
+bench/ios/build
+bench/dist
+bench/.expo
+# bundler's gem install path.
+example/vendor
+**/Pods
+**/.expo
+
+# api-extractor writes this report itself; the formatter would restyle its tables.
+etc/*.api.md
+
+# The registry writes nitro.json's autolinking section in its own layout;
+# ignoring it keeps `registry` and `format` from trading edits.
+nitro.json
+
+# Storybook's generated requires file (S1) - see .gitignore.
+example/.rnstorybook/storybook.requires.*
+
+# X13's fixtures are the byte-exact `Pods/Local Podspecs/*.podspec.json` files a
+# maintainer Mac wrote, and the test asserts `sha1(file)` equals the checksum in
+# the committed Podfile.lock. The formatter reflows the JSON, which changes those
+# bytes and makes the proof of the root cause false. Byte-exact is the fixture.
+scripts/__tests__/fixtures/x13-json-empty-array/*.podspec.json

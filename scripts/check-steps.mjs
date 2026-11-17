@@ -61,7 +61,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [FINDINGS.nitrogenDir],
-    note: 'oxfmt --check; .oxfmtrc.jsonc ignores lib, nitrogen/generated, .turbo, and oxfmt also reads .gitignore - but not nitrogen/ as a whole',
+    note: 'oxfmt --check; .prettierignore covers lib, nitrogen/generated, .turbo, and oxfmt also reads .gitignore - but not nitrogen/ as a whole',
   },
   {
     name: 'test',
