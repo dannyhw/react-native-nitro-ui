@@ -275,14 +275,19 @@ function runE2E({ files, env }) {
   ];
   // The runner's own stdout: e2e's list reporter is the readable half of the
   // gate log, and the JSON report is the half this file turns into a verdict.
-  const result = spawnSync(process.execPath, argv, {
+  // `bun <file>` runs the CLI on the bun runtime whatever its `node` shebang
+  // says, and the mobile driver's daemon then starts on bun too. e2e needs bun
+  // 1.4.3 or newer, which `packageManager` pins.
+  const result = spawnSync('bun', argv, {
     cwd: path.join(root, E2E_DIR),
     env,
     stdio: 'inherit',
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.error != null) {
-    throw new Error(`real-input: e2e could not start: ${String(result.error)}`);
+    throw new Error(
+      `real-input: e2e could not start on bun (is bun on PATH?): ${String(result.error)}`
+    );
   }
   /** @type {any} */
   let report = null;
