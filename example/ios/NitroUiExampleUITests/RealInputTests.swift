@@ -5966,8 +5966,8 @@ final class RealInputTests: XCTestCase {
   /// What a row does with a tap on React Native content of its own.
   ///
   /// React Native's `Pressable` cannot be told apart from plain content in the row's box, so
-  /// the row answers the touch as well and both counters move. Documented behaviour, measured
-  /// so that the sentence in `docs/components/form.md` is a measurement and not a hope.
+  /// the row answers the touch as well and both counters move: one tap on the pressable is one
+  /// press for the row and one for the pressable, and the next tap beside it is the row's alone.
   private func assertPressInsideAPressingRowAnswersReactNativeContentToo() throws {
     try scrollIntoView("form-row-inner", as: "the form row with onPress and a pressable")
     let row = try required("form-row-inner", as: "the form row with onPress and a pressable")

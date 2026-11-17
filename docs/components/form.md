@@ -73,14 +73,18 @@ app names the component only to add `onPress` or an accessory. A row without
 accessibility element and its own touches.
 
 A row *with* `onPress` answers the taps that land on it and gives up the ones that land
-on a nitro-ui control inside it: a `Switch` in a pressing row flips and reports its
-change once, and the row's `onPress` does not fire — the same division as a switch
-trailing a Material `ListItem`. It is one touch, not two, so the row goes back to
-answering the next tap that lands beside the control. React Native's own content is the
-exception, and it is visible: a `Pressable`, `Switch` or `TextInput` of React Native's
-inside a pressing row answers the tap *and* presses the row, because nothing tells such
-a view apart from plain row content at the moment the touch arrives. Aim a control that
-must not press the row at a row without `onPress`.
+on what nitro-ui draws itself inside it: a `Switch` in a pressing row flips and reports
+its change once, and the row's `onPress` does not fire — the same division as a switch
+trailing a Material `ListItem`. Being interactive is not the test — a `Progress` in the
+row takes the tap just as a `Switch` does, because the row cannot see past the
+platform's own view to ask. A component that only holds your children, a `ContextMenu`
+around a `Text` for instance, draws nothing under the finger, so its row answers that
+tap. And it is one touch, not two, so the row goes back to answering the next tap that
+lands beside the control. React Native's own content is the exception, and it is
+visible: a `Pressable`, `Switch` or `TextInput` of React Native's inside a pressing row
+answers the tap *and* presses the row, because nothing tells such a view apart from
+plain row content at the moment the touch arrives. Put a control that must not press the
+row in a row without `onPress`.
 
 `Form.Row` is a direct child of `Form` or `Form.Section` — see Rows.
 

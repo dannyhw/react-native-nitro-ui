@@ -293,10 +293,12 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   // MARK: UIGestureRecognizerDelegate
 
   override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    // Asked about any other recognizer, the row answers as it always did: only a row that was
+    // given `onPress` lets one begin.
+    guard gestureRecognizer === pressGesture else { return isPressable }
     // A touch that lands on a hosted control inside the row is that control's, and the row
     // leaves it: the recognizer never begins, so nothing is cancelled for the control either.
-    gestureRecognizer === pressGesture && isPressable
-      && !hostedControlCovers(pressGesture.location(in: container))
+    return isPressable && !hostedControlCovers(pressGesture.location(in: container))
   }
 
   /// Whether a hosted control's box holds this point of the container.
