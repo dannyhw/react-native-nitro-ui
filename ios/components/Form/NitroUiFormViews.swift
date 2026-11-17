@@ -293,7 +293,36 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   // MARK: UIGestureRecognizerDelegate
 
   override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-    isPressable
+    // A touch that lands on a hosted control inside the row is that control's, and the row
+    // leaves it: the recognizer never begins, so nothing is cancelled for the control either.
+    gestureRecognizer === pressGesture && isPressable
+      && !hostedControlCovers(pressGesture.location(in: container))
+  }
+
+  /// Whether a hosted control's box holds this point of the container.
+  private func hostedControlCovers(_ point: CGPoint) -> Bool {
+    var current: UIView? = deepestSubview(of: container, at: point)
+    while let view = current, view !== container {
+      if view is NitroUiHostedControl { return true }
+      current = view.superview
+    }
+    return false
+  }
+
+  /// The deepest visible subview whose frame holds `point`, in `parent`'s coordinates.
+  ///
+  /// Geometric rather than `hitTest`: a React Native subtree reports no touch owner until the
+  /// release, so a hosted view's box is the only sign available while the touch is still down.
+  private func deepestSubview(of parent: UIView, at point: CGPoint) -> UIView? {
+    for subview in parent.subviews.reversed() {
+      guard !subview.isHidden, subview.alpha > 0.01, !subview.frame.isEmpty else { continue }
+      guard subview.frame.contains(point) else { continue }
+      if let deeper = deepestSubview(of: subview, at: subview.convert(point, from: parent)) {
+        return deeper
+      }
+      return subview
+    }
+    return nil
   }
 
   func gestureRecognizer(
