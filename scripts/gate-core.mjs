@@ -236,7 +236,9 @@ export const TOOLING_FILES = [
   // rule would call both platforms, but no app code imports it.
   'example/src/readme-examples.tsx',
   // Wires `eslint-rules/` to the files it checks; no build reads it.
-  'eslint.config.mjs',
+  '.oxlintrc.json',
+  // The formatter's options; no build reads it.
+  '.oxfmtrc.jsonc',
   '.gitignore',
   '.prettierignore',
 ];
