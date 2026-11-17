@@ -222,14 +222,16 @@ final class RealInputTests: XCTestCase {
     try goToTab(one.tab, showing: one.screenAnchor)
     bringIntoView(one.testId)
     let anchor = try required(one.testId, as: "the control \"\(one.testId)\"")
+    var snapshotError: Error?
     func readCase() -> A11ySnapshot {
-      A11ySnapshot(
-        nodes: [A11yNode(element: anchor)]
-          + anchor
-            .descendants(matching: .any)
-            .allElementsBoundByIndex
-            .map(A11yNode.init(element:))
-      )
+      do {
+        let nodes = try A11yNode.tree(of: anchor)
+        snapshotError = nil
+        return A11ySnapshot(nodes: nodes)
+      } catch {
+        snapshotError = error
+        return A11ySnapshot(nodes: [])
+      }
     }
 
     let settled = A11yFrameStability.settle(
@@ -238,6 +240,7 @@ final class RealInputTests: XCTestCase {
       confirmationNeeded: { $0.mergedChildrenInQuestion },
       read: readCase
     )
+    if let snapshotError { throw snapshotError }
     // Printed only when the reads disagreed. `firstAnchor*` is the box a single read would
     // have reported.
     if A11yFrameStability.shouldReport(settled) {
@@ -252,7 +255,7 @@ final class RealInputTests: XCTestCase {
           } ?? "")
       )
     }
-    let nodes = settled.snapshot.nodes
+    let nodes = settled.snapshot.withHittable(of: anchor).nodes
     let anchorFrame = nodes[0].frame
     // The log parser reads these lines. The frame numbers are spelled out because the shape
     // of a `CGRect`'s description is not ours to rely on.
@@ -378,6 +381,18 @@ final class RealInputTests: XCTestCase {
   private struct A11ySnapshot {
     let nodes: [A11yNode]
 
+    /// The same nodes with `hittable` read from the live elements, matched by position: the
+    /// anchor first, then its descendants in query order.
+    func withHittable(of anchor: XCUIElement) -> A11ySnapshot {
+      let descendants = anchor.descendants(matching: .any)
+      var read = nodes
+      for index in read.indices {
+        read[index].hittable =
+          index == 0 ? anchor.isHittable : descendants.element(boundBy: index - 1).isHittable
+      }
+      return A11ySnapshot(nodes: read)
+    }
+
     var frames: [CGRect] { nodes.map(\.frame) }
 
     /// One string per element: trait, name and value. Not deduplicated, because the runner
@@ -397,15 +412,17 @@ final class RealInputTests: XCTestCase {
     }
   }
 
-  /// One read of one accessibility element. Every property is a round trip to the test
-  /// manager, so a subtree is captured in one pass.
+  /// One accessibility element. Each property of a live `XCUIElement` is a round trip to the
+  /// test manager; a snapshot of a subtree is one for the whole subtree.
   private struct A11yNode {
     let identifier: String
     let label: String
     let elementType: XCUIElement.ElementType
     let frame: CGRect
     let enabled: Bool
-    let hittable: Bool
+    /// A snapshot cannot say whether a touch would land on the element, so for one this is
+    /// read from the live element once the tree has settled, and is `false` until then.
+    var hittable: Bool
     let selected: Bool
     let valueText: String
 
@@ -419,6 +436,27 @@ final class RealInputTests: XCTestCase {
       selected = element.isSelected
       let raw = element.value
       valueText = (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+    }
+
+    init(snapshot: XCUIElementSnapshot) {
+      identifier = snapshot.identifier
+      label = snapshot.label
+      elementType = snapshot.elementType
+      frame = snapshot.frame
+      enabled = snapshot.isEnabled
+      hittable = false
+      selected = snapshot.isSelected
+      let raw = snapshot.value
+      valueText = (raw as? String) ?? (raw == nil ? "" : "\(String(describing: raw))")
+    }
+
+    /// The element and every descendant, depth first, which is the order
+    /// `descendants(matching: .any)` lists them in.
+    static func tree(of element: XCUIElement) throws -> [A11yNode] {
+      func walk(_ node: XCUIElementSnapshot) -> [A11yNode] {
+        [A11yNode(snapshot: node)] + node.children.flatMap(walk)
+      }
+      return walk(try element.snapshot())
     }
 
     var traitName: String {
