@@ -1,5 +1,5 @@
 /**
- * Jest's `globalSetup` (named in `package.json`): removes this shell's device lease from the
+ * Vitest's `globalSetup` (named in `vitest.config.mjs`): removes this shell's device lease from the
  * environment before any test file runs, so no worker or spawned child inherits it.
  */
 

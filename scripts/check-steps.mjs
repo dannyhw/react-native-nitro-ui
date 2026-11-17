@@ -5,7 +5,7 @@
 
 /**
  * The regions steps declare in `writes`/`reads`. `prepare` (bob) deletes and
- * regenerates `nitrogen/` before it writes `lib/`, and `test` and `perf:renders`
+ * regenerates `nitrogen/` before it writes `lib/`, and `test:library` and `perf:renders`
  * share one Jest haste-map cache file that is written without a lock.
  */
 export const FINDINGS = Object.freeze({
@@ -64,12 +64,12 @@ export const CHECK_STEPS = Object.freeze([
     note: 'oxfmt --check; .prettierignore covers lib, nitrogen/generated, .turbo, and oxfmt also reads .gitignore - but not nitrogen/ as a whole',
   },
   {
-    name: 'test',
+    name: 'test:library',
     needs: [],
     group: 'jest',
     writes: [FINDINGS.jestCache],
     reads: [FINDINGS.generatedDir],
-    note: 'jest; reads nitrogen/generated/shared/json via src/__tests__/viewConfigs.test.ts, ignores lib/',
+    note: 'jest over src/__tests__; reads nitrogen/generated/shared/json via src/__tests__/viewConfigs.test.ts, ignores lib/',
   },
   {
     name: 'test:native',
@@ -78,6 +78,14 @@ export const CHECK_STEPS = Object.freeze([
     writes: ['tmp:nitro-ui-native-tests'],
     reads: [],
     note: 'clang/swiftc into $TMPDIR/nitro-ui-native-tests-$$ - the $$ makes it per-process',
+  },
+  {
+    name: 'test:tooling',
+    needs: [],
+    group: null,
+    writes: ['node_modules/.vite'],
+    reads: [],
+    note: 'vitest over scripts/__tests__ and eslint-rules/__tests__ (vitest.config.mjs); its results cache is node_modules/.vite/vitest',
   },
   {
     name: 'test:native:android',
@@ -124,7 +132,7 @@ export const CHECK_STEPS = Object.freeze([
     needs: [
       'lock:check',
       'nitrogen:check',
-      'test',
+      'test:library',
       'perf:renders',
       'test:native:android',
       // These two ignore only `nitrogen/generated`, so they read the rest of

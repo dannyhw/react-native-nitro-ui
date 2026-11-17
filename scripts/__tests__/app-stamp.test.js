@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdtempSync, writeFileSync } from 'node:fs';

@@ -328,7 +328,9 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - Menu and ContextMenu (Android): the test hook's pick of a disabled row closes the popup (`applyPick`), where a real press closes nothing. Making the hook answer nothing needs a dismiss hook first: no harness press reaches the popup's window, so the pick path is the only close `Menu.harness.tsx` has.
 - `menu.e2e.ts`: the enabled-row read passes for any node with no disabled state, so it does not prove the right node was found; and "the tap on the disabled row took the popup down by itself" has not been shown red.
 - Menu: what TalkBack says aloud about a row the tree marks disabled is untested.
-- JS tooling, open after the move to oxlint, oxfmt and `bun check`:
+- JS tooling, open after the move to oxlint, oxfmt, `bun check` and Vitest:
+  - `check` is now bounded by `scripts/__tests__/gate.test.js` (about 55 s) and `gate-logs.test.js` (about 51 s), which wait on child processes, and by the native unit tests. Splitting the two files would shorten it on either runner.
+  - The library tests stay on Jest. Moving them saves about 2 s and needs `vitest-native`, a pre-1.0 package that supports React Native 0.86 to 0.88 only.
   - `bun check` uses the TypeScript built into bun (7), not the installed `typescript` (6). CI pins bun 1.4.4 exactly and `doctor` accepts a newer one, so a local bun upgrade can change type results with no `tsc` run left to show it.
   - The custom lint rules' unit tests run on ESLint's parser while oxlint runs the rules on its own; ESLint and `@typescript-eslint/parser` stay installed for that test alone. Under oxlint `eslint-comments/no-aggregating-enable` reports at the last `eslint-disable` comment, where ESLint reported at the `eslint-enable`.
   - oxlint raises 13 `no-path-concat` warnings and a few others (empty `if` blocks, a bare `eslint-enable`) that ESLint did not; none fails lint.

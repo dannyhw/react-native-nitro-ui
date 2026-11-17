@@ -64,16 +64,17 @@ export function isCiRunner(env) {
 
 /**
  * Free space as the gate reads it: the measured value, which no variable can
- * raise. Under jest (`JEST_WORKER_ID`, inherited by a spawned CLI) the measurement
- * is ignored so a nearly-full disk cannot fail a suite; a test names a value in
- * `NITRO_UI_GATE_FREE_DISK_GB` or gets `null`.
+ * raise. Under a test runner (`JEST_WORKER_ID` or `VITEST_WORKER_ID`, inherited by a
+ * spawned CLI) the measurement is ignored so a nearly-full disk cannot fail a suite;
+ * a test names a value in `NITRO_UI_GATE_FREE_DISK_GB` or gets `null`.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {number | null} measuredGb
  * @returns {number | null}
  */
 export function freeDiskGbFrom(env, measuredGb) {
-  if (env.JEST_WORKER_ID == null) return measuredGb;
+  if (env.JEST_WORKER_ID == null && env.VITEST_WORKER_ID == null)
+    return measuredGb;
   const forced = String(env.NITRO_UI_GATE_FREE_DISK_GB ?? '').trim();
   if (forced !== '' && Number.isFinite(Number(forced))) return Number(forced);
   return null;

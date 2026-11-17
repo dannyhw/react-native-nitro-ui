@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-17 Nothing user-visible: the tooling unit tests run on Vitest, which takes `check` from
+  about 89 s to about 60 s; the library tests stay on Jest (X53, #94).
 - 11-17 Nothing user-visible: lint runs on oxlint, format on oxfmt and type checks on
   `bun check`, each well under a second where they took 3 to 7; the Android e2e suite starts on
   bun (X52, #93).

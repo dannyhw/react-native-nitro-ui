@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 import {

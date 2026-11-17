@@ -1,4 +1,5 @@
 import { RuleTester } from 'eslint';
+import { describe, it } from 'vitest';
 import * as tsParserModule from '@typescript-eslint/parser';
 
 import nitroUi from '../index.js';
@@ -9,6 +10,10 @@ const parser =
   typeof tsParserModule.parseForESLint === 'function'
     ? tsParserModule
     : tsParserModule.default;
+
+RuleTester.describe = describe;
+RuleTester.it = it;
+RuleTester.itOnly = it.only;
 
 const ruleTester = new RuleTester({
   languageOptions: {
