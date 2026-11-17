@@ -11,6 +11,7 @@ import {
   reveal,
   tapBand,
   textOf,
+  type Box,
   type Point,
 } from './support';
 import { actsOnOneNamedNode } from './reader';
@@ -35,13 +36,13 @@ const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
 const CONTENT_ROOT = 'android:id/content';
 
 /**
- * The row the keyboard opt-out check measures where the list stands at its end.
+ * The last row the Form draws — the ruler the keyboard opt-out check measures.
  *
- * It is the Form's own lowest testID rather than a text a screen draws: a box read
- * through a text query costs seconds on this driver, and the check reads its ruler
- * once per drag. Six rows hang below it, so it is in the open at the end of the list.
+ * It has to be the last row and not merely a low one: a row the list can scroll past
+ * is not in the tree at all once the list is at its end, and a box read on a node that
+ * is not there costs the driver its whole action timeout.
  */
-const CONTENT_RULER = 'form-note-field';
+const CONTENT_RULER = 'Diagnostics log';
 
 /** How long a counter or a box is watched for a second value or a second move. */
 const SETTLE_MS = 500;
@@ -266,7 +267,7 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   const field = editableField(screen, 'Note');
   const focus = screen.getByTestId('form-field-focus');
   const avoid = screen.getByTestId('form-avoid-echo');
-  const ruler = screen.getByTestId(CONTENT_RULER);
+  const ruler = screen.getByText(CONTENT_RULER);
 
   // The toggle is tapped first, while the page is still at its top: this check travels to
   // the end of a long form twice, so it starts no further down it than it has to.
@@ -282,7 +283,7 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
   // Back to the field, and its box is taken once it is in reach: this is where it has
   // to stay, whatever the keyboard does to the content below it.
   await reveal(screen, field);
-  const parked = await boxOf(field);
+  const parked = await boxIfPresent(field);
   if (parked == null) {
     throw new Error(
       'real-input: the Note field has no box to watch for a move.'
@@ -309,7 +310,7 @@ test('opting out of keyboard avoidance leaves the content and its offset alone',
     // The field is where it was parked: no scroll for a keyboard the Form was told to
     // leave alone. Read again after the list has been travelled below, so a late scroll
     // has had half a minute to arrive.
-    const afterFocus = await boxOf(field);
+    const afterFocus = await boxIfPresent(field);
     if (afterFocus == null) {
       throw new Error(
         `real-input: the focused Note field left the tree; it was parked at ` +
@@ -359,6 +360,17 @@ async function staysAt(
 }
 
 /**
+ * A node's box, or `null` at once when it is not in the tree.
+ *
+ * `boundingBox` waits for a node to appear, and a row the list has recycled away never
+ * does, so a scroll search that reads it blind pays the action timeout per read.
+ */
+async function boxIfPresent(locator: Locator): Promise<Box | null> {
+  if ((await locator.count()) === 0) return null;
+  return boxOf(locator);
+}
+
+/**
  * The drag that pulls the list to its end, measured while nothing is above it.
  *
  * The path cannot be read once a keyboard is up: the IME's own window carries the
@@ -398,7 +410,7 @@ async function restingBoxAtEnd(
   let unmoved = 0;
   for (let dragNumber = 1; dragNumber <= 14; dragNumber += 1) {
     await drag(screen, from, to, 500);
-    const box = await boxOf(ruler);
+    const box = await boxIfPresent(ruler);
     if (box == null) {
       unmoved = 0;
       last = null;
