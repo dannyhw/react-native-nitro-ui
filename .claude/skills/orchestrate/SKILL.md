@@ -102,7 +102,7 @@ or provider error. After that, replan around it.
 
 - Merge ready branches as one train with one run of the merge gates. Hold a branch a few
   hours to share a run rather than re-gate each.
-- Name the merge branch `merge/<name>` (`merge/train`, `merge/x55`), never `task/<ID>-...`:
+- Name the merge branch `merge/<name>` (such as `merge/train`), never `task/<ID>-...`:
   a `task/` branch under HEAD keeps that task's records, so `task-records.mjs --archive`
   would leave them on `main`.
 - Run `node scripts/gate.mjs need --for merge` as its own command and read it. Never pipe
