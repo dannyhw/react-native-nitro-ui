@@ -71,7 +71,9 @@ Native's `TextInput` does: the suggestion strip goes away with it, which leaving
 autocorrect flag alone does not achieve. The flag belongs to Android's text keyboard, so
 `keyboardType="number-pad"` and `"phone-pad"` are sent what they are sent with the
 default, and so is a secure field that keeps `autoCorrect` on. Changing `autoCorrect` on
-a focused field restarts its input session, so the keyboard that is up takes the change.
+a focused Android field restarts its input session, so the keyboard that is up takes the
+change; a secure field's session is not restarted, so there the change reaches the keyboard
+when the field is next focused.
 
 ### `ref`: `focus()` and `blur()`
 
@@ -172,14 +174,15 @@ the text after a mid-text insertion: pasting `xyz` at the middle of `ab··cd` u
 limit of 8 gives `ab xy cd`, where cutting the end would give `ab xyz c`
 (`scripts/native-tests/text-limit.test.swift`, and the harness's paste case).
 
-Either way the caret stays where the person was typing: it is put just after the part of
-the edit that was kept, so a mid-field commit that lost its last characters leaves the
-caret between what it kept and the text after it, and an edit that fitted nowhere is put
-back where it was asked for. A composition's commit is finished by UIKit after the cut is
-written, and its own insertion point can land just after the whole insertion rather than
-after the part that was kept - what the caret does not do is go to the end of the field.
-An edit at the end of the field leaves the caret at the end, where the field's own answer
-puts it anyway.
+Either way the caret ends just after the part of the edit that was kept, between what the
+edit kept and the text after it, wherever in the field the edit was made. Pasting `xyz` at
+offset 3 of `ab··cd` under a limit of 8 leaves it at 5. A composition's commit is the same,
+although UIKit finishes such a commit by putting its own insertion point after the whole
+insertion: the caret is written again after that, so committing `wxyz` with room for one
+unit leaves the caret at 4, not at 7. A cut at least as long as the text after it is no
+different - the caret follows what was kept instead of going to the end of the field. An
+edit at the end of the field leaves the caret at the end, where the field's own answer puts
+it anyway, and an edit that fitted nowhere is put back where it was asked for.
 
 ## Sizing
 
