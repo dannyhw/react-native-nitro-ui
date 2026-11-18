@@ -4,6 +4,8 @@
  *
  *   node scripts/lease.mjs acquire --task <id>                   # env file on stdout
  *   node scripts/lease.mjs acquire --task <id> --exclusive --out /tmp/lease.env
+ *   node scripts/lease.mjs acquire --task <id> --note "merge: check, harness:ios; then real-input:ios, quiet machine"
+ *   node scripts/lease.mjs note <id> "<text>"                    # change the note, "" clears it
  *   node scripts/lease.mjs list
  *   node scripts/lease.mjs release <id>                          # by task or lease id
  *   node scripts/lease.mjs reap                                  # power idle devices off
@@ -31,6 +33,8 @@ import {
   assertLeasable,
   formatWaited,
   leaseAcquiredAtMs,
+  normalizeNote,
+  withNote,
   metroPortReason,
   metroPortsOf,
   portListeners,
@@ -55,8 +59,10 @@ const USAGE =
   '                                          [--exclusive] [--wait-minutes N]\n' +
   '                                          [--ttl-minutes N] [--out <file>] [--config <file>]\n' +
   '                                          [--boot] [--no-boot] [--boot-timeout-minutes N]\n' +
+  '                                          [--note <text>]\n' +
   '         (--exclusive --boot needs --platform ios|android|both: an exclusive lease boots only\n' +
   '          the half it names, and never for NITRO_UI_LEASE_BOOT alone)\n' +
+  '       node scripts/lease.mjs note <lease-id> <text>   (what the lease runs next; "" clears it)\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs reap [--idle-minutes N] [--config <file>]   (the only reaper)\n' +
   '       node scripts/lease.mjs list [--json]   (leases, who is queued and warm devices)';
@@ -101,6 +107,8 @@ function parseArgs(argv) {
     reap: !BOOT_FORCED_OFF,
     bootTimeoutMinutes: null,
     idleMinutes: null,
+    // `undefined` until `--note` is typed: an acquire without it leaves a held lease's note alone.
+    note: undefined,
   };
   const take = (name, value) => {
     if (value == null) throw new Error(`${name} needs a value\n${USAGE}`);
@@ -150,6 +158,9 @@ function parseArgs(argv) {
         break;
       case '--json':
         options.json = true;
+        break;
+      case '--note':
+        options.note = normalizeNote(take('--note', argv[++index]));
         break;
       default: {
         if (argument.startsWith('-')) {
@@ -286,6 +297,22 @@ function acquire({ devices, paths, options, log }) {
             // Idempotent: a task that asks twice keeps what it already has. No Metro
             // check either: a server on this pair's port is this task's own run.
             dropMyTicket();
+            if (options.note !== undefined) {
+              const noted = withNote(sameTask, options.note);
+              const latest = readJson(paths.leases, { leases: [] });
+              writeJsonAtomic(paths.leases, {
+                ...latest,
+                leases: (latest.leases ?? []).map((lease) =>
+                  lease.id === sameTask.id ? noted : lease
+                ),
+              });
+              return {
+                kind: 'acquired',
+                lease: noted,
+                pair: devices.pairs.find((pair) => pair.id === noted.holds[0]),
+                already: true,
+              };
+            }
             return {
               kind: 'acquired',
               lease: sameTask,
@@ -365,19 +392,22 @@ function acquire({ devices, paths, options, log }) {
             return { kind: 'refuse', reason: reserved };
           }
 
-          const lease = {
-            id: leaseId,
-            task: options.task,
-            platform: options.platform,
-            exclusive: options.exclusive,
-            // An exclusive lease holds every pair: it needs a quiet machine, not a
-            // free simulator.
-            holds: options.exclusive
-              ? devices.pairs.map((pair) => pair.id)
-              : [decision.pair.id],
-            acquiredAt: now,
-            ttlMinutes,
-          };
+          const lease = withNote(
+            {
+              id: leaseId,
+              task: options.task,
+              platform: options.platform,
+              exclusive: options.exclusive,
+              // An exclusive lease holds every pair: it needs a quiet machine, not a
+              // free simulator.
+              holds: options.exclusive
+                ? devices.pairs.map((pair) => pair.id)
+                : [decision.pair.id],
+              acquiredAt: now,
+              ttlMinutes,
+            },
+            options.note ?? null
+          );
           const next = { ...state, leases: [...state.leases, lease] };
           if (others.length > 0) next.pendingExclusive = others;
           else delete next.pendingExclusive;
@@ -434,6 +464,8 @@ function formatAge(lease, now) {
 function main(argv) {
   const paths = statePaths(stateHome(process.env));
   const command = argv[0];
+  // `note` takes a text that may look like anything, so it is not parsed as flags.
+  if (command === 'note') return noteCommand(argv.slice(1), paths);
   const options = parseArgs(argv.slice(1));
   const log = (message) => process.stderr.write(`${message}\n`);
 
@@ -471,6 +503,7 @@ function main(argv) {
         lease.holds.join(',').padEnd(24),
         formatAge(lease, Date.now()),
       ];
+      if (lease.note != null) row.push(`- ${lease.note}`);
       process.stdout.write(`${row.join(' ')}\n`);
     }
     for (const waiter of queue) {
@@ -634,6 +667,46 @@ function main(argv) {
     log(`lease: ${result.lease.id} for ${result.lease.task} -> ${options.out}`);
   } else {
     process.stdout.write(envFile);
+  }
+  return 0;
+}
+
+/**
+ * `note <lease-id> <text>`: sets the note of the lease with that id, or of the task with
+ * that name. An empty text clears it.
+ */
+function noteCommand(args, paths) {
+  if (args.length !== 2) {
+    throw new Error(`note needs a lease id and a text ("" clears it)\n${USAGE}`);
+  }
+  const [who, text] = args;
+  const note = normalizeNote(text);
+  const noted = withLock({
+    lockFile: paths.lock,
+    timeoutMs: LOCK_TIMEOUT_MS,
+    mutate: () => {
+      const state = readJson(paths.leases, { leases: [] });
+      const changed = [];
+      const leases = (state.leases ?? []).map((lease) => {
+        if (lease.id !== who && lease.task !== who) return lease;
+        const next = withNote(lease, note);
+        changed.push(next);
+        return next;
+      });
+      if (changed.length > 0) writeJsonAtomic(paths.leases, { ...state, leases });
+      return changed;
+    },
+  });
+  if (noted.length === 0) {
+    process.stderr.write(`lease: no lease matched ${who}\n`);
+    return 1;
+  }
+  for (const lease of noted) {
+    process.stdout.write(
+      lease.note == null
+        ? `cleared the note of ${lease.id} (${lease.task})\n`
+        : `noted ${lease.id} (${lease.task}): ${lease.note}\n`
+    );
   }
   return 0;
 }

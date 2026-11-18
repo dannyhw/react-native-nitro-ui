@@ -820,6 +820,62 @@ describe('the CLI, in a real state directory', () => {
     expect(readState().leases).toEqual([]);
   });
 
+  it('carries a note from acquire to list, changes it, and clears it', () => {
+    const plan = 'merge: check, harness:ios; then real-input:ios, quiet machine';
+    expect(
+      cli(['acquire', '--task', 'M1', '--note', plan, '--config', config])
+        .status
+    ).toBe(0);
+    const id = readState().leases[0].id;
+    expect(readState().leases[0].note).toBe(plan);
+    const listedRow = () =>
+      cli(['list'])
+        .stdout.split('\n')
+        .find((line) => line.startsWith(id));
+    expect(listedRow()).toContain(plan);
+    expect(JSON.parse(cli(['list', '--json']).stdout).leases[0].note).toBe(
+      plan
+    );
+
+    const next = 'merge: real-input:ios now, needs a quiet machine';
+    const changed = cli(['note', id, next]);
+    expect(changed.status).toBe(0);
+    expect(changed.stdout).toContain(next);
+    expect(listedRow()).toContain(next);
+    expect(listedRow()).not.toContain(plan);
+
+    // By task name too, the way `release` takes one.
+    expect(cli(['note', 'M1', '']).status).toBe(0);
+    expect(readState().leases[0]).not.toHaveProperty('note');
+    expect(listedRow()).not.toContain(' - ');
+
+    // A re-acquire with --note sets it on the lease the task already holds.
+    expect(
+      cli(['acquire', '--task', 'M1', '--note', 'again', '--config', config])
+        .status
+    ).toBe(0);
+    expect(readState().leases).toHaveLength(1);
+    expect(readState().leases[0].note).toBe('again');
+    // ... and one without --note leaves it alone.
+    cli(['acquire', '--task', 'M1', '--config', config]);
+    expect(readState().leases[0].note).toBe('again');
+  });
+
+  it('refuses a note of two lines, one over 200 characters, or for no lease', () => {
+    cli(['acquire', '--task', 'M2', '--config', config]);
+    const twoLines = cli(['note', 'M2', 'one\ntwo']);
+    expect(twoLines.status).toBe(2);
+    expect(twoLines.stderr).toContain('one line');
+    expect(cli(['note', 'M2', 'x'.repeat(200)]).status).toBe(0);
+    const long = cli(['note', 'M2', 'x'.repeat(201)]);
+    expect(long.status).toBe(2);
+    expect(long.stderr).toContain('at most 200 characters');
+    expect(readState().leases[0].note).toBe('x'.repeat(200));
+    const nobody = cli(['note', 'Z9', 'hello']);
+    expect(nobody.status).toBe(1);
+    expect(nobody.stderr).toContain('no lease matched Z9');
+  });
+
   it('is idempotent per task, so a retry does not eat a second pair', () => {
     const first = cli(['acquire', '--task', 'G6', '--config', config]);
     const second = cli(['acquire', '--task', 'G6', '--config', config]);

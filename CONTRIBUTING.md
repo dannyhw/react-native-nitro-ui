@@ -394,6 +394,19 @@ the real-input scripts read. It also exports `METRO_PORT_IOS` and `METRO_PORT_AN
 platforms the lease covers; `gate.mjs` runs each device gate on its own platform's port, so an
 iOS and an Android gate on one lease never share a Metro.
 
+A lease carries an optional note that says what it will run next, so whoever shares the machine
+can plan around it. `list` prints it at the end of the lease's row, and `list --json` as the
+lease's `note`.
+
+```sh
+node scripts/lease.mjs acquire --task <ID> --note "check, harness:ios; then real-input:ios, quiet machine"
+node scripts/lease.mjs note <lease-id or ID> "real-input:ios now, needs a quiet machine"
+node scripts/lease.mjs note <lease-id or ID> ""                  # clears it
+```
+
+A note is one line of at most 200 characters. `acquire --note` on a task that already holds a
+lease changes that lease's note; an `acquire` without `--note` leaves it as it is.
+
 The rules the script enforces:
 
 - At most `maxDeviceLeases` device leases at a time (default 2). The next one is refused.
