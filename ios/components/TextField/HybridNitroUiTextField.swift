@@ -37,6 +37,10 @@ final class TextFieldModel: NitroUiModel {
   /// What a `maxLength` cut owes the caret while UIKit ends the composition's commit that cut was
   /// made in. `nil` when no cut is waiting on one.
   var owedCaret: NitroUiOwedCaret?
+  /// Where the open composition began, as the control reports it: text that repeats the composed
+  /// characters hides the location when a cut compares the text before and after. `nil` with no
+  /// composition open.
+  var markedStart: Int?
   /// A `maxLength` cut is being written into the control: the selection changes those writes make
   /// say nothing about where the caret the field ends up with belongs.
   var applyingCut = false
@@ -577,6 +581,8 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     set {
       // Read only by the control's edit callbacks; nothing to render.
       model.maxLength = newValue.asType(Double.self).flatMap { $0.isFinite ? Int($0) : nil }
+      // A different limit says the last cut should have kept something else.
+      discardOwedCaret()
     }
   }
 
@@ -708,6 +714,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     model.focusWhenReady = false
     model.wasComposing = false
     model.owedCaret = nil
+    model.markedStart = nil
     // The control outlives the mount, so its text is reset with the model's.
     syncText()
     host.prepareForRecycle()
@@ -728,6 +735,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     nitroUiAssertMainThread()
     guard model.focused != focused else { return }
     model.focused = focused
+    discardOwedCaret()
     publishState()
     model.onFocusChange?(focused)
   }

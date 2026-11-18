@@ -355,6 +355,8 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     set {
       // Read only by the control's edit callbacks; nothing to render.
       model.maxLength = newValue.asType(Double.self).flatMap { $0.isFinite ? Int($0) : nil }
+      // A different limit says the last cut should have kept something else.
+      discardOwedCaret()
     }
   }
 
@@ -444,6 +446,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     nitroUiAssertMainThread()
     guard model.focused != focused else { return }
     model.focused = focused
+    discardOwedCaret()
     publishState()
     model.onFocusChange?(focused)
   }
@@ -483,6 +486,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     model.focusWhenReady = false
     model.wasComposing = false
     model.owedCaret = nil
+    model.markedStart = nil
     // Back to a search field's own traits: the model is shared with TextField, and its
     // defaults are a text field's.
     applySearchPresets()

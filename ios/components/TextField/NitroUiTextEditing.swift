@@ -122,6 +122,8 @@ protocol NitroUiTextControl: UIView {
   /// The caret's UTF-16 offset in the text; the start of a selection. `-1` when the control has
   /// no selection to read.
   var nuiCaret: Int { get }
+  /// The UTF-16 offset an open composition began at; `nil` when none is open.
+  var nuiMarkedStart: Int? { get }
   /// Whether the keyboard attached here is told that suggestions and autocorrections are
   /// available. iOS hands a keyboard its `autocorrectionType` trait, so the trait is the answer.
   var nuiSuggestionsOffered: Bool { get }
@@ -140,6 +142,15 @@ extension NitroUiTextControl {
 
   var nuiSuggestionsOffered: Bool {
     (self as? UITextInputTraits)?.autocorrectionType != .no
+  }
+
+  /// The text before and after a composition does not always say where it was - `aaaa` with `aa`
+  /// committed at 1 reads as `aa` appended at the end. UIKit's marked range does.
+  var nuiMarkedStart: Int? {
+    guard let input = self as? UITextInput, let marked = input.markedTextRange else {
+      return nil
+    }
+    return input.offset(from: input.beginningOfDocument, to: marked.start)
   }
 
   /// The body of both controls' "selection changed" delegate methods.
@@ -247,6 +258,13 @@ protocol NitroUiTextOwner: AnyObject {
 extension NitroUiTextOwner {
   private var model: TextFieldModel { nuiTextModel }
 
+  /// A `maxLength` cut owns the caret only while UIKit can still end the commit that cut was made
+  /// in. Focus moving, a write from JS, another `maxLength` and the next edit each end that
+  /// moment; a claim kept past it would move a caret that is somebody else's.
+  func discardOwedCaret() {
+    nuiTextModel.owedCaret = nil
+  }
+
   /// Decide a pending `value` write: applied, stale, or held back by an open
   /// composition. Called from a commit, and when a composition that held one back ends.
   func applyWrite() {
@@ -269,6 +287,8 @@ extension NitroUiTextOwner {
   func syncText() {
     guard let control = model.control, !control.nuiComposing else { return }
     if NitroUiText(control.nuiText) != model.state.displayed {
+      // Text is being put in from outside the field: the commit a cut was waiting on is over.
+      discardOwedCaret()
       control.nuiSetText(model.state.displayed.string)
     }
   }
@@ -280,9 +300,12 @@ extension NitroUiTextOwner {
   /// back, even if the text is unchanged: otherwise nothing would decide that write again.
   func userEdited(_ control: NitroUiTextControl) {
     nitroUiAssertMainThread()
+    discardOwedCaret()
     let composing = control.nuiComposing
     let compositionEnded = model.wasComposing && !composing
     model.wasComposing = composing
+    let committedAt = model.markedStart
+    model.markedStart = composing ? control.nuiMarkedStart : nil
     guard !composing else {
       publishState()
       return
@@ -296,13 +319,18 @@ extension NitroUiTextOwner {
       let kept = NitroUiCommitDelta.clamp(
         displayed: model.state.displayed.string,
         incoming: text,
-        limit: limit
+        limit: limit,
+        editLocation: committedAt
       )
       if kept.text != text {
         text = kept.text
-        if compositionEnded, let caret = kept.caret {
+        let keptUnits = (kept.text as NSString).length
+        // Only a caret inside the text is one UIKit can still move under us. At the end of it
+        // there is no later offset for UIKit's own insertion point to arrive at, so nothing is
+        // owed and nothing is claimed.
+        if compositionEnded, let caret = kept.caret, caret < keptUnits {
           model.owedCaret = NitroUiOwedCaret(
-            caret: caret, upTo: caret + committedUnits - (kept.text as NSString).length)
+            caret: caret, upTo: caret + committedUnits - keptUnits)
         }
         model.applyingCut = true
         control.nuiSetText(text)
