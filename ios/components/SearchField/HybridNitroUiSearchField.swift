@@ -60,6 +60,13 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
     model.owner?.userEdited(self)
   }
 
+  /// UIKit's own end of a composition, where it sets the insertion point to the end of the whole
+  /// insertion after reporting the edit (see `NitroUiSingleLineField`).
+  override func unmarkText() {
+    super.unmarkText()
+    nuiSettleCaret()
+  }
+
   func nuiApply() {
     // A `UITextInputTraits` setter does not reach a keyboard that is already up, so a change on a
     // focused field reloads its input views.
@@ -163,7 +170,7 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
   }
 
   func textFieldDidChangeSelection(_ textField: UITextField) {
-    model.owner?.publishState()
+    nuiSelectionChanged()
   }
 }
 
@@ -475,6 +482,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     model.focused = false
     model.focusWhenReady = false
     model.wasComposing = false
+    model.owedCaret = nil
     // Back to a search field's own traits: the model is shared with TextField, and its
     // defaults are a text field's.
     applySearchPresets()

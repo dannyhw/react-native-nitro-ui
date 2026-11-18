@@ -134,6 +134,22 @@ extension NitroUiTextControl {
     (self as? UITextInputTraits)?.autocorrectionType != .no
   }
 
+  /// The body of both controls' "selection changed" delegate methods.
+  func nuiSelectionChanged() {
+    // A cut in flight moves the selection on its way to the caret the field keeps, so the caret
+    // read while one is owed is a value the field is about to replace.
+    guard nuiModel.owedCaret == nil else { return }
+    nuiModel.owner?.publishState()
+  }
+
+  /// Write the caret a cut asked for once UIKit has finished the edit that cut was made in.
+  func nuiSettleCaret() {
+    guard let caret = nuiModel.owedCaret else { return }
+    nuiModel.owedCaret = nil
+    nuiSetCaret(at: caret)
+    nuiModel.owner?.publishState()
+  }
+
   /// The body of both controls' "should change characters" delegate methods. Applies
   /// `maxLength` as React Native does: the inserted text is cut to what still fits, never
   /// the end of the field, and never inside a composed character.
@@ -268,6 +284,11 @@ extension NitroUiTextOwner {
       )
       if kept.text != text {
         text = kept.text
+        if compositionEnded {
+          // UIKit moves the insertion point to the end of its insertion after this callback, so
+          // the caret survives only if it is written again once `unmarkText()` has returned.
+          model.owedCaret = kept.caret
+        }
         control.nuiSetText(text)
         // Writing the text moves the caret to the end; a cut made in the middle belongs where
         // the person was typing.

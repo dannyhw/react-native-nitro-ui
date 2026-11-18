@@ -34,6 +34,9 @@ final class TextFieldModel: NitroUiModel {
   /// Whether the control held marked text the last time it reported an edit, so the
   /// edit that ends a composition is known as one (see `userEdited`).
   var wasComposing = false
+  /// The caret a `maxLength` cut asked for while a composition was committing, which the control
+  /// writes again once UIKit has finished that commit. `nil` when no cut is in flight.
+  var owedCaret: Int?
 
   var onChange: ((_ value: String, _ eventCount: Double) -> Void)?
   var onFocusChange: ((_ focused: Bool) -> Void)?
@@ -102,6 +105,14 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
   func nuiReportEdit() {
     guard !applying else { return }
     model.owner?.userEdited(self)
+  }
+
+  /// UIKit's own end of a composition: it commits the marked text - reporting the edit from
+  /// inside that call - and then puts the insertion point at the end of the whole insertion.
+  /// A caret asked for by that report belongs to the field again once UIKit has had its say.
+  override func unmarkText() {
+    super.unmarkText()
+    nuiSettleCaret()
   }
 
   func nuiApply() {
@@ -191,7 +202,7 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
   }
 
   func textFieldDidChangeSelection(_ textField: UITextField) {
-    model.owner?.publishState()
+    nuiSelectionChanged()
   }
 }
 
@@ -249,6 +260,13 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
     updatePlaceholder()
     invalidateIntrinsicContentSize()
     model.owner?.userEdited(self)
+  }
+
+  /// UIKit's own end of a composition, where it sets the insertion point to the end of the whole
+  /// insertion after reporting the edit (see `NitroUiSingleLineField`).
+  override func unmarkText() {
+    super.unmarkText()
+    nuiSettleCaret()
   }
 
   func nuiApply() {
@@ -329,7 +347,7 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
   }
 
   func textViewDidChangeSelection(_ textView: UITextView) {
-    model.owner?.publishState()
+    nuiSelectionChanged()
   }
 }
 
@@ -686,6 +704,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     model.focused = false
     model.focusWhenReady = false
     model.wasComposing = false
+    model.owedCaret = nil
     // The control outlives the mount, so its text is reset with the model's.
     syncText()
     host.prepareForRecycle()
