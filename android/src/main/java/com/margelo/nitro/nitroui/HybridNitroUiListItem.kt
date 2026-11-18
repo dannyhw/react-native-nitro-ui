@@ -265,7 +265,7 @@ private class ListItemHost(
   activity: Activity?,
   model: ListItemModel,
 ) : NitroComposeHost<ListItemModel>(context, activity, model) {
-  // The row's cell installs no `clickable` for an item inside it and presses for it, so the row
+  // An item inside a row installs no `clickable` and hands its press to the row, so the row
   // keeps a tap that lands here.
   override val pressOwnedByRow: Boolean
     get() = model.insideRow

@@ -300,8 +300,8 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     _ gestureRecognizer: UIGestureRecognizer,
     shouldReceive touch: UITouch
   ) -> Bool {
-    // UIKit asks this of the cell for the recognizers it owns as a cell, too. Declining one of
-    // those would take the cell's own behaviour, so only this row's press is the row's to give.
+    // Only the row's own press is declined; any other recognizer given this delegate keeps
+    // every touch.
     guard gestureRecognizer === pressGesture else { return true }
     // A touch that lands on a hosted control inside the row is that control's, and the row
     // leaves it: the recognizer is never given the touch, so nothing is cancelled for the
