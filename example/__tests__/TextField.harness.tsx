@@ -631,8 +631,8 @@ describe('TextField', () => {
 
   /*
    * iOS only, and the same commit with room for one unit of a four-unit edit: here "just after
-   * what was kept", "one past that" and "after the whole insertion" are three different offsets,
-   * which a cut that drops a single unit cannot tell apart.
+   * what was kept" and "one past that" - where UIKit's own insertion point lands - are two
+   * different offsets, which a cut that drops a single unit cannot tell apart.
    */
   itComposes(
     'puts the caret after the kept unit when a cut drops most of the edit',
@@ -647,8 +647,8 @@ describe('TextField', () => {
         'the caret between the two spaces'
       );
 
-      // `w` is kept, so the caret belongs at 4 - not at 5 (one past it), 7 (after the whole
-      // `wxyz` insertion) or 9 (the end of the field).
+      // `w` is kept, so the caret belongs at 4 - not at 5, where UIKit's own insertion point
+      // lands, or 9, the end of the field.
       await compose('cut-long', 'wxyz');
       await finishComposition('cut-long');
       const cut = await stateWhen(

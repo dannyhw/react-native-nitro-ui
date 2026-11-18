@@ -177,9 +177,9 @@ limit of 8 gives `ab xy cd`, where cutting the end would give `ab xyz c`
 Either way the caret ends just after the part of the edit that was kept, between what the
 edit kept and the text after it, wherever in the field the edit was made. Pasting `xyz` at
 offset 3 of `ab··cd` under a limit of 8 leaves it at 5. A composition's commit is the same,
-although UIKit finishes such a commit by putting its own insertion point after the whole
-insertion: the caret is written again after that, so committing `wxyz` with room for one
-unit leaves the caret at 4, not at 7. A cut at least as long as the text after it is no
+although UIKit finishes such a commit by writing its own insertion point one past the part
+that was kept: the caret is written again after that, so committing `wxyz` with room for one
+unit leaves the caret at 4, not at 5. A cut at least as long as the text after it is no
 different - the caret follows what was kept instead of going to the end of the field. An
 edit at the end of the field leaves the caret at the end, where the field's own answer puts
 it anyway, and an edit that fitted nowhere is put back where it was asked for.
