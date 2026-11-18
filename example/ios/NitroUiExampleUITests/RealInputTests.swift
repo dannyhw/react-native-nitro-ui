@@ -2366,6 +2366,41 @@ final class RealInputTests: XCTestCase {
     return item
   }
 
+  /// What one toggle item's own element tells a screen reader: that it is a toggle, which state it
+  /// is in, and that the state is told once — a reader is given a switch's value, and a `selected`
+  /// trait on top of it is the same word twice.
+  private func assertToggleElement(
+    _ identifier: String,
+    _ title: String,
+    state expected: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let item = buttonGroupItem(identifier, titled: title)
+    let said = "\(quoted(item.label)) type=\(item.elementType.rawValue) value=\(String(describing: item.value)) selected=\(item.isSelected)"
+    XCTAssertEqual(
+      item.elementType,
+      .switch,
+      "the toggle item \"\(title)\" is not a toggle to VoiceOver: \(said)",
+      file: file,
+      line: line
+    )
+    XCTAssertEqual(
+      nativeItemState(of: identifier, title),
+      expected,
+      "the toggle item \"\(title)\" does not say it is \(expected): \(said)",
+      file: file,
+      line: line
+    )
+    XCTAssertFalse(
+      item.isSelected,
+      "the toggle item \"\(title)\" also reports itself selected, so a reader hears its state "
+        + "twice: \(said)",
+      file: file,
+      line: line
+    )
+  }
+
   /// Whether one item's own element says it is checked, as "on"/"off".
   private func nativeItemState(of identifier: String, _ title: String) -> String? {
     let item = buttonGroupItem(identifier, titled: title)
@@ -2442,6 +2477,8 @@ final class RealInputTests: XCTestCase {
       nativeItemState(of: toggles, "Bold"), "on",
       "the checked toggle item's own element should report value 1"
     )
+    assertToggleElement(toggles, "Bold", state: "on")
+    assertToggleElement(toggles, "Italic", state: "off")
 
     for (title, id, count) in [("Copy", "copy", "1"), ("Cut", "cut", "2"), ("Paste", "paste", "3")] {
       XCTAssertEqual(
@@ -2482,6 +2519,7 @@ final class RealInputTests: XCTestCase {
       nativeItemState(of: toggles, "Italic"), "on",
       "the checked item's own element should report value 1"
     )
+    assertToggleElement(toggles, "Italic", state: "on")
     XCTAssertEqual(
       try read(Echo.buttonGroupToggleEvents), "1",
       "one tap should report exactly one change"
@@ -2503,6 +2541,7 @@ final class RealInputTests: XCTestCase {
       nativeItemState(of: toggles, "Italic"), "off",
       "the unchecked item's own element should report value 0 again"
     )
+    assertToggleElement(toggles, "Italic", state: "off")
     XCTAssertEqual(
       try read(Echo.buttonGroupToggleEvents), "2",
       "two taps should report two changes — a flip is not a one-way press"

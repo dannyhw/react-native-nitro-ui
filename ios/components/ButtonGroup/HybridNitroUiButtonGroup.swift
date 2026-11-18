@@ -595,7 +595,9 @@ private struct ItemButtonStyle: ViewModifier {
 /// both in the group's tint. Grey belongs to disabled items, and an unchecked toggle is not one.
 ///
 /// A `Toggle` with `.toggleStyle(.button)` ignores `buttonStyle` — iOS gives it one look — so this
-/// draws a `Button` in the state's style.
+/// draws a `Button` in the state's style. A custom `ToggleStyle` changes only the drawing: the
+/// element stays the `Toggle`'s own, so it keeps the toggle's trait and its 0/1 value, and saying
+/// the state again here would have a reader announce it twice.
 private struct ItemToggleStyle: ToggleStyle {
   let variant: ButtonVariant
   let tint: UIColor?
@@ -606,7 +608,6 @@ private struct ItemToggleStyle: ToggleStyle {
     }
     .modifier(ItemButtonStyle(style: ItemStyle(variant: variant).state(configuration.isOn)))
     .modifier(OptionalItemTint(color: tint))
-    .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
   }
 }
 
