@@ -439,7 +439,8 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
   private var stateSnapshot = NitroUiTextFieldTestState(
     text: "", focused: false, composing: false, nativeEvents: 0, jsEvents: 0, lastWrite: "none",
     editable: true, multiline: false, secure: false, keyboardType: "default", returnKeyType: "default",
-    autoCapitalize: "sentences", autoCorrect: true, maxLength: -1, placeholder: "", accessibilityLabel: "")
+    autoCapitalize: "sentences", autoCorrect: true, maxLength: -1, placeholder: "",
+    accessibilityLabel: "", caret: -1, suggestions: "unknown")
 
   override init() {
     host = NitroSwiftUIHost(model: TextFieldModel())
